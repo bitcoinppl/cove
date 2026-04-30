@@ -164,7 +164,7 @@ internal fun OnboardingSoftwareImportFlowView(
 
         SoftwareImportMode.Qr ->
             OnboardingHotWalletImportView(
-                numberOfWords = NumberOfBip39Words.TWENTY_FOUR,
+                numberOfWords = NumberOfBip39Words.TWELVE,
                 importType = ImportType.QR,
                 onBack = { mode = SoftwareImportMode.Chooser },
                 onImported = onImported,
@@ -255,7 +255,7 @@ internal fun OnboardingHardwareImportFlowView(
                     )
                     OnboardingChoiceCard(
                         title = "Scan with NFC",
-                        subtitle = "Hold your hardware wallet or export tag near your phone.",
+                        subtitle = "Hold your hardware wallet or export tag near the top of your phone.",
                         icon = Icons.Default.Nfc,
                         onClick = { mode = HardwareImportMode.Nfc },
                     )
@@ -465,7 +465,7 @@ private fun OnboardingHardwareNfcImportView(
     OnboardingPromptScreen(
         icon = Icons.Default.Nfc,
         title = "Scan your hardware wallet with NFC",
-        subtitle = "Hold your hardware wallet or export tag near your phone.",
+        subtitle = "Hold your hardware wallet or export tag near the top of your phone.",
     ) {
         if (activity == null || nfcReader == null) {
             OnboardingInlineMessage(text = "NFC is not available on this device.")
@@ -477,7 +477,7 @@ private fun OnboardingHardwareNfcImportView(
 
         if (nfcReader != null && nfcReader.readingState != NfcReadingState.WAITING) {
             Text(
-                text = nfcReader.message.ifEmpty { "Hold your phone near the NFC tag" },
+                text = nfcReader.message.ifEmpty { "Hold the top of your phone near the NFC tag" },
                 color = Color.White,
                 style = MaterialTheme.typography.bodyMedium,
             )

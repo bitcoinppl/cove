@@ -287,7 +287,7 @@ struct OnboardingPromptScreen<Footer: View>: View {
 
             OnboardingStatusHero(
                 systemImage: icon,
-                pulse: false,
+                pulse: true,
                 iconSize: 22
             )
 

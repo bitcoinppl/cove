@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PhoneIphone
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Warning
@@ -37,6 +38,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
@@ -90,7 +92,7 @@ internal fun CloudCheckContent() {
             Spacer(modifier = Modifier.size(10.dp))
 
             Text(
-                text = "Cove may ask for Google Drive access so it can check whether you already have a backup",
+                text = "This only takes a moment",
                 color = OnboardingTextSecondary,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
@@ -333,7 +335,7 @@ internal fun OnboardingRestoreOfferView(
     val title = if (warningMessage == null) "Google Drive Backup Found" else "Restore from Google Drive"
     val body =
         if (warningMessage == null) {
-            "A previous Cove backup was found in Google Drive. Restore your wallet securely using your passkey."
+            "A previous Google Drive backup was found. Restore your wallet securely using your passkey."
         } else {
             "We couldn't confirm whether a Google Drive backup is available. If you're reinstalling this device, you can still try restoring with your passkey."
         }
@@ -345,11 +347,14 @@ internal fun OnboardingRestoreOfferView(
                     .fillMaxSize()
                     .padding(horizontal = 28.dp, vertical = 12.dp),
         ) {
-            OnboardingStepIndicator(selected = 1)
+            OnboardingStepIndicator(selected = 1, modifier = Modifier.padding(top = 8.dp))
 
             Spacer(modifier = Modifier.size(42.dp))
 
-            OnboardingStatusHero(icon = Icons.Default.CloudDownload)
+            OnboardingStatusHero(
+                icon = Icons.Default.Search,
+                fillColor = CoveColor.duskBlue.copy(alpha = 0.40f),
+            )
 
             Spacer(modifier = Modifier.size(44.dp))
 
@@ -379,12 +384,12 @@ internal fun OnboardingRestoreOfferView(
 
             if (warningMessage != null) {
                 Spacer(modifier = Modifier.size(14.dp))
-                OnboardingInlineMessage(text = warningMessage)
+                OnboardingRestoreWarningCard(text = warningMessage)
             }
 
             if (errorMessage != null) {
                 Spacer(modifier = Modifier.size(14.dp))
-                OnboardingInlineMessage(text = errorMessage)
+                OnboardingRestoreErrorCard(text = errorMessage)
             }
 
             Spacer(modifier = Modifier.weight(1f, fill = true))
@@ -462,7 +467,7 @@ private fun OnboardingPasskeyCard() {
                 )
                 Spacer(modifier = Modifier.size(4.dp))
                 Text(
-                    text = "Secured with your Google account and passkey",
+                    text = "Secured with your Google account",
                     color = CoveColor.coveLightGray.copy(alpha = 0.58f),
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -474,6 +479,64 @@ private fun OnboardingPasskeyCard() {
             color = OnboardingTextSecondary,
             style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
         )
+    }
+}
+
+@Composable
+private fun OnboardingRestoreWarningCard(text: String) {
+    OnboardingRestoreMessageCard(
+        text = text,
+        icon = Icons.Default.Warning,
+        foreground = OnboardingGradientLight.copy(alpha = 0.95f),
+        background = OnboardingGradientLight.copy(alpha = 0.08f),
+        border = OnboardingGradientLight.copy(alpha = 0.22f),
+    )
+}
+
+@Composable
+private fun OnboardingRestoreErrorCard(text: String) {
+    OnboardingRestoreMessageCard(
+        text = text,
+        icon = Icons.Default.Warning,
+        foreground = OnboardingWarning.copy(alpha = 0.95f),
+        background = OnboardingWarning.copy(alpha = 0.10f),
+        border = OnboardingWarning.copy(alpha = 0.28f),
+    )
+}
+
+@Composable
+private fun OnboardingRestoreMessageCard(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    foreground: Color,
+    background: Color,
+    border: Color,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = background,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, border),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = foreground,
+                modifier = Modifier.padding(top = 2.dp).size(16.dp),
+            )
+            Text(
+                text = text,
+                color = foreground,
+                style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+            )
+        }
     }
 }
 
