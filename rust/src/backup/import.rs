@@ -534,7 +534,14 @@ pub(crate) fn cleanup_failed_wallet(metadata: &WalletMetadata) -> Vec<String> {
 
 fn import_labels(id: &WalletId, jsonl: &str) -> Result<(), BackupError> {
     let manager = LabelManager::new(id.clone());
-    manager.import(jsonl).map(|_| ()).map_err_str(BackupError::Restore)
+    manager.import(jsonl).map_err_str(BackupError::Restore)?;
+    Ok(())
+}
+
+fn import_labels_preserve_backup(id: &WalletId, jsonl: &str) -> Result<(), BackupError> {
+    let manager = LabelManager::new(id.clone());
+    manager.import_without_cloud_backup_dirty(jsonl).map_err_str(BackupError::Restore)?;
+    Ok(())
 }
 
 pub(crate) fn restore_wallet_labels(
@@ -547,13 +554,11 @@ pub(crate) fn restore_wallet_labels(
         return LabelRestoreOutcome::default();
     };
 
-    let manager = LabelManager::new(wallet_id.clone());
     let import_result = match behavior {
         LabelRestoreBehavior::MarkCloudBackupDirty => import_labels(wallet_id, jsonl),
-        LabelRestoreBehavior::PreserveCloudBackupClean => manager
-            .import_without_cloud_backup_dirty(jsonl)
-            .map(|_| ())
-            .map_err_str(BackupError::Restore),
+        LabelRestoreBehavior::PreserveCloudBackupClean => {
+            import_labels_preserve_backup(wallet_id, jsonl)
+        }
     };
 
     match import_result {
