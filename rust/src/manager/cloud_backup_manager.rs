@@ -48,7 +48,9 @@ pub use self::detail::{
     CloudOnlyOperation, CloudOnlyState, RecoveryAction, RecoveryState, SyncState, VerificationState,
 };
 use self::prompt::CloudBackupPromptState;
-use self::runtime_actor::{CloudBackupOperation, CloudBackupRuntimeActor, RestoreOperation};
+use self::runtime_actor::{
+    CloudBackupOperation, CloudBackupRuntimeActor, RestoreOperation, SyncHealthRuntimeState,
+};
 use self::wallets::wallet_metadata_change_requires_upload;
 use self::wallets::{
     UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader, all_local_wallets, count_all_wallets,
@@ -331,6 +333,13 @@ enum PendingEnableSessionKind {
     RetryUpload,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingMasterKeyUpload {
+    None,
+    InGrace,
+    Expired,
+}
+
 pub(crate) struct PendingEnableSession {
     kind: PendingEnableSessionKind,
     master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
@@ -589,7 +598,6 @@ pub struct RustCloudBackupManager {
     pub reconciler: Sender<Message>,
     pub reconcile_receiver: Arc<Receiver<Message>>,
     prompt_state: Arc<parking_lot::Mutex<CloudBackupPromptState>>,
-    pending_enable_session: Arc<parking_lot::Mutex<Option<PendingEnableSession>>>,
     pub(crate) runtime: Addr<CloudBackupRuntimeActor>,
 }
 
@@ -747,7 +755,6 @@ impl RustCloudBackupManager {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
             prompt_state: Arc::new(parking_lot::Mutex::new(CloudBackupPromptState::default())),
-            pending_enable_session: Arc::new(parking_lot::Mutex::new(None)),
             runtime: spawn_actor(CloudBackupRuntimeActor::new(manager.clone())),
         });
 
@@ -1097,7 +1104,10 @@ impl RustCloudBackupManager {
             .ok_or_else(|| CloudBackupError::Internal("namespace_id not found in keychain".into()))
     }
 
-    pub(crate) async fn compute_sync_health(&self) -> CloudSyncHealth {
+    pub(crate) async fn compute_sync_health(
+        &self,
+        runtime_state: SyncHealthRuntimeState,
+    ) -> CloudSyncHealth {
         if !Self::load_persisted_state().is_configured() {
             return CloudSyncHealth::Unknown;
         }
@@ -1130,36 +1140,55 @@ impl RustCloudBackupManager {
             return sync_health;
         }
 
-        if Self::sync_health_has_pending_upload(&sync_states) {
+        let pending_master_key_upload =
+            Self::pending_master_key_upload_confirmation(&runtime_state, &namespace, &sync_states);
+        if pending_master_key_upload == PendingMasterKeyUpload::None
+            && Self::sync_health_has_pending_upload(&sync_states)
+        {
             return CloudSyncHealth::Uploading;
         }
 
         let cloud = CloudStorage::global_silent_client();
-        let remote_wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
-            Ok(record_ids) => record_ids.into_iter().collect::<HashSet<_>>(),
-            Err(CloudStorageError::NotFound(_)) => HashSet::new(),
+        let master_key_uploaded = match cloud
+            .is_backup_uploaded(namespace.clone(), MASTER_KEY_RECORD_ID.to_string())
+            .await
+        {
+            Ok(is_uploaded) => is_uploaded,
+            Err(CloudStorageError::NotFound(_)) => false,
             Err(error) => return Self::sync_health_from_cloud_error(error),
         };
-        let master_key_uploaded =
-            match cloud.is_backup_uploaded(namespace, MASTER_KEY_RECORD_ID.to_string()).await {
-                Ok(is_uploaded) => is_uploaded,
-                Err(CloudStorageError::NotFound(_)) => false,
-                Err(error) => return Self::sync_health_from_cloud_error(error),
-            };
 
         if expected_wallet_record_ids.is_empty() {
             if master_key_uploaded {
                 return CloudSyncHealth::AllUploaded;
             }
 
+            if pending_master_key_upload == PendingMasterKeyUpload::InGrace {
+                return CloudSyncHealth::Uploading;
+            }
+
             return CloudSyncHealth::NoFiles;
         }
 
         if !master_key_uploaded {
+            if pending_master_key_upload == PendingMasterKeyUpload::InGrace {
+                return CloudSyncHealth::Uploading;
+            }
+
             return CloudSyncHealth::Failed(
                 "master key backup is missing from cloud storage".into(),
             );
         }
+
+        if Self::sync_health_has_pending_wallet_upload(&sync_states) {
+            return CloudSyncHealth::Uploading;
+        }
+
+        let remote_wallet_record_ids = match cloud.list_wallet_backups(namespace).await {
+            Ok(record_ids) => record_ids.into_iter().collect::<HashSet<_>>(),
+            Err(CloudStorageError::NotFound(_)) => HashSet::new(),
+            Err(error) => return Self::sync_health_from_cloud_error(error),
+        };
 
         let missing_wallet_count = expected_wallet_record_ids
             .iter()
@@ -1226,6 +1255,41 @@ impl RustCloudBackupManager {
                     | PersistedCloudBlobState::UploadedPendingConfirmation(_)
             )
         })
+    }
+
+    fn sync_health_has_pending_wallet_upload(sync_states: &[PersistedCloudBlobSyncState]) -> bool {
+        sync_states.iter().any(|sync_state| {
+            sync_state.wallet_id.is_some()
+                && matches!(
+                    sync_state.state,
+                    PersistedCloudBlobState::Dirty(_)
+                        | PersistedCloudBlobState::Uploading(_)
+                        | PersistedCloudBlobState::UploadedPendingConfirmation(_)
+                )
+        })
+    }
+
+    fn pending_master_key_upload_confirmation(
+        runtime_state: &SyncHealthRuntimeState,
+        namespace: &str,
+        sync_states: &[PersistedCloudBlobSyncState],
+    ) -> PendingMasterKeyUpload {
+        let pending_master_key_upload = sync_states.iter().any(|sync_state| {
+            let is_master_key_record = sync_state.wallet_id.is_none();
+            let is_pending =
+                matches!(sync_state.state, PersistedCloudBlobState::UploadedPendingConfirmation(_));
+
+            is_master_key_record && is_pending
+        });
+        if !pending_master_key_upload {
+            return PendingMasterKeyUpload::None;
+        }
+
+        if runtime_state.master_key_upload_in_grace(namespace) {
+            PendingMasterKeyUpload::InGrace
+        } else {
+            PendingMasterKeyUpload::Expired
+        }
     }
 
     fn sync_health_from_cloud_error(error: CloudStorageError) -> CloudSyncHealth {
@@ -1322,29 +1386,26 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub(crate) fn replace_pending_enable_session(&self, session: PendingEnableSession) {
-        *self.pending_enable_session.lock() = Some(session);
+    pub(crate) async fn replace_pending_enable_session(&self, session: PendingEnableSession) {
+        act_zero::call!(self.runtime.replace_pending_enable_session(session))
+            .await
+            .expect("replace pending enable session");
     }
 
-    pub(crate) fn take_retry_pending_enable_session(&self) -> Option<PendingEnableSession> {
-        let pending = self.take_pending_enable_session();
-        if pending.as_ref().is_some_and(PendingEnableSession::is_retry_upload) {
-            return pending;
-        }
-
-        if let Some(pending) = pending {
-            self.replace_pending_enable_session(pending);
-        }
-
-        None
+    pub(crate) async fn take_retry_pending_enable_session(&self) -> Option<PendingEnableSession> {
+        act_zero::call!(self.runtime.take_retry_pending_enable_session())
+            .await
+            .expect("take retry pending enable session")
     }
 
-    pub(crate) fn take_pending_enable_session(&self) -> Option<PendingEnableSession> {
-        self.pending_enable_session.lock().take()
+    pub(crate) async fn take_pending_enable_session(&self) -> Option<PendingEnableSession> {
+        act_zero::call!(self.runtime.take_pending_enable_session())
+            .await
+            .expect("take pending enable session")
     }
 
     pub(crate) fn clear_pending_enable_session(&self) {
-        self.pending_enable_session.lock().take();
+        send!(self.runtime.clear_pending_enable_session());
     }
 
     pub(crate) fn replace_pending_verification_completion(
@@ -1707,23 +1768,7 @@ impl RustCloudBackupManager {
 
     /// Dismiss staged enable state for the existing-backup confirmation flow
     pub(crate) fn discard_pending_enable_cloud_backup(&self) {
-        if let Some(pending) = self.take_pending_enable_session() {
-            let should_delete_remote = pending.is_retry_upload();
-            let namespace_id = pending.master_key.namespace_id();
-
-            cove_cspp::Cspp::new(Keychain::global().clone()).delete_master_key();
-
-            if should_delete_remote {
-                cove_tokio::task::spawn(async move {
-                    if let Err(error) = CloudStorage::global_explicit_client()
-                        .delete_wallet_backup(namespace_id, MASTER_KEY_RECORD_ID.to_string())
-                        .await
-                    {
-                        warn!("Discard pending enable failed to delete remote master key: {error}");
-                    }
-                });
-            }
-        }
+        send!(self.runtime.discard_pending_enable_cloud_backup());
         self.clear_existing_backup_found_prompt();
     }
 

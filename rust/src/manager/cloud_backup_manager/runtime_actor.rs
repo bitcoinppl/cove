@@ -3,7 +3,9 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, send};
-use cove_device::cloud_storage::CloudSyncHealth;
+use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
+use cove_device::cloud_storage::{CloudStorage, CloudSyncHealth};
+use cove_device::keychain::Keychain;
 use cove_tokio::DebouncedTask;
 use tokio::sync::Notify;
 use tracing::{error, info, warn};
@@ -13,8 +15,8 @@ use super::pending::{
     build_pending_upload_backoff,
 };
 use super::{
-    CloudBackupError, CloudBackupStatus, PendingVerificationCompletion, RecoveryAction,
-    RustCloudBackupManager, WalletId, live_upload_retry_delay_for_attempt,
+    CloudBackupError, CloudBackupStatus, PendingEnableSession, PendingVerificationCompletion,
+    RecoveryAction, RustCloudBackupManager, WalletId, live_upload_retry_delay_for_attempt,
 };
 use crate::database::cloud_backup::{
     CloudBlobFailedState, CloudBlobFailureIssue, PersistedCloudBlobState,
@@ -126,14 +128,39 @@ enum SyncHealthRefreshState {
     RunningQueued,
 }
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct SyncHealthRuntimeState {
+    master_key_upload_grace_namespace: Option<String>,
+}
+
+impl SyncHealthRuntimeState {
+    pub(crate) fn master_key_upload_in_grace(&self, namespace_id: &str) -> bool {
+        self.master_key_upload_grace_namespace.as_deref() == Some(namespace_id)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_master_key_upload_grace(namespace_id: String) -> Self {
+        Self { master_key_upload_grace_namespace: Some(namespace_id) }
+    }
+}
+
+#[derive(Debug)]
+struct MasterKeyUploadGrace {
+    namespace_id: String,
+    id: u64,
+}
+
 #[derive(Debug)]
 pub(crate) struct CloudBackupRuntimeActor {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
+    pending_enable_session: Option<PendingEnableSession>,
     pending_verification_completion: Option<PendingVerificationCompletion>,
     pending_upload_verifier_running: bool,
     pending_upload_verifier_blocked_on_authorization: bool,
     pending_upload_verifier_wakeup: Arc<Notify>,
+    master_key_upload_grace: Option<MasterKeyUploadGrace>,
+    next_master_key_upload_grace_id: u64,
     sync_health_refresh_state: SyncHealthRefreshState,
     wallet_upload_debouncers: HashMap<WalletId, DebouncedTask<()>>,
     wallet_upload_retry_counts: HashMap<WalletId, u32>,
@@ -154,10 +181,13 @@ impl CloudBackupRuntimeActor {
         Self {
             addr: WeakAddr::default(),
             manager,
+            pending_enable_session: None,
             pending_verification_completion: None,
             pending_upload_verifier_running: false,
             pending_upload_verifier_blocked_on_authorization: false,
             pending_upload_verifier_wakeup: Arc::new(Notify::new()),
+            master_key_upload_grace: None,
+            next_master_key_upload_grace_id: 0,
             sync_health_refresh_state: SyncHealthRefreshState::Idle,
             wallet_upload_debouncers: HashMap::new(),
             wallet_upload_retry_counts: HashMap::new(),
@@ -174,14 +204,24 @@ impl CloudBackupRuntimeActor {
         Some(self.addr.upgrade())
     }
 
+    fn sync_health_runtime_state(&self) -> SyncHealthRuntimeState {
+        SyncHealthRuntimeState {
+            master_key_upload_grace_namespace: self
+                .master_key_upload_grace
+                .as_ref()
+                .map(|grace| grace.namespace_id.clone()),
+        }
+    }
+
     fn spawn_sync_health_refresh_task(&mut self, addr: Addr<Self>) {
         self.sync_health_refresh_state = SyncHealthRefreshState::Running;
         let Some(manager) = self.manager() else {
             self.sync_health_refresh_state = SyncHealthRefreshState::Idle;
             return;
         };
+        let runtime_state = self.sync_health_runtime_state();
         cove_tokio::task::spawn(async move {
-            let sync_health = manager.compute_sync_health().await;
+            let sync_health = manager.compute_sync_health(runtime_state).await;
             send!(addr.complete_sync_health_refresh(sync_health));
         });
     }
@@ -380,6 +420,96 @@ impl CloudBackupRuntimeActor {
     ) -> ActorResult<()> {
         self.spawn_operation(operation, record_id);
         Produces::ok(())
+    }
+
+    pub async fn replace_pending_enable_session(
+        &mut self,
+        session: PendingEnableSession,
+    ) -> ActorResult<()> {
+        self.pending_enable_session = Some(session);
+        Produces::ok(())
+    }
+
+    pub async fn take_pending_enable_session(
+        &mut self,
+    ) -> ActorResult<Option<PendingEnableSession>> {
+        Produces::ok(self.pending_enable_session.take())
+    }
+
+    pub async fn take_retry_pending_enable_session(
+        &mut self,
+    ) -> ActorResult<Option<PendingEnableSession>> {
+        let pending = self.pending_enable_session.take();
+        if pending.as_ref().is_some_and(PendingEnableSession::is_retry_upload) {
+            return Produces::ok(pending);
+        }
+
+        self.pending_enable_session = pending;
+        Produces::ok(None)
+    }
+
+    pub async fn clear_pending_enable_session(&mut self) -> ActorResult<()> {
+        self.pending_enable_session = None;
+        Produces::ok(())
+    }
+
+    pub async fn discard_pending_enable_cloud_backup(&mut self) -> ActorResult<()> {
+        let Some(pending) = self.pending_enable_session.take() else {
+            return Produces::ok(());
+        };
+
+        let should_delete_remote = pending.is_retry_upload();
+        let namespace_id = pending.master_key.namespace_id();
+
+        cove_cspp::Cspp::new(Keychain::global().clone()).delete_master_key();
+
+        if should_delete_remote {
+            cove_tokio::task::spawn(async move {
+                if let Err(error) = CloudStorage::global_explicit_client()
+                    .delete_wallet_backup(namespace_id, MASTER_KEY_RECORD_ID.to_string())
+                    .await
+                {
+                    warn!("Discard pending enable failed to delete remote master key: {error}");
+                }
+            });
+        }
+
+        Produces::ok(())
+    }
+
+    pub async fn start_master_key_upload_confirmation_grace(
+        &mut self,
+        namespace_id: String,
+    ) -> ActorResult<()> {
+        self.next_master_key_upload_grace_id += 1;
+        let id = self.next_master_key_upload_grace_id;
+        self.master_key_upload_grace =
+            Some(MasterKeyUploadGrace { namespace_id: namespace_id.clone(), id });
+
+        let Some(addr) = self.addr() else { return Produces::ok(()) };
+        cove_tokio::task::spawn(async move {
+            tokio::time::sleep(MAX_PENDING_UPLOAD_VERIFICATION_DELAY).await;
+            send!(addr.expire_master_key_upload_confirmation_grace(namespace_id, id));
+        });
+
+        Produces::ok(())
+    }
+
+    pub async fn expire_master_key_upload_confirmation_grace(
+        &mut self,
+        namespace_id: String,
+        id: u64,
+    ) -> ActorResult<()> {
+        if !self
+            .master_key_upload_grace
+            .as_ref()
+            .is_some_and(|grace| grace.namespace_id == namespace_id && grace.id == id)
+        {
+            return Produces::ok(());
+        }
+
+        self.master_key_upload_grace = None;
+        self.request_sync_health_refresh().await
     }
 
     pub async fn request_sync_health_refresh(&mut self) -> ActorResult<()> {
@@ -729,6 +859,8 @@ impl CloudBackupRuntimeActor {
     }
 
     pub async fn clear_upload_runtime_state(&mut self) -> ActorResult<()> {
+        self.pending_enable_session = None;
+        self.master_key_upload_grace = None;
         self.wallet_upload_debouncers.clear();
         self.wallet_upload_retry_counts.clear();
         self.active_wallet_uploads.clear();
