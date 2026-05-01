@@ -362,7 +362,7 @@ private struct OnboardingSoftwareImportCloudBackupChoiceView: View {
     }
 }
 
-private struct OnboardingHardwareImportCloudBackupChoiceView: View {
+struct OnboardingHardwareImportCloudBackupChoiceView: View {
     let onEnable: () -> Void
     let onSkip: () -> Void
 

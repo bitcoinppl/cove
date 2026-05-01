@@ -282,43 +282,49 @@ struct OnboardingPromptScreen<Footer: View>: View {
     @ViewBuilder let footer: Footer
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
+        ScrollView {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
 
-            OnboardingStatusHero(
-                systemImage: icon,
-                pulse: true,
-                iconSize: 22
-            )
+                OnboardingStatusHero(
+                    systemImage: icon,
+                    pulse: true,
+                    iconSize: 22
+                )
 
-            Spacer()
-                .frame(height: 36)
+                Spacer()
+                    .frame(height: 36)
 
-            VStack(spacing: 12) {
-                Text(title)
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(spacing: 12) {
+                    Text(title)
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(subtitle)
-                    .font(.footnote)
-                    .foregroundStyle(.coveLightGray.opacity(0.74))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.74))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 24)
+
+                Spacer()
+                    .frame(height: 26)
+
+                VStack(spacing: 14) {
+                    footer
+                }
+                .padding(.horizontal, 24)
+
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 24)
-
-            Spacer()
-                .frame(height: 26)
-
-            VStack(spacing: 14) {
-                footer
-            }
-            .padding(.horizontal, 24)
-
-            Spacer(minLength: 0)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity)
+            .containerRelativeFrame(.vertical, alignment: .center)
         }
-        .padding(.vertical, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
     }
