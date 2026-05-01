@@ -298,14 +298,15 @@ internal fun WalletSheetsHost(
                 onPartialSuccess = { skipped ->
                     onDismissNfcScanner()
                     scope.launch {
-                        val noun = if (skipped == 1u) "entry" else "entries"
-                        val msg = "Labels imported ($skipped $noun skipped)"
+                        val noun = if (skipped == 1u) "label" else "labels"
+                        val skippedMsg = "Labels imported. Could not import $skipped $noun"
                         try {
                             manager.rust.getTransactions()
+                            snackbarHostState.showSnackbar(skippedMsg)
                         } catch (e: Exception) {
                             android.util.Log.e(tag, "Failed to refresh transactions after partial NFC label import")
+                            snackbarHostState.showSnackbar("$skippedMsg. Transaction list may need manual refresh")
                         }
-                        snackbarHostState.showSnackbar(msg)
                     }
                 },
                 onError = { errorMsg ->
