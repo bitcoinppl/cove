@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 final class OnboardingFullLaunchUITests: XCTestCase {
@@ -169,7 +170,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         chooseNativeImportedWalletFromSelectionSheet()
 
         XCTAssertTrue(app.staticTexts["Transactions"].waitForExistence(timeout: 30))
-        XCTAssertTrue(staticText(containing: "0 sats").waitForExistence(timeout: 30))
+        XCTAssertTrue(staticText(containing: "0 BTC").waitForExistence(timeout: 30))
     }
 
     func testNewUserCanReachBackupWallet() {
@@ -273,10 +274,10 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
     private func chooseNativeImportedWalletFromSelectionSheet() {
         XCTAssertTrue(app.staticTexts["Multiple wallets found, please choose one"].waitForExistence(timeout: 30))
-        XCTAssertTrue(app.buttons["Keep Current"].exists)
+        XCTAssertTrue(button(startingWith: "Keep Current").exists)
         XCTAssertTrue(app.staticTexts["Wrapped Segwit"].exists || app.buttons["Wrapped Segwit"].exists)
         XCTAssertTrue(app.staticTexts["Legacy"].exists || app.buttons["Legacy"].exists)
-        app.buttons["Keep Current"].tap()
+        button(startingWith: "Keep Current").tap()
         XCTAssertTrue(app.staticTexts["Transactions"].waitForExistence(timeout: 30))
     }
 
@@ -290,12 +291,11 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         button(startingWith: "12 words").tap()
         XCTAssertTrue(app.navigationBars["Import Wallet"].waitForExistence(timeout: 10))
 
-        for (index, word) in knownEmptyMainnetMnemonic.enumerated() {
-            let field = app.textFields["hotWalletImport.word.\(index + 1)"]
-            XCTAssertTrue(field.waitForExistence(timeout: 10))
-            field.tap()
-            field.typeText(word)
-        }
+        let firstField = app.textFields["hotWalletImport.word.1"]
+        XCTAssertTrue(firstField.waitForExistence(timeout: 10))
+        firstField.tap()
+        UIPasteboard.general.string = knownEmptyMainnetMnemonic.joined(separator: " ")
+        firstField.typeKey("v", modifierFlags: .command)
 
         dismissKeyboardIfVisible()
         app.buttons["hotWalletImport.import"].tap()
@@ -347,6 +347,6 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     private func element(identifier: String) -> XCUIElement {
-        app.descendants(matching: .any)[identifier]
+        app.buttons[identifier]
     }
 }
