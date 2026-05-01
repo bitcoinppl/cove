@@ -210,33 +210,6 @@ fun HotWalletImportScreen(
                     ).use { it.isValidWord(word, enteredWords) }
             }
 
-    fun handlePasteMnemonic(mnemonicString: String) {
-        // extract word-like tokens, stripping numbers and punctuation
-        val words =
-            mnemonicString
-                .split(Regex("\\s+"))
-                .map { it.lowercase() }
-                .filter { word -> word.all { it.isLetter() } }
-
-        // need 12 or 24 words
-        if (words.size != 12 && words.size != 24) {
-            alertState = AlertState.InvalidWords
-            return
-        }
-
-        // group words into chunks of GROUPS_OF (12)
-        val grouped = words.chunked(GROUPS_OF)
-        setWords(grouped)
-
-        // validate - show alert if invalid
-        try {
-            groupedPlainWordsOf(words.joinToString(" "), GROUPS_OF.toUByte())
-        } catch (e: Exception) {
-            Log.d("HotWalletImport", "Invalid pasted mnemonic: ${e.message}")
-            alertState = AlertState.InvalidWords
-        }
-    }
-
     val focusManager = LocalFocusManager.current
 
     // dismiss keyboard when all words become valid
@@ -303,6 +276,33 @@ fun HotWalletImportScreen(
         // move to last page and last field
         tabIndex = words.size - 1
         focusedField = totalWords - 1
+    }
+
+    fun handlePasteMnemonic(mnemonicString: String) {
+        // extract word-like tokens, stripping numbers and punctuation
+        val words =
+            mnemonicString
+                .split(Regex("\\s+"))
+                .map { it.lowercase() }
+                .filter { word -> word.all { it.isLetter() } }
+
+        // need 12 or 24 words
+        if (words.size != 12 && words.size != 24) {
+            alertState = AlertState.InvalidWords
+            return
+        }
+
+        // group words into chunks of GROUPS_OF (12)
+        val grouped = words.chunked(GROUPS_OF)
+        setWords(grouped)
+
+        // validate - show alert if invalid
+        try {
+            groupedPlainWordsOf(words.joinToString(" "), GROUPS_OF.toUByte())
+        } catch (e: Exception) {
+            Log.d("HotWalletImport", "Invalid pasted mnemonic: ${e.message}")
+            alertState = AlertState.InvalidWords
+        }
     }
 
     // force white status bar icons for midnight blue background
