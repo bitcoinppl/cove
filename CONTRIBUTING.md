@@ -35,10 +35,12 @@ The `COVE_KEYSTORE_*` variables in `.envrc.example` are only needed for signed A
 ### iOS
 
 ```bash
-just build-ios-release    # alias: just bir
+just testflight
 ```
 
-Then archive and distribute via Xcode (Product → Archive).
+This bumps the iOS build number, rebuilds the release iOS bindings, archives the app, and uploads it to App Store Connect for TestFlight processing using the signed-in Xcode account.
+
+For CI or other API-key based uploads, set `ASC_AUTH_MODE=api-key` plus `ASC_API_KEY_PATH`, `ASC_API_KEY_ID`, and `ASC_API_ISSUER_ID`. The API key must have access to cloud-managed distribution certificates.
 
 ### Android
 

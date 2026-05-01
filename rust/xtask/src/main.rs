@@ -100,6 +100,26 @@ enum Commands {
         foreground: bool,
     },
 
+    /// Archive and upload the iOS app to TestFlight
+    #[command(name = "upload-testflight")]
+    UploadTestflight {
+        /// Signing/authentication mode for the upload
+        #[arg(long, env = "ASC_AUTH_MODE", value_enum, default_value_t = TestflightAuthMode::XcodeAccount)]
+        auth_mode: TestflightAuthMode,
+
+        /// App Store Connect API key file path
+        #[arg(long, env = "ASC_API_KEY_PATH")]
+        api_key_path: Option<String>,
+
+        /// App Store Connect API key ID
+        #[arg(long, env = "ASC_API_KEY_ID")]
+        api_key_id: Option<String>,
+
+        /// App Store Connect API issuer ID
+        #[arg(long, env = "ASC_API_ISSUER_ID")]
+        api_issuer_id: Option<String>,
+    },
+
     /// Install required build dependencies (cargo-ndk, etc.)
     #[command(name = "install-deps")]
     InstallDeps,
@@ -123,6 +143,24 @@ enum OutputFormat {
     BbqrGif,
     /// Animated GIF with UR-encoded QR codes (crypto-psbt)
     UrGif,
+}
+
+#[derive(Debug, Clone, Copy, Default, ValueEnum)]
+enum TestflightAuthMode {
+    /// Use the signed-in Xcode account
+    #[default]
+    XcodeAccount,
+    /// Use App Store Connect API key credentials
+    ApiKey,
+}
+
+impl From<TestflightAuthMode> for ios::TestflightAuthMode {
+    fn from(auth_mode: TestflightAuthMode) -> Self {
+        match auth_mode {
+            TestflightAuthMode::XcodeAccount => ios::TestflightAuthMode::XcodeAccount,
+            TestflightAuthMode::ApiKey => ios::TestflightAuthMode::ApiKey,
+        }
+    }
 }
 
 impl From<OutputFormat> for util::OutputFormat {
@@ -197,6 +235,16 @@ fn main() -> Result<()> {
         Commands::IosUi { device, test, foreground } => {
             let options = ios::IosUiOptions::new(device, test, foreground);
             ios::run_ios_ui_tests(options, cli.verbose)
+        }
+
+        Commands::UploadTestflight { auth_mode, api_key_path, api_key_id, api_issuer_id } => {
+            let options = ios::TestflightUploadOptions::new(
+                auth_mode.into(),
+                api_key_path,
+                api_key_id,
+                api_issuer_id,
+            );
+            ios::upload_testflight(options, cli.verbose)
         }
 
         Commands::InstallDeps => install_deps(cli.verbose),
