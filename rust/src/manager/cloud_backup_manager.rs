@@ -346,6 +346,24 @@ pub(crate) struct PendingEnableSession {
     passkey: Zeroizing<UnpersistedPrfKey>,
 }
 
+fn cloud_only_cache_is_stale(cloud_only: &CloudOnlyState, detail: &CloudBackupDetail) -> bool {
+    let CloudOnlyState::Loaded { wallets } = cloud_only else {
+        return false;
+    };
+
+    if wallets.len() as u32 != detail.cloud_only_count {
+        return true;
+    }
+
+    wallets.iter().any(|cloud_wallet| {
+        detail
+            .up_to_date
+            .iter()
+            .chain(detail.needs_sync.iter())
+            .any(|local_wallet| local_wallet.record_id == cloud_wallet.record_id)
+    })
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct PendingVerificationCompletion {
     report: DeepVerificationReport,
@@ -975,7 +993,31 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn set_detail(&self, detail: Option<CloudBackupDetail>) {
-        self.set_and_notify_field(detail, |state| &mut state.detail, Message::Detail);
+        let (detail_changed, reset_cloud_only) = {
+            let mut state = self.state.write();
+
+            let detail_changed = state.detail != detail;
+            if detail_changed {
+                state.detail.clone_from(&detail);
+            }
+
+            let reset_cloud_only = detail
+                .as_ref()
+                .is_some_and(|detail| cloud_only_cache_is_stale(&state.cloud_only, detail));
+            if reset_cloud_only {
+                state.cloud_only = CloudOnlyState::NotFetched;
+            }
+
+            (detail_changed, reset_cloud_only)
+        };
+
+        if reset_cloud_only {
+            self.send(Message::CloudOnly(CloudOnlyState::NotFetched));
+        }
+
+        if detail_changed {
+            self.send(Message::Detail(detail));
+        }
     }
 
     pub(crate) fn set_verification(&self, verification: VerificationState) {
@@ -2039,6 +2081,29 @@ mod tests {
         RustCloudBackupManager::init()
     }
 
+    fn cloud_backup_wallet_item(record_id: &str) -> CloudBackupWalletItem {
+        CloudBackupWalletItem {
+            name: record_id.into(),
+            network: None,
+            wallet_mode: None,
+            wallet_type: None,
+            fingerprint: None,
+            label_count: None,
+            backup_updated_at: None,
+            sync_status: CloudBackupWalletStatus::DeletedFromDevice,
+            record_id: record_id.into(),
+        }
+    }
+
+    fn cloud_backup_detail(cloud_only_count: u32) -> CloudBackupDetail {
+        CloudBackupDetail {
+            last_sync: None,
+            up_to_date: Vec::new(),
+            needs_sync: Vec::new(),
+            cloud_only_count,
+        }
+    }
+
     fn new_restore_operation(manager: &RustCloudBackupManager) -> RestoreOperation {
         let runtime = manager.runtime.clone();
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
@@ -2063,6 +2128,44 @@ mod tests {
             .recv()
             .expect("receive invalidate restore operation result")
             .expect("invalidate restore operation");
+    }
+
+    #[test]
+    fn detail_refresh_resets_empty_cloud_only_cache_when_remote_count_increases() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+
+        manager.set_cloud_only(CloudOnlyState::Loaded { wallets: Vec::new() });
+        manager.set_detail(Some(cloud_backup_detail(1)));
+
+        assert!(matches!(manager.state.read().cloud_only, CloudOnlyState::NotFetched));
+    }
+
+    #[test]
+    fn detail_refresh_resets_loaded_cloud_only_cache_when_remote_count_drops_to_zero() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+
+        manager.set_cloud_only(CloudOnlyState::Loaded {
+            wallets: vec![cloud_backup_wallet_item("wallet-1")],
+        });
+        manager.set_detail(Some(cloud_backup_detail(0)));
+
+        assert!(matches!(manager.state.read().cloud_only, CloudOnlyState::NotFetched));
+    }
+
+    #[test]
+    fn detail_refresh_resets_cloud_only_cache_when_loaded_wallet_is_now_local() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        let wallet = cloud_backup_wallet_item("wallet-1");
+        let mut detail = cloud_backup_detail(1);
+        detail.up_to_date.push(wallet.clone());
+
+        manager.set_cloud_only(CloudOnlyState::Loaded { wallets: vec![wallet] });
+        manager.set_detail(Some(detail));
+
+        assert!(matches!(manager.state.read().cloud_only, CloudOnlyState::NotFetched));
     }
 
     #[test]

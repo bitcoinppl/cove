@@ -83,6 +83,14 @@ fun WalletSettingsScreen(
     var showFinalDeleteConfirmation by remember { mutableStateOf(false) }
     var requiredConfirmations by remember { mutableStateOf(1.toUByte()) }
     var deleteError by remember { mutableStateOf<String?>(null) }
+    val finalDeleteConfirmationMessage =
+        if (app.cloudBackupManager.isCloudBackupEnabled) {
+            "This wallet will be deleted from this device. You can recover it from " +
+                "the Cloud Backup screen, or permanently delete it from there."
+        } else {
+            "This wallet is not backed up and contains funds. You will lose access to " +
+                "these funds forever."
+        }
 
     fun deleteWallet() {
         try {
@@ -347,7 +355,7 @@ fun WalletSettingsScreen(
         AlertDialog(
             onDismissRequest = { showFinalDeleteConfirmation = false },
             title = { Text("Final Warning") },
-            text = { Text("This wallet is not backed up and contains funds. You will lose access to these funds forever.") },
+            text = { Text(finalDeleteConfirmationMessage) },
             confirmButton = {
                 TextButton(
                     onClick = {
