@@ -1744,15 +1744,8 @@ impl RustCloudBackupManager {
     ///
     /// Debug-only: pair with Swift-side iCloud wipe for full reset
     pub fn debug_reset_cloud_backup_state(&self) {
-        let keychain = Keychain::global();
-        keychain.delete(CSPP_NAMESPACE_ID_KEY.to_string());
-        keychain.delete(CSPP_CREDENTIAL_ID_KEY.to_string());
-        keychain.delete(CSPP_PRF_SALT_KEY.to_string());
+        clear_local_cloud_backup_keychain_state();
         self.clear_pending_enable_session();
-
-        // also delete the master key so next enable starts clean
-        let cspp = cove_cspp::Cspp::new(keychain.clone());
-        cspp.delete_master_key();
 
         let db = Database::global();
         let _ = db.cloud_backup_state.delete();
@@ -1849,6 +1842,7 @@ fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecover
     use crate::database::migration::log_remove_file;
 
     wipe_wallet_keychain_items_for_catastrophic_recovery()?;
+    clear_local_cloud_backup_keychain_state();
 
     let root = &*cove_common::consts::ROOT_DATA_DIR;
 
@@ -1915,6 +1909,25 @@ fn live_upload_retry_delay_for_attempt(retry_count: u32) -> Duration {
         .saturating_mul(backoff_multiplier)
         .min(MAX_LIVE_UPLOAD_RETRY_DELAY.as_secs());
     Duration::from_secs(delay_secs)
+}
+
+pub(crate) fn clear_local_cloud_backup_keychain_state() {
+    let keychain = Keychain::global();
+    delete_keychain_item_if_present(keychain, CSPP_NAMESPACE_ID_KEY);
+    delete_keychain_item_if_present(keychain, CSPP_CREDENTIAL_ID_KEY);
+    delete_keychain_item_if_present(keychain, CSPP_PRF_SALT_KEY);
+
+    let cspp = cove_cspp::Cspp::new(keychain.clone());
+    let had_master_key = cspp.has_master_key();
+    if had_master_key && !cspp.delete_master_key() {
+        warn!("Failed to delete cloud backup master key from keychain");
+    }
+}
+
+fn delete_keychain_item_if_present(keychain: &Keychain, key: &str) {
+    if keychain.get(key.to_string()).is_some() && !keychain.delete(key.to_string()) {
+        warn!("Failed to delete cloud backup keychain item key={key}");
+    }
 }
 
 fn wipe_wallet_keychain_items_for_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {

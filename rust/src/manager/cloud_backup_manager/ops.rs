@@ -1214,7 +1214,8 @@ mod tests {
     use crate::label_manager::LabelManager;
     use crate::manager::cloud_backup_manager::{
         CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, DeepVerificationResult,
-        VerificationFailureKind, VerificationState, runtime_actor::SyncHealthRuntimeState,
+        VerificationFailureKind, VerificationState, clear_local_cloud_backup_keychain_state,
+        runtime_actor::SyncHealthRuntimeState,
     };
     use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
     use crate::manager::wallet_manager::RustWalletManager;
@@ -1777,6 +1778,55 @@ mod tests {
             store_handle.get(CSPP_NAMESPACE_ID_KEY.into()).as_deref(),
             Some(namespace_id.as_str())
         );
+    }
+
+    #[test]
+    fn clear_local_cloud_backup_keychain_state_removes_master_key_and_passkey_metadata() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        globals.reset();
+
+        let keychain = Keychain::global();
+        let cspp = cove_cspp::Cspp::new(keychain.clone());
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        cspp.save_master_key(&master_key).unwrap();
+        keychain.save_cspp_passkey_and_namespace(&[1, 2, 3], [4; 32], "test-namespace").unwrap();
+
+        assert!(cspp.load_master_key_from_store().unwrap().is_some());
+        assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_some());
+        assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_some());
+        assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_some());
+
+        clear_local_cloud_backup_keychain_state();
+
+        assert!(cspp.load_master_key_from_store().unwrap().is_none());
+        assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_none());
+        assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_none());
+        assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn local_master_key_fallback_is_unavailable_after_local_cloud_state_clear() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        globals.reset();
+
+        let keychain = Keychain::global();
+        let cspp = cove_cspp::Cspp::new(keychain.clone());
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        let namespace_id = master_key.namespace_id();
+        cspp.save_master_key(&master_key).unwrap();
+        globals.cloud.set_wallet_files(namespace_id, vec!["wallet-test.json".into()]);
+
+        clear_local_cloud_backup_keychain_state();
+
+        let fallback =
+            try_restore_from_local_master_key(&CloudStorage::global_explicit_client(), &cspp)
+                .await
+                .unwrap();
+
+        assert!(fallback.is_none());
     }
 
     #[tokio::test(flavor = "current_thread")]

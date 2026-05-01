@@ -100,10 +100,11 @@ impl<S: CsppStore> Cspp<S> {
     /// Deletes the master key and its encryption key from the store
     ///
     /// Used by debug reset to fully clear CSPP state
-    pub fn delete_master_key(&self) {
-        self.0.delete(MASTER_KEY_NAME.into());
-        self.0.delete(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into());
+    pub fn delete_master_key(&self) -> bool {
+        let master_key_deleted = self.0.delete(MASTER_KEY_NAME.into());
+        let encryption_key_deleted = self.0.delete(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into());
         Self::clear_cached_master_key();
+        master_key_deleted && encryption_key_deleted
     }
 
     /// Checks whether the master key exists in the store without decrypting it
