@@ -28108,6 +28108,44 @@ public object FfiConverterTypeCloudBackupWalletItem: FfiConverterRustBuffer<Clou
 
 
 
+data class CloudRestoreProviderHint (
+    var `providerName`: kotlin.String
+    , 
+    var `registeredAt`: kotlin.ULong
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudRestoreProviderHint: FfiConverterRustBuffer<CloudRestoreProviderHint> {
+    override fun read(buf: ByteBuffer): CloudRestoreProviderHint {
+        return CloudRestoreProviderHint(
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudRestoreProviderHint) = (
+            FfiConverterString.allocationSize(value.`providerName`) +
+            FfiConverterULong.allocationSize(value.`registeredAt`)
+    )
+
+    override fun write(value: CloudRestoreProviderHint, buf: ByteBuffer) {
+            FfiConverterString.write(value.`providerName`, buf)
+            FfiConverterULong.write(value.`registeredAt`, buf)
+    }
+}
+
+
+
 data class ConfirmedDetails (
     var `blockNumber`: kotlin.UInt
     , 
@@ -29029,6 +29067,8 @@ data class OnboardingState (
     , 
     var `cloudRestoreMessage`: kotlin.String?
     , 
+    var `cloudRestoreProviderHint`: CloudRestoreProviderHint?
+    , 
     var `shouldOfferCloudRestore`: kotlin.Boolean
     , 
     var `errorMessage`: kotlin.String?
@@ -29055,6 +29095,7 @@ public object FfiConverterTypeOnboardingState: FfiConverterRustBuffer<Onboarding
             FfiConverterBoolean.read(buf),
             FfiConverterTypeOnboardingCloudRestoreState.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeCloudRestoreProviderHint.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterOptionalString.read(buf),
         )
@@ -29068,6 +29109,7 @@ public object FfiConverterTypeOnboardingState: FfiConverterRustBuffer<Onboarding
             FfiConverterBoolean.allocationSize(value.`secretWordsSaved`) +
             FfiConverterTypeOnboardingCloudRestoreState.allocationSize(value.`cloudRestoreState`) +
             FfiConverterOptionalString.allocationSize(value.`cloudRestoreMessage`) +
+            FfiConverterOptionalTypeCloudRestoreProviderHint.allocationSize(value.`cloudRestoreProviderHint`) +
             FfiConverterBoolean.allocationSize(value.`shouldOfferCloudRestore`) +
             FfiConverterOptionalString.allocationSize(value.`errorMessage`)
     )
@@ -29080,6 +29122,7 @@ public object FfiConverterTypeOnboardingState: FfiConverterRustBuffer<Onboarding
             FfiConverterBoolean.write(value.`secretWordsSaved`, buf)
             FfiConverterTypeOnboardingCloudRestoreState.write(value.`cloudRestoreState`, buf)
             FfiConverterOptionalString.write(value.`cloudRestoreMessage`, buf)
+            FfiConverterOptionalTypeCloudRestoreProviderHint.write(value.`cloudRestoreProviderHint`, buf)
             FfiConverterBoolean.write(value.`shouldOfferCloudRestore`, buf)
             FfiConverterOptionalString.write(value.`errorMessage`, buf)
     }
@@ -40866,7 +40909,7 @@ sealed class OnboardingAction {
     }
     
     object CreateSoftwareWallet : OnboardingAction()
-
+    
     
     object ContinueWalletCreation : OnboardingAction()
     
@@ -41388,6 +41431,15 @@ sealed class OnboardingReconcileMessage {
         companion object
     }
     
+    data class CloudRestoreProviderHintChanged(
+        val v1: org.bitcoinppl.cove_core.CloudRestoreProviderHint?) : OnboardingReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class ShouldOfferCloudRestore(
         val v1: kotlin.Boolean) : OnboardingReconcileMessage()
         
@@ -41446,13 +41498,16 @@ public object FfiConverterTypeOnboardingReconcileMessage : FfiConverterRustBuffe
             7 -> OnboardingReconcileMessage.CloudRestoreMessageChanged(
                 FfiConverterOptionalString.read(buf),
                 )
-            8 -> OnboardingReconcileMessage.ShouldOfferCloudRestore(
+            8 -> OnboardingReconcileMessage.CloudRestoreProviderHintChanged(
+                FfiConverterOptionalTypeCloudRestoreProviderHint.read(buf),
+                )
+            9 -> OnboardingReconcileMessage.ShouldOfferCloudRestore(
                 FfiConverterBoolean.read(buf),
                 )
-            9 -> OnboardingReconcileMessage.ErrorMessageChanged(
+            10 -> OnboardingReconcileMessage.ErrorMessageChanged(
                 FfiConverterOptionalString.read(buf),
                 )
-            10 -> OnboardingReconcileMessage.Complete
+            11 -> OnboardingReconcileMessage.Complete
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -41505,6 +41560,13 @@ public object FfiConverterTypeOnboardingReconcileMessage : FfiConverterRustBuffe
             (
                 4UL
                 + FfiConverterOptionalString.allocationSize(value.v1)
+            )
+        }
+        is OnboardingReconcileMessage.CloudRestoreProviderHintChanged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterOptionalTypeCloudRestoreProviderHint.allocationSize(value.v1)
             )
         }
         is OnboardingReconcileMessage.ShouldOfferCloudRestore -> {
@@ -41566,18 +41628,23 @@ public object FfiConverterTypeOnboardingReconcileMessage : FfiConverterRustBuffe
                 FfiConverterOptionalString.write(value.v1, buf)
                 Unit
             }
-            is OnboardingReconcileMessage.ShouldOfferCloudRestore -> {
+            is OnboardingReconcileMessage.CloudRestoreProviderHintChanged -> {
                 buf.putInt(8)
+                FfiConverterOptionalTypeCloudRestoreProviderHint.write(value.v1, buf)
+                Unit
+            }
+            is OnboardingReconcileMessage.ShouldOfferCloudRestore -> {
+                buf.putInt(9)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is OnboardingReconcileMessage.ErrorMessageChanged -> {
-                buf.putInt(9)
+                buf.putInt(10)
                 FfiConverterOptionalString.write(value.v1, buf)
                 Unit
             }
             is OnboardingReconcileMessage.Complete -> {
-                buf.putInt(10)
+                buf.putInt(11)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -53582,6 +53649,38 @@ public object FfiConverterOptionalTypeCloudBackupRestoreReport: FfiConverterRust
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeCloudRestoreProviderHint: FfiConverterRustBuffer<CloudRestoreProviderHint?> {
+    override fun read(buf: ByteBuffer): CloudRestoreProviderHint? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudRestoreProviderHint.read(buf)
+    }
+
+    override fun allocationSize(value: CloudRestoreProviderHint?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudRestoreProviderHint.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudRestoreProviderHint?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudRestoreProviderHint.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeDeriveInfo: FfiConverterRustBuffer<DeriveInfo?> {
     override fun read(buf: ByteBuffer): DeriveInfo? {
         if (buf.get().toInt() == 0) {
@@ -55520,4 +55619,5 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     )
     }
     
+
 

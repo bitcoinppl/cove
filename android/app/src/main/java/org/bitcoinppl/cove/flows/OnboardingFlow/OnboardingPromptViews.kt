@@ -59,7 +59,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove_core.CloudRestoreProviderHint
 import org.bitcoinppl.cove_core.OnboardingStorageSelection
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 internal fun CloudCheckContent() {
@@ -327,6 +331,7 @@ private fun OnboardingTermsAgreementCard(
 internal fun OnboardingRestoreOfferView(
     warningMessage: String?,
     errorMessage: String?,
+    providerHint: CloudRestoreProviderHint?,
     onRestore: () -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -378,7 +383,7 @@ internal fun OnboardingRestoreOfferView(
 
             Spacer(modifier = Modifier.size(32.dp))
 
-            OnboardingPasskeyCard()
+            OnboardingPasskeyCard(providerHint = providerHint)
 
             if (warningMessage != null) {
                 Spacer(modifier = Modifier.size(14.dp))
@@ -418,7 +423,7 @@ internal fun OnboardingRestoreOfferView(
 }
 
 @Composable
-private fun OnboardingPasskeyCard() {
+private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
     Column(
         modifier =
             Modifier
@@ -465,10 +470,48 @@ private fun OnboardingPasskeyCard() {
                 )
                 Spacer(modifier = Modifier.size(4.dp))
                 Text(
-                    text = "Secured with your Google account",
+                    text = providerHint?.providerName ?: "Secured with your Google account",
                     color = CoveColor.coveLightGray.copy(alpha = 0.58f),
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+        }
+
+        if (providerHint != null) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(CoveColor.duskBlue.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Security,
+                    contentDescription = null,
+                    tint = OnboardingGradientLight.copy(alpha = 0.92f),
+                    modifier = Modifier.size(18.dp),
+                )
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Passkey provider",
+                        color = CoveColor.coveLightGray.copy(alpha = 0.58f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Text(
+                        text = providerHint.providerName,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "Added ${formatPasskeyProviderDate(providerHint.registeredAt)}",
+                        color = CoveColor.coveLightGray.copy(alpha = 0.58f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
         }
 
@@ -479,6 +522,12 @@ private fun OnboardingPasskeyCard() {
         )
     }
 }
+
+private fun formatPasskeyProviderDate(registeredAt: ULong): String =
+    DateTimeFormatter
+        .ofPattern("MMM d, yyyy")
+        .withZone(ZoneId.systemDefault())
+        .format(Instant.ofEpochSecond(registeredAt.toLong()))
 
 @Composable
 private fun OnboardingRestoreWarningCard(text: String) {

@@ -31,6 +31,9 @@ import org.bitcoinppl.cove_core.device.PasskeyException
 import org.bitcoinppl.cove_core.device.PasskeyFailureReason
 import org.bitcoinppl.cove_core.device.PasskeyOperation
 import org.bitcoinppl.cove_core.device.PasskeyProvider
+import org.bitcoinppl.cove_core.device.PasskeyRegistrationPlatform
+import org.bitcoinppl.cove_core.device.PasskeyRegistrationResult
+import org.bitcoinppl.cove_core.device.passkeyAaguidFromAttestationObject
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.SecureRandom
@@ -47,7 +50,7 @@ class AndroidPasskeyProvider(
         rpId: String,
         userId: ByteArray,
         challenge: ByteArray,
-    ): ByteArray {
+    ): PasskeyRegistrationResult {
         enforceBackgroundThread("createPasskey")
         return runBlocking {
             try {
@@ -68,7 +71,11 @@ class AndroidPasskeyProvider(
                         )
 
                 validatePasskeyRegistrationPrf(registration.registrationResponseJson)
-                extractCreatedCredentialId(registration.registrationResponseJson)
+                PasskeyRegistrationResult(
+                    credentialId = extractCreatedCredentialId(registration.registrationResponseJson),
+                    providerAaguid = extractCreatedProviderAaguid(registration.registrationResponseJson),
+                    registeredPlatform = PasskeyRegistrationPlatform.ANDROID,
+                )
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 throw mapPasskeyCreateError(error)
@@ -269,6 +276,21 @@ class AndroidPasskeyProvider(
             )
         }
         return rawId.fromBase64Url()
+    }
+
+    private fun extractCreatedProviderAaguid(responseJson: String): String {
+        val attestationObject =
+            JSONObject(responseJson)
+                .optJSONObject("response")
+                ?.optString("attestationObject")
+        if (attestationObject.isNullOrBlank()) {
+            throw passkeyRequestFailed(
+                PasskeyOperation.REGISTRATION,
+                PasskeyFailureReason.MalformedResponse,
+            )
+        }
+
+        return passkeyAaguidFromAttestationObject(attestationObject.fromBase64Url())
     }
 
     private fun extractPrfOutput(responseJson: String): ByteArray {

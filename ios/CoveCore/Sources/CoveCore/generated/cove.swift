@@ -13468,6 +13468,60 @@ public func FfiConverterTypeCloudBackupWalletItem_lower(_ value: CloudBackupWall
 }
 
 
+public struct CloudRestoreProviderHint: Equatable, Hashable {
+    public var providerName: String
+    public var registeredAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(providerName: String, registeredAt: UInt64) {
+        self.providerName = providerName
+        self.registeredAt = registeredAt
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CloudRestoreProviderHint: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudRestoreProviderHint: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudRestoreProviderHint {
+        return
+            try CloudRestoreProviderHint(
+                providerName: FfiConverterString.read(from: &buf), 
+                registeredAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudRestoreProviderHint, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.providerName, into: &buf)
+        FfiConverterUInt64.write(value.registeredAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudRestoreProviderHint_lift(_ buf: RustBuffer) throws -> CloudRestoreProviderHint {
+    return try FfiConverterTypeCloudRestoreProviderHint.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudRestoreProviderHint_lower(_ value: CloudRestoreProviderHint) -> RustBuffer {
+    return FfiConverterTypeCloudRestoreProviderHint.lower(value)
+}
+
+
 public struct ConfirmedDetails: Equatable, Hashable {
     public var blockNumber: UInt32
     public var confirmationTime: UInt64
@@ -14643,12 +14697,13 @@ public struct OnboardingState: Equatable, Hashable {
     public var secretWordsSaved: Bool
     public var cloudRestoreState: OnboardingCloudRestoreState
     public var cloudRestoreMessage: String?
+    public var cloudRestoreProviderHint: CloudRestoreProviderHint?
     public var shouldOfferCloudRestore: Bool
     public var errorMessage: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(step: OnboardingStep, branch: OnboardingBranch?, createdWords: [String], cloudBackupEnabled: Bool, secretWordsSaved: Bool, cloudRestoreState: OnboardingCloudRestoreState, cloudRestoreMessage: String?, shouldOfferCloudRestore: Bool, errorMessage: String?) {
+    public init(step: OnboardingStep, branch: OnboardingBranch?, createdWords: [String], cloudBackupEnabled: Bool, secretWordsSaved: Bool, cloudRestoreState: OnboardingCloudRestoreState, cloudRestoreMessage: String?, cloudRestoreProviderHint: CloudRestoreProviderHint?, shouldOfferCloudRestore: Bool, errorMessage: String?) {
         self.step = step
         self.branch = branch
         self.createdWords = createdWords
@@ -14656,6 +14711,7 @@ public struct OnboardingState: Equatable, Hashable {
         self.secretWordsSaved = secretWordsSaved
         self.cloudRestoreState = cloudRestoreState
         self.cloudRestoreMessage = cloudRestoreMessage
+        self.cloudRestoreProviderHint = cloudRestoreProviderHint
         self.shouldOfferCloudRestore = shouldOfferCloudRestore
         self.errorMessage = errorMessage
     }
@@ -14683,6 +14739,7 @@ public struct FfiConverterTypeOnboardingState: FfiConverterRustBuffer {
                 secretWordsSaved: FfiConverterBool.read(from: &buf), 
                 cloudRestoreState: FfiConverterTypeOnboardingCloudRestoreState.read(from: &buf), 
                 cloudRestoreMessage: FfiConverterOptionString.read(from: &buf), 
+                cloudRestoreProviderHint: FfiConverterOptionTypeCloudRestoreProviderHint.read(from: &buf), 
                 shouldOfferCloudRestore: FfiConverterBool.read(from: &buf), 
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
@@ -14696,6 +14753,7 @@ public struct FfiConverterTypeOnboardingState: FfiConverterRustBuffer {
         FfiConverterBool.write(value.secretWordsSaved, into: &buf)
         FfiConverterTypeOnboardingCloudRestoreState.write(value.cloudRestoreState, into: &buf)
         FfiConverterOptionString.write(value.cloudRestoreMessage, into: &buf)
+        FfiConverterOptionTypeCloudRestoreProviderHint.write(value.cloudRestoreProviderHint, into: &buf)
         FfiConverterBool.write(value.shouldOfferCloudRestore, into: &buf)
         FfiConverterOptionString.write(value.errorMessage, into: &buf)
     }
@@ -24338,7 +24396,7 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
         
         case .createSoftwareWallet:
             writeInt(&buf, Int32(5))
-
+        
         
         case .continueWalletCreation:
             writeInt(&buf, Int32(6))
@@ -24619,6 +24677,8 @@ public enum OnboardingReconcileMessage: Equatable, Hashable {
     )
     case cloudRestoreMessageChanged(String?
     )
+    case cloudRestoreProviderHintChanged(CloudRestoreProviderHint?
+    )
     case shouldOfferCloudRestore(Bool
     )
     case errorMessageChanged(String?
@@ -24666,13 +24726,16 @@ public struct FfiConverterTypeOnboardingReconcileMessage: FfiConverterRustBuffer
         case 7: return .cloudRestoreMessageChanged(try FfiConverterOptionString.read(from: &buf)
         )
         
-        case 8: return .shouldOfferCloudRestore(try FfiConverterBool.read(from: &buf)
+        case 8: return .cloudRestoreProviderHintChanged(try FfiConverterOptionTypeCloudRestoreProviderHint.read(from: &buf)
         )
         
-        case 9: return .errorMessageChanged(try FfiConverterOptionString.read(from: &buf)
+        case 9: return .shouldOfferCloudRestore(try FfiConverterBool.read(from: &buf)
         )
         
-        case 10: return .complete
+        case 10: return .errorMessageChanged(try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 11: return .complete
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -24717,18 +24780,23 @@ public struct FfiConverterTypeOnboardingReconcileMessage: FfiConverterRustBuffer
             FfiConverterOptionString.write(v1, into: &buf)
             
         
-        case let .shouldOfferCloudRestore(v1):
+        case let .cloudRestoreProviderHintChanged(v1):
             writeInt(&buf, Int32(8))
+            FfiConverterOptionTypeCloudRestoreProviderHint.write(v1, into: &buf)
+            
+        
+        case let .shouldOfferCloudRestore(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterBool.write(v1, into: &buf)
             
         
         case let .errorMessageChanged(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterOptionString.write(v1, into: &buf)
             
         
         case .complete:
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
         
         }
     }
@@ -34536,6 +34604,30 @@ fileprivate struct FfiConverterOptionTypeCloudBackupRestoreReport: FfiConverterR
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeCloudBackupRestoreReport.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeCloudRestoreProviderHint: FfiConverterRustBuffer {
+    typealias SwiftType = CloudRestoreProviderHint?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCloudRestoreProviderHint.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCloudRestoreProviderHint.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

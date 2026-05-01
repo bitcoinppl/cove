@@ -1,9 +1,15 @@
 use std::time::Duration;
 
 use backon::{ExponentialBuilder, Retryable as _};
-use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
+use cove_cspp::backup_data::{
+    EncryptedMasterKeyBackup, MasterKeyBackupVersion, PasskeyProviderHint,
+    PasskeyRegistrationPlatform as BackupPasskeyRegistrationPlatform,
+};
 use cove_device::cloud_storage::CloudStorageClient;
-use cove_device::passkey::{PasskeyAccess, PasskeyError, PasskeyFailureReason, PasskeyOperation};
+use cove_device::passkey::{
+    PasskeyAccess, PasskeyError, PasskeyFailureReason, PasskeyOperation,
+    PasskeyRegistrationPlatform, PasskeyRegistrationResult,
+};
 use cove_tokio::unblock;
 use rand::RngExt as _;
 use tracing::{info, warn};
@@ -122,7 +128,12 @@ impl PasskeyMaterialAcquirer {
                 let prf_key = prf_output_to_key(discovered.prf_output)?;
                 info!("{}", context.discovered_message);
 
-                Ok(UnpersistedPrfKey { prf_key, prf_salt, credential_id: discovered.credential_id })
+                Ok(UnpersistedPrfKey {
+                    prf_key,
+                    prf_salt,
+                    credential_id: discovered.credential_id,
+                    provider_hint: None,
+                })
             }
             Err(PasskeyError::UserCancelled) => {
                 info!("{}", context.cancelled_message);
@@ -160,7 +171,7 @@ impl PasskeyMaterialAcquirer {
         map_passkey_error: fn(PasskeyError) -> CloudBackupError,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
         let prf_salt: [u8; 32] = rand::rng().random();
-        let credential_id = {
+        let registration = {
             let passkey = self.passkey.clone();
             unblock::run_blocking(move || {
                 passkey.create_passkey(
@@ -172,6 +183,7 @@ impl PasskeyMaterialAcquirer {
             .await
             .map_err(map_passkey_error)?
         };
+        let credential_id = registration.credential_id.clone();
 
         // wait briefly before targeted auth so iOS can settle after registration
         // without probing for presence and flashing another native passkey sheet
@@ -192,7 +204,23 @@ impl PasskeyMaterialAcquirer {
             .map_err(map_passkey_error)?
         };
 
-        Ok(UnpersistedPrfKey { prf_key: prf_output_to_key(prf_output)?, prf_salt, credential_id })
+        Ok(UnpersistedPrfKey {
+            prf_key: prf_output_to_key(prf_output)?,
+            prf_salt,
+            credential_id,
+            provider_hint: Some(passkey_provider_hint(registration)),
+        })
+    }
+}
+
+fn passkey_provider_hint(registration: PasskeyRegistrationResult) -> PasskeyProviderHint {
+    PasskeyProviderHint {
+        aaguid: registration.provider_aaguid,
+        registered_platform: match registration.registered_platform {
+            PasskeyRegistrationPlatform::Ios => BackupPasskeyRegistrationPlatform::Ios,
+            PasskeyRegistrationPlatform::Android => BackupPasskeyRegistrationPlatform::Android,
+        },
+        registered_at: jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
     }
 }
 

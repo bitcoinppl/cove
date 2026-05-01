@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -7,6 +8,10 @@ use std::{
 };
 
 use backon::{FibonacciBuilder, Retryable as _};
+use cove_cspp::backup_data::{
+    EncryptedMasterKeyBackup, PasskeyProviderHint,
+    PasskeyRegistrationPlatform as BackupPasskeyRegistrationPlatform,
+};
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
 use flume::Receiver;
@@ -97,8 +102,15 @@ pub struct OnboardingState {
     pub secret_words_saved: bool,
     pub cloud_restore_state: OnboardingCloudRestoreState,
     pub cloud_restore_message: Option<String>,
+    pub cloud_restore_provider_hint: Option<CloudRestoreProviderHint>,
     pub should_offer_cloud_restore: bool,
     pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct CloudRestoreProviderHint {
+    pub provider_name: String,
+    pub registered_at: u64,
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -139,6 +151,7 @@ pub enum OnboardingReconcileMessage {
     SecretWordsSaved(bool),
     CloudRestoreState(OnboardingCloudRestoreState),
     CloudRestoreMessageChanged(Option<String>),
+    CloudRestoreProviderHintChanged(Option<CloudRestoreProviderHint>),
     ShouldOfferCloudRestore(bool),
     ErrorMessageChanged(Option<String>),
     Complete,
@@ -175,9 +188,9 @@ struct InitialFlowResolution {
     start_cloud_check: bool,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 enum CloudCheckOutcome {
-    BackupFound,
+    BackupFound(Option<CloudRestoreProviderHint>),
     NoBackupConfirmed,
     Inconclusive(CloudCheckIssue),
 }
@@ -280,10 +293,10 @@ enum OnboardingProgress {
     },
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 enum CloudRestoreDiscovery {
     Checking,
-    BackupFound,
+    BackupFound(Option<CloudRestoreProviderHint>),
     NoBackupFound,
     Inconclusive(CloudCheckIssue),
 }
@@ -399,7 +412,7 @@ impl RustOnboardingManager {
         let command = self.mutate_state(|state, deferred| {
             let command = state.flow.apply_user_action(
                 action,
-                state.cloud_restore_discovery,
+                state.cloud_restore_discovery.clone(),
                 &mut state.restore_offer_allowed,
             );
             let command = state.maybe_advance_accepted_terms(command);
@@ -474,7 +487,7 @@ impl RustOnboardingManager {
             let cloud = CloudStorage::global_silent_client();
             let check_cloud_backup = || {
                 let cloud = cloud.clone();
-                async move { cloud.has_any_cloud_backup().await }
+                async move { inspect_cloud_restore_backup(cloud).await }
             };
 
             let outcome =
@@ -502,7 +515,7 @@ impl RustOnboardingManager {
     ) -> bool {
         self.mutate_state(|state, deferred| {
             state.flow.apply_event(
-                InternalEvent::CloudCheckFinished(outcome),
+                InternalEvent::CloudCheckFinished(outcome.clone()),
                 &mut state.cloud_restore_discovery,
                 state.restore_offer_allowed,
             );
@@ -699,7 +712,7 @@ impl InternalState {
     fn new(flow: FlowState) -> Self {
         let cloud_restore_discovery = CloudRestoreDiscovery::Checking;
         let restore_offer_allowed = true;
-        let ui = flow.ui_state(cloud_restore_discovery, false);
+        let ui = flow.ui_state(&cloud_restore_discovery, false);
         Self { flow, cloud_restore_discovery, restore_offer_allowed, ui }
     }
 
@@ -732,7 +745,7 @@ impl InternalState {
 
     fn sync_ui(&mut self, deferred: &mut DeferredSender<Message>) {
         let next_ui =
-            self.flow.ui_state(self.cloud_restore_discovery, self.should_offer_cloud_restore());
+            self.flow.ui_state(&self.cloud_restore_discovery, self.should_offer_cloud_restore());
 
         if self.ui.branch != next_ui.branch {
             deferred.queue(Message::Branch(next_ui.branch));
@@ -753,6 +766,11 @@ impl InternalState {
             deferred
                 .queue(Message::CloudRestoreMessageChanged(next_ui.cloud_restore_message.clone()));
         }
+        if self.ui.cloud_restore_provider_hint != next_ui.cloud_restore_provider_hint {
+            deferred.queue(Message::CloudRestoreProviderHintChanged(
+                next_ui.cloud_restore_provider_hint.clone(),
+            ));
+        }
         if self.ui.should_offer_cloud_restore != next_ui.should_offer_cloud_restore {
             deferred.queue(Message::ShouldOfferCloudRestore(next_ui.should_offer_cloud_restore));
         }
@@ -768,7 +786,7 @@ impl InternalState {
 
     fn should_offer_cloud_restore(&self) -> bool {
         self.restore_offer_allowed
-            && self.cloud_restore_discovery == CloudRestoreDiscovery::BackupFound
+            && matches!(self.cloud_restore_discovery, CloudRestoreDiscovery::BackupFound(_))
     }
 }
 
@@ -1061,7 +1079,7 @@ impl FlowState {
         restore_offer_allowed: bool,
     ) {
         if let InternalEvent::CloudCheckFinished(outcome) = &event {
-            *cloud_restore_discovery = CloudRestoreDiscovery::from(*outcome);
+            *cloud_restore_discovery = CloudRestoreDiscovery::from(outcome.clone());
         }
 
         let current = std::mem::replace(self, Self::Welcome { error_message: None });
@@ -1069,7 +1087,7 @@ impl FlowState {
         let next = match (current, event) {
             (
                 Self::CloudCheck { origin },
-                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound),
+                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(_)),
             ) => Self::RestoreOffer { origin, error_message: None },
             (
                 Self::CloudCheck { origin },
@@ -1081,19 +1099,19 @@ impl FlowState {
             ) => Self::restore_inconclusive_entry_for(issue, origin),
             (
                 Self::Welcome { .. },
-                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound),
+                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(_)),
             ) if restore_offer_allowed => {
                 Self::RestoreOffer { origin: RestoreOrigin::Welcome, error_message: None }
             }
             (
                 Self::BitcoinChoice { .. },
-                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound),
+                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(_)),
             ) if restore_offer_allowed => {
                 Self::RestoreOffer { origin: RestoreOrigin::BitcoinChoice, error_message: None }
             }
             (
                 Self::ReturningUserChoice,
-                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound),
+                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(_)),
             ) if restore_offer_allowed => Self::RestoreOffer {
                 origin: RestoreOrigin::ReturningUserChoice,
                 error_message: None,
@@ -1149,7 +1167,7 @@ impl FlowState {
 
     fn ui_state(
         &self,
-        cloud_restore_discovery: CloudRestoreDiscovery,
+        cloud_restore_discovery: &CloudRestoreDiscovery,
         should_offer_cloud_restore: bool,
     ) -> OnboardingState {
         let mut state = Self::base_ui_state(cloud_restore_discovery, should_offer_cloud_restore);
@@ -1291,7 +1309,7 @@ impl FlowState {
     ) -> Self {
         match cloud_restore_discovery {
             CloudRestoreDiscovery::Checking => Self::CloudCheck { origin },
-            CloudRestoreDiscovery::BackupFound => {
+            CloudRestoreDiscovery::BackupFound(_) => {
                 Self::RestoreOffer { origin, error_message: None }
             }
             CloudRestoreDiscovery::NoBackupFound => Self::RestoreUnavailable { origin },
@@ -1311,12 +1329,13 @@ impl FlowState {
     }
 
     fn base_ui_state(
-        cloud_restore_discovery: CloudRestoreDiscovery,
+        cloud_restore_discovery: &CloudRestoreDiscovery,
         should_offer_cloud_restore: bool,
     ) -> OnboardingState {
         OnboardingState {
             cloud_restore_state: cloud_restore_discovery.ui_state(),
             cloud_restore_message: cloud_restore_discovery.message(),
+            cloud_restore_provider_hint: cloud_restore_discovery.provider_hint(),
             should_offer_cloud_restore,
             ..OnboardingState::default()
         }
@@ -1325,7 +1344,7 @@ impl FlowState {
     fn project_created_wallet(
         step: OnboardingStep,
         flow: &CreatedWalletFlow,
-        cloud_restore_discovery: CloudRestoreDiscovery,
+        cloud_restore_discovery: &CloudRestoreDiscovery,
         should_offer_cloud_restore: bool,
     ) -> OnboardingState {
         OnboardingState {
@@ -1336,6 +1355,7 @@ impl FlowState {
             secret_words_saved: flow.secret_words_saved,
             cloud_restore_state: cloud_restore_discovery.ui_state(),
             cloud_restore_message: cloud_restore_discovery.message(),
+            cloud_restore_provider_hint: cloud_restore_discovery.provider_hint(),
             should_offer_cloud_restore,
             error_message: None,
         }
@@ -1490,18 +1510,25 @@ where
 }
 
 impl CloudRestoreDiscovery {
-    fn ui_state(self) -> OnboardingCloudRestoreState {
+    fn ui_state(&self) -> OnboardingCloudRestoreState {
         match self {
             Self::Checking => OnboardingCloudRestoreState::Checking,
-            Self::BackupFound => OnboardingCloudRestoreState::BackupFound,
+            Self::BackupFound(_) => OnboardingCloudRestoreState::BackupFound,
             Self::NoBackupFound => OnboardingCloudRestoreState::NoBackupFound,
             Self::Inconclusive(_) => OnboardingCloudRestoreState::Inconclusive,
         }
     }
 
-    fn message(self) -> Option<String> {
+    fn message(&self) -> Option<String> {
         match self {
-            Self::Inconclusive(issue) => Some(cloud_check_inconclusive_message(issue)),
+            Self::Inconclusive(issue) => Some(cloud_check_inconclusive_message(*issue)),
+            _ => None,
+        }
+    }
+
+    fn provider_hint(&self) -> Option<CloudRestoreProviderHint> {
+        match self {
+            Self::BackupFound(hint) => hint.clone(),
             _ => None,
         }
     }
@@ -1510,7 +1537,7 @@ impl CloudRestoreDiscovery {
 impl From<CloudCheckOutcome> for CloudRestoreDiscovery {
     fn from(value: CloudCheckOutcome) -> Self {
         match value {
-            CloudCheckOutcome::BackupFound => Self::BackupFound,
+            CloudCheckOutcome::BackupFound(hint) => Self::BackupFound(hint),
             CloudCheckOutcome::NoBackupConfirmed => Self::NoBackupFound,
             CloudCheckOutcome::Inconclusive(issue) => Self::Inconclusive(issue),
         }
@@ -1569,13 +1596,83 @@ fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String {
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct CloudRestoreBackupSnapshot {
+    has_backup: bool,
+    provider_hint: Option<CloudRestoreProviderHint>,
+}
+
+async fn inspect_cloud_restore_backup(
+    cloud: cove_device::cloud_storage::CloudStorageClient,
+) -> Result<CloudRestoreBackupSnapshot, CloudStorageError> {
+    let namespaces = cloud.list_namespaces().await?;
+    if namespaces.is_empty() {
+        return Ok(CloudRestoreBackupSnapshot { has_backup: false, provider_hint: None });
+    }
+
+    let provider_hint = load_cloud_restore_provider_hint(&cloud, namespaces).await;
+    Ok(CloudRestoreBackupSnapshot { has_backup: true, provider_hint })
+}
+
+async fn load_cloud_restore_provider_hint(
+    cloud: &cove_device::cloud_storage::CloudStorageClient,
+    namespaces: Vec<String>,
+) -> Option<CloudRestoreProviderHint> {
+    let mut hints = Vec::new();
+    for namespace in namespaces {
+        let Ok(master_json) = cloud.download_master_key_backup(namespace).await else {
+            continue;
+        };
+        let Ok(encrypted) = serde_json::from_slice::<EncryptedMasterKeyBackup>(&master_json) else {
+            continue;
+        };
+        let Some(hint) = encrypted.passkey_provider_hint.as_ref().and_then(resolve_provider_hint)
+        else {
+            continue;
+        };
+
+        hints.push(hint);
+    }
+
+    choose_restore_provider_hint(hints)
+}
+
+fn choose_restore_provider_hint(
+    hints: Vec<CloudRestoreProviderHint>,
+) -> Option<CloudRestoreProviderHint> {
+    let provider_names =
+        hints.iter().map(|hint| hint.provider_name.as_str()).collect::<HashSet<_>>();
+    if provider_names.len() != 1 {
+        return None;
+    }
+
+    hints.into_iter().max_by_key(|hint| hint.registered_at)
+}
+
+fn resolve_provider_hint(hint: &PasskeyProviderHint) -> Option<CloudRestoreProviderHint> {
+    let provider_name = match hint.aaguid.as_str() {
+        "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4" => "Google Password Manager",
+        "00000000-0000-0000-0000-000000000000"
+            if hint.registered_platform == BackupPasskeyRegistrationPlatform::Ios =>
+        {
+            "Apple Passwords"
+        }
+        _ => return None,
+    };
+
+    Some(CloudRestoreProviderHint {
+        provider_name: provider_name.into(),
+        registered_at: hint.registered_at,
+    })
+}
+
 async fn determine_cloud_check_outcome<F, Fut, S>(
-    mut has_any_cloud_backup: F,
+    mut inspect_backup: F,
     sleep: S,
 ) -> CloudCheckOutcome
 where
     F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<bool, CloudStorageError>>,
+    Fut: std::future::Future<Output = Result<CloudRestoreBackupSnapshot, CloudStorageError>>,
     S: backon::Sleeper,
 {
     let max_retries = 6;
@@ -1583,7 +1680,7 @@ where
     let result = (|| {
         attempt += 1;
         info!("Onboarding: checking cloud backup attempt={attempt}");
-        has_any_cloud_backup()
+        inspect_backup()
     })
     .retry(
         FibonacciBuilder::default()
@@ -1595,8 +1692,10 @@ where
     .await;
 
     match result {
-        Ok(true) => CloudCheckOutcome::BackupFound,
-        Ok(false) => CloudCheckOutcome::NoBackupConfirmed,
+        Ok(snapshot) if snapshot.has_backup => {
+            CloudCheckOutcome::BackupFound(snapshot.provider_hint)
+        }
+        Ok(_) => CloudCheckOutcome::NoBackupConfirmed,
         Err(error) => {
             warn!("Onboarding: final cloud backup check failed: {error}");
             CloudCheckOutcome::Inconclusive(classify_cloud_check_error(&error))
@@ -1795,7 +1894,7 @@ mod tests {
         let wallet_id = WalletId::new();
         let flow = FlowState::CloudBackup(CloudBackupFlow::HardwareImport { wallet_id });
 
-        let state = flow.ui_state(CloudRestoreDiscovery::Checking, false);
+        let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false);
 
         assert_eq!(state.step, OnboardingStep::CloudBackup);
         assert_eq!(state.branch, Some(OnboardingBranch::Hardware));
@@ -2075,7 +2174,7 @@ mod tests {
 
         let command = flow.apply_user_action(
             OnboardingAction::ContinueFromBackup,
-            CloudRestoreDiscovery::BackupFound,
+            CloudRestoreDiscovery::BackupFound(None),
             &mut restore_offer_allowed,
         );
 
@@ -2091,7 +2190,7 @@ mod tests {
 
         let command = flow.apply_user_action(
             OnboardingAction::RestoreFailed { error: "passkey verification failed".into() },
-            CloudRestoreDiscovery::BackupFound,
+            CloudRestoreDiscovery::BackupFound(None),
             &mut restore_offer_allowed,
         );
 
@@ -2178,12 +2277,12 @@ mod tests {
             let mut discovery = CloudRestoreDiscovery::Checking;
 
             flow.apply_event(
-                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound),
+                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(None)),
                 &mut discovery,
                 true,
             );
 
-            assert_eq!(discovery, CloudRestoreDiscovery::BackupFound);
+            assert_eq!(discovery, CloudRestoreDiscovery::BackupFound(None));
             assert!(matches!(
                 flow,
                 FlowState::RestoreOffer { origin, error_message: None } if origin == expected_origin
@@ -2197,12 +2296,12 @@ mod tests {
         let mut discovery = CloudRestoreDiscovery::Checking;
 
         flow.apply_event(
-            InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound),
+            InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(None)),
             &mut discovery,
             true,
         );
 
-        assert_eq!(discovery, CloudRestoreDiscovery::BackupFound);
+        assert_eq!(discovery, CloudRestoreDiscovery::BackupFound(None));
         assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
     }
 
@@ -2235,7 +2334,7 @@ mod tests {
                 false,
             );
 
-            let state = flow.ui_state(CloudRestoreDiscovery::Checking, false);
+            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false);
             assert_eq!(state.step, step);
             assert_eq!(state.error_message.as_deref(), Some("create failed"));
         }
@@ -2276,7 +2375,7 @@ mod tests {
             assert_eq!(command, expected_command);
             assert!(!restore_offer_allowed);
 
-            let state = flow.ui_state(CloudRestoreDiscovery::Checking, false);
+            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false);
             assert_eq!(state.step, expected_step);
             assert_eq!(state.error_message, None);
         }
@@ -2310,7 +2409,7 @@ mod tests {
 
             assert_eq!(command, TransitionCommand::None);
 
-            let state = flow.ui_state(CloudRestoreDiscovery::Checking, false);
+            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false);
             assert_eq!(state.step, expected_step);
             assert_eq!(state.error_message, None);
         }
@@ -2337,7 +2436,7 @@ mod tests {
         ];
 
         for (flow, expected_step, expected_error) in scenarios {
-            let state = flow.ui_state(CloudRestoreDiscovery::Checking, false);
+            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false);
 
             assert_eq!(state.step, expected_step);
             assert_eq!(state.error_message.as_deref(), Some(expected_error));
@@ -2394,7 +2493,7 @@ mod tests {
 
         assert_eq!(discovery, CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline));
         assert!(matches!(flow, FlowState::RestoreOffline { origin: RestoreOrigin::Startup }));
-        assert_eq!(flow.ui_state(discovery, false).step, OnboardingStep::RestoreOffline);
+        assert_eq!(flow.ui_state(&discovery, false).step, OnboardingStep::RestoreOffline);
     }
 
     #[test]
@@ -2428,7 +2527,7 @@ mod tests {
 
         let command = flow.apply_user_action(
             OnboardingAction::SkipRestore,
-            CloudRestoreDiscovery::BackupFound,
+            CloudRestoreDiscovery::BackupFound(None),
             &mut restore_offer_allowed,
         );
 
@@ -2445,7 +2544,7 @@ mod tests {
 
         let command = flow.apply_user_action(
             OnboardingAction::SkipRestore,
-            CloudRestoreDiscovery::BackupFound,
+            CloudRestoreDiscovery::BackupFound(None),
             &mut restore_offer_allowed,
         );
 
@@ -2737,7 +2836,7 @@ mod tests {
         let slept = Arc::new(Mutex::new(Vec::new()));
         let sleep_log = Arc::clone(&slept);
         let outcome = determine_cloud_check_outcome(
-            || async { Ok(false) },
+            || async { Ok(CloudRestoreBackupSnapshot { has_backup: false, provider_hint: None }) },
             move |duration| {
                 let sleep_log = Arc::clone(&sleep_log);
                 async move {
@@ -2760,6 +2859,34 @@ mod tests {
         .await;
 
         assert_eq!(outcome, CloudCheckOutcome::Inconclusive(CloudCheckIssue::CloudUnavailable));
+    }
+
+    #[test]
+    fn restore_provider_hint_resolves_known_providers_only() {
+        let google = resolve_provider_hint(&PasskeyProviderHint {
+            aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+            registered_platform: BackupPasskeyRegistrationPlatform::Android,
+            registered_at: 1_777_661_234,
+        })
+        .expect("google provider should resolve");
+        assert_eq!(google.provider_name, "Google Password Manager");
+
+        let apple = resolve_provider_hint(&PasskeyProviderHint {
+            aaguid: "00000000-0000-0000-0000-000000000000".into(),
+            registered_platform: BackupPasskeyRegistrationPlatform::Ios,
+            registered_at: 1_777_661_235,
+        })
+        .expect("iOS all-zero provider should resolve");
+        assert_eq!(apple.provider_name, "Apple Passwords");
+
+        assert_eq!(
+            resolve_provider_hint(&PasskeyProviderHint {
+                aaguid: "00000000-0000-0000-0000-000000000000".into(),
+                registered_platform: BackupPasskeyRegistrationPlatform::Android,
+                registered_at: 1_777_661_236,
+            }),
+            None
+        );
     }
 
     #[test]
@@ -2873,7 +3000,7 @@ mod tests {
         flow: FlowState,
         cloud_restore_discovery: CloudRestoreDiscovery,
     ) -> InternalState {
-        let ui = flow.ui_state(cloud_restore_discovery, false);
+        let ui = flow.ui_state(&cloud_restore_discovery, false);
 
         InternalState { flow, cloud_restore_discovery, restore_offer_allowed: true, ui }
     }

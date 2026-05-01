@@ -2,7 +2,7 @@ use chacha20poly1305::{ChaCha20Poly1305, KeyInit as _, aead::Aead as _};
 use cove_util::ResultExt as _;
 use rand::RngExt as _;
 
-use crate::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
+use crate::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion, PasskeyProviderHint};
 use crate::error::CsppError;
 use crate::master_key::MasterKey;
 
@@ -18,6 +18,15 @@ pub fn encrypt_master_key(
     prf_key: &[u8; 32],
     prf_salt: &[u8; 32],
 ) -> Result<EncryptedMasterKeyBackup, CsppError> {
+    encrypt_master_key_with_provider_hint(master_key, prf_key, prf_salt, None)
+}
+
+pub fn encrypt_master_key_with_provider_hint(
+    master_key: &MasterKey,
+    prf_key: &[u8; 32],
+    prf_salt: &[u8; 32],
+    passkey_provider_hint: Option<PasskeyProviderHint>,
+) -> Result<EncryptedMasterKeyBackup, CsppError> {
     let cipher = ChaCha20Poly1305::new(prf_key.into());
 
     let mut nonce_bytes = [0u8; 12];
@@ -29,6 +38,7 @@ pub fn encrypt_master_key(
 
     Ok(EncryptedMasterKeyBackup {
         version: MasterKeyBackupVersion::V1.as_u32(),
+        passkey_provider_hint,
         prf_salt: *prf_salt,
         nonce: nonce_bytes,
         ciphertext,

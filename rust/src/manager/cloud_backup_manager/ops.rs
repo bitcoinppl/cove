@@ -1008,9 +1008,13 @@ impl RustCloudBackupManager {
         ))
         .await;
 
-        let encrypted_master =
-            master_key_crypto::encrypt_master_key(&master_key, &passkey.prf_key, &passkey.prf_salt)
-                .map_err_str(CloudBackupError::Crypto)?;
+        let encrypted_master = master_key_crypto::encrypt_master_key_with_provider_hint(
+            &master_key,
+            &passkey.prf_key,
+            &passkey.prf_salt,
+            passkey.provider_hint.clone(),
+        )
+        .map_err_str(CloudBackupError::Crypto)?;
         let master_json =
             serde_json::to_vec(&encrypted_master).map_err_str(CloudBackupError::Internal)?;
 
@@ -2221,7 +2225,7 @@ mod tests {
         globals.reset();
 
         let namespace = "existing-namespace";
-        CloudBackupKeychain::global().save_namespace_id(&namespace).unwrap();
+        CloudBackupKeychain::global().save_namespace_id(namespace).unwrap();
 
         let manager = RustCloudBackupManager::init();
         let mut metadata = WalletMetadata::preview_new();
@@ -2248,7 +2252,7 @@ mod tests {
         globals.reset();
 
         let namespace = "existing-namespace";
-        CloudBackupKeychain::global().save_namespace_id(&namespace).unwrap();
+        CloudBackupKeychain::global().save_namespace_id(namespace).unwrap();
 
         let manager = RustCloudBackupManager::init();
         let metadata = xpub_only_wallet_metadata();
@@ -3933,6 +3937,7 @@ mod tests {
                     prf_key: [7; 32],
                     prf_salt: [9; 32],
                     credential_id: vec![1, 2, 3],
+                    provider_hint: None,
                 },
             ))
             .await;
@@ -3964,6 +3969,7 @@ mod tests {
                     prf_key: [7; 32],
                     prf_salt: [9; 32],
                     credential_id: vec![1, 2, 3],
+                    provider_hint: None,
                 },
             ))
             .await;
@@ -4014,6 +4020,7 @@ mod tests {
                     prf_key: [7; 32],
                     prf_salt: [9; 32],
                     credential_id: expected_credential_id.clone(),
+                    provider_hint: None,
                 },
             ))
             .await;
@@ -4047,6 +4054,7 @@ mod tests {
                     prf_key: [7; 32],
                     prf_salt: [9; 32],
                     credential_id: expected_credential_id.clone(),
+                    provider_hint: None,
                 },
             ))
             .await;
@@ -4080,6 +4088,7 @@ mod tests {
                     prf_key: [7; 32],
                     prf_salt: [9; 32],
                     credential_id: expected_credential_id.clone(),
+                    provider_hint: None,
                 },
             ))
             .await;
@@ -4109,6 +4118,7 @@ mod tests {
                     prf_key: [7; 32],
                     prf_salt: [9; 32],
                     credential_id: vec![1, 2, 3],
+                    provider_hint: None,
                 },
             ))
             .await;

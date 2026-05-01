@@ -51,6 +51,7 @@ internal fun OnboardingContainer(
             OnboardingRestoreOfferView(
                 warningMessage = restoreWarningMessage,
                 errorMessage = manager.state.errorMessage,
+                providerHint = manager.state.cloudRestoreProviderHint,
                 onRestore = { manager.dispatch(OnboardingAction.StartRestore) },
                 onSkip = { manager.dispatch(OnboardingAction.SkipRestore) },
             )

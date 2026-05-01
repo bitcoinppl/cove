@@ -75,6 +75,20 @@ impl TryFrom<u32> for MasterKeyBackupVersion {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PasskeyRegistrationPlatform {
+    Ios,
+    Android,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PasskeyProviderHint {
+    pub aaguid: String,
+    pub registered_platform: PasskeyRegistrationPlatform,
+    pub registered_at: u64,
+}
+
 /// Wallet data to be encrypted and uploaded to cloud backup
 #[derive(Debug, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct WalletEntry {
@@ -158,6 +172,7 @@ pub struct EncryptedWalletBackup {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedMasterKeyBackup {
     pub version: u32,
+    pub passkey_provider_hint: Option<PasskeyProviderHint>,
     /// Salt used with the passkey PRF to re-derive the existing wrapping key
     #[serde(with = "hex_array")]
     pub prf_salt: [u8; 32],
@@ -272,6 +287,11 @@ mod tests {
     fn encrypted_master_key_backup_json_roundtrip() {
         let backup = EncryptedMasterKeyBackup {
             version: 1,
+            passkey_provider_hint: Some(PasskeyProviderHint {
+                aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+                registered_platform: PasskeyRegistrationPlatform::Android,
+                registered_at: 1_777_661_234,
+            }),
             prf_salt: [0xCC; 32],
             nonce: [0xDD; 12],
             ciphertext: vec![10, 20, 30],
@@ -280,6 +300,7 @@ mod tests {
         let json = serde_json::to_string(&backup).unwrap();
         let decoded: EncryptedMasterKeyBackup = serde_json::from_str(&json).unwrap();
 
+        assert_eq!(decoded.passkey_provider_hint, backup.passkey_provider_hint);
         assert_eq!(decoded.prf_salt, [0xCC; 32]);
         assert_eq!(decoded.nonce, [0xDD; 12]);
         assert_eq!(decoded.ciphertext, vec![10, 20, 30]);

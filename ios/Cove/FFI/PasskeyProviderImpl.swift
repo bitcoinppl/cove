@@ -61,7 +61,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         true
     }
 
-    func createPasskey(rpId: String, userId: Data, challenge: Data) throws -> Data {
+    func createPasskey(rpId: String, userId: Data, challenge: Data) throws -> PasskeyRegistrationResult {
         precondition(!Thread.isMainThread, "createPasskey must not be called from the main thread")
 
         let registration = try performRegistrationRequest(
@@ -70,7 +70,19 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             challenge: challenge
         )
         _ = try validateRegistrationPrfMetadata(registration)
-        return registration.credentialID
+
+        guard let attestationObject = registration.rawAttestationObject else {
+            throw PasskeyError.RequestFailed(
+                operation: .registration,
+                reason: .malformedResponse
+            )
+        }
+
+        return try PasskeyRegistrationResult(
+            credentialId: registration.credentialID,
+            providerAaguid: passkeyAaguidFromAttestationObject(attestationObject: attestationObject),
+            registeredPlatform: .ios
+        )
     }
 
     func authenticateWithPrf(

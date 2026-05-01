@@ -8,6 +8,7 @@ struct CloudRestoreOfferView: View {
     let onSkip: () -> Void
     var warningMessage: String? = nil
     var errorMessage: String? = nil
+    var providerHint: CloudRestoreProviderHint? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -149,12 +150,43 @@ struct CloudRestoreOfferView: View {
                         .font(OnboardingRecoveryTypography.bodySemibold)
                         .foregroundStyle(.white)
 
-                    Text("Secured with iCloud Keychain")
+                    Text(providerHint?.providerName ?? "Secured with iCloud Keychain")
                         .font(OnboardingRecoveryTypography.footnote)
                         .foregroundStyle(.coveLightGray.opacity(0.58))
                 }
 
                 Spacer()
+            }
+
+            if let providerHint {
+                HStack(spacing: 12) {
+                    Image(systemName: "key.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.btnGradientLight.opacity(0.92))
+                        .frame(width: 22)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Passkey provider")
+                            .font(OnboardingRecoveryTypography.captionSemibold)
+                            .foregroundStyle(.coveLightGray.opacity(0.58))
+
+                        Text(providerHint.providerName)
+                            .font(OnboardingRecoveryTypography.footnote)
+                            .foregroundStyle(.white)
+
+                        Text("Added \(formattedProviderDate(providerHint.registeredAt))")
+                            .font(.caption)
+                            .foregroundStyle(.coveLightGray.opacity(0.58))
+                    }
+
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.duskBlue.opacity(0.34))
+                )
             }
 
             Text("Your passkey is stored securely in iCloud Keychain and syncs across all your Apple devices.")
@@ -172,6 +204,11 @@ struct CloudRestoreOfferView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(Color.coveLightGray.opacity(0.14), lineWidth: 1)
         )
+    }
+
+    private func formattedProviderDate(_ registeredAt: UInt64) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(registeredAt))
+        return date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 
     private func errorCard(message: String) -> some View {

@@ -57,7 +57,8 @@ struct OnboardingContainer: View {
                     manager.dispatch(.skipRestore)
                 },
                 warningMessage: restoreWarningMessage,
-                errorMessage: manager.state.errorMessage
+                errorMessage: manager.state.errorMessage,
+                providerHint: manager.state.cloudRestoreProviderHint
             )
 
         case .restoreOffline:

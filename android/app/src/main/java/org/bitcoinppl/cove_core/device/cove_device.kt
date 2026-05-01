@@ -837,6 +837,8 @@ internal object IntegrityCheckingUniffiLib {
         uniffiCheckContractApiVersion(this)
         uniffiCheckApiChecksums(this)
     }
+    external fun uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object(
+    ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup(
     ): Short
     external fun uniffi_cove_device_checksum_method_passkeyaccess_is_prf_supported(
@@ -966,6 +968,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_device_fn_method_passkeyoperation_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_cove_device_fn_func_passkey_aaguid_from_attestation_object(`attestationObject`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun ffi_cove_device_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_cove_device_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1085,6 +1089,9 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if (lib.uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object() != 43803.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 42755.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1148,7 +1155,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_keychainaccess_delete() != 1213.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 57897.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 17856.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_passkeyprovider_authenticate_with_prf() != 17002.toShort()) {
@@ -2926,6 +2933,49 @@ public object FfiConverterTypeDiscoveredPasskeyResult: FfiConverterRustBuffer<Di
 
 
 
+data class PasskeyRegistrationResult (
+    var `credentialId`: kotlin.ByteArray
+    , 
+    var `providerAaguid`: kotlin.String
+    , 
+    var `registeredPlatform`: PasskeyRegistrationPlatform
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyRegistrationResult: FfiConverterRustBuffer<PasskeyRegistrationResult> {
+    override fun read(buf: ByteBuffer): PasskeyRegistrationResult {
+        return PasskeyRegistrationResult(
+            FfiConverterByteArray.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypePasskeyRegistrationPlatform.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PasskeyRegistrationResult) = (
+            FfiConverterByteArray.allocationSize(value.`credentialId`) +
+            FfiConverterString.allocationSize(value.`providerAaguid`) +
+            FfiConverterTypePasskeyRegistrationPlatform.allocationSize(value.`registeredPlatform`)
+    )
+
+    override fun write(value: PasskeyRegistrationResult, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`credentialId`, buf)
+            FfiConverterString.write(value.`providerAaguid`, buf)
+            FfiConverterTypePasskeyRegistrationPlatform.write(value.`registeredPlatform`, buf)
+    }
+}
+
+
+
 
 enum class CloudAccessPolicy {
     
@@ -3900,6 +3950,40 @@ public object FfiConverterTypePasskeyOperation: FfiConverterRustBuffer<PasskeyOp
 
 
 
+enum class PasskeyRegistrationPlatform {
+    
+    IOS,
+    ANDROID;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyRegistrationPlatform: FfiConverterRustBuffer<PasskeyRegistrationPlatform> {
+    override fun read(buf: ByteBuffer) = try {
+        PasskeyRegistrationPlatform.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: PasskeyRegistrationPlatform) = 4UL
+
+    override fun write(value: PasskeyRegistrationPlatform, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 
 public interface CloudStorageAccess {
     
@@ -4520,7 +4604,7 @@ public interface PasskeyProvider {
     /**
      * Create a new passkey credential
      */
-    fun `createPasskey`(`rpId`: kotlin.String, `userId`: kotlin.ByteArray, `challenge`: kotlin.ByteArray): kotlin.ByteArray
+    fun `createPasskey`(`rpId`: kotlin.String, `userId`: kotlin.ByteArray, `challenge`: kotlin.ByteArray): PasskeyRegistrationResult
     
     /**
      * Authenticate with a known credential_id (enable flow, re-enable)
@@ -4564,7 +4648,7 @@ internal object uniffiCallbackInterfacePasskeyProvider {
                     FfiConverterByteArray.lift(`challenge`),
                 )
             }
-            val writeReturn = { value: kotlin.ByteArray -> uniffiOutReturn.setValue(FfiConverterByteArray.lower(value)) }
+            val writeReturn = { value: PasskeyRegistrationResult -> uniffiOutReturn.setValue(FfiConverterTypePasskeyRegistrationResult.lower(value)) }
             uniffiTraitInterfaceCallWithError(
                 uniffiCallStatus,
                 makeCall,
@@ -4739,5 +4823,16 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
 
 
 
+
+    @Throws(PasskeyException::class) fun `passkeyAaguidFromAttestationObject`(`attestationObject`: kotlin.ByteArray): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(PasskeyException) { _status ->
+    UniffiLib.uniffi_cove_device_fn_func_passkey_aaguid_from_attestation_object(
+    
+        FfiConverterByteArray.lower(`attestationObject`),_status)
+}
+    )
+    }
+    
 
 

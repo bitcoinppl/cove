@@ -14,7 +14,8 @@ use cove_device::cloud_storage::{
 use cove_device::keychain::{Keychain, KeychainAccess};
 use cove_device::passkey::{
     DiscoveredPasskeyResult, PasskeyAccess, PasskeyCredentialPresence, PasskeyError,
-    PasskeyFailureReason, PasskeyOperation, PasskeyProvider,
+    PasskeyFailureReason, PasskeyOperation, PasskeyProvider, PasskeyRegistrationPlatform,
+    PasskeyRegistrationResult,
 };
 use parking_lot::Mutex;
 use sha2::Digest as _;
@@ -62,6 +63,7 @@ impl cove_cspp::CsppStore for MockStoreHandle {
 
 type MockDiscoverResult = Result<(Vec<u8>, Vec<u8>), PasskeyError>;
 type MockPasskeyActionResult = Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>;
+type MockPasskeyCreateResult = Arc<Mutex<Option<Result<PasskeyRegistrationResult, PasskeyError>>>>;
 #[derive(Debug, Clone, Default)]
 pub(crate) struct MockKeychain {
     entries: Arc<Mutex<HashMap<String, String>>>,
@@ -396,7 +398,7 @@ impl CloudStorageAccess for MockCloudStorage {
 #[derive(Debug, Clone)]
 pub(crate) struct MockPasskeyProviderImpl {
     discover_results: Arc<Mutex<VecDeque<MockDiscoverResult>>>,
-    create_result: MockPasskeyActionResult,
+    create_result: MockPasskeyCreateResult,
     authenticate_result: MockPasskeyActionResult,
 }
 
@@ -436,7 +438,11 @@ impl MockPasskeyProviderImpl {
     }
 
     pub(crate) fn set_create_result(&self, result: Result<Vec<u8>, PasskeyError>) {
-        *self.create_result.lock() = Some(result);
+        *self.create_result.lock() = Some(result.map(|credential_id| PasskeyRegistrationResult {
+            credential_id,
+            provider_aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+            registered_platform: PasskeyRegistrationPlatform::Android,
+        }));
     }
 
     pub(crate) fn set_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
@@ -450,7 +456,7 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _rp_id: String,
         _user_id: Vec<u8>,
         _challenge: Vec<u8>,
-    ) -> Result<Vec<u8>, PasskeyError> {
+    ) -> Result<PasskeyRegistrationResult, PasskeyError> {
         self.create_result.lock().take().unwrap_or_else(|| {
             Err(PasskeyError::RequestFailed {
                 operation: PasskeyOperation::Registration,
@@ -926,12 +932,12 @@ mod tests {
         let provider = MockPasskeyProviderImpl::default();
         provider.set_create_result(Ok(vec![1, 2, 3]));
 
-        assert_eq!(
-            provider
-                .create_passkey("rp".into(), vec![1], vec![2])
-                .expect("configured create result"),
-            vec![1, 2, 3]
-        );
+        let registration = provider
+            .create_passkey("rp".into(), vec![1], vec![2])
+            .expect("configured create result");
+        assert_eq!(registration.credential_id, vec![1, 2, 3]);
+        assert_eq!(registration.provider_aaguid, "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4");
+        assert_eq!(registration.registered_platform, PasskeyRegistrationPlatform::Android);
         assert!(matches!(
             provider.create_passkey("rp".into(), vec![1], vec![2]),
             Err(PasskeyError::RequestFailed {
