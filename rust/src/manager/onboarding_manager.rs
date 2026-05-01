@@ -47,7 +47,6 @@ pub enum OnboardingStep {
     BitcoinChoice,
     ReturningUserChoice,
     StorageChoice,
-    SoftwareChoice,
     CreatingWallet,
     BackupWallet,
     CloudBackup,
@@ -72,12 +71,6 @@ pub enum OnboardingStorageSelection {
     Exchange,
     HardwareWallet,
     SoftwareWallet,
-}
-
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum OnboardingSoftwareSelection {
-    CreateNewWallet,
-    ImportExistingWallet,
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -114,7 +107,7 @@ pub enum OnboardingAction {
     SelectHasBitcoin { has_bitcoin: bool },
     SelectReturningUserFlow { selection: OnboardingReturningUserSelection },
     SelectStorage { selection: OnboardingStorageSelection },
-    SelectSoftwareAction { selection: OnboardingSoftwareSelection },
+    CreateSoftwareWallet,
     ContinueWalletCreation,
     ShowSecretWords,
     SecretWordsSaved,
@@ -243,16 +236,15 @@ enum FlowState {
     StorageChoice {
         error_message: Option<String>,
     },
-    SoftwareChoice {
-        error_message: Option<String>,
-    },
     CreatingWallet(CreatedWalletFlow),
     BackupWallet(CreatedWalletFlow),
     CloudBackup(CloudBackupFlow),
     SecretWords(CreatedWalletFlow),
     ExchangeFunding(CreatedWalletFlow),
     HardwareImport,
-    SoftwareImport,
+    SoftwareImport {
+        error_message: Option<String>,
+    },
     Terms {
         context: TermsContext,
         error_message: Option<String>,
@@ -303,7 +295,6 @@ enum RestoreOrigin {
     BitcoinChoice,
     ReturningUserChoice,
     StorageChoice,
-    SoftwareChoice,
 }
 
 #[derive(Debug, Clone)]
@@ -854,27 +845,16 @@ impl FlowState {
                 OnboardingAction::SelectStorage {
                     selection: OnboardingStorageSelection::SoftwareWallet,
                 },
-            ) => (Self::SoftwareChoice { error_message: None }, TransitionCommand::None),
-            (
-                Self::SoftwareChoice { .. },
-                OnboardingAction::SelectSoftwareAction {
-                    selection: OnboardingSoftwareSelection::CreateNewWallet,
-                },
             ) => {
+                *restore_offer_allowed = false;
+                (Self::SoftwareImport { error_message: None }, TransitionCommand::None)
+            }
+            (Self::SoftwareImport { .. }, OnboardingAction::CreateSoftwareWallet) => {
                 *restore_offer_allowed = false;
                 (
-                    Self::SoftwareChoice { error_message: None },
+                    Self::SoftwareImport { error_message: None },
                     TransitionCommand::CreateWallet(OnboardingBranch::SoftwareCreate),
                 )
-            }
-            (
-                Self::SoftwareChoice { .. },
-                OnboardingAction::SelectSoftwareAction {
-                    selection: OnboardingSoftwareSelection::ImportExistingWallet,
-                },
-            ) => {
-                *restore_offer_allowed = false;
-                (Self::SoftwareImport, TransitionCommand::None)
             }
             (Self::CreatingWallet(flow), OnboardingAction::ContinueWalletCreation) => {
                 (Self::BackupWallet(flow), TransitionCommand::None)
@@ -974,7 +954,10 @@ impl FlowState {
                     TransitionCommand::None,
                 )
             }
-            (Self::SoftwareImport, OnboardingAction::SoftwareImportCompleted { wallet_id }) => (
+            (
+                Self::SoftwareImport { .. },
+                OnboardingAction::SoftwareImportCompleted { wallet_id },
+            ) => (
                 Self::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id }),
                 TransitionCommand::None,
             ),
@@ -984,10 +967,6 @@ impl FlowState {
             ),
             (Self::StorageChoice { .. }, OnboardingAction::OpenCloudRestore) => (
                 Self::restore_entry_for(cloud_restore_discovery, RestoreOrigin::StorageChoice),
-                TransitionCommand::None,
-            ),
-            (Self::SoftwareChoice { .. }, OnboardingAction::OpenCloudRestore) => (
-                Self::restore_entry_for(cloud_restore_discovery, RestoreOrigin::SoftwareChoice),
                 TransitionCommand::None,
             ),
             (Self::RestoreOffer { origin, .. }, OnboardingAction::StartRestore) => {
@@ -1023,11 +1002,8 @@ impl FlowState {
             (Self::StorageChoice { .. }, OnboardingAction::Back) => {
                 (Self::ReturningUserChoice, TransitionCommand::None)
             }
-            (Self::SoftwareChoice { .. }, OnboardingAction::Back) => {
+            (Self::SoftwareImport { .. }, OnboardingAction::Back) => {
                 (Self::StorageChoice { error_message: None }, TransitionCommand::None)
-            }
-            (Self::SoftwareImport, OnboardingAction::Back) => {
-                (Self::SoftwareChoice { error_message: None }, TransitionCommand::None)
             }
             (Self::HardwareImport, OnboardingAction::Back) => {
                 (Self::StorageChoice { error_message: None }, TransitionCommand::None)
@@ -1133,7 +1109,7 @@ impl FlowState {
             {
                 Self::CreatingWallet(flow)
             }
-            (Self::SoftwareChoice { .. }, InternalEvent::WalletCreated { flow })
+            (Self::SoftwareImport { .. }, InternalEvent::WalletCreated { flow })
                 if flow.branch == OnboardingBranch::SoftwareCreate =>
             {
                 Self::CreatingWallet(flow)
@@ -1147,12 +1123,12 @@ impl FlowState {
                 InternalEvent::WalletCreationFailed { branch: OnboardingBranch::Exchange, error },
             ) => Self::StorageChoice { error_message: Some(error) },
             (
-                Self::SoftwareChoice { .. },
+                Self::SoftwareImport { .. },
                 InternalEvent::WalletCreationFailed {
                     branch: OnboardingBranch::SoftwareCreate,
                     error,
                 },
-            ) => Self::SoftwareChoice { error_message: Some(error) },
+            ) => Self::SoftwareImport { error_message: Some(error) },
             (
                 Self::Terms { context, progress, allow_auto_advance: _, .. },
                 InternalEvent::CompletionFailed { error },
@@ -1219,11 +1195,6 @@ impl FlowState {
                 state.error_message = error_message.clone();
                 state
             }
-            Self::SoftwareChoice { error_message } => {
-                state.step = OnboardingStep::SoftwareChoice;
-                state.error_message = error_message.clone();
-                state
-            }
             Self::CreatingWallet(flow) => Self::project_created_wallet(
                 OnboardingStep::CreatingWallet,
                 flow,
@@ -1271,9 +1242,10 @@ impl FlowState {
                 state.branch = Some(OnboardingBranch::Hardware);
                 state
             }
-            Self::SoftwareImport => {
+            Self::SoftwareImport { error_message } => {
                 state.step = OnboardingStep::SoftwareImport;
                 state.branch = Some(OnboardingBranch::SoftwareImport);
+                state.error_message = error_message.clone();
                 state
             }
             Self::Terms { error_message, .. } => {
@@ -1393,7 +1365,6 @@ impl FlowState {
                 | Self::BitcoinChoice { .. }
                 | Self::ReturningUserChoice
                 | Self::StorageChoice { .. }
-                | Self::SoftwareChoice { .. }
         )
     }
 
@@ -1554,7 +1525,6 @@ impl RestoreOrigin {
             Self::BitcoinChoice => FlowState::BitcoinChoice { error_message: None },
             Self::ReturningUserChoice => FlowState::ReturningUserChoice,
             Self::StorageChoice => FlowState::StorageChoice { error_message: None },
-            Self::SoftwareChoice => FlowState::SoftwareChoice { error_message: None },
         }
     }
 
@@ -1661,7 +1631,7 @@ mod tests {
     #[test]
     fn software_import_completion_goes_to_cloud_backup() {
         let wallet_id = WalletId::new();
-        let mut flow = FlowState::SoftwareImport;
+        let mut flow = FlowState::SoftwareImport { error_message: None };
         let mut restore_offer_allowed = false;
 
         let command = flow.apply_user_action(
@@ -1920,7 +1890,7 @@ mod tests {
     #[test]
     fn software_import_skip_cloud_backup_flow_completes_selected_wallet() {
         let wallet_id = WalletId::new();
-        let mut flow = FlowState::SoftwareImport;
+        let mut flow = FlowState::SoftwareImport { error_message: None };
 
         assert_eq!(
             apply_action(
@@ -2053,6 +2023,24 @@ mod tests {
     }
 
     #[test]
+    fn selecting_software_wallet_goes_to_software_import() {
+        let mut flow = FlowState::StorageChoice { error_message: None };
+        let mut restore_offer_allowed = false;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::SelectStorage {
+                selection: OnboardingStorageSelection::SoftwareWallet,
+            },
+            CloudRestoreDiscovery::Checking,
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(flow, FlowState::SoftwareImport { error_message: None }));
+        assert!(!restore_offer_allowed);
+    }
+
+    #[test]
     fn hardware_back_returns_to_storage_choice() {
         let mut flow = FlowState::HardwareImport;
         let mut restore_offer_allowed = false;
@@ -2067,8 +2055,22 @@ mod tests {
     }
 
     #[test]
+    fn software_back_returns_to_storage_choice() {
+        let mut flow = FlowState::SoftwareImport { error_message: Some("create failed".into()) };
+        let mut restore_offer_allowed = false;
+
+        flow.apply_user_action(
+            OnboardingAction::Back,
+            CloudRestoreDiscovery::Checking,
+            &mut restore_offer_allowed,
+        );
+
+        assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
+    }
+
+    #[test]
     fn invalid_action_leaves_current_flow_unchanged() {
-        let mut flow = FlowState::SoftwareImport;
+        let mut flow = FlowState::SoftwareImport { error_message: None };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
@@ -2078,7 +2080,7 @@ mod tests {
         );
 
         assert_eq!(command, TransitionCommand::None);
-        assert!(matches!(flow, FlowState::SoftwareImport));
+        assert!(matches!(flow, FlowState::SoftwareImport { error_message: None }));
         assert!(restore_offer_allowed);
     }
 
@@ -2218,9 +2220,9 @@ mod tests {
                 OnboardingStep::StorageChoice,
             ),
             (
-                FlowState::SoftwareChoice { error_message: None },
+                FlowState::SoftwareImport { error_message: None },
                 OnboardingBranch::SoftwareCreate,
-                OnboardingStep::SoftwareChoice,
+                OnboardingStep::SoftwareImport,
             ),
         ];
 
@@ -2255,12 +2257,10 @@ mod tests {
                 OnboardingStep::StorageChoice,
             ),
             (
-                FlowState::SoftwareChoice { error_message: Some("create failed".into()) },
-                OnboardingAction::SelectSoftwareAction {
-                    selection: OnboardingSoftwareSelection::CreateNewWallet,
-                },
+                FlowState::SoftwareImport { error_message: Some("create failed".into()) },
+                OnboardingAction::CreateSoftwareWallet,
                 TransitionCommand::CreateWallet(OnboardingBranch::SoftwareCreate),
-                OnboardingStep::SoftwareChoice,
+                OnboardingStep::SoftwareImport,
             ),
         ];
 
@@ -2294,7 +2294,7 @@ mod tests {
                 OnboardingStep::ReturningUserChoice,
             ),
             (
-                FlowState::SoftwareChoice { error_message: Some("create failed".into()) },
+                FlowState::SoftwareImport { error_message: Some("create failed".into()) },
                 OnboardingStep::StorageChoice,
             ),
         ];
@@ -2330,8 +2330,8 @@ mod tests {
                 "exchange failed",
             ),
             (
-                FlowState::SoftwareChoice { error_message: Some("software failed".into()) },
-                OnboardingStep::SoftwareChoice,
+                FlowState::SoftwareImport { error_message: Some("software failed".into()) },
+                OnboardingStep::SoftwareImport,
                 "software failed",
             ),
         ];

@@ -40865,14 +40865,8 @@ sealed class OnboardingAction {
         companion object
     }
     
-    data class SelectSoftwareAction(
-        val `selection`: org.bitcoinppl.cove_core.OnboardingSoftwareSelection) : OnboardingAction()
-        
-    {
-        
+    object CreateSoftwareWallet : OnboardingAction()
 
-        companion object
-    }
     
     object ContinueWalletCreation : OnboardingAction()
     
@@ -40972,9 +40966,7 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
             4 -> OnboardingAction.SelectStorage(
                 FfiConverterTypeOnboardingStorageSelection.read(buf),
                 )
-            5 -> OnboardingAction.SelectSoftwareAction(
-                FfiConverterTypeOnboardingSoftwareSelection.read(buf),
-                )
+            5 -> OnboardingAction.CreateSoftwareWallet
             6 -> OnboardingAction.ContinueWalletCreation
             7 -> OnboardingAction.ShowSecretWords
             8 -> OnboardingAction.SecretWordsSaved
@@ -41031,11 +41023,10 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 + FfiConverterTypeOnboardingStorageSelection.allocationSize(value.`selection`)
             )
         }
-        is OnboardingAction.SelectSoftwareAction -> {
+        is OnboardingAction.CreateSoftwareWallet -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeOnboardingSoftwareSelection.allocationSize(value.`selection`)
             )
         }
         is OnboardingAction.ContinueWalletCreation -> {
@@ -41172,9 +41163,8 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 FfiConverterTypeOnboardingStorageSelection.write(value.`selection`, buf)
                 Unit
             }
-            is OnboardingAction.SelectSoftwareAction -> {
+            is OnboardingAction.CreateSoftwareWallet -> {
                 buf.putInt(5)
-                FfiConverterTypeOnboardingSoftwareSelection.write(value.`selection`, buf)
                 Unit
             }
             is OnboardingAction.ContinueWalletCreation -> {
@@ -41633,40 +41623,6 @@ public object FfiConverterTypeOnboardingReturningUserSelection: FfiConverterRust
 
 
 
-enum class OnboardingSoftwareSelection {
-    
-    CREATE_NEW_WALLET,
-    IMPORT_EXISTING_WALLET;
-
-    
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeOnboardingSoftwareSelection: FfiConverterRustBuffer<OnboardingSoftwareSelection> {
-    override fun read(buf: ByteBuffer) = try {
-        OnboardingSoftwareSelection.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: OnboardingSoftwareSelection) = 4UL
-
-    override fun write(value: OnboardingSoftwareSelection, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
-
 enum class OnboardingStep {
     
     CLOUD_CHECK,
@@ -41678,7 +41634,6 @@ enum class OnboardingStep {
     BITCOIN_CHOICE,
     RETURNING_USER_CHOICE,
     STORAGE_CHOICE,
-    SOFTWARE_CHOICE,
     CREATING_WALLET,
     BACKUP_WALLET,
     CLOUD_BACKUP,
@@ -55565,5 +55520,4 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     )
     }
     
-
 

@@ -113,16 +113,6 @@ struct OnboardingContainer: View {
                 onBack: { manager.dispatch(.back) }
             )
 
-        case .softwareChoice:
-            OnboardingSoftwareChoiceScreen(
-                errorMessage: manager.state.errorMessage,
-                onRestoreFromCoveBackup: onOpenCloudRestore,
-                onSelectSoftwareAction: { selection in
-                    manager.dispatch(.selectSoftwareAction(selection: selection))
-                },
-                onBack: { manager.dispatch(.back) }
-            )
-
         case .creatingWallet:
             OnboardingCreatingWalletView {
                 manager.dispatch(.continueWalletCreation)
@@ -169,9 +159,11 @@ struct OnboardingContainer: View {
 
         case .softwareImport:
             OnboardingSoftwareImportFlowView(
+                errorMessage: manager.state.errorMessage,
                 onImported: { walletId in
                     manager.dispatch(.softwareImportCompleted(walletId: walletId))
                 },
+                onCreateWallet: { manager.dispatch(.createSoftwareWallet) },
                 onBack: { manager.dispatch(.back) }
             )
         }

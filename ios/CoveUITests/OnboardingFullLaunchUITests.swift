@@ -25,8 +25,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
 
-        XCTAssertTrue(app.staticTexts["What would you like to do?"].waitForExistence(timeout: 10))
-        button(startingWith: "Import existing wallet").tap()
+        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
 
         importKnownEmptyMainnetWalletWords()
         app.buttons["Not Now"].tap()
@@ -121,8 +120,8 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
 
-        XCTAssertTrue(app.staticTexts["What would you like to do?"].waitForExistence(timeout: 10))
-        button(startingWith: "Create a new wallet").tap()
+        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
+        app.buttons["Create a new wallet instead"].tap()
 
         assertBackupWallet(titlePrefix: "Back up your wallet")
         viewRecoveryWords()
@@ -133,9 +132,6 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
-
-        XCTAssertTrue(app.staticTexts["What would you like to do?"].waitForExistence(timeout: 10))
-        button(startingWith: "Import existing wallet").tap()
 
         XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
         XCTAssertTrue(button(startingWith: "Enter recovery words").exists)
@@ -148,8 +144,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
 
-        XCTAssertTrue(app.staticTexts["What would you like to do?"].waitForExistence(timeout: 10))
-        button(startingWith: "Import existing wallet").tap()
+        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
         button(startingWith: "Scan QR code").tap()
 
         assertQrScannerVisible()
@@ -161,8 +156,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
 
-        XCTAssertTrue(app.staticTexts["What would you like to do?"].waitForExistence(timeout: 10))
-        button(startingWith: "Import existing wallet").tap()
+        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
 
         importKnownEmptyMainnetWalletWords()
         app.buttons["Not Now"].tap()

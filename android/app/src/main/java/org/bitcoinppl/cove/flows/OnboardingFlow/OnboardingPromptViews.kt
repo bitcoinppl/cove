@@ -21,7 +21,6 @@ import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDownload
@@ -60,7 +59,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
-import org.bitcoinppl.cove_core.OnboardingSoftwareSelection
 import org.bitcoinppl.cove_core.OnboardingStorageSelection
 
 @Composable
@@ -728,52 +726,6 @@ internal fun OnboardingStorageChoiceScreen(
             text = "Back",
             onClick = onBack,
             modifier = Modifier.testTag("onboarding.back"),
-        )
-    }
-}
-
-@Composable
-internal fun OnboardingSoftwareChoiceScreen(
-    errorMessage: String?,
-    onRestoreFromCoveBackup: (() -> Unit)?,
-    onSelectSoftwareAction: (OnboardingSoftwareSelection) -> Unit,
-    onBack: () -> Unit,
-) {
-    OnboardingPromptScreen(
-        icon = Icons.Default.PhoneIphone,
-        title = "What would you like to do?",
-        subtitle = "Create a new wallet in Cove or import the one you already use.",
-    ) {
-        if (errorMessage != null) {
-            OnboardingInlineMessage(text = errorMessage)
-            Spacer(modifier = Modifier.size(14.dp))
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (onRestoreFromCoveBackup != null) {
-                OnboardingCloudRestoreChoiceCard(onClick = onRestoreFromCoveBackup)
-            }
-            OnboardingChoiceCard(
-                title = "Create a new wallet",
-                subtitle = "Generate a fresh 12-word recovery phrase",
-                icon = Icons.Default.AddCircle,
-                onClick = { onSelectSoftwareAction(OnboardingSoftwareSelection.CREATE_NEW_WALLET) },
-                modifier = Modifier.testTag("onboarding.software.create"),
-            )
-            OnboardingChoiceCard(
-                title = "Import existing wallet",
-                subtitle = "Use words or QR from another wallet",
-                icon = Icons.Default.Download,
-                onClick = { onSelectSoftwareAction(OnboardingSoftwareSelection.IMPORT_EXISTING_WALLET) },
-                modifier = Modifier.testTag("onboarding.software.import"),
-            )
-        }
-
-        Spacer(modifier = Modifier.size(14.dp))
-
-        OnboardingSecondaryButton(
-            text = "Back",
-            onClick = onBack,
         )
     }
 }

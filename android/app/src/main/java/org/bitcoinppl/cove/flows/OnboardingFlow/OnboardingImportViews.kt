@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.io.File
@@ -90,7 +91,9 @@ private sealed interface HardwareImportMode {
 
 @Composable
 internal fun OnboardingSoftwareImportFlowView(
+    errorMessage: String?,
     onImported: (WalletId) -> Unit,
+    onCreateWallet: () -> Unit,
     onBack: () -> Unit,
 ) {
     var mode by remember { mutableStateOf<SoftwareImportMode>(SoftwareImportMode.Chooser) }
@@ -102,6 +105,11 @@ internal fun OnboardingSoftwareImportFlowView(
                 title = "Import your software wallet",
                 subtitle = "Choose how you want to bring your existing wallet into Cove.",
             ) {
+                if (errorMessage != null) {
+                    OnboardingInlineMessage(text = errorMessage)
+                    Spacer(modifier = Modifier.size(14.dp))
+                }
+
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OnboardingChoiceCard(
                         title = "Enter recovery words",
@@ -123,6 +131,22 @@ internal fun OnboardingSoftwareImportFlowView(
                     text = "Back",
                     onClick = onBack,
                 )
+
+                Spacer(modifier = Modifier.size(2.dp))
+
+                TextButton(
+                    onClick = onCreateWallet,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag("onboarding.software.create"),
+                ) {
+                    Text(
+                        text = "Create a new wallet instead",
+                        color = OnboardingTextSecondary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
 
         SoftwareImportMode.WordCount ->

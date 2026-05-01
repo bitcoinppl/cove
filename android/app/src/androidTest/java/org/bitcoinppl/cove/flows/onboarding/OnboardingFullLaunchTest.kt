@@ -45,7 +45,6 @@ class OnboardingFullLaunchTest {
             .chooseExistingUser()
             .useAnotherWallet()
             .chooseSoftwareWallet()
-            .chooseSoftwareImport()
             .importKnownEmptyMainnetWalletWords()
             .skipCloudBackupAfterImport()
             .acceptTermsAfterImport()
@@ -148,7 +147,6 @@ class OnboardingFullLaunchTest {
             .chooseExistingUser()
             .useAnotherWallet()
             .chooseSoftwareWallet()
-            .chooseSoftwareImport()
             .assertSoftwareImportChoices()
     }
 
@@ -161,7 +159,6 @@ class OnboardingFullLaunchTest {
             .chooseExistingUser()
             .useAnotherWallet()
             .chooseSoftwareWallet()
-            .chooseSoftwareImport()
             .openSoftwareQrScanner()
     }
 
@@ -174,7 +171,6 @@ class OnboardingFullLaunchTest {
             .chooseExistingUser()
             .useAnotherWallet()
             .chooseSoftwareWallet()
-            .chooseSoftwareImport()
             .assertImportScreenBlocksScreenshots()
     }
 
@@ -187,7 +183,6 @@ class OnboardingFullLaunchTest {
             .chooseExistingUser()
             .useAnotherWallet()
             .chooseSoftwareWallet()
-            .chooseSoftwareImport()
             .importKnownEmptyMainnetWalletWords()
             .skipCloudBackupAfterImport()
             .acceptTermsAfterImport()

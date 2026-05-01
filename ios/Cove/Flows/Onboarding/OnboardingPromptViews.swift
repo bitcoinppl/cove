@@ -218,50 +218,6 @@ struct OnboardingStorageChoiceScreen: View {
     }
 }
 
-struct OnboardingSoftwareChoiceScreen: View {
-    let errorMessage: String?
-    let onRestoreFromCoveBackup: (() -> Void)?
-    let onSelectSoftwareAction: (OnboardingSoftwareSelection) -> Void
-    let onBack: () -> Void
-
-    var body: some View {
-        OnboardingPromptScreen(
-            icon: "arrow.left.arrow.right.square",
-            title: "What would you like to do?",
-            subtitle: "Create a new wallet in Cove or import the one you already use."
-        ) {
-            if let errorMessage {
-                OnboardingInlineMessage(text: errorMessage)
-            }
-
-            VStack(spacing: 14) {
-                if let onRestoreFromCoveBackup {
-                    OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
-                }
-
-                OnboardingChoiceCard(
-                    title: "Create a new wallet",
-                    subtitle: "Generate a fresh 12-word recovery phrase",
-                    systemImage: "plus.circle"
-                ) {
-                    onSelectSoftwareAction(.createNewWallet)
-                }
-
-                OnboardingChoiceCard(
-                    title: "Import existing wallet",
-                    subtitle: "Use words or QR from another wallet",
-                    systemImage: "square.and.arrow.down"
-                ) {
-                    onSelectSoftwareAction(.importExistingWallet)
-                }
-            }
-
-            Button("Back", action: onBack)
-                .buttonStyle(OnboardingSecondaryButtonStyle())
-        }
-    }
-}
-
 struct OnboardingCloudRestoreChoiceCard: View {
     let action: () -> Void
 

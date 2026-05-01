@@ -24214,8 +24214,7 @@ public enum OnboardingAction: Equatable, Hashable {
     )
     case selectStorage(selection: OnboardingStorageSelection
     )
-    case selectSoftwareAction(selection: OnboardingSoftwareSelection
-    )
+    case createSoftwareWallet
     case continueWalletCreation
     case showSecretWords
     case secretWordsSaved
@@ -24269,8 +24268,7 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
         case 4: return .selectStorage(selection: try FfiConverterTypeOnboardingStorageSelection.read(from: &buf)
         )
         
-        case 5: return .selectSoftwareAction(selection: try FfiConverterTypeOnboardingSoftwareSelection.read(from: &buf)
-        )
+        case 5: return .createSoftwareWallet
         
         case 6: return .continueWalletCreation
         
@@ -24338,10 +24336,9 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
             FfiConverterTypeOnboardingStorageSelection.write(selection, into: &buf)
             
         
-        case let .selectSoftwareAction(selection):
+        case .createSoftwareWallet:
             writeInt(&buf, Int32(5))
-            FfiConverterTypeOnboardingSoftwareSelection.write(selection, into: &buf)
-            
+
         
         case .continueWalletCreation:
             writeInt(&buf, Int32(6))
@@ -24821,72 +24818,6 @@ public func FfiConverterTypeOnboardingReturningUserSelection_lower(_ value: Onbo
 
 
 
-public enum OnboardingSoftwareSelection: Equatable, Hashable {
-    
-    case createNewWallet
-    case importExistingWallet
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension OnboardingSoftwareSelection: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeOnboardingSoftwareSelection: FfiConverterRustBuffer {
-    typealias SwiftType = OnboardingSoftwareSelection
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingSoftwareSelection {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .createNewWallet
-        
-        case 2: return .importExistingWallet
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: OnboardingSoftwareSelection, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .createNewWallet:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .importExistingWallet:
-            writeInt(&buf, Int32(2))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOnboardingSoftwareSelection_lift(_ buf: RustBuffer) throws -> OnboardingSoftwareSelection {
-    return try FfiConverterTypeOnboardingSoftwareSelection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOnboardingSoftwareSelection_lower(_ value: OnboardingSoftwareSelection) -> RustBuffer {
-    return FfiConverterTypeOnboardingSoftwareSelection.lower(value)
-}
-
-
-
-
 public enum OnboardingStep: Equatable, Hashable {
     
     case cloudCheck
@@ -24898,7 +24829,6 @@ public enum OnboardingStep: Equatable, Hashable {
     case bitcoinChoice
     case returningUserChoice
     case storageChoice
-    case softwareChoice
     case creatingWallet
     case backupWallet
     case cloudBackup
@@ -24946,23 +24876,21 @@ public struct FfiConverterTypeOnboardingStep: FfiConverterRustBuffer {
         
         case 9: return .storageChoice
         
-        case 10: return .softwareChoice
+        case 10: return .creatingWallet
         
-        case 11: return .creatingWallet
+        case 11: return .backupWallet
         
-        case 12: return .backupWallet
+        case 12: return .cloudBackup
         
-        case 13: return .cloudBackup
+        case 13: return .secretWords
         
-        case 14: return .secretWords
+        case 14: return .exchangeFunding
         
-        case 15: return .exchangeFunding
+        case 15: return .hardwareImport
         
-        case 16: return .hardwareImport
+        case 16: return .softwareImport
         
-        case 17: return .softwareImport
-        
-        case 18: return .terms
+        case 17: return .terms
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -25008,40 +24936,36 @@ public struct FfiConverterTypeOnboardingStep: FfiConverterRustBuffer {
             writeInt(&buf, Int32(9))
         
         
-        case .softwareChoice:
+        case .creatingWallet:
             writeInt(&buf, Int32(10))
         
         
-        case .creatingWallet:
+        case .backupWallet:
             writeInt(&buf, Int32(11))
         
         
-        case .backupWallet:
+        case .cloudBackup:
             writeInt(&buf, Int32(12))
         
         
-        case .cloudBackup:
+        case .secretWords:
             writeInt(&buf, Int32(13))
         
         
-        case .secretWords:
+        case .exchangeFunding:
             writeInt(&buf, Int32(14))
         
         
-        case .exchangeFunding:
+        case .hardwareImport:
             writeInt(&buf, Int32(15))
         
         
-        case .hardwareImport:
+        case .softwareImport:
             writeInt(&buf, Int32(16))
         
         
-        case .softwareImport:
-            writeInt(&buf, Int32(17))
-        
-        
         case .terms:
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(17))
         
         }
     }
