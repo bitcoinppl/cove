@@ -166,6 +166,7 @@ internal fun OnboardingSoftwareImportFlowView(
             OnboardingHotWalletImportView(
                 numberOfWords = NumberOfBip39Words.TWELVE,
                 importType = ImportType.QR,
+                autoImportScannedWords = true,
                 onBack = { mode = SoftwareImportMode.Chooser },
                 onImported = onImported,
             )
@@ -176,6 +177,7 @@ internal fun OnboardingSoftwareImportFlowView(
 private fun OnboardingHotWalletImportView(
     numberOfWords: NumberOfBip39Words,
     importType: ImportType,
+    autoImportScannedWords: Boolean = false,
     onBack: () -> Unit,
     onImported: (WalletId) -> Unit,
 ) {
@@ -216,6 +218,7 @@ private fun OnboardingHotWalletImportView(
                 onBackPressed = onBack,
                 onImported = onImported,
                 showNfcAction = false,
+                autoImportScannedWords = autoImportScannedWords,
             )
         else ->
             OnboardingImportErrorView(

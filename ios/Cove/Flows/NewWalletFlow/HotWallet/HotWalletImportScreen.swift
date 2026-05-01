@@ -71,15 +71,18 @@ struct HotWalletImportScreen: View {
     let autocomplete = Bip39AutoComplete()
     @State private var numberOfWords: NumberOfBip39Words
     let importType: ImportType
+    let autoImportScannedWords: Bool
     let onImported: ((WalletId) -> Void)?
 
     init(
         numberOfWords: NumberOfBip39Words,
         importType: ImportType = .manual,
+        autoImportScannedWords: Bool = false,
         onImported: ((WalletId) -> Void)? = nil
     ) {
         _numberOfWords = State(initialValue: numberOfWords)
         self.importType = importType
+        self.autoImportScannedWords = autoImportScannedWords
         self.onImported = onImported
     }
 
@@ -194,7 +197,14 @@ struct HotWalletImportScreen: View {
                 if case let .mnemonic(mnemonic) = multiFormat {
                     let mnemonicString = mnemonic.words().joined(separator: " ")
                     if let words = try? groupedPlainWordsOf(mnemonic: mnemonicString, groups: UInt8(groupsOf)) {
-                        setWords(words)
+                        scanner.reset()
+
+                        if autoImportScannedWords {
+                            sheetState = .none
+                            importWallet(enteredWords: words)
+                        } else {
+                            setWords(words)
+                        }
                     }
                 } else {
                     sheetState = .none
@@ -216,9 +226,9 @@ struct HotWalletImportScreen: View {
         }
     }
 
-    func importWallet() {
+    func importWallet(enteredWords wordsToImport: [[String]]? = nil) {
         do {
-            let walletMetadata = try manager.rust.importWallet(enteredWords: enteredWords)
+            let walletMetadata = try manager.rust.importWallet(enteredWords: wordsToImport ?? enteredWords)
             if let onImported {
                 onImported(walletMetadata.id)
                 return
@@ -356,7 +366,6 @@ struct HotWalletImportScreen: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .ignoresSafeArea(.keyboard)
     }
 
     private var KeyboardToolbar: some View {

@@ -85,6 +85,7 @@ struct OnboardingSoftwareImportFlowView: View {
                 HotWalletImportScreen(
                     numberOfWords: .twelve,
                     importType: .qr,
+                    autoImportScannedWords: true,
                     onImported: onImported
                 )
             }

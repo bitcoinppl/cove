@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet
 
+import android.view.WindowManager
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
@@ -46,14 +48,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
-import android.view.WindowManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -66,8 +67,8 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ImportWalletManager
 import org.bitcoinppl.cove.Log
-import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
@@ -114,6 +115,7 @@ fun HotWalletImportScreen(
     onBackPressed: (() -> Unit)? = null,
     onImported: ((WalletId) -> Unit)? = null,
     showNfcAction: Boolean = true,
+    autoImportScannedWords: Boolean = false,
 ) {
     // block screenshots unconditionally — import screen contains seed words
     val context = LocalContext.current
@@ -196,35 +198,6 @@ fun HotWalletImportScreen(
         }
     }
 
-    fun setWords(words: List<List<String>>) {
-        val flatWords = words.flatten()
-        val totalWords = flatWords.size
-
-        // update word count based on actual pasted words (matching iOS behavior)
-        currentNumberOfWords =
-            when (totalWords) {
-                12 -> NumberOfBip39Words.TWELVE
-                24 -> NumberOfBip39Words.TWENTY_FOUR
-                else -> {
-                    Log.w("HotWalletImport", "Invalid word count: $totalWords")
-                    genericErrorMessage = "Invalid number of words: $totalWords. We only support 12 or 24 words."
-                    alertState = AlertState.GenericError
-                    return
-                }
-            }
-
-        // reset scanners
-        showQrScanner = false
-        showNfcScanner = false
-
-        // update words
-        enteredWords = words
-
-        // move to last page and last field
-        tabIndex = words.size - 1
-        focusedField = totalWords - 1
-    }
-
     fun isAllWordsValid(): Boolean =
         enteredWords
             .flatten()
@@ -273,9 +246,9 @@ fun HotWalletImportScreen(
         }
     }
 
-    fun importWallet() {
+    fun importWallet(wordsToImport: List<List<String>> = enteredWords) {
         try {
-            val walletMetadata = manager.importWallet(enteredWords)
+            val walletMetadata = manager.importWallet(wordsToImport)
             app.clearWalletManager()
             onImported?.invoke(walletMetadata.id) ?: run {
                 app.selectWalletOrThrow(walletMetadata.id)
@@ -293,6 +266,43 @@ fun HotWalletImportScreen(
             genericErrorMessage = e.message ?: "Unknown error occurred"
             alertState = AlertState.GenericError
         }
+    }
+
+    fun setWords(
+        words: List<List<String>>,
+        shouldAutoImport: Boolean = false,
+    ) {
+        val flatWords = words.flatten()
+        val totalWords = flatWords.size
+
+        // update word count based on actual pasted words (matching iOS behavior)
+        currentNumberOfWords =
+            when (totalWords) {
+                12 -> NumberOfBip39Words.TWELVE
+                24 -> NumberOfBip39Words.TWENTY_FOUR
+                else -> {
+                    Log.w("HotWalletImport", "Invalid word count: $totalWords")
+                    genericErrorMessage = "Invalid number of words: $totalWords. We only support 12 or 24 words."
+                    alertState = AlertState.GenericError
+                    return
+                }
+            }
+
+        // reset scanners
+        showQrScanner = false
+        showNfcScanner = false
+
+        if (shouldAutoImport) {
+            importWallet(words)
+            return
+        }
+
+        // update words
+        enteredWords = words
+
+        // move to last page and last field
+        tabIndex = words.size - 1
+        focusedField = totalWords - 1
     }
 
     // force white status bar icons for midnight blue background
@@ -437,6 +447,7 @@ fun HotWalletImportScreen(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .imePadding()
                             .padding(horizontal = 20.dp),
                 ) {
                     Row(
@@ -553,7 +564,7 @@ fun HotWalletImportScreen(
                     showQrScanner = false
                 },
                 onWordsScanned = { words ->
-                    setWords(words)
+                    setWords(words, shouldAutoImport = autoImportScannedWords)
                 },
             )
         }
