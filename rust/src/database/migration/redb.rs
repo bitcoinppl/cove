@@ -11,7 +11,7 @@ use crate::bootstrap::Migration;
 use crate::database::encrypted_backend::EncryptedBackend;
 use cove_common::consts::{ROOT_DATA_DIR, WALLET_DATA_DIR};
 
-use self::copy::{copy_table, verify_encrypted_redb_db};
+use self::copy::{copy_table, verify_all_source_tables_copied, verify_encrypted_redb_db};
 use self::recovery::recover_interrupted_migrations as recover_interrupted_migrations_impl;
 use super::MigrationFailure;
 
@@ -175,6 +175,7 @@ fn migrate_database(
     let dst_db = create_encrypted_dst(&paths.tmp)?;
 
     copy_tables(&src_db, &dst_db)?;
+    verify_all_source_tables_copied(&src_db, &dst_db)?;
 
     drop(src_db);
     drop(dst_db);
@@ -201,6 +202,8 @@ fn migrate_main_database(source_path: &Path) -> Result<bool> {
             copy_table(src_db, dst_db, crate::database::global_flag::TABLE)?;
             copy_table(src_db, dst_db, crate::database::global_config::TABLE)?;
             copy_table(src_db, dst_db, crate::database::global_cache::TABLE)?;
+            copy_table(src_db, dst_db, crate::database::cloud_backup::CLOUD_BACKUP_STATE_TABLE)?;
+            copy_table(src_db, dst_db, crate::database::cloud_backup::CLOUD_BLOB_SYNC_STATE_TABLE)?;
             copy_table(src_db, dst_db, crate::database::wallet::TABLE)?;
             copy_table(src_db, dst_db, crate::database::unsigned_transactions::MAIN_TABLE)?;
             copy_table(src_db, dst_db, crate::database::unsigned_transactions::BY_WALLET_TABLE)?;
@@ -328,8 +331,8 @@ mod tests {
 
     use super::*;
     use crate::database::{
-        encrypted_backend, global_cache, global_config, global_flag, historical_price,
-        unsigned_transactions, wallet, wallet_data,
+        cloud_backup, encrypted_backend, global_cache, global_config, global_flag,
+        historical_price, unsigned_transactions, wallet, wallet_data,
     };
     use tempfile::TempDir;
 
@@ -481,6 +484,60 @@ mod tests {
     }
 
     #[test]
+    fn migrate_main_database_copies_cloud_backup_rows() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source_path = create_plaintext_main_db(&dir);
+        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+
+        let backup_state = cloud_backup::PersistedCloudBackupState {
+            status: cloud_backup::PersistedCloudBackupStatus::Unverified,
+            last_sync: Some(42),
+            wallet_count: Some(2),
+            ..cloud_backup::PersistedCloudBackupState::default()
+        };
+        let sync_state = cloud_backup::PersistedCloudBlobSyncState {
+            kind: cloud_backup::CloudUploadKind::BackupBlob,
+            namespace_id: "namespace".into(),
+            wallet_id: None,
+            record_id: "wallet-a".into(),
+            state: cloud_backup::PersistedCloudBlobState::Dirty(
+                cloud_backup::CloudBlobDirtyState { changed_at: 7 },
+            ),
+        };
+
+        {
+            let db = redb::Database::open(&source_path).unwrap();
+            let write_txn = db.begin_write().unwrap();
+            {
+                let mut table =
+                    write_txn.open_table(cloud_backup::CLOUD_BACKUP_STATE_TABLE).unwrap();
+                table.insert("current", backup_state.clone()).unwrap();
+            }
+            {
+                let mut table =
+                    write_txn.open_table(cloud_backup::CLOUD_BLOB_SYNC_STATE_TABLE).unwrap();
+                table.insert(sync_state.record_id.as_str(), sync_state.clone()).unwrap();
+            }
+            write_txn.commit().unwrap();
+        }
+
+        migrate_main_database(&source_path).unwrap();
+
+        let key = encrypted_backend::encryption_key().unwrap();
+        let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
+        let db = redb::Database::builder().create_with_backend(backend).unwrap();
+        let read_txn = db.begin_read().unwrap();
+
+        let backup_table = read_txn.open_table(cloud_backup::CLOUD_BACKUP_STATE_TABLE).unwrap();
+        assert_eq!(backup_table.get("current").unwrap().unwrap().value(), backup_state);
+
+        let sync_table = read_txn.open_table(cloud_backup::CLOUD_BLOB_SYNC_STATE_TABLE).unwrap();
+        assert_eq!(sync_table.get("wallet-a").unwrap().unwrap().value(), sync_state);
+    }
+
+    #[test]
     fn migrate_wallet_database_roundtrip() {
         setup_test_key();
 
@@ -544,12 +601,10 @@ mod tests {
 
         recover_main_migration(dir.path()).unwrap();
 
-        // should finish the rename
-        assert!(dest.exists());
+        // source still exists, so retry from source instead of trusting an unpromoted temp
+        assert!(!dest.exists());
         assert!(!tmp.exists());
-        assert!(verify_encrypted_redb_db(&dest).unwrap());
-        // plaintext cleaned up since dest is now verified
-        assert!(!source.exists());
+        assert!(source.exists());
     }
 
     #[test]
@@ -628,10 +683,9 @@ mod tests {
 
         recover_wallet_migration(&wallet_dir).unwrap();
 
-        assert!(dest.exists());
+        assert!(!dest.exists());
         assert!(!tmp.exists());
-        assert!(verify_encrypted_redb_db(&dest).unwrap());
-        assert!(!source.exists());
+        assert!(source.exists());
     }
 
     #[test]
@@ -641,6 +695,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("cove.db");
         let bak_path = dir.path().join("cove.db.bak");
+        let corrupt_path = dir.path().join("cove.db.corrupt");
 
         // main DB exists but is corrupt, .bak is a valid encrypted DB
         std::fs::write(&db_path, b"corrupt_data").unwrap();
@@ -648,9 +703,11 @@ mod tests {
 
         recover_legacy_at_path(&db_path).unwrap();
 
-        // should have restored from .bak
+        // should restore from .bak without deleting the corrupt DB
         assert!(db_path.exists());
         assert!(!bak_path.exists());
+        assert!(corrupt_path.exists());
+        assert_eq!(std::fs::read(&corrupt_path).unwrap(), b"corrupt_data");
         assert!(verify_encrypted_redb_db(&db_path).unwrap());
     }
 
@@ -690,6 +747,40 @@ mod tests {
         assert!(db_path.exists());
         assert!(!bak_path.exists());
         assert_eq!(std::fs::read(&db_path).unwrap(), b"backup_data");
+    }
+
+    #[test]
+    fn recover_legacy_tmp_only_promotes_valid_tmp() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("cove.db");
+        let tmp_path = dir.path().join("cove.db.enc.tmp");
+
+        create_encrypted_redb_at(&tmp_path);
+
+        recover_legacy_at_path(&db_path).unwrap();
+
+        assert!(db_path.exists());
+        assert!(!tmp_path.exists());
+        assert!(verify_encrypted_redb_db(&db_path).unwrap());
+    }
+
+    #[test]
+    fn recover_legacy_tmp_only_preserves_invalid_tmp() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("cove.db");
+        let tmp_path = dir.path().join("cove.db.enc.tmp");
+
+        std::fs::write(&tmp_path, b"corrupt_tmp").unwrap();
+
+        recover_legacy_at_path(&db_path).unwrap();
+
+        assert!(!db_path.exists());
+        assert!(tmp_path.exists());
+        assert_eq!(std::fs::read(&tmp_path).unwrap(), b"corrupt_tmp");
     }
 
     #[test]
@@ -773,6 +864,8 @@ mod tests {
             write_txn.open_table(global_flag::TABLE).unwrap();
             write_txn.open_table(global_config::TABLE).unwrap();
             write_txn.open_table(global_cache::TABLE).unwrap();
+            write_txn.open_table(cloud_backup::CLOUD_BACKUP_STATE_TABLE).unwrap();
+            write_txn.open_table(cloud_backup::CLOUD_BLOB_SYNC_STATE_TABLE).unwrap();
             write_txn.open_table(wallet::TABLE).unwrap();
             write_txn.open_table(unsigned_transactions::MAIN_TABLE).unwrap();
             write_txn.open_table(unsigned_transactions::BY_WALLET_TABLE).unwrap();
@@ -802,6 +895,40 @@ mod tests {
             missing.is_empty(),
             "Tables in source but not in destination (migration missed them): {missing:?}"
         );
+    }
+
+    #[test]
+    fn migrate_main_database_fails_if_source_table_is_not_copied() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source_path = create_plaintext_main_db(&dir);
+        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+        let tmp_path = dest_path.with_extension("db.tmp");
+        let future_table: TableDefinition<&str, &str> = TableDefinition::new("future_table");
+
+        {
+            let db = redb::Database::open(&source_path).unwrap();
+            let write_txn = db.begin_write().unwrap();
+            {
+                let mut table = write_txn.open_table(future_table).unwrap();
+                table.insert("key", "value").unwrap();
+            }
+            write_txn.commit().unwrap();
+        }
+
+        let result = migrate_main_database(&source_path);
+        assert!(result.is_err(), "migration should fail instead of dropping an unknown table");
+        assert!(result.unwrap_err().to_string().contains("future_table"));
+        assert!(source_path.exists());
+        assert!(!dest_path.exists());
+        assert!(tmp_path.exists());
+
+        recover_main_migration(dir.path()).unwrap();
+
+        assert!(source_path.exists());
+        assert!(!dest_path.exists());
+        assert!(!tmp_path.exists());
     }
 
     #[test]

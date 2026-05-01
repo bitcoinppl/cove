@@ -11,9 +11,11 @@ use crate::wallet::metadata::WalletId;
 
 const CURRENT_KEY: &str = "current";
 
-const CLOUD_BACKUP_STATE_TABLE: TableDefinition<&'static str, Json<PersistedCloudBackupState>> =
-    TableDefinition::new("cloud_backup_state");
-const CLOUD_BLOB_SYNC_STATE_TABLE: TableDefinition<
+pub(crate) const CLOUD_BACKUP_STATE_TABLE: TableDefinition<
+    &'static str,
+    Json<PersistedCloudBackupState>,
+> = TableDefinition::new("cloud_backup_state");
+pub(crate) const CLOUD_BLOB_SYNC_STATE_TABLE: TableDefinition<
     &'static str,
     Json<PersistedCloudBlobSyncState>,
 > = TableDefinition::new("cloud_blob_sync_state");

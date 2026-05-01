@@ -63,18 +63,30 @@ fn recover_promoted_database(
     verification_warning: &str,
 ) -> Result<()> {
     if paths.tmp.exists() && !paths.dest.exists() {
-        match super::verify_encrypted_redb_db(&paths.tmp) {
-            Ok(true) => {
-                std::fs::rename(&paths.tmp, &paths.dest)
-                    .with_context(|| rename_context.to_string())?;
-            }
-            _ => {
-                // corrupt tmp — remove it, migration retries next launch
-                super::super::log_remove_file(&paths.tmp);
+        if paths.source.exists() {
+            let tmp = paths.tmp.display();
+            info!("Removing unpromoted migration temp at {tmp}; source still exists");
+            super::super::log_remove_file(&paths.tmp);
+        } else {
+            match super::verify_encrypted_redb_db(&paths.tmp) {
+                Ok(true) => {
+                    std::fs::rename(&paths.tmp, &paths.dest)
+                        .with_context(|| rename_context.to_string())?;
+                }
+                _ => {
+                    let tmp = paths.tmp.display();
+                    warn!("Migration temp at {tmp} failed verification and no source exists");
+                }
             }
         }
     } else if paths.tmp.exists() {
-        super::super::log_remove_file(&paths.tmp);
+        if paths.source.exists() || matches!(super::verify_encrypted_redb_db(&paths.dest), Ok(true))
+        {
+            super::super::log_remove_file(&paths.tmp);
+        } else {
+            let tmp = paths.tmp.display();
+            warn!("Preserving migration temp at {tmp} because destination failed verification");
+        }
     }
 
     // clean up leftover plaintext only after verifying encrypted version works
@@ -124,6 +136,22 @@ pub(super) fn recover_legacy_at_path(db_path: &Path) -> Result<()> {
         return Ok(());
     }
 
+    if tmp_path.exists() && !db_path.exists() {
+        let path = db_path.display();
+        match super::verify_encrypted_redb_db(&tmp_path) {
+            Ok(true) => {
+                info!("Promoting verified legacy migration temp at {path}");
+                std::fs::rename(&tmp_path, db_path)
+                    .context(format!("failed to promote legacy migration temp at {path}"))?;
+            }
+            _ => {
+                let tmp = tmp_path.display();
+                warn!("Legacy migration temp at {tmp} failed verification and no backup exists");
+            }
+        }
+        return Ok(());
+    }
+
     if tmp_path.exists() {
         super::super::log_remove_file(&tmp_path);
     }
@@ -135,7 +163,9 @@ pub(super) fn recover_legacy_at_path(db_path: &Path) -> Result<()> {
                 let path = db_path.display();
                 warn!("Encrypted DB at {path} appears corrupt, restoring from legacy backup");
 
-                super::super::log_remove_file(db_path);
+                let preserved = preserve_corrupt_file(db_path)?;
+                let preserved = preserved.display();
+                warn!("Preserved corrupt encrypted DB at {preserved}");
                 std::fs::rename(&bak_path, db_path)
                     .context(format!("failed to restore from legacy backup at {path}"))?;
             }
@@ -147,8 +177,34 @@ pub(super) fn recover_legacy_at_path(db_path: &Path) -> Result<()> {
     }
 
     if bak_path.exists() && !db_path.exists() {
-        super::super::log_remove_file(&bak_path);
+        let bak = bak_path.display();
+        warn!("Restoring legacy backup at {bak}");
+        std::fs::rename(&bak_path, db_path)
+            .context(format!("failed to restore from legacy backup at {bak}"))?;
     }
 
     Ok(())
+}
+
+fn preserve_corrupt_file(path: &Path) -> Result<std::path::PathBuf> {
+    let extension = path.extension().and_then(std::ffi::OsStr::to_str).unwrap_or_default();
+
+    for index in 0..1000 {
+        let suffix = if index == 0 {
+            format!("{extension}.corrupt")
+        } else {
+            format!("{extension}.corrupt.{index}")
+        };
+        let candidate = path.with_extension(suffix);
+        if candidate.exists() {
+            continue;
+        }
+
+        std::fs::rename(path, &candidate).with_context(|| {
+            format!("failed to preserve corrupt database at {}", candidate.to_string_lossy())
+        })?;
+        return Ok(candidate);
+    }
+
+    eyre::bail!("failed to find a path for preserving corrupt database {}", path.display())
 }

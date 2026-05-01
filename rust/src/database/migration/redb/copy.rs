@@ -1,7 +1,8 @@
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::path::Path;
 
-use eyre::{Context as _, Result};
+use eyre::{Context as _, Result, bail};
 use redb::{ReadableTable as _, TableDefinition, TableHandle as _, TypeName};
 use tracing::{info, warn};
 
@@ -139,6 +140,29 @@ where
 
     info!("Copied table '{name}': {count} rows");
     Ok(count)
+}
+
+pub(super) fn verify_all_source_tables_copied(
+    src_db: &redb::Database,
+    dst_db: &redb::Database,
+) -> Result<()> {
+    let source_tables = table_names(src_db).context("failed to list source tables")?;
+    let dest_tables = table_names(dst_db).context("failed to list destination tables")?;
+
+    let missing = source_tables.difference(&dest_tables).map(String::as_str).collect::<Vec<_>>();
+
+    if !missing.is_empty() {
+        bail!("encrypted migration missed source table(s): {}", missing.join(", "));
+    }
+
+    Ok(())
+}
+
+fn table_names(db: &redb::Database) -> Result<BTreeSet<String>> {
+    let read_txn = db.begin_read().context("failed to begin table listing read")?;
+    let tables = read_txn.list_tables().context("failed to list tables")?;
+
+    Ok(tables.map(|handle| handle.name().to_string()).collect())
 }
 
 /// Check whether an encrypted redb database can be opened and read
