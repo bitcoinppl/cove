@@ -5,6 +5,7 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.combinedRestoreProgress
 import org.bitcoinppl.cove.flows.OnboardingFlow.resolveRestorePhase
 import org.bitcoinppl.cove.flows.OnboardingFlow.shouldCompleteOnboardingCloudBackup
 import org.bitcoinppl.cove.flows.OnboardingFlow.shouldNotifyRestoreError
+import org.bitcoinppl.cove_core.AppInitException
 import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
@@ -93,6 +94,23 @@ class OnboardingHelpersTest {
         assertFalse(hasPersistedOnboardingProgress(""))
         assertFalse(hasPersistedOnboardingProgress("   "))
         assertTrue(hasPersistedOnboardingProgress("""{"step":"backup_wallet"}"""))
+    }
+
+    @Test
+    fun databaseKeyMismatchUsesCatastrophicRecoveryStartupFailure() {
+        val failure = classifyBootstrapFailure(AppInitException.DatabaseKeyMismatch("wrong key"))
+
+        assertEquals(BootstrapFailure.CatastrophicRecovery, failure)
+    }
+
+    @Test
+    fun nonCatastrophicBootstrapErrorsRemainFatal() {
+        val failure = classifyBootstrapFailure(AppInitException.AlreadyCalled("already called"))
+
+        assertEquals(
+            BootstrapFailure.Fatal("App initialization error. Please force-quit and restart."),
+            failure,
+        )
     }
 
     @Test

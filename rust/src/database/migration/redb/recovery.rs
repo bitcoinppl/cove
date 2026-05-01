@@ -9,10 +9,12 @@ use super::{
     DatabasePaths, LEGACY_MAIN_DB, LEGACY_WALLET_DB, main_database_paths, wallet_database_paths,
 };
 
-/// Recover from interrupted migrations by checking for orphaned .tmp files
-pub(super) fn recover_interrupted_migrations() -> Result<()> {
+pub(super) fn recover_interrupted_main_migration() -> Result<()> {
     recover_main_migration(&ROOT_DATA_DIR)?;
+    recover_legacy_at_path(&ROOT_DATA_DIR.join(LEGACY_MAIN_DB))
+}
 
+pub(super) fn recover_interrupted_wallet_migrations() -> Result<()> {
     let entries = match std::fs::read_dir(&*WALLET_DATA_DIR) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -32,9 +34,6 @@ pub(super) fn recover_interrupted_migrations() -> Result<()> {
         recover_wallet_migration(&entry.path())?;
         recover_legacy_at_path(&entry.path().join(LEGACY_WALLET_DB))?;
     }
-
-    // also clean up old-style .bak/.enc.tmp files from previous migration code
-    recover_legacy_at_path(&ROOT_DATA_DIR.join(LEGACY_MAIN_DB))?;
 
     Ok(())
 }
@@ -93,7 +92,14 @@ fn recover_promoted_database(
     if paths.source.exists() && paths.dest.exists() {
         match super::verify_encrypted_redb_db(&paths.dest) {
             Ok(true) => super::super::log_remove_file(&paths.source),
-            _ => warn!("{verification_warning}"),
+            Ok(false) => {
+                warn!("{verification_warning}");
+
+                let preserved = preserve_corrupt_file(&paths.dest)?;
+                let preserved = preserved.display();
+                warn!("Preserved corrupt encrypted DB at {preserved}");
+            }
+            Err(error) => warn!("{verification_warning}: {error:#}"),
         }
     }
 

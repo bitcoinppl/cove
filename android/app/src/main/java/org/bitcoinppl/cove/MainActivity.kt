@@ -120,6 +120,26 @@ internal enum class StartupMode {
     READY,
 }
 
+internal sealed class BootstrapFailure {
+    data object CatastrophicRecovery : BootstrapFailure()
+
+    data class Fatal(
+        val message: String,
+    ) : BootstrapFailure()
+}
+
+internal fun classifyBootstrapFailure(error: Exception): BootstrapFailure =
+    when (error) {
+        is AppInitException.DatabaseKeyMismatch -> BootstrapFailure.CatastrophicRecovery
+        is AppInitException.AlreadyCalled ->
+            BootstrapFailure.Fatal("App initialization error. Please force-quit and restart.")
+        is AppInitException.Cancelled ->
+            BootstrapFailure.Fatal(
+                "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com",
+            )
+        else -> BootstrapFailure.Fatal(error.message ?: "Unknown error")
+    }
+
 internal fun hasPersistedOnboardingProgress(
     persistedProgress: String?,
 ): Boolean = !persistedProgress.isNullOrBlank()
@@ -231,10 +251,44 @@ class MainActivity : FragmentActivity() {
         setContent {
             var bootstrapped by remember { mutableStateOf(false) }
             var bootstrapError by remember { mutableStateOf<String?>(null) }
+            var needsCatastrophicRecovery by remember { mutableStateOf(false) }
+            var bootstrapAttempt by remember { mutableStateOf(0) }
             var bdkMigrationWarning by remember { mutableStateOf<String?>(null) }
 
+            fun resetCatastrophicRecoveryAndRetry(logContext: String) {
+                try {
+                    resetLocalDataForCatastrophicRecovery()
+                    resetBootstrapForRestore()
+                    bootstrapError = null
+                    needsCatastrophicRecovery = false
+                    bootstrapAttempt += 1
+                } catch (e: Exception) {
+                    Log.e(TAG, "[STARTUP] catastrophic recovery $logContext failed", e)
+                    needsCatastrophicRecovery = false
+                    bootstrapError = "Failed to reset local data: ${e.message ?: "Unknown error"}"
+                }
+            }
+
             if (!bootstrapped) {
-                if (bootstrapError != null) {
+                if (needsCatastrophicRecovery) {
+                    CatastrophicRecoveryView(
+                        onRestoreFromCloud = {
+                            resetCatastrophicRecoveryAndRetry("reset")
+                        },
+                        onWipeLocalData = {
+                            resetCatastrophicRecoveryAndRetry("wipe")
+                        },
+                        onContactSupport = {
+                            val intent =
+                                Intent(Intent.ACTION_SENDTO).apply {
+                                    data = Uri.parse("mailto:feedback@covebitcoinwallet.com")
+                                }
+                            runCatching { startActivity(intent) }.onFailure { error ->
+                                Log.w(TAG, "[STARTUP] failed to open support email", error)
+                            }
+                        },
+                    )
+                } else if (bootstrapError != null) {
                     BootstrapErrorView(errorMessage = bootstrapError!!)
                 } else {
                     var showSpinner by remember { mutableStateOf(false) }
@@ -252,7 +306,7 @@ class MainActivity : FragmentActivity() {
                         showSpinner = true
                     }
 
-                    LaunchedEffect(Unit) {
+                    LaunchedEffect(bootstrapAttempt) {
                         fun completeBootstrap(warning: String? = null) {
                             splashStatus = null
                             encryptionProgress = null
@@ -308,15 +362,15 @@ class MainActivity : FragmentActivity() {
                                 completeBootstrap()
                             } else if (e is AppInitException.AlreadyCalled) {
                                 Log.e(TAG, "[STARTUP] bootstrap already called at step: $step", e)
-                                bootstrapError =
-                                    "App initialization error. Please force-quit and restart."
                             } else if (e is AppInitException.Cancelled) {
                                 Log.e(TAG, "[STARTUP] bootstrap cancelled at step: $step", e)
-                                bootstrapError =
-                                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
                             } else {
                                 Log.e(TAG, "[STARTUP] bootstrap failed at step: $step", e)
-                                bootstrapError = e.message ?: "Unknown error"
+                            }
+
+                            when (val failure = classifyBootstrapFailure(e)) {
+                                BootstrapFailure.CatastrophicRecovery -> needsCatastrophicRecovery = true
+                                is BootstrapFailure.Fatal -> bootstrapError = failure.message
                             }
                             return@LaunchedEffect
                         }
@@ -1098,6 +1152,85 @@ private fun GlobalAlertDialog(
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun CatastrophicRecoveryView(
+    onRestoreFromCloud: () -> Unit,
+    onWipeLocalData: () -> Unit,
+    onContactSupport: () -> Unit,
+) {
+    var showWipeConfirmation by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = true) {}
+
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color.Black),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth().padding(28.dp),
+        ) {
+            Text(
+                "Encryption Key Error",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                "Cove can't safely open the local wallet data on this device.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.76f),
+            )
+            Spacer(modifier = Modifier.height(28.dp))
+            FilledTonalButton(
+                onClick = onRestoreFromCloud,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Restore from Cloud Backup")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(
+                onClick = onContactSupport,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Contact Support")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(
+                onClick = { showWipeConfirmation = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Wipe Local Data", color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+
+    if (showWipeConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showWipeConfirmation = false },
+            title = { Text("Wipe Local Data?") },
+            text = {
+                Text(
+                    "This will permanently delete wallet data on this device. Make sure your recovery phrases are backed up before continuing.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showWipeConfirmation = false
+                        onWipeLocalData()
+                    },
+                ) {
+                    Text("Wipe Data", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWipeConfirmation = false }) { Text("Cancel") }
+            },
+        )
     }
 }
 
