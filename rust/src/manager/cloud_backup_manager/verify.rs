@@ -18,8 +18,8 @@ use self::session::VerificationSession;
 use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
 use super::wallets::persist_enabled_cloud_backup_state;
 use super::{
-    BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupStatus,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
+    CloudBackupStatus, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
     PendingVerificationCompletion, RecoveryState, RustCloudBackupManager, VerificationFailureKind,
     VerificationState,
 };
@@ -29,6 +29,22 @@ use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBac
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IntegrityDowngrade {
     Unverified,
+}
+
+impl IntegrityDowngrade {
+    fn apply_to(&self, current: &PersistedCloudBackupState) -> Option<PersistedCloudBackupState> {
+        match self {
+            Self::Unverified => match current.status {
+                PersistedCloudBackupStatus::Enabled => Some(PersistedCloudBackupState {
+                    status: PersistedCloudBackupStatus::Unverified,
+                    ..current.clone()
+                }),
+                PersistedCloudBackupStatus::Unverified => Some(current.clone()),
+                PersistedCloudBackupStatus::PasskeyMissing
+                | PersistedCloudBackupStatus::Disabled => None,
+            },
+        }
+    }
 }
 
 impl RustCloudBackupManager {
@@ -98,9 +114,7 @@ impl RustCloudBackupManager {
 
         match current.status {
             PersistedCloudBackupStatus::Enabled | PersistedCloudBackupStatus::Unverified => {
-                let Some(mut new_state) =
-                    downgrade_cloud_backup_state(&current, IntegrityDowngrade::Unverified)
-                else {
+                let Some(mut new_state) = IntegrityDowngrade::Unverified.apply_to(&current) else {
                     return;
                 };
 
@@ -139,6 +153,7 @@ impl RustCloudBackupManager {
         let cloud = CloudStorage::global_explicit_client();
         let passkey = PasskeyAccess::global();
         let namespace = self.current_namespace_id()?;
+        let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
 
         let local_master_key = cspp
             .load_master_key_from_store()
@@ -153,7 +168,8 @@ impl RustCloudBackupManager {
             }
         };
 
-        let repair = WrapperRepairOperation::new(self, keychain, &cloud, passkey, &namespace);
+        let repair =
+            WrapperRepairOperation::new(self, &cloud_keychain, &cloud, passkey, &namespace);
         repair
             .run(&local_master_key, &wallet_record_ids, strategy)
             .await
@@ -268,7 +284,8 @@ impl RustCloudBackupManager {
             }
         }
 
-        let authenticator = PasskeyAuthenticator::new(keychain, passkey);
+        let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
+        let authenticator = PasskeyAuthenticator::new(&cloud_keychain, passkey);
         let auth_outcome =
             authenticator.authenticate_with_policy(&encrypted.prf_salt, auth_policy).await?;
         let authenticated = match auth_outcome {
@@ -293,32 +310,14 @@ impl RustCloudBackupManager {
                 }
             })?;
 
-        keychain
-            .save_cspp_passkey(&authenticated.credential_id, encrypted.prf_salt)
+        CloudBackupKeychain::new(keychain.clone())
+            .save_passkey(&authenticated.credential_id, encrypted.prf_salt)
             .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
         cspp.save_master_key(&master_key)
             .map_err_prefix("save recovered master key", CloudBackupError::Internal)?;
 
         info!("Recovered local master key from cloud");
         Ok(master_key)
-    }
-}
-
-fn downgrade_cloud_backup_state(
-    current: &PersistedCloudBackupState,
-    downgrade: IntegrityDowngrade,
-) -> Option<PersistedCloudBackupState> {
-    match downgrade {
-        IntegrityDowngrade::Unverified => match current.status {
-            PersistedCloudBackupStatus::Enabled => Some(PersistedCloudBackupState {
-                status: PersistedCloudBackupStatus::Unverified,
-                ..current.clone()
-            }),
-            PersistedCloudBackupStatus::Unverified => Some(current.clone()),
-            PersistedCloudBackupStatus::PasskeyMissing | PersistedCloudBackupStatus::Disabled => {
-                None
-            }
-        },
     }
 }
 
@@ -336,8 +335,7 @@ mod tests {
             ..PersistedCloudBackupState::default()
         };
 
-        let updated =
-            downgrade_cloud_backup_state(&current, IntegrityDowngrade::Unverified).unwrap();
+        let updated = IntegrityDowngrade::Unverified.apply_to(&current).unwrap();
 
         assert_eq!(
             updated,
@@ -361,7 +359,7 @@ mod tests {
             ..PersistedCloudBackupState::default()
         };
 
-        let updated = downgrade_cloud_backup_state(&current, IntegrityDowngrade::Unverified);
+        let updated = IntegrityDowngrade::Unverified.apply_to(&current);
 
         assert!(updated.is_none());
     }

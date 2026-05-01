@@ -22,6 +22,31 @@ enum BlobCheckResult {
     Failed { error: String, retryable: bool, issue: Option<CloudBlobFailureIssue> },
 }
 
+impl BlobCheckResult {
+    fn terminal_failure(error: String) -> Self {
+        Self::Failed { error, retryable: false, issue: None }
+    }
+
+    fn cloud_storage_failure(error: CloudStorageError) -> Self {
+        if matches!(error, CloudStorageError::AuthorizationRequired(_)) {
+            return Self::AuthorizationRequired { error: error.to_string() };
+        }
+
+        let retryable = matches!(
+            error,
+            CloudStorageError::Offline(_)
+                | CloudStorageError::NotAvailable(_)
+                | CloudStorageError::DownloadFailed(_)
+        );
+
+        let issue = RustCloudBackupManager::cloud_blob_failure_issue(
+            RustCloudBackupManager::cloud_storage_issue(&error),
+        );
+
+        Self::Failed { error: error.to_string(), retryable, issue }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingUploadRunOutcome {
     Idle,
@@ -168,7 +193,7 @@ impl PendingUploadVerifier {
         match cloud.download_master_key_backup(namespace_id.to_string()).await {
             Ok(_) => BlobCheckResult::Confirmed,
             Err(CloudStorageError::NotFound(_)) => BlobCheckResult::NotYetUploaded,
-            Err(error) => cloud_storage_failure_result(error),
+            Err(error) => BlobCheckResult::cloud_storage_failure(error),
         }
     }
 
@@ -180,9 +205,13 @@ impl PendingUploadVerifier {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         let master_key = match cspp.load_master_key_from_store() {
             Ok(Some(master_key)) => master_key,
-            Ok(None) => return terminal_failure("no local master key available".into()),
+            Ok(None) => {
+                return BlobCheckResult::terminal_failure("no local master key available".into());
+            }
             Err(error) => {
-                return terminal_failure(format!("load local master key: {error}"));
+                return BlobCheckResult::terminal_failure(format!(
+                    "load local master key: {error}"
+                ));
             }
         };
 
@@ -199,17 +228,19 @@ impl PendingUploadVerifier {
         let wallet_json = match wallt_download_result {
             Ok(wallet_json) => wallet_json,
             Err(CloudStorageError::NotFound(_)) => return BlobCheckResult::NotYetUploaded,
-            Err(error) => return cloud_storage_failure_result(error),
+            Err(error) => return BlobCheckResult::cloud_storage_failure(error),
         };
 
         let encrypted: EncryptedWalletBackup = match serde_json::from_slice(&wallet_json) {
             Ok(encrypted) => encrypted,
             Err(error) => {
-                return terminal_failure(format!("deserialize wallet backup: {error}"));
+                return BlobCheckResult::terminal_failure(format!(
+                    "deserialize wallet backup: {error}"
+                ));
             }
         };
         if encrypted.version != 1 {
-            return terminal_failure(format!(
+            return BlobCheckResult::terminal_failure(format!(
                 "unsupported wallet backup version {}",
                 encrypted.version
             ));
@@ -223,7 +254,9 @@ impl PendingUploadVerifier {
                     BlobCheckResult::Stale(entry.content_revision_hash.clone())
                 }
             }
-            Err(error) => terminal_failure(format!("decrypt wallet backup: {error}")),
+            Err(error) => {
+                BlobCheckResult::terminal_failure(format!("decrypt wallet backup: {error}"))
+            }
         }
     }
 
@@ -244,7 +277,7 @@ impl PendingUploadVerifier {
                     })
                 }
                 BlobCheckResult::NotYetUploaded | BlobCheckResult::Stale(_)
-                    if should_retry_wallet_upload(sync_state, next_attempt_count) =>
+                    if Self::should_retry_wallet_upload(sync_state, next_attempt_count) =>
                 {
                     PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at: checked_at })
                 }
@@ -364,37 +397,14 @@ impl PendingUploadVerifier {
     fn send_pending_state(&self, pending: bool) {
         self.0.set_pending_upload_verification(pending);
     }
-}
 
-fn should_retry_wallet_upload(
-    sync_state: &PersistedCloudBlobSyncState,
-    next_attempt_count: u32,
-) -> bool {
-    sync_state.wallet_id.is_some()
-        && next_attempt_count >= MAX_PENDING_WALLET_UPLOAD_CONFIRMATION_ATTEMPTS
-}
-
-fn terminal_failure(error: String) -> BlobCheckResult {
-    BlobCheckResult::Failed { error, retryable: false, issue: None }
-}
-
-fn cloud_storage_failure_result(error: CloudStorageError) -> BlobCheckResult {
-    if matches!(error, CloudStorageError::AuthorizationRequired(_)) {
-        return BlobCheckResult::AuthorizationRequired { error: error.to_string() };
+    fn should_retry_wallet_upload(
+        sync_state: &PersistedCloudBlobSyncState,
+        next_attempt_count: u32,
+    ) -> bool {
+        sync_state.wallet_id.is_some()
+            && next_attempt_count >= MAX_PENDING_WALLET_UPLOAD_CONFIRMATION_ATTEMPTS
     }
-
-    let retryable = matches!(
-        error,
-        CloudStorageError::Offline(_)
-            | CloudStorageError::NotAvailable(_)
-            | CloudStorageError::DownloadFailed(_)
-    );
-
-    let issue = RustCloudBackupManager::cloud_blob_failure_issue(
-        RustCloudBackupManager::cloud_storage_issue(&error),
-    );
-
-    BlobCheckResult::Failed { error: error.to_string(), retryable, issue }
 }
 
 #[cfg(test)]
@@ -598,7 +608,8 @@ mod tests {
 
     #[test]
     fn cloud_storage_failure_result_retries_offline_errors() {
-        let result = cloud_storage_failure_result(CloudStorageError::Offline("offline".into()));
+        let result =
+            BlobCheckResult::cloud_storage_failure(CloudStorageError::Offline("offline".into()));
 
         assert!(matches!(result, BlobCheckResult::Failed { retryable: true, .. }));
     }

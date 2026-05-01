@@ -1,7 +1,6 @@
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::CloudStorageClient;
-use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use cove_tokio::unblock;
 use cove_util::ResultExt as _;
@@ -10,7 +9,8 @@ use tracing::info;
 use zeroize::Zeroizing;
 
 use super::super::{
-    CloudBackupError, PASSKEY_RP_ID, RustCloudBackupManager, cspp_master_key_record_id,
+    CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID, RustCloudBackupManager,
+    cspp_master_key_record_id,
 };
 use crate::manager::cloud_backup_manager::wallets::{
     PasskeyMaterialAcquirer, WalletBackupLookup, WalletBackupReader,
@@ -112,7 +112,7 @@ impl LocalKeyVerifier {
 /// Repairs the cloud master-key wrapper after proving the local master key is valid
 pub(super) struct WrapperRepairOperation {
     manager: RustCloudBackupManager,
-    keychain: Keychain,
+    keychain: CloudBackupKeychain,
     cloud: CloudStorageClient,
     passkey: PasskeyAccess,
     namespace: String,
@@ -121,7 +121,7 @@ pub(super) struct WrapperRepairOperation {
 impl WrapperRepairOperation {
     pub(super) fn new(
         manager: &RustCloudBackupManager,
-        keychain: &Keychain,
+        keychain: &CloudBackupKeychain,
         cloud: &CloudStorageClient,
         passkey: &PasskeyAccess,
         namespace: &str,
@@ -166,7 +166,7 @@ impl WrapperRepairOperation {
             .map_err(WrapperRepairError::Operation)?;
 
         self.keychain
-            .save_cspp_passkey(&credentials.credential_id, credentials.prf_salt)
+            .save_passkey(&credentials.credential_id, credentials.prf_salt)
             .map_err_prefix("save cspp credentials", CloudBackupError::Internal)
             .map_err(WrapperRepairError::Operation)?;
 

@@ -1,5 +1,6 @@
 mod cloud_inventory;
 mod detail;
+mod keychain;
 mod ops;
 mod pending;
 mod prompt;
@@ -13,7 +14,6 @@ use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use act_zero::{Addr, send};
-use cove_cspp::CsppStore as _;
 use cove_cspp::backup_data::{MASTER_KEY_RECORD_ID, wallet_record_id};
 use cove_device::cloud_storage::{
     CloudStorage, CloudStorageClient, CloudStorageError, CloudSyncHealth,
@@ -27,9 +27,7 @@ use parking_lot::RwLock;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
-use cove_device::keychain::{
-    CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, Keychain,
-};
+use cove_device::keychain::Keychain;
 use cove_types::network::Network;
 
 use crate::database::Database;
@@ -47,6 +45,7 @@ use self::cloud_inventory::RemoteWalletTruth;
 pub use self::detail::{
     CloudOnlyOperation, CloudOnlyState, RecoveryAction, RecoveryState, SyncState, VerificationState,
 };
+pub(crate) use self::keychain::CloudBackupKeychain;
 use self::prompt::CloudBackupPromptState;
 use self::runtime_actor::{
     CloudBackupOperation, CloudBackupRuntimeActor, RestoreOperation, SyncHealthRuntimeState,
@@ -1140,9 +1139,8 @@ impl RustCloudBackupManager {
     }
 
     fn current_namespace_id(&self) -> Result<String, CloudBackupError> {
-        let keychain = Keychain::global();
-        keychain
-            .get(CSPP_NAMESPACE_ID_KEY.into())
+        CloudBackupKeychain::global()
+            .namespace_id()
             .ok_or_else(|| CloudBackupError::Internal("namespace_id not found in keychain".into()))
     }
 
@@ -1744,7 +1742,7 @@ impl RustCloudBackupManager {
     ///
     /// Debug-only: pair with Swift-side iCloud wipe for full reset
     pub fn debug_reset_cloud_backup_state(&self) {
-        clear_local_cloud_backup_keychain_state();
+        CloudBackupKeychain::global().clear_local_state();
         self.clear_pending_enable_session();
 
         let db = Database::global();
@@ -1842,7 +1840,7 @@ fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecover
     use crate::database::migration::log_remove_file;
 
     wipe_wallet_keychain_items_for_catastrophic_recovery()?;
-    clear_local_cloud_backup_keychain_state();
+    CloudBackupKeychain::global().clear_local_state();
 
     let root = &*cove_common::consts::ROOT_DATA_DIR;
 
@@ -1909,25 +1907,6 @@ fn live_upload_retry_delay_for_attempt(retry_count: u32) -> Duration {
         .saturating_mul(backoff_multiplier)
         .min(MAX_LIVE_UPLOAD_RETRY_DELAY.as_secs());
     Duration::from_secs(delay_secs)
-}
-
-pub(crate) fn clear_local_cloud_backup_keychain_state() {
-    let keychain = Keychain::global();
-    delete_keychain_item_if_present(keychain, CSPP_NAMESPACE_ID_KEY);
-    delete_keychain_item_if_present(keychain, CSPP_CREDENTIAL_ID_KEY);
-    delete_keychain_item_if_present(keychain, CSPP_PRF_SALT_KEY);
-
-    let cspp = cove_cspp::Cspp::new(keychain.clone());
-    let had_master_key = cspp.has_master_key();
-    if had_master_key && !cspp.delete_master_key() {
-        warn!("Failed to delete cloud backup master key from keychain");
-    }
-}
-
-fn delete_keychain_item_if_present(keychain: &Keychain, key: &str) {
-    if keychain.get(key.to_string()).is_some() && !keychain.delete(key.to_string()) {
-        warn!("Failed to delete cloud backup keychain item key={key}");
-    }
 }
 
 fn wipe_wallet_keychain_items_for_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {

@@ -20,9 +20,7 @@ use crate::{
         client::{FIAT_CLIENT, PriceResponse},
     },
     keychain::{Keychain, KeychainError},
-    manager::cloud_backup_manager::{
-        CLOUD_BACKUP_MANAGER, clear_local_cloud_backup_keychain_state,
-    },
+    manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, CloudBackupKeychain},
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     network::Network,
     node::{Node, client::NodeClient},
@@ -585,7 +583,7 @@ impl FfiApp {
             }
         }
 
-        clear_local_cloud_backup_keychain_state();
+        CloudBackupKeychain::global().clear_local_state();
         database.dangerous_reset_all_data();
     }
 

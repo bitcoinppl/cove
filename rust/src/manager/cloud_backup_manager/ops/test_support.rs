@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use act_zero::call;
 use bip39::Mnemonic;
-use cove_cspp::CsppStore;
 use cove_cspp::backup_data::{
     MASTER_KEY_RECORD_ID, WalletEntry, WalletMode as CloudWalletMode, WalletSecret,
     wallet_filename_from_record_id,
@@ -12,7 +11,7 @@ use cove_cspp::backup_data::{
 use cove_device::cloud_storage::{
     CloudAccessPolicy, CloudStorage, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
 };
-use cove_device::keychain::{CSPP_NAMESPACE_ID_KEY, Keychain, KeychainAccess};
+use cove_device::keychain::{Keychain, KeychainAccess};
 use cove_device::passkey::{
     DiscoveredPasskeyResult, PasskeyAccess, PasskeyCredentialPresence, PasskeyError,
     PasskeyFailureReason, PasskeyOperation, PasskeyProvider,
@@ -21,6 +20,7 @@ use parking_lot::Mutex;
 use sha2::Digest as _;
 use strum::IntoEnumIterator as _;
 
+use super::super::CloudBackupKeychain;
 use super::*;
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -65,16 +65,40 @@ type MockPasskeyActionResult = Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>
 #[derive(Debug, Clone, Default)]
 pub(crate) struct MockKeychain {
     entries: Arc<Mutex<HashMap<String, String>>>,
+    fail_save_at: Arc<Mutex<Option<usize>>>,
+    save_count: Arc<Mutex<usize>>,
 }
 
 impl MockKeychain {
     fn reset(&self) {
         self.entries.lock().clear();
+        *self.fail_save_at.lock() = None;
+        *self.save_count.lock() = 0;
+    }
+
+    pub(crate) fn set_entries(&self, entries: Vec<(&str, &str)>) {
+        *self.entries.lock() =
+            entries.into_iter().map(|(key, value)| (key.into(), value.into())).collect();
+    }
+
+    pub(crate) fn get_entry(&self, key: &str) -> Option<String> {
+        self.entries.lock().get(key).cloned()
+    }
+
+    pub(crate) fn fail_save_at(&self, save_attempt: usize) {
+        *self.fail_save_at.lock() = Some(save_attempt);
+        *self.save_count.lock() = 0;
     }
 }
 
 impl KeychainAccess for MockKeychain {
     fn save(&self, key: String, value: String) -> Result<(), cove_device::keychain::KeychainError> {
+        let mut save_count = self.save_count.lock();
+        *save_count += 1;
+        if Some(*save_count) == *self.fail_save_at.lock() {
+            return Err(cove_device::keychain::KeychainError::Save);
+        }
+
         self.entries.lock().insert(key, value);
         Ok(())
     }
@@ -535,7 +559,7 @@ fn clear_local_wallets() {
 }
 
 pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
-    let namespace_id = Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()).unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
     let changed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
 
@@ -574,7 +598,7 @@ pub(crate) fn persist_failed_blob_state_with_issue(
     retryable: bool,
     issue: Option<CloudBlobFailureIssue>,
 ) {
-    let namespace_id = Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()).unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
     let failed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
 
@@ -597,7 +621,7 @@ pub(crate) fn persist_failed_blob_state_with_issue(
 }
 
 pub(crate) fn persist_uploading_blob_state(wallet_id: WalletId, started_at: u64) {
-    let namespace_id = Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()).unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
 
     Database::global()
@@ -688,7 +712,7 @@ pub(crate) fn configure_enabled_cloud_backup(
     let master_key = cove_cspp::master_key::MasterKey::generate();
     let namespace = master_key.namespace_id();
     let keychain = Keychain::global();
-    keychain.save(CSPP_NAMESPACE_ID_KEY.into(), namespace).unwrap();
+    CloudBackupKeychain::new(keychain.clone()).save_namespace_id(&namespace).unwrap();
     cove_cspp::Cspp::new(keychain.clone()).save_master_key(&master_key).unwrap();
 
     manager
@@ -711,7 +735,7 @@ pub(crate) fn enable_cloud_backup_without_reset(
     let master_key = cove_cspp::master_key::MasterKey::generate();
     let namespace = master_key.namespace_id();
     let keychain = Keychain::global();
-    keychain.save(CSPP_NAMESPACE_ID_KEY.into(), namespace).unwrap();
+    CloudBackupKeychain::new(keychain.clone()).save_namespace_id(&namespace).unwrap();
     cove_cspp::Cspp::new(keychain.clone()).save_master_key(&master_key).unwrap();
 
     manager
@@ -852,7 +876,7 @@ pub(crate) fn prepare_deep_verify_with_unsynced_wallet(
     }));
 
     let keychain = Keychain::global();
-    keychain.save(CSPP_NAMESPACE_ID_KEY.into(), namespace).unwrap();
+    CloudBackupKeychain::new(keychain.clone()).save_namespace_id(&namespace).unwrap();
     cove_cspp::Cspp::new(keychain.clone()).save_master_key(&master_key).unwrap();
 
     manager

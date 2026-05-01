@@ -1,10 +1,9 @@
-use cove_device::keychain::Keychain;
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use cove_tokio::unblock;
 use rand::RngExt as _;
 use tracing::info;
 
-use super::super::{CloudBackupError, PASSKEY_RP_ID};
+use super::super::{CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID};
 use super::session::VerificationSession;
 
 #[derive(Debug, PartialEq)]
@@ -37,13 +36,13 @@ enum StoredPasskeyAuthOutcome {
 
 /// Authenticates backup passkeys against the PRF salt from a master-key backup
 pub(crate) struct PasskeyAuthenticator {
-    keychain: Keychain,
+    keychain: CloudBackupKeychain,
     passkey: PasskeyAccess,
 }
 
 impl PasskeyAuthenticator {
     /// Builds an authenticator from cheap device-service handles
-    pub(crate) fn new(keychain: &Keychain, passkey: &PasskeyAccess) -> Self {
+    pub(crate) fn new(keychain: &CloudBackupKeychain, passkey: &PasskeyAccess) -> Self {
         Self { keychain: keychain.clone(), passkey: passkey.clone() }
     }
 
@@ -126,7 +125,7 @@ impl PasskeyAuthenticator {
         &self,
         prf_salt: &[u8; 32],
     ) -> Result<StoredPasskeyAuthOutcome, CloudBackupError> {
-        let Some(credential_id) = self.keychain.load_cspp_credential_id() else {
+        let Some(credential_id) = self.keychain.load_credential_id() else {
             return Ok(StoredPasskeyAuthOutcome::NoCredentialFound);
         };
 
@@ -204,7 +203,7 @@ impl VerificationSession {
             PasskeyAuthPolicy::StoredThenDiscover
         };
 
-        PasskeyAuthenticator::new(&self.keychain, &self.passkey)
+        PasskeyAuthenticator::new(&self.cloud_keychain, &self.passkey)
             .authenticate_with_policy(prf_salt, policy)
             .await
     }
