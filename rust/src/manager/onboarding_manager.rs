@@ -1607,8 +1607,11 @@ async fn inspect_cloud_restore_backup(
 ) -> Result<CloudRestoreBackupSnapshot, CloudStorageError> {
     let namespaces = cloud.list_namespaces().await?;
     if namespaces.is_empty() {
+        info!("Onboarding: cloud backup namespace check found no namespaces");
         return Ok(CloudRestoreBackupSnapshot { has_backup: false, provider_hint: None });
     }
+
+    info!("Onboarding: cloud backup namespace check found {} namespace(s)", namespaces.len());
 
     let provider_hint = load_cloud_restore_provider_hint(&cloud, namespaces).await;
     Ok(CloudRestoreBackupSnapshot { has_backup: true, provider_hint })
@@ -1620,14 +1623,33 @@ async fn load_cloud_restore_provider_hint(
 ) -> Option<CloudRestoreProviderHint> {
     let mut hints = Vec::new();
     for namespace in namespaces {
-        let Ok(master_json) = cloud.download_master_key_backup(namespace).await else {
+        let Ok(master_json) = cloud.download_master_key_backup(namespace.clone()).await else {
+            info!(
+                "No cloud restore passkey provider hint namespace={namespace} reason=download_failed"
+            );
             continue;
         };
         let Ok(encrypted) = serde_json::from_slice::<EncryptedMasterKeyBackup>(&master_json) else {
+            info!(
+                "No cloud restore passkey provider hint namespace={namespace} reason=deserialize_failed"
+            );
             continue;
         };
-        let Some(hint) = encrypted.passkey_provider_hint.as_ref().and_then(resolve_provider_hint)
-        else {
+        let Some(raw_hint) = encrypted.passkey_provider_hint.as_ref() else {
+            info!("No cloud restore passkey provider hint namespace={namespace} reason=missing");
+            continue;
+        };
+
+        info!(
+            "Found cloud restore passkey provider hint namespace={namespace} aaguid={} registered_platform={:?} registered_at={}",
+            raw_hint.aaguid, raw_hint.registered_platform, raw_hint.registered_at
+        );
+
+        let Some(hint) = resolve_provider_hint(raw_hint) else {
+            info!(
+                "No resolved cloud restore passkey provider hint namespace={namespace} aaguid={} registered_platform={:?} registered_at={} reason=unknown_provider",
+                raw_hint.aaguid, raw_hint.registered_platform, raw_hint.registered_at
+            );
             continue;
         };
 
@@ -1643,6 +1665,10 @@ fn choose_restore_provider_hint(
     let provider_names =
         hints.iter().map(|hint| hint.provider_name.as_str()).collect::<HashSet<_>>();
     if provider_names.len() != 1 {
+        info!(
+            "No resolved cloud restore passkey provider hint reason=provider_name_mismatch provider_name_count={}",
+            provider_names.len()
+        );
         return None;
     }
 
@@ -1651,12 +1677,32 @@ fn choose_restore_provider_hint(
 
 fn resolve_provider_hint(hint: &PasskeyProviderHint) -> Option<CloudRestoreProviderHint> {
     let provider_name = match hint.aaguid.as_str() {
-        "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4" => "Google Password Manager",
         "00000000-0000-0000-0000-000000000000"
             if hint.registered_platform == BackupPasskeyRegistrationPlatform::Ios =>
         {
             "Apple Passwords"
         }
+        "0ea242b4-43c4-4a1b-8b17-dd6d0b6baec6" => "Keeper",
+        "50726f74-6f6e-5061-7373-50726f746f6e" => "Proton Pass",
+        "531126d6-e717-415c-9320-3d9aa6981239" => "Dashlane",
+        "53414d53-554e-4700-0000-000000000000" => "Samsung Pass",
+        "70617373-7761-6c6c-6669-646f32303236" => "Passwall",
+        "a10c6dd9-465e-4226-8198-c7c44b91c555" => "Kaspersky Password Manager",
+        "adce0002-35bc-c60a-648b-0b25f1f05503" => "Chrome on Mac",
+        "b35a26b2-8f6e-4697-ab1d-d44db4da28c6" => "Zoho Vault",
+        "b78a0a55-6ef8-d246-a042-ba0f6d55050c" => "LastPass",
+        "b84e4048-15dc-4dd0-8640-f4f60813c8af" => "NordPass",
+        "bada5566-a7aa-401f-bd96-45619a55120d" => "1Password",
+        "bfc748bb-3429-4faa-b9f9-7cfa9f3b76d0" => "iPasswords",
+        "d3452668-01fd-4c12-926c-83a4204853aa" => "Microsoft Password Manager",
+        "d548826e-79b4-db40-a3d8-11116f7e8349" => "Bitwarden",
+        "d9be9d39-e6a6-4c28-a581-32b044d986e4" => "Sticky Password Manager",
+        "dd4ec289-e01d-41c9-bb89-70fa845d4bf2" => "iCloud Keychain (Managed)",
+        "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4" => "Google Password Manager",
+        "eaecdef2-1c31-5634-8639-f1cbd9c00a08" => "KeePassDX",
+        "fbfc3007-154e-4ecc-8c0b-6e020557d7bd" => "Apple Passwords",
+        "fdb141b2-5d84-443e-8a35-4698c205a502" => "KeePassXC",
+        "f3809540-7f14-49c1-a8b3-8f813b225541" => "Enpass",
         _ => return None,
     };
 
@@ -1693,12 +1739,28 @@ where
 
     match result {
         Ok(snapshot) if snapshot.has_backup => {
+            log_cloud_restore_provider_hint(snapshot.provider_hint.as_ref());
             CloudCheckOutcome::BackupFound(snapshot.provider_hint)
         }
-        Ok(_) => CloudCheckOutcome::NoBackupConfirmed,
+        Ok(_) => {
+            info!("Onboarding: cloud backup check completed backup_found=false");
+            CloudCheckOutcome::NoBackupConfirmed
+        }
         Err(error) => {
             warn!("Onboarding: final cloud backup check failed: {error}");
             CloudCheckOutcome::Inconclusive(classify_cloud_check_error(&error))
+        }
+    }
+}
+
+fn log_cloud_restore_provider_hint(provider_hint: Option<&CloudRestoreProviderHint>) {
+    match provider_hint {
+        Some(hint) => info!(
+            "Onboarding: cloud backup check completed backup_found=true provider_hint=some provider_name={} registered_at={}",
+            hint.provider_name, hint.registered_at
+        ),
+        None => {
+            info!("Onboarding: cloud backup check completed backup_found=true provider_hint=none")
         }
     }
 }
@@ -2863,21 +2925,41 @@ mod tests {
 
     #[test]
     fn restore_provider_hint_resolves_known_providers_only() {
-        let google = resolve_provider_hint(&PasskeyProviderHint {
-            aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
-            registered_platform: BackupPasskeyRegistrationPlatform::Android,
-            registered_at: 1_777_661_234,
-        })
-        .expect("google provider should resolve");
-        assert_eq!(google.provider_name, "Google Password Manager");
+        let known_providers = [
+            ("00000000-0000-0000-0000-000000000000", "Apple Passwords"),
+            ("0ea242b4-43c4-4a1b-8b17-dd6d0b6baec6", "Keeper"),
+            ("50726f74-6f6e-5061-7373-50726f746f6e", "Proton Pass"),
+            ("531126d6-e717-415c-9320-3d9aa6981239", "Dashlane"),
+            ("53414d53-554e-4700-0000-000000000000", "Samsung Pass"),
+            ("70617373-7761-6c6c-6669-646f32303236", "Passwall"),
+            ("a10c6dd9-465e-4226-8198-c7c44b91c555", "Kaspersky Password Manager"),
+            ("adce0002-35bc-c60a-648b-0b25f1f05503", "Chrome on Mac"),
+            ("b35a26b2-8f6e-4697-ab1d-d44db4da28c6", "Zoho Vault"),
+            ("b78a0a55-6ef8-d246-a042-ba0f6d55050c", "LastPass"),
+            ("b84e4048-15dc-4dd0-8640-f4f60813c8af", "NordPass"),
+            ("bada5566-a7aa-401f-bd96-45619a55120d", "1Password"),
+            ("bfc748bb-3429-4faa-b9f9-7cfa9f3b76d0", "iPasswords"),
+            ("d3452668-01fd-4c12-926c-83a4204853aa", "Microsoft Password Manager"),
+            ("d548826e-79b4-db40-a3d8-11116f7e8349", "Bitwarden"),
+            ("d9be9d39-e6a6-4c28-a581-32b044d986e4", "Sticky Password Manager"),
+            ("dd4ec289-e01d-41c9-bb89-70fa845d4bf2", "iCloud Keychain (Managed)"),
+            ("ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4", "Google Password Manager"),
+            ("eaecdef2-1c31-5634-8639-f1cbd9c00a08", "KeePassDX"),
+            ("fbfc3007-154e-4ecc-8c0b-6e020557d7bd", "Apple Passwords"),
+            ("fdb141b2-5d84-443e-8a35-4698c205a502", "KeePassXC"),
+            ("f3809540-7f14-49c1-a8b3-8f813b225541", "Enpass"),
+        ];
 
-        let apple = resolve_provider_hint(&PasskeyProviderHint {
-            aaguid: "00000000-0000-0000-0000-000000000000".into(),
-            registered_platform: BackupPasskeyRegistrationPlatform::Ios,
-            registered_at: 1_777_661_235,
-        })
-        .expect("iOS all-zero provider should resolve");
-        assert_eq!(apple.provider_name, "Apple Passwords");
+        for (aaguid, provider_name) in known_providers {
+            let hint = resolve_provider_hint(&PasskeyProviderHint {
+                aaguid: aaguid.into(),
+                registered_platform: BackupPasskeyRegistrationPlatform::Ios,
+                registered_at: 1_777_661_234,
+            })
+            .expect("known provider should resolve");
+
+            assert_eq!(hint.provider_name, provider_name);
+        }
 
         assert_eq!(
             resolve_provider_hint(&PasskeyProviderHint {

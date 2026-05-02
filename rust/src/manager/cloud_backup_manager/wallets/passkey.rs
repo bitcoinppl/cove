@@ -214,14 +214,18 @@ impl PasskeyMaterialAcquirer {
 }
 
 fn passkey_provider_hint(registration: PasskeyRegistrationResult) -> PasskeyProviderHint {
-    PasskeyProviderHint {
-        aaguid: registration.provider_aaguid,
-        registered_platform: match registration.registered_platform {
-            PasskeyRegistrationPlatform::Ios => BackupPasskeyRegistrationPlatform::Ios,
-            PasskeyRegistrationPlatform::Android => BackupPasskeyRegistrationPlatform::Android,
-        },
-        registered_at: jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
-    }
+    let registered_platform = match registration.registered_platform {
+        PasskeyRegistrationPlatform::Ios => BackupPasskeyRegistrationPlatform::Ios,
+        PasskeyRegistrationPlatform::Android => BackupPasskeyRegistrationPlatform::Android,
+    };
+    let registered_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+
+    info!(
+        "Captured passkey provider hint aaguid={} registered_platform={registered_platform:?} registered_at={registered_at}",
+        registration.provider_aaguid
+    );
+
+    PasskeyProviderHint { aaguid: registration.provider_aaguid, registered_platform, registered_at }
 }
 
 /// Matches a discoverable passkey against candidate cloud backup namespaces
