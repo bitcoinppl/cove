@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.flows.OnboardingFlow
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -10,11 +11,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.ClickableText
@@ -22,17 +26,23 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneIphone
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
@@ -55,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
@@ -349,17 +360,15 @@ internal fun OnboardingRestoreOfferView(
                 Modifier
                     .fillMaxSize()
                     .padding(horizontal = 28.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            OnboardingStepIndicator(selected = 1, modifier = Modifier.padding(top = 8.dp))
+            OnboardingStepIndicator(selected = 1, modifier = Modifier.padding(top = 48.dp))
 
             Spacer(modifier = Modifier.size(42.dp))
 
-            OnboardingStatusHero(
-                icon = Icons.Default.Search,
-                fillColor = CoveColor.duskBlue.copy(alpha = 0.40f),
-            )
+            OnboardingCloudSearchHero()
 
-            Spacer(modifier = Modifier.size(44.dp))
+            Spacer(modifier = Modifier.size(38.dp))
 
             Text(
                 text = title,
@@ -381,7 +390,7 @@ internal fun OnboardingRestoreOfferView(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Spacer(modifier = Modifier.size(32.dp))
+            Spacer(modifier = Modifier.size(28.dp))
 
             OnboardingPasskeyCard(providerHint = providerHint)
 
@@ -429,14 +438,15 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
             Modifier
                 .fillMaxWidth()
                 .background(OnboardingCardFill, RoundedCornerShape(22.dp))
-                .padding(horizontal = 18.dp, vertical = 18.dp),
+                .border(1.dp, CoveColor.coveLightGray.copy(alpha = 0.18f), RoundedCornerShape(22.dp))
+                .padding(horizontal = 20.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Box(
             modifier =
                 Modifier
                     .background(OnboardingGradientLight.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
             Text(
                 text = "Recommended",
@@ -446,18 +456,19 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
             )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier =
                     Modifier
-                        .size(42.dp)
-                        .background(OnboardingGradientLight.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
+                        .size(48.dp)
+                        .background(OnboardingGradientLight.copy(alpha = 0.12f), RoundedCornerShape(13.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Default.Security,
+                    imageVector = Icons.Default.Person,
                     contentDescription = null,
                     tint = OnboardingGradientLight,
+                    modifier = Modifier.size(24.dp),
                 )
             }
 
@@ -478,49 +489,153 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
         }
 
         if (providerHint != null) {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .background(CoveColor.duskBlue.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    tint = OnboardingGradientLight.copy(alpha = 0.92f),
-                    modifier = Modifier.size(18.dp),
+            OnboardingPasskeyDivider()
+
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    text = "Provider Details",
+                    color = CoveColor.coveLightGray.copy(alpha = 0.72f),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
                 )
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Passkey provider",
-                        color = CoveColor.coveLightGray.copy(alpha = 0.58f),
-                        style = MaterialTheme.typography.labelSmall,
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ProviderDetailItem(
+                        icon = Icons.Default.Key,
+                        label = "STORED IN",
+                        value = providerHint.providerName,
+                        modifier = Modifier.weight(1f),
                     )
-                    Text(
-                        text = providerHint.providerName,
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .width(1.dp)
+                                .height(46.dp)
+                                .background(CoveColor.coveLightGray.copy(alpha = 0.14f)),
                     )
-                    Text(
-                        text = "Added ${formatPasskeyProviderDate(providerHint.registeredAt)}",
-                        color = CoveColor.coveLightGray.copy(alpha = 0.58f),
-                        style = MaterialTheme.typography.labelSmall,
+
+                    ProviderDetailItem(
+                        icon = Icons.Default.CalendarToday,
+                        label = "CREATED",
+                        value = formatPasskeyProviderDate(providerHint.registeredAt),
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
+
+            OnboardingPasskeyDivider()
         }
 
-        Text(
-            text = "Your passkey is stored securely by your passkey provider, and your encrypted backup is stored in Google Drive app data.",
-            color = OnboardingTextSecondary,
-            style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+            Icon(
+                imageVector = Icons.Default.Lock,
+                contentDescription = null,
+                tint = OnboardingGradientLight,
+                modifier = Modifier.size(20.dp),
+            )
+
+            Text(
+                text = "Your passkey is stored securely by your passkey provider, and your encrypted backup is stored in Google Drive app data.",
+                color = OnboardingTextSecondary,
+                style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun OnboardingCloudSearchHero() {
+    Box(
+        modifier = Modifier.size(118.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(118.dp)
+                    .border(1.dp, OnboardingGradientLight.copy(alpha = 0.16f), CircleShape),
+        )
+
+        Box(
+            modifier =
+                Modifier
+                    .size(86.dp)
+                    .border(1.dp, OnboardingGradientLight.copy(alpha = 0.26f), CircleShape),
+        )
+
+        Box(
+            modifier =
+                Modifier
+                    .size(58.dp)
+                    .border(1.5.dp, OnboardingGradientLight.copy(alpha = 0.88f), CircleShape),
+        )
+
+        Icon(
+            imageVector = Icons.Outlined.Cloud,
+            contentDescription = null,
+            tint = OnboardingGradientLight,
+            modifier = Modifier.size(54.dp),
+        )
+
+        Icon(
+            imageVector = Icons.Outlined.Search,
+            contentDescription = null,
+            tint = OnboardingGradientLight,
+            modifier =
+                Modifier
+                    .size(28.dp)
+                    .padding(start = 18.dp, top = 12.dp),
         )
     }
+}
+
+@Composable
+private fun ProviderDetailItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = OnboardingGradientLight,
+            modifier = Modifier.size(20.dp),
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = label,
+                color = CoveColor.coveLightGray.copy(alpha = 0.64f),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = value,
+                color = Color.White,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun OnboardingPasskeyDivider() {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(CoveColor.coveLightGray.copy(alpha = 0.16f)),
+    )
 }
 
 private fun formatPasskeyProviderDate(registeredAt: ULong): String =
@@ -528,6 +643,22 @@ private fun formatPasskeyProviderDate(registeredAt: ULong): String =
         .ofPattern("MMM d, yyyy")
         .withZone(ZoneId.systemDefault())
         .format(Instant.ofEpochSecond(registeredAt.toLong()))
+
+@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
+@Composable
+private fun OnboardingRestoreOfferWithProviderHintPreview() {
+    OnboardingRestoreOfferView(
+        warningMessage = null,
+        errorMessage = null,
+        providerHint =
+            CloudRestoreProviderHint(
+                providerName = "Google Password Manager",
+                registeredAt = 1_777_612_800u,
+            ),
+        onRestore = {},
+        onSkip = {},
+    )
+}
 
 @Composable
 private fun OnboardingRestoreWarningCard(text: String) {
