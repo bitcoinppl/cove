@@ -6,6 +6,11 @@ import androidx.credentials.exceptions.CreateCredentialUnsupportedException
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
+import androidx.credentials.exceptions.domerrors.DataError
+import androidx.credentials.exceptions.domerrors.NotAllowedError
+import androidx.credentials.exceptions.domerrors.TimeoutError
+import androidx.credentials.exceptions.publickeycredential.CreatePublicKeyCredentialDomException
+import androidx.credentials.exceptions.publickeycredential.GetPublicKeyCredentialDomException
 import org.bitcoinppl.cove_core.device.PasskeyException
 import org.bitcoinppl.cove_core.device.PasskeyFailureReason
 import org.bitcoinppl.cove_core.device.PasskeyOperation
@@ -89,6 +94,11 @@ class AndroidPasskeyProviderTest {
         assertTrue(interrupted is PasskeyException.RequestFailed)
         assertEquals(PasskeyOperation.REGISTRATION, (interrupted as PasskeyException.RequestFailed).operation)
         assertEquals(PasskeyFailureReason.Interrupted, interrupted.reason)
+
+        val timedOut = mapPasskeyCreateError(CreatePublicKeyCredentialDomException(TimeoutError()))
+        assertTrue(timedOut is PasskeyException.RequestFailed)
+        assertEquals(PasskeyOperation.REGISTRATION, (timedOut as PasskeyException.RequestFailed).operation)
+        assertEquals(PasskeyFailureReason.TimedOut, timedOut.reason)
     }
 
     @Test
@@ -109,6 +119,20 @@ class AndroidPasskeyProviderTest {
         assertTrue(interrupted is PasskeyException.RequestFailed)
         assertEquals(PasskeyOperation.DISCOVER_ASSERTION, (interrupted as PasskeyException.RequestFailed).operation)
         assertEquals(PasskeyFailureReason.Interrupted, interrupted.reason)
+
+        val notAllowed = mapPasskeyGetError(
+            GetPublicKeyCredentialDomException(NotAllowedError()),
+            PasskeyOperation.DISCOVER_ASSERTION,
+        )
+        assertTrue(notAllowed is PasskeyException.RequestFailed)
+        assertEquals(PasskeyOperation.DISCOVER_ASSERTION, (notAllowed as PasskeyException.RequestFailed).operation)
+        assertEquals(PasskeyFailureReason.PlatformAuthorizationFailed, notAllowed.reason)
+
+        val dataError = mapPasskeyGetError(GetPublicKeyCredentialDomException(DataError()))
+        assertTrue(dataError is PasskeyException.RequestFailed)
+        val reason = (dataError as PasskeyException.RequestFailed).reason
+        assertTrue(reason is PasskeyFailureReason.Unknown)
+        assertTrue((reason as PasskeyFailureReason.Unknown).diagnosticMessage.contains("passkey DOM error"))
     }
 
     private fun registrationResponseJson(clientExtensionResults: JSONObject): String =

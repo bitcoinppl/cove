@@ -1002,6 +1002,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn set_detail(&self, detail: Option<CloudBackupDetail>) {
+        let detail_snapshot = self.cloud_only_detail_snapshot.read().clone();
         let (detail_changed, reset_cloud_only) = {
             let mut state = self.state.write();
 
@@ -1010,14 +1011,12 @@ impl RustCloudBackupManager {
                 state.detail.clone_from(&detail);
             }
 
-            let detail_snapshot = self.cloud_only_detail_snapshot.read();
             let reset_cloud_only = detail.as_ref().is_some_and(|detail| {
                 cloud_only_cache_is_stale(&state.cloud_only, detail, detail_snapshot.as_ref())
             });
             if reset_cloud_only {
                 state.cloud_only = CloudOnlyState::NotFetched;
             }
-            drop(detail_snapshot);
 
             (detail_changed, reset_cloud_only)
         };
@@ -1058,7 +1057,8 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn set_loaded_cloud_only(&self, wallets: Vec<CloudBackupWalletItem>) {
-        *self.cloud_only_detail_snapshot.write() = self.state.read().detail.clone();
+        let detail = self.state.read().detail.clone();
+        *self.cloud_only_detail_snapshot.write() = detail;
         self.set_and_notify_field(
             CloudOnlyState::Loaded { wallets },
             |state| &mut state.cloud_only,

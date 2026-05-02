@@ -1630,19 +1630,19 @@ async fn inspect_cloud_restore_namespaces(
 ) -> Result<InspectedCloudRestoreNamespaces, CloudStorageError> {
     let mut hints = Vec::new();
     let mut found_backup = false;
-    let mut first_cloud_error = None;
+    let mut first_non_not_found_error = None;
 
     for namespace in namespaces {
         let master_json = match cloud.download_master_key_backup(namespace.clone()).await {
             Ok(master_json) => master_json,
             Err(error @ CloudStorageError::NotFound(_)) => {
                 info!("No cloud restore backup namespace={namespace} reason=not_found");
-                first_cloud_error.get_or_insert(error);
+                record_cloud_restore_download_error(&mut first_non_not_found_error, error);
                 continue;
             }
             Err(error) => {
                 info!("No cloud restore backup namespace={namespace} reason=download_failed");
-                first_cloud_error.get_or_insert(error);
+                record_cloud_restore_download_error(&mut first_non_not_found_error, error);
                 continue;
             }
         };
@@ -1683,13 +1683,20 @@ async fn inspect_cloud_restore_namespaces(
         });
     }
 
-    if let Some(error) = first_cloud_error
-        && !matches!(error, CloudStorageError::NotFound(_))
-    {
+    if let Some(error) = first_non_not_found_error {
         return Err(error);
     }
 
     Ok(InspectedCloudRestoreNamespaces { has_backup: false, provider_hint: None })
+}
+
+fn record_cloud_restore_download_error(
+    first_non_not_found_error: &mut Option<CloudStorageError>,
+    error: CloudStorageError,
+) {
+    if !matches!(error, CloudStorageError::NotFound(_)) {
+        first_non_not_found_error.get_or_insert(error);
+    }
 }
 
 fn choose_restore_provider_hint(
@@ -2949,6 +2956,22 @@ mod tests {
         .await;
 
         assert_eq!(outcome, CloudCheckOutcome::Inconclusive(CloudCheckIssue::CloudUnavailable));
+    }
+
+    #[test]
+    fn cloud_restore_download_error_tracking_ignores_not_found_before_harder_error() {
+        let mut error = None;
+
+        record_cloud_restore_download_error(
+            &mut error,
+            CloudStorageError::NotFound("old-namespace".into()),
+        );
+        record_cloud_restore_download_error(
+            &mut error,
+            CloudStorageError::NotAvailable("iCloud unavailable".into()),
+        );
+
+        assert_eq!(error, Some(CloudStorageError::NotAvailable("iCloud unavailable".into())));
     }
 
     #[test]

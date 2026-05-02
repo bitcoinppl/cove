@@ -1166,7 +1166,7 @@ where
 }
 
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 
 #[cfg(test)]
 #[allow(clippy::await_holding_lock)]

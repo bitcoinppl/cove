@@ -237,6 +237,7 @@ class OnboardingHelpersTest {
             secretWordsSaved = false,
             cloudRestoreState = OnboardingCloudRestoreState.CHECKING,
             cloudRestoreMessage = null,
+            cloudRestoreProviderHint = null,
             shouldOfferCloudRestore = false,
             errorMessage = null,
         )

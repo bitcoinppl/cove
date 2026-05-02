@@ -20,6 +20,11 @@ import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.NoCredentialException
+import androidx.credentials.exceptions.domerrors.DomError
+import androidx.credentials.exceptions.domerrors.InvalidStateError
+import androidx.credentials.exceptions.domerrors.NotAllowedError
+import androidx.credentials.exceptions.domerrors.SecurityError
+import androidx.credentials.exceptions.domerrors.TimeoutError
 import androidx.credentials.exceptions.publickeycredential.CreatePublicKeyCredentialDomException
 import androidx.credentials.exceptions.publickeycredential.GetPublicKeyCredentialDomException
 import kotlinx.coroutines.CancellationException
@@ -352,7 +357,7 @@ internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
         is CreatePublicKeyCredentialDomException ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
-                PasskeyFailureReason.MalformedResponse,
+                passkeyDomErrorReason(error.domError),
             )
         is CreateCredentialUnsupportedException ->
             passkeyNotSupported(PasskeyFailureReason.ProviderConfiguration)
@@ -389,7 +394,7 @@ internal fun mapPasskeyGetError(
         is GetPublicKeyCredentialDomException ->
             passkeyRequestFailed(
                 operation,
-                PasskeyFailureReason.MalformedResponse,
+                passkeyDomErrorReason(error.domError),
             )
         is GetCredentialUnsupportedException ->
             passkeyNotSupported(PasskeyFailureReason.ProviderConfiguration)
@@ -418,6 +423,16 @@ private fun passkeyRequestFailed(
 
 private fun passkeyUnknownReason(message: String): PasskeyFailureReason =
     PasskeyFailureReason.Unknown(diagnosticMessage = message)
+
+private fun passkeyDomErrorReason(domError: DomError): PasskeyFailureReason =
+    when (domError) {
+        is TimeoutError -> PasskeyFailureReason.TimedOut
+        is NotAllowedError,
+        is SecurityError,
+        is InvalidStateError,
+        -> PasskeyFailureReason.PlatformAuthorizationFailed
+        else -> passkeyUnknownReason("passkey DOM error: ${domError.type}")
+    }
 
 private fun Throwable.passkeyMessage(fallback: String): String =
     message?.takeIf(String::isNotBlank) ?: fallback

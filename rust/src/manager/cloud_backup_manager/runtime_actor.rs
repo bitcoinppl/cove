@@ -603,18 +603,27 @@ fn save_restore_keychain_entries(
     namespace_id: String,
 ) -> Result<(), CloudBackupError> {
     let keychain = Keychain::global();
+    let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
     let cspp = cove_cspp::Cspp::new(keychain.clone());
-    cspp.save_master_key(&master_key)
-        .map_err_prefix("save master key", CloudBackupError::Internal)?;
 
     if let Some(passkey) = passkey {
-        CloudBackupKeychain::new(keychain.clone())
+        cloud_keychain
             .save_passkey_and_namespace(&passkey.credential_id, passkey.prf_salt, &namespace_id)
-            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
+            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?
     } else {
-        CloudBackupKeychain::new(keychain.clone())
+        cloud_keychain
             .save_namespace_id(&namespace_id)
-            .map_err_prefix("save namespace_id", CloudBackupError::Internal)?;
+            .map_err_prefix("save namespace_id", CloudBackupError::Internal)?
+    };
+
+    if let Err(error) = cspp.save_master_key(&master_key) {
+        if let Err(rollback) = cloud_keychain.clear_local_state() {
+            return Err(CloudBackupError::Internal(format!(
+                "save master key: {error}; rollback failed: {rollback}"
+            )));
+        }
+
+        return Err(CloudBackupError::Internal(format!("save master key: {error}")));
     }
 
     Ok(())
@@ -1050,6 +1059,10 @@ impl PendingUploadRetryBackoff {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manager::cloud_backup_manager::keychain::{
+        CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY,
+    };
+    use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
 
     #[test]
     fn pending_upload_retry_backoff_caps_at_max_delay() {
@@ -1089,5 +1102,24 @@ mod tests {
             .expect("expire stale grace");
 
         assert!(actor.master_key_upload_grace.is_some());
+    }
+
+    #[test]
+    fn restore_keychain_save_rolls_back_metadata_when_master_key_save_fails() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        globals.reset();
+        globals.keychain.fail_save_at(4);
+
+        let result = save_restore_keychain_entries(
+            cove_cspp::master_key::MasterKey::generate(),
+            Some(RestoredPasskeyMaterial { credential_id: vec![1, 2, 3], prf_salt: [4; 32] }),
+            "namespace-id".into(),
+        );
+
+        assert!(result.is_err());
+        assert!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).is_none());
+        assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_none());
+        assert!(globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).is_none());
     }
 }
