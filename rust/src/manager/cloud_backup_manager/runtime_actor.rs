@@ -12,6 +12,7 @@ use cove_util::{GenerationClaim, GenerationToken, GenerationTracker};
 use tokio::sync::Notify;
 use tracing::{error, info, warn};
 
+use super::keychain::CloudBackupKeychain;
 use super::pending::{
     MAX_PENDING_UPLOAD_VERIFICATION_DELAY, PendingUploadVerificationStatus,
     build_pending_upload_backoff,
@@ -565,29 +566,7 @@ impl CloudBackupRuntimeActor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         }
 
-        let keychain = Keychain::global();
-        let cspp = cove_cspp::Cspp::new(keychain.clone());
-        let result = (|| {
-            cspp.save_master_key(&master_key)
-                .map_err_prefix("save master key", CloudBackupError::Internal)?;
-
-            if let Some(passkey) = passkey {
-                super::keychain::CloudBackupKeychain::new(keychain.clone())
-                    .save_passkey_and_namespace(
-                        &passkey.credential_id,
-                        passkey.prf_salt,
-                        &namespace_id,
-                    )
-                    .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
-            } else {
-                super::keychain::CloudBackupKeychain::new(keychain.clone())
-                    .save_namespace_id(&namespace_id)
-                    .map_err_prefix("save namespace_id", CloudBackupError::Internal)?;
-            }
-
-            Ok(())
-        })();
-
+        let result = save_restore_keychain_entries(master_key, passkey, namespace_id);
         Produces::ok(result)
     }
 
@@ -599,7 +578,7 @@ impl CloudBackupRuntimeActor {
         let should_delete_remote = pending.is_retry_upload();
         let namespace_id = pending.master_key.namespace_id();
 
-        if let Err(error) = super::keychain::CloudBackupKeychain::global().clear_local_state() {
+        if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
             warn!("Discard pending enable failed to clear local cloud backup state: {error}");
         }
 
@@ -616,7 +595,32 @@ impl CloudBackupRuntimeActor {
 
         Produces::ok(())
     }
+}
 
+fn save_restore_keychain_entries(
+    master_key: cove_cspp::master_key::MasterKey,
+    passkey: Option<RestoredPasskeyMaterial>,
+    namespace_id: String,
+) -> Result<(), CloudBackupError> {
+    let keychain = Keychain::global();
+    let cspp = cove_cspp::Cspp::new(keychain.clone());
+    cspp.save_master_key(&master_key)
+        .map_err_prefix("save master key", CloudBackupError::Internal)?;
+
+    if let Some(passkey) = passkey {
+        CloudBackupKeychain::new(keychain.clone())
+            .save_passkey_and_namespace(&passkey.credential_id, passkey.prf_salt, &namespace_id)
+            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
+    } else {
+        CloudBackupKeychain::new(keychain.clone())
+            .save_namespace_id(&namespace_id)
+            .map_err_prefix("save namespace_id", CloudBackupError::Internal)?;
+    }
+
+    Ok(())
+}
+
+impl CloudBackupRuntimeActor {
     pub async fn start_master_key_upload_confirmation_grace(
         &mut self,
         namespace_id: String,
