@@ -28109,7 +28109,7 @@ public object FfiConverterTypeCloudBackupWalletItem: FfiConverterRustBuffer<Clou
 
 
 data class CloudRestoreProviderHint (
-    var `providerName`: kotlin.String
+    var `providerName`: kotlin.String?
     , 
     var `registeredAt`: kotlin.ULong
     
@@ -28128,18 +28128,18 @@ data class CloudRestoreProviderHint (
 public object FfiConverterTypeCloudRestoreProviderHint: FfiConverterRustBuffer<CloudRestoreProviderHint> {
     override fun read(buf: ByteBuffer): CloudRestoreProviderHint {
         return CloudRestoreProviderHint(
-            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
             FfiConverterULong.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudRestoreProviderHint) = (
-            FfiConverterString.allocationSize(value.`providerName`) +
+            FfiConverterOptionalString.allocationSize(value.`providerName`) +
             FfiConverterULong.allocationSize(value.`registeredAt`)
     )
 
     override fun write(value: CloudRestoreProviderHint, buf: ByteBuffer) {
-            FfiConverterString.write(value.`providerName`, buf)
+            FfiConverterOptionalString.write(value.`providerName`, buf)
             FfiConverterULong.write(value.`registeredAt`, buf)
     }
 }

@@ -13469,12 +13469,12 @@ public func FfiConverterTypeCloudBackupWalletItem_lower(_ value: CloudBackupWall
 
 
 public struct CloudRestoreProviderHint: Equatable, Hashable {
-    public var providerName: String
+    public var providerName: String?
     public var registeredAt: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(providerName: String, registeredAt: UInt64) {
+    public init(providerName: String?, registeredAt: UInt64) {
         self.providerName = providerName
         self.registeredAt = registeredAt
     }
@@ -13495,13 +13495,13 @@ public struct FfiConverterTypeCloudRestoreProviderHint: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudRestoreProviderHint {
         return
             try CloudRestoreProviderHint(
-                providerName: FfiConverterString.read(from: &buf), 
+                providerName: FfiConverterOptionString.read(from: &buf), 
                 registeredAt: FfiConverterUInt64.read(from: &buf)
         )
     }
 
     public static func write(_ value: CloudRestoreProviderHint, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.providerName, into: &buf)
+        FfiConverterOptionString.write(value.providerName, into: &buf)
         FfiConverterUInt64.write(value.registeredAt, into: &buf)
     }
 }

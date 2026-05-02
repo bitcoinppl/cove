@@ -499,27 +499,37 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
                     fontWeight = FontWeight.SemiBold,
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ProviderDetailItem(
-                        icon = Icons.Default.Key,
-                        label = "STORED IN",
-                        value = providerHint.providerName,
-                        modifier = Modifier.weight(1f),
-                    )
+                val providerName = providerHint.providerName
+                if (providerName != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ProviderDetailItem(
+                            icon = Icons.Default.Key,
+                            label = "STORED IN",
+                            value = providerName,
+                            modifier = Modifier.weight(1f),
+                        )
 
-                    Box(
-                        modifier =
-                            Modifier
-                                .width(1.dp)
-                                .height(46.dp)
-                                .background(CoveColor.coveLightGray.copy(alpha = 0.14f)),
-                    )
+                        Box(
+                            modifier =
+                                Modifier
+                                    .width(1.dp)
+                                    .height(46.dp)
+                                    .background(CoveColor.coveLightGray.copy(alpha = 0.14f)),
+                        )
 
+                        ProviderDetailItem(
+                            icon = Icons.Default.CalendarToday,
+                            label = "CREATED",
+                            value = formatPasskeyProviderDate(providerHint.registeredAt),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                } else {
                     ProviderDetailItem(
                         icon = Icons.Default.CalendarToday,
                         label = "CREATED",
                         value = formatPasskeyProviderDate(providerHint.registeredAt),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -653,6 +663,22 @@ private fun OnboardingRestoreOfferWithProviderHintPreview() {
         providerHint =
             CloudRestoreProviderHint(
                 providerName = "Google Password Manager",
+                registeredAt = 1_777_612_800u,
+            ),
+        onRestore = {},
+        onSkip = {},
+    )
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
+@Composable
+private fun OnboardingRestoreOfferWithProviderDatePreview() {
+    OnboardingRestoreOfferView(
+        warningMessage = null,
+        errorMessage = null,
+        providerHint =
+            CloudRestoreProviderHint(
+                providerName = null,
                 registeredAt = 1_777_612_800u,
             ),
         onRestore = {},

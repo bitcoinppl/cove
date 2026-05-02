@@ -152,17 +152,25 @@ struct CloudRestoreOfferView: View {
                         .font(OnboardingRecoveryTypography.subheadline.weight(.semibold))
                         .foregroundStyle(.coveLightGray.opacity(0.72))
 
-                    HStack(alignment: .center, spacing: 14) {
-                        providerDetailItem(
-                            icon: "key",
-                            label: "STORED IN",
-                            value: providerHint.providerName
-                        )
+                    if let providerName = providerHint.providerName {
+                        HStack(alignment: .center, spacing: 14) {
+                            providerDetailItem(
+                                icon: "key",
+                                label: "STORED IN",
+                                value: providerName
+                            )
 
-                        Rectangle()
-                            .fill(Color.coveLightGray.opacity(0.14))
-                            .frame(width: 1, height: 46)
+                            Rectangle()
+                                .fill(Color.coveLightGray.opacity(0.14))
+                                .frame(width: 1, height: 46)
 
+                            providerDetailItem(
+                                icon: "calendar",
+                                label: "CREATED",
+                                value: formattedProviderDate(providerHint.registeredAt)
+                            )
+                        }
+                    } else {
                         providerDetailItem(
                             icon: "calendar",
                             label: "CREATED",
@@ -285,6 +293,14 @@ struct CloudRestoreOfferView: View {
         onRestore: {},
         onSkip: {},
         providerHint: CloudRestoreProviderHint(providerName: "Apple Passwords", registeredAt: 1_777_612_800)
+    )
+}
+
+#Preview("Backup Found Provider Date") {
+    CloudRestoreOfferView(
+        onRestore: {},
+        onSkip: {},
+        providerHint: CloudRestoreProviderHint(providerName: nil, registeredAt: 1_777_612_800)
     )
 }
 

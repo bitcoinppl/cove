@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -109,7 +108,7 @@ pub struct OnboardingState {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct CloudRestoreProviderHint {
-    pub provider_name: String,
+    pub provider_name: Option<String>,
     pub registered_at: u64,
 }
 
@@ -1645,13 +1644,13 @@ async fn load_cloud_restore_provider_hint(
             raw_hint.aaguid, raw_hint.registered_platform, raw_hint.registered_at
         );
 
-        let Some(hint) = resolve_provider_hint(raw_hint) else {
+        let hint = resolve_provider_hint(raw_hint);
+        if hint.provider_name.is_none() {
             info!(
                 "No resolved cloud restore passkey provider hint namespace={namespace} aaguid={} registered_platform={:?} registered_at={} reason=unknown_provider",
                 raw_hint.aaguid, raw_hint.registered_platform, raw_hint.registered_at
             );
-            continue;
-        };
+        }
 
         hints.push(hint);
     }
@@ -1662,20 +1661,10 @@ async fn load_cloud_restore_provider_hint(
 fn choose_restore_provider_hint(
     hints: Vec<CloudRestoreProviderHint>,
 ) -> Option<CloudRestoreProviderHint> {
-    let provider_names =
-        hints.iter().map(|hint| hint.provider_name.as_str()).collect::<HashSet<_>>();
-    if provider_names.len() != 1 {
-        info!(
-            "No resolved cloud restore passkey provider hint reason=provider_name_mismatch provider_name_count={}",
-            provider_names.len()
-        );
-        return None;
-    }
-
     hints.into_iter().max_by_key(|hint| hint.registered_at)
 }
 
-fn resolve_provider_hint(hint: &PasskeyProviderHint) -> Option<CloudRestoreProviderHint> {
+fn resolve_provider_hint(hint: &PasskeyProviderHint) -> CloudRestoreProviderHint {
     let provider_name = match hint.aaguid.as_str() {
         "00000000-0000-0000-0000-000000000000"
             if hint.registered_platform == BackupPasskeyRegistrationPlatform::Ios =>
@@ -1703,13 +1692,18 @@ fn resolve_provider_hint(hint: &PasskeyProviderHint) -> Option<CloudRestoreProvi
         "fbfc3007-154e-4ecc-8c0b-6e020557d7bd" => "Apple Passwords",
         "fdb141b2-5d84-443e-8a35-4698c205a502" => "KeePassXC",
         "f3809540-7f14-49c1-a8b3-8f813b225541" => "Enpass",
-        _ => return None,
+        _ => {
+            return CloudRestoreProviderHint {
+                provider_name: None,
+                registered_at: hint.registered_at,
+            };
+        }
     };
 
-    Some(CloudRestoreProviderHint {
-        provider_name: provider_name.into(),
+    CloudRestoreProviderHint {
+        provider_name: Some(provider_name.into()),
         registered_at: hint.registered_at,
-    })
+    }
 }
 
 async fn determine_cloud_check_outcome<F, Fut, S>(
@@ -1756,7 +1750,7 @@ where
 fn log_cloud_restore_provider_hint(provider_hint: Option<&CloudRestoreProviderHint>) {
     match provider_hint {
         Some(hint) => info!(
-            "Onboarding: cloud backup check completed backup_found=true provider_hint=some provider_name={} registered_at={}",
+            "Onboarding: cloud backup check completed backup_found=true provider_hint=some provider_name={:?} registered_at={}",
             hint.provider_name, hint.registered_at
         ),
         None => {
@@ -2924,7 +2918,7 @@ mod tests {
     }
 
     #[test]
-    fn restore_provider_hint_resolves_known_providers_only() {
+    fn restore_provider_hint_resolves_known_provider_names() {
         let known_providers = [
             ("00000000-0000-0000-0000-000000000000", "Apple Passwords"),
             ("0ea242b4-43c4-4a1b-8b17-dd6d0b6baec6", "Keeper"),
@@ -2955,19 +2949,41 @@ mod tests {
                 aaguid: aaguid.into(),
                 registered_platform: BackupPasskeyRegistrationPlatform::Ios,
                 registered_at: 1_777_661_234,
-            })
-            .expect("known provider should resolve");
+            });
 
-            assert_eq!(hint.provider_name, provider_name);
+            assert_eq!(hint.provider_name.as_deref(), Some(provider_name));
+            assert_eq!(hint.registered_at, 1_777_661_234);
         }
+    }
+
+    #[test]
+    fn restore_provider_hint_preserves_unknown_provider_date() {
+        let hint = resolve_provider_hint(&PasskeyProviderHint {
+            aaguid: "00000000-0000-0000-0000-000000000000".into(),
+            registered_platform: BackupPasskeyRegistrationPlatform::Android,
+            registered_at: 1_777_661_236,
+        });
 
         assert_eq!(
-            resolve_provider_hint(&PasskeyProviderHint {
-                aaguid: "00000000-0000-0000-0000-000000000000".into(),
-                registered_platform: BackupPasskeyRegistrationPlatform::Android,
-                registered_at: 1_777_661_236,
-            }),
-            None
+            hint,
+            CloudRestoreProviderHint { provider_name: None, registered_at: 1_777_661_236 }
+        );
+    }
+
+    #[test]
+    fn restore_provider_hint_selects_latest_hint() {
+        let hint = choose_restore_provider_hint(vec![
+            CloudRestoreProviderHint {
+                provider_name: Some("Apple Passwords".into()),
+                registered_at: 1_777_661_234,
+            },
+            CloudRestoreProviderHint { provider_name: None, registered_at: 1_777_661_236 },
+        ])
+        .expect("latest hint should be selected");
+
+        assert_eq!(
+            hint,
+            CloudRestoreProviderHint { provider_name: None, registered_at: 1_777_661_236 }
         );
     }
 
