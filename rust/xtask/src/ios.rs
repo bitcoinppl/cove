@@ -416,10 +416,12 @@ pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Res
     let api_key_path = &api_credentials.api_key_path;
     let api_key_id = &api_credentials.api_key_id;
     let api_issuer_id = &api_credentials.api_issuer_id;
+    let xcode_path = xcode_distribution_path();
     let archive_cmd = cmd!(
         sh,
         "xcodebuild -project {IOS_PROJECT} -scheme {IOS_SCHEME} -configuration {IOS_CONFIGURATION_RELEASE} -destination {IOS_GENERIC_DEVICE_DESTINATION} -archivePath {archive_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id} archive"
-    );
+    )
+    .env("PATH", &xcode_path);
     run_xcodebuild(archive_cmd, verbose, "Failed to archive iOS app")?;
     print_success(&format!("Created archive at {archive_path}"));
 
@@ -427,7 +429,8 @@ pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Res
     let export_cmd = cmd!(
         sh,
         "xcodebuild -exportArchive -archivePath {archive_path} -exportPath {export_path} -exportOptionsPlist {export_options_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id}"
-    );
+    )
+    .env("PATH", &xcode_path);
     run_xcodebuild(export_cmd, verbose, "Failed to upload iOS archive to App Store Connect")?;
     print_success("Uploaded iOS archive to App Store Connect");
 
@@ -467,6 +470,17 @@ fn normalize_required_arg(name: &str, value: &Option<String>) -> Result<String> 
     }
 
     Ok(value.to_string())
+}
+
+fn xcode_distribution_path() -> String {
+    // keep Apple's rsync ahead of Homebrew rsync for Xcode IPA packaging
+    const SYSTEM_PATH_PREFIX: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+
+    let Some(path) = std::env::var_os("PATH") else {
+        return SYSTEM_PATH_PREFIX.to_string();
+    };
+
+    format!("{SYSTEM_PATH_PREFIX}:{}", path.to_string_lossy())
 }
 
 fn temp_artifact_path(prefix: &str, extension: &str) -> Result<String> {
