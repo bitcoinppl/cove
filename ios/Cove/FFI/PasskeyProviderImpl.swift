@@ -71,16 +71,19 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         )
         _ = try validateRegistrationPrfMetadata(registration)
 
-        guard let attestationObject = registration.rawAttestationObject else {
-            throw PasskeyError.RequestFailed(
-                operation: .registration,
-                reason: .malformedResponse
+        let providerAaguid: String
+        if let attestationObject = registration.rawAttestationObject {
+            providerAaguid = try passkeyAaguidFromAttestationObject(
+                attestationObject: attestationObject
             )
+        } else {
+            Log.warn("[PASSKEY] registration attestation object missing, using iOS fallback AAGUID")
+            providerAaguid = "00000000-0000-0000-0000-000000000000"
         }
 
-        return try PasskeyRegistrationResult(
+        return PasskeyRegistrationResult(
             credentialId: registration.credentialID,
-            providerAaguid: passkeyAaguidFromAttestationObject(attestationObject: attestationObject),
+            providerAaguid: providerAaguid,
             registeredPlatform: .ios
         )
     }
