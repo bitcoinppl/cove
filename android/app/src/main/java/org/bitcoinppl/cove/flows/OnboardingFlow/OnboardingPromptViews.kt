@@ -527,7 +527,7 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
             OnboardingPasskeyDivider()
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = Icons.Default.Lock,
                 contentDescription = null,

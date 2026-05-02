@@ -175,7 +175,7 @@ struct CloudRestoreOfferView: View {
                     .overlay(Color.coveLightGray.opacity(0.16))
             }
 
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .center, spacing: 14) {
                 Image(systemName: "lock")
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(Color.btnGradientLight)
