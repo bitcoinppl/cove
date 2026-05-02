@@ -17,6 +17,8 @@ import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.device.KeychainException
 import org.bitcoinppl.cove_core.tapcard.*
 import org.bitcoinppl.cove_core.types.*
+import org.bitcoinppl.cove_core.util.GenerationToken
+import org.bitcoinppl.cove_core.util.GenerationTracker
 import java.util.UUID
 
 /**
@@ -30,7 +32,7 @@ class AppManager private constructor() : FfiReconcile {
 
     // Scope for UI-bound work; reconcile() hops to Main here
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var navigationGeneration = 0L
+    private val navigationGenerations = GenerationTracker()
     private var pendingSidebarNavigationJob: Job? = null
 
     // rust bridge - not observable
@@ -412,10 +414,10 @@ class AppManager private constructor() : FfiReconcile {
         rust.loadAndResetDefaultRoute(to)
     }
 
-    fun captureLoadAndResetGeneration(): Long = navigationGeneration
+    fun captureLoadAndResetGeneration(): GenerationToken = navigationGenerations.capture()
 
     fun resetAfterLoadingIfCurrent(
-        generation: Long,
+        generation: GenerationToken,
         route: Route.LoadAndReset,
         nextRoutes: List<Route>,
     ) {
@@ -424,12 +426,10 @@ class AppManager private constructor() : FfiReconcile {
         rust.resetAfterLoading(nextRoutes)
     }
 
-    private fun advanceNavigationGeneration(): Long {
-        navigationGeneration += 1
-        return navigationGeneration
-    }
+    private fun advanceNavigationGeneration(): GenerationToken = navigationGenerations.advance()
 
-    private fun isNavigationGenerationCurrent(generation: Long): Boolean = generation == navigationGeneration
+    private fun isNavigationGenerationCurrent(generation: GenerationToken): Boolean =
+        navigationGenerations.isCurrent(generation)
 
     fun agreeToTerms() {
         dispatch(AppAction.AcceptTerms)

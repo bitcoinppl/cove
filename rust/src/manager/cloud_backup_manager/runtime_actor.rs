@@ -7,6 +7,7 @@ use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use cove_device::cloud_storage::{CloudStorage, CloudSyncHealth};
 use cove_device::keychain::Keychain;
 use cove_tokio::DebouncedTask;
+use cove_util::{GenerationClaim, GenerationToken, GenerationTracker};
 use tokio::sync::Notify;
 use tracing::{error, info, warn};
 
@@ -39,77 +40,33 @@ pub(crate) enum CloudBackupOperation {
 
 #[derive(Clone, Debug)]
 pub(crate) struct RestoreOperation {
-    coordinator: RestoreOperationCoordinator,
-    id: u64,
+    active_restore_generation: GenerationClaim,
 }
 
 impl RestoreOperation {
-    fn new(coordinator: RestoreOperationCoordinator) -> Self {
-        let id = coordinator.next_operation_id();
-        Self { coordinator, id }
+    fn new(tracker: GenerationTracker) -> Self {
+        Self { active_restore_generation: tracker.claim() }
     }
 
     pub(crate) fn ensure_current(&self) -> Result<(), CloudBackupError> {
-        self.coordinator.ensure_current(self.id)
+        if self.active_restore_generation.is_current() {
+            Ok(())
+        } else {
+            Err(CloudBackupError::Cancelled)
+        }
     }
 
     pub(crate) fn run<T>(&self, update: impl FnOnce() -> T) -> Result<T, CloudBackupError> {
-        self.coordinator.with_current(self.id, update)
+        self.active_restore_generation.run_if_current(update).ok_or(CloudBackupError::Cancelled)
     }
 
     pub(crate) fn run_result<T>(
         &self,
         update: impl FnOnce() -> Result<T, CloudBackupError>,
     ) -> Result<T, CloudBackupError> {
-        self.coordinator.with_current_result(self.id, update)
-    }
-}
-
-// serializes restore cancellation against restore state mutations in spawned tasks
-#[derive(Clone, Debug, Default)]
-struct RestoreOperationCoordinator(Arc<parking_lot::Mutex<u64>>);
-
-impl RestoreOperationCoordinator {
-    fn next_operation_id(&self) -> u64 {
-        let mut operation_id = self.0.lock();
-        *operation_id += 1;
-        *operation_id
-    }
-
-    fn invalidate(&self) {
-        let mut operation_id = self.0.lock();
-        *operation_id += 1;
-    }
-
-    fn ensure_current(&self, operation_id: u64) -> Result<(), CloudBackupError> {
-        let current_operation = *self.0.lock();
-        if current_operation == operation_id { Ok(()) } else { Err(CloudBackupError::Cancelled) }
-    }
-
-    fn with_current<T>(
-        &self,
-        operation_id: u64,
-        update: impl FnOnce() -> T,
-    ) -> Result<T, CloudBackupError> {
-        let current_operation = self.0.lock();
-        if *current_operation != operation_id {
-            return Err(CloudBackupError::Cancelled);
-        }
-
-        Ok(update())
-    }
-
-    fn with_current_result<T>(
-        &self,
-        operation_id: u64,
-        update: impl FnOnce() -> Result<T, CloudBackupError>,
-    ) -> Result<T, CloudBackupError> {
-        let current_operation = self.0.lock();
-        if *current_operation != operation_id {
-            return Err(CloudBackupError::Cancelled);
-        }
-
-        update()
+        self.active_restore_generation
+            .run_result_if_current(update)
+            .unwrap_or(Err(CloudBackupError::Cancelled))
     }
 }
 
@@ -147,7 +104,7 @@ impl SyncHealthRuntimeState {
 #[derive(Debug)]
 struct MasterKeyUploadGrace {
     namespace_id: String,
-    id: u64,
+    generation: GenerationToken,
 }
 
 #[derive(Debug)]
@@ -160,12 +117,13 @@ pub(crate) struct CloudBackupRuntimeActor {
     pending_upload_verifier_blocked_on_authorization: bool,
     pending_upload_verifier_wakeup: Arc<Notify>,
     master_key_upload_grace: Option<MasterKeyUploadGrace>,
-    next_master_key_upload_grace_id: u64,
+    master_key_upload_grace_generations: GenerationTracker,
     sync_health_refresh_state: SyncHealthRefreshState,
+    sync_health_refresh_generations: GenerationTracker,
     wallet_upload_debouncers: HashMap<WalletId, DebouncedTask<()>>,
     wallet_upload_retry_counts: HashMap<WalletId, u32>,
     active_wallet_uploads: HashSet<WalletId>,
-    restore_operations: RestoreOperationCoordinator,
+    restore_operations: GenerationTracker,
 }
 
 #[async_trait::async_trait]
@@ -187,12 +145,13 @@ impl CloudBackupRuntimeActor {
             pending_upload_verifier_blocked_on_authorization: false,
             pending_upload_verifier_wakeup: Arc::new(Notify::new()),
             master_key_upload_grace: None,
-            next_master_key_upload_grace_id: 0,
+            master_key_upload_grace_generations: GenerationTracker::new(),
             sync_health_refresh_state: SyncHealthRefreshState::Idle,
+            sync_health_refresh_generations: GenerationTracker::new(),
             wallet_upload_debouncers: HashMap::new(),
             wallet_upload_retry_counts: HashMap::new(),
             active_wallet_uploads: HashSet::new(),
-            restore_operations: RestoreOperationCoordinator::default(),
+            restore_operations: GenerationTracker::new(),
         }
     }
 
@@ -219,10 +178,12 @@ impl CloudBackupRuntimeActor {
             self.sync_health_refresh_state = SyncHealthRefreshState::Idle;
             return;
         };
+
+        let generation = self.sync_health_refresh_generations.advance();
         let runtime_state = self.sync_health_runtime_state();
         cove_tokio::task::spawn(async move {
             let sync_health = manager.compute_sync_health(runtime_state).await;
-            send!(addr.complete_sync_health_refresh(sync_health));
+            send!(addr.complete_sync_health_refresh(generation, sync_health));
         });
     }
 
@@ -481,30 +442,29 @@ impl CloudBackupRuntimeActor {
         &mut self,
         namespace_id: String,
     ) -> ActorResult<()> {
-        self.next_master_key_upload_grace_id += 1;
-        let id = self.next_master_key_upload_grace_id;
+        let generation = self.master_key_upload_grace_generations.advance();
         self.master_key_upload_grace =
-            Some(MasterKeyUploadGrace { namespace_id: namespace_id.clone(), id });
+            Some(MasterKeyUploadGrace { namespace_id: namespace_id.clone(), generation });
 
         let Some(addr) = self.addr() else { return Produces::ok(()) };
         cove_tokio::task::spawn(async move {
             tokio::time::sleep(MAX_PENDING_UPLOAD_VERIFICATION_DELAY).await;
-            send!(addr.expire_master_key_upload_confirmation_grace(namespace_id, id));
+            send!(addr.expire_master_key_upload_confirmation_grace(namespace_id, generation));
         });
 
-        Produces::ok(())
+        self.request_sync_health_refresh().await
     }
 
     pub async fn expire_master_key_upload_confirmation_grace(
         &mut self,
         namespace_id: String,
-        id: u64,
+        generation: GenerationToken,
     ) -> ActorResult<()> {
-        if !self
-            .master_key_upload_grace
-            .as_ref()
-            .is_some_and(|grace| grace.namespace_id == namespace_id && grace.id == id)
-        {
+        if !self.master_key_upload_grace.as_ref().is_some_and(|grace| {
+            grace.namespace_id == namespace_id
+                && grace.generation == generation
+                && self.master_key_upload_grace_generations.is_current(generation)
+        }) {
             return Produces::ok(());
         }
 
@@ -517,9 +477,13 @@ impl CloudBackupRuntimeActor {
             SyncHealthRefreshState::Idle => {}
             SyncHealthRefreshState::Running => {
                 self.sync_health_refresh_state = SyncHealthRefreshState::RunningQueued;
+                self.sync_health_refresh_generations.invalidate();
                 return Produces::ok(());
             }
-            SyncHealthRefreshState::RunningQueued => return Produces::ok(()),
+            SyncHealthRefreshState::RunningQueued => {
+                self.sync_health_refresh_generations.invalidate();
+                return Produces::ok(());
+            }
         }
 
         let Some(addr) = self.addr() else { return Produces::ok(()) };
@@ -530,12 +494,15 @@ impl CloudBackupRuntimeActor {
 
     pub async fn complete_sync_health_refresh(
         &mut self,
+        generation: GenerationToken,
         sync_health: CloudSyncHealth,
     ) -> ActorResult<()> {
         let rerun_queued =
             matches!(self.sync_health_refresh_state, SyncHealthRefreshState::RunningQueued);
+        let is_current = self.sync_health_refresh_generations.is_current(generation);
         self.sync_health_refresh_state = SyncHealthRefreshState::Idle;
-        if let Some(manager) = self.manager() {
+
+        if is_current && let Some(manager) = self.manager() {
             manager.set_sync_health(sync_health);
         }
 
@@ -861,10 +828,12 @@ impl CloudBackupRuntimeActor {
     pub async fn clear_upload_runtime_state(&mut self) -> ActorResult<()> {
         self.pending_enable_session = None;
         self.master_key_upload_grace = None;
+        self.master_key_upload_grace_generations.invalidate();
         self.wallet_upload_debouncers.clear();
         self.wallet_upload_retry_counts.clear();
         self.active_wallet_uploads.clear();
         self.sync_health_refresh_state = SyncHealthRefreshState::Idle;
+        self.sync_health_refresh_generations.invalidate();
         Produces::ok(())
     }
 }
@@ -899,5 +868,36 @@ mod tests {
         for _ in 0..10 {
             assert!(backoff.next_delay() <= MAX_PENDING_UPLOAD_VERIFICATION_DELAY);
         }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn queued_sync_health_refresh_invalidates_in_flight_generation() {
+        let mut actor = CloudBackupRuntimeActor::new(Weak::new());
+        let generation = actor.sync_health_refresh_generations.advance();
+        actor.sync_health_refresh_state = SyncHealthRefreshState::Running;
+
+        actor.request_sync_health_refresh().await.expect("queue refresh");
+
+        assert_eq!(actor.sync_health_refresh_state, SyncHealthRefreshState::RunningQueued);
+        assert!(!actor.sync_health_refresh_generations.is_current(generation));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn stale_master_key_upload_grace_generation_does_not_expire_new_grace() {
+        let mut actor = CloudBackupRuntimeActor::new(Weak::new());
+        let namespace_id = "namespace-id".to_string();
+        let stale_generation = actor.master_key_upload_grace_generations.advance();
+        let current_generation = actor.master_key_upload_grace_generations.advance();
+        actor.master_key_upload_grace = Some(MasterKeyUploadGrace {
+            namespace_id: namespace_id.clone(),
+            generation: current_generation,
+        });
+
+        actor
+            .expire_master_key_upload_confirmation_grace(namespace_id, stale_generation)
+            .await
+            .expect("expire stale grace");
+
+        assert!(actor.master_key_upload_grace.is_some());
     }
 }

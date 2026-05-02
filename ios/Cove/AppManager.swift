@@ -10,7 +10,7 @@ private let sidebarNavigationDelayMs = 250
 
     private let logger = Log(id: "AppManager")
     @ObservationIgnored
-    private var navigationGeneration: UInt64 = 0
+    private let navigationGenerations = GenerationTracker()
     @ObservationIgnored
     private var pendingSidebarNavigationTask: Task<Void, Never>?
 
@@ -300,10 +300,8 @@ private let sidebarNavigationDelayMs = 250
     }
 
     @discardableResult
-    private func advanceNavigationGeneration() -> UInt64 {
-        navigationGeneration &+= 1
-
-        return navigationGeneration
+    private func advanceNavigationGeneration() -> GenerationToken {
+        navigationGenerations.advance()
     }
 
     func closeSidebarAndSelectWallet(_ id: WalletId) {
@@ -365,19 +363,19 @@ private let sidebarNavigationDelayMs = 250
     }
 
     @MainActor
-    func captureLoadAndResetGeneration() -> UInt64 {
-        navigationGeneration
+    func captureLoadAndResetGeneration() -> GenerationToken {
+        navigationGenerations.capture()
     }
 
     @MainActor
-    func resetAfterLoadingIfCurrent(generation: UInt64, route: Route, nextRoute: [Route]) {
+    func resetAfterLoadingIfCurrent(generation: GenerationToken, route: Route, nextRoute: [Route]) {
         guard isNavigationGenerationCurrent(generation) else { return }
         guard router.default == route else { return }
         rust.resetAfterLoading(to: nextRoute)
     }
 
-    private func isNavigationGenerationCurrent(_ generation: UInt64) -> Bool {
-        generation == navigationGeneration
+    private func isNavigationGenerationCurrent(_ generation: GenerationToken) -> Bool {
+        navigationGenerations.isCurrent(token: generation)
     }
 
     func agreeToTerms() {
