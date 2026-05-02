@@ -119,26 +119,18 @@ impl IosUiOptions {
 
 #[derive(Debug, Clone)]
 pub struct TestflightUploadOptions {
-    auth_mode: TestflightAuthMode,
     api_key_path: Option<String>,
     api_key_id: Option<String>,
     api_issuer_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum TestflightAuthMode {
-    XcodeAccount,
-    ApiKey,
-}
-
 impl TestflightUploadOptions {
     pub fn new(
-        auth_mode: TestflightAuthMode,
         api_key_path: Option<String>,
         api_key_id: Option<String>,
         api_issuer_id: Option<String>,
     ) -> Self {
-        Self { auth_mode, api_key_path, api_key_id, api_issuer_id }
+        Self { api_key_path, api_key_id, api_issuer_id }
     }
 }
 
@@ -406,12 +398,9 @@ pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Res
         color_eyre::eyre::bail!("xcodebuild command not found");
     }
 
-    let api_credentials = match options.auth_mode {
-        TestflightAuthMode::XcodeAccount => None,
-        TestflightAuthMode::ApiKey => Some(TestflightApiCredentials::from_options(&sh, options)?),
-    };
-
     sh.change_dir("../ios");
+
+    let api_credentials = TestflightApiCredentials::from_options(&sh, &options)?;
 
     let archive_path = temp_artifact_path("Cove-TestFlight", "xcarchive")?;
     let export_path = temp_artifact_path("Cove-TestFlight-export", "ipa")?;
@@ -424,41 +413,21 @@ pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Res
     sh.write_file(&export_options_path, testflight_export_options_plist())?;
 
     print_info("Archiving iOS app for TestFlight...");
-    let archive_cmd = match &api_credentials {
-        Some(credentials) => {
-            let api_key_path = &credentials.api_key_path;
-            let api_key_id = &credentials.api_key_id;
-            let api_issuer_id = &credentials.api_issuer_id;
-            cmd!(
-                sh,
-                "xcodebuild -project {IOS_PROJECT} -scheme {IOS_SCHEME} -configuration {IOS_CONFIGURATION_RELEASE} -destination {IOS_GENERIC_DEVICE_DESTINATION} -archivePath {archive_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id} archive"
-            )
-        }
-        None => cmd!(
-            sh,
-            "xcodebuild -project {IOS_PROJECT} -scheme {IOS_SCHEME} -configuration {IOS_CONFIGURATION_RELEASE} -destination {IOS_GENERIC_DEVICE_DESTINATION} -archivePath {archive_path} -allowProvisioningUpdates archive"
-        ),
-    };
+    let api_key_path = &api_credentials.api_key_path;
+    let api_key_id = &api_credentials.api_key_id;
+    let api_issuer_id = &api_credentials.api_issuer_id;
+    let archive_cmd = cmd!(
+        sh,
+        "xcodebuild -project {IOS_PROJECT} -scheme {IOS_SCHEME} -configuration {IOS_CONFIGURATION_RELEASE} -destination {IOS_GENERIC_DEVICE_DESTINATION} -archivePath {archive_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id} archive"
+    );
     run_xcodebuild(archive_cmd, verbose, "Failed to archive iOS app")?;
     print_success(&format!("Created archive at {archive_path}"));
 
     print_info("Uploading iOS archive to App Store Connect...");
-    let export_cmd = match &api_credentials {
-        Some(credentials) => {
-            let api_key_path = &credentials.api_key_path;
-            let api_key_id = &credentials.api_key_id;
-            let api_issuer_id = &credentials.api_issuer_id;
-            cmd!(
-                sh,
-                "xcodebuild -exportArchive -archivePath {archive_path} -exportPath {export_path} -exportOptionsPlist {export_options_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id}"
-            )
-        }
-        None => cmd!(
-            sh,
-            "xcodebuild -exportArchive -archivePath {archive_path} -exportPath {export_path} -exportOptionsPlist {export_options_path} -allowProvisioningUpdates"
-        ),
-    };
-    let export_cmd = export_cmd.env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
+    let export_cmd = cmd!(
+        sh,
+        "xcodebuild -exportArchive -archivePath {archive_path} -exportPath {export_path} -exportOptionsPlist {export_options_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id}"
+    );
     run_xcodebuild(export_cmd, verbose, "Failed to upload iOS archive to App Store Connect")?;
     print_success("Uploaded iOS archive to App Store Connect");
 
@@ -472,10 +441,10 @@ struct TestflightApiCredentials {
 }
 
 impl TestflightApiCredentials {
-    fn from_options(sh: &Shell, options: TestflightUploadOptions) -> Result<Self> {
-        let api_key_path = normalize_required_arg("ASC_API_KEY_PATH", options.api_key_path)?;
-        let api_key_id = normalize_required_arg("ASC_API_KEY_ID", options.api_key_id)?;
-        let api_issuer_id = normalize_required_arg("ASC_API_ISSUER_ID", options.api_issuer_id)?;
+    fn from_options(sh: &Shell, options: &TestflightUploadOptions) -> Result<Self> {
+        let api_key_path = normalize_required_arg("ASC_API_KEY_PATH", &options.api_key_path)?;
+        let api_key_id = normalize_required_arg("ASC_API_KEY_ID", &options.api_key_id)?;
+        let api_issuer_id = normalize_required_arg("ASC_API_ISSUER_ID", &options.api_issuer_id)?;
 
         if !sh.path_exists(&api_key_path) {
             color_eyre::eyre::bail!("ASC_API_KEY_PATH does not exist: {api_key_path}");
@@ -489,8 +458,8 @@ impl TestflightApiCredentials {
     }
 }
 
-fn normalize_required_arg(name: &str, value: Option<String>) -> Result<String> {
-    let value = value.unwrap_or_default();
+fn normalize_required_arg(name: &str, value: &Option<String>) -> Result<String> {
+    let value = value.as_deref().unwrap_or_default();
     let value = value.trim();
 
     if value.is_empty() {
