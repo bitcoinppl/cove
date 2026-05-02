@@ -1209,7 +1209,12 @@ public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
 
 
 /**
- * Shared source of truth for the current generation
+ * Shared source of truth for stale async-work tokens
+ *
+ * A generation token only answers whether work was started before the latest
+ * invalidation. It does not serialize later state mutations; owners of the
+ * mutated state must check the token and apply changes at their own
+ * serialization boundary.
  */
 public interface GenerationTrackerInterface {
     
@@ -1223,7 +1228,12 @@ public interface GenerationTrackerInterface {
 }
 
 /**
- * Shared source of truth for the current generation
+ * Shared source of truth for stale async-work tokens
+ *
+ * A generation token only answers whether work was started before the latest
+ * invalidation. It does not serialize later state mutations; owners of the
+ * mutated state must check the token and apply changes at their own
+ * serialization boundary.
  */
 open class GenerationTracker: Disposable, AutoCloseable, GenerationTrackerInterface
 {

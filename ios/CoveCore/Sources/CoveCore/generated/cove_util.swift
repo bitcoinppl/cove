@@ -519,7 +519,12 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 /**
- * Shared source of truth for the current generation
+ * Shared source of truth for stale async-work tokens
+ *
+ * A generation token only answers whether work was started before the latest
+ * invalidation. It does not serialize later state mutations; owners of the
+ * mutated state must check the token and apply changes at their own
+ * serialization boundary.
  */
 public protocol GenerationTrackerProtocol: AnyObject, Sendable {
     
@@ -531,7 +536,12 @@ public protocol GenerationTrackerProtocol: AnyObject, Sendable {
     
 }
 /**
- * Shared source of truth for the current generation
+ * Shared source of truth for stale async-work tokens
+ *
+ * A generation token only answers whether work was started before the latest
+ * invalidation. It does not serialize later state mutations; owners of the
+ * mutated state must check the token and apply changes at their own
+ * serialization boundary.
  */
 open class GenerationTracker: GenerationTrackerProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
