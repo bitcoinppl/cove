@@ -9,6 +9,17 @@ pub(crate) const CSPP_NAMESPACE_ID_KEY: &str = "cspp::v1::namespace_id";
 #[derive(Debug, Clone)]
 pub(crate) struct CloudBackupKeychain(Keychain);
 
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum CloudBackupKeychainError {
+    #[error("{0}")]
+    Keychain(#[from] KeychainError),
+
+    #[error(
+        "failed to roll back cloud backup keychain save after original error: {original}; rollback error: {rollback}"
+    )]
+    RollbackFailed { original: KeychainError, rollback: KeychainError },
+}
+
 impl CloudBackupKeychain {
     pub(crate) fn global() -> Self {
         Self::new(Keychain::global().clone())
@@ -22,8 +33,12 @@ impl CloudBackupKeychain {
         self.0.get(CSPP_NAMESPACE_ID_KEY.into())
     }
 
-    pub(crate) fn save_namespace_id(&self, namespace_id: &str) -> Result<(), KeychainError> {
-        self.0.save(CSPP_NAMESPACE_ID_KEY.into(), namespace_id.to_owned())
+    pub(crate) fn save_namespace_id(
+        &self,
+        namespace_id: &str,
+    ) -> Result<(), CloudBackupKeychainError> {
+        self.0.save(CSPP_NAMESPACE_ID_KEY.into(), namespace_id.to_owned())?;
+        Ok(())
     }
 
     pub(crate) fn has_prf_salt(&self) -> bool {
@@ -34,7 +49,7 @@ impl CloudBackupKeychain {
         &self,
         credential_id: &[u8],
         prf_salt: [u8; 32],
-    ) -> Result<(), KeychainError> {
+    ) -> Result<(), CloudBackupKeychainError> {
         self.save_entries_with_rollback(&[
             (CSPP_CREDENTIAL_ID_KEY, hex::encode(credential_id)),
             (CSPP_PRF_SALT_KEY, hex::encode(prf_salt)),
@@ -46,7 +61,7 @@ impl CloudBackupKeychain {
         credential_id: &[u8],
         prf_salt: [u8; 32],
         namespace_id: &str,
-    ) -> Result<(), KeychainError> {
+    ) -> Result<(), CloudBackupKeychainError> {
         self.save_entries_with_rollback(&[
             (CSPP_CREDENTIAL_ID_KEY, hex::encode(credential_id)),
             (CSPP_PRF_SALT_KEY, hex::encode(prf_salt)),
@@ -67,47 +82,67 @@ impl CloudBackupKeychain {
         self.0.delete(CSPP_PRF_SALT_KEY.into());
     }
 
-    pub(crate) fn clear_local_state(&self) {
-        self.delete_keychain_item_if_present(CSPP_NAMESPACE_ID_KEY);
-        self.delete_keychain_item_if_present(CSPP_CREDENTIAL_ID_KEY);
-        self.delete_keychain_item_if_present(CSPP_PRF_SALT_KEY);
-
+    pub(crate) fn clear_local_state(&self) -> Result<(), CloudBackupKeychainError> {
         let cspp = cove_cspp::Cspp::new(self.0.clone());
         if !cspp.delete_master_key() {
-            warn!("Failed to delete cloud backup master key from keychain");
+            return Err(CloudBackupKeychainError::Keychain(KeychainError::Delete));
         }
+
+        self.delete_keychain_item_if_present(CSPP_NAMESPACE_ID_KEY)?;
+        self.delete_keychain_item_if_present(CSPP_CREDENTIAL_ID_KEY)?;
+        self.delete_keychain_item_if_present(CSPP_PRF_SALT_KEY)?;
+
+        Ok(())
     }
 
-    fn save_entries_with_rollback(&self, entries: &[(&str, String)]) -> Result<(), KeychainError> {
+    fn save_entries_with_rollback(
+        &self,
+        entries: &[(&str, String)],
+    ) -> Result<(), CloudBackupKeychainError> {
         let previous_values: Vec<_> =
             entries.iter().map(|(key, _)| ((*key).to_owned(), self.0.get((*key).into()))).collect();
 
         for (key, value) in entries {
             if let Err(error) = self.0.save((*key).to_owned(), value.clone()) {
-                self.restore_entries(&previous_values);
-                return Err(error);
+                if let Err(rollback) = self.restore_entries(&previous_values) {
+                    return Err(CloudBackupKeychainError::RollbackFailed {
+                        original: error,
+                        rollback,
+                    });
+                }
+                return Err(CloudBackupKeychainError::Keychain(error));
             }
         }
 
         Ok(())
     }
 
-    fn restore_entries(&self, previous_values: &[(String, Option<String>)]) {
+    fn restore_entries(
+        &self,
+        previous_values: &[(String, Option<String>)],
+    ) -> Result<(), KeychainError> {
         for (key, previous_value) in previous_values {
             match previous_value {
                 Some(value) => {
-                    let _ = self.0.save(key.clone(), value.clone());
+                    self.0.save(key.clone(), value.clone())?;
                 }
                 None => {
-                    self.0.delete(key.clone());
+                    if self.0.get(key.clone()).is_some() && !self.0.delete(key.clone()) {
+                        return Err(KeychainError::Delete);
+                    }
                 }
             }
         }
+
+        Ok(())
     }
 
-    fn delete_keychain_item_if_present(&self, key: &str) {
+    fn delete_keychain_item_if_present(&self, key: &str) -> Result<(), KeychainError> {
         if self.0.get(key.to_owned()).is_some() && !self.0.delete(key.to_owned()) {
             warn!("Failed to delete cloud backup keychain item key={key}");
+            return Err(KeychainError::Delete);
         }
+
+        Ok(())
     }
 }

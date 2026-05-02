@@ -284,13 +284,19 @@ class AndroidPasskeyProvider(
                 .optJSONObject("response")
                 ?.optString("attestationObject")
         if (attestationObject.isNullOrBlank()) {
-            throw passkeyRequestFailed(
-                PasskeyOperation.REGISTRATION,
-                PasskeyFailureReason.MalformedResponse,
+            Log.w(
+                "AndroidPasskeyProvider",
+                "missing passkey attestationObject; continuing without provider AAGUID",
             )
+            return ""
         }
 
-        return passkeyAaguidFromAttestationObject(attestationObject.fromBase64Url())
+        return runCatching {
+            passkeyAaguidFromAttestationObject(attestationObject.fromBase64Url())
+        }.getOrElse { error ->
+            Log.w("AndroidPasskeyProvider", "failed to extract passkey provider AAGUID", error)
+            ""
+        }
     }
 
     private fun extractPrfOutput(responseJson: String): ByteArray {

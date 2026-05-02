@@ -12,7 +12,7 @@ use cove_device::passkey::{
 };
 use cove_tokio::unblock;
 use rand::RngExt as _;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use super::super::{CloudBackupError, PASSKEY_RP_ID};
 use super::UnpersistedPrfKey;
@@ -111,17 +111,7 @@ impl PasskeyMaterialAcquirer {
         info!("{}", context.attempt_message);
         let prf_salt: [u8; 32] = rand::rng().random();
 
-        let discovery = {
-            let passkey = self.passkey.clone();
-            unblock::run_blocking(move || {
-                passkey.discover_and_authenticate_with_prf(
-                    PASSKEY_RP_ID.to_string(),
-                    prf_salt.to_vec(),
-                    random_challenge(),
-                )
-            })
-            .await
-        };
+        let discovery = self.discover_with_platform_authorization_retry(prf_salt).await;
 
         match discovery {
             Ok(discovered) => {
@@ -164,6 +154,41 @@ impl PasskeyMaterialAcquirer {
         }
 
         self.create_for_wrapper_repair().await
+    }
+
+    async fn discover_with_platform_authorization_retry(
+        &self,
+        prf_salt: [u8; 32],
+    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
+        (|| self.discover_with_prf_salt(prf_salt))
+            .retry(
+                ExponentialBuilder::default()
+                    .with_min_delay(Duration::from_millis(50))
+                    .without_max_times()
+                    .with_total_delay(Some(Duration::from_secs(2))),
+            )
+            .when(is_platform_authorization_error)
+            .notify(|error, delay| {
+                warn!(
+                    "Passkey platform authorization failed before presentation: {error}; retrying in {delay:?}"
+                );
+            })
+            .await
+    }
+
+    async fn discover_with_prf_salt(
+        &self,
+        prf_salt: [u8; 32],
+    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
+        let passkey = self.passkey.clone();
+        unblock::run_blocking(move || {
+            passkey.discover_and_authenticate_with_prf(
+                PASSKEY_RP_ID.to_string(),
+                prf_salt.to_vec(),
+                random_challenge(),
+            )
+        })
+        .await
     }
 
     async fn create_new_prf_key_with_mapper(
@@ -220,7 +245,7 @@ fn passkey_provider_hint(registration: PasskeyRegistrationResult) -> PasskeyProv
     };
     let registered_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
 
-    info!(
+    debug!(
         "Captured passkey provider hint aaguid={} registered_platform={registered_platform:?} registered_at={registered_at}",
         registration.provider_aaguid
     );

@@ -199,11 +199,11 @@ struct HotWalletImportScreen: View {
                     if let words = try? groupedPlainWordsOf(mnemonic: mnemonicString, groups: UInt8(groupsOf)) {
                         scanner.reset()
 
+                        setWords(words)
+
                         if autoImportScannedWords {
                             sheetState = .none
                             importWallet(enteredWords: words)
-                        } else {
-                            setWords(words)
                         }
                     }
                 } else {

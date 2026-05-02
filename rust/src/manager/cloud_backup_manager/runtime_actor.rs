@@ -2,11 +2,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, send};
+use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, call, send};
 use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use cove_device::cloud_storage::{CloudStorage, CloudSyncHealth};
 use cove_device::keychain::Keychain;
 use cove_tokio::DebouncedTask;
+use cove_util::ResultExt as _;
 use cove_util::{GenerationClaim, GenerationToken, GenerationTracker};
 use tokio::sync::Notify;
 use tracing::{error, info, warn};
@@ -16,11 +17,13 @@ use super::pending::{
     build_pending_upload_backoff,
 };
 use super::{
-    CloudBackupError, CloudBackupStatus, PendingEnableSession, PendingVerificationCompletion,
-    RecoveryAction, RustCloudBackupManager, WalletId, live_upload_retry_delay_for_attempt,
+    CloudBackupError, CloudBackupRestoreProgress, CloudBackupRestoreReport, CloudBackupStatus,
+    PendingEnableSession, PendingVerificationCompletion, RecoveryAction, RustCloudBackupManager,
+    WalletId, live_upload_retry_delay_for_attempt,
 };
+use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobFailedState, CloudBlobFailureIssue, PersistedCloudBlobState,
+    CloudBlobFailedState, CloudBlobFailureIssue, PersistedCloudBackupState, PersistedCloudBlobState,
 };
 
 #[derive(Debug, Clone)]
@@ -41,33 +44,82 @@ pub(crate) enum CloudBackupOperation {
 #[derive(Clone, Debug)]
 pub(crate) struct RestoreOperation {
     active_restore_generation: GenerationClaim,
+    runtime: Addr<CloudBackupRuntimeActor>,
 }
 
 impl RestoreOperation {
-    fn new(tracker: GenerationTracker) -> Self {
-        Self { active_restore_generation: tracker.claim() }
+    fn new(tracker: GenerationTracker, runtime: Addr<CloudBackupRuntimeActor>) -> Self {
+        Self { active_restore_generation: tracker.claim(), runtime }
     }
 
-    pub(crate) fn ensure_current(&self) -> Result<(), CloudBackupError> {
-        if self.active_restore_generation.is_current() {
-            Ok(())
-        } else {
-            Err(CloudBackupError::Cancelled)
-        }
+    fn generation(&self) -> GenerationToken {
+        self.active_restore_generation.token()
     }
 
-    pub(crate) fn run<T>(&self, update: impl FnOnce() -> T) -> Result<T, CloudBackupError> {
-        self.active_restore_generation.run_if_current(update).ok_or(CloudBackupError::Cancelled)
+    pub(crate) async fn ensure_current(&self) -> Result<(), CloudBackupError> {
+        call!(self.runtime.ensure_restore_current(self.generation()))
+            .await
+            .map_err(|_| CloudBackupError::Cancelled)?
     }
 
-    pub(crate) fn run_result<T>(
+    pub(crate) async fn set_status(
         &self,
-        update: impl FnOnce() -> Result<T, CloudBackupError>,
-    ) -> Result<T, CloudBackupError> {
-        self.active_restore_generation
-            .run_result_if_current(update)
-            .unwrap_or(Err(CloudBackupError::Cancelled))
+        status: CloudBackupStatus,
+    ) -> Result<(), CloudBackupError> {
+        call!(self.runtime.set_restore_status(self.generation(), status))
+            .await
+            .map_err(|_| CloudBackupError::Cancelled)?
     }
+
+    pub(crate) async fn set_progress(
+        &self,
+        progress: Option<CloudBackupRestoreProgress>,
+    ) -> Result<(), CloudBackupError> {
+        call!(self.runtime.set_restore_progress(self.generation(), progress))
+            .await
+            .map_err(|_| CloudBackupError::Cancelled)?
+    }
+
+    pub(crate) async fn set_report(
+        &self,
+        report: Option<CloudBackupRestoreReport>,
+    ) -> Result<(), CloudBackupError> {
+        call!(self.runtime.set_restore_report(self.generation(), report))
+            .await
+            .map_err(|_| CloudBackupError::Cancelled)?
+    }
+
+    pub(crate) async fn persist_cloud_backup_state(
+        &self,
+        state: PersistedCloudBackupState,
+        context: String,
+    ) -> Result<(), CloudBackupError> {
+        call!(self.runtime.persist_restore_cloud_backup_state(self.generation(), state, context))
+            .await
+            .map_err(|_| CloudBackupError::Cancelled)?
+    }
+
+    pub(crate) async fn save_keychain_state(
+        &self,
+        master_key: cove_cspp::master_key::MasterKey,
+        passkey: Option<RestoredPasskeyMaterial>,
+        namespace_id: String,
+    ) -> Result<(), CloudBackupError> {
+        call!(self.runtime.save_restore_keychain_state(
+            self.generation(),
+            master_key,
+            passkey,
+            namespace_id
+        ))
+        .await
+        .map_err(|_| CloudBackupError::Cancelled)?
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct RestoredPasskeyMaterial {
+    pub(crate) credential_id: Vec<u8>,
+    pub(crate) prf_salt: [u8; 32],
 }
 
 fn is_authorization_failed_blob(failed_state: &CloudBlobFailedState) -> bool {
@@ -414,6 +466,131 @@ impl CloudBackupRuntimeActor {
         Produces::ok(())
     }
 
+    fn restore_generation_is_current(&self, generation: GenerationToken) -> bool {
+        self.restore_operations.is_current(generation)
+    }
+
+    pub async fn ensure_restore_current(
+        &mut self,
+        generation: GenerationToken,
+    ) -> ActorResult<Result<(), CloudBackupError>> {
+        if self.restore_generation_is_current(generation) {
+            Produces::ok(Ok(()))
+        } else {
+            Produces::ok(Err(CloudBackupError::Cancelled))
+        }
+    }
+
+    pub async fn set_restore_status(
+        &mut self,
+        generation: GenerationToken,
+        status: CloudBackupStatus,
+    ) -> ActorResult<Result<(), CloudBackupError>> {
+        let Some(manager) = self.manager() else {
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        };
+        if !self.restore_generation_is_current(generation) {
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        }
+
+        manager.set_status(status);
+        Produces::ok(Ok(()))
+    }
+
+    pub async fn set_restore_progress(
+        &mut self,
+        generation: GenerationToken,
+        progress: Option<CloudBackupRestoreProgress>,
+    ) -> ActorResult<Result<(), CloudBackupError>> {
+        let Some(manager) = self.manager() else {
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        };
+        if !self.restore_generation_is_current(generation) {
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        }
+
+        manager.set_restore_progress(progress);
+        Produces::ok(Ok(()))
+    }
+
+    pub async fn set_restore_report(
+        &mut self,
+        generation: GenerationToken,
+        report: Option<CloudBackupRestoreReport>,
+    ) -> ActorResult<Result<(), CloudBackupError>> {
+        let Some(manager) = self.manager() else {
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        };
+        if !self.restore_generation_is_current(generation) {
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        }
+
+        manager.set_restore_report(report);
+        Produces::ok(Ok(()))
+    }
+
+    pub async fn persist_restore_cloud_backup_state(
+        &mut self,
+        generation: GenerationToken,
+        state: PersistedCloudBackupState,
+        context: String,
+    ) -> ActorResult<Result<(), CloudBackupError>> {
+        let Some(manager) = self.manager() else {
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        };
+        if !self.restore_generation_is_current(generation) {
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        }
+
+        let result = Database::global()
+            .cloud_backup_state
+            .set(&state)
+            .map_err(|error| CloudBackupError::Internal(format!("{context}: {error}")));
+        if result.is_ok() {
+            manager.set_status(RustCloudBackupManager::runtime_status_for(&state));
+            manager.refresh_persisted_flags();
+        }
+
+        Produces::ok(result)
+    }
+
+    pub async fn save_restore_keychain_state(
+        &mut self,
+        generation: GenerationToken,
+        master_key: cove_cspp::master_key::MasterKey,
+        passkey: Option<RestoredPasskeyMaterial>,
+        namespace_id: String,
+    ) -> ActorResult<Result<(), CloudBackupError>> {
+        if !self.restore_generation_is_current(generation) {
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        }
+
+        let keychain = Keychain::global();
+        let cspp = cove_cspp::Cspp::new(keychain.clone());
+        let result = (|| {
+            cspp.save_master_key(&master_key)
+                .map_err_prefix("save master key", CloudBackupError::Internal)?;
+
+            if let Some(passkey) = passkey {
+                super::keychain::CloudBackupKeychain::new(keychain.clone())
+                    .save_passkey_and_namespace(
+                        &passkey.credential_id,
+                        passkey.prf_salt,
+                        &namespace_id,
+                    )
+                    .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
+            } else {
+                super::keychain::CloudBackupKeychain::new(keychain.clone())
+                    .save_namespace_id(&namespace_id)
+                    .map_err_prefix("save namespace_id", CloudBackupError::Internal)?;
+            }
+
+            Ok(())
+        })();
+
+        Produces::ok(result)
+    }
+
     pub async fn discard_pending_enable_cloud_backup(&mut self) -> ActorResult<()> {
         let Some(pending) = self.pending_enable_session.take() else {
             return Produces::ok(());
@@ -422,7 +599,9 @@ impl CloudBackupRuntimeActor {
         let should_delete_remote = pending.is_retry_upload();
         let namespace_id = pending.master_key.namespace_id();
 
-        cove_cspp::Cspp::new(Keychain::global().clone()).delete_master_key();
+        if let Err(error) = super::keychain::CloudBackupKeychain::global().clear_local_state() {
+            warn!("Discard pending enable failed to clear local cloud backup state: {error}");
+        }
 
         if should_delete_remote {
             cove_tokio::task::spawn(async move {
@@ -772,7 +951,13 @@ impl CloudBackupRuntimeActor {
 
     #[cfg(test)]
     pub async fn new_restore_operation(&mut self) -> ActorResult<RestoreOperation> {
-        Produces::ok(RestoreOperation::new(self.restore_operations.clone()))
+        let Some(addr) = self.addr() else {
+            return Produces::ok(RestoreOperation::new(
+                self.restore_operations.clone(),
+                self.addr.upgrade(),
+            ));
+        };
+        Produces::ok(RestoreOperation::new(self.restore_operations.clone(), addr))
     }
 
     #[cfg(test)]
@@ -789,7 +974,8 @@ impl CloudBackupRuntimeActor {
             return Produces::ok(());
         }
 
-        let operation = RestoreOperation::new(self.restore_operations.clone());
+        let Some(addr) = self.addr() else { return Produces::ok(()) };
+        let operation = RestoreOperation::new(self.restore_operations.clone(), addr);
         cove_tokio::task::spawn(async move {
             info!("restore_from_cloud_backup: task started");
             match manager.do_restore_from_cloud_backup(&operation).await {

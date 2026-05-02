@@ -135,7 +135,7 @@ struct CloudRestoreOfferView: View {
                         .font(OnboardingRecoveryTypography.bodySemibold)
                         .foregroundStyle(.white)
 
-                    Text(providerHint?.providerName ?? "Secured with iCloud Keychain")
+                    Text(providerHint?.providerName ?? "Secured with your passkey provider")
                         .font(OnboardingRecoveryTypography.footnote)
                         .foregroundStyle(.coveLightGray.opacity(0.58))
                 }
@@ -189,7 +189,7 @@ struct CloudRestoreOfferView: View {
                     .foregroundStyle(Color.btnGradientLight)
                     .frame(width: 28)
 
-                Text("Your passkey is stored securely in iCloud Keychain and syncs across all your Apple devices.")
+                Text(passkeyStorageDescription)
                     .font(OnboardingRecoveryTypography.subheadline)
                     .foregroundStyle(.coveLightGray.opacity(0.74))
                     .fixedSize(horizontal: false, vertical: true)
@@ -226,6 +226,14 @@ struct CloudRestoreOfferView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var passkeyStorageDescription: String {
+        if let providerName = providerHint?.providerName {
+            return "Your passkey is stored securely by \(providerName), and your encrypted backup is stored in iCloud."
+        }
+
+        return "Your passkey is stored securely by your passkey provider, and your encrypted backup is stored in iCloud."
     }
 
     private func formattedProviderDate(_ registeredAt: UInt64) -> String {

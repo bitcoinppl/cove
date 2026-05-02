@@ -6,9 +6,14 @@ private enum AlertState: Equatable {
     case betaEnabled
     case betaError(String)
     case confirmWipeCloud
-    case wipeCloudResult(String)
+    case wipeCloudResult(WipeCloudResult)
     case confirmResetLocalState
     case resetLocalStateResult(String)
+}
+
+private struct WipeCloudResult: Equatable {
+    let succeeded: Bool
+    let message: String
 }
 
 struct AboutScreen: View {
@@ -196,10 +201,10 @@ struct AboutScreen: View {
                 }
             ).eraseToAny()
 
-        case let .wipeCloudResult(message):
+        case let .wipeCloudResult(result):
             AlertBuilder(
-                title: "Cloud Backup Wiped",
-                message: message,
+                title: result.succeeded ? "Cloud Backup Wiped" : "Cloud Backup Wipe Failed",
+                message: result.message,
                 actions: { Button("OK") { alertState = .none } }
             ).eraseToAny()
 
@@ -225,7 +230,7 @@ struct AboutScreen: View {
         }
     }
 
-    private nonisolated static func debugWipeCloudBackup() -> String {
+    private nonisolated static func debugWipeCloudBackup() -> WipeCloudResult {
         let helper = ICloudDriveHelper.shared
 
         do {
@@ -234,11 +239,14 @@ struct AboutScreen: View {
                 try FileManager.default.removeItem(at: dataDir)
             }
         } catch {
-            return "iCloud wipe failed: \(error.localizedDescription)"
+            return WipeCloudResult(
+                succeeded: false,
+                message: "iCloud wipe failed: \(error.localizedDescription)"
+            )
         }
 
         RustCloudBackupManager().debugResetCloudBackupState()
-        return "All cloud backup data deleted and local state reset"
+        return WipeCloudResult(succeeded: true, message: "All cloud backup data deleted and local state reset")
     }
 }
 

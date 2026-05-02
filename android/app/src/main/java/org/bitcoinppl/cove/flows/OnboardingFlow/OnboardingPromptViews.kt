@@ -481,7 +481,7 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
                 )
                 Spacer(modifier = Modifier.size(4.dp))
                 Text(
-                    text = providerHint?.providerName ?: "Secured with your Google account",
+                    text = providerHint?.providerName ?: "Secured with your passkey provider",
                     color = CoveColor.coveLightGray.copy(alpha = 0.58f),
                     style = MaterialTheme.typography.bodySmall,
                 )

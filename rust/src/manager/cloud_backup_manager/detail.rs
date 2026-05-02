@@ -331,7 +331,7 @@ impl RustCloudBackupManager {
 
         match self.do_fetch_cloud_only_wallets().await {
             Ok(items) => {
-                self.set_cloud_only(CloudOnlyState::Loaded { wallets: items });
+                self.set_loaded_cloud_only(items);
             }
             Err(error) => {
                 error!("Failed to fetch cloud-only wallets: {error}");

@@ -9,12 +9,12 @@ use super::{
     DatabasePaths, LEGACY_MAIN_DB, LEGACY_WALLET_DB, main_database_paths, wallet_database_paths,
 };
 
-pub(super) fn recover_interrupted_main_migration() -> Result<()> {
+pub(crate) fn recover_interrupted_main_migration() -> Result<()> {
     recover_main_migration(&ROOT_DATA_DIR)?;
     recover_legacy_at_path(&ROOT_DATA_DIR.join(LEGACY_MAIN_DB))
 }
 
-pub(super) fn recover_interrupted_wallet_migrations() -> Result<()> {
+pub(crate) fn recover_interrupted_wallet_migrations() -> Result<()> {
     let entries = match std::fs::read_dir(&*WALLET_DATA_DIR) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -38,7 +38,7 @@ pub(super) fn recover_interrupted_wallet_migrations() -> Result<()> {
     Ok(())
 }
 
-pub(super) fn recover_main_migration(root_dir: &Path) -> Result<()> {
+pub(crate) fn recover_main_migration(root_dir: &Path) -> Result<()> {
     let paths = main_database_paths(root_dir);
     recover_promoted_database(
         &paths,
@@ -47,7 +47,7 @@ pub(super) fn recover_main_migration(root_dir: &Path) -> Result<()> {
     )
 }
 
-pub(super) fn recover_wallet_migration(wallet_dir: &Path) -> Result<()> {
+pub(crate) fn recover_wallet_migration(wallet_dir: &Path) -> Result<()> {
     let paths = wallet_database_paths(wallet_dir);
     recover_promoted_database(
         &paths,

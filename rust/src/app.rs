@@ -583,7 +583,10 @@ impl FfiApp {
             }
         }
 
-        CloudBackupKeychain::global().clear_local_state();
+        if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
+            error!("Unable to clear cloud backup keychain state: {error}");
+            return;
+        }
         database.dangerous_reset_all_data();
     }
 

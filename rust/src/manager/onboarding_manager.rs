@@ -16,7 +16,7 @@ use cove_util::ResultExt as _;
 use flume::Receiver;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::{
     app::{App, AppAction, FfiApp},
@@ -1612,41 +1612,62 @@ async fn inspect_cloud_restore_backup(
 
     info!("Onboarding: cloud backup namespace check found {} namespace(s)", namespaces.len());
 
-    let provider_hint = load_cloud_restore_provider_hint(&cloud, namespaces).await;
-    Ok(CloudRestoreBackupSnapshot { has_backup: true, provider_hint })
+    let provider_hint = inspect_cloud_restore_namespaces(&cloud, namespaces).await?;
+    Ok(CloudRestoreBackupSnapshot {
+        has_backup: provider_hint.has_backup,
+        provider_hint: provider_hint.provider_hint,
+    })
 }
 
-async fn load_cloud_restore_provider_hint(
+struct InspectedCloudRestoreNamespaces {
+    has_backup: bool,
+    provider_hint: Option<CloudRestoreProviderHint>,
+}
+
+async fn inspect_cloud_restore_namespaces(
     cloud: &cove_device::cloud_storage::CloudStorageClient,
     namespaces: Vec<String>,
-) -> Option<CloudRestoreProviderHint> {
+) -> Result<InspectedCloudRestoreNamespaces, CloudStorageError> {
     let mut hints = Vec::new();
+    let mut found_backup = false;
+    let mut first_cloud_error = None;
+
     for namespace in namespaces {
-        let Ok(master_json) = cloud.download_master_key_backup(namespace.clone()).await else {
-            info!(
-                "No cloud restore passkey provider hint namespace={namespace} reason=download_failed"
-            );
-            continue;
+        let master_json = match cloud.download_master_key_backup(namespace.clone()).await {
+            Ok(master_json) => master_json,
+            Err(error @ CloudStorageError::NotFound(_)) => {
+                info!("No cloud restore backup namespace={namespace} reason=not_found");
+                first_cloud_error.get_or_insert(error);
+                continue;
+            }
+            Err(error) => {
+                info!("No cloud restore backup namespace={namespace} reason=download_failed");
+                first_cloud_error.get_or_insert(error);
+                continue;
+            }
         };
+
         let Ok(encrypted) = serde_json::from_slice::<EncryptedMasterKeyBackup>(&master_json) else {
             info!(
                 "No cloud restore passkey provider hint namespace={namespace} reason=deserialize_failed"
             );
             continue;
         };
+        found_backup = true;
+
         let Some(raw_hint) = encrypted.passkey_provider_hint.as_ref() else {
             info!("No cloud restore passkey provider hint namespace={namespace} reason=missing");
             continue;
         };
 
-        info!(
+        debug!(
             "Found cloud restore passkey provider hint namespace={namespace} aaguid={} registered_platform={:?} registered_at={}",
             raw_hint.aaguid, raw_hint.registered_platform, raw_hint.registered_at
         );
 
         let hint = resolve_provider_hint(raw_hint);
         if hint.provider_name.is_none() {
-            info!(
+            debug!(
                 "No resolved cloud restore passkey provider hint namespace={namespace} aaguid={} registered_platform={:?} registered_at={} reason=unknown_provider",
                 raw_hint.aaguid, raw_hint.registered_platform, raw_hint.registered_at
             );
@@ -1655,7 +1676,20 @@ async fn load_cloud_restore_provider_hint(
         hints.push(hint);
     }
 
-    choose_restore_provider_hint(hints)
+    if found_backup {
+        return Ok(InspectedCloudRestoreNamespaces {
+            has_backup: true,
+            provider_hint: choose_restore_provider_hint(hints),
+        });
+    }
+
+    if let Some(error) = first_cloud_error
+        && !matches!(error, CloudStorageError::NotFound(_))
+    {
+        return Err(error);
+    }
+
+    Ok(InspectedCloudRestoreNamespaces { has_backup: false, provider_hint: None })
 }
 
 fn choose_restore_provider_hint(

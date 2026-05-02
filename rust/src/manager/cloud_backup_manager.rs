@@ -345,10 +345,18 @@ pub(crate) struct PendingEnableSession {
     passkey: Zeroizing<UnpersistedPrfKey>,
 }
 
-fn cloud_only_cache_is_stale(cloud_only: &CloudOnlyState, detail: &CloudBackupDetail) -> bool {
+fn cloud_only_cache_is_stale(
+    cloud_only: &CloudOnlyState,
+    detail: &CloudBackupDetail,
+    detail_snapshot: Option<&CloudBackupDetail>,
+) -> bool {
     let CloudOnlyState::Loaded { wallets } = cloud_only else {
         return false;
     };
+
+    if detail_snapshot != Some(detail) {
+        return true;
+    }
 
     if wallets.len() as u32 != detail.cloud_only_count {
         return true;
@@ -615,6 +623,7 @@ pub struct RustCloudBackupManager {
     pub reconciler: Sender<Message>,
     pub reconcile_receiver: Arc<Receiver<Message>>,
     prompt_state: Arc<parking_lot::Mutex<CloudBackupPromptState>>,
+    cloud_only_detail_snapshot: Arc<RwLock<Option<CloudBackupDetail>>>,
     pub(crate) runtime: Addr<CloudBackupRuntimeActor>,
 }
 
@@ -772,6 +781,7 @@ impl RustCloudBackupManager {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
             prompt_state: Arc::new(parking_lot::Mutex::new(CloudBackupPromptState::default())),
+            cloud_only_detail_snapshot: Arc::new(RwLock::new(None)),
             runtime: spawn_actor(CloudBackupRuntimeActor::new(manager.clone())),
         });
 
@@ -1000,17 +1010,20 @@ impl RustCloudBackupManager {
                 state.detail.clone_from(&detail);
             }
 
-            let reset_cloud_only = detail
-                .as_ref()
-                .is_some_and(|detail| cloud_only_cache_is_stale(&state.cloud_only, detail));
+            let detail_snapshot = self.cloud_only_detail_snapshot.read();
+            let reset_cloud_only = detail.as_ref().is_some_and(|detail| {
+                cloud_only_cache_is_stale(&state.cloud_only, detail, detail_snapshot.as_ref())
+            });
             if reset_cloud_only {
                 state.cloud_only = CloudOnlyState::NotFetched;
             }
+            drop(detail_snapshot);
 
             (detail_changed, reset_cloud_only)
         };
 
         if reset_cloud_only {
+            *self.cloud_only_detail_snapshot.write() = None;
             self.send(Message::CloudOnly(CloudOnlyState::NotFetched));
         }
 
@@ -1038,7 +1051,19 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn set_cloud_only(&self, cloud_only: CloudOnlyState) {
+        if !matches!(cloud_only, CloudOnlyState::Loaded { .. }) {
+            *self.cloud_only_detail_snapshot.write() = None;
+        }
         self.set_and_notify_field(cloud_only, |state| &mut state.cloud_only, Message::CloudOnly);
+    }
+
+    pub(crate) fn set_loaded_cloud_only(&self, wallets: Vec<CloudBackupWalletItem>) {
+        *self.cloud_only_detail_snapshot.write() = self.state.read().detail.clone();
+        self.set_and_notify_field(
+            CloudOnlyState::Loaded { wallets },
+            |state| &mut state.cloud_only,
+            Message::CloudOnly,
+        );
     }
 
     pub(crate) fn set_cloud_only_operation(&self, cloud_only_operation: CloudOnlyOperation) {
@@ -1065,52 +1090,44 @@ impl RustCloudBackupManager {
         Ok(())
     }
 
-    pub(crate) fn persist_cloud_backup_state_for_restore_operation(
+    pub(crate) async fn persist_cloud_backup_state_for_restore_operation(
         &self,
         operation: &RestoreOperation,
         state: &PersistedCloudBackupState,
         context: &str,
     ) -> Result<(), CloudBackupError> {
-        operation.run_result(|| {
-            Database::global()
-                .cloud_backup_state
-                .set(state)
-                .map_err(|error| CloudBackupError::Internal(format!("{context}: {error}")))?;
-            self.set_status(Self::runtime_status_for(state));
-            self.refresh_persisted_flags();
-            Ok(())
-        })
+        operation.persist_cloud_backup_state(state.clone(), context.to_string()).await
     }
 
-    pub(crate) fn ensure_current_restore_operation(
+    pub(crate) async fn ensure_current_restore_operation(
         &self,
         operation: &RestoreOperation,
     ) -> Result<(), CloudBackupError> {
-        operation.ensure_current()
+        operation.ensure_current().await
     }
 
-    pub(crate) fn set_status_for_restore_operation(
+    pub(crate) async fn set_status_for_restore_operation(
         &self,
         operation: &RestoreOperation,
         status: CloudBackupStatus,
     ) -> Result<(), CloudBackupError> {
-        operation.run(|| self.set_status(status)).map(|_| ())
+        operation.set_status(status).await
     }
 
-    pub(crate) fn set_restore_progress_for_restore_operation(
+    pub(crate) async fn set_restore_progress_for_restore_operation(
         &self,
         operation: &RestoreOperation,
         progress: Option<CloudBackupRestoreProgress>,
     ) -> Result<(), CloudBackupError> {
-        operation.run(|| self.set_restore_progress(progress)).map(|_| ())
+        operation.set_progress(progress).await
     }
 
-    pub(crate) fn set_restore_report_for_restore_operation(
+    pub(crate) async fn set_restore_report_for_restore_operation(
         &self,
         operation: &RestoreOperation,
         report: Option<CloudBackupRestoreReport>,
     ) -> Result<(), CloudBackupError> {
-        operation.run(|| self.set_restore_report(report)).map(|_| ())
+        operation.set_report(report).await
     }
 
     pub(crate) async fn build_cloud_backup_detail_with_remote_truth(
@@ -1742,7 +1759,10 @@ impl RustCloudBackupManager {
     ///
     /// Debug-only: pair with Swift-side iCloud wipe for full reset
     pub fn debug_reset_cloud_backup_state(&self) {
-        CloudBackupKeychain::global().clear_local_state();
+        if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
+            error!("Failed to clear cloud backup keychain state: {error}");
+            return;
+        }
         self.clear_pending_enable_session();
 
         let db = Database::global();
@@ -1840,7 +1860,9 @@ fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecover
     use crate::database::migration::log_remove_file;
 
     wipe_wallet_keychain_items_for_catastrophic_recovery()?;
-    CloudBackupKeychain::global().clear_local_state();
+    CloudBackupKeychain::global()
+        .clear_local_state()
+        .map_err(|error| CatastrophicRecoveryError::Failure(error.to_string()))?;
 
     let root = &*cove_common::consts::ROOT_DATA_DIR;
 
@@ -2120,6 +2142,17 @@ mod tests {
             .recv()
             .expect("receive invalidate restore operation result")
             .expect("invalidate restore operation");
+    }
+
+    fn run_on_cloud_backup_runtime<T: Send + 'static>(
+        future: impl Future<Output = T> + Send + 'static,
+    ) -> T {
+        super::ensure_cloud_backup_test_tokio_runtime();
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let _task = cove_tokio::task::spawn(async move {
+            sender.send(future.await).expect("send cloud backup runtime result");
+        });
+        receiver.recv().expect("receive cloud backup runtime result")
     }
 
     #[test]
@@ -2421,16 +2454,30 @@ mod tests {
             total: Some(3),
         };
 
-        let error = manager
-            .set_restore_progress_for_restore_operation(&stale_operation, Some(progress.clone()))
-            .unwrap_err();
+        let error = run_on_cloud_backup_runtime({
+            let manager = manager.clone();
+            let progress = progress.clone();
+            async move {
+                manager
+                    .set_restore_progress_for_restore_operation(&stale_operation, Some(progress))
+                    .await
+                    .unwrap_err()
+            }
+        });
 
         assert!(matches!(error, CloudBackupError::Cancelled));
         assert_eq!(manager.state.read().restore_progress, None);
 
-        manager
-            .set_restore_progress_for_restore_operation(&current_operation, Some(progress.clone()))
-            .unwrap();
+        run_on_cloud_backup_runtime({
+            let manager = manager.clone();
+            let progress = progress.clone();
+            async move {
+                manager
+                    .set_restore_progress_for_restore_operation(&current_operation, Some(progress))
+                    .await
+                    .unwrap()
+            }
+        });
 
         assert_eq!(manager.state.read().restore_progress, Some(progress));
     }
@@ -2442,16 +2489,34 @@ mod tests {
         let stale_operation = new_restore_operation(&manager);
         let current_operation = new_restore_operation(&manager);
 
-        let error = manager
-            .set_status_for_restore_operation(&stale_operation, CloudBackupStatus::Restoring)
-            .unwrap_err();
+        let error = run_on_cloud_backup_runtime({
+            let manager = manager.clone();
+            async move {
+                manager
+                    .set_status_for_restore_operation(
+                        &stale_operation,
+                        CloudBackupStatus::Restoring,
+                    )
+                    .await
+                    .unwrap_err()
+            }
+        });
 
         assert!(matches!(error, CloudBackupError::Cancelled));
         assert_eq!(manager.state.read().status, CloudBackupStatus::Disabled);
 
-        manager
-            .set_status_for_restore_operation(&current_operation, CloudBackupStatus::Restoring)
-            .unwrap();
+        run_on_cloud_backup_runtime({
+            let manager = manager.clone();
+            async move {
+                manager
+                    .set_status_for_restore_operation(
+                        &current_operation,
+                        CloudBackupStatus::Restoring,
+                    )
+                    .await
+                    .unwrap()
+            }
+        });
 
         assert_eq!(manager.state.read().status, CloudBackupStatus::Restoring);
     }
@@ -2470,16 +2535,30 @@ mod tests {
             labels_failed_errors: Vec::new(),
         };
 
-        let error = manager
-            .set_restore_report_for_restore_operation(&stale_operation, Some(report.clone()))
-            .unwrap_err();
+        let error = run_on_cloud_backup_runtime({
+            let manager = manager.clone();
+            let report = report.clone();
+            async move {
+                manager
+                    .set_restore_report_for_restore_operation(&stale_operation, Some(report))
+                    .await
+                    .unwrap_err()
+            }
+        });
 
         assert!(matches!(error, CloudBackupError::Cancelled));
         assert_eq!(manager.state.read().restore_report, None);
 
-        manager
-            .set_restore_report_for_restore_operation(&current_operation, Some(report.clone()))
-            .unwrap();
+        run_on_cloud_backup_runtime({
+            let manager = manager.clone();
+            let report = report.clone();
+            async move {
+                manager
+                    .set_restore_report_for_restore_operation(&current_operation, Some(report))
+                    .await
+                    .unwrap()
+            }
+        });
 
         assert_eq!(manager.state.read().restore_report, Some(report));
     }
@@ -2499,25 +2578,39 @@ mod tests {
             ..PersistedCloudBackupState::default()
         };
 
-        let error = manager
-            .persist_cloud_backup_state_for_restore_operation(
-                &stale_operation,
-                &persisted_state,
-                "test stale restore persist",
-            )
-            .unwrap_err();
+        let error = run_on_cloud_backup_runtime({
+            let manager = manager.clone();
+            let persisted_state = persisted_state.clone();
+            async move {
+                manager
+                    .persist_cloud_backup_state_for_restore_operation(
+                        &stale_operation,
+                        &persisted_state,
+                        "test stale restore persist",
+                    )
+                    .await
+                    .unwrap_err()
+            }
+        });
 
         assert!(matches!(error, CloudBackupError::Cancelled));
         assert_eq!(db.cloud_backup_state.get().unwrap(), PersistedCloudBackupState::default());
         assert_eq!(manager.state.read().status, CloudBackupStatus::Disabled);
 
-        manager
-            .persist_cloud_backup_state_for_restore_operation(
-                &current_operation,
-                &persisted_state,
-                "test current restore persist",
-            )
-            .unwrap();
+        run_on_cloud_backup_runtime({
+            let manager = manager.clone();
+            let persisted_state = persisted_state.clone();
+            async move {
+                manager
+                    .persist_cloud_backup_state_for_restore_operation(
+                        &current_operation,
+                        &persisted_state,
+                        "test current restore persist",
+                    )
+                    .await
+                    .unwrap()
+            }
+        });
 
         assert_eq!(db.cloud_backup_state.get().unwrap(), persisted_state);
         assert_eq!(manager.state.read().status, CloudBackupStatus::Enabled);
@@ -2531,27 +2624,24 @@ mod tests {
 
         invalidate_restore_operation(&manager);
 
-        let error = manager.ensure_current_restore_operation(&operation).unwrap_err();
+        let error = run_on_cloud_backup_runtime({
+            let manager = manager.clone();
+            async move { manager.ensure_current_restore_operation(&operation).await.unwrap_err() }
+        });
         assert!(matches!(error, CloudBackupError::Cancelled));
     }
 
     #[test]
-    fn stale_restore_operation_does_not_run_locked_update() {
+    fn stale_restore_operation_rejects_current_check() {
         let _guard = test_lock().lock();
         let manager = init_manager();
         let stale_operation = new_restore_operation(&manager);
         let _current_operation = new_restore_operation(&manager);
-        let mut ran = false;
-
-        let error = stale_operation
-            .run_result(|| {
-                ran = true;
-                Ok(())
-            })
-            .unwrap_err();
+        let error = run_on_cloud_backup_runtime(async move {
+            stale_operation.ensure_current().await.unwrap_err()
+        });
 
         assert!(matches!(error, CloudBackupError::Cancelled));
-        assert!(!ran);
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -1,6 +1,5 @@
 use std::sync::Arc;
-
-use parking_lot::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Captured generation value that can cross async and platform boundaries
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Record)]
@@ -8,9 +7,14 @@ pub struct GenerationToken {
     pub value: u64,
 }
 
-/// Shared source of truth for the current generation
+/// Shared source of truth for stale async-work tokens
+///
+/// A generation token only answers whether work was started before the latest
+/// invalidation. It does not serialize later state mutations; owners of the
+/// mutated state must check the token and apply changes at their own
+/// serialization boundary.
 #[derive(Debug, Clone, Default, uniffi::Object)]
-pub struct GenerationTracker(Arc<Mutex<u64>>);
+pub struct GenerationTracker(Arc<AtomicU64>);
 
 /// Rust-owned pairing of a shared tracker and this operation's captured token
 #[derive(Debug, Clone)]
@@ -28,53 +32,17 @@ impl GenerationTracker {
     pub fn invalidate(&self) {
         let _ = self.advance();
     }
-
-    #[must_use]
-    pub fn run_if_current<T>(
-        &self,
-        captured_token: GenerationToken,
-        update: impl FnOnce() -> T,
-    ) -> Option<T> {
-        let current = self.0.lock();
-        if *current != captured_token.value {
-            return None;
-        }
-
-        Some(update())
-    }
-
-    #[must_use]
-    pub fn run_result_if_current<T, E>(
-        &self,
-        captured_token: GenerationToken,
-        update: impl FnOnce() -> Result<T, E>,
-    ) -> Option<Result<T, E>> {
-        let current = self.0.lock();
-        if *current != captured_token.value {
-            return None;
-        }
-
-        Some(update())
-    }
 }
 
 impl GenerationClaim {
     #[must_use]
+    pub fn token(&self) -> GenerationToken {
+        self.captured_token
+    }
+
+    #[must_use]
     pub fn is_current(&self) -> bool {
         self.shared_tracker.is_current(self.captured_token)
-    }
-
-    #[must_use]
-    pub fn run_if_current<T>(&self, update: impl FnOnce() -> T) -> Option<T> {
-        self.shared_tracker.run_if_current(self.captured_token, update)
-    }
-
-    #[must_use]
-    pub fn run_result_if_current<T, E>(
-        &self,
-        update: impl FnOnce() -> Result<T, E>,
-    ) -> Option<Result<T, E>> {
-        self.shared_tracker.run_result_if_current(self.captured_token, update)
     }
 }
 
@@ -88,20 +56,19 @@ impl GenerationTracker {
 
     #[must_use]
     pub fn advance(&self) -> GenerationToken {
-        let mut current = self.0.lock();
-        *current = current.wrapping_add(1);
+        let value = self.0.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
 
-        GenerationToken { value: *current }
+        GenerationToken { value }
     }
 
     #[must_use]
     pub fn capture(&self) -> GenerationToken {
-        GenerationToken { value: *self.0.lock() }
+        GenerationToken { value: self.0.load(Ordering::Relaxed) }
     }
 
     #[must_use]
     pub fn is_current(&self, captured_token: GenerationToken) -> bool {
-        *self.0.lock() == captured_token.value
+        self.0.load(Ordering::Relaxed) == captured_token.value
     }
 }
 
@@ -128,27 +95,6 @@ mod tests {
     }
 
     #[test]
-    fn stale_token_does_not_run_update() {
-        let tracker = GenerationTracker::new();
-        let stale_token = tracker.capture();
-        let _ = tracker.advance();
-
-        let result = tracker.run_if_current(stale_token, || 1);
-
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn current_token_runs_result_update() {
-        let tracker = GenerationTracker::new();
-        let token = tracker.advance();
-
-        let result = tracker.run_result_if_current(token, || Ok::<_, ()>(1));
-
-        assert_eq!(result, Some(Ok(1)));
-    }
-
-    #[test]
     fn claim_is_current_until_tracker_advances() {
         let tracker = GenerationTracker::new();
         let claim = tracker.claim();
@@ -158,16 +104,5 @@ mod tests {
         tracker.invalidate();
 
         assert!(!claim.is_current());
-    }
-
-    #[test]
-    fn stale_claim_does_not_run_update() {
-        let tracker = GenerationTracker::new();
-        let claim = tracker.claim();
-        tracker.invalidate();
-
-        let result = claim.run_if_current(|| 1);
-
-        assert_eq!(result, None);
     }
 }

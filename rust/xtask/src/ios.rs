@@ -398,9 +398,9 @@ pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Res
         color_eyre::eyre::bail!("xcodebuild command not found");
     }
 
-    sh.change_dir("../ios");
-
     let api_credentials = TestflightApiCredentials::from_options(&sh, &options)?;
+
+    sh.change_dir("../ios");
 
     let archive_path = temp_artifact_path("Cove-TestFlight", "xcarchive")?;
     let export_path = temp_artifact_path("Cove-TestFlight-export", "ipa")?;

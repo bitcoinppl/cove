@@ -88,8 +88,8 @@ impl MockKeychain {
     }
 
     pub(crate) fn fail_save_at(&self, save_attempt: usize) {
-        *self.fail_save_at.lock() = Some(save_attempt);
         *self.save_count.lock() = 0;
+        *self.fail_save_at.lock() = Some(save_attempt);
     }
 }
 

@@ -142,7 +142,7 @@ where
     Ok(count)
 }
 
-pub(super) fn verify_all_source_tables_copied(
+pub(crate) fn verify_all_source_tables_copied(
     src_db: &redb::Database,
     dst_db: &redb::Database,
 ) -> Result<()> {
