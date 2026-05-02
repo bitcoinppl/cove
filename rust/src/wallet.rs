@@ -255,6 +255,10 @@ impl Wallet {
     /// Create a new watch-only wallet from the given xpub
     pub fn try_new_persisted_from_xpub(xpub: String) -> Result<Self, WalletError> {
         let xpub = xpub.trim();
+        if let Some(error) = xpub::XpubError::unsupported_slip132_prefix(xpub) {
+            return Err(WalletError::ParseXpubError(error));
+        }
+
         let hardware_export = pubport::Format::try_new_from_str(xpub)
             .map_err(Into::into)
             .map_err(WalletError::ParseXpubError);
@@ -739,6 +743,23 @@ mod tests {
 
         let _ = delete_wallet_specific_data(&metadata.id);
         assert_eq!("73c5da0a", fingerprint.as_str());
+    }
+
+    #[test]
+    fn importing_slip132_xpub_returns_actionable_error() {
+        let zpub = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+
+        let message = match Wallet::try_new_persisted_from_xpub(zpub.to_string()).unwrap_err() {
+            WalletError::ParseXpubError(xpub::XpubError::InvalidXpub(message)) => message,
+            error => panic!("unexpected error: {error}"),
+        };
+
+        assert!(message.contains("zpub"));
+        assert!(message.contains("SLIP-132"));
+        assert!(message.contains("BIP32"));
+        assert!(message.contains("xpub"));
+        assert!(message.contains("public descriptors"));
+        assert!(!message.contains("magic bytes"));
     }
 }
 

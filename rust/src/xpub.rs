@@ -22,6 +22,21 @@ pub enum XpubError {
     InvalidXpub(String),
 }
 
+impl XpubError {
+    pub(crate) fn unsupported_slip132_prefix(input: &str) -> Option<Self> {
+        let prefix = input.get(..4)?;
+
+        match prefix {
+            "ypub" | "zpub" | "Ypub" | "Zpub" | "upub" | "vpub" | "Upub" | "Vpub" => {
+                Some(Self::InvalidXpub(format!(
+                    "{prefix} is a SLIP-132 extended public key. Cove currently accepts BIP32 xpub/tpub keys or public descriptors."
+                )))
+            }
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum DescriptorError {
