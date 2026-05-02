@@ -56,6 +56,16 @@ struct WalletSettingsView: View {
                 }
                 .font(.subheadline)
 
+                if let birthday = metadata.birthday {
+                    HStack {
+                        Text("Birthday")
+                        Spacer()
+                        Text(birthday.displayValue)
+                            .foregroundColor(.secondary)
+                    }
+                    .font(.subheadline)
+                }
+
                 if let masterFingerprint = manager.rust.masterFingerprint(), !metadata.isTapSigner() {
                     HStack {
                         Text("Fingerprint")
@@ -221,6 +231,18 @@ struct WalletSettingsView: View {
         .onDisappear { manager.validateMetadata() }
         .onAppear { manager.validateMetadata() }
         .scrollContentBackground(.hidden)
+    }
+}
+
+private extension WalletBirthday {
+    var displayValue: String {
+        switch self {
+        case let .blockHeight(height):
+            "Block \(height.formatted(.number.grouping(.automatic)))"
+        case let .timestamp(timestamp):
+            Date(timeIntervalSince1970: TimeInterval(timestamp))
+                .formatted(date: .abbreviated, time: .omitted)
+        }
     }
 }
 

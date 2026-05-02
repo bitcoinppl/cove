@@ -64,11 +64,17 @@ import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
+import org.bitcoinppl.cove_core.WalletBirthday
 import org.bitcoinppl.cove_core.WalletColor
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.defaultWalletColors
+import java.math.BigInteger
+import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -179,6 +185,14 @@ fun WalletSettingsScreen(
                             subtitle = metadata.network.toString(),
                         )
                         MaterialDivider()
+
+                        metadata.birthday?.let { birthday ->
+                            MaterialSettingsItem(
+                                title = stringResource(R.string.label_wallet_birthday),
+                                subtitle = birthday.displayValue(),
+                            )
+                            MaterialDivider()
+                        }
 
                         // show fingerprint for non-TapSigner wallets
                         val hardwareMeta = metadata.hardwareMetadata
@@ -388,6 +402,19 @@ fun WalletSettingsScreen(
         )
     }
 }
+
+private fun WalletBirthday.displayValue(): String =
+    when (this) {
+        is WalletBirthday.BlockHeight -> {
+            val height = NumberFormat.getIntegerInstance(Locale.getDefault()).format(BigInteger(v1.toString()))
+            "Block $height"
+        }
+
+        is WalletBirthday.Timestamp -> {
+            val date = Date(v1.toLong() * 1000)
+            SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(date)
+        }
+    }
 
 @Composable
 private fun WalletColorSelector(
