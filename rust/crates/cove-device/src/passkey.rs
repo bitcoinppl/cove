@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
+use minicbor::decode::{Decode, Decoder, Error as DecodeError};
 use once_cell::sync::OnceCell;
 use tracing::warn;
 
 static REF: OnceCell<PasskeyAccess> = OnceCell::new();
+const AUTH_DATA_FIELD: &str = "authData";
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -235,21 +237,57 @@ fn extract_aaguid_from_attestation_object(
 }
 
 fn attestation_auth_data(attestation_object: &[u8]) -> Result<&[u8], PasskeyFailureReason> {
-    let mut decoder = minicbor::Decoder::new(attestation_object);
-    let Some(map_len) = decoder.map().map_err(|_| PasskeyFailureReason::MalformedResponse)? else {
-        return Err(PasskeyFailureReason::MalformedResponse);
-    };
+    let mut decoder = Decoder::new(attestation_object);
+    let attestation_object = AttestationObject::decode(&mut decoder, &mut ())
+        .map_err(|_| PasskeyFailureReason::MalformedResponse)?;
 
-    for _ in 0..map_len {
-        let key = decoder.str().map_err(|_| PasskeyFailureReason::MalformedResponse)?;
-        if key == "authData" {
-            return decoder.bytes().map_err(|_| PasskeyFailureReason::MalformedResponse);
+    Ok(attestation_object.auth_data)
+}
+
+struct AttestationObject<'a> {
+    auth_data: &'a [u8],
+}
+
+impl<'b, C> Decode<'b, C> for AttestationObject<'b> {
+    fn decode(decoder: &mut Decoder<'b>, _: &mut C) -> Result<Self, DecodeError> {
+        let Some(map_len) = decoder.map()? else {
+            return Err(DecodeError::message("indefinite attestation object"));
+        };
+
+        let mut auth_data = None;
+        for _ in 0..map_len {
+            match AttestationObjectField::from_key(decoder.str()?) {
+                AttestationObjectField::AuthData => {
+                    if auth_data.is_some() {
+                        return Err(DecodeError::message("duplicate authData"));
+                    }
+
+                    auth_data = Some(decoder.bytes()?);
+                }
+                AttestationObjectField::Unknown => decoder.skip()?,
+            }
         }
 
-        decoder.skip().map_err(|_| PasskeyFailureReason::MalformedResponse)?;
-    }
+        let Some(auth_data) = auth_data else {
+            return Err(DecodeError::message("missing authData"));
+        };
 
-    Err(PasskeyFailureReason::MalformedResponse)
+        Ok(Self { auth_data })
+    }
+}
+
+enum AttestationObjectField {
+    AuthData,
+    Unknown,
+}
+
+impl AttestationObjectField {
+    fn from_key(key: &str) -> Self {
+        match key {
+            AUTH_DATA_FIELD => Self::AuthData,
+            _ => Self::Unknown,
+        }
+    }
 }
 
 fn extract_aaguid_from_auth_data(auth_data: &[u8]) -> Result<String, PasskeyFailureReason> {
@@ -283,6 +321,39 @@ fn format_aaguid(aaguid: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn attestation_object(auth_data: &[u8]) -> Vec<u8> {
+        let mut cbor = Vec::new();
+        let mut encoder = minicbor::Encoder::new(&mut cbor);
+        encoder.map(3).unwrap();
+        encoder.str("fmt").unwrap();
+        encoder.str("none").unwrap();
+        encoder.str(AUTH_DATA_FIELD).unwrap();
+        encoder.bytes(auth_data).unwrap();
+        encoder.str("attStmt").unwrap();
+        encoder.map(0).unwrap();
+
+        cbor
+    }
+
+    #[test]
+    fn extracts_auth_data_from_attestation_object() {
+        let auth_data = [1, 2, 3, 4];
+        let attestation_object = attestation_object(&auth_data);
+
+        assert_eq!(attestation_auth_data(&attestation_object).unwrap(), auth_data);
+    }
+
+    #[test]
+    fn rejects_attestation_object_without_auth_data() {
+        let mut cbor = Vec::new();
+        let mut encoder = minicbor::Encoder::new(&mut cbor);
+        encoder.map(1).unwrap();
+        encoder.str("fmt").unwrap();
+        encoder.str("none").unwrap();
+
+        assert_eq!(attestation_auth_data(&cbor), Err(PasskeyFailureReason::MalformedResponse));
+    }
 
     #[test]
     fn extracts_aaguid_from_auth_data() {
