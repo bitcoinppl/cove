@@ -100,8 +100,8 @@ impl GenerationTracker {
     }
 
     #[must_use]
-    pub fn is_current(&self, token: GenerationToken) -> bool {
-        *self.0.lock() == token.value
+    pub fn is_current(&self, captured_token: GenerationToken) -> bool {
+        *self.0.lock() == captured_token.value
     }
 }
 

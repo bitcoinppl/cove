@@ -375,7 +375,7 @@ private let sidebarNavigationDelayMs = 250
     }
 
     private func isNavigationGenerationCurrent(_ generation: GenerationToken) -> Bool {
-        navigationGenerations.isCurrent(token: generation)
+        navigationGenerations.isCurrent(capturedToken: generation)
     }
 
     func agreeToTerms() {

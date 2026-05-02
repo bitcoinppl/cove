@@ -527,7 +527,7 @@ public protocol GenerationTrackerProtocol: AnyObject, Sendable {
     
     func capture()  -> GenerationToken
     
-    func isCurrent(token: GenerationToken)  -> Bool
+    func isCurrent(capturedToken: GenerationToken)  -> Bool
     
 }
 /**
@@ -609,11 +609,11 @@ open func capture() -> GenerationToken  {
 })
 }
     
-open func isCurrent(token: GenerationToken) -> Bool  {
+open func isCurrent(capturedToken: GenerationToken) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_util_fn_method_generationtracker_is_current(
             self.uniffiCloneHandle(),
-        FfiConverterTypeGenerationToken_lower(token),$0
+        FfiConverterTypeGenerationToken_lower(capturedToken),$0
     )
 })
 }
@@ -826,7 +826,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_util_checksum_method_generationtracker_capture() != 44477) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_util_checksum_method_generationtracker_is_current() != 56589) {
+    if (uniffi_cove_util_checksum_method_generationtracker_is_current() != 28139) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_util_checksum_constructor_generationtracker_new() != 38534) {

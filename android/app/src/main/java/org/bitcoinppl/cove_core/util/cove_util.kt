@@ -680,7 +680,7 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_util_fn_method_generationtracker_capture(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_cove_util_fn_method_generationtracker_is_current(`ptr`: Long,`token`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_method_generationtracker_is_current(`ptr`: Long,`capturedToken`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_cove_util_fn_func_generaterandomchaincode(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -827,7 +827,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_util_checksum_method_generationtracker_capture() != 44477.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_util_checksum_method_generationtracker_is_current() != 56589.toShort()) {
+    if (lib.uniffi_cove_util_checksum_method_generationtracker_is_current() != 28139.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_util_checksum_constructor_generationtracker_new() != 38534.toShort()) {
@@ -1217,7 +1217,7 @@ public interface GenerationTrackerInterface {
     
     fun `capture`(): GenerationToken
     
-    fun `isCurrent`(`token`: GenerationToken): kotlin.Boolean
+    fun `isCurrent`(`capturedToken`: GenerationToken): kotlin.Boolean
     
     companion object
 }
@@ -1360,13 +1360,13 @@ open class GenerationTracker: Disposable, AutoCloseable, GenerationTrackerInterf
     }
     
 
-    override fun `isCurrent`(`token`: GenerationToken): kotlin.Boolean {
+    override fun `isCurrent`(`capturedToken`: GenerationToken): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_util_fn_method_generationtracker_is_current(
         it,
-        FfiConverterTypeGenerationToken.lower(`token`),_status)
+        FfiConverterTypeGenerationToken.lower(`capturedToken`),_status)
 }
     }
     )
