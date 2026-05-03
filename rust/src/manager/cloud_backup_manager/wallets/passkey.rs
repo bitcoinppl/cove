@@ -14,8 +14,8 @@ use cove_tokio::unblock;
 use rand::RngExt as _;
 use tracing::{debug, info, warn};
 
-use super::super::{CloudBackupError, PASSKEY_RP_ID};
 use super::UnpersistedPrfKey;
+use crate::manager::cloud_backup_manager::{CloudBackupError, PASSKEY_RP_ID};
 
 async fn delay_before_new_passkey_auth() {
     let delay = Duration::from_secs(3);

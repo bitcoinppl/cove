@@ -4,8 +4,6 @@ use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
-use super::super::RustCloudBackupManager;
-use super::super::wallets::WalletBackupReader;
 use super::PendingUploadVerificationStatus;
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -13,6 +11,8 @@ use crate::database::cloud_backup::{
     CloudBlobUploadedPendingConfirmationState, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
+use crate::manager::cloud_backup_manager::RustCloudBackupManager;
+use crate::manager::cloud_backup_manager::wallets::WalletBackupReader;
 
 enum BlobCheckResult {
     Confirmed,

@@ -8,12 +8,12 @@ use rand::RngExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
-use super::super::{
-    CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID, RustCloudBackupManager,
-    cspp_master_key_record_id,
-};
 use crate::manager::cloud_backup_manager::wallets::{
     PasskeyMaterialAcquirer, WalletBackupLookup, WalletBackupReader,
+};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID, RustCloudBackupManager,
+    cspp_master_key_record_id,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

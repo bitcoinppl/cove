@@ -1186,9 +1186,6 @@ mod tests {
         PasskeyOperation,
     };
 
-    use super::super::keychain::{
-        CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, CloudBackupKeychainError,
-    };
     use super::test_support::*;
     use super::*;
     use crate::database::Database;
@@ -1199,6 +1196,9 @@ mod tests {
         PersistedCloudBlobSyncState,
     };
     use crate::label_manager::LabelManager;
+    use crate::manager::cloud_backup_manager::keychain::{
+        CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, CloudBackupKeychainError,
+    };
     use crate::manager::cloud_backup_manager::{
         CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupKeychain, DeepVerificationResult,
         VerificationFailureKind, VerificationState, runtime_actor::SyncHealthRuntimeState,
@@ -1231,7 +1231,7 @@ mod tests {
                 kind: CloudUploadKind::BackupBlob,
                 namespace_id,
                 wallet_id: None,
-                record_id: super::super::cspp_master_key_record_id(),
+                record_id: crate::manager::cloud_backup_manager::cspp_master_key_record_id(),
                 state: PersistedCloudBlobState::UploadedPendingConfirmation(
                     CloudBlobUploadedPendingConfirmationState {
                         revision_hash: "master-key-wrapper".into(),
@@ -2383,7 +2383,7 @@ mod tests {
         ));
 
         assert_test_condition_stays_true(
-            super::super::LIVE_UPLOAD_DEBOUNCE + Duration::from_secs(1),
+            crate::manager::cloud_backup_manager::LIVE_UPLOAD_DEBOUNCE + Duration::from_secs(1),
             "non-retryable upload should not retry without restart",
             || globals.cloud.wallet_backup_upload_attempt_count() == 1,
         )

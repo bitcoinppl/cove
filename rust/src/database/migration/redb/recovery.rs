@@ -61,37 +61,12 @@ fn recover_promoted_database(
     rename_context: &str,
     verification_warning: &str,
 ) -> Result<()> {
-    if paths.tmp.exists() && !paths.dest.exists() {
-        if paths.source.exists() {
-            let tmp = paths.tmp.display();
-            info!("Removing unpromoted migration temp at {tmp}; source still exists");
-            super::super::log_remove_file(&paths.tmp);
-        } else {
-            match super::verify_encrypted_redb_db(&paths.tmp) {
-                Ok(true) => {
-                    std::fs::rename(&paths.tmp, &paths.dest)
-                        .with_context(|| rename_context.to_string())?;
-                }
-                _ => {
-                    let tmp = paths.tmp.display();
-                    warn!("Migration temp at {tmp} failed verification and no source exists");
-                }
-            }
-        }
-    } else if paths.tmp.exists() {
-        if paths.source.exists() || matches!(super::verify_encrypted_redb_db(&paths.dest), Ok(true))
-        {
-            super::super::log_remove_file(&paths.tmp);
-        } else {
-            let tmp = paths.tmp.display();
-            warn!("Preserving migration temp at {tmp} because destination failed verification");
-        }
-    }
+    recover_promoted_tmp(paths, rename_context)?;
 
     // clean up leftover plaintext only after verifying encrypted version works
     if paths.source.exists() && paths.dest.exists() {
         match super::verify_encrypted_redb_db(&paths.dest) {
-            Ok(true) => super::super::log_remove_file(&paths.source),
+            Ok(true) => crate::database::migration::log_remove_file(&paths.source),
             Ok(false) => {
                 warn!("{verification_warning}");
 
@@ -104,6 +79,43 @@ fn recover_promoted_database(
     }
 
     Ok(())
+}
+
+fn recover_promoted_tmp(paths: &DatabasePaths, rename_context: &str) -> Result<()> {
+    if !paths.tmp.exists() {
+        return Ok(());
+    }
+
+    if !paths.dest.exists() {
+        return recover_promoted_tmp_without_dest(paths, rename_context);
+    }
+
+    if paths.source.exists() || matches!(super::verify_encrypted_redb_db(&paths.dest), Ok(true)) {
+        crate::database::migration::log_remove_file(&paths.tmp);
+        return Ok(());
+    }
+
+    let tmp = paths.tmp.display();
+    warn!("Preserving migration temp at {tmp} because destination failed verification");
+
+    Ok(())
+}
+
+fn recover_promoted_tmp_without_dest(paths: &DatabasePaths, rename_context: &str) -> Result<()> {
+    if paths.source.exists() {
+        let tmp = paths.tmp.display();
+        info!("Removing unpromoted migration temp at {tmp}; source still exists");
+        crate::database::migration::log_remove_file(&paths.tmp);
+        return Ok(());
+    }
+
+    if !matches!(super::verify_encrypted_redb_db(&paths.tmp), Ok(true)) {
+        let tmp = paths.tmp.display();
+        warn!("Migration temp at {tmp} failed verification and no source exists");
+        return Ok(());
+    }
+
+    std::fs::rename(&paths.tmp, &paths.dest).with_context(|| rename_context.to_string())
 }
 
 /// Legacy recovery for old-style .bak/.enc.tmp files from the previous migration code
@@ -130,11 +142,11 @@ pub(super) fn recover_legacy_at_path(db_path: &Path) -> Result<()> {
             Ok(true) => {
                 std::fs::rename(&tmp_path, db_path)
                     .context(format!("failed to finish interrupted legacy migration at {path}"))?;
-                super::super::log_remove_file(&bak_path);
+                crate::database::migration::log_remove_file(&bak_path);
             }
             _ => {
                 warn!("Legacy .enc.tmp at {path} is corrupt, restoring from backup");
-                super::super::log_remove_file(&tmp_path);
+                crate::database::migration::log_remove_file(&tmp_path);
                 std::fs::rename(&bak_path, db_path)
                     .context(format!("failed to restore from legacy backup at {path}"))?;
             }
@@ -159,12 +171,12 @@ pub(super) fn recover_legacy_at_path(db_path: &Path) -> Result<()> {
     }
 
     if tmp_path.exists() {
-        super::super::log_remove_file(&tmp_path);
+        crate::database::migration::log_remove_file(&tmp_path);
     }
 
     if bak_path.exists() && db_path.exists() {
         match super::verify_encrypted_redb_db(db_path) {
-            Ok(true) => super::super::log_remove_file(&bak_path),
+            Ok(true) => crate::database::migration::log_remove_file(&bak_path),
             Ok(false) => {
                 let path = db_path.display();
                 warn!("Encrypted DB at {path} appears corrupt, restoring from legacy backup");

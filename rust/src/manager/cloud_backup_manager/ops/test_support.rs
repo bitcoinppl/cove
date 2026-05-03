@@ -21,13 +21,16 @@ use parking_lot::Mutex;
 use sha2::Digest as _;
 use strum::IntoEnumIterator as _;
 
-use super::super::CloudBackupKeychain;
 use super::*;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue, CloudBlobUploadingState,
     CloudUploadKind, PersistedCloudBackupState, PersistedCloudBackupStatus,
     PersistedCloudBlobState, PersistedCloudBlobSyncState,
+};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupKeychain, cloud_backup_test_lock, ensure_cloud_backup_test_tokio_runtime,
+    runtime_actor::RestoreOperation,
 };
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
@@ -542,7 +545,7 @@ impl TestGlobals {
 }
 
 pub(crate) fn init_test_runtime() {
-    super::super::ensure_cloud_backup_test_tokio_runtime();
+    ensure_cloud_backup_test_tokio_runtime();
 }
 
 pub(crate) fn test_globals() -> &'static TestGlobals {
@@ -552,7 +555,7 @@ pub(crate) fn test_globals() -> &'static TestGlobals {
 }
 
 pub(crate) fn test_lock() -> &'static parking_lot::Mutex<()> {
-    super::super::cloud_backup_test_lock()
+    cloud_backup_test_lock()
 }
 
 fn clear_local_wallets() {
@@ -919,7 +922,7 @@ pub(crate) async fn run_wallet_upload_for_test_async(
 
 pub(crate) async fn new_restore_operation_for_test(
     manager: &RustCloudBackupManager,
-) -> super::super::runtime_actor::RestoreOperation {
+) -> RestoreOperation {
     call!(manager.runtime.new_restore_operation()).await.expect("create restore operation")
 }
 

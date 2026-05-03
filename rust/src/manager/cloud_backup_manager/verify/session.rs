@@ -9,7 +9,10 @@ use futures::stream::{self, StreamExt as _, TryStreamExt as _};
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
-use super::super::{
+use super::passkey_auth::PasskeyAuthOutcome;
+use super::wrapper_repair::{WrapperRepairError, WrapperRepairOperation, WrapperRepairStrategy};
+use crate::manager::cloud_backup_manager::pending::remote_wallet_revision_matches;
+use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError, CloudBackupKeychain,
     DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, PASSKEY_RP_ID,
     PendingVerificationCompletion, PendingVerificationUpload, RustCloudBackupManager,
@@ -17,9 +20,6 @@ use super::super::{
     cloud_inventory::CloudWalletInventory,
     wallets::{WalletBackupLookup, WalletBackupReader, prepare_wallet_backup},
 };
-use super::passkey_auth::PasskeyAuthOutcome;
-use super::wrapper_repair::{WrapperRepairError, WrapperRepairOperation, WrapperRepairStrategy};
-use crate::manager::cloud_backup_manager::pending::remote_wallet_revision_matches;
 
 const RECREATE_WARNING: &str = "Recreating from this device will remove references to wallets that only exist in the cloud backup";
 const REINITIALIZE_WARNING: &str = "This will replace your entire cloud backup set. Wallets that only exist in the cloud backup will be lost";

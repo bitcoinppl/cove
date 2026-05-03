@@ -2,11 +2,11 @@ use cove_device::cloud_storage::CloudStorage;
 use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 
-use super::super::CloudBackupKeychain;
-use super::super::cloud_inventory::CloudWalletInventory;
-use super::super::wallets::count_all_wallets;
 use super::{CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager};
 use crate::database::Database;
+use crate::manager::cloud_backup_manager::CloudBackupKeychain;
+use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
+use crate::manager::cloud_backup_manager::wallets::count_all_wallets;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BackupIntegrityIssue {

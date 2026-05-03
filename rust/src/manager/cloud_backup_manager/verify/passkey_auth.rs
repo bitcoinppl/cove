@@ -3,8 +3,8 @@ use cove_tokio::unblock;
 use rand::RngExt as _;
 use tracing::info;
 
-use super::super::{CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID};
 use super::session::VerificationSession;
+use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID};
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct AuthenticatedPasskey {

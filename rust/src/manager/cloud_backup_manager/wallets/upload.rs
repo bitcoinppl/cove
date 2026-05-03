@@ -14,12 +14,12 @@ use cove_util::ResultExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
-use super::super::ops::load_master_key_for_cloud_action;
-use super::super::{CloudBackupError, RustCloudBackupManager};
 use super::{
     PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, all_local_wallets,
     persist_enabled_cloud_backup_state, prepare_wallet_backup,
 };
+use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
+use crate::manager::cloud_backup_manager::{CloudBackupError, RustCloudBackupManager};
 
 const STALE_UPLOADING_RETRY_THRESHOLD_SECS: u64 = 60;
 

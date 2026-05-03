@@ -9,10 +9,10 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tracing::warn;
 
-use super::super::LocalWalletSecret;
 use super::{CloudBackupError, LocalWalletMode, MAX_CLOUD_LABELS_SIZE, PreparedWalletBackup};
 use crate::backup::model::DescriptorPair as LocalDescriptorPair;
 use crate::label_manager::LabelManager;
+use crate::manager::cloud_backup_manager::LocalWalletSecret;
 use crate::mnemonic::MnemonicExt as _;
 use crate::wallet::{
     WalletAddressType,
