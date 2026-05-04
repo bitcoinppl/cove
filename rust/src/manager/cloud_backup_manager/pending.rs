@@ -82,7 +82,8 @@ impl RustCloudBackupManager {
 
         if starts_master_key_grace {
             send!(
-                self.runtime.start_master_key_upload_confirmation_grace(namespace_id.to_string())
+                self.supervisor
+                    .start_master_key_upload_confirmation_grace(namespace_id.to_string())
             );
         }
 
@@ -118,7 +119,7 @@ impl RustCloudBackupManager {
 
         if current_state.wallet_id.is_none() {
             send!(
-                self.runtime
+                self.supervisor
                     .start_master_key_upload_confirmation_grace(current_state.namespace_id.clone())
             );
         }
@@ -188,7 +189,7 @@ impl RustCloudBackupManager {
     }
 
     pub(super) fn start_pending_upload_verification_loop(&self) {
-        send!(self.runtime.ensure_pending_upload_verification_loop());
+        send!(self.supervisor.ensure_pending_upload_verification_loop());
     }
 
     pub(crate) async fn verify_pending_uploads_once(&self) -> PendingUploadVerificationStatus {
@@ -196,7 +197,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn wake_pending_upload_verifier(&self) {
-        send!(self.runtime.wake_pending_upload_verifier());
+        send!(self.supervisor.wake_pending_upload_verifier());
     }
 }
 

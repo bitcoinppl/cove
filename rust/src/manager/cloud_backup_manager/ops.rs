@@ -15,7 +15,7 @@ use super::wallets::{
     persist_enabled_cloud_backup_state_reset_verification, upload_all_wallets,
 };
 
-use super::runtime_actor::RestoredPasskeyMaterial;
+use super::workers::RestoredPasskeyMaterial;
 use super::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupKeychain,
     CloudBackupPasskeyChoiceFlow, CloudBackupRestoreProgress, CloudBackupRestoreReport,
@@ -1283,7 +1283,7 @@ mod tests {
     use crate::manager::cloud_backup_manager::{
         CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupKeychain,
         CloudBackupPromptIntent, DeepVerificationResult, VerificationFailureKind,
-        VerificationState, runtime_actor::SyncHealthRuntimeState,
+        VerificationState, workers::SyncHealthWorkerState,
     };
     use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
     use crate::manager::wallet_manager::RustWalletManager;
@@ -2233,7 +2233,7 @@ mod tests {
         let discover_count = globals.passkey.discover_count();
         let authenticate_count = globals.passkey.authenticate_count();
 
-        call!(manager.runtime.start_enter_detail()).await.unwrap();
+        call!(manager.supervisor.start_enter_detail()).await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         assert_eq!(globals.passkey.discover_count(), discover_count);
@@ -2262,7 +2262,7 @@ mod tests {
 
         let discover_count = globals.passkey.discover_count();
 
-        call!(manager.runtime.start_enter_detail()).await.unwrap();
+        call!(manager.supervisor.start_enter_detail()).await.unwrap();
         wait_for_discover_count(globals, discover_count + 1).await;
 
         assert_eq!(globals.passkey.discover_count(), discover_count + 1);
@@ -2923,7 +2923,7 @@ mod tests {
         );
 
         assert_eq!(
-            manager.compute_sync_health(SyncHealthRuntimeState::default()).await,
+            manager.compute_sync_health(SyncHealthWorkerState::default()).await,
             CloudSyncHealth::AuthorizationRequired("failed".into()),
         );
 
@@ -2945,17 +2945,17 @@ mod tests {
 
         let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
         persist_pending_master_key_confirmation(namespace_id.clone());
-        let runtime_state =
-            SyncHealthRuntimeState::with_master_key_upload_grace(namespace_id.clone());
+        let worker_state =
+            SyncHealthWorkerState::with_master_key_upload_grace(namespace_id.clone());
 
         assert_eq!(
-            manager.compute_sync_health(runtime_state.clone()).await,
+            manager.compute_sync_health(worker_state.clone()).await,
             CloudSyncHealth::Uploading
         );
 
         globals.cloud.set_master_key_backup(namespace_id, vec![1, 2, 3]);
 
-        assert_eq!(manager.compute_sync_health(runtime_state).await, CloudSyncHealth::AllUploaded);
+        assert_eq!(manager.compute_sync_health(worker_state).await, CloudSyncHealth::AllUploaded);
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
@@ -2979,7 +2979,7 @@ mod tests {
         persist_pending_master_key_confirmation(namespace_id);
 
         assert_eq!(
-            manager.compute_sync_health(SyncHealthRuntimeState::default()).await,
+            manager.compute_sync_health(SyncHealthWorkerState::default()).await,
             CloudSyncHealth::Failed("master key backup is missing from cloud storage".into()),
         );
 

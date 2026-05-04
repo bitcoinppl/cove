@@ -30,7 +30,7 @@ use crate::database::cloud_backup::{
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupKeychain, cloud_backup_test_lock, ensure_cloud_backup_test_tokio_runtime,
-    runtime_actor::RestoreOperation,
+    workers::RestoreOperation,
 };
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
@@ -702,10 +702,10 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
     std::thread::spawn(move || reset_manager.debug_reset_cloud_backup_state())
         .join()
         .expect("reset cloud backup test state thread");
-    let runtime = manager.runtime.clone();
+    let supervisor = manager.supervisor.clone();
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     let _task = cove_tokio::task::spawn(async move {
-        let result = call!(runtime.clear_upload_runtime_state()).await;
+        let result = call!(supervisor.clear_upload_runtime_state()).await;
         sender.send(result).expect("send clear upload runtime state result");
     });
     receiver
@@ -943,14 +943,16 @@ pub(crate) fn prepare_deep_verify_with_unsynced_wallet(
     metadata
 }
 pub(crate) async fn clear_wallet_upload_runtime_for_test_async(manager: &RustCloudBackupManager) {
-    call!(manager.runtime.clear_upload_runtime_state()).await.expect("clear upload runtime state");
+    call!(manager.supervisor.clear_upload_runtime_state())
+        .await
+        .expect("clear upload runtime state");
 }
 
 pub(crate) async fn run_wallet_upload_for_test_async(
     manager: &RustCloudBackupManager,
     wallet_id: WalletId,
 ) {
-    call!(manager.runtime.run_wallet_upload_inline_for_test(wallet_id))
+    call!(manager.supervisor.run_wallet_upload_inline_for_test(wallet_id))
         .await
         .expect("run wallet upload");
 }
@@ -958,7 +960,7 @@ pub(crate) async fn run_wallet_upload_for_test_async(
 pub(crate) async fn new_restore_operation_for_test(
     manager: &RustCloudBackupManager,
 ) -> RestoreOperation {
-    call!(manager.runtime.new_restore_operation()).await.expect("create restore operation")
+    call!(manager.supervisor.new_restore_operation()).await.expect("create restore operation")
 }
 
 #[cfg(test)]
