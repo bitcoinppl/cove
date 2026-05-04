@@ -71,14 +71,18 @@ type MockPasskeyCreateResult = Arc<Mutex<Option<Result<PasskeyRegistrationResult
 pub(crate) struct MockKeychain {
     entries: Arc<Mutex<HashMap<String, String>>>,
     fail_save_at: Arc<Mutex<Option<usize>>>,
+    fail_delete_at: Arc<Mutex<Option<usize>>>,
     save_count: Arc<Mutex<usize>>,
+    delete_count: Arc<Mutex<usize>>,
 }
 
 impl MockKeychain {
     fn reset(&self) {
         self.entries.lock().clear();
         *self.fail_save_at.lock() = None;
+        *self.fail_delete_at.lock() = None;
         *self.save_count.lock() = 0;
+        *self.delete_count.lock() = 0;
     }
 
     pub(crate) fn set_entries(&self, entries: Vec<(&str, &str)>) {
@@ -93,6 +97,11 @@ impl MockKeychain {
     pub(crate) fn fail_save_at(&self, save_attempt: usize) {
         *self.save_count.lock() = 0;
         *self.fail_save_at.lock() = Some(save_attempt);
+    }
+
+    pub(crate) fn fail_delete_at(&self, delete_attempt: usize) {
+        *self.delete_count.lock() = 0;
+        *self.fail_delete_at.lock() = Some(delete_attempt);
     }
 }
 
@@ -113,6 +122,12 @@ impl KeychainAccess for MockKeychain {
     }
 
     fn delete(&self, key: String) -> bool {
+        let mut delete_count = self.delete_count.lock();
+        *delete_count += 1;
+        if Some(*delete_count) == *self.fail_delete_at.lock() {
+            return false;
+        }
+
         self.entries.lock().remove(&key).is_some()
     }
 }

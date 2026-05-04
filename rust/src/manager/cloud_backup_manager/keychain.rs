@@ -82,15 +82,53 @@ impl CloudBackupKeychain {
         self.0.delete(CSPP_PRF_SALT_KEY.into());
     }
 
-    pub(crate) fn clear_local_state(&self) -> Result<(), CloudBackupKeychainError> {
+    pub(crate) fn delete_master_key(&self) -> Result<(), CloudBackupKeychainError> {
         let cspp = cove_cspp::Cspp::new(self.0.clone());
         if !cspp.delete_master_key() {
+            warn!("Failed to delete cloud backup master key");
             return Err(CloudBackupKeychainError::Keychain(KeychainError::Delete));
         }
 
+        Ok(())
+    }
+
+    pub(crate) fn delete_namespace_id(&self) -> Result<(), CloudBackupKeychainError> {
         self.delete_keychain_item_if_present(CSPP_NAMESPACE_ID_KEY)?;
+        Ok(())
+    }
+
+    pub(crate) fn delete_credential_id(&self) -> Result<(), CloudBackupKeychainError> {
         self.delete_keychain_item_if_present(CSPP_CREDENTIAL_ID_KEY)?;
+        Ok(())
+    }
+
+    pub(crate) fn delete_prf_salt(&self) -> Result<(), CloudBackupKeychainError> {
         self.delete_keychain_item_if_present(CSPP_PRF_SALT_KEY)?;
+        Ok(())
+    }
+
+    pub(crate) fn clear_local_state(&self) -> Result<(), CloudBackupKeychainError> {
+        let mut failed = false;
+
+        if self.delete_master_key().is_err() {
+            failed = true;
+        }
+
+        if self.delete_namespace_id().is_err() {
+            failed = true;
+        }
+
+        if self.delete_credential_id().is_err() {
+            failed = true;
+        }
+
+        if self.delete_prf_salt().is_err() {
+            failed = true;
+        }
+
+        if failed {
+            return Err(CloudBackupKeychainError::Keychain(KeychainError::Delete));
+        }
 
         Ok(())
     }

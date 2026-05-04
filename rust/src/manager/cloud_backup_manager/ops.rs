@@ -532,28 +532,42 @@ impl RustCloudBackupManager {
         cspp.save_master_key(&matched.master_key)
             .map_err_prefix("save recovered master key", CloudBackupError::Internal)?;
 
-        let critical_key = Zeroizing::new(matched.master_key.critical_data_key());
-        let uploaded_wallets =
-            upload_all_wallets(cloud, &matched.namespace_id, &critical_key, &Database::global())
-                .await
-                .map_err(|error| self.blocking_cloud_error(BlockingCloudStep::Enable, error))?;
-
-        // persist credentials AFTER uploads succeed
-        cloud_keychain
-            .save_passkey_and_namespace(
-                &matched.credential_id,
-                matched.prf_salt,
+        let result = async {
+            let critical_key = Zeroizing::new(matched.master_key.critical_data_key());
+            let uploaded_wallets = upload_all_wallets(
+                cloud,
                 &matched.namespace_id,
+                &critical_key,
+                &Database::global(),
             )
-            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
+            .await
+            .map_err(|error| self.blocking_cloud_error(BlockingCloudStep::Enable, error))?;
 
-        self.finalize_uploaded_wallets(
-            cloud,
-            &matched.namespace_id,
-            uploaded_wallets,
-            FinalizeUploadStateMode::ResetVerification,
-        )
-        .await?;
+            // persist credentials AFTER uploads succeed
+            cloud_keychain
+                .save_passkey_and_namespace(
+                    &matched.credential_id,
+                    matched.prf_salt,
+                    &matched.namespace_id,
+                )
+                .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
+
+            self.finalize_uploaded_wallets(
+                cloud,
+                &matched.namespace_id,
+                uploaded_wallets,
+                FinalizeUploadStateMode::ResetVerification,
+            )
+            .await
+        }
+        .await;
+
+        if let Err(error) = result {
+            warn!("Enable: rolling back recovered local master key after recovery failure");
+            cspp.delete_master_key();
+            return Err(error);
+        }
+
         self.clear_pending_enable_session();
         self.clear_enable_progress(CloudBackupStatus::Enabled);
         info!("Cloud backup enabled (recovered existing namespace)");
@@ -1891,6 +1905,32 @@ mod tests {
         assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_none());
     }
 
+    #[test]
+    fn clear_local_state_attempts_passkey_metadata_after_master_key_delete_failure() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        globals.reset();
+
+        let keychain = Keychain::global();
+        let cloud_keychain = CloudBackupKeychain::global();
+        let cspp = cove_cspp::Cspp::new(keychain.clone());
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        cspp.save_master_key(&master_key).unwrap();
+        cloud_keychain.save_passkey_and_namespace(&[1, 2, 3], [4; 32], "test-namespace").unwrap();
+
+        globals.keychain.fail_delete_at(1);
+
+        let error = cloud_keychain.clear_local_state().unwrap_err();
+
+        assert!(matches!(
+            error,
+            CloudBackupKeychainError::Keychain(cove_device::keychain::KeychainError::Delete)
+        ));
+        assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_none());
+        assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_none());
+        assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_none());
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn local_master_key_fallback_is_unavailable_after_local_cloud_state_clear() {
         let _guard = test_lock().lock();
@@ -1913,6 +1953,75 @@ mod tests {
                 .unwrap();
 
         assert!(fallback.is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn complete_recovery_rolls_back_local_master_key_when_wallet_upload_fails() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        persist_xpub_wallets(vec![xpub_only_wallet_metadata()]);
+        globals.cloud.fail_wallet_backup_upload("upload failed");
+
+        let keychain = Keychain::global();
+        let cloud_keychain = CloudBackupKeychain::global();
+        let cspp = cove_cspp::Cspp::new(keychain.clone());
+        let matched = NamespaceMatch {
+            namespace_id: "matched-namespace".into(),
+            master_key: cove_cspp::master_key::MasterKey::generate(),
+            prf_salt: [9; 32],
+            credential_id: vec![1, 2, 3],
+        };
+
+        let error = manager
+            .complete_recovery(
+                &cloud_keychain,
+                &CloudStorage::global_explicit_client(),
+                &cspp,
+                matched,
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, CloudBackupError::CloudStorage(_)));
+        assert!(cspp.load_master_key_from_store().unwrap().is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn complete_recovery_rolls_back_local_master_key_when_keychain_save_fails() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        globals.keychain.fail_save_at(3);
+
+        let keychain = Keychain::global();
+        let cloud_keychain = CloudBackupKeychain::global();
+        let cspp = cove_cspp::Cspp::new(keychain.clone());
+        let matched = NamespaceMatch {
+            namespace_id: "matched-namespace".into(),
+            master_key: cove_cspp::master_key::MasterKey::generate(),
+            prf_salt: [9; 32],
+            credential_id: vec![1, 2, 3],
+        };
+
+        let error = manager
+            .complete_recovery(
+                &cloud_keychain,
+                &CloudStorage::global_explicit_client(),
+                &cspp,
+                matched,
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, CloudBackupError::Internal(_)));
+        assert!(cspp.load_master_key_from_store().unwrap().is_none());
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -344,28 +344,34 @@ internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
                 PasskeyOperation.REGISTRATION,
                 PasskeyFailureReason.Interrupted,
             )
+
         is CreateCredentialProviderConfigurationException ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
                 PasskeyFailureReason.ProviderConfiguration,
             )
+
         is CreateCredentialNoCreateOptionException ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
                 PasskeyFailureReason.NoCreateOption,
             )
+
         is CreatePublicKeyCredentialDomException ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
                 passkeyDomErrorReason(error.domError),
             )
+
         is CreateCredentialUnsupportedException ->
             passkeyNotSupported(PasskeyFailureReason.ProviderConfiguration)
+
         is CreateCredentialException ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
                 passkeyUnknownReason(error.passkeyMessage("passkey creation failed")),
             )
+
         else ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
@@ -386,23 +392,28 @@ internal fun mapPasskeyGetError(
                 operation,
                 PasskeyFailureReason.Interrupted,
             )
+
         is GetCredentialProviderConfigurationException ->
             passkeyRequestFailed(
                 operation,
                 PasskeyFailureReason.ProviderConfiguration,
             )
+
         is GetPublicKeyCredentialDomException ->
             passkeyRequestFailed(
                 operation,
                 passkeyDomErrorReason(error.domError),
             )
+
         is GetCredentialUnsupportedException ->
             passkeyNotSupported(PasskeyFailureReason.ProviderConfiguration)
+
         is GetCredentialException ->
             passkeyRequestFailed(
                 operation,
                 passkeyUnknownReason(error.passkeyMessage("passkey authentication failed")),
             )
+
         else ->
             passkeyRequestFailed(
                 operation,
@@ -427,10 +438,9 @@ private fun passkeyUnknownReason(message: String): PasskeyFailureReason =
 private fun passkeyDomErrorReason(domError: DomError): PasskeyFailureReason =
     when (domError) {
         is TimeoutError -> PasskeyFailureReason.TimedOut
-        is NotAllowedError,
-        is SecurityError,
-        is InvalidStateError,
-        -> PasskeyFailureReason.PlatformAuthorizationFailed
+        is NotAllowedError -> PasskeyFailureReason.PlatformAuthorizationFailed
+        is SecurityError -> PasskeyFailureReason.ProviderConfiguration
+        is InvalidStateError -> PasskeyFailureReason.InvalidResponse
         else -> passkeyUnknownReason("passkey DOM error: ${domError.type}")
     }
 

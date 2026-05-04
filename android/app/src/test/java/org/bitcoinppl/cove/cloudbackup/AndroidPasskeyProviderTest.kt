@@ -7,7 +7,9 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.domerrors.DataError
+import androidx.credentials.exceptions.domerrors.InvalidStateError
 import androidx.credentials.exceptions.domerrors.NotAllowedError
+import androidx.credentials.exceptions.domerrors.SecurityError
 import androidx.credentials.exceptions.domerrors.TimeoutError
 import androidx.credentials.exceptions.publickeycredential.CreatePublicKeyCredentialDomException
 import androidx.credentials.exceptions.publickeycredential.GetPublicKeyCredentialDomException
@@ -127,6 +129,21 @@ class AndroidPasskeyProviderTest {
         assertTrue(notAllowed is PasskeyException.RequestFailed)
         assertEquals(PasskeyOperation.DISCOVER_ASSERTION, (notAllowed as PasskeyException.RequestFailed).operation)
         assertEquals(PasskeyFailureReason.PlatformAuthorizationFailed, notAllowed.reason)
+
+        val securityError = mapPasskeyGetError(GetPublicKeyCredentialDomException(SecurityError()))
+        assertTrue(securityError is PasskeyException.RequestFailed)
+        assertEquals(
+            PasskeyFailureReason.ProviderConfiguration,
+            (securityError as PasskeyException.RequestFailed).reason,
+        )
+
+        val invalidState =
+            mapPasskeyGetError(GetPublicKeyCredentialDomException(InvalidStateError()))
+        assertTrue(invalidState is PasskeyException.RequestFailed)
+        assertEquals(
+            PasskeyFailureReason.InvalidResponse,
+            (invalidState as PasskeyException.RequestFailed).reason,
+        )
 
         val dataError = mapPasskeyGetError(GetPublicKeyCredentialDomException(DataError()))
         assertTrue(dataError is PasskeyException.RequestFailed)

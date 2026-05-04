@@ -1074,6 +1074,30 @@ impl RustCloudBackupManager {
         );
     }
 
+    pub(crate) fn clear_in_process_state_for_local_reset(&self) {
+        let runtime = self.runtime.clone();
+        if let Err(error) = cove_tokio::task::block_on(async move {
+            act_zero::call!(runtime.clear_upload_runtime_state()).await
+        }) {
+            error!("Failed to clear cloud backup runtime state during local reset: {error}");
+        }
+
+        self.clear_prompt_state();
+        self.set_progress(None);
+        self.set_restore_progress(None);
+        self.set_restore_report(None);
+        self.set_sync_error(None);
+        self.set_sync_health(CloudSyncHealth::Unknown);
+        self.set_pending_upload_verification(false);
+        self.set_detail(None);
+        self.set_verification(VerificationState::Idle);
+        self.set_sync(SyncState::Idle);
+        self.set_recovery(RecoveryState::Idle);
+        self.set_cloud_only(CloudOnlyState::NotFetched);
+        self.set_cloud_only_operation(CloudOnlyOperation::Idle);
+        self.set_status(CloudBackupStatus::Disabled);
+    }
+
     pub(crate) fn persist_cloud_backup_state(
         &self,
         state: &PersistedCloudBackupState,
@@ -1853,6 +1877,7 @@ impl RustCloudBackupManager {
 #[uniffi::export]
 pub fn reset_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {
     wipe_local_data_for_catastrophic_recovery()?;
+    clear_in_process_cloud_backup_state_for_catastrophic_recovery();
     reinit_database_after_catastrophic_recovery()
 }
 
@@ -1862,7 +1887,7 @@ fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecover
     wipe_wallet_keychain_items_for_catastrophic_recovery()?;
     CloudBackupKeychain::global()
         .clear_local_state()
-        .map_err(|error| CatastrophicRecoveryError::Failure(error.to_string()))?;
+        .map_err_str(CatastrophicRecoveryError::Failure)?;
 
     let root = &*cove_common::consts::ROOT_DATA_DIR;
 
@@ -1886,6 +1911,14 @@ fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecover
     }
 
     Ok(())
+}
+
+fn clear_in_process_cloud_backup_state_for_catastrophic_recovery() {
+    cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
+
+    if let Some(manager) = LazyLock::get(&CLOUD_BACKUP_MANAGER) {
+        manager.clear_in_process_state_for_local_reset();
+    }
 }
 
 fn reinit_database_after_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {
