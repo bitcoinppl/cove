@@ -101,22 +101,21 @@ const KNOWN_PASSKEY_PROVIDERS: &[KnownPasskeyProviderEntry] = known_passkey_prov
 
 impl PasskeyProviderHint {
     pub fn known_provider(&self) -> Option<KnownPasskeyProvider> {
-        if let Some(entry) =
-            KNOWN_PASSKEY_PROVIDERS.iter().find(|entry| entry.aaguid == self.aaguid)
-        {
+        let aaguid = self.aaguid.to_ascii_lowercase();
+
+        if let Some(entry) = KNOWN_PASSKEY_PROVIDERS.iter().find(|entry| entry.aaguid == aaguid) {
             return Some(entry.provider);
         }
 
         // zero AAGUID is an iOS fallback used when Apple does not provide attestation data
-        if self.aaguid == ZERO_AAGUID
-            && self.registered_platform == PasskeyRegistrationPlatform::Ios
-        {
+        if aaguid == ZERO_AAGUID && self.registered_platform == PasskeyRegistrationPlatform::Ios {
             return Some(KnownPasskeyProvider::ApplePasswords);
         }
 
         None
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,6 +124,17 @@ mod tests {
     fn resolves_google_provider() {
         let hint = PasskeyProviderHint {
             aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+            registered_platform: PasskeyRegistrationPlatform::Android,
+            registered_at: 1_777_661_234,
+        };
+
+        assert_eq!(hint.known_provider(), Some(KnownPasskeyProvider::GooglePasswordManager));
+    }
+
+    #[test]
+    fn resolves_uppercase_google_provider() {
+        let hint = PasskeyProviderHint {
+            aaguid: "EA9B8D66-4D01-1D21-3CE4-B6B48CB575D4".into(),
             registered_platform: PasskeyRegistrationPlatform::Android,
             registered_at: 1_777_661_234,
         };
@@ -147,6 +157,17 @@ mod tests {
 
         assert_eq!(ios_hint.known_provider(), Some(KnownPasskeyProvider::ApplePasswords));
         assert_eq!(android_hint.known_provider(), None);
+    }
+
+    #[test]
+    fn resolves_uppercase_zero_aaguid_for_ios() {
+        let hint = PasskeyProviderHint {
+            aaguid: "00000000-0000-0000-0000-000000000000".to_ascii_uppercase(),
+            registered_platform: PasskeyRegistrationPlatform::Ios,
+            registered_at: 1_777_661_234,
+        };
+
+        assert_eq!(hint.known_provider(), Some(KnownPasskeyProvider::ApplePasswords));
     }
 
     #[test]
