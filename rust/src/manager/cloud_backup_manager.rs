@@ -1014,6 +1014,7 @@ impl RustCloudBackupManager {
             let reset_cloud_only = detail.as_ref().is_some_and(|detail| {
                 cloud_only_cache_is_stale(&state.cloud_only, detail, detail_snapshot.as_ref())
             });
+
             if reset_cloud_only {
                 state.cloud_only = CloudOnlyState::NotFetched;
             }

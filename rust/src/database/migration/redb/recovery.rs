@@ -205,6 +205,7 @@ pub(super) fn recover_legacy_at_path(db_path: &Path) -> Result<()> {
 }
 
 fn preserve_corrupt_file(path: &Path) -> Result<std::path::PathBuf> {
+    // quarantine is not read by the app; keep it as extra caution for this migration window
     let extension = path.extension().and_then(std::ffi::OsStr::to_str).unwrap_or_default();
 
     for index in 0..1000 {
