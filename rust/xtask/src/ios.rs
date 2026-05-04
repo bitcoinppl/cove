@@ -5,6 +5,9 @@ use color_eyre::{
 };
 use colored::Colorize;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{fs, path::Path};
+#[cfg(unix)]
+use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 use xshell::{cmd, Shell};
 
 // iOS build constants
@@ -441,6 +444,8 @@ struct TestflightApiCredentials {
     api_key_path: String,
     api_key_id: String,
     api_issuer_id: String,
+    // keep the normalized key file alive until xcodebuild finishes using api_key_path
+    _normalized_api_key_file: TemporarySecretFile,
 }
 
 impl TestflightApiCredentials {
@@ -457,8 +462,83 @@ impl TestflightApiCredentials {
             .to_string_lossy()
             .into_owned();
 
-        Ok(Self { api_key_path, api_key_id, api_issuer_id })
+        let normalized_api_key = normalize_testflight_api_key(&api_key_path)?;
+        let api_key_file =
+            TemporarySecretFile::write("Cove-TestFlight-ApiKey", "p8", &normalized_api_key)?;
+        let api_key_path = api_key_file.path.clone();
+
+        Ok(Self { api_key_path, api_key_id, api_issuer_id, _normalized_api_key_file: api_key_file })
     }
+}
+
+struct TemporarySecretFile {
+    path: String,
+}
+
+impl TemporarySecretFile {
+    fn write(prefix: &str, extension: &str, contents: &str) -> Result<Self> {
+        let path = temp_artifact_path(prefix, extension)?;
+        fs::write(&path, contents)
+            .wrap_err_with(|| format!("Failed to write normalized API key to {path}"))?;
+        set_secret_file_permissions(&path)?;
+
+        Ok(Self { path })
+    }
+}
+
+impl Drop for TemporarySecretFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn normalize_testflight_api_key(path: impl AsRef<Path>) -> Result<String> {
+    let path = path.as_ref();
+    let contents = fs::read_to_string(path)
+        .wrap_err_with(|| format!("Failed to read ASC_API_KEY_PATH: {}", path.display()))?;
+
+    let normalized = normalize_pem_text(&contents)
+        .wrap_err_with(|| format!("Invalid ASC_API_KEY_PATH PEM: {}", path.display()))?;
+
+    Ok(normalized)
+}
+
+fn normalize_pem_text(contents: &str) -> Result<String> {
+    const BEGIN_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----";
+    const END_PRIVATE_KEY: &str = "-----END PRIVATE KEY-----";
+
+    let normalized_line_endings = contents.replace("\r\n", "\n").replace('\r', "\n");
+    let mut lines: Vec<&str> =
+        normalized_line_endings.lines().map(|line| line.trim_end_matches([' ', '\t'])).collect();
+
+    while lines.first().is_some_and(|line| line.is_empty()) {
+        lines.remove(0);
+    }
+
+    while lines.last().is_some_and(|line| line.is_empty()) {
+        lines.pop();
+    }
+
+    if lines.first() != Some(&BEGIN_PRIVATE_KEY) {
+        color_eyre::eyre::bail!("missing private key PEM header");
+    }
+
+    if lines.last() != Some(&END_PRIVATE_KEY) {
+        color_eyre::eyre::bail!("missing private key PEM footer");
+    }
+
+    Ok(format!("{}\n", lines.join("\n")))
+}
+
+#[cfg(unix)]
+fn set_secret_file_permissions(path: &str) -> Result<()> {
+    fs::set_permissions(path, Permissions::from_mode(0o600))
+        .wrap_err_with(|| format!("Failed to set API key permissions on {path}"))
+}
+
+#[cfg(not(unix))]
+fn set_secret_file_permissions(_path: &str) -> Result<()> {
+    Ok(())
 }
 
 fn normalize_required_arg(name: &str, value: &Option<String>) -> Result<String> {
@@ -825,7 +905,13 @@ fn parse_device_detail(output: &str, prefix: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::simulator_line_matches_device;
+    use super::{normalize_pem_text, simulator_line_matches_device};
+
+    const VALID_PEM: &str = "\
+-----BEGIN PRIVATE KEY-----
+ABC123
+-----END PRIVATE KEY-----
+";
 
     #[test]
     fn simulator_line_matches_exact_booted_device_name() {
@@ -849,5 +935,68 @@ mod tests {
             "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Shutdown)",
             "iPhone 17",
         ));
+    }
+
+    #[test]
+    fn normalize_pem_accepts_valid_private_key() {
+        assert_eq!(normalize_pem_text(VALID_PEM).unwrap(), VALID_PEM);
+    }
+
+    #[test]
+    fn normalize_pem_trims_trailing_footer_whitespace() {
+        let pem = "\
+-----BEGIN PRIVATE KEY-----
+ABC123
+-----END PRIVATE KEY----- 
+";
+
+        assert_eq!(normalize_pem_text(pem).unwrap(), VALID_PEM);
+    }
+
+    #[test]
+    fn normalize_pem_normalizes_crlf_line_endings() {
+        let pem = "-----BEGIN PRIVATE KEY-----\r\nABC123\r\n-----END PRIVATE KEY-----\r\n";
+
+        assert_eq!(normalize_pem_text(pem).unwrap(), VALID_PEM);
+    }
+
+    #[test]
+    fn normalize_pem_preserves_base64_content() {
+        let pem = "\
+-----BEGIN PRIVATE KEY-----
+ABC123  
+DEF456
+-----END PRIVATE KEY-----
+";
+        let expected = "\
+-----BEGIN PRIVATE KEY-----
+ABC123
+DEF456
+-----END PRIVATE KEY-----
+";
+
+        assert_eq!(normalize_pem_text(pem).unwrap(), expected);
+    }
+
+    #[test]
+    fn normalize_pem_rejects_wrong_header() {
+        let pem = "\
+-----BEGIN PUBLIC KEY-----
+ABC123
+-----END PRIVATE KEY-----
+";
+
+        assert!(normalize_pem_text(pem).is_err());
+    }
+
+    #[test]
+    fn normalize_pem_rejects_wrong_footer() {
+        let pem = "\
+-----BEGIN PRIVATE KEY-----
+ABC123
+-----END PUBLIC KEY-----
+";
+
+        assert!(normalize_pem_text(pem).is_err());
     }
 }
