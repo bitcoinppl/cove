@@ -47,10 +47,6 @@ impl CloudBackupSyncHealthWorker {
         self.manager.upgrade()
     }
 
-    fn addr(&self) -> Option<Addr<Self>> {
-        Some(self.addr.upgrade())
-    }
-
     fn worker_state(&self) -> SyncHealthWorkerState {
         SyncHealthWorkerState {
             master_key_upload_grace_namespace: self
@@ -60,7 +56,7 @@ impl CloudBackupSyncHealthWorker {
         }
     }
 
-    fn spawn_refresh_task(&mut self, addr: Addr<Self>) {
+    fn spawn_refresh_task(&mut self) {
         self.sync_health_refresh_state = SyncHealthRefreshState::Running;
         let Some(manager) = self.manager() else {
             self.sync_health_refresh_state = SyncHealthRefreshState::Idle;
@@ -69,7 +65,7 @@ impl CloudBackupSyncHealthWorker {
 
         let generation = self.sync_health_refresh_generations.advance();
         let worker_state = self.worker_state();
-        cove_tokio::task::spawn(async move {
+        self.addr.send_fut_with(move |addr| async move {
             let sync_health = manager.compute_sync_health(worker_state).await;
             send!(addr.complete_sync_health_refresh(generation, sync_health));
         });
@@ -122,9 +118,8 @@ impl CloudBackupSyncHealthWorker {
             }
         }
 
-        let Some(addr) = self.addr() else { return Produces::ok(()) };
         let Some(_) = self.manager() else { return Produces::ok(()) };
-        self.spawn_refresh_task(addr);
+        self.spawn_refresh_task();
         Produces::ok(())
     }
 
@@ -146,9 +141,8 @@ impl CloudBackupSyncHealthWorker {
             return Produces::ok(());
         }
 
-        let Some(addr) = self.addr() else { return Produces::ok(()) };
         let Some(_) = self.manager() else { return Produces::ok(()) };
-        self.spawn_refresh_task(addr);
+        self.spawn_refresh_task();
         Produces::ok(())
     }
 

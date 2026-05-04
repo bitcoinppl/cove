@@ -4,7 +4,7 @@ mod uploads;
 
 use std::sync::{Arc, Weak};
 
-use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, call, send};
+use act_zero::{Actor, ActorResult, Addr, AddrLike, Produces, WeakAddr, call, send};
 use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use cove_device::cloud_storage::CloudStorage;
 use cove_tokio::task::spawn_actor;
@@ -197,11 +197,10 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn start_refresh_detail(&mut self) -> ActorResult<()> {
-        let Some(addr) = self.addr() else { return Produces::ok(()) };
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         manager.refresh_sync_health();
-        cove_tokio::task::spawn(async move {
+        self.addr.send_fut_with(move |addr| async move {
             let result = manager.refresh_cloud_backup_detail().await;
             send!(addr.complete_refresh_detail(result));
         });
@@ -219,14 +218,13 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn start_enter_detail(&mut self) -> ActorResult<()> {
-        let Some(addr) = self.addr() else { return Produces::ok(()) };
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         // decide before refresh so a fresh passkey enable is not immediately re-prompted
         let decision = self.detail_entry_decision(&manager);
 
         manager.refresh_sync_health();
-        cove_tokio::task::spawn(async move {
+        self.addr.send_fut_with(move |addr| async move {
             let result = manager.refresh_cloud_backup_detail().await;
             send!(addr.complete_enter_detail(result, decision));
         });
@@ -252,12 +250,11 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn start_verification(&mut self, force_discoverable: bool) -> ActorResult<()> {
-        let Some(addr) = self.addr() else { return Produces::ok(()) };
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         self.pending_verification_completion = None;
         manager.set_verification(VerificationState::Verifying);
-        cove_tokio::task::spawn(async move {
+        self.addr.send_fut_with(move |addr| async move {
             let result = manager.deep_verify_cloud_backup(force_discoverable).await;
             send!(addr.complete_verification(result));
         });

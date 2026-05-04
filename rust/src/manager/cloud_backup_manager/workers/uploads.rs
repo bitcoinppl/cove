@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, send};
+use act_zero::{Actor, ActorResult, Addr, AddrLike, Produces, WeakAddr, send};
 use cove_tokio::DebouncedTask;
 use tokio::sync::Notify;
 use tracing::{error, info, warn};
@@ -62,13 +62,12 @@ impl CloudBackupUploadWorker {
 
     fn spawn_pending_upload_verification_loop_task(
         &mut self,
-        addr: Addr<Self>,
         manager: Arc<RustCloudBackupManager>,
     ) {
         self.pending_upload_verifier_running = true;
         self.pending_upload_verifier_blocked_on_authorization = false;
         let wakeup = Arc::clone(&self.pending_upload_verifier_wakeup);
-        cove_tokio::task::spawn(async move {
+        self.addr.send_fut_with(move |addr| async move {
             info!("Pending upload verification: started");
             let mut backoff = PendingUploadRetryBackoff::new();
             let mut blocked_on_authorization = false;
@@ -187,16 +186,12 @@ impl CloudBackupUploadWorker {
             return Produces::ok(());
         }
 
-        let Some(addr) = self.addr() else {
-            self.active_wallet_uploads.remove(&wallet_id);
-            return Produces::ok(());
-        };
         let Some(manager) = self.manager() else {
             self.active_wallet_uploads.remove(&wallet_id);
             return Produces::ok(());
         };
 
-        cove_tokio::task::spawn(async move {
+        self.addr.send_fut_with(move |addr| async move {
             let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id).await;
             let deferred = matches!(
                 upload_result,
@@ -375,10 +370,9 @@ impl CloudBackupUploadWorker {
             return Produces::ok(());
         }
 
-        let Some(addr) = self.addr() else { return Produces::ok(()) };
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        self.spawn_pending_upload_verification_loop_task(addr, manager);
+        self.spawn_pending_upload_verification_loop_task(manager);
 
         Produces::ok(())
     }
@@ -405,8 +399,7 @@ impl CloudBackupUploadWorker {
 
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         if manager.has_pending_cloud_upload_verification() {
-            let Some(addr) = self.addr() else { return Produces::ok(()) };
-            self.spawn_pending_upload_verification_loop_task(addr, manager);
+            self.spawn_pending_upload_verification_loop_task(manager);
             return Produces::ok(());
         }
 
