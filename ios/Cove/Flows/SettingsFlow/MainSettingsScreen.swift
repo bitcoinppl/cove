@@ -896,9 +896,17 @@ struct MainSettingsScreen: View {
             }
 
         case .cloudBackupOnboarding:
-            SettingsCloudBackupEnableSheet(onDismiss: {
-                sheetState = .none
-            })
+            SettingsCloudBackupEnableSheet(
+                onComplete: {
+                    sheetState = .none
+                    DispatchQueue.main.async {
+                        app.pushRoute(.settings(.cloudBackup))
+                    }
+                },
+                onDismiss: {
+                    sheetState = .none
+                }
+            )
         }
     }
 
@@ -956,6 +964,7 @@ private struct SettingsCloudBackupEnableSheet: View {
     @State private var isStartingEnable = false
     @State private var passkeyEnableFlow = PasskeyEnableFlow.idle
 
+    let onComplete: () -> Void
     let onDismiss: () -> Void
 
     private var message: String? {
@@ -1040,7 +1049,7 @@ private struct SettingsCloudBackupEnableSheet: View {
             }
 
             if case .enabled = status {
-                onDismiss()
+                onComplete()
             }
         }
         .onChange(of: manager.promptIntent, initial: true) { _, promptIntent in

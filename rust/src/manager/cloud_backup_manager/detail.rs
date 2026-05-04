@@ -108,6 +108,7 @@ impl RustCloudBackupManager {
                 CLOUD_BACKUP_MANAGER.clone().spawn_delete_cloud_wallet(record_id);
             }
             A::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
+            A::EnterDetail => CLOUD_BACKUP_MANAGER.clone().spawn_enter_detail(),
         }
     }
 }
@@ -117,25 +118,20 @@ impl RustCloudBackupManager {
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
-        CLOUD_BACKUP_MANAGER.clone().spawn_verification(false);
+        send!(self.runtime.start_verification(false));
     }
 
     fn start_verification_discoverable(&self) {
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
-        CLOUD_BACKUP_MANAGER.clone().spawn_verification(true);
+        send!(self.runtime.start_verification(true));
     }
 
     fn dismiss_verification_prompt(&self) {
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt: {error}");
         }
-    }
-
-    fn spawn_verification(self: std::sync::Arc<Self>, force_discoverable: bool) {
-        let operation = CloudBackupOperation::Verification { force_discoverable };
-        send!(self.runtime.start_operation(operation, None));
     }
 
     fn spawn_recovery(self: std::sync::Arc<Self>, action: RecoveryAction) {
@@ -167,7 +163,11 @@ impl RustCloudBackupManager {
     }
 
     fn spawn_refresh_detail(self: std::sync::Arc<Self>) {
-        send!(self.runtime.start_operation(CloudBackupOperation::RefreshDetail, None));
+        send!(self.runtime.start_refresh_detail());
+    }
+
+    fn spawn_enter_detail(self: std::sync::Arc<Self>) {
+        send!(self.runtime.start_enter_detail());
     }
 
     pub(crate) async fn handle_start_verification(&self, force_discoverable: bool) {
@@ -175,7 +175,10 @@ impl RustCloudBackupManager {
         self.set_verification(VerificationState::Verifying);
 
         let result = self.deep_verify_cloud_backup(force_discoverable).await;
+        self.apply_deep_verification_result(result);
+    }
 
+    pub(crate) fn apply_deep_verification_result(&self, result: DeepVerificationResult) {
         match result {
             DeepVerificationResult::Verified(report) => {
                 self.apply_verified_report(report);

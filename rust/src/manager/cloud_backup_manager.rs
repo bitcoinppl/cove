@@ -113,6 +113,7 @@ pub enum CloudBackupManagerAction {
     RestoreCloudWallet { record_id: String },
     DeleteCloudWallet { record_id: String },
     RefreshDetail,
+    EnterDetail,
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -839,6 +840,10 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn set_status(&self, status: CloudBackupStatus) {
+        if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::Enabling) {
+            self.clear_runtime_passkey_proof();
+        }
+
         let status_changed = {
             let mut state = self.state.write();
             if state.status == status {
@@ -1033,6 +1038,13 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn set_verification(&self, verification: VerificationState) {
+        if matches!(
+            verification,
+            VerificationState::Idle | VerificationState::Failed(_) | VerificationState::Cancelled
+        ) {
+            self.clear_runtime_passkey_proof();
+        }
+
         self.set_and_notify_field(
             verification,
             |state| &mut state.verification,
@@ -1046,8 +1058,25 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn set_recovery(&self, recovery: RecoveryState) {
+        if !matches!(recovery, RecoveryState::Idle) {
+            self.clear_runtime_passkey_proof();
+        }
+
         self.set_and_notify_field(recovery, |state| &mut state.recovery, Message::Recovery);
         self.refresh_prompt_intent();
+    }
+
+    pub(crate) fn set_runtime_passkey_proof(
+        &self,
+        namespace_id: String,
+        credential_id: Vec<u8>,
+        prf_salt: [u8; 32],
+    ) {
+        send!(self.runtime.set_runtime_passkey_proof(namespace_id, credential_id, prf_salt));
+    }
+
+    pub(crate) fn clear_runtime_passkey_proof(&self) {
+        send!(self.runtime.clear_runtime_passkey_proof());
     }
 
     pub(crate) fn set_cloud_only(&self, cloud_only: CloudOnlyState) {

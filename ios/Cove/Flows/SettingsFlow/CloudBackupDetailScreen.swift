@@ -6,7 +6,6 @@ struct CloudBackupDetailScreen: View {
     @State private var manager = CloudBackupManager.shared
     @State private var showRecreateConfirmation = false
     @State private var showReinitializeConfirmation = false
-    @State private var hasAutoVerified = false
 
     private var isVerifying: Bool {
         if case .verifying = manager.verification { return true }
@@ -50,14 +49,7 @@ struct CloudBackupDetailScreen: View {
         .navigationTitle("Cloud Backup")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            guard !isPasskeyMissing, !isUnsupportedPasskeyProvider else { return }
-
-            manager.dispatch(action: .refreshDetail)
-
-            if !hasAutoVerified {
-                hasAutoVerified = true
-                manager.dispatch(action: .startVerificationDiscoverable)
-            }
+            manager.dispatch(action: .enterDetail)
         }
         .onDisappear {
             cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: false)

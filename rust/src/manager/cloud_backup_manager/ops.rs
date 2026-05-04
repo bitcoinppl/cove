@@ -20,7 +20,8 @@ use super::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupKeychain,
     CloudBackupPasskeyChoiceFlow, CloudBackupRestoreProgress, CloudBackupRestoreReport,
     CloudBackupRestoreStage, CloudBackupStatus, CloudBackupWalletItem, CloudBackupWalletStatus,
-    PendingEnableSession, RestoreOperation, RustCloudBackupManager,
+    DeepVerificationReport, PendingEnableSession, PendingVerificationCompletion,
+    PendingVerificationUpload, RestoreOperation, RustCloudBackupManager, VerificationState,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
@@ -159,6 +160,62 @@ impl RustCloudBackupManager {
                 uploaded_at,
             )?;
         }
+
+        Ok(())
+    }
+
+    fn pending_verification_uploads(
+        uploaded_wallets: &[super::wallets::PreparedWalletBackup],
+    ) -> Vec<PendingVerificationUpload> {
+        uploaded_wallets
+            .iter()
+            .map(|wallet| {
+                PendingVerificationUpload::new(
+                    wallet.record_id.clone(),
+                    wallet.revision_hash.clone(),
+                )
+            })
+            .collect()
+    }
+
+    fn seed_post_enable_verification_from_fresh_passkey_material(
+        &self,
+        encrypted_master: &cove_cspp::backup_data::EncryptedMasterKeyBackup,
+        master_key: &cove_cspp::master_key::MasterKey,
+        passkey: &UnpersistedPrfKey,
+        namespace_id: &str,
+        pending_uploads: Vec<PendingVerificationUpload>,
+    ) -> Result<(), CloudBackupError> {
+        let decrypted_master =
+            master_key_crypto::decrypt_master_key(encrypted_master, &passkey.prf_key)
+                .map_err_str(CloudBackupError::Crypto)?;
+        if decrypted_master.as_bytes() != master_key.as_bytes() {
+            return Err(CloudBackupError::Crypto(
+                "fresh passkey material decrypted the wrong master key".into(),
+            ));
+        }
+
+        self.set_runtime_passkey_proof(
+            namespace_id.to_owned(),
+            passkey.credential_id.clone(),
+            passkey.prf_salt,
+        );
+
+        let report = DeepVerificationReport {
+            master_key_wrapper_repaired: false,
+            local_master_key_repaired: false,
+            credential_recovered: false,
+            wallets_verified: 0,
+            wallets_failed: 0,
+            wallets_unsupported: 0,
+            detail: None,
+        };
+        self.replace_pending_verification_completion(PendingVerificationCompletion::new(
+            report,
+            namespace_id.to_owned(),
+            pending_uploads,
+        ));
+        self.set_verification(VerificationState::Verifying);
 
         Ok(())
     }
@@ -1038,6 +1095,7 @@ impl RustCloudBackupManager {
         let uploaded_wallets = upload_all_wallets(&cloud, &namespace_id, &critical_key, &db)
             .await
             .map_err(|error| self.blocking_cloud_error(BlockingCloudStep::Enable, error))?;
+        let pending_uploads = Self::pending_verification_uploads(&uploaded_wallets);
 
         info!("Enable: persisting cloud backup state");
         CloudBackupKeychain::new(keychain.clone())
@@ -1061,8 +1119,16 @@ impl RustCloudBackupManager {
         )
         .await?;
 
+        self.seed_post_enable_verification_from_fresh_passkey_material(
+            &encrypted_master,
+            &master_key,
+            &passkey,
+            &namespace_id,
+            pending_uploads,
+        )?;
         self.clear_pending_enable_session();
         self.clear_enable_progress(CloudBackupStatus::Enabled);
+        self.refresh_persisted_flags();
         info!("Cloud backup enabled successfully");
         Ok(())
     }
@@ -1188,6 +1254,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
+    use act_zero::call;
     use cove_cspp::CsppStore;
     use cove_cspp::backup_data::{
         WalletEntry, WalletMode as CloudWalletMode, WalletSecret, wallet_filename_from_record_id,
@@ -1214,8 +1281,9 @@ mod tests {
         CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, CloudBackupKeychainError,
     };
     use crate::manager::cloud_backup_manager::{
-        CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupKeychain, DeepVerificationResult,
-        VerificationFailureKind, VerificationState, runtime_actor::SyncHealthRuntimeState,
+        CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupKeychain,
+        CloudBackupPromptIntent, DeepVerificationResult, VerificationFailureKind,
+        VerificationState, runtime_actor::SyncHealthRuntimeState,
     };
     use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
     use crate::manager::wallet_manager::RustWalletManager;
@@ -1230,6 +1298,18 @@ mod tests {
             operation: PasskeyOperation::DiscoverAssertion,
             reason: PasskeyFailureReason::PlatformAuthorizationFailed,
         }
+    }
+
+    async fn wait_for_discover_count(globals: &TestGlobals, expected_count: usize) {
+        for _ in 0..20 {
+            if globals.passkey.discover_count() == expected_count {
+                return;
+            }
+
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        assert_eq!(globals.passkey.discover_count(), expected_count);
     }
 
     mod cove_tokio {
@@ -2140,6 +2220,52 @@ mod tests {
         manager.do_enable_cloud_backup_create_new().await.unwrap();
 
         assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+        let state = manager.state();
+        assert!(matches!(
+            state.verification,
+            VerificationState::Verifying | VerificationState::Verified(_)
+        ));
+        assert!(matches!(state.prompt_intent, CloudBackupPromptIntent::None));
+        assert!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).is_some());
+        assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_some());
+        assert!(globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).is_some());
+
+        let discover_count = globals.passkey.discover_count();
+        let authenticate_count = globals.passkey.authenticate_count();
+
+        call!(manager.runtime.start_enter_detail()).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        assert_eq!(globals.passkey.discover_count(), discover_count);
+        assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn detail_entry_starts_discoverable_verification_without_runtime_proof() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+        globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+
+        manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+        manager.clear_runtime_passkey_proof();
+        manager.clear_pending_verification_completion();
+        manager.set_pending_upload_verification(false);
+        manager.set_verification(VerificationState::Idle);
+        Database::global().cloud_blob_sync_states.delete_all().unwrap();
+        globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+
+        let discover_count = globals.passkey.discover_count();
+
+        call!(manager.runtime.start_enter_detail()).await.unwrap();
+        wait_for_discover_count(globals, discover_count + 1).await;
+
+        assert_eq!(globals.passkey.discover_count(), discover_count + 1);
     }
 
     #[tokio::test(flavor = "current_thread")]

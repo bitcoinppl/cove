@@ -18,8 +18,9 @@ use super::pending::{
     build_pending_upload_backoff,
 };
 use super::{
-    CloudBackupError, CloudBackupRestoreProgress, CloudBackupRestoreReport, CloudBackupStatus,
-    PendingEnableSession, PendingVerificationCompletion, RecoveryAction, RustCloudBackupManager,
+    CloudBackupDetailResult, CloudBackupError, CloudBackupRestoreProgress,
+    CloudBackupRestoreReport, CloudBackupStatus, DeepVerificationResult, PendingEnableSession,
+    PendingVerificationCompletion, RecoveryAction, RustCloudBackupManager, VerificationState,
     WalletId, live_upload_retry_delay_for_attempt,
 };
 use crate::database::Database;
@@ -32,14 +33,12 @@ pub(crate) enum CloudBackupOperation {
     Enable,
     EnableForceNew,
     EnableNoDiscovery,
-    Verification { force_discoverable: bool },
     Recovery { action: RecoveryAction },
     RepairPasskey { no_discovery: bool },
     Sync,
     FetchCloudOnly,
     RestoreCloudWallet,
     DeleteCloudWallet,
-    RefreshDetail,
 }
 
 #[derive(Clone, Debug)]
@@ -160,12 +159,42 @@ struct MasterKeyUploadGrace {
     generation: GenerationToken,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimePasskeyProof {
+    namespace_id: String,
+    credential_id: Vec<u8>,
+    prf_salt: [u8; 32],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DetailEntryDecision {
+    RefreshOnly,
+    ContinueRustOwnedVerification,
+    StartPasskeyVerification,
+}
+
+fn apply_refresh_detail_result(
+    manager: &RustCloudBackupManager,
+    result: Option<CloudBackupDetailResult>,
+) {
+    let Some(result) = result else { return };
+    match result {
+        CloudBackupDetailResult::Success(detail) => {
+            manager.set_detail(Some(detail));
+        }
+        CloudBackupDetailResult::AccessError(error) => {
+            error!("Failed to refresh detail: {error}");
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct CloudBackupRuntimeActor {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
     pending_enable_session: Option<PendingEnableSession>,
     pending_verification_completion: Option<PendingVerificationCompletion>,
+    runtime_passkey_proof: Option<RuntimePasskeyProof>,
     pending_upload_verifier_running: bool,
     pending_upload_verifier_blocked_on_authorization: bool,
     pending_upload_verifier_wakeup: Arc<Notify>,
@@ -194,6 +223,7 @@ impl CloudBackupRuntimeActor {
             manager,
             pending_enable_session: None,
             pending_verification_completion: None,
+            runtime_passkey_proof: None,
             pending_upload_verifier_running: false,
             pending_upload_verifier_blocked_on_authorization: false,
             pending_upload_verifier_wakeup: Arc::new(Notify::new()),
@@ -390,11 +420,6 @@ impl CloudBackupRuntimeActor {
                     }
                 });
             }
-            CloudBackupOperation::Verification { force_discoverable } => {
-                cove_tokio::task::spawn(async move {
-                    manager.handle_start_verification(force_discoverable).await;
-                });
-            }
             CloudBackupOperation::Recovery { action } => {
                 cove_tokio::task::spawn(async move { manager.handle_recovery(action).await });
             }
@@ -421,9 +446,6 @@ impl CloudBackupRuntimeActor {
                     manager.handle_delete_cloud_wallet(&record_id).await
                 });
             }
-            CloudBackupOperation::RefreshDetail => {
-                cove_tokio::task::spawn(async move { manager.handle_refresh_detail().await });
-            }
         }
     }
 
@@ -434,6 +456,128 @@ impl CloudBackupRuntimeActor {
     ) -> ActorResult<()> {
         self.spawn_operation(operation, record_id);
         Produces::ok(())
+    }
+
+    pub async fn start_refresh_detail(&mut self) -> ActorResult<()> {
+        let Some(addr) = self.addr() else { return Produces::ok(()) };
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        manager.refresh_sync_health();
+        cove_tokio::task::spawn(async move {
+            let result = manager.refresh_cloud_backup_detail().await;
+            send!(addr.complete_refresh_detail(result));
+        });
+
+        Produces::ok(())
+    }
+
+    pub async fn complete_refresh_detail(
+        &mut self,
+        result: Option<CloudBackupDetailResult>,
+    ) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        apply_refresh_detail_result(&manager, result);
+        Produces::ok(())
+    }
+
+    pub async fn start_enter_detail(&mut self) -> ActorResult<()> {
+        let Some(addr) = self.addr() else { return Produces::ok(()) };
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        let decision = self.detail_entry_decision(&manager);
+
+        manager.refresh_sync_health();
+        cove_tokio::task::spawn(async move {
+            let result = manager.refresh_cloud_backup_detail().await;
+            send!(addr.complete_enter_detail(result, decision));
+        });
+
+        Produces::ok(())
+    }
+
+    pub async fn complete_enter_detail(
+        &mut self,
+        result: Option<CloudBackupDetailResult>,
+        decision: DetailEntryDecision,
+    ) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        apply_refresh_detail_result(&manager, result);
+
+        if matches!(decision, DetailEntryDecision::StartPasskeyVerification)
+            && let Some(addr) = self.addr()
+        {
+            send!(addr.start_verification(true));
+        }
+
+        Produces::ok(())
+    }
+
+    pub async fn start_verification(&mut self, force_discoverable: bool) -> ActorResult<()> {
+        let Some(addr) = self.addr() else { return Produces::ok(()) };
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        self.pending_verification_completion = None;
+        manager.set_verification(VerificationState::Verifying);
+        cove_tokio::task::spawn(async move {
+            let result = manager.deep_verify_cloud_backup(force_discoverable).await;
+            send!(addr.complete_verification(result));
+        });
+
+        Produces::ok(())
+    }
+
+    pub async fn complete_verification(
+        &mut self,
+        result: DeepVerificationResult,
+    ) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        manager.apply_deep_verification_result(result);
+        Produces::ok(())
+    }
+
+    fn detail_entry_decision(&self, manager: &RustCloudBackupManager) -> DetailEntryDecision {
+        let state = manager.state.read().clone();
+        if !matches!(state.status, CloudBackupStatus::Enabled) {
+            return DetailEntryDecision::RefreshOnly;
+        }
+
+        let can_continue_without_passkey_prompt = state.has_pending_upload_verification
+            || self.pending_verification_completion.is_some()
+            || self.runtime_passkey_proof_matches_current_manager(manager)
+            || matches!(
+                state.verification,
+                VerificationState::Verifying
+                    | VerificationState::Verified(_)
+                    | VerificationState::PasskeyConfirmed
+            );
+        if can_continue_without_passkey_prompt {
+            return DetailEntryDecision::ContinueRustOwnedVerification;
+        }
+
+        DetailEntryDecision::StartPasskeyVerification
+    }
+
+    fn runtime_passkey_proof_matches_current_manager(
+        &self,
+        manager: &RustCloudBackupManager,
+    ) -> bool {
+        let Some(proof) = self.runtime_passkey_proof.as_ref() else {
+            return false;
+        };
+        let Ok(namespace_id) = manager.current_namespace_id() else {
+            return false;
+        };
+
+        let cloud_keychain = CloudBackupKeychain::global();
+        let Some(credential_id) = cloud_keychain.load_credential_id() else {
+            return false;
+        };
+        let Some(prf_salt) = cloud_keychain.load_prf_salt() else {
+            return false;
+        };
+
+        proof.namespace_id == namespace_id
+            && proof.credential_id == credential_id
+            && proof.prf_salt == prf_salt
     }
 
     pub async fn replace_pending_enable_session(
@@ -464,6 +608,22 @@ impl CloudBackupRuntimeActor {
 
     pub async fn clear_pending_enable_session(&mut self) -> ActorResult<()> {
         self.pending_enable_session = None;
+        Produces::ok(())
+    }
+
+    pub async fn set_runtime_passkey_proof(
+        &mut self,
+        namespace_id: String,
+        credential_id: Vec<u8>,
+        prf_salt: [u8; 32],
+    ) -> ActorResult<()> {
+        self.runtime_passkey_proof =
+            Some(RuntimePasskeyProof { namespace_id, credential_id, prf_salt });
+        Produces::ok(())
+    }
+
+    pub async fn clear_runtime_passkey_proof(&mut self) -> ActorResult<()> {
+        self.runtime_passkey_proof = None;
         Produces::ok(())
     }
 

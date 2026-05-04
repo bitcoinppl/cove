@@ -418,6 +418,9 @@ pub(crate) struct MockPasskeyProviderImpl {
     discover_results: Arc<Mutex<VecDeque<MockDiscoverResult>>>,
     create_result: MockPasskeyCreateResult,
     authenticate_result: MockPasskeyActionResult,
+    create_count: Arc<Mutex<usize>>,
+    authenticate_count: Arc<Mutex<usize>>,
+    discover_count: Arc<Mutex<usize>>,
 }
 
 impl Default for MockPasskeyProviderImpl {
@@ -426,6 +429,9 @@ impl Default for MockPasskeyProviderImpl {
             discover_results: Arc::new(Mutex::new(VecDeque::new())),
             create_result: Arc::new(Mutex::new(None)),
             authenticate_result: Arc::new(Mutex::new(None)),
+            create_count: Arc::new(Mutex::new(0)),
+            authenticate_count: Arc::new(Mutex::new(0)),
+            discover_count: Arc::new(Mutex::new(0)),
         }
     }
 }
@@ -435,6 +441,9 @@ impl MockPasskeyProviderImpl {
         self.discover_results.lock().clear();
         *self.create_result.lock() = None;
         *self.authenticate_result.lock() = None;
+        *self.create_count.lock() = 0;
+        *self.authenticate_count.lock() = 0;
+        *self.discover_count.lock() = 0;
     }
 
     pub(crate) fn set_discover_result(
@@ -466,6 +475,14 @@ impl MockPasskeyProviderImpl {
     pub(crate) fn set_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
         *self.authenticate_result.lock() = Some(result);
     }
+
+    pub(crate) fn authenticate_count(&self) -> usize {
+        *self.authenticate_count.lock()
+    }
+
+    pub(crate) fn discover_count(&self) -> usize {
+        *self.discover_count.lock()
+    }
 }
 
 impl PasskeyProvider for MockPasskeyProviderImpl {
@@ -475,6 +492,7 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _user_id: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<PasskeyRegistrationResult, PasskeyError> {
+        *self.create_count.lock() += 1;
         self.create_result.lock().take().unwrap_or_else(|| {
             Err(PasskeyError::RequestFailed {
                 operation: PasskeyOperation::Registration,
@@ -492,6 +510,7 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _prf_salt: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
+        *self.authenticate_count.lock() += 1;
         self.authenticate_result.lock().take().unwrap_or_else(|| {
             Err(PasskeyError::RequestFailed {
                 operation: PasskeyOperation::AuthenticateAssertion,
@@ -508,6 +527,7 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _prf_salt: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<DiscoveredPasskeyResult, PasskeyError> {
+        *self.discover_count.lock() += 1;
         self.discover_results
             .lock()
             .pop_front()

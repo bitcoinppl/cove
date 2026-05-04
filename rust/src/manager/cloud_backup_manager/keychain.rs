@@ -77,6 +77,17 @@ impl CloudBackupKeychain {
         })
     }
 
+    pub(crate) fn load_prf_salt(&self) -> Option<[u8; 32]> {
+        self.0.get(CSPP_PRF_SALT_KEY.into()).and_then(|hex_str| {
+            hex::decode(hex_str)
+                .inspect_err(|error| warn!("Failed to decode stored prf_salt: {error}"))
+                .ok()
+                .and_then(|bytes| {
+                    bytes.try_into().inspect_err(|_| warn!("Stored prf_salt is not 32 bytes")).ok()
+                })
+        })
+    }
+
     pub(crate) fn clear_passkey(&self) {
         self.0.delete(CSPP_CREDENTIAL_ID_KEY.into());
         self.0.delete(CSPP_PRF_SALT_KEY.into());
