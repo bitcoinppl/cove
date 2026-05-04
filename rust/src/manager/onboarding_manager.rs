@@ -7,10 +7,7 @@ use std::{
 };
 
 use backon::{FibonacciBuilder, Retryable as _};
-use cove_cspp::backup_data::{
-    EncryptedMasterKeyBackup, PasskeyProviderHint,
-    PasskeyRegistrationPlatform as BackupPasskeyRegistrationPlatform,
-};
+use cove_cspp::backup_data::{EncryptedMasterKeyBackup, PasskeyProviderHint};
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
 use flume::Receiver;
@@ -1706,43 +1703,8 @@ fn choose_restore_provider_hint(
 }
 
 fn resolve_provider_hint(hint: &PasskeyProviderHint) -> CloudRestoreProviderHint {
-    let provider_name = match hint.aaguid.as_str() {
-        "00000000-0000-0000-0000-000000000000"
-            if hint.registered_platform == BackupPasskeyRegistrationPlatform::Ios =>
-        {
-            "Apple Passwords"
-        }
-        "0ea242b4-43c4-4a1b-8b17-dd6d0b6baec6" => "Keeper",
-        "50726f74-6f6e-5061-7373-50726f746f6e" => "Proton Pass",
-        "531126d6-e717-415c-9320-3d9aa6981239" => "Dashlane",
-        "53414d53-554e-4700-0000-000000000000" => "Samsung Pass",
-        "70617373-7761-6c6c-6669-646f32303236" => "Passwall",
-        "a10c6dd9-465e-4226-8198-c7c44b91c555" => "Kaspersky Password Manager",
-        "adce0002-35bc-c60a-648b-0b25f1f05503" => "Chrome on Mac",
-        "b35a26b2-8f6e-4697-ab1d-d44db4da28c6" => "Zoho Vault",
-        "b78a0a55-6ef8-d246-a042-ba0f6d55050c" => "LastPass",
-        "b84e4048-15dc-4dd0-8640-f4f60813c8af" => "NordPass",
-        "bada5566-a7aa-401f-bd96-45619a55120d" => "1Password",
-        "bfc748bb-3429-4faa-b9f9-7cfa9f3b76d0" => "iPasswords",
-        "d3452668-01fd-4c12-926c-83a4204853aa" => "Microsoft Password Manager",
-        "d548826e-79b4-db40-a3d8-11116f7e8349" => "Bitwarden",
-        "d9be9d39-e6a6-4c28-a581-32b044d986e4" => "Sticky Password Manager",
-        "dd4ec289-e01d-41c9-bb89-70fa845d4bf2" => "iCloud Keychain (Managed)",
-        "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4" => "Google Password Manager",
-        "eaecdef2-1c31-5634-8639-f1cbd9c00a08" => "KeePassDX",
-        "fbfc3007-154e-4ecc-8c0b-6e020557d7bd" => "Apple Passwords",
-        "fdb141b2-5d84-443e-8a35-4698c205a502" => "KeePassXC",
-        "f3809540-7f14-49c1-a8b3-8f813b225541" => "Enpass",
-        _ => {
-            return CloudRestoreProviderHint {
-                provider_name: None,
-                registered_at: hint.registered_at,
-            };
-        }
-    };
-
     CloudRestoreProviderHint {
-        provider_name: Some(provider_name.into()),
+        provider_name: hint.known_provider().map(|provider| provider.display_name().into()),
         registered_at: hint.registered_at,
     }
 }
@@ -1805,6 +1767,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use bip39::Mnemonic;
+    use cove_cspp::backup_data::PasskeyRegistrationPlatform as BackupPasskeyRegistrationPlatform;
 
     use super::*;
 
@@ -2975,7 +2938,7 @@ mod tests {
     }
 
     #[test]
-    fn restore_provider_hint_resolves_google_provider() {
+    fn restore_provider_hint_uses_known_provider_name_and_date() {
         let hint = resolve_provider_hint(&PasskeyProviderHint {
             aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
             registered_platform: BackupPasskeyRegistrationPlatform::Android,
@@ -2988,34 +2951,6 @@ mod tests {
                 provider_name: Some("Google Password Manager".into()),
                 registered_at: 1_777_661_234,
             }
-        );
-    }
-
-    #[test]
-    fn restore_provider_hint_resolves_zero_aaguid_for_ios_only() {
-        let ios_hint = resolve_provider_hint(&PasskeyProviderHint {
-            aaguid: "00000000-0000-0000-0000-000000000000".into(),
-            registered_platform: BackupPasskeyRegistrationPlatform::Ios,
-            registered_at: 1_777_661_234,
-        });
-
-        assert_eq!(
-            ios_hint,
-            CloudRestoreProviderHint {
-                provider_name: Some("Apple Passwords".into()),
-                registered_at: 1_777_661_234,
-            }
-        );
-
-        let android_hint = resolve_provider_hint(&PasskeyProviderHint {
-            aaguid: "00000000-0000-0000-0000-000000000000".into(),
-            registered_platform: BackupPasskeyRegistrationPlatform::Android,
-            registered_at: 1_777_661_236,
-        });
-
-        assert_eq!(
-            android_hint,
-            CloudRestoreProviderHint { provider_name: None, registered_at: 1_777_661_236 }
         );
     }
 

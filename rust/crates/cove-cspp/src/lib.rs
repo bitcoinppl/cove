@@ -105,6 +105,7 @@ pub mod error;
 pub mod key_derivation;
 pub mod master_key;
 pub mod master_key_crypto;
+pub mod passkey_provider;
 mod serde_helpers;
 pub mod store;
 pub mod wallet_crypto;
