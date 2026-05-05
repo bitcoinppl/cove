@@ -1840,7 +1840,7 @@ impl RustCloudBackupManager {
         let db_state = Self::load_persisted_state();
         let mut state = self.state.read().clone();
         state.status = Self::runtime_status_for(&db_state);
-        state.verification_metadata = Self::verification_metadata_for(&db_state);
+        state.verification_metadata = CloudBackupVerificationMetadata::from(&db_state);
         state.should_prompt_verification = db_state.should_prompt_verification();
         state.has_pending_upload_verification = self.has_pending_cloud_upload_verification();
         state.prompt_intent = self.prompt_state.lock().resolve(&state);
@@ -2513,7 +2513,7 @@ mod tests {
         let db_state = PersistedCloudBackupState::default();
 
         assert_eq!(
-            RustCloudBackupManager::verification_metadata_for(&db_state),
+            CloudBackupVerificationMetadata::from(&db_state),
             CloudBackupVerificationMetadata::NotConfigured,
         );
     }
@@ -2526,7 +2526,7 @@ mod tests {
         };
 
         assert_eq!(
-            RustCloudBackupManager::verification_metadata_for(&db_state),
+            CloudBackupVerificationMetadata::from(&db_state),
             CloudBackupVerificationMetadata::ConfiguredNeverVerified,
         );
     }
@@ -2540,7 +2540,7 @@ mod tests {
         };
 
         assert_eq!(
-            RustCloudBackupManager::verification_metadata_for(&db_state),
+            CloudBackupVerificationMetadata::from(&db_state),
             CloudBackupVerificationMetadata::Verified(21),
         );
     }
@@ -2554,7 +2554,7 @@ mod tests {
         };
 
         assert_eq!(
-            RustCloudBackupManager::verification_metadata_for(&db_state),
+            CloudBackupVerificationMetadata::from(&db_state),
             CloudBackupVerificationMetadata::NeedsVerification,
         );
     }
