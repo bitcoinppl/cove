@@ -5,7 +5,7 @@ use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupStatus,
-    RustCloudBackupManager, cloud_inventory::RemoteWalletTruth,
+    RustCloudBackupManager, blocking_cloud_error, cloud_inventory::RemoteWalletTruth,
 };
 
 impl RustCloudBackupManager {
@@ -37,7 +37,7 @@ impl RustCloudBackupManager {
             Ok(ids) => ids,
             Err(CloudStorageError::NotFound(_)) => Vec::new(),
             Err(error) => {
-                let error = self.blocking_cloud_error(
+                let error = blocking_cloud_error(
                     BlockingCloudStep::DetailRefresh,
                     CloudBackupError::cloud_storage_context("list wallet backups", error),
                 );

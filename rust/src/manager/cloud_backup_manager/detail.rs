@@ -4,7 +4,7 @@ use tracing::error;
 use super::{
     CLOUD_BACKUP_MANAGER, CloudBackupError, CloudBackupManagerAction, CloudBackupPasskeyChoiceFlow,
     CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    RustCloudBackupManager, workers::CloudBackupOperation,
+    OtherBackupsOperation, RustCloudBackupManager, workers::CloudBackupOperation,
 };
 
 type Action = CloudBackupManagerAction;
@@ -107,6 +107,8 @@ impl RustCloudBackupManager {
             A::DeleteCloudWallet { record_id } => {
                 CLOUD_BACKUP_MANAGER.clone().spawn_delete_cloud_wallet(record_id);
             }
+            A::RecoverOtherBackups => CLOUD_BACKUP_MANAGER.clone().spawn_recover_other_backups(),
+            A::DeleteOtherBackups => CLOUD_BACKUP_MANAGER.clone().spawn_delete_other_backups(),
             A::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
             A::EnterDetail => CLOUD_BACKUP_MANAGER.clone().spawn_enter_detail(),
         }
@@ -160,6 +162,14 @@ impl RustCloudBackupManager {
     fn spawn_delete_cloud_wallet(self: std::sync::Arc<Self>, record_id: String) {
         let operation = CloudBackupOperation::DeleteCloudWallet;
         send!(self.supervisor.start_operation(operation, Some(record_id)));
+    }
+
+    fn spawn_recover_other_backups(self: std::sync::Arc<Self>) {
+        send!(self.supervisor.start_operation(CloudBackupOperation::RecoverOtherBackups, None));
+    }
+
+    fn spawn_delete_other_backups(self: std::sync::Arc<Self>) {
+        send!(self.supervisor.start_operation(CloudBackupOperation::DeleteOtherBackups, None));
     }
 
     fn spawn_refresh_detail(self: std::sync::Arc<Self>) {
@@ -395,6 +405,42 @@ impl RustCloudBackupManager {
             }
             Err(error) => {
                 self.set_cloud_only_operation(CloudOnlyOperation::Failed {
+                    error: error.to_string(),
+                });
+            }
+        }
+    }
+
+    pub(crate) async fn handle_recover_other_backups(&self) {
+        self.set_other_backups_operation(OtherBackupsOperation::Recovering);
+
+        match self.do_recover_other_backups().await {
+            Ok(report) => {
+                self.set_other_backups_operation(OtherBackupsOperation::Recovered {
+                    wallets_restored: report.wallets_restored,
+                    wallets_failed: report.wallets_failed,
+                    failed_wallet_errors: report.failed_wallet_errors,
+                });
+                self.handle_sync().await;
+            }
+            Err(error) => {
+                self.set_other_backups_operation(OtherBackupsOperation::Failed {
+                    error: error.to_string(),
+                });
+            }
+        }
+    }
+
+    pub(crate) async fn handle_delete_other_backups(&self) {
+        self.set_other_backups_operation(OtherBackupsOperation::Deleting);
+
+        match self.do_delete_other_backups().await {
+            Ok(()) => {
+                self.set_other_backups_operation(OtherBackupsOperation::Deleted);
+                self.handle_refresh_detail().await;
+            }
+            Err(error) => {
+                self.set_other_backups_operation(OtherBackupsOperation::Failed {
                     error: error.to_string(),
                 });
             }

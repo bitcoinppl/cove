@@ -5,8 +5,8 @@ use futures::stream::{self, StreamExt as _, TryStreamExt as _};
 
 use super::wallets::{RemoteWalletBackupSummary, all_local_wallets, prepare_wallet_backup};
 use super::{
-    CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError, CloudBackupWalletItem,
-    CloudBackupWalletStatus,
+    CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError,
+    CloudBackupOtherBackupsSummary, CloudBackupWalletItem, CloudBackupWalletStatus,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -93,7 +93,10 @@ impl CloudWalletInventory {
             .collect()
     }
 
-    pub(super) fn build_detail(&self) -> CloudBackupDetail {
+    pub(super) fn build_detail(
+        &self,
+        other_backups: CloudBackupOtherBackupsSummary,
+    ) -> CloudBackupDetail {
         let local_record_ids: HashSet<_> =
             self.local_wallets.iter().map(|wallet| wallet.record_id.clone()).collect();
 
@@ -116,7 +119,13 @@ impl CloudWalletInventory {
             .filter(|record_id| !local_record_ids.contains(*record_id))
             .count() as u32;
 
-        CloudBackupDetail { last_sync: self.last_sync, up_to_date, needs_sync, cloud_only_count }
+        CloudBackupDetail {
+            last_sync: self.last_sync,
+            up_to_date,
+            needs_sync,
+            cloud_only_count,
+            other_backups,
+        }
     }
 
     pub(super) fn has_unknown_remote_wallets(&self) -> bool {
@@ -614,7 +623,7 @@ mod tests {
 
         assert!(upload_candidates.is_empty());
 
-        let detail = inventory.build_detail();
+        let detail = inventory.build_detail(CloudBackupOtherBackupsSummary::default());
 
         assert_eq!(detail.needs_sync.len(), 2);
         assert!(detail.needs_sync.iter().any(|item| {
@@ -654,7 +663,7 @@ mod tests {
         );
         assert!(inventory.upload_candidate_wallets().is_empty());
 
-        let detail = inventory.build_detail();
+        let detail = inventory.build_detail(CloudBackupOtherBackupsSummary::default());
 
         assert_eq!(detail.needs_sync.len(), 1);
         assert_eq!(detail.needs_sync[0].record_id, wallet.record_id);

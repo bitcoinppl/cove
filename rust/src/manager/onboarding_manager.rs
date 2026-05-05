@@ -19,7 +19,7 @@ use crate::{
     app::{App, AppAction, FfiApp},
     database::{Database, global_config::GlobalConfigKey},
     manager::{
-        cloud_backup_manager::{CLOUD_BACKUP_MANAGER, RustCloudBackupManager},
+        cloud_backup_manager::{CLOUD_BACKUP_MANAGER, CloudStorageIssue},
         connectivity_manager::CONNECTIVITY_MANAGER,
     },
     mnemonic::{Mnemonic as StoredMnemonic, MnemonicExt, NumberOfBip39Words},
@@ -196,6 +196,20 @@ enum CloudCheckIssue {
     Offline,
     CloudUnavailable,
     Unknown,
+}
+
+impl From<CloudStorageError> for CloudCheckIssue {
+    fn from(error: CloudStorageError) -> Self {
+        match CloudStorageIssue::from(error) {
+            CloudStorageIssue::AuthorizationRequired | CloudStorageIssue::Unavailable => {
+                Self::CloudUnavailable
+            }
+            CloudStorageIssue::Offline => Self::Offline,
+            CloudStorageIssue::NotFound
+            | CloudStorageIssue::QuotaExceeded
+            | CloudStorageIssue::Other => Self::Unknown,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1559,25 +1573,6 @@ impl RestoreOrigin {
     }
 }
 
-fn classify_cloud_check_error(error: &CloudStorageError) -> CloudCheckIssue {
-    match RustCloudBackupManager::cloud_storage_issue(error) {
-        crate::manager::cloud_backup_manager::CloudStorageIssue::AuthorizationRequired => {
-            CloudCheckIssue::CloudUnavailable
-        }
-        crate::manager::cloud_backup_manager::CloudStorageIssue::Offline => {
-            CloudCheckIssue::Offline
-        }
-        crate::manager::cloud_backup_manager::CloudStorageIssue::Unavailable => {
-            CloudCheckIssue::CloudUnavailable
-        }
-        crate::manager::cloud_backup_manager::CloudStorageIssue::NotFound
-        | crate::manager::cloud_backup_manager::CloudStorageIssue::QuotaExceeded
-        | crate::manager::cloud_backup_manager::CloudStorageIssue::Other => {
-            CloudCheckIssue::Unknown
-        }
-    }
-}
-
 fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String {
     match issue {
         CloudCheckIssue::Offline => {
@@ -1745,7 +1740,7 @@ where
         }
         Err(error) => {
             warn!("Onboarding: final cloud backup check failed: {error}");
-            CloudCheckOutcome::Inconclusive(classify_cloud_check_error(&error))
+            CloudCheckOutcome::Inconclusive(error.into())
         }
     }
 }
@@ -2881,14 +2876,14 @@ mod tests {
     fn cloud_check_timeout_is_treated_as_cloud_unavailable() {
         let error = CloudStorageError::NotAvailable("iCloud metadata query timed out".into());
 
-        assert_eq!(classify_cloud_check_error(&error), CloudCheckIssue::CloudUnavailable);
+        assert_eq!(CloudCheckIssue::from(error), CloudCheckIssue::CloudUnavailable);
     }
 
     #[test]
     fn cloud_drive_unavailable_is_treated_as_cloud_unavailable() {
         let error = CloudStorageError::NotAvailable("iCloud Drive is not available".into());
 
-        assert_eq!(classify_cloud_check_error(&error), CloudCheckIssue::CloudUnavailable);
+        assert_eq!(CloudCheckIssue::from(error), CloudCheckIssue::CloudUnavailable);
     }
 
     #[tokio::test(flavor = "current_thread")]

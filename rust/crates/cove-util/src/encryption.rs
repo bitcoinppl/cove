@@ -58,7 +58,7 @@ pub enum Error {
     Base64Decode(base64::DecodeError),
 
     #[error("invalid utf8 string")]
-    InvalidUtf8(std::string::FromUtf8Error),
+    InvalidUtf8(#[from] std::string::FromUtf8Error),
 }
 
 impl_default_for!(Cryptor);
@@ -148,7 +148,7 @@ impl Cryptor {
 
         let decrypted = self.decrypt(&ciphertext_bytes)?;
 
-        let decrypted_string = String::from_utf8(decrypted).map_err(Error::InvalidUtf8)?;
+        let decrypted_string = String::from_utf8(decrypted)?;
         Ok(decrypted_string)
     }
 

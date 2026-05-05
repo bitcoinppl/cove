@@ -130,7 +130,12 @@ impl RustCloudBackupManager {
             }
         };
 
-        self.set_detail(Some(inventory.build_detail()));
+        let other_backups = self.other_backup_summary().await.unwrap_or_else(|error| {
+            warn!("Backup integrity: other backup summary failed: {error}");
+            Default::default()
+        });
+
+        self.set_detail(Some(inventory.build_detail(other_backups)));
 
         let unsynced = inventory.upload_candidate_wallets();
         let handled_unsynced = !unsynced.is_empty();
@@ -206,7 +211,12 @@ impl RustCloudBackupManager {
             }
         };
 
-        self.set_detail(Some(inventory.build_detail()));
+        let other_backups = self.other_backup_summary().await.unwrap_or_else(|error| {
+            warn!("Backup integrity: detail other backup summary failed: {error}");
+            Default::default()
+        });
+
+        self.set_detail(Some(inventory.build_detail(other_backups)));
     }
 
     fn finish_backup_integrity_check(

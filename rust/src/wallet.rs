@@ -227,8 +227,7 @@ impl Wallet {
 
         let mut metadata = Database::global()
             .wallets
-            .get(&id, network, mode)
-            .map_err(WalletError::Database)?
+            .get(&id, network, mode)?
             .ok_or(WalletError::WalletNotFound)?;
 
         // set and save the origin if not set

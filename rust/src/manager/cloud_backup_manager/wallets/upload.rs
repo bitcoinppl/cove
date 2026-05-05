@@ -19,7 +19,10 @@ use super::{
     persist_enabled_cloud_backup_state, prepare_wallet_backup,
 };
 use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
-use crate::manager::cloud_backup_manager::{CloudBackupError, RustCloudBackupManager};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupError, CloudStorageErrorIssueExt as _, RustCloudBackupManager,
+    is_connectivity_related_issue,
+};
 
 const STALE_UPLOADING_RETRY_THRESHOLD_SECS: u64 = 60;
 
@@ -95,8 +98,7 @@ impl RustCloudBackupManager {
 
             cloud
                 .upload_wallet_backup(namespace.clone(), prepared.record_id.clone(), wallet_json)
-                .await
-                .map_err(CloudBackupError::CloudStorage)?;
+                .await?;
 
             let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
             self.mark_wallet_uploaded_pending_confirmation_if_revision_current(
@@ -253,11 +255,11 @@ impl RustCloudBackupManager {
         revision_hash: Option<String>,
         error: CloudStorageError,
     ) -> Result<(), CloudBackupError> {
-        let issue = Self::cloud_storage_issue(&error);
+        let issue = error.cloud_storage_issue();
         let retryable = Self::is_upload_failure_retryable(&error);
         let persisted_issue = Self::cloud_blob_failure_issue(issue);
         let cloud_error = CloudBackupError::CloudStorage(error);
-        if Self::is_connectivity_related_issue(issue) {
+        if is_connectivity_related_issue(issue) {
             self.mark_blob_dirty_state(current_state)?;
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
@@ -280,8 +282,8 @@ impl RustCloudBackupManager {
         revision_hash: Option<String>,
         error: CloudBackupError,
     ) -> Result<(), CloudBackupError> {
-        let issue = self.cloud_backup_issue(&error);
-        if Self::is_connectivity_related_issue(issue) {
+        let issue = error.cloud_storage_issue();
+        if is_connectivity_related_issue(issue) {
             self.mark_blob_dirty_state(current_state)?;
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
@@ -468,8 +470,7 @@ pub async fn upload_all_wallets(
 
         cloud
             .upload_wallet_backup(namespace.to_string(), prepared.record_id.clone(), wallet_json)
-            .await
-            .map_err(CloudBackupError::CloudStorage)?;
+            .await?;
 
         uploaded_wallets.push(prepared);
     }

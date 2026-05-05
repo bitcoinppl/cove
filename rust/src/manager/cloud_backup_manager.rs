@@ -112,6 +112,8 @@ pub enum CloudBackupManagerAction {
     FetchCloudOnly,
     RestoreCloudWallet { record_id: String },
     DeleteCloudWallet { record_id: String },
+    RecoverOtherBackups,
+    DeleteOtherBackups,
     RefreshDetail,
     EnterDetail,
 }
@@ -133,6 +135,7 @@ pub enum CloudBackupReconcileMessage {
     Recovery(RecoveryState),
     CloudOnly(CloudOnlyState),
     CloudOnlyOperation(CloudOnlyOperation),
+    OtherBackupsOperation(OtherBackupsOperation),
     PromptIntent(CloudBackupPromptIntent),
 }
 
@@ -204,6 +207,23 @@ pub struct CloudBackupDetail {
     pub needs_sync: Vec<CloudBackupWalletItem>,
     /// Number of wallets in the cloud that aren't on this device
     pub cloud_only_count: u32,
+    pub other_backups: CloudBackupOtherBackupsSummary,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, uniffi::Record)]
+pub struct CloudBackupOtherBackupsSummary {
+    pub namespace_count: u32,
+    pub wallet_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum OtherBackupsOperation {
+    Idle,
+    Recovering,
+    Recovered { wallets_restored: u32, wallets_failed: u32, failed_wallet_errors: Vec<String> },
+    Deleting,
+    Deleted,
+    Failed { error: String },
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -278,6 +298,7 @@ pub struct CloudBackupState {
     pub recovery: RecoveryState,
     pub cloud_only: CloudOnlyState,
     pub cloud_only_operation: CloudOnlyOperation,
+    pub other_backups_operation: OtherBackupsOperation,
 }
 
 impl Default for CloudBackupState {
@@ -299,6 +320,7 @@ impl Default for CloudBackupState {
             recovery: RecoveryState::Idle,
             cloud_only: CloudOnlyState::NotFetched,
             cloud_only_operation: CloudOnlyOperation::Idle,
+            other_backups_operation: OtherBackupsOperation::Idle,
         }
     }
 }
@@ -313,6 +335,132 @@ pub(crate) enum CloudStorageIssue {
     Other,
 }
 
+pub(crate) fn is_connectivity_related_issue(issue: CloudStorageIssue) -> bool {
+    matches!(issue, CloudStorageIssue::Offline | CloudStorageIssue::Unavailable)
+}
+
+pub(crate) fn blocking_cloud_error(
+    step: BlockingCloudStep,
+    error: CloudBackupError,
+) -> CloudBackupError {
+    if is_connectivity_related_issue(error.cloud_storage_issue()) {
+        return offline_error_for_step(step);
+    }
+
+    error
+}
+
+impl From<CloudBackupError> for CloudStorageIssue {
+    fn from(error: CloudBackupError) -> Self {
+        error.cloud_storage_issue()
+    }
+}
+
+impl CloudBackupError {
+    pub(crate) fn cloud_storage_issue(&self) -> CloudStorageIssue {
+        match self {
+            CloudBackupError::Offline(_) | CloudBackupError::Deferred(_) => {
+                CloudStorageIssue::Offline
+            }
+            CloudBackupError::CloudStorage(error) => error.into(),
+            CloudBackupError::CloudStorageContext { source, .. } => source.into(),
+            CloudBackupError::Cloud(_) => CloudStorageIssue::Other,
+            CloudBackupError::NotSupported(_)
+            | CloudBackupError::UnsupportedPasskeyProvider
+            | CloudBackupError::RecoveryRequired(_)
+            | CloudBackupError::Passkey(_)
+            | CloudBackupError::Crypto(_)
+            | CloudBackupError::Internal(_)
+            | CloudBackupError::Compatibility(_)
+            | CloudBackupError::PasskeyMismatch
+            | CloudBackupError::PasskeyDiscoveryCancelled
+            | CloudBackupError::Cancelled => CloudStorageIssue::Other,
+        }
+    }
+}
+
+impl From<CloudStorageError> for CloudStorageIssue {
+    fn from(error: CloudStorageError) -> Self {
+        error.cloud_storage_issue()
+    }
+}
+
+impl From<&CloudStorageError> for CloudStorageIssue {
+    fn from(error: &CloudStorageError) -> Self {
+        error.cloud_storage_issue()
+    }
+}
+
+pub(crate) trait CloudStorageErrorIssueExt {
+    fn cloud_storage_issue(&self) -> CloudStorageIssue;
+}
+
+impl From<&PersistedCloudBackupState> for CloudBackupVerificationMetadata {
+    fn from(db_state: &PersistedCloudBackupState) -> Self {
+        if db_state.is_unverified() {
+            return Self::NeedsVerification;
+        }
+
+        if !db_state.is_configured() {
+            return Self::NotConfigured;
+        }
+
+        match db_state.last_verified_at {
+            Some(last_verified_at) => Self::Verified(last_verified_at),
+            None => Self::ConfiguredNeverVerified,
+        }
+    }
+}
+
+impl CloudStorageErrorIssueExt for CloudStorageError {
+    fn cloud_storage_issue(&self) -> CloudStorageIssue {
+        match self {
+            CloudStorageError::AuthorizationRequired(_) => CloudStorageIssue::AuthorizationRequired,
+            CloudStorageError::Offline(_) => CloudStorageIssue::Offline,
+            CloudStorageError::NotAvailable(_) => CloudStorageIssue::Unavailable,
+            CloudStorageError::NotFound(_) => CloudStorageIssue::NotFound,
+            CloudStorageError::QuotaExceeded => CloudStorageIssue::QuotaExceeded,
+            CloudStorageError::UploadFailed(_) | CloudStorageError::DownloadFailed(_) => {
+                CloudStorageIssue::Other
+            }
+        }
+    }
+}
+
+pub(crate) fn offline_error_for_step(step: BlockingCloudStep) -> CloudBackupError {
+    CloudBackupError::Offline(offline_message_for_step(step).into())
+}
+
+fn offline_message_for_step(step: BlockingCloudStep) -> &'static str {
+    use BlockingCloudStep as B;
+    match step {
+        B::Enable => "Reconnect to the internet, then try enabling cloud backup again",
+        B::Restore => "Reconnect to the internet, then try restoring from cloud backup again",
+        B::Verify => "Reconnect to the internet, then try verifying cloud backup again",
+        B::Sync => "Reconnect to the internet, then try syncing cloud backup again",
+        B::FetchCloudOnly => "Reconnect to the internet, then try loading cloud-only wallets again",
+        B::RestoreCloudWallet => {
+            "Reconnect to the internet, then try restoring this cloud wallet again"
+        }
+        B::DeleteCloudWallet => {
+            "Reconnect to the internet, then try deleting this cloud wallet again"
+        }
+        B::RecoverOtherBackups => {
+            "Reconnect to the internet, then try recovering the other cloud backups again"
+        }
+        B::DeleteOtherBackups => {
+            "Reconnect to the internet, then try deleting the other cloud backups again"
+        }
+        B::RecreateManifest => {
+            "Reconnect to the internet, then try recreating the cloud backup manifest again"
+        }
+        B::RepairPasskey => "Reconnect to the internet, then try repairing cloud backup again",
+        B::DetailRefresh => {
+            "Reconnect to the internet, then try refreshing cloud backup details again"
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BlockingCloudStep {
     Enable,
@@ -322,6 +470,8 @@ pub(crate) enum BlockingCloudStep {
     FetchCloudOnly,
     RestoreCloudWallet,
     DeleteCloudWallet,
+    RecoverOtherBackups,
+    DeleteOtherBackups,
     RecreateManifest,
     RepairPasskey,
     DetailRefresh,
@@ -574,7 +724,7 @@ pub(crate) enum CloudBackupError {
     Cloud(String),
 
     #[error("cloud storage error: {0}")]
-    CloudStorage(CloudStorageError),
+    CloudStorage(#[from] CloudStorageError),
 
     #[error("cloud storage error: {context}: {source}")]
     CloudStorageContext { context: String, source: CloudStorageError },
@@ -663,50 +813,6 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub(crate) fn cloud_storage_issue(
-        error: &cove_device::cloud_storage::CloudStorageError,
-    ) -> CloudStorageIssue {
-        use cove_device::cloud_storage::CloudStorageError;
-
-        match error {
-            CloudStorageError::AuthorizationRequired(_) => CloudStorageIssue::AuthorizationRequired,
-            CloudStorageError::Offline(_) => CloudStorageIssue::Offline,
-            CloudStorageError::NotAvailable(_) => CloudStorageIssue::Unavailable,
-            CloudStorageError::NotFound(_) => CloudStorageIssue::NotFound,
-            CloudStorageError::QuotaExceeded => CloudStorageIssue::QuotaExceeded,
-            CloudStorageError::UploadFailed(_) | CloudStorageError::DownloadFailed(_) => {
-                CloudStorageIssue::Other
-            }
-        }
-    }
-
-    pub(crate) fn cloud_backup_issue(&self, error: &CloudBackupError) -> CloudStorageIssue {
-        match error {
-            CloudBackupError::Offline(_) | CloudBackupError::Deferred(_) => {
-                CloudStorageIssue::Offline
-            }
-            CloudBackupError::CloudStorage(error) => Self::cloud_storage_issue(error),
-            CloudBackupError::CloudStorageContext { source, .. } => {
-                Self::cloud_storage_issue(source)
-            }
-            CloudBackupError::Cloud(_) => CloudStorageIssue::Other,
-            CloudBackupError::NotSupported(_)
-            | CloudBackupError::UnsupportedPasskeyProvider
-            | CloudBackupError::RecoveryRequired(_)
-            | CloudBackupError::Passkey(_)
-            | CloudBackupError::Crypto(_)
-            | CloudBackupError::Internal(_)
-            | CloudBackupError::Compatibility(_)
-            | CloudBackupError::PasskeyMismatch
-            | CloudBackupError::PasskeyDiscoveryCancelled
-            | CloudBackupError::Cancelled => CloudStorageIssue::Other,
-        }
-    }
-
-    pub(crate) fn is_connectivity_related_issue(issue: CloudStorageIssue) -> bool {
-        matches!(issue, CloudStorageIssue::Offline | CloudStorageIssue::Unavailable)
-    }
-
     pub(crate) fn cloud_blob_failure_issue(
         issue: CloudStorageIssue,
     ) -> Option<CloudBlobFailureIssue> {
@@ -726,34 +832,8 @@ impl RustCloudBackupManager {
         !CONNECTIVITY_MANAGER.is_connected()
     }
 
-    fn offline_message_for_step(step: BlockingCloudStep) -> &'static str {
-        use BlockingCloudStep as B;
-        match step {
-            B::Enable => "Reconnect to the internet, then try enabling cloud backup again",
-            B::Restore => "Reconnect to the internet, then try restoring from cloud backup again",
-            B::Verify => "Reconnect to the internet, then try verifying cloud backup again",
-            B::Sync => "Reconnect to the internet, then try syncing cloud backup again",
-            B::FetchCloudOnly => {
-                "Reconnect to the internet, then try loading cloud-only wallets again"
-            }
-            B::RestoreCloudWallet => {
-                "Reconnect to the internet, then try restoring this cloud wallet again"
-            }
-            B::DeleteCloudWallet => {
-                "Reconnect to the internet, then try deleting this cloud wallet again"
-            }
-            B::RecreateManifest => {
-                "Reconnect to the internet, then try recreating the cloud backup manifest again"
-            }
-            B::RepairPasskey => "Reconnect to the internet, then try repairing cloud backup again",
-            B::DetailRefresh => {
-                "Reconnect to the internet, then try refreshing cloud backup details again"
-            }
-        }
-    }
-
     pub(crate) fn offline_error_for_step(&self, step: BlockingCloudStep) -> CloudBackupError {
-        CloudBackupError::Offline(Self::offline_message_for_step(step).into())
+        offline_error_for_step(step)
     }
 
     pub(crate) fn ensure_cloud_connectivity(
@@ -767,22 +847,7 @@ impl RustCloudBackupManager {
         Ok(())
     }
 
-    pub(crate) fn blocking_cloud_error(
-        &self,
-        step: BlockingCloudStep,
-        error: CloudBackupError,
-    ) -> CloudBackupError {
-        if Self::is_connectivity_related_issue(self.cloud_backup_issue(&error)) {
-            return self.offline_error_for_step(step);
-        }
-
-        error
-    }
-
     fn init() -> Arc<Self> {
-        #[cfg(test)]
-        ensure_cloud_backup_test_tokio_runtime();
-
         let (sender, receiver) = flume::bounded(1000);
 
         let manager = Arc::new_cyclic(|manager| Self {
@@ -798,26 +863,9 @@ impl RustCloudBackupManager {
         manager
     }
 
-    fn verification_metadata_for(
-        db_state: &PersistedCloudBackupState,
-    ) -> CloudBackupVerificationMetadata {
-        if db_state.is_unverified() {
-            return CloudBackupVerificationMetadata::NeedsVerification;
-        }
-
-        if !db_state.is_configured() {
-            return CloudBackupVerificationMetadata::NotConfigured;
-        }
-
-        match db_state.last_verified_at {
-            Some(last_verified_at) => CloudBackupVerificationMetadata::Verified(last_verified_at),
-            None => CloudBackupVerificationMetadata::ConfiguredNeverVerified,
-        }
-    }
-
     fn load_persisted_flags() -> (CloudBackupVerificationMetadata, bool) {
         let db_state = Self::load_persisted_state();
-        (Self::verification_metadata_for(&db_state), db_state.should_prompt_verification())
+        ((&db_state).into(), db_state.should_prompt_verification())
     }
 
     pub(super) fn send(&self, message: Message) {
@@ -1112,6 +1160,17 @@ impl RustCloudBackupManager {
         );
     }
 
+    pub(crate) fn set_other_backups_operation(
+        &self,
+        other_backups_operation: OtherBackupsOperation,
+    ) {
+        self.set_and_notify_field(
+            other_backups_operation,
+            |state| &mut state.other_backups_operation,
+            Message::OtherBackupsOperation,
+        );
+    }
+
     pub(crate) fn clear_in_process_state_for_local_reset(&self) {
         let supervisor = self.supervisor.clone();
         if let Err(error) = cove_tokio::task::block_on(async move {
@@ -1133,6 +1192,7 @@ impl RustCloudBackupManager {
         self.set_recovery(RecoveryState::Idle);
         self.set_cloud_only(CloudOnlyState::NotFetched);
         self.set_cloud_only_operation(CloudOnlyOperation::Idle);
+        self.set_other_backups_operation(OtherBackupsOperation::Idle);
         self.set_status(CloudBackupStatus::Disabled);
     }
 
@@ -1197,12 +1257,67 @@ impl RustCloudBackupManager {
         wallet_record_ids: &[String],
         remote_wallet_truth: RemoteWalletTruth,
     ) -> Result<CloudBackupDetail, CloudBackupError> {
+        let other_backups = self.other_backup_summary().await?;
+
         Ok(self::cloud_inventory::CloudWalletInventory::load_with_remote_truth(
             wallet_record_ids,
             remote_wallet_truth,
         )
         .await?
-        .build_detail())
+        .build_detail(other_backups))
+    }
+
+    pub(crate) async fn other_backup_summary(
+        &self,
+    ) -> Result<CloudBackupOtherBackupsSummary, CloudBackupError> {
+        let current_namespace = self.current_namespace_id()?;
+        let cloud = CloudStorage::global_explicit_client();
+        let namespaces = self.other_backup_namespaces(&cloud, &current_namespace).await?;
+        let mut wallet_count = 0;
+
+        for namespace in &namespaces {
+            match cloud.list_wallet_backups(namespace.clone()).await {
+                Ok(record_ids) => wallet_count += record_ids.len() as u32,
+                Err(CloudStorageError::NotFound(_)) => {}
+                Err(error) => {
+                    warn!("Failed to count other backup namespace {namespace}: {error}");
+                }
+            }
+        }
+
+        Ok(CloudBackupOtherBackupsSummary {
+            namespace_count: namespaces.len() as u32,
+            wallet_count,
+        })
+    }
+
+    pub(crate) async fn other_backup_namespaces(
+        &self,
+        cloud: &CloudStorageClient,
+        current_namespace: &str,
+    ) -> Result<Vec<String>, CloudBackupError> {
+        let mut namespaces = cloud.list_namespaces().await.map_err(|error| {
+            blocking_cloud_error(
+                BlockingCloudStep::DetailRefresh,
+                CloudBackupError::cloud_storage_context("list cloud backup namespaces", error),
+            )
+        })?;
+
+        namespaces.retain(|namespace| namespace != current_namespace);
+        namespaces.sort();
+
+        let mut backup_namespaces = Vec::new();
+        for namespace in namespaces {
+            match cloud.download_master_key_backup(namespace.clone()).await {
+                Ok(_) => backup_namespaces.push(namespace),
+                Err(CloudStorageError::NotFound(_)) => {}
+                Err(error) => {
+                    warn!("Failed to inspect other backup namespace {namespace}: {error}");
+                }
+            }
+        }
+
+        Ok(backup_namespaces)
     }
 
     pub(crate) fn dismiss_verification_prompt_impl(&self) -> Result<(), CloudBackupError> {
@@ -1851,6 +1966,7 @@ impl RustCloudBackupManager {
         self.set_recovery(RecoveryState::Idle);
         self.set_cloud_only(CloudOnlyState::NotFetched);
         self.set_cloud_only_operation(CloudOnlyOperation::Idle);
+        self.set_other_backups_operation(OtherBackupsOperation::Idle);
         self.set_status(CloudBackupStatus::Disabled);
         self.refresh_sync_health();
         send!(self.supervisor.clear_upload_runtime_state());
@@ -2192,6 +2308,7 @@ mod tests {
             up_to_date: Vec::new(),
             needs_sync: Vec::new(),
             cloud_only_count,
+            other_backups: CloudBackupOtherBackupsSummary::default(),
         }
     }
 
@@ -2273,31 +2390,25 @@ mod tests {
     #[test]
     fn cloud_storage_issue_classifies_typed_errors() {
         assert_eq!(
-            RustCloudBackupManager::cloud_storage_issue(&CloudStorageError::AuthorizationRequired(
-                "authorization required".into()
+            CloudStorageIssue::from(&CloudStorageError::AuthorizationRequired(
+                "authorization required".into(),
             )),
             CloudStorageIssue::AuthorizationRequired
         );
         assert_eq!(
-            RustCloudBackupManager::cloud_storage_issue(&CloudStorageError::Offline(
-                "offline".into()
-            )),
+            CloudStorageIssue::from(&CloudStorageError::Offline("offline".into())),
             CloudStorageIssue::Offline
         );
         assert_eq!(
-            RustCloudBackupManager::cloud_storage_issue(&CloudStorageError::NotAvailable(
-                "not available".into()
-            )),
+            CloudStorageIssue::from(&CloudStorageError::NotAvailable("not available".into())),
             CloudStorageIssue::Unavailable
         );
         assert_eq!(
-            RustCloudBackupManager::cloud_storage_issue(&CloudStorageError::QuotaExceeded),
+            CloudStorageIssue::from(&CloudStorageError::QuotaExceeded),
             CloudStorageIssue::QuotaExceeded
         );
         assert_eq!(
-            RustCloudBackupManager::cloud_storage_issue(&CloudStorageError::NotFound(
-                "wallet".into()
-            )),
+            CloudStorageIssue::from(&CloudStorageError::NotFound("wallet".into())),
             CloudStorageIssue::NotFound
         );
     }
@@ -2305,7 +2416,7 @@ mod tests {
     #[test]
     fn opaque_upload_messages_are_not_classified_by_text() {
         assert_eq!(
-            RustCloudBackupManager::cloud_storage_issue(&CloudStorageError::UploadFailed(
+            CloudStorageIssue::from(&CloudStorageError::UploadFailed(
                 "authorization required".into()
             )),
             CloudStorageIssue::Other

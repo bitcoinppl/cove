@@ -145,6 +145,7 @@ struct MockCloudState {
     upload_wallet_backup_error: Option<CloudStorageError>,
     reflect_uploaded_wallets_in_listing: bool,
     uploaded_wallet_backups: Vec<(String, String)>,
+    deleted_namespace_policies: Vec<CloudAccessPolicy>,
     wallet_backup_upload_attempts: usize,
     dirty_wallet_on_next_upload: Option<WalletId>,
     changed_wallet_on_next_upload: Option<WalletId>,
@@ -231,6 +232,20 @@ impl MockCloudStorage {
 
     pub(crate) fn has_master_key_backup(&self, namespace: &str) -> bool {
         self.state.lock().master_key_backups.contains_key(namespace)
+    }
+
+    pub(crate) fn has_namespace(&self, namespace: &str) -> bool {
+        let state = self.state.lock();
+        state.master_key_backups.contains_key(namespace)
+            || state.wallet_files.contains_key(namespace)
+            || state
+                .wallet_backups
+                .keys()
+                .any(|(backup_namespace, _)| backup_namespace == namespace)
+    }
+
+    pub(crate) fn deleted_namespace_policies(&self) -> Vec<CloudAccessPolicy> {
+        self.state.lock().deleted_namespace_policies.clone()
     }
 
     pub(crate) fn wallet_backup_upload_attempt_count(&self) -> usize {
@@ -357,11 +372,33 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(())
     }
 
+    async fn delete_namespace(
+        &self,
+        namespace: String,
+        policy: CloudAccessPolicy,
+    ) -> Result<(), CloudStorageError> {
+        let mut state = self.state.lock();
+        state.deleted_namespace_policies.push(policy);
+        state.master_key_backups.remove(&namespace);
+        state.wallet_files.remove(&namespace);
+        state.wallet_backups.retain(|(backup_namespace, _), _| backup_namespace != &namespace);
+        state
+            .uploaded_wallet_backups
+            .retain(|(uploaded_namespace, _)| uploaded_namespace != &namespace);
+        Ok(())
+    }
+
     async fn list_namespaces(
         &self,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        Ok(self.state.lock().wallet_files.keys().cloned().collect())
+        let state = self.state.lock();
+        let mut namespaces: std::collections::HashSet<String> =
+            state.wallet_files.keys().cloned().collect();
+        namespaces.extend(state.master_key_backups.keys().cloned());
+        namespaces.extend(state.wallet_backups.keys().map(|(namespace, _)| namespace.clone()));
+
+        Ok(namespaces.into_iter().collect())
     }
 
     async fn list_wallet_files(

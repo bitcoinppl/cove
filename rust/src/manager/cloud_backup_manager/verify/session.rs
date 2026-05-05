@@ -376,7 +376,12 @@ impl VerificationSession {
 
         let unsynced = match inventory_result {
             Ok(inventory) => {
-                let detail = inventory.build_detail();
+                let other_backups =
+                    self.manager.other_backup_summary().await.unwrap_or_else(|error| {
+                        warn!("Verification: other backup summary failed: {error}");
+                        Default::default()
+                    });
+                let detail = inventory.build_detail(other_backups);
                 self.report.detail = Some(detail.clone());
                 if inventory.has_unknown_remote_wallets() {
                     return Some(
@@ -455,7 +460,11 @@ impl VerificationSession {
         let listed: std::collections::HashSet<_> = updated_ids.iter().cloned().collect();
         let remaining_unsynced = inventory.upload_candidate_wallets();
 
-        self.report.detail = Some(inventory.build_detail());
+        let other_backups = self.manager.other_backup_summary().await.unwrap_or_else(|error| {
+            warn!("Verification: completion other backup summary failed: {error}");
+            Default::default()
+        });
+        self.report.detail = Some(inventory.build_detail(other_backups));
         self.wallet_record_ids = Some(updated_ids);
 
         if inventory.has_unknown_remote_wallets() {

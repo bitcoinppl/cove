@@ -173,7 +173,7 @@ impl RustCloudBackupManager {
         repair
             .run(&local_master_key, &wallet_record_ids, strategy)
             .await
-            .map_err(|error| error.into_cloud_backup_error())?;
+            .map_err(CloudBackupError::from)?;
 
         info!("Repaired cloud master key wrapper with repaired passkey association");
         Ok(())

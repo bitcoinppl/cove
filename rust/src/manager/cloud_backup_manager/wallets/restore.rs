@@ -307,7 +307,7 @@ mod tests {
             _data: Vec<u8>,
             _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
-            Err(CloudStorageError::NotAvailable("unused in test".into()))
+            panic!("unused in test")
         }
 
         async fn upload_wallet_backup(
@@ -317,7 +317,7 @@ mod tests {
             _data: Vec<u8>,
             _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
-            Err(CloudStorageError::NotAvailable("unused in test".into()))
+            panic!("unused in test")
         }
 
         async fn download_master_key_backup(
@@ -325,7 +325,7 @@ mod tests {
             _namespace: String,
             _policy: CloudAccessPolicy,
         ) -> Result<Vec<u8>, CloudStorageError> {
-            Err(CloudStorageError::NotAvailable("unused in test".into()))
+            panic!("unused in test")
         }
 
         async fn download_wallet_backup(
@@ -334,7 +334,7 @@ mod tests {
             _record_id: String,
             _policy: CloudAccessPolicy,
         ) -> Result<Vec<u8>, CloudStorageError> {
-            Err(CloudStorageError::NotAvailable("unused in test".into()))
+            panic!("unused in test")
         }
 
         async fn delete_wallet_backup(
@@ -343,7 +343,15 @@ mod tests {
             _record_id: String,
             _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
-            Err(CloudStorageError::NotAvailable("unused in test".into()))
+            panic!("unused in test")
+        }
+
+        async fn delete_namespace(
+            &self,
+            _namespace: String,
+            _policy: CloudAccessPolicy,
+        ) -> Result<(), CloudStorageError> {
+            panic!("unused in test")
         }
 
         async fn list_namespaces(

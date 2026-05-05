@@ -33,6 +33,8 @@ pub(crate) enum CloudBackupOperation {
     FetchCloudOnly,
     RestoreCloudWallet,
     DeleteCloudWallet,
+    RecoverOtherBackups,
+    DeleteOtherBackups,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -183,6 +185,14 @@ impl CloudBackupSupervisor {
                 cove_tokio::task::spawn(async move {
                     manager.handle_delete_cloud_wallet(&record_id).await
                 });
+            }
+            CloudBackupOperation::RecoverOtherBackups => {
+                cove_tokio::task::spawn(
+                    async move { manager.handle_recover_other_backups().await },
+                );
+            }
+            CloudBackupOperation::DeleteOtherBackups => {
+                cove_tokio::task::spawn(async move { manager.handle_delete_other_backups().await });
             }
         }
     }

@@ -39,9 +39,7 @@ impl BlobCheckResult {
                 | CloudStorageError::DownloadFailed(_)
         );
 
-        let issue = RustCloudBackupManager::cloud_blob_failure_issue(
-            RustCloudBackupManager::cloud_storage_issue(&error),
-        );
+        let issue = RustCloudBackupManager::cloud_blob_failure_issue(error.clone().into());
 
         Self::Failed { error: error.to_string(), retryable, issue }
     }

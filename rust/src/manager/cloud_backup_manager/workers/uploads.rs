@@ -199,7 +199,7 @@ impl CloudBackupUploadWorker {
             );
             let authorization_required = upload_result.as_ref().err().is_some_and(|error| {
                 matches!(
-                    manager.cloud_backup_issue(error),
+                    error.cloud_storage_issue(),
                     crate::manager::cloud_backup_manager::CloudStorageIssue::AuthorizationRequired
                 )
             });
@@ -258,7 +258,7 @@ impl CloudBackupUploadWorker {
         );
         let authorization_required = upload_result.as_ref().err().is_some_and(|error| {
             matches!(
-                manager.cloud_backup_issue(error),
+                error.cloud_storage_issue(),
                 crate::manager::cloud_backup_manager::CloudStorageIssue::AuthorizationRequired
             )
         });

@@ -23,23 +23,28 @@ enum LocalKeyProof {
     Inconclusive,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub(super) enum WrapperRepairError {
+    #[error("local master key cannot decrypt existing cloud wallet backups")]
     WrongKey,
+
+    #[error("could not download any wallet to verify local key")]
     Inconclusive,
-    Operation(CloudBackupError),
+
+    #[error(transparent)]
+    Operation(#[from] CloudBackupError),
 }
 
-impl WrapperRepairError {
-    pub(super) fn into_cloud_backup_error(self) -> CloudBackupError {
-        match self {
-            Self::WrongKey => CloudBackupError::Crypto(
+impl From<WrapperRepairError> for CloudBackupError {
+    fn from(error: WrapperRepairError) -> Self {
+        match error {
+            WrapperRepairError::WrongKey => CloudBackupError::Crypto(
                 "local master key cannot decrypt existing cloud wallet backups".into(),
             ),
-            Self::Inconclusive => {
+            WrapperRepairError::Inconclusive => {
                 CloudBackupError::Cloud("could not download any wallet to verify local key".into())
             }
-            Self::Operation(error) => error,
+            WrapperRepairError::Operation(error) => error,
         }
     }
 }
@@ -145,8 +150,7 @@ impl WrapperRepairOperation {
     ) -> Result<(), WrapperRepairError> {
         self.verify_local_key(wallet_record_ids, local_master_key).await?;
 
-        let credentials =
-            self.credentials(strategy).await.map_err(WrapperRepairError::Operation)?;
+        let credentials = self.credentials(strategy).await?;
 
         let encrypted_backup = master_key_crypto::encrypt_master_key_with_provider_hint(
             local_master_key,
@@ -154,33 +158,27 @@ impl WrapperRepairOperation {
             &credentials.prf_salt,
             credentials.provider_hint.clone(),
         )
-        .map_err_str(CloudBackupError::Crypto)
-        .map_err(WrapperRepairError::Operation)?;
+        .map_err_str(CloudBackupError::Crypto)?;
 
-        let backup_json = serde_json::to_vec(&encrypted_backup)
-            .map_err_str(CloudBackupError::Internal)
-            .map_err(WrapperRepairError::Operation)?;
+        let backup_json =
+            serde_json::to_vec(&encrypted_backup).map_err_str(CloudBackupError::Internal)?;
 
         self.cloud
             .upload_master_key_backup(self.namespace.clone(), backup_json)
             .await
-            .map_err(CloudBackupError::CloudStorage)
-            .map_err(WrapperRepairError::Operation)?;
+            .map_err(CloudBackupError::from)?;
 
         self.keychain
             .save_passkey(&credentials.credential_id, credentials.prf_salt)
-            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)
-            .map_err(WrapperRepairError::Operation)?;
+            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
 
-        self.manager
-            .mark_blob_uploaded_pending_confirmation(
-                self.namespace.as_str(),
-                None,
-                cspp_master_key_record_id(),
-                "master-key-wrapper".into(),
-                jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
-            )
-            .map_err(WrapperRepairError::Operation)?;
+        self.manager.mark_blob_uploaded_pending_confirmation(
+            self.namespace.as_str(),
+            None,
+            cspp_master_key_record_id(),
+            "master-key-wrapper".into(),
+            jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+        )?;
 
         Ok(())
     }
