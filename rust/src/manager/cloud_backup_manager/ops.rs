@@ -11,19 +11,20 @@ use zeroize::Zeroizing;
 
 use super::cloud_inventory::CloudWalletInventory;
 use super::wallets::{
-    CloudBackupStateStore, CloudBackupWalletStore, DownloadedWalletBackup, NamespaceMatch,
-    NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, UnpersistedPrfKey,
-    WalletBackupLookup, WalletBackupReader, WalletRestoreSession,
+    DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher,
+    PasskeyMaterialAcquirer, UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader,
+    WalletRestoreSession,
 };
 
 use super::workers::RestoredPasskeyMaterial;
 use super::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupKeychain,
     CloudBackupPasskeyChoiceFlow, CloudBackupRestoreProgress, CloudBackupRestoreReport,
-    CloudBackupRestoreStage, CloudBackupStatus, CloudBackupWalletItem, CloudBackupWalletStatus,
-    DeepVerificationReport, PendingEnableSession, PendingVerificationCompletion,
-    PendingVerificationUpload, RestoreOperation, RustCloudBackupManager, VerificationState,
-    blocking_cloud_error, current_namespace_wallet_record_ids, is_connectivity_related_issue,
+    CloudBackupRestoreStage, CloudBackupStatus, CloudBackupStore, CloudBackupWalletItem,
+    CloudBackupWalletStatus, DeepVerificationReport, PendingEnableSession,
+    PendingVerificationCompletion, PendingVerificationUpload, RestoreOperation,
+    RustCloudBackupManager, VerificationState, blocking_cloud_error,
+    current_namespace_wallet_record_ids, is_connectivity_related_issue,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
@@ -155,10 +156,10 @@ impl RustCloudBackupManager {
             .unwrap_or(uploaded_wallets.len() as u32);
         match state_mode {
             FinalizeUploadStateMode::PreserveVerification => {
-                CloudBackupStateStore::new(&db).persist_enabled(wallet_count)?;
+                CloudBackupStore::new(&db).persist_enabled(wallet_count)?;
             }
             FinalizeUploadStateMode::ResetVerification => {
-                CloudBackupStateStore::new(&db).persist_enabled_reset_verification(wallet_count)?;
+                CloudBackupStore::new(&db).persist_enabled_reset_verification(wallet_count)?;
             }
         }
 
@@ -282,8 +283,8 @@ impl RustCloudBackupManager {
             })?;
 
         let db = Database::global();
-        let local_record_ids: std::collections::HashSet<_> = CloudBackupWalletStore::new(&db)
-            .all()?
+        let local_record_ids: std::collections::HashSet<_> = CloudBackupStore::new(&db)
+            .all_wallets()?
             .iter()
             .map(|wallet| cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref()))
             .collect();
@@ -397,8 +398,8 @@ impl RustCloudBackupManager {
         );
 
         let db = Database::global();
-        let existing_fingerprints: Vec<_> = CloudBackupWalletStore::new(&db)
-            .all()?
+        let existing_fingerprints: Vec<_> = CloudBackupStore::new(&db)
+            .all_wallets()?
             .iter()
             .filter_map(|wallet| {
                 wallet
@@ -539,8 +540,8 @@ impl RustCloudBackupManager {
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
         let cloud = CloudStorage::global_explicit_client();
-        let uploaded_wallets = CloudBackupWalletStore::global()
-            .upload_all(&cloud, &namespace, &critical_key)
+        let uploaded_wallets = CloudBackupStore::global()
+            .upload_all_wallets(&cloud, &namespace, &critical_key)
             .await
             .map_err(|error| blocking_cloud_error(BlockingCloudStep::RecreateManifest, error))?;
 
@@ -671,8 +672,8 @@ impl RustCloudBackupManager {
 
         let result = async {
             let critical_key = Zeroizing::new(matched.master_key.critical_data_key());
-            let uploaded_wallets = CloudBackupWalletStore::global()
-                .upload_all(cloud, &matched.namespace_id, &critical_key)
+            let uploaded_wallets = CloudBackupStore::global()
+                .upload_all_wallets(cloud, &matched.namespace_id, &critical_key)
                 .await
                 .map_err(|error| blocking_cloud_error(BlockingCloudStep::Enable, error))?;
 
@@ -1180,8 +1181,8 @@ impl RustCloudBackupManager {
 
         info!("Enable: uploading wallets");
         let critical_key = Zeroizing::new(master_key.critical_data_key());
-        let uploaded_wallets = CloudBackupWalletStore::global()
-            .upload_all(&cloud, &namespace_id, &critical_key)
+        let uploaded_wallets = CloudBackupStore::global()
+            .upload_all_wallets(&cloud, &namespace_id, &critical_key)
             .await
             .map_err(|error| blocking_cloud_error(BlockingCloudStep::Enable, error))?;
         let pending_uploads = Self::pending_verification_uploads(&uploaded_wallets);

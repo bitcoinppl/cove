@@ -16,7 +16,7 @@ use tracing::{error, info, warn};
 use self::passkey_auth::{PasskeyAuthOutcome, PasskeyAuthPolicy, PasskeyAuthenticator};
 use self::session::VerificationSession;
 use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
-use super::wallets::CloudBackupStateStore;
+use super::CloudBackupStore;
 use super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
     CloudBackupRetryAction, CloudBackupRetryContext, CloudBackupStatus, DeepVerificationFailure,
@@ -221,7 +221,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        CloudBackupStateStore::global().persist_enabled(wallet_count)?;
+        CloudBackupStore::global().persist_enabled(wallet_count)?;
         self.set_status(CloudBackupStatus::Enabled);
 
         match self.refresh_cloud_backup_detail().await {

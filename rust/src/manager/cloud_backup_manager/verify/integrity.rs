@@ -5,8 +5,9 @@ use tracing::{error, info, warn};
 use super::{CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager};
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
-use crate::manager::cloud_backup_manager::wallets::CloudBackupWalletStore;
-use crate::manager::cloud_backup_manager::{CloudBackupKeychain, CloudBackupOtherBackupsSummary};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupKeychain, CloudBackupOtherBackupsSummary, CloudBackupStore,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BackupIntegrityIssue {
@@ -165,7 +166,7 @@ impl RustCloudBackupManager {
         }
 
         let db = Database::global();
-        let has_local_wallets = match CloudBackupWalletStore::new(&db).count() {
+        let has_local_wallets = match CloudBackupStore::new(&db).wallet_count() {
             Ok(local_count) => local_count > 0,
             Err(error) => {
                 warn!("Backup integrity: local wallet count failed: {error}");
