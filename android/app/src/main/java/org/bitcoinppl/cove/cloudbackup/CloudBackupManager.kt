@@ -23,6 +23,7 @@ import org.bitcoinppl.cove_core.CloudBackupVerificationMetadata
 import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
+import org.bitcoinppl.cove_core.OtherBackupsOperation
 import org.bitcoinppl.cove_core.RecoveryState
 import org.bitcoinppl.cove_core.RustCloudBackupManager
 import org.bitcoinppl.cove_core.SyncState
@@ -94,6 +95,9 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
 
     val cloudOnlyOperation: CloudOnlyOperation
         get() = state.cloudOnlyOperation
+
+    val otherBackupsOperation: OtherBackupsOperation
+        get() = state.otherBackupsOperation
 
     val hasPendingUploadVerification: Boolean
         get() = state.hasPendingUploadVerification
@@ -201,6 +205,7 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
             is CloudBackupReconcileMessage.Recovery -> state = state.copy(recovery = message.v1)
             is CloudBackupReconcileMessage.CloudOnly -> state = state.copy(cloudOnly = message.v1)
             is CloudBackupReconcileMessage.CloudOnlyOperation -> state = state.copy(cloudOnlyOperation = message.v1)
+            is CloudBackupReconcileMessage.OtherBackupsOperation -> state = state.copy(otherBackupsOperation = message.v1)
             is CloudBackupReconcileMessage.PromptIntent -> state = state.copy(promptIntent = message.v1)
         }
     }

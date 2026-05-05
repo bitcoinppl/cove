@@ -2183,6 +2183,8 @@ public protocol CloudStorageAccess: AnyObject, Sendable {
     
     func deleteWalletBackup(namespace: String, recordId: String, policy: CloudAccessPolicy) async throws 
     
+    func deleteNamespace(namespace: String, policy: CloudAccessPolicy) async throws
+
     /**
      * List all namespace IDs (subdirectories of cspp-namespaces/)
      */
@@ -2426,6 +2428,49 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                 return try await uniffiObj.deleteWalletBackup(
                      namespace: try FfiConverterString.lift(namespace),
                      recordId: try FfiConverterString.lift(recordId),
+                     policy: try FfiConverterTypeCloudAccessPolicy_lift(policy)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        deleteNamespace: { (
+            uniffiHandle: UInt64,
+            namespace: RustBuffer,
+            policy: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.deleteNamespace(
+                     namespace: try FfiConverterString.lift(namespace),
                      policy: try FfiConverterTypeCloudAccessPolicy_lift(policy)
                 )
             }
@@ -3677,16 +3722,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 27370) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 35406) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_namespace() != 26766) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 56403) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 47835) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 55189) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 24091) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 21304) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 34175) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 13608) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918) {

@@ -27750,6 +27750,8 @@ data class CloudBackupDetail (
      * Number of wallets in the cloud that aren't on this device
      */
     var `cloudOnlyCount`: kotlin.UInt
+    ,
+    var `otherBackups`: CloudBackupOtherBackupsSummary
     
 ){
     
@@ -27770,6 +27772,7 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterSequenceTypeCloudBackupWalletItem.read(buf),
             FfiConverterSequenceTypeCloudBackupWalletItem.read(buf),
             FfiConverterUInt.read(buf),
+            FfiConverterTypeCloudBackupOtherBackupsSummary.read(buf),
         )
     }
 
@@ -27777,7 +27780,8 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterOptionalULong.allocationSize(value.`lastSync`) +
             FfiConverterSequenceTypeCloudBackupWalletItem.allocationSize(value.`upToDate`) +
             FfiConverterSequenceTypeCloudBackupWalletItem.allocationSize(value.`needsSync`) +
-            FfiConverterUInt.allocationSize(value.`cloudOnlyCount`)
+            FfiConverterUInt.allocationSize(value.`cloudOnlyCount`) +
+            FfiConverterTypeCloudBackupOtherBackupsSummary.allocationSize(value.`otherBackups`)
     )
 
     override fun write(value: CloudBackupDetail, buf: ByteBuffer) {
@@ -27785,6 +27789,45 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterSequenceTypeCloudBackupWalletItem.write(value.`upToDate`, buf)
             FfiConverterSequenceTypeCloudBackupWalletItem.write(value.`needsSync`, buf)
             FfiConverterUInt.write(value.`cloudOnlyCount`, buf)
+            FfiConverterTypeCloudBackupOtherBackupsSummary.write(value.`otherBackups`, buf)
+    }
+}
+
+
+
+data class CloudBackupOtherBackupsSummary (
+    var `namespaceCount`: kotlin.UInt
+    ,
+    var `walletCount`: kotlin.UInt
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupOtherBackupsSummary: FfiConverterRustBuffer<CloudBackupOtherBackupsSummary> {
+    override fun read(buf: ByteBuffer): CloudBackupOtherBackupsSummary {
+        return CloudBackupOtherBackupsSummary(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupOtherBackupsSummary) = (
+            FfiConverterUInt.allocationSize(value.`namespaceCount`) +
+            FfiConverterUInt.allocationSize(value.`walletCount`)
+    )
+
+    override fun write(value: CloudBackupOtherBackupsSummary, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`namespaceCount`, buf)
+            FfiConverterUInt.write(value.`walletCount`, buf)
     }
 }
 
@@ -27956,6 +27999,8 @@ data class CloudBackupState (
     var `cloudOnly`: CloudOnlyState
     , 
     var `cloudOnlyOperation`: CloudOnlyOperation
+    ,
+    var `otherBackupsOperation`: OtherBackupsOperation
     
 ){
     
@@ -27988,6 +28033,7 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterTypeRecoveryState.read(buf),
             FfiConverterTypeCloudOnlyState.read(buf),
             FfiConverterTypeCloudOnlyOperation.read(buf),
+            FfiConverterTypeOtherBackupsOperation.read(buf),
         )
     }
 
@@ -28007,7 +28053,8 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterTypeSyncState.allocationSize(value.`sync`) +
             FfiConverterTypeRecoveryState.allocationSize(value.`recovery`) +
             FfiConverterTypeCloudOnlyState.allocationSize(value.`cloudOnly`) +
-            FfiConverterTypeCloudOnlyOperation.allocationSize(value.`cloudOnlyOperation`)
+            FfiConverterTypeCloudOnlyOperation.allocationSize(value.`cloudOnlyOperation`) +
+            FfiConverterTypeOtherBackupsOperation.allocationSize(value.`otherBackupsOperation`)
     )
 
     override fun write(value: CloudBackupState, buf: ByteBuffer) {
@@ -28027,6 +28074,7 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterTypeRecoveryState.write(value.`recovery`, buf)
             FfiConverterTypeCloudOnlyState.write(value.`cloudOnly`, buf)
             FfiConverterTypeCloudOnlyOperation.write(value.`cloudOnlyOperation`, buf)
+            FfiConverterTypeOtherBackupsOperation.write(value.`otherBackupsOperation`, buf)
     }
 }
 
@@ -33977,6 +34025,12 @@ sealed class CloudBackupManagerAction {
         companion object
     }
     
+    object RecoverOtherBackups : CloudBackupManagerAction()
+
+
+    object DeleteOtherBackups : CloudBackupManagerAction()
+
+
     object RefreshDetail : CloudBackupManagerAction()
     
     
@@ -34022,8 +34076,10 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             19 -> CloudBackupManagerAction.DeleteCloudWallet(
                 FfiConverterString.read(buf),
                 )
-            20 -> CloudBackupManagerAction.RefreshDetail
-            21 -> CloudBackupManagerAction.EnterDetail
+            20 -> CloudBackupManagerAction.RecoverOtherBackups
+            21 -> CloudBackupManagerAction.DeleteOtherBackups
+            22 -> CloudBackupManagerAction.RefreshDetail
+            23 -> CloudBackupManagerAction.EnterDetail
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -34145,6 +34201,18 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 + FfiConverterString.allocationSize(value.`recordId`)
             )
         }
+        is CloudBackupManagerAction.RecoverOtherBackups -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupManagerAction.DeleteOtherBackups -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is CloudBackupManagerAction.RefreshDetail -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -34239,12 +34307,20 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 FfiConverterString.write(value.`recordId`, buf)
                 Unit
             }
-            is CloudBackupManagerAction.RefreshDetail -> {
+            is CloudBackupManagerAction.RecoverOtherBackups -> {
                 buf.putInt(20)
                 Unit
             }
-            is CloudBackupManagerAction.EnterDetail -> {
+            is CloudBackupManagerAction.DeleteOtherBackups -> {
                 buf.putInt(21)
+                Unit
+            }
+            is CloudBackupManagerAction.RefreshDetail -> {
+                buf.putInt(22)
+                Unit
+            }
+            is CloudBackupManagerAction.EnterDetail -> {
+                buf.putInt(23)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -34541,6 +34617,15 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
+    data class OtherBackupsOperation(
+        val v1: org.bitcoinppl.cove_core.OtherBackupsOperation) : CloudBackupReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
     data class PromptIntent(
         val v1: org.bitcoinppl.cove_core.CloudBackupPromptIntent) : CloudBackupReconcileMessage()
         
@@ -34611,7 +34696,10 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             15 -> CloudBackupReconcileMessage.CloudOnlyOperation(
                 FfiConverterTypeCloudOnlyOperation.read(buf),
                 )
-            16 -> CloudBackupReconcileMessage.PromptIntent(
+            16 -> CloudBackupReconcileMessage.OtherBackupsOperation(
+                FfiConverterTypeOtherBackupsOperation.read(buf),
+                )
+            17 -> CloudBackupReconcileMessage.PromptIntent(
                 FfiConverterTypeCloudBackupPromptIntent.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -34724,6 +34812,13 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 + FfiConverterTypeCloudOnlyOperation.allocationSize(value.v1)
             )
         }
+        is CloudBackupReconcileMessage.OtherBackupsOperation -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeOtherBackupsOperation.allocationSize(value.v1)
+            )
+        }
         is CloudBackupReconcileMessage.PromptIntent -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -34810,8 +34905,13 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 FfiConverterTypeCloudOnlyOperation.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.PromptIntent -> {
+            is CloudBackupReconcileMessage.OtherBackupsOperation -> {
                 buf.putInt(16)
+                FfiConverterTypeOtherBackupsOperation.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.PromptIntent -> {
+                buf.putInt(17)
                 FfiConverterTypeCloudBackupPromptIntent.write(value.v1, buf)
                 Unit
             }
@@ -41780,6 +41880,153 @@ public object FfiConverterTypeOnboardingStorageSelection: FfiConverterRustBuffer
 
     override fun write(value: OnboardingStorageSelection, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+sealed class OtherBackupsOperation {
+
+    object Idle : OtherBackupsOperation()
+
+
+    object Recovering : OtherBackupsOperation()
+
+
+    data class Recovered(
+        val `walletsRestored`: kotlin.UInt,
+        val `walletsFailed`: kotlin.UInt,
+        val `failedWalletErrors`: List<kotlin.String>) : OtherBackupsOperation()
+
+    {
+
+
+        companion object
+    }
+
+    object Deleting : OtherBackupsOperation()
+
+
+    object Deleted : OtherBackupsOperation()
+
+
+    data class Failed(
+        val `error`: kotlin.String) : OtherBackupsOperation()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeOtherBackupsOperation : FfiConverterRustBuffer<OtherBackupsOperation>{
+    override fun read(buf: ByteBuffer): OtherBackupsOperation {
+        return when(buf.getInt()) {
+            1 -> OtherBackupsOperation.Idle
+            2 -> OtherBackupsOperation.Recovering
+            3 -> OtherBackupsOperation.Recovered(
+                FfiConverterUInt.read(buf),
+                FfiConverterUInt.read(buf),
+                FfiConverterSequenceString.read(buf),
+                )
+            4 -> OtherBackupsOperation.Deleting
+            5 -> OtherBackupsOperation.Deleted
+            6 -> OtherBackupsOperation.Failed(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: OtherBackupsOperation): ULong = when(value) {
+        is OtherBackupsOperation.Idle -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OtherBackupsOperation.Recovering -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OtherBackupsOperation.Recovered -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`walletsRestored`)
+                + FfiConverterUInt.allocationSize(value.`walletsFailed`)
+                + FfiConverterSequenceString.allocationSize(value.`failedWalletErrors`)
+            )
+        }
+        is OtherBackupsOperation.Deleting -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OtherBackupsOperation.Deleted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OtherBackupsOperation.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`error`)
+            )
+        }
+    }
+
+    override fun write(value: OtherBackupsOperation, buf: ByteBuffer) {
+        when(value) {
+            is OtherBackupsOperation.Idle -> {
+                buf.putInt(1)
+                Unit
+            }
+            is OtherBackupsOperation.Recovering -> {
+                buf.putInt(2)
+                Unit
+            }
+            is OtherBackupsOperation.Recovered -> {
+                buf.putInt(3)
+                FfiConverterUInt.write(value.`walletsRestored`, buf)
+                FfiConverterUInt.write(value.`walletsFailed`, buf)
+                FfiConverterSequenceString.write(value.`failedWalletErrors`, buf)
+                Unit
+            }
+            is OtherBackupsOperation.Deleting -> {
+                buf.putInt(4)
+                Unit
+            }
+            is OtherBackupsOperation.Deleted -> {
+                buf.putInt(5)
+                Unit
+            }
+            is OtherBackupsOperation.Failed -> {
+                buf.putInt(6)
+                FfiConverterString.write(value.`error`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 

@@ -128,6 +128,10 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.cloudOnlyOperation
     }
 
+    var otherBackupsOperation: OtherBackupsOperation {
+        state.otherBackupsOperation
+    }
+
     func dispatch(action: Action) {
         dispatch(action)
     }
@@ -170,6 +174,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
             state.cloudOnly = cloudOnly
         case let .cloudOnlyOperation(cloudOnlyOperation):
             state.cloudOnlyOperation = cloudOnlyOperation
+        case let .otherBackupsOperation(otherBackupsOperation):
+            state.otherBackupsOperation = otherBackupsOperation
         }
     }
 
