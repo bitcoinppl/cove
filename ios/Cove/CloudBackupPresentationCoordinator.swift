@@ -169,6 +169,12 @@ final class CloudBackupPresentationCoordinator {
         case .existingBackupFound, .passkeyChoice:
             return true
         case .missingPasskeyReminder, .verificationPrompt:
+            if case .verificationPrompt = presentation,
+               case .verifying = CloudBackupManager.shared.verification
+            {
+                return false
+            }
+
             return !context.isViewingCloudBackup
         }
     }
@@ -317,6 +323,9 @@ struct CloudBackupPresentationHost<Content: View>: View {
             .onChange(of: manager.promptIntent) { _, _ in
                 coordinator.reconcile()
             }
+            .onChange(of: manager.verification) { _, _ in
+                coordinator.reconcile()
+            }
             .confirmationDialog(
                 "Existing Cloud Backup Found",
                 isPresented: showingExistingBackupPrompt
@@ -372,6 +381,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
                         manager.dispatch(action: .dismissVerificationPrompt)
                     },
                     onVerify: {
+                        coordinator.dismissCurrentPresentation()
                         manager.dispatch(action: .startVerification)
                     }
                 )
@@ -433,13 +443,11 @@ private struct CloudBackupVerificationPromptView: View {
                 HStack {
                     Spacer()
 
-                    if !isVerifying {
-                        Button(action: onDismiss) {
-                            Image(systemName: "xmark")
-                                .font(.headline)
-                                .foregroundStyle(.white.opacity(0.85))
-                                .frame(width: 44, height: 44)
-                        }
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.headline)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 44, height: 44)
                     }
                 }
                 .padding(.top, 4)
@@ -490,10 +498,8 @@ private struct CloudBackupVerificationPromptView: View {
                     .buttonStyle(OnboardingPrimaryButtonStyle())
                     .disabled(isVerifying)
 
-                    if !isVerifying {
-                        Button("Not Now", action: onDismiss)
-                            .buttonStyle(OnboardingSecondaryButtonStyle())
-                    }
+                    Button(isVerifying ? "Hide" : "Not Now", action: onDismiss)
+                        .buttonStyle(OnboardingSecondaryButtonStyle())
                 }
 
                 Spacer()

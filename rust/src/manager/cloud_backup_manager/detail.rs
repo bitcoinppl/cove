@@ -209,7 +209,25 @@ impl RustCloudBackupManager {
         self.set_verification(VerificationState::Verifying);
 
         let result = self.deep_verify_cloud_backup(force_discoverable).await;
-        self.apply_deep_verification_result(result);
+        self.handle_deep_verification_result(result, force_discoverable, false);
+    }
+
+    pub(crate) fn handle_deep_verification_result(
+        &self,
+        result: DeepVerificationResult,
+        force_discoverable: bool,
+        is_connectivity_retry: bool,
+    ) {
+        let retry_scheduled = result.is_connectivity_failure()
+            && self.request_verification_connectivity_retry(force_discoverable);
+
+        if !retry_scheduled {
+            self.apply_deep_verification_result(result);
+        }
+
+        if is_connectivity_retry {
+            self.finish_verification_connectivity_retry();
+        }
     }
 
     pub(crate) fn apply_deep_verification_result(&self, result: DeepVerificationResult) {

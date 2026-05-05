@@ -23,11 +23,8 @@ struct DetailFormContent: View {
 
     var body: some View {
         HeaderSection(lastSync: detail.lastSync, syncHealth: syncHealth)
-        if !detail.upToDate.isEmpty {
-            WalletSections(wallets: detail.upToDate)
-        }
-        if !detail.needsSync.isEmpty {
-            WalletSections(wallets: detail.needsSync)
+        if !wallets.isEmpty {
+            WalletSections(wallets: wallets)
         }
         if showCloudOnlySection {
             CloudOnlySection(manager: manager)
@@ -35,6 +32,10 @@ struct DetailFormContent: View {
         if detail.otherBackups.namespaceCount > 0 {
             OtherBackupsSection(summary: detail.otherBackups, manager: manager)
         }
+    }
+
+    private var wallets: [CloudBackupWalletItem] {
+        detail.upToDate + detail.needsSync
     }
 }
 

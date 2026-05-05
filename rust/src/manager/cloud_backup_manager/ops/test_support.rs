@@ -140,6 +140,7 @@ struct MockCloudState {
     wallet_backups: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_overrides: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_errors: HashMap<(String, String), CloudStorageError>,
+    next_list_wallet_files_error: Option<CloudStorageError>,
     list_wallet_files_error: Option<CloudStorageError>,
     list_wallet_files_non_interactive_error: Option<CloudStorageError>,
     upload_master_key_error: Option<CloudStorageError>,
@@ -149,6 +150,7 @@ struct MockCloudState {
     reflect_uploaded_wallets_in_listing: bool,
     uploaded_wallet_backups: Vec<(String, String)>,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
+    list_wallet_files_attempts: usize,
     wallet_backup_upload_attempts: usize,
     dirty_wallet_on_next_upload: Option<WalletId>,
     changed_wallet_on_next_upload: Option<WalletId>,
@@ -201,6 +203,11 @@ impl MockCloudStorage {
     pub(crate) fn fail_list_wallet_files(&self, message: &str) {
         self.state.lock().list_wallet_files_error =
             Some(CloudStorageError::DownloadFailed(message.into()));
+    }
+
+    pub(crate) fn fail_next_list_wallet_files_offline(&self, message: &str) {
+        self.state.lock().next_list_wallet_files_error =
+            Some(CloudStorageError::Offline(message.into()));
     }
 
     pub(crate) fn fail_list_wallet_files_non_interactive(&self, message: &str) {
@@ -277,6 +284,10 @@ impl MockCloudStorage {
 
     pub(crate) fn wallet_backup_upload_attempt_count(&self) -> usize {
         self.state.lock().wallet_backup_upload_attempts
+    }
+
+    pub(crate) fn list_wallet_files_attempt_count(&self) -> usize {
+        self.state.lock().list_wallet_files_attempts
     }
 
     pub(crate) fn dirty_wallet_on_next_upload(&self, wallet_id: WalletId) {
@@ -447,7 +458,12 @@ impl CloudStorageAccess for MockCloudStorage {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        let state = self.state.lock();
+        let mut state = self.state.lock();
+        state.list_wallet_files_attempts += 1;
+        if let Some(error) = state.next_list_wallet_files_error.take() {
+            return Err(error);
+        }
+
         let error = if policy == CloudAccessPolicy::Silent {
             state.list_wallet_files_non_interactive_error.clone()
         } else {

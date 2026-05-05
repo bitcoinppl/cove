@@ -26,10 +26,6 @@ final class CloudConnectivityMonitor: ConnectivityAccess, @unchecked Sendable {
         }
 
         monitor.start(queue: queue)
-
-        let initialConnected = monitor.currentPath.status == .satisfied
-        setConnected(initialConnected)
-        updateRustConnectivity(initialConnected)
     }
 
     func isConnected() -> Bool {

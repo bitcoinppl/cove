@@ -294,6 +294,19 @@ pub struct CloudBackupState {
     pub other_backups_operation: OtherBackupsOperation,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PendingConnectivityVerification {
+    pub force_discoverable: bool,
+}
+
+#[derive(Debug, Default)]
+struct ConnectivityRecoveryState {
+    pending_detail_refresh: bool,
+    retrying_detail_refresh: bool,
+    pending_verification: Option<PendingConnectivityVerification>,
+    retrying_verification: bool,
+}
+
 impl Default for CloudBackupState {
     fn default() -> Self {
         Self {
@@ -607,6 +620,30 @@ impl DeepVerificationFailure {
             | Self::UnsupportedVersion { detail, .. } => detail.as_ref(),
         }
     }
+
+    pub(crate) fn is_connectivity_retry(&self) -> bool {
+        matches!(
+            self,
+            Self::Retry { message, .. }
+                if message == &offline_error_for_step(BlockingCloudStep::Verify).to_string()
+        )
+    }
+}
+
+impl DeepVerificationResult {
+    pub(crate) fn is_connectivity_failure(&self) -> bool {
+        matches!(self, Self::Failed(failure) if failure.is_connectivity_retry())
+    }
+}
+
+impl CloudBackupDetailResult {
+    pub(crate) fn is_connectivity_access_error(&self) -> bool {
+        matches!(
+            self,
+            Self::AccessError(error)
+                if error == &offline_error_for_step(BlockingCloudStep::DetailRefresh).to_string()
+        )
+    }
 }
 
 impl PendingVerificationCompletion {
@@ -840,6 +877,7 @@ pub struct RustCloudBackupManager {
     pub reconcile_receiver: Arc<Receiver<Message>>,
     prompt_state: Arc<parking_lot::Mutex<CloudBackupPromptState>>,
     cloud_only_detail_snapshot: Arc<RwLock<Option<CloudBackupDetail>>>,
+    connectivity_recovery: Arc<parking_lot::Mutex<ConnectivityRecoveryState>>,
     pub(crate) supervisor: Addr<CloudBackupSupervisor>,
 }
 
@@ -913,6 +951,9 @@ impl RustCloudBackupManager {
             reconcile_receiver: Arc::new(receiver),
             prompt_state: Arc::new(parking_lot::Mutex::new(CloudBackupPromptState::default())),
             cloud_only_detail_snapshot: Arc::new(RwLock::new(None)),
+            connectivity_recovery: Arc::new(parking_lot::Mutex::new(
+                ConnectivityRecoveryState::default(),
+            )),
             supervisor: spawn_actor(CloudBackupSupervisor::new(manager.clone())),
         });
 
@@ -1003,6 +1044,85 @@ impl RustCloudBackupManager {
         send!(self.supervisor.resume_wallet_uploads_from_persisted_state());
         send!(self.supervisor.wake_pending_upload_verifier());
         self.start_pending_upload_verification_loop();
+        self.resume_pending_connectivity_retries();
+    }
+
+    fn resume_pending_connectivity_retries(&self) {
+        let (retry_detail_refresh, retry_verification) = {
+            let mut recovery = self.connectivity_recovery.lock();
+            let retry_detail_refresh = recovery.pending_detail_refresh;
+            let retry_verification = recovery.pending_verification.take();
+
+            if retry_detail_refresh {
+                recovery.pending_detail_refresh = false;
+                recovery.retrying_detail_refresh = true;
+            }
+
+            if retry_verification.is_some() {
+                recovery.retrying_verification = true;
+            }
+
+            (retry_detail_refresh, retry_verification)
+        };
+
+        if retry_detail_refresh {
+            send!(self.supervisor.retry_refresh_detail_after_connectivity());
+        }
+
+        if let Some(retry) = retry_verification {
+            send!(self.supervisor.retry_verification_after_connectivity(retry.force_discoverable));
+        }
+    }
+
+    pub(crate) fn request_detail_refresh_connectivity_retry(&self) -> bool {
+        let should_retry_now = {
+            let mut recovery = self.connectivity_recovery.lock();
+            if self.is_offline() {
+                recovery.pending_detail_refresh = true;
+                false
+            } else if recovery.retrying_detail_refresh {
+                false
+            } else {
+                recovery.retrying_detail_refresh = true;
+                true
+            }
+        };
+
+        if should_retry_now {
+            send!(self.supervisor.retry_refresh_detail_after_connectivity());
+        }
+
+        should_retry_now
+    }
+
+    pub(crate) fn finish_detail_refresh_connectivity_retry(&self) {
+        self.connectivity_recovery.lock().retrying_detail_refresh = false;
+    }
+
+    pub(crate) fn request_verification_connectivity_retry(&self, force_discoverable: bool) -> bool {
+        let retry = PendingConnectivityVerification { force_discoverable };
+        let should_retry_now = {
+            let mut recovery = self.connectivity_recovery.lock();
+            if self.is_offline() {
+                recovery.pending_verification = Some(retry);
+                false
+            } else if recovery.retrying_verification {
+                false
+            } else {
+                recovery.retrying_verification = true;
+                true
+            }
+        };
+
+        if should_retry_now {
+            send!(self.supervisor.retry_verification_after_connectivity(force_discoverable));
+        }
+
+        should_retry_now
+    }
+
+    pub(crate) fn finish_verification_connectivity_retry(&self) {
+        self.connectivity_recovery.lock().retrying_verification = false;
     }
 
     pub(crate) fn set_sync_health(&self, sync_health: CloudSyncHealth) {
@@ -1336,14 +1456,29 @@ impl RustCloudBackupManager {
         cloud: &CloudStorageClient,
     ) -> Result<CloudBackupOtherBackupsSummary, CloudBackupError> {
         let current_namespace = self.current_namespace_id()?;
+        let current_wallet_record_ids =
+            current_namespace_wallet_record_ids(cloud, &current_namespace).await?;
+        let known_wallet_record_ids = self.known_wallet_record_ids(current_wallet_record_ids)?;
         let namespaces = self
             .other_backup_namespaces(cloud, &current_namespace, BlockingCloudStep::DetailRefresh)
             .await?;
+
+        let mut namespace_count = 0;
         let mut wallet_count = 0;
 
         for namespace in &namespaces {
             match cloud.list_wallet_backups(namespace.clone()).await {
-                Ok(record_ids) => wallet_count += record_ids.len() as u32,
+                Ok(record_ids) => {
+                    let unrecovered_wallet_count = record_ids
+                        .iter()
+                        .filter(|record_id| !known_wallet_record_ids.contains(*record_id))
+                        .count() as u32;
+
+                    if unrecovered_wallet_count > 0 {
+                        namespace_count += 1;
+                        wallet_count += unrecovered_wallet_count;
+                    }
+                }
                 Err(CloudStorageError::NotFound(_)) => {}
                 Err(error) => {
                     warn!("Failed to count other backup namespace {namespace}: {error}");
@@ -1351,10 +1486,24 @@ impl RustCloudBackupManager {
             }
         }
 
-        Ok(CloudBackupOtherBackupsSummary {
-            namespace_count: namespaces.len() as u32,
-            wallet_count,
-        })
+        Ok(CloudBackupOtherBackupsSummary { namespace_count, wallet_count })
+    }
+
+    fn known_wallet_record_ids<I>(
+        &self,
+        current_wallet_record_ids: I,
+    ) -> Result<HashSet<String>, CloudBackupError>
+    where
+        I: IntoIterator<Item = String>,
+    {
+        let mut known_wallet_record_ids: HashSet<String> =
+            current_wallet_record_ids.into_iter().collect();
+
+        for wallet in all_local_wallets(&Database::global())? {
+            known_wallet_record_ids.insert(wallet_record_id(wallet.id.as_ref()));
+        }
+
+        Ok(known_wallet_record_ids)
     }
 
     pub(crate) async fn other_backup_namespaces(
@@ -2287,6 +2436,20 @@ fn sync_health_missing_wallet_message(missing_wallet_count: usize) -> String {
     }
 
     format!("{missing_wallet_count} wallet backups are missing from cloud storage")
+}
+
+async fn current_namespace_wallet_record_ids(
+    cloud: &CloudStorageClient,
+    current_namespace: &str,
+) -> Result<Vec<String>, CloudBackupError> {
+    match cloud.list_wallet_backups(current_namespace.to_owned()).await {
+        Ok(record_ids) => Ok(record_ids),
+        Err(CloudStorageError::NotFound(_)) => Ok(Vec::new()),
+        Err(error) => Err(blocking_cloud_error(
+            BlockingCloudStep::DetailRefresh,
+            CloudBackupError::cloud_storage_context("list wallet backups", error),
+        )),
+    }
 }
 
 #[cfg(test)]

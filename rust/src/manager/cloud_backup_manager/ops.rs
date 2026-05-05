@@ -1492,6 +1492,26 @@ mod tests {
         RustCloudBackupManager::init()
     }
 
+    fn seed_verifiable_cloud_master_key(globals: &TestGlobals) {
+        let prf_key = [7u8; 32];
+        let prf_salt = [9u8; 32];
+        let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+        let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+            .load_master_key_from_store()
+            .unwrap()
+            .unwrap();
+        let encrypted =
+            cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &prf_key, &prf_salt)
+                .unwrap();
+
+        globals.cloud.set_master_key_backup(namespace, serde_json::to_vec(&encrypted).unwrap());
+        globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+            prf_output: prf_key.to_vec(),
+            credential_id: vec![1, 2, 3],
+        }));
+        globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+    }
+
     fn global_manager() -> Arc<RustCloudBackupManager> {
         init_test_runtime();
         CLOUD_BACKUP_MANAGER.clone()
@@ -2435,13 +2455,40 @@ mod tests {
         manager.set_verification(VerificationState::Idle);
         Database::global().cloud_blob_sync_states.delete_all().unwrap();
         globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+        globals.cloud.fail_list_wallet_files("list should not run before passkey auth");
 
         let discover_count = globals.passkey.discover_count();
+        let list_count = globals.cloud.list_wallet_files_attempt_count();
 
         call!(manager.supervisor.start_enter_detail()).await.unwrap();
         wait_for_discover_count(globals, discover_count + 1).await;
 
         assert_eq!(globals.passkey.discover_count(), discover_count + 1);
+        assert_eq!(globals.cloud.list_wallet_files_attempt_count(), list_count);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn deep_verify_authenticates_before_loading_wallet_inventory() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        configure_enabled_cloud_backup(&manager, globals, 0);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        seed_verifiable_cloud_master_key(globals);
+        globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+        globals.cloud.fail_list_wallet_files("list should not run before passkey auth");
+
+        let discover_count = globals.passkey.discover_count();
+        let list_count = globals.cloud.list_wallet_files_attempt_count();
+
+        call!(manager.supervisor.start_verification(true)).await.unwrap();
+        wait_for_discover_count(globals, discover_count + 1).await;
+
+        assert_eq!(globals.passkey.discover_count(), discover_count + 1);
+        assert_eq!(globals.cloud.list_wallet_files_attempt_count(), list_count);
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2781,6 +2828,11 @@ mod tests {
         );
         assert_eq!(CloudBackupKeychain::global().load_credential_id(), Some(vec![9, 8, 7]));
         assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_some());
+
+        let summary =
+            manager.other_backup_summary(&CloudStorage::global_explicit_client()).await.unwrap();
+        assert_eq!(summary.namespace_count, 0);
+        assert_eq!(summary.wallet_count, 0);
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -3247,6 +3299,111 @@ mod tests {
         manager.handle_connectivity_change(true);
 
         assert!(manager.state().sync_error.is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn reconnect_retries_verification_after_offline_failure() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+        seed_verifiable_cloud_master_key(globals);
+        CONNECTIVITY_MANAGER.set_connection_state(false);
+
+        call!(manager.supervisor.start_verification(false)).await.unwrap();
+        wait_for_test_condition(
+            Duration::from_secs(1),
+            "expected offline verification failure",
+            || matches!(manager.state().verification, VerificationState::Failed(_)),
+        )
+        .await;
+
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        manager.handle_connectivity_change(true);
+
+        wait_for_test_condition(
+            Duration::from_secs(1),
+            "expected reconnect to retry and verify backup",
+            || matches!(manager.state().verification, VerificationState::Verified(_)),
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn reconnect_retries_detail_refresh_after_offline_failure() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+        CONNECTIVITY_MANAGER.set_connection_state(false);
+
+        call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(manager.state().detail.is_none());
+
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        manager.handle_connectivity_change(true);
+
+        wait_for_test_condition(
+            Duration::from_secs(1),
+            "expected reconnect to refresh detail",
+            || manager.state().detail.is_some(),
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn connected_connectivity_failure_retries_verification_once() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        seed_verifiable_cloud_master_key(globals);
+        globals.cloud.fail_next_list_wallet_files_offline("offline");
+
+        call!(manager.supervisor.start_verification(false)).await.unwrap();
+
+        wait_for_test_condition(
+            Duration::from_secs(1),
+            "expected connected offline failure to retry verification",
+            || matches!(manager.state().verification, VerificationState::Verified(_)),
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn non_connectivity_verification_failure_does_not_retry_on_reconnect() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        globals.cloud.fail_list_wallet_files("list failed");
+
+        call!(manager.supervisor.start_verification(false)).await.unwrap();
+        wait_for_test_condition(
+            Duration::from_secs(1),
+            "expected non-connectivity verification failure",
+            || matches!(manager.state().verification, VerificationState::Failed(_)),
+        )
+        .await;
+
+        CONNECTIVITY_MANAGER.set_connection_state(false);
+        manager.handle_connectivity_change(false);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        manager.handle_connectivity_change(true);
+
+        assert_test_condition_stays_true(
+            Duration::from_millis(150),
+            "non-connectivity failure should stay failed after reconnect",
+            || matches!(manager.state().verification, VerificationState::Failed(_)),
+        )
+        .await;
     }
 
     #[test]

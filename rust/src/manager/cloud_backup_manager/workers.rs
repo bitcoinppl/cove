@@ -43,15 +43,12 @@ struct RuntimePasskeyAuthorization {
     prf_salt: [u8; 32],
 }
 
-/// Detail entry decision captured before async refresh
-///
-/// This preserves the entry-time verification intent while detail refresh updates
-/// cloud-backed state in the background
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DetailEntryDecision {
+#[derive(Debug)]
+enum DetailEntryPlan {
     RefreshOnly,
-    ContinueRustOwnedVerification,
-    StartPasskeyVerification,
+    ResumePendingUploadConfirmation(PendingVerificationCompletion),
+    UseFreshEnableProof(RuntimePasskeyAuthorization),
+    StartPasskeyVerification { force_discoverable: bool },
 }
 
 fn apply_refresh_detail_result(
@@ -59,11 +56,16 @@ fn apply_refresh_detail_result(
     result: Option<CloudBackupDetailResult>,
 ) {
     let Some(result) = result else { return };
+    let is_connectivity_error = result.is_connectivity_access_error();
     match result {
         CloudBackupDetailResult::Success(detail) => {
             manager.set_detail(Some(detail));
         }
         CloudBackupDetailResult::AccessError(error) => {
+            if is_connectivity_error && manager.request_detail_refresh_connectivity_retry() {
+                return;
+            }
+
             error!("Failed to refresh detail: {error}");
         }
     }
@@ -206,36 +208,68 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn start_refresh_detail(&mut self) -> ActorResult<()> {
+        self.start_refresh_detail_with_context(false).await
+    }
+
+    async fn start_refresh_detail_with_context(
+        &mut self,
+        is_connectivity_retry: bool,
+    ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         manager.refresh_sync_health();
         self.addr.send_fut_with(move |addr| async move {
             let result = manager.refresh_cloud_backup_detail().await;
-            send!(addr.complete_refresh_detail(result));
+            send!(addr.complete_refresh_detail(result, is_connectivity_retry));
         });
 
         Produces::ok(())
     }
 
+    pub async fn retry_refresh_detail_after_connectivity(&mut self) -> ActorResult<()> {
+        self.start_refresh_detail_with_context(true).await
+    }
+
     pub async fn complete_refresh_detail(
         &mut self,
         result: Option<CloudBackupDetailResult>,
+        is_connectivity_retry: bool,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         apply_refresh_detail_result(&manager, result);
+        if is_connectivity_retry {
+            manager.finish_detail_refresh_connectivity_retry();
+        }
         Produces::ok(())
     }
 
     pub async fn start_enter_detail(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        // decide before refresh so a fresh passkey enable is not immediately re-prompted
-        let decision = self.detail_entry_decision(&manager);
+        let plan = self.detail_entry_plan(&manager);
+        match plan {
+            DetailEntryPlan::StartPasskeyVerification { force_discoverable } => {
+                if let Some(addr) = self.addr() {
+                    send!(addr.start_verification(force_discoverable));
+                }
+                return Produces::ok(());
+            }
+            DetailEntryPlan::UseFreshEnableProof(authorization) => {
+                debug_assert_eq!(
+                    manager.current_namespace_id().ok().as_deref(),
+                    Some(authorization.namespace_id.as_str())
+                );
+            }
+            DetailEntryPlan::ResumePendingUploadConfirmation(completion) => {
+                debug_assert!(!completion.uploads().is_empty());
+            }
+            DetailEntryPlan::RefreshOnly => {}
+        }
 
         manager.refresh_sync_health();
         self.addr.send_fut_with(move |addr| async move {
             let result = manager.refresh_cloud_backup_detail().await;
-            send!(addr.complete_enter_detail(result, decision));
+            send!(addr.complete_enter_detail(result));
         });
 
         Produces::ok(())
@@ -244,86 +278,87 @@ impl CloudBackupSupervisor {
     pub async fn complete_enter_detail(
         &mut self,
         result: Option<CloudBackupDetailResult>,
-        decision: DetailEntryDecision,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         apply_refresh_detail_result(&manager, result);
-
-        if matches!(decision, DetailEntryDecision::StartPasskeyVerification)
-            && let Some(addr) = self.addr()
-        {
-            send!(addr.start_verification(true));
-        }
 
         Produces::ok(())
     }
 
     pub async fn start_verification(&mut self, force_discoverable: bool) -> ActorResult<()> {
+        self.start_verification_with_context(force_discoverable, false).await
+    }
+
+    async fn start_verification_with_context(
+        &mut self,
+        force_discoverable: bool,
+        is_connectivity_retry: bool,
+    ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         self.pending_verification_completion = None;
         manager.set_verification(VerificationState::Verifying);
         self.addr.send_fut_with(move |addr| async move {
             let result = manager.deep_verify_cloud_backup(force_discoverable).await;
-            send!(addr.complete_verification(result));
+            send!(addr.complete_verification(result, force_discoverable, is_connectivity_retry));
         });
 
         Produces::ok(())
     }
 
+    pub async fn retry_verification_after_connectivity(
+        &mut self,
+        force_discoverable: bool,
+    ) -> ActorResult<()> {
+        self.start_verification_with_context(force_discoverable, true).await
+    }
+
     pub async fn complete_verification(
         &mut self,
         result: DeepVerificationResult,
+        force_discoverable: bool,
+        is_connectivity_retry: bool,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        manager.apply_deep_verification_result(result);
+        manager.handle_deep_verification_result(result, force_discoverable, is_connectivity_retry);
         Produces::ok(())
     }
 
-    fn detail_entry_decision(&self, manager: &RustCloudBackupManager) -> DetailEntryDecision {
+    fn detail_entry_plan(&self, manager: &RustCloudBackupManager) -> DetailEntryPlan {
         let state = manager.state.read().clone();
         if !matches!(state.status, CloudBackupStatus::Enabled) {
-            return DetailEntryDecision::RefreshOnly;
+            return DetailEntryPlan::RefreshOnly;
         }
 
-        let can_continue_without_passkey_prompt = state.has_pending_upload_verification
-            || self.pending_verification_completion.is_some()
-            || self.runtime_passkey_authorization_matches_current_manager(manager)
-            || matches!(
-                state.verification,
-                VerificationState::Verifying
-                    | VerificationState::Verified(_)
-                    | VerificationState::PasskeyConfirmed
-            );
-        if can_continue_without_passkey_prompt {
-            return DetailEntryDecision::ContinueRustOwnedVerification;
+        if let Some(completion) = self.pending_verification_completion.clone() {
+            return DetailEntryPlan::ResumePendingUploadConfirmation(completion);
         }
 
-        DetailEntryDecision::StartPasskeyVerification
+        if let Some(authorization) = self.runtime_passkey_authorization_for_current_manager(manager)
+        {
+            return DetailEntryPlan::UseFreshEnableProof(authorization);
+        }
+
+        DetailEntryPlan::StartPasskeyVerification { force_discoverable: true }
     }
 
-    fn runtime_passkey_authorization_matches_current_manager(
+    fn runtime_passkey_authorization_for_current_manager(
         &self,
         manager: &RustCloudBackupManager,
-    ) -> bool {
-        let Some(authorization) = self.runtime_passkey_authorization.as_ref() else {
-            return false;
-        };
+    ) -> Option<RuntimePasskeyAuthorization> {
+        let authorization = self.runtime_passkey_authorization.as_ref()?;
         let Ok(namespace_id) = manager.current_namespace_id() else {
-            return false;
+            return None;
         };
 
         let cloud_keychain = CloudBackupKeychain::global();
-        let Some(credential_id) = cloud_keychain.load_credential_id() else {
-            return false;
-        };
-        let Some(prf_salt) = cloud_keychain.load_prf_salt() else {
-            return false;
-        };
+        let credential_id = cloud_keychain.load_credential_id()?;
+        let prf_salt = cloud_keychain.load_prf_salt()?;
 
-        authorization.namespace_id == namespace_id
+        (authorization.namespace_id == namespace_id
             && authorization.credential_id == credential_id
-            && authorization.prf_salt == prf_salt
+            && authorization.prf_salt == prf_salt)
+            .then(|| authorization.clone())
     }
 
     pub async fn replace_pending_enable_session(
