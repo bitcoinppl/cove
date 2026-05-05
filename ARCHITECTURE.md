@@ -3,6 +3,7 @@
 ## TL;DR
 
 - The Rust crate in `rust/` is the single source of truth for wallet logic, networking, persistence, and hardware integrations. BDK is the main library powering all things bitcoin-related.
+- Model the domain correctly before optimizing for a small patch. Durable fixes should represent state, ownership, and invariants explicitly in Rust data structures and persisted records instead of compensating with temporary UI logic, string flags, or caller-specific conditionals.
 - SwiftUI (iOS) and Jetpack Compose (Android) UIs talk to the Rust core through “Managers”, lightweight view-models that own the generated FFI objects, subscribe to reconciliation callbacks, and expose platform-friendly state.
 - All cross-platform bindings are generated with UniFFI via custom scripts that live in `scripts/` and Just recipes; `just build-ios` and `just build-android` rebuild the Rust core, regenerate bindings, and drop artifacts into the mobile projects.
 
@@ -23,6 +24,8 @@
 ## Rust Core
 
 **Layout.** The top-level crate (`rust/src/lib.rs`) re-exports a collection of domain-focused modules (wallets, routing, hardware, fiat, etc.) plus internal crates under `rust/crates/`. Everything compiles into `libcove.{a,so}` and the `coveffi` cdylib specified in `rust/uniffi.toml`.
+
+**Data model first.** When a feature or bug reveals that the current types do not describe the real domain, fix the model instead of spreading compensating logic through managers or platform code. Prefer typed states, enums, records, and persisted schema that make invalid states hard to express. If the model has to change, update the UniFFI API, generated bindings, migrations, and Swift/Kotlin call sites together so every layer shares the same contract.
 
 **Internal crates** (`rust/crates/`):
 
