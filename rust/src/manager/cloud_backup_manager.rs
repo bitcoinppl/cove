@@ -536,9 +536,9 @@ pub(crate) struct PendingVerificationCompletion {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct PendingVerificationUpload {
-    record_id: String,
-    expected_revision: String,
+pub(crate) enum PendingVerificationUpload {
+    MasterKeyWrapper,
+    Wallet { record_id: String, expected_revision: String },
 }
 
 impl std::fmt::Debug for PendingEnableSession {
@@ -634,26 +634,59 @@ impl PendingVerificationCompletion {
 
 impl PendingVerificationUpload {
     pub(crate) fn new(record_id: String, expected_revision: String) -> Self {
-        Self { record_id, expected_revision }
+        Self::Wallet { record_id, expected_revision }
+    }
+
+    pub(crate) fn master_key_wrapper() -> Self {
+        Self::MasterKeyWrapper
     }
 
     pub(crate) fn record_id(&self) -> &str {
-        &self.record_id
+        match self {
+            Self::MasterKeyWrapper => MASTER_KEY_RECORD_ID,
+            Self::Wallet { record_id, .. } => record_id,
+        }
     }
 
     pub(crate) fn expected_revision(&self) -> &str {
-        &self.expected_revision
+        match self {
+            Self::MasterKeyWrapper => "master-key-wrapper",
+            Self::Wallet { expected_revision, .. } => expected_revision,
+        }
+    }
+
+    pub(crate) fn wallet_record_id(&self) -> Option<&str> {
+        match self {
+            Self::MasterKeyWrapper => None,
+            Self::Wallet { record_id, .. } => Some(record_id),
+        }
+    }
+
+    pub(crate) fn wallet_revision(&self) -> Option<&str> {
+        match self {
+            Self::MasterKeyWrapper => None,
+            Self::Wallet { expected_revision, .. } => Some(expected_revision),
+        }
     }
 
     pub(crate) fn target_revision(&self, sync_state: Option<&PersistedCloudBlobState>) -> String {
+        let Self::Wallet { expected_revision, .. } = self else {
+            return self.expected_revision().to_owned();
+        };
+
         sync_state
             .and_then(PersistedCloudBlobState::revision_hash)
-            .unwrap_or(&self.expected_revision)
+            .unwrap_or(expected_revision)
             .to_owned()
     }
 
     fn from_persisted(upload: PersistedPendingVerificationUpload) -> Self {
-        Self { record_id: upload.record_id, expected_revision: upload.expected_revision }
+        match upload {
+            PersistedPendingVerificationUpload::MasterKeyWrapper => Self::MasterKeyWrapper,
+            PersistedPendingVerificationUpload::Wallet { record_id, expected_revision } => {
+                Self::Wallet { record_id, expected_revision }
+            }
+        }
     }
 }
 
@@ -698,9 +731,12 @@ impl From<&DeepVerificationReport> for PersistedDeepVerificationReport {
 
 impl From<&PendingVerificationUpload> for PersistedPendingVerificationUpload {
     fn from(upload: &PendingVerificationUpload) -> Self {
-        Self {
-            record_id: upload.record_id.clone(),
-            expected_revision: upload.expected_revision.clone(),
+        match upload {
+            PendingVerificationUpload::MasterKeyWrapper => Self::MasterKeyWrapper,
+            PendingVerificationUpload::Wallet { record_id, expected_revision } => Self::Wallet {
+                record_id: record_id.clone(),
+                expected_revision: expected_revision.clone(),
+            },
         }
     }
 }

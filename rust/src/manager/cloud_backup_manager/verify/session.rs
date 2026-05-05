@@ -440,12 +440,13 @@ impl VerificationSession {
 
         let unconfirmed_pending_uploads = pending_uploads
             .iter()
-            .filter(|upload| {
-                !remote_wallet_revision_matches(
+            .filter(|upload| match (upload.wallet_record_id(), upload.wallet_revision()) {
+                (Some(record_id), Some(expected_revision)) => !remote_wallet_revision_matches(
                     &remote_wallet_truth,
-                    upload.record_id(),
-                    upload.expected_revision(),
-                )
+                    record_id,
+                    expected_revision,
+                ),
+                _ => false,
             })
             .count();
 
@@ -473,8 +474,10 @@ impl VerificationSession {
             );
         }
 
-        let missing_listed_uploads =
-            pending_uploads.iter().any(|upload| !listed.contains(upload.record_id()));
+        let missing_listed_uploads = pending_uploads
+            .iter()
+            .filter_map(PendingVerificationUpload::wallet_record_id)
+            .any(|record_id| !listed.contains(record_id));
 
         if remaining_unsynced.is_empty()
             && !missing_listed_uploads
@@ -484,8 +487,11 @@ impl VerificationSession {
         }
 
         let remaining_count = remaining_unsynced.len();
-        let missing_count =
-            pending_uploads.iter().filter(|upload| !listed.contains(upload.record_id())).count();
+        let missing_count = pending_uploads
+            .iter()
+            .filter_map(PendingVerificationUpload::wallet_record_id)
+            .filter(|record_id| !listed.contains(*record_id))
+            .count();
         let stale_count = unconfirmed_pending_uploads.saturating_sub(missing_count);
 
         warn!(

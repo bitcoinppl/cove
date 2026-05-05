@@ -78,21 +78,26 @@ impl RustCloudBackupManager {
         upload: &PendingVerificationUpload,
         sync_state: Option<&PersistedCloudBlobState>,
     ) -> bool {
-        match sync_state {
-            Some(PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
-                revision_hash,
-                ..
-            })) => revision_hash.as_str() == upload.target_revision(sync_state),
-
-            Some(PersistedCloudBlobState::Failed(_)) => {
+        match upload {
+            PendingVerificationUpload::MasterKeyWrapper => {
                 Self::remote_pending_upload_exists_or_log(completion, upload).await
             }
+            PendingVerificationUpload::Wallet { .. } => match sync_state {
+                Some(PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+                    revision_hash,
+                    ..
+                })) => revision_hash.as_str() == upload.target_revision(sync_state),
 
-            Some(PersistedCloudBlobState::UploadedPendingConfirmation(_)) => {
-                Self::remote_pending_upload_exists_or_log(completion, upload).await
-            }
+                Some(PersistedCloudBlobState::Failed(_)) => {
+                    Self::remote_pending_upload_exists_or_log(completion, upload).await
+                }
 
-            _ => false,
+                Some(PersistedCloudBlobState::UploadedPendingConfirmation(_)) => {
+                    Self::remote_pending_upload_exists_or_log(completion, upload).await
+                }
+
+                _ => false,
+            },
         }
     }
 
@@ -118,17 +123,26 @@ impl RustCloudBackupManager {
         completion: &PendingVerificationCompletion,
         upload: &PendingVerificationUpload,
     ) -> Result<bool, CloudStorageError> {
-        CloudStorage::global_silent_client()
-            .download_wallet_backup(
-                completion.namespace_id().to_string(),
-                upload.record_id().to_string(),
-            )
-            .await
-            .map(|_| true)
-            .or_else(|error| match error {
-                CloudStorageError::NotFound(_) => Ok(false),
-                other => Err(other),
-            })
+        let cloud = CloudStorage::global_silent_client();
+        let result = match upload {
+            PendingVerificationUpload::MasterKeyWrapper => {
+                cloud.download_master_key_backup(completion.namespace_id().to_string()).await
+            }
+            PendingVerificationUpload::Wallet { record_id, .. } => {
+                cloud
+                    .download_wallet_backup(
+                        completion.namespace_id().to_string(),
+                        record_id.to_string(),
+                    )
+                    .await
+            }
+        };
+
+        match result {
+            Ok(_) => Ok(true),
+            Err(CloudStorageError::NotFound(_)) => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 
     async fn finalize_pending_verification(
@@ -161,6 +175,8 @@ impl RustCloudBackupManager {
             .collect();
 
         for upload in completion.uploads() {
+            let PendingVerificationUpload::Wallet { .. } = upload else { continue };
+
             match self
                 .verify_pending_wallet_backup(
                     &completion,

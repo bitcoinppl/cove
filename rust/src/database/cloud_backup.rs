@@ -118,9 +118,9 @@ pub struct PersistedDeepVerificationReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PersistedPendingVerificationUpload {
-    pub record_id: String,
-    pub expected_revision: String,
+pub enum PersistedPendingVerificationUpload {
+    MasterKeyWrapper,
+    Wallet { record_id: String, expected_revision: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
