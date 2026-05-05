@@ -424,15 +424,15 @@ pub(crate) enum CloudStorageIssue {
     Other,
 }
 
-pub(crate) fn is_connectivity_related_issue(issue: CloudStorageIssue) -> bool {
-    matches!(issue, CloudStorageIssue::Offline | CloudStorageIssue::Unavailable)
+pub(crate) fn is_connectivity_related_issue(issue: impl Into<CloudStorageIssue>) -> bool {
+    matches!(issue.into(), CloudStorageIssue::Offline | CloudStorageIssue::Unavailable)
 }
 
 pub(crate) fn blocking_cloud_error(
     step: BlockingCloudStep,
     error: CloudBackupError,
 ) -> CloudBackupError {
-    if is_connectivity_related_issue(error.cloud_storage_issue()) {
+    if is_connectivity_related_issue(&error) {
         return offline_error_for_step(step);
     }
 
@@ -441,19 +441,17 @@ pub(crate) fn blocking_cloud_error(
 
 impl From<CloudBackupError> for CloudStorageIssue {
     fn from(error: CloudBackupError) -> Self {
-        error.cloud_storage_issue()
+        Self::from(&error)
     }
 }
 
-impl CloudBackupError {
-    pub(crate) fn cloud_storage_issue(&self) -> CloudStorageIssue {
-        match self {
-            CloudBackupError::Offline(_) | CloudBackupError::Deferred(_) => {
-                CloudStorageIssue::Offline
-            }
+impl From<&CloudBackupError> for CloudStorageIssue {
+    fn from(error: &CloudBackupError) -> Self {
+        match error {
+            CloudBackupError::Offline(_) | CloudBackupError::Deferred(_) => Self::Offline,
             CloudBackupError::CloudStorage(error) => error.into(),
             CloudBackupError::CloudStorageContext { source, .. } => source.into(),
-            CloudBackupError::Cloud(_) => CloudStorageIssue::Other,
+            CloudBackupError::Cloud(_) => Self::Other,
             CloudBackupError::NotSupported(_)
             | CloudBackupError::UnsupportedPasskeyProvider
             | CloudBackupError::RecoveryRequired(_)
@@ -463,25 +461,30 @@ impl CloudBackupError {
             | CloudBackupError::Compatibility(_)
             | CloudBackupError::PasskeyMismatch
             | CloudBackupError::PasskeyDiscoveryCancelled
-            | CloudBackupError::Cancelled => CloudStorageIssue::Other,
+            | CloudBackupError::Cancelled => Self::Other,
         }
     }
 }
 
 impl From<CloudStorageError> for CloudStorageIssue {
     fn from(error: CloudStorageError) -> Self {
-        error.cloud_storage_issue()
+        Self::from(&error)
     }
 }
 
 impl From<&CloudStorageError> for CloudStorageIssue {
     fn from(error: &CloudStorageError) -> Self {
-        error.cloud_storage_issue()
+        match error {
+            CloudStorageError::AuthorizationRequired(_) => Self::AuthorizationRequired,
+            CloudStorageError::Offline(_) => Self::Offline,
+            CloudStorageError::NotAvailable(_) => Self::Unavailable,
+            CloudStorageError::NotFound(_) => Self::NotFound,
+            CloudStorageError::QuotaExceeded => Self::QuotaExceeded,
+            CloudStorageError::UploadFailed(_) | CloudStorageError::DownloadFailed(_) => {
+                Self::Other
+            }
+        }
     }
-}
-
-pub(crate) trait CloudStorageErrorIssueExt {
-    fn cloud_storage_issue(&self) -> CloudStorageIssue;
 }
 
 impl From<&PersistedCloudBackupState> for CloudBackupVerificationMetadata {
@@ -497,21 +500,6 @@ impl From<&PersistedCloudBackupState> for CloudBackupVerificationMetadata {
         match db_state.last_verified_at {
             Some(last_verified_at) => Self::Verified(last_verified_at),
             None => Self::ConfiguredNeverVerified,
-        }
-    }
-}
-
-impl CloudStorageErrorIssueExt for CloudStorageError {
-    fn cloud_storage_issue(&self) -> CloudStorageIssue {
-        match self {
-            CloudStorageError::AuthorizationRequired(_) => CloudStorageIssue::AuthorizationRequired,
-            CloudStorageError::Offline(_) => CloudStorageIssue::Offline,
-            CloudStorageError::NotAvailable(_) => CloudStorageIssue::Unavailable,
-            CloudStorageError::NotFound(_) => CloudStorageIssue::NotFound,
-            CloudStorageError::QuotaExceeded => CloudStorageIssue::QuotaExceeded,
-            CloudStorageError::UploadFailed(_) | CloudStorageError::DownloadFailed(_) => {
-                CloudStorageIssue::Other
-            }
         }
     }
 }
@@ -681,7 +669,7 @@ impl PendingSavedPasskeySessionMaterial {
 }
 
 impl PendingEnableSession {
-    #[allow(dead_code)]
+    #[cfg(test)]
     fn awaiting_confirmation(
         master_key: cove_cspp::master_key::MasterKey,
         passkey: UnpersistedPrfKey,
@@ -828,7 +816,7 @@ impl CloudBackupRetryContext {
 
 impl CloudBackupDetailResult {
     pub(crate) fn is_connectivity_access_error(&self) -> bool {
-        matches!(self, Self::AccessError(error) if is_connectivity_related_issue(error.cloud_storage_issue()))
+        matches!(self, Self::AccessError(error) if is_connectivity_related_issue(error))
     }
 }
 
@@ -2821,37 +2809,6 @@ fn wallet_ids_from_wallet_data_dir(wallet_data_dir: &Path) -> Vec<WalletId> {
     wallet_ids.into_iter().map(WalletId::from).collect()
 }
 
-#[cfg(test)]
-pub(crate) fn cloud_backup_test_lock() -> &'static parking_lot::Mutex<()> {
-    static LOCK: std::sync::OnceLock<parking_lot::Mutex<()>> = std::sync::OnceLock::new();
-    LOCK.get_or_init(parking_lot::Mutex::default)
-}
-
-#[cfg(test)]
-pub(crate) fn ensure_cloud_backup_test_tokio_runtime() {
-    static INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
-    INIT.get_or_init(|| {
-        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-        std::thread::Builder::new()
-            .name("cloud-backup-test-tokio".into())
-            .spawn(move || {
-                let runtime = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("create cloud backup test tokio runtime");
-
-                let drive_runtime = tokio::runtime::Runtime::block_on;
-                drive_runtime(&runtime, async move {
-                    cove_tokio::init();
-                    sender.send(()).expect("signal cloud backup test tokio runtime");
-                    std::future::pending::<()>().await;
-                });
-            })
-            .expect("spawn cloud backup test tokio runtime thread");
-        receiver.recv().expect("wait for cloud backup test tokio runtime");
-    });
-}
-
 fn sync_health_failed_message(
     sync_state: &PersistedCloudBlobSyncState,
     failed_state: &crate::database::cloud_backup::CloudBlobFailedState,
@@ -2887,33 +2844,15 @@ pub(crate) async fn current_namespace_wallet_record_ids(
 }
 
 #[cfg(test)]
-impl RustCloudBackupManager {
-    pub(crate) async fn clear_wallet_upload_debouncers_for_test(&self) {
-        call!(self.supervisor.clear_upload_runtime_state())
-            .await
-            .expect("clear upload runtime state");
-    }
-
-    pub(crate) async fn verify_pending_uploads_once_for_test(&self) -> bool {
-        !matches!(
-            self.verify_pending_uploads_once().await,
-            pending::PendingUploadVerificationStatus::Idle
-        )
-    }
-}
-
-#[cfg(test)]
 mod tests {
+    use super::ops::test_support::{init_test_runtime, test_globals, test_lock};
     use super::*;
     use act_zero::call;
     use tempfile::TempDir;
 
-    fn test_lock() -> &'static parking_lot::Mutex<()> {
-        super::cloud_backup_test_lock()
-    }
-
     fn init_manager() -> Arc<RustCloudBackupManager> {
-        super::ensure_cloud_backup_test_tokio_runtime();
+        init_test_runtime();
+        test_globals().reset();
         RustCloudBackupManager::init()
     }
 
@@ -2970,7 +2909,7 @@ mod tests {
     fn run_on_cloud_backup_runtime<T: Send + 'static>(
         future: impl Future<Output = T> + Send + 'static,
     ) -> T {
-        super::ensure_cloud_backup_test_tokio_runtime();
+        init_test_runtime();
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
         let _task = cove_tokio::task::spawn(async move {
             sender.send(future.await).expect("send cloud backup runtime result");
@@ -3095,28 +3034,28 @@ mod tests {
     #[test]
     fn convert_cloud_secret_mnemonic() {
         let secret = cove_cspp::backup_data::WalletSecret::Mnemonic("abandon".into());
-        let result = wallets::convert_cloud_secret(&secret);
+        let result = wallets::tests::convert_cloud_secret(&secret);
         assert!(matches!(result, LocalWalletSecret::Mnemonic(ref m) if m == "abandon"));
     }
 
     #[test]
     fn convert_cloud_secret_tap_signer() {
         let secret = cove_cspp::backup_data::WalletSecret::TapSignerBackup(vec![1, 2, 3]);
-        let result = wallets::convert_cloud_secret(&secret);
+        let result = wallets::tests::convert_cloud_secret(&secret);
         assert!(matches!(result, LocalWalletSecret::TapSignerBackup(ref b) if b == &[1, 2, 3]));
     }
 
     #[test]
     fn convert_cloud_secret_descriptor_to_none() {
         let secret = cove_cspp::backup_data::WalletSecret::Descriptor("wpkh(...)".into());
-        let result = wallets::convert_cloud_secret(&secret);
+        let result = wallets::tests::convert_cloud_secret(&secret);
         assert!(matches!(result, LocalWalletSecret::None));
     }
 
     #[test]
     fn convert_cloud_secret_watch_only_to_none() {
         let result =
-            wallets::convert_cloud_secret(&cove_cspp::backup_data::WalletSecret::WatchOnly);
+            wallets::tests::convert_cloud_secret(&cove_cspp::backup_data::WalletSecret::WatchOnly);
         assert!(matches!(result, LocalWalletSecret::None));
     }
 

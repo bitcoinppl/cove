@@ -2,8 +2,6 @@ use std::str::FromStr as _;
 
 use cove_cspp::backup_data::{EncryptedWalletBackup, WalletEntry};
 use cove_cspp::wallet_crypto;
-#[cfg(test)]
-use cove_device::cloud_storage::CloudStorage;
 use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use cove_util::ResultExt as _;
 use tracing::{info, warn};
@@ -27,8 +25,6 @@ type ExistingFingerprints = Vec<(Fingerprint, cove_types::network::Network, Loca
 #[derive(Clone)]
 pub(crate) struct WalletBackupReader {
     cloud: Option<CloudStorageClient>,
-    #[cfg(test)]
-    _local_cloud: Option<CloudStorage>,
     namespace: String,
     critical_key: Zeroizing<[u8; 32]>,
 }
@@ -39,22 +35,7 @@ impl WalletBackupReader {
         namespace: String,
         critical_key: Zeroizing<[u8; 32]>,
     ) -> Self {
-        Self {
-            cloud: Some(cloud),
-            #[cfg(test)]
-            _local_cloud: None,
-            namespace,
-            critical_key,
-        }
-    }
-
-    #[cfg(test)]
-    fn new_with_local_storage(
-        cloud: CloudStorage,
-        namespace: String,
-        critical_key: Zeroizing<[u8; 32]>,
-    ) -> Self {
-        Self { cloud: None, _local_cloud: Some(cloud), namespace, critical_key }
+        Self { cloud: Some(cloud), namespace, critical_key }
     }
 
     pub(crate) async fn download(
@@ -275,9 +256,6 @@ impl DownloadedWalletBackup {
 mod tests {
     use super::*;
     use cove_cspp::backup_data::WalletSecret;
-    use cove_device::cloud_storage::{
-        CloudAccessPolicy, CloudStorage, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
-    };
 
     fn test_wallet_entry(metadata: &WalletMetadata) -> WalletEntry {
         WalletEntry {
@@ -296,108 +274,17 @@ mod tests {
         }
     }
 
-    #[derive(Debug)]
-    struct NoopCloudStorage;
-
-    #[async_trait::async_trait]
-    impl CloudStorageAccess for NoopCloudStorage {
-        async fn upload_master_key_backup(
-            &self,
-            _namespace: String,
-            _data: Vec<u8>,
-            _policy: CloudAccessPolicy,
-        ) -> Result<(), CloudStorageError> {
-            panic!("unused in test")
-        }
-
-        async fn upload_wallet_backup(
-            &self,
-            _namespace: String,
-            _record_id: String,
-            _data: Vec<u8>,
-            _policy: CloudAccessPolicy,
-        ) -> Result<(), CloudStorageError> {
-            panic!("unused in test")
-        }
-
-        async fn download_master_key_backup(
-            &self,
-            _namespace: String,
-            _policy: CloudAccessPolicy,
-        ) -> Result<Vec<u8>, CloudStorageError> {
-            panic!("unused in test")
-        }
-
-        async fn download_wallet_backup(
-            &self,
-            _namespace: String,
-            _record_id: String,
-            _policy: CloudAccessPolicy,
-        ) -> Result<Vec<u8>, CloudStorageError> {
-            panic!("unused in test")
-        }
-
-        async fn delete_wallet_backup(
-            &self,
-            _namespace: String,
-            _record_id: String,
-            _policy: CloudAccessPolicy,
-        ) -> Result<(), CloudStorageError> {
-            panic!("unused in test")
-        }
-
-        async fn delete_namespace(
-            &self,
-            _namespace: String,
-            _policy: CloudAccessPolicy,
-        ) -> Result<(), CloudStorageError> {
-            panic!("unused in test")
-        }
-
-        async fn list_namespaces(
-            &self,
-            _policy: CloudAccessPolicy,
-        ) -> Result<Vec<String>, CloudStorageError> {
-            Ok(Vec::new())
-        }
-
-        async fn list_wallet_files(
-            &self,
-            _namespace: String,
-            _policy: CloudAccessPolicy,
-        ) -> Result<Vec<String>, CloudStorageError> {
-            Ok(Vec::new())
-        }
-
-        async fn is_backup_uploaded(
-            &self,
-            _namespace: String,
-            _record_id: String,
-            _policy: CloudAccessPolicy,
-        ) -> Result<bool, CloudStorageError> {
-            Ok(false)
-        }
-
-        async fn overall_sync_health(&self, _policy: CloudAccessPolicy) -> CloudSyncHealth {
-            CloudSyncHealth::NoFiles
-        }
-    }
-
-    fn test_cloud_storage() -> CloudStorage {
-        CloudStorage::new(Box::new(NoopCloudStorage))
-    }
-
     #[test]
     fn decrypt_entry_round_trips_encrypted_wallet_entry() {
         let metadata = WalletMetadata::preview_new();
         let entry = test_wallet_entry(&metadata);
         let critical_key = [7; 32];
         let encrypted = wallet_crypto::encrypt_wallet_entry(&entry, &critical_key).unwrap();
-        let reader = WalletBackupReader::new_with_local_storage(
-            test_cloud_storage(),
-            "test-namespace".into(),
-            Zeroizing::new(critical_key),
-        );
+        let reader = WalletBackupReader {
+            cloud: None,
+            namespace: "test-namespace".into(),
+            critical_key: Zeroizing::new(critical_key),
+        };
 
         let decrypted = reader.decrypt_entry(&encrypted).unwrap();
 

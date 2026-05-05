@@ -138,16 +138,6 @@ impl CloudStorage {
     fn client(&self, policy: CloudAccessPolicy) -> CloudStorageClient {
         CloudStorageClient(self.clone(), policy)
     }
-
-    #[cfg(test)]
-    fn explicit_client(&self) -> CloudStorageClient {
-        CloudStorageClient(self.clone(), CloudAccessPolicy::ConsentAllowed)
-    }
-
-    #[cfg(test)]
-    fn silent_client(&self) -> CloudStorageClient {
-        CloudStorageClient(self.clone(), CloudAccessPolicy::Silent)
-    }
 }
 
 #[uniffi::export]
@@ -385,7 +375,7 @@ mod tests {
         })));
 
         assert!(
-            block_on_ready(cloud.silent_client().has_any_cloud_backup())
+            block_on_ready(cloud.client(CloudAccessPolicy::Silent).has_any_cloud_backup())
                 .expect("cloud check should succeed")
         );
         assert!(expected_policy_used.load(Ordering::Acquire));
@@ -400,7 +390,7 @@ mod tests {
         })));
 
         assert!(
-            block_on_ready(cloud.explicit_client().has_any_cloud_backup())
+            block_on_ready(cloud.client(CloudAccessPolicy::ConsentAllowed).has_any_cloud_backup())
                 .expect("cloud check should succeed")
         );
         assert!(expected_policy_used.load(Ordering::Acquire));

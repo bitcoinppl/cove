@@ -17,7 +17,7 @@ use zeroize::Zeroizing;
 use super::{PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, prepare_wallet_backup};
 use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupError, CloudBackupStore, CloudStorageErrorIssueExt as _, RustCloudBackupManager,
+    CloudBackupError, CloudBackupStore, CloudStorageIssue, RustCloudBackupManager,
     is_connectivity_related_issue,
 };
 
@@ -253,7 +253,7 @@ impl RustCloudBackupManager {
         revision_hash: Option<String>,
         error: CloudStorageError,
     ) -> Result<(), CloudBackupError> {
-        let issue = error.cloud_storage_issue();
+        let issue = CloudStorageIssue::from(&error);
         let retryable = Self::is_upload_failure_retryable(&error);
         let persisted_issue = Self::cloud_blob_failure_issue(issue);
         let cloud_error = CloudBackupError::CloudStorage(error);
@@ -280,7 +280,7 @@ impl RustCloudBackupManager {
         revision_hash: Option<String>,
         error: CloudBackupError,
     ) -> Result<(), CloudBackupError> {
-        let issue = error.cloud_storage_issue();
+        let issue = CloudStorageIssue::from(&error);
         if is_connectivity_related_issue(issue) {
             self.mark_blob_dirty_state(current_state)?;
             return Err(CloudBackupError::Deferred(

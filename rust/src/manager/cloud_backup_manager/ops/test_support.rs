@@ -29,8 +29,7 @@ use crate::database::cloud_backup::{
     PersistedCloudBlobSyncState,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, cloud_backup_test_lock, ensure_cloud_backup_test_tokio_runtime,
-    workers::RestoreOperation,
+    CloudBackupKeychain, pending::PendingUploadVerificationStatus, workers::RestoreOperation,
 };
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
@@ -734,14 +733,40 @@ pub(crate) fn init_test_runtime() {
     ensure_cloud_backup_test_tokio_runtime();
 }
 
+pub(crate) fn ensure_cloud_backup_test_tokio_runtime() {
+    static INIT: OnceLock<()> = OnceLock::new();
+    INIT.get_or_init(|| {
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        std::thread::Builder::new()
+            .name("cloud-backup-test-tokio".into())
+            .spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("create cloud backup test tokio runtime");
+
+                let drive_runtime = tokio::runtime::Runtime::block_on;
+                drive_runtime(&runtime, async move {
+                    cove_tokio::init();
+                    sender.send(()).expect("signal cloud backup test tokio runtime");
+                    std::future::pending::<()>().await;
+                });
+            })
+            .expect("spawn cloud backup test tokio runtime thread");
+        receiver.recv().expect("wait for cloud backup test tokio runtime");
+    });
+}
+
 pub(crate) fn test_globals() -> &'static TestGlobals {
     static GLOBALS: OnceLock<TestGlobals> = OnceLock::new();
+    crate::database::test_support::init_test_database();
     init_test_runtime();
     GLOBALS.get_or_init(TestGlobals::init)
 }
 
 pub(crate) fn test_lock() -> &'static parking_lot::Mutex<()> {
-    cloud_backup_test_lock()
+    static LOCK: OnceLock<parking_lot::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(parking_lot::Mutex::default)
 }
 
 fn clear_local_wallets() {
@@ -1095,6 +1120,12 @@ pub(crate) async fn clear_wallet_upload_runtime_for_test_async(manager: &RustClo
     call!(manager.supervisor.clear_upload_runtime_state())
         .await
         .expect("clear upload runtime state");
+}
+
+pub(crate) async fn verify_pending_uploads_once_for_test_async(
+    manager: &RustCloudBackupManager,
+) -> bool {
+    !matches!(manager.verify_pending_uploads_once().await, PendingUploadVerificationStatus::Idle)
 }
 
 pub(crate) async fn run_wallet_upload_for_test_async(
