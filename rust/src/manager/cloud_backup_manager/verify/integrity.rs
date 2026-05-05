@@ -130,10 +130,14 @@ impl RustCloudBackupManager {
             }
         };
 
-        let other_backups = self.other_backup_summary().await.unwrap_or_else(|error| {
-            warn!("Backup integrity: other backup summary failed: {error}");
-            Default::default()
-        });
+        let cloud = CloudStorage::global_silent_client();
+        let other_backups = match self.other_backup_summary(&cloud).await {
+            Ok(other_backups) => other_backups,
+            Err(error) => {
+                warn!("Backup integrity: other backup summary failed: {error}");
+                return;
+            }
+        };
 
         self.set_detail(Some(inventory.build_detail(other_backups)));
 
@@ -211,10 +215,13 @@ impl RustCloudBackupManager {
             }
         };
 
-        let other_backups = self.other_backup_summary().await.unwrap_or_else(|error| {
-            warn!("Backup integrity: detail other backup summary failed: {error}");
-            Default::default()
-        });
+        let other_backups = match self.other_backup_summary(&cloud).await {
+            Ok(other_backups) => other_backups,
+            Err(error) => {
+                warn!("Backup integrity: detail other backup summary failed: {error}");
+                return;
+            }
+        };
 
         self.set_detail(Some(inventory.build_detail(other_backups)));
     }

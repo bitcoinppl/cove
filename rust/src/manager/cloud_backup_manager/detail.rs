@@ -165,10 +165,34 @@ impl RustCloudBackupManager {
     }
 
     fn spawn_recover_other_backups(self: std::sync::Arc<Self>) {
+        if !matches!(
+            &self.state.read().other_backups_operation,
+            OtherBackupsOperation::Idle
+                | OtherBackupsOperation::Recovered { .. }
+                | OtherBackupsOperation::Deleted
+                | OtherBackupsOperation::Failed { .. }
+        ) {
+            return;
+        }
+
+        self.set_other_backups_operation(OtherBackupsOperation::Recovering);
+
         send!(self.supervisor.start_operation(CloudBackupOperation::RecoverOtherBackups, None));
     }
 
     fn spawn_delete_other_backups(self: std::sync::Arc<Self>) {
+        if !matches!(
+            &self.state.read().other_backups_operation,
+            OtherBackupsOperation::Idle
+                | OtherBackupsOperation::Recovered { .. }
+                | OtherBackupsOperation::Deleted
+                | OtherBackupsOperation::Failed { .. }
+        ) {
+            return;
+        }
+
+        self.set_other_backups_operation(OtherBackupsOperation::Deleting);
+
         send!(self.supervisor.start_operation(CloudBackupOperation::DeleteOtherBackups, None));
     }
 
@@ -412,8 +436,6 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) async fn handle_recover_other_backups(&self) {
-        self.set_other_backups_operation(OtherBackupsOperation::Recovering);
-
         match self.do_recover_other_backups().await {
             Ok(report) => {
                 self.set_other_backups_operation(OtherBackupsOperation::Recovered {
@@ -432,8 +454,6 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) async fn handle_delete_other_backups(&self) {
-        self.set_other_backups_operation(OtherBackupsOperation::Deleting);
-
         match self.do_delete_other_backups().await {
             Ok(()) => {
                 self.set_other_backups_operation(OtherBackupsOperation::Deleted);
