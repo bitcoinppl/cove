@@ -38,7 +38,7 @@ pub(crate) enum CloudBackupOperation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct RuntimePasskeyProof {
+struct RuntimePasskeyAuthorization {
     namespace_id: String,
     credential_id: Vec<u8>,
     prf_salt: [u8; 32],
@@ -79,9 +79,9 @@ pub(crate) struct CloudBackupSupervisor {
     uploads: Addr<CloudBackupUploadWorker>,
     pending_enable_session: Option<PendingEnableSession>,
     pending_verification_completion: Option<PendingVerificationCompletion>,
-    // runtime-only proof that this app session just produced matching passkey material
+    // runtime-only authorization produced by this app session for the active namespace
     // clearing it when the supervisor is recreated makes detail entry re-check passkey availability
-    runtime_passkey_proof: Option<RuntimePasskeyProof>,
+    runtime_passkey_authorization: Option<RuntimePasskeyAuthorization>,
 }
 
 #[async_trait::async_trait]
@@ -102,7 +102,7 @@ impl CloudBackupSupervisor {
             manager,
             pending_enable_session: None,
             pending_verification_completion: None,
-            runtime_passkey_proof: None,
+            runtime_passkey_authorization: None,
         }
     }
 
@@ -289,7 +289,7 @@ impl CloudBackupSupervisor {
 
         let can_continue_without_passkey_prompt = state.has_pending_upload_verification
             || self.pending_verification_completion.is_some()
-            || self.runtime_passkey_proof_matches_current_manager(manager)
+            || self.runtime_passkey_authorization_matches_current_manager(manager)
             || matches!(
                 state.verification,
                 VerificationState::Verifying
@@ -303,11 +303,11 @@ impl CloudBackupSupervisor {
         DetailEntryDecision::StartPasskeyVerification
     }
 
-    fn runtime_passkey_proof_matches_current_manager(
+    fn runtime_passkey_authorization_matches_current_manager(
         &self,
         manager: &RustCloudBackupManager,
     ) -> bool {
-        let Some(proof) = self.runtime_passkey_proof.as_ref() else {
+        let Some(authorization) = self.runtime_passkey_authorization.as_ref() else {
             return false;
         };
         let Ok(namespace_id) = manager.current_namespace_id() else {
@@ -322,9 +322,9 @@ impl CloudBackupSupervisor {
             return false;
         };
 
-        proof.namespace_id == namespace_id
-            && proof.credential_id == credential_id
-            && proof.prf_salt == prf_salt
+        authorization.namespace_id == namespace_id
+            && authorization.credential_id == credential_id
+            && authorization.prf_salt == prf_salt
     }
 
     pub async fn replace_pending_enable_session(
@@ -366,19 +366,19 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn set_runtime_passkey_proof(
+    pub async fn record_runtime_passkey_authorization(
         &mut self,
         namespace_id: String,
         credential_id: Vec<u8>,
         prf_salt: [u8; 32],
     ) -> ActorResult<()> {
-        self.runtime_passkey_proof =
-            Some(RuntimePasskeyProof { namespace_id, credential_id, prf_salt });
+        self.runtime_passkey_authorization =
+            Some(RuntimePasskeyAuthorization { namespace_id, credential_id, prf_salt });
         Produces::ok(())
     }
 
-    pub async fn clear_runtime_passkey_proof(&mut self) -> ActorResult<()> {
-        self.runtime_passkey_proof = None;
+    pub async fn clear_runtime_passkey_authorization(&mut self) -> ActorResult<()> {
+        self.runtime_passkey_authorization = None;
         Produces::ok(())
     }
 

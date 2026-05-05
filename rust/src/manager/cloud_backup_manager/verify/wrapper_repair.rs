@@ -172,6 +172,14 @@ impl WrapperRepairOperation {
             .save_passkey(&credentials.credential_id, credentials.prf_salt)
             .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
 
+        self.manager
+            .record_runtime_passkey_authorization(
+                self.namespace.clone(),
+                credentials.credential_id.clone(),
+                credentials.prf_salt,
+            )
+            .await?;
+
         self.manager.mark_blob_uploaded_pending_confirmation(
             self.namespace.as_str(),
             None,

@@ -189,7 +189,7 @@ impl RustCloudBackupManager {
             .collect()
     }
 
-    fn seed_post_enable_verification_from_fresh_passkey_material(
+    async fn seed_post_enable_verification_from_fresh_passkey_material(
         &self,
         encrypted_master: &cove_cspp::backup_data::EncryptedMasterKeyBackup,
         master_key: &cove_cspp::master_key::MasterKey,
@@ -206,11 +206,12 @@ impl RustCloudBackupManager {
             ));
         }
 
-        self.set_runtime_passkey_proof(
+        self.record_runtime_passkey_authorization(
             namespace_id.to_owned(),
             passkey.credential_id.clone(),
             passkey.prf_salt,
-        );
+        )
+        .await?;
 
         let report = DeepVerificationReport {
             master_key_wrapper_repaired: false,
@@ -683,6 +684,13 @@ impl RustCloudBackupManager {
                     &matched.namespace_id,
                 )
                 .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
+
+            self.record_runtime_passkey_authorization(
+                matched.namespace_id.clone(),
+                matched.credential_id.clone(),
+                matched.prf_salt,
+            )
+            .await?;
 
             self.finalize_uploaded_wallets(
                 cloud,
@@ -1206,7 +1214,8 @@ impl RustCloudBackupManager {
             &passkey,
             &namespace_id,
             pending_uploads,
-        )?;
+        )
+        .await?;
         self.clear_pending_enable_session();
         self.clear_enable_progress(CloudBackupStatus::Enabled);
         self.refresh_persisted_flags();
@@ -2395,7 +2404,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn detail_entry_starts_discoverable_verification_without_runtime_proof() {
+    async fn detail_entry_starts_discoverable_verification_without_runtime_authorization() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
@@ -2407,7 +2416,7 @@ mod tests {
         globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
-        manager.clear_runtime_passkey_proof();
+        manager.clear_runtime_passkey_authorization();
         manager.clear_pending_verification_completion();
         manager.set_pending_upload_verification(false);
         manager.set_verification(VerificationState::Idle);
@@ -4628,6 +4637,98 @@ mod tests {
         let (pending_master_key, pending_passkey) = pending.into_parts();
         assert_eq!(pending_master_key.namespace_id(), expected_namespace);
         assert_eq!(pending_passkey.credential_id, expected_credential_id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn force_new_after_other_namespace_enter_detail_reuses_runtime_authorization() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+
+        let existing_master_key = cove_cspp::master_key::MasterKey::generate();
+        let existing_namespace = existing_master_key.namespace_id();
+        let encrypted_existing_master = cove_cspp::master_key_crypto::encrypt_master_key(
+            &existing_master_key,
+            &[7; 32],
+            &[9; 32],
+        )
+        .unwrap();
+        globals.cloud.set_wallet_files(existing_namespace.clone(), vec!["wallet-1.json".into()]);
+        globals.cloud.set_master_key_backup(
+            existing_namespace,
+            serde_json::to_vec(&encrypted_existing_master).unwrap(),
+        );
+        globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+        globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+
+        manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+
+        assert_eq!(globals.passkey.create_count(), 1);
+        assert_eq!(globals.passkey.authenticate_count(), 1);
+        assert_eq!(globals.passkey.discover_count(), 0);
+        assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
+        assert!(matches!(
+            manager.state().prompt_intent,
+            CloudBackupPromptIntent::ExistingBackupFound
+        ));
+
+        manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+
+        assert_eq!(globals.passkey.create_count(), 1);
+        assert_eq!(globals.passkey.authenticate_count(), 1);
+        assert_eq!(globals.passkey.discover_count(), 0);
+
+        manager.do_enable_cloud_backup_force_new().await.unwrap();
+
+        assert!(manager.take_pending_enable_session().await.is_none());
+        assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+
+        globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+        let create_count = globals.passkey.create_count();
+        let authenticate_count = globals.passkey.authenticate_count();
+        let discover_count = globals.passkey.discover_count();
+
+        call!(manager.supervisor.start_enter_detail()).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        assert_eq!(globals.passkey.create_count(), create_count);
+        assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
+        assert_eq!(globals.passkey.discover_count(), discover_count);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn detail_entry_after_restart_without_active_authorization_prompts_normally() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+        globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+
+        manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+        assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+
+        let restarted_manager = init_manager();
+        restarted_manager.sync_persisted_state();
+        restarted_manager.clear_pending_verification_completion();
+        restarted_manager.set_pending_upload_verification(false);
+        restarted_manager.set_verification(VerificationState::Idle);
+        Database::global().cloud_blob_sync_states.delete_all().unwrap();
+        globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+
+        let discover_count = globals.passkey.discover_count();
+
+        call!(restarted_manager.supervisor.start_enter_detail()).await.unwrap();
+        wait_for_discover_count(globals, discover_count + 1).await;
+
+        assert_eq!(globals.passkey.discover_count(), discover_count + 1);
     }
 
     #[tokio::test(flavor = "current_thread")]

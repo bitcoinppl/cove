@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
-use act_zero::{Addr, send};
+use act_zero::{Addr, call, send};
 use cove_cspp::backup_data::{MASTER_KEY_RECORD_ID, wallet_record_id};
 use cove_device::cloud_storage::{
     CloudStorage, CloudStorageClient, CloudStorageError, CloudSyncHealth,
@@ -897,7 +897,7 @@ impl RustCloudBackupManager {
 
     pub(crate) fn set_status(&self, status: CloudBackupStatus) {
         if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::Enabling) {
-            self.clear_runtime_passkey_proof();
+            self.clear_runtime_passkey_authorization();
         }
 
         let status_changed = {
@@ -1098,7 +1098,7 @@ impl RustCloudBackupManager {
             verification,
             VerificationState::Idle | VerificationState::Failed(_) | VerificationState::Cancelled
         ) {
-            self.clear_runtime_passkey_proof();
+            self.clear_runtime_passkey_authorization();
         }
 
         self.set_and_notify_field(
@@ -1115,24 +1115,30 @@ impl RustCloudBackupManager {
 
     pub(crate) fn set_recovery(&self, recovery: RecoveryState) {
         if !matches!(recovery, RecoveryState::Idle) {
-            self.clear_runtime_passkey_proof();
+            self.clear_runtime_passkey_authorization();
         }
 
         self.set_and_notify_field(recovery, |state| &mut state.recovery, Message::Recovery);
         self.refresh_prompt_intent();
     }
 
-    pub(crate) fn set_runtime_passkey_proof(
+    pub(crate) async fn record_runtime_passkey_authorization(
         &self,
         namespace_id: String,
         credential_id: Vec<u8>,
         prf_salt: [u8; 32],
-    ) {
-        send!(self.supervisor.set_runtime_passkey_proof(namespace_id, credential_id, prf_salt));
+    ) -> Result<(), CloudBackupError> {
+        call!(self.supervisor.record_runtime_passkey_authorization(
+            namespace_id,
+            credential_id,
+            prf_salt
+        ))
+        .await
+        .map_err_str(CloudBackupError::Internal)
     }
 
-    pub(crate) fn clear_runtime_passkey_proof(&self) {
-        send!(self.supervisor.clear_runtime_passkey_proof());
+    pub(crate) fn clear_runtime_passkey_authorization(&self) {
+        send!(self.supervisor.clear_runtime_passkey_authorization());
     }
 
     pub(crate) fn set_cloud_only(&self, cloud_only: CloudOnlyState) {
