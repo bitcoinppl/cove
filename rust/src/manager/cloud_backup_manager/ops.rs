@@ -1311,6 +1311,12 @@ impl RustCloudBackupManager {
                         }
                     }
                     Err(error) => {
+                        if is_connectivity_related_issue(error.cloud_storage_issue()) {
+                            return Err(blocking_cloud_error(
+                                BlockingCloudStep::RecoverOtherBackups,
+                                error,
+                            ));
+                        }
                         warn!(
                             "Failed to recover wallet {}/{} from other backup: {error}",
                             namespace.namespace_id, record_id
@@ -2745,6 +2751,58 @@ mod tests {
         );
         assert_eq!(CloudBackupKeychain::global().load_credential_id(), Some(vec![9, 8, 7]));
         assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_some());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn recover_other_backups_returns_offline_when_wallet_download_is_offline() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let prf_key = [7u8; 32];
+        let other_master_key = cove_cspp::master_key::MasterKey::generate();
+        let other_namespace = other_master_key.namespace_id();
+        let encrypted_master =
+            cove_cspp::master_key_crypto::encrypt_master_key(&other_master_key, &prf_key, &[9; 32])
+                .unwrap();
+        globals.cloud.set_master_key_backup(
+            other_namespace.clone(),
+            serde_json::to_vec(&encrypted_master).unwrap(),
+        );
+        globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+            prf_output: prf_key.to_vec(),
+            credential_id: vec![1, 2, 3],
+        }));
+
+        let wallet = xpub_only_wallet_metadata();
+        let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+        globals.cloud.set_wallet_files(
+            other_namespace.clone(),
+            vec![wallet_filename_from_record_id(&record_id)],
+        );
+        globals.cloud.fail_wallet_backup_download_offline(
+            other_namespace,
+            record_id,
+            "offline while downloading wallet",
+        );
+
+        let result = manager.do_recover_other_backups().await;
+
+        match result {
+            Err(CloudBackupError::Offline(message)) => {
+                assert_eq!(
+                    message,
+                    "Reconnect to the internet, then try recovering the other cloud backups again"
+                );
+            }
+            Ok(report) => panic!(
+                "expected offline error, got report with {} failed wallet(s)",
+                report.wallets_failed
+            ),
+            Err(error) => panic!("expected offline error, got {error:?}"),
+        }
     }
 
     #[tokio::test(flavor = "current_thread")]

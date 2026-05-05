@@ -138,6 +138,7 @@ struct MockCloudState {
     master_key_backups: HashMap<String, Vec<u8>>,
     wallet_backups: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_overrides: HashMap<(String, String), Vec<u8>>,
+    wallet_backup_download_errors: HashMap<(String, String), CloudStorageError>,
     list_wallet_files_error: Option<CloudStorageError>,
     list_wallet_files_non_interactive_error: Option<CloudStorageError>,
     upload_master_key_error: Option<CloudStorageError>,
@@ -181,6 +182,18 @@ impl MockCloudStorage {
         backup: Vec<u8>,
     ) {
         self.state.lock().wallet_backup_download_overrides.insert((namespace, record_id), backup);
+    }
+
+    pub(crate) fn fail_wallet_backup_download_offline(
+        &self,
+        namespace: String,
+        record_id: String,
+        message: &str,
+    ) {
+        self.state
+            .lock()
+            .wallet_backup_download_errors
+            .insert((namespace, record_id), CloudStorageError::Offline(message.into()));
     }
 
     pub(crate) fn fail_list_wallet_files(&self, message: &str) {
@@ -339,6 +352,12 @@ impl CloudStorageAccess for MockCloudStorage {
         }
 
         let override_key = (namespace.clone(), record_id.clone());
+        if let Some(error) =
+            self.state.lock().wallet_backup_download_errors.get(&override_key).cloned()
+        {
+            return Err(error);
+        }
+
         if let Some(backup) =
             self.state.lock().wallet_backup_download_overrides.get(&override_key).cloned()
         {
