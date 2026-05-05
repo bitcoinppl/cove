@@ -30,15 +30,14 @@ where
     where
         Self: 'a,
     {
-        cbor4ii::serde::from_slice(data).unwrap()
+        minicbor_serde::from_slice(data).unwrap()
     }
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
     where
         Self: 'a + 'b,
     {
-        let buf = Vec::new();
-        cbor4ii::serde::to_vec(buf, value).unwrap()
+        minicbor_serde::to_vec(value).unwrap()
     }
 
     fn type_name() -> TypeName {
