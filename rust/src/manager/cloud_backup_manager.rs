@@ -327,9 +327,13 @@ pub(crate) enum BlockingCloudStep {
     DetailRefresh,
 }
 
+/// Tracks passkey material created during enable before the flow fully completes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingEnableSessionKind {
+    /// A new passkey and master key are staged while the user confirms Create New Backup
     AwaitingForceNewConfirmation,
+
+    /// Upload already started and should retry with the same staged passkey material
     RetryUpload,
 }
 
@@ -427,6 +431,10 @@ impl PendingEnableSession {
 
     fn is_retry_upload(&self) -> bool {
         matches!(self.kind, PendingEnableSessionKind::RetryUpload)
+    }
+
+    fn is_awaiting_force_new_confirmation(&self) -> bool {
+        matches!(self.kind, PendingEnableSessionKind::AwaitingForceNewConfirmation)
     }
 }
 
@@ -1507,6 +1515,12 @@ impl RustCloudBackupManager {
         act_zero::call!(self.supervisor.take_retry_pending_enable_session())
             .await
             .expect("take retry pending enable session")
+    }
+
+    pub(crate) async fn has_awaiting_force_new_pending_enable_session(&self) -> bool {
+        act_zero::call!(self.supervisor.has_awaiting_force_new_pending_enable_session())
+            .await
+            .expect("check pending enable session")
     }
 
     pub(crate) async fn take_pending_enable_session(&self) -> Option<PendingEnableSession> {

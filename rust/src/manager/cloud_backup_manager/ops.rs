@@ -75,6 +75,16 @@ impl RustCloudBackupManager {
         self.set_status(status);
     }
 
+    async fn keep_awaiting_force_new_confirmation(&self) -> bool {
+        if !self.has_awaiting_force_new_pending_enable_session().await {
+            return false;
+        }
+
+        self.set_existing_backup_found_prompt();
+        self.clear_enable_progress(CloudBackupStatus::Disabled);
+        true
+    }
+
     fn rollback_new_local_master_key(
         &self,
         cspp: &cove_cspp::Cspp<Keychain>,
@@ -489,6 +499,10 @@ impl RustCloudBackupManager {
                 .await;
         }
 
+        if self.keep_awaiting_force_new_confirmation().await {
+            return Ok(());
+        }
+
         let passkey = PasskeyAccess::global();
         if !passkey.is_prf_supported() {
             return Err(CloudBackupError::NotSupported(
@@ -645,6 +659,9 @@ impl RustCloudBackupManager {
                 .enable_cloud_backup_with_passkey_material(Keychain::global(), master_key, passkey)
                 .await;
         }
+        if self.keep_awaiting_force_new_confirmation().await {
+            return Ok(());
+        }
 
         let passkey_access = PasskeyAccess::global();
         let keychain = Keychain::global();
@@ -716,6 +733,9 @@ impl RustCloudBackupManager {
             return self
                 .enable_cloud_backup_with_passkey_material(Keychain::global(), master_key, passkey)
                 .await;
+        }
+        if self.keep_awaiting_force_new_confirmation().await {
+            return Ok(());
         }
 
         let passkey_access = PasskeyAccess::global();
@@ -4323,7 +4343,16 @@ mod tests {
             ))
             .await;
 
+        let create_count = globals.passkey.create_count();
+
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+
+        assert_eq!(globals.passkey.create_count(), create_count);
+        assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
+        assert!(matches!(
+            manager.state().prompt_intent,
+            CloudBackupPromptIntent::ExistingBackupFound
+        ));
 
         let pending = manager.take_pending_enable_session().await.unwrap();
         let (pending_master_key, pending_passkey) = pending.into_parts();
