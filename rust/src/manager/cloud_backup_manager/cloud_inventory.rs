@@ -331,13 +331,12 @@ mod tests {
     use super::*;
     use crate::database::cloud_backup::{
         CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
-        CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, CloudUploadKind,
+        CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState,
         PersistedCloudBlobState,
     };
 
     fn sync_state(state: PersistedCloudBlobState) -> PersistedCloudBlobSyncState {
         PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: None,
             record_id: "record-1".into(),
@@ -566,7 +565,6 @@ mod tests {
                 (
                     uploading_wallet.record_id.clone(),
                     PersistedCloudBlobSyncState {
-                        kind: CloudUploadKind::BackupBlob,
                         namespace_id: "ns-1".into(),
                         wallet_id: None,
                         record_id: uploading_wallet.record_id.clone(),
@@ -579,7 +577,6 @@ mod tests {
                 (
                     pending_wallet.record_id.clone(),
                     PersistedCloudBlobSyncState {
-                        kind: CloudUploadKind::BackupBlob,
                         namespace_id: "ns-1".into(),
                         wallet_id: None,
                         record_id: pending_wallet.record_id.clone(),

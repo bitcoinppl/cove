@@ -12,7 +12,7 @@ use super::{CloudBackupError, RustCloudBackupManager};
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
-    CloudBlobUploadedPendingConfirmationState, CloudUploadKind, PersistedCloudBlobState,
+    CloudBlobUploadedPendingConfirmationState, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
 use crate::wallet::metadata::WalletId;
@@ -61,7 +61,6 @@ impl RustCloudBackupManager {
     ) -> Result<(), CloudBackupError> {
         let starts_master_key_grace = wallet_id.is_none();
         let sync_state = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: namespace_id.to_string(),
             wallet_id,
             record_id,

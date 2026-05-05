@@ -123,14 +123,8 @@ pub enum PersistedPendingVerificationUpload {
     Wallet { record_id: String, expected_revision: String },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum CloudUploadKind {
-    BackupBlob,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersistedCloudBlobSyncState {
-    pub kind: CloudUploadKind,
     pub namespace_id: String,
     pub wallet_id: Option<WalletId>,
     pub record_id: String,
@@ -414,7 +408,6 @@ mod tests {
     #[test]
     fn blob_sync_state_helpers_reflect_state() {
         let confirmed = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: None,
             record_id: "wallet-a".into(),
@@ -437,7 +430,6 @@ mod tests {
     #[test]
     fn uploaded_pending_confirmation_tracks_attempts() {
         let state = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: None,
             record_id: "wallet-a".into(),

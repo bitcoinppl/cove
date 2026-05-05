@@ -1436,7 +1436,7 @@ mod tests {
     use crate::database::Database;
     use crate::database::cloud_backup::{
         CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
-        CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, CloudUploadKind,
+        CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState,
         PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
         PersistedCloudBlobSyncState,
     };
@@ -1501,7 +1501,6 @@ mod tests {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState {
-                kind: CloudUploadKind::BackupBlob,
                 namespace_id,
                 wallet_id: None,
                 record_id: crate::manager::cloud_backup_manager::cspp_master_key_record_id(),
@@ -2894,7 +2893,6 @@ mod tests {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState {
-                kind: CloudUploadKind::BackupBlob,
                 namespace_id: namespace.into(),
                 wallet_id: Some(metadata.id.clone()),
                 record_id: record_id.clone(),
@@ -3109,7 +3107,6 @@ mod tests {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState {
-                kind: CloudUploadKind::BackupBlob,
                 namespace_id: CloudBackupKeychain::global().namespace_id().unwrap(),
                 wallet_id: Some(wallet_id),
                 record_id,
@@ -3155,7 +3152,6 @@ mod tests {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState {
-                kind: CloudUploadKind::BackupBlob,
                 namespace_id: CloudBackupKeychain::global().namespace_id().unwrap(),
                 wallet_id: Some(wallet_id),
                 record_id,
@@ -3545,7 +3541,6 @@ mod tests {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState {
-                kind: CloudUploadKind::BackupBlob,
                 namespace_id: namespace.clone(),
                 wallet_id: Some(metadata.id.clone()),
                 record_id: record_id.clone(),
@@ -3580,7 +3575,6 @@ mod tests {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState {
-                kind: CloudUploadKind::BackupBlob,
                 namespace_id,
                 wallet_id: Some(metadata.id.clone()),
                 record_id,
@@ -3912,7 +3906,6 @@ mod tests {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState {
-                kind: CloudUploadKind::BackupBlob,
                 namespace_id,
                 wallet_id: Some(metadata.id.clone()),
                 record_id: record_id.clone(),
@@ -4048,7 +4041,6 @@ mod tests {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState {
-                kind: CloudUploadKind::BackupBlob,
                 namespace_id,
                 wallet_id: Some(metadata.id.clone()),
                 record_id: record_id.clone(),
@@ -4455,7 +4447,6 @@ mod tests {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState {
-                kind: CloudUploadKind::BackupBlob,
                 namespace_id: namespace_id.clone(),
                 wallet_id: Some(metadata.id),
                 record_id: record_id.clone(),
@@ -4509,7 +4500,6 @@ mod tests {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState {
-                kind: CloudUploadKind::BackupBlob,
                 namespace_id,
                 wallet_id: Some(metadata.id),
                 record_id: record_id.clone(),

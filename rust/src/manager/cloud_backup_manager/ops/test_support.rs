@@ -25,8 +25,8 @@ use super::*;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue, CloudBlobUploadingState,
-    CloudUploadKind, PersistedCloudBackupState, PersistedCloudBackupStatus,
-    PersistedCloudBlobState, PersistedCloudBlobSyncState,
+    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
+    PersistedCloudBlobSyncState,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupKeychain, cloud_backup_test_lock, ensure_cloud_backup_test_tokio_runtime,
@@ -670,7 +670,6 @@ pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
     Database::global()
         .cloud_blob_sync_states
         .set(&PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id,
             wallet_id: Some(wallet_id),
             record_id,
@@ -709,7 +708,6 @@ pub(crate) fn persist_failed_blob_state_with_issue(
     Database::global()
         .cloud_blob_sync_states
         .set(&PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id,
             wallet_id: Some(wallet_id),
             record_id,
@@ -731,7 +729,6 @@ pub(crate) fn persist_uploading_blob_state(wallet_id: WalletId, started_at: u64)
     Database::global()
         .cloud_blob_sync_states
         .set(&PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id,
             wallet_id: Some(wallet_id),
             record_id,

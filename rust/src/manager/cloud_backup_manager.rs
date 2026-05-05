@@ -32,7 +32,7 @@ use cove_types::network::Network;
 
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobDirtyState, CloudBlobFailureIssue, CloudUploadKind, PersistedCloudBackupState,
+    CloudBlobDirtyState, CloudBlobFailureIssue, PersistedCloudBackupState,
     PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
     PersistedDeepVerificationReport, PersistedPendingVerificationCompletion,
     PersistedPendingVerificationUpload,
@@ -1556,7 +1556,6 @@ impl RustCloudBackupManager {
         let changed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
         let record_id = wallet_record_id(wallet_id.as_ref());
         let sync_state = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id,
             wallet_id: Some(wallet_id.clone()),
             record_id,
@@ -2427,7 +2426,6 @@ mod tests {
     #[test]
     fn sync_health_from_local_failures_prefers_authorization_required() {
         let generic_failure = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "namespace".into(),
             wallet_id: None,
             record_id: "generic".into(),
@@ -2442,7 +2440,6 @@ mod tests {
             ),
         };
         let authorization_failure = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "namespace".into(),
             wallet_id: None,
             record_id: "authorization".into(),

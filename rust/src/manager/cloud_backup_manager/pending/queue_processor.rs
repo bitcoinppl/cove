@@ -431,12 +431,11 @@ impl PendingUploadVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::cloud_backup::{CloudUploadKind, PersistedCloudBlobSyncState};
+    use crate::database::cloud_backup::PersistedCloudBlobSyncState;
 
     #[test]
     fn apply_blob_result_confirms_blob() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: None,
             record_id: "wallet-a".into(),
@@ -464,7 +463,6 @@ mod tests {
     #[test]
     fn apply_blob_result_tracks_pending_blob() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: Some("wallet-a".into()),
             record_id: "wallet-a".into(),
@@ -503,7 +501,6 @@ mod tests {
         let uploaded_at = checked_at
             .saturating_sub(super::super::MAX_PENDING_UPLOAD_VERIFICATION_DELAY.as_secs());
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: None,
             record_id: "master-key".into(),
@@ -537,7 +534,6 @@ mod tests {
     #[test]
     fn apply_blob_result_keeps_pending_blob_when_remote_revision_is_stale() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: Some("wallet-a".into()),
             record_id: "wallet-a".into(),
@@ -574,7 +570,6 @@ mod tests {
     #[test]
     fn apply_blob_result_retries_wallet_upload_after_threshold() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: Some("wallet-a".into()),
             record_id: "wallet-a".into(),
@@ -605,7 +600,6 @@ mod tests {
     #[test]
     fn apply_blob_result_keeps_retryable_failures_pending() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: Some("wallet-a".into()),
             record_id: "wallet-a".into(),
@@ -636,7 +630,6 @@ mod tests {
     #[test]
     fn apply_blob_result_marks_terminal_failures_failed() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: Some("wallet-a".into()),
             record_id: "wallet-a".into(),
