@@ -49,7 +49,7 @@ pub(crate) use self::keychain::CloudBackupKeychain;
 use self::prompt::CloudBackupPromptState;
 use self::wallets::wallet_metadata_change_requires_upload;
 use self::wallets::{
-    UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader, all_local_wallets, count_all_wallets,
+    CloudBackupWalletStore, UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader,
 };
 use self::workers::{CloudBackupOperation, CloudBackupSupervisor, RestoreOperation};
 use super::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
@@ -1601,7 +1601,7 @@ impl RustCloudBackupManager {
     }
 
     async fn expected_wallet_record_ids(&self) -> Result<HashSet<String>, CloudBackupError> {
-        let local_wallets = all_local_wallets(&Database::global())?;
+        let local_wallets = CloudBackupWalletStore::global().all()?;
         let record_ids =
             stream::iter(local_wallets)
                 .map(|wallet| async move {
@@ -1836,7 +1836,7 @@ impl RustCloudBackupManager {
     ) -> Result<RemoteWalletTruth, CloudBackupError> {
         let namespace = self.current_namespace_id()?;
         let db = Database::global();
-        let local_wallets = all_local_wallets(&db)?;
+        let local_wallets = CloudBackupWalletStore::new(&db).all()?;
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         let Some(master_key) = cspp
             .load_master_key_from_store()
@@ -1993,7 +1993,7 @@ impl RustCloudBackupManager {
 
         match current.wallet_count {
             Some(count) => Some(count),
-            None if current.is_configured() => match count_all_wallets(&db) {
+            None if current.is_configured() => match CloudBackupWalletStore::new(&db).count() {
                 Ok(count) => {
                     let _ = db.cloud_backup_state.set(&current.with_wallet_count(Some(count)));
                     Some(count)
@@ -2295,7 +2295,7 @@ fn persisted_wallet_ids_for_catastrophic_wipe() -> Option<Vec<WalletId>> {
     };
 
     let db = db_swap.load();
-    match all_local_wallets(&db) {
+    match CloudBackupWalletStore::new(&db).all() {
         Ok(wallets) => Some(wallets.into_iter().map(|wallet| wallet.id).collect()),
         Err(error) => {
             warn!(

@@ -717,7 +717,8 @@ pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
 }
 
 fn mutate_wallet_and_persist_dirty(wallet_id: WalletId) {
-    let mut wallet = all_local_wallets(&Database::global())
+    let mut wallet = CloudBackupWalletStore::global()
+        .all()
         .unwrap()
         .into_iter()
         .find(|wallet| wallet.id == wallet_id)

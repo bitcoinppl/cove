@@ -15,8 +15,8 @@ use tracing::info;
 use zeroize::Zeroizing;
 
 use super::{
-    PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, all_local_wallets,
-    persist_enabled_cloud_backup_state, prepare_wallet_backup,
+    CloudBackupStateStore, CloudBackupWalletStore, PreparedWalletBackup,
+    UPLOAD_WALLET_RECOVERY_MESSAGE, prepare_wallet_backup,
 };
 use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
 use crate::manager::cloud_backup_manager::{
@@ -154,7 +154,7 @@ impl RustCloudBackupManager {
         .flatten()
         .max()
         .unwrap_or(previous_count);
-        persist_enabled_cloud_backup_state(&db, wallet_count)?;
+        CloudBackupStateStore::new(&db).persist_enabled(wallet_count)?;
 
         info!("Backed up {} wallet(s) to cloud", wallets.len());
         Ok(())
@@ -184,7 +184,8 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
-        let Some(metadata) = all_local_wallets(&Database::global())?
+        let Some(metadata) = CloudBackupWalletStore::global()
+            .all()?
             .into_iter()
             .find(|wallet| wallet.id == *wallet_id)
         else {
@@ -371,7 +372,8 @@ impl RustCloudBackupManager {
         revision_hash: String,
         uploaded_at: u64,
     ) -> Result<(), CloudBackupError> {
-        let Some(current_metadata) = all_local_wallets(&Database::global())?
+        let Some(current_metadata) = CloudBackupWalletStore::global()
+            .all()?
             .into_iter()
             .find(|wallet| wallet.id == wallet_id)
         else {
@@ -453,27 +455,34 @@ impl RustCloudBackupManager {
     }
 }
 
-pub async fn upload_all_wallets(
-    cloud: &CloudStorageClient,
-    namespace: &str,
-    critical_key: &[u8; 32],
-    db: &Database,
-) -> Result<Vec<PreparedWalletBackup>, CloudBackupError> {
-    let mut uploaded_wallets = Vec::new();
+impl CloudBackupWalletStore {
+    pub(crate) async fn upload_all(
+        &self,
+        cloud: &CloudStorageClient,
+        namespace: &str,
+        critical_key: &[u8; 32],
+    ) -> Result<Vec<PreparedWalletBackup>, CloudBackupError> {
+        let mut uploaded_wallets = Vec::new();
 
-    for metadata in all_local_wallets(db)? {
-        let prepared = prepare_wallet_backup(&metadata, metadata.wallet_mode).await?;
-        let encrypted = wallet_crypto::encrypt_wallet_entry(&prepared.entry, critical_key)
-            .map_err_str(CloudBackupError::Crypto)?;
+        for metadata in self.all()? {
+            let prepared = prepare_wallet_backup(&metadata, metadata.wallet_mode).await?;
+            let encrypted = wallet_crypto::encrypt_wallet_entry(&prepared.entry, critical_key)
+                .map_err_str(CloudBackupError::Crypto)?;
 
-        let wallet_json = serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
+            let wallet_json =
+                serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
 
-        cloud
-            .upload_wallet_backup(namespace.to_string(), prepared.record_id.clone(), wallet_json)
-            .await?;
+            cloud
+                .upload_wallet_backup(
+                    namespace.to_string(),
+                    prepared.record_id.clone(),
+                    wallet_json,
+                )
+                .await?;
 
-        uploaded_wallets.push(prepared);
+            uploaded_wallets.push(prepared);
+        }
+
+        Ok(uploaded_wallets)
     }
-
-    Ok(uploaded_wallets)
 }

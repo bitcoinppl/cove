@@ -3,15 +3,16 @@ use std::collections::{HashMap, HashSet};
 use cove_util::ResultExt as _;
 use futures::stream::{self, StreamExt as _, TryStreamExt as _};
 
-use super::wallets::{RemoteWalletBackupSummary, all_local_wallets, prepare_wallet_backup};
+use super::wallets::{
+    CloudBackupStateStore, CloudBackupWalletStore, RemoteWalletBackupSummary, prepare_wallet_backup,
+};
 use super::{
     CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError,
     CloudBackupOtherBackupsSummary, CloudBackupWalletItem, CloudBackupWalletStatus,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobFailedState, PersistedCloudBackupStatus, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState,
+    CloudBlobFailedState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
 };
 use crate::wallet::metadata::WalletMetadata;
 
@@ -58,9 +59,9 @@ impl CloudWalletInventory {
         remote_wallet_truth: RemoteWalletTruth,
     ) -> Result<Self, CloudBackupError> {
         let db = Database::global();
-        let local_wallets = all_local_wallet_snapshots(&db).await?;
-        let last_sync = last_sync(&db);
-        let sync_states_by_record_id = sync_states_by_record_id(&db)?;
+        let local_wallets = CloudBackupWalletStore::new(&db).local_snapshots().await?;
+        let last_sync = CloudBackupStateStore::new(&db).last_sync();
+        let sync_states_by_record_id = CloudBlobSyncStateStore::new(&db).by_record_id()?;
 
         Ok(Self {
             last_sync,
@@ -241,22 +242,22 @@ fn wallet_item_bucket(item: &CloudBackupWalletItem) -> Option<WalletItemBucket> 
     }
 }
 
-async fn all_local_wallet_snapshots(
-    db: &Database,
-) -> Result<Vec<LocalWalletSnapshot>, CloudBackupError> {
-    stream::iter(all_local_wallets(db)?)
-        .map(|wallet| async move {
-            let prepared = prepare_wallet_backup(&wallet, wallet.wallet_mode).await?;
-            Ok(LocalWalletSnapshot {
-                metadata: wallet,
-                record_id: prepared.record_id,
-                revision_hash: prepared.revision_hash,
-                local_label_count: prepared.entry.labels_count,
+impl CloudBackupWalletStore {
+    async fn local_snapshots(&self) -> Result<Vec<LocalWalletSnapshot>, CloudBackupError> {
+        stream::iter(self.all()?)
+            .map(|wallet| async move {
+                let prepared = prepare_wallet_backup(&wallet, wallet.wallet_mode).await?;
+                Ok(LocalWalletSnapshot {
+                    metadata: wallet,
+                    record_id: prepared.record_id,
+                    revision_hash: prepared.revision_hash,
+                    local_label_count: prepared.entry.labels_count,
+                })
             })
-        })
-        .buffered(CLOUD_BACKUP_IO_CONCURRENCY)
-        .try_collect()
-        .await
+            .buffered(CLOUD_BACKUP_IO_CONCURRENCY)
+            .try_collect()
+            .await
+    }
 }
 
 fn sync_status_from_state(
@@ -302,28 +303,28 @@ fn has_local_upload_candidate(sync_state: Option<&PersistedCloudBlobSyncState>) 
     }
 }
 
-fn last_sync(db: &Database) -> Option<u64> {
-    let state = db.cloud_backup_state.get().ok()?;
-    match state.status {
-        PersistedCloudBackupStatus::Disabled => None,
-        PersistedCloudBackupStatus::Enabled
-        | PersistedCloudBackupStatus::Unverified
-        | PersistedCloudBackupStatus::PasskeyMissing => state.last_sync,
-    }
-}
+#[derive(Clone)]
+struct CloudBlobSyncStateStore(Database);
 
-fn sync_states_by_record_id(
-    db: &Database,
-) -> Result<HashMap<String, PersistedCloudBlobSyncState>, CloudBackupError> {
-    db.cloud_blob_sync_states
-        .list()
-        .map_err_prefix("list cloud blob sync states", CloudBackupError::Internal)
-        .map(|states| {
-            states
-                .into_iter()
-                .map(|state| (state.record_id.clone(), state))
-                .collect::<HashMap<_, _>>()
-        })
+impl CloudBlobSyncStateStore {
+    fn new(db: &Database) -> Self {
+        Self(db.clone())
+    }
+
+    fn by_record_id(
+        &self,
+    ) -> Result<HashMap<String, PersistedCloudBlobSyncState>, CloudBackupError> {
+        self.0
+            .cloud_blob_sync_states
+            .list()
+            .map_err_prefix("list cloud blob sync states", CloudBackupError::Internal)
+            .map(|states| {
+                states
+                    .into_iter()
+                    .map(|state| (state.record_id.clone(), state))
+                    .collect::<HashMap<_, _>>()
+            })
+    }
 }
 
 #[cfg(test)]
