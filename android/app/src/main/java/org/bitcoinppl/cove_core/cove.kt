@@ -27750,7 +27750,7 @@ data class CloudBackupDetail (
      * Number of wallets in the cloud that aren't on this device
      */
     var `cloudOnlyCount`: kotlin.UInt
-    ,
+    , 
     var `otherBackups`: CloudBackupOtherBackupsSummary
     
 ){
@@ -27797,15 +27797,15 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
 
 data class CloudBackupOtherBackupsSummary (
     var `namespaceCount`: kotlin.UInt
-    ,
+    , 
     var `walletCount`: kotlin.UInt
-
+    
 ){
+    
 
+    
 
-
-
-
+    
     companion object
 }
 
@@ -27999,7 +27999,7 @@ data class CloudBackupState (
     var `cloudOnly`: CloudOnlyState
     , 
     var `cloudOnlyOperation`: CloudOnlyOperation
-    ,
+    , 
     var `otherBackupsOperation`: OtherBackupsOperation
     
 ){
@@ -34026,11 +34026,11 @@ sealed class CloudBackupManagerAction {
     }
     
     object RecoverOtherBackups : CloudBackupManagerAction()
-
-
+    
+    
     object DeleteOtherBackups : CloudBackupManagerAction()
-
-
+    
+    
     object RefreshDetail : CloudBackupManagerAction()
     
     
@@ -34619,13 +34619,13 @@ sealed class CloudBackupReconcileMessage {
     
     data class OtherBackupsOperation(
         val v1: org.bitcoinppl.cove_core.OtherBackupsOperation) : CloudBackupReconcileMessage()
-
+        
     {
-
+        
 
         companion object
     }
-
+    
     data class PromptIntent(
         val v1: org.bitcoinppl.cove_core.CloudBackupPromptIntent) : CloudBackupReconcileMessage()
         
@@ -41888,44 +41888,44 @@ public object FfiConverterTypeOnboardingStorageSelection: FfiConverterRustBuffer
 
 
 sealed class OtherBackupsOperation {
-
+    
     object Idle : OtherBackupsOperation()
-
-
+    
+    
     object Recovering : OtherBackupsOperation()
-
-
+    
+    
     data class Recovered(
-        val `walletsRestored`: kotlin.UInt,
-        val `walletsFailed`: kotlin.UInt,
+        val `walletsRestored`: kotlin.UInt, 
+        val `walletsFailed`: kotlin.UInt, 
         val `failedWalletErrors`: List<kotlin.String>) : OtherBackupsOperation()
-
+        
     {
-
+        
 
         companion object
     }
-
+    
     object Deleting : OtherBackupsOperation()
-
-
+    
+    
     object Deleted : OtherBackupsOperation()
-
-
+    
+    
     data class Failed(
         val `error`: kotlin.String) : OtherBackupsOperation()
-
+        
     {
-
+        
 
         companion object
     }
+    
 
+    
 
-
-
-
-
+    
+    
 
 
     companion object

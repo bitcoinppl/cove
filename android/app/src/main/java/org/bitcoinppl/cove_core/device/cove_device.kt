@@ -4009,7 +4009,7 @@ public interface CloudStorageAccess {
     suspend fun `deleteWalletBackup`(`namespace`: kotlin.String, `recordId`: kotlin.String, `policy`: CloudAccessPolicy)
     
     suspend fun `deleteNamespace`(`namespace`: kotlin.String, `policy`: CloudAccessPolicy)
-
+    
     /**
      * List all namespace IDs (subdirectories of cspp-namespaces/)
      */

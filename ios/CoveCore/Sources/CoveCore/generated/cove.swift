@@ -13066,7 +13066,7 @@ public struct FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer {
                 lastSync: FfiConverterOptionUInt64.read(from: &buf), 
                 upToDate: FfiConverterSequenceTypeCloudBackupWalletItem.read(from: &buf), 
                 needsSync: FfiConverterSequenceTypeCloudBackupWalletItem.read(from: &buf), 
-                cloudOnlyCount: FfiConverterUInt32.read(from: &buf),
+                cloudOnlyCount: FfiConverterUInt32.read(from: &buf), 
                 otherBackups: FfiConverterTypeCloudBackupOtherBackupsSummary.read(from: &buf)
         )
     }
@@ -13107,9 +13107,9 @@ public struct CloudBackupOtherBackupsSummary: Equatable, Hashable {
         self.walletCount = walletCount
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13123,7 +13123,7 @@ public struct FfiConverterTypeCloudBackupOtherBackupsSummary: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupOtherBackupsSummary {
         return
             try CloudBackupOtherBackupsSummary(
-                namespaceCount: FfiConverterUInt32.read(from: &buf),
+                namespaceCount: FfiConverterUInt32.read(from: &buf), 
                 walletCount: FfiConverterUInt32.read(from: &buf)
         )
     }
@@ -13400,7 +13400,7 @@ public struct FfiConverterTypeCloudBackupState: FfiConverterRustBuffer {
                 sync: FfiConverterTypeSyncState.read(from: &buf), 
                 recovery: FfiConverterTypeRecoveryState.read(from: &buf), 
                 cloudOnly: FfiConverterTypeCloudOnlyState.read(from: &buf), 
-                cloudOnlyOperation: FfiConverterTypeCloudOnlyOperation.read(from: &buf),
+                cloudOnlyOperation: FfiConverterTypeCloudOnlyOperation.read(from: &buf), 
                 otherBackupsOperation: FfiConverterTypeOtherBackupsOperation.read(from: &buf)
         )
     }
@@ -18701,11 +18701,11 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
         )
         
         case 20: return .recoverOtherBackups
-
+        
         case 21: return .deleteOtherBackups
         
         case 22: return .refreshDetail
-
+        
         case 23: return .enterDetail
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -18801,14 +18801,14 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
         case .deleteOtherBackups:
             writeInt(&buf, Int32(21))
         
-
+        
         case .refreshDetail:
             writeInt(&buf, Int32(22))
-
-
+        
+        
         case .enterDetail:
             writeInt(&buf, Int32(23))
-
+        
         }
     }
 }
@@ -19091,7 +19091,7 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
         
         case 16: return .otherBackupsOperation(try FfiConverterTypeOtherBackupsOperation.read(from: &buf)
         )
-
+        
         case 17: return .promptIntent(try FfiConverterTypeCloudBackupPromptIntent.read(from: &buf)
         )
         
@@ -19181,8 +19181,8 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
         case let .otherBackupsOperation(v1):
             writeInt(&buf, Int32(16))
             FfiConverterTypeOtherBackupsOperation.write(v1, into: &buf)
-
-
+            
+        
         case let .promptIntent(v1):
             writeInt(&buf, Int32(17))
             FfiConverterTypeCloudBackupPromptIntent.write(v1, into: &buf)
@@ -25224,7 +25224,7 @@ public func FfiConverterTypeOnboardingStorageSelection_lower(_ value: Onboarding
 
 
 public enum OtherBackupsOperation: Equatable, Hashable {
-
+    
     case idle
     case recovering
     case recovered(walletsRestored: UInt32, walletsFailed: UInt32, failedWalletErrors: [String]
@@ -25253,56 +25253,56 @@ public struct FfiConverterTypeOtherBackupsOperation: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OtherBackupsOperation {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .idle
-
+        
         case 2: return .recovering
-
+        
         case 3: return .recovered(walletsRestored: try FfiConverterUInt32.read(from: &buf), walletsFailed: try FfiConverterUInt32.read(from: &buf), failedWalletErrors: try FfiConverterSequenceString.read(from: &buf)
         )
-
+        
         case 4: return .deleting
-
+        
         case 5: return .deleted
-
+        
         case 6: return .failed(error: try FfiConverterString.read(from: &buf)
         )
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: OtherBackupsOperation, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .idle:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .recovering:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case let .recovered(walletsRestored,walletsFailed,failedWalletErrors):
             writeInt(&buf, Int32(3))
             FfiConverterUInt32.write(walletsRestored, into: &buf)
             FfiConverterUInt32.write(walletsFailed, into: &buf)
             FfiConverterSequenceString.write(failedWalletErrors, into: &buf)
-
-
+            
+        
         case .deleting:
             writeInt(&buf, Int32(4))
-
-
+        
+        
         case .deleted:
             writeInt(&buf, Int32(5))
-
-
+        
+        
         case let .failed(error):
             writeInt(&buf, Int32(6))
             FfiConverterString.write(error, into: &buf)
-
+            
         }
     }
 }

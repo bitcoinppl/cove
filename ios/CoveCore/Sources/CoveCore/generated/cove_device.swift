@@ -2183,8 +2183,8 @@ public protocol CloudStorageAccess: AnyObject, Sendable {
     
     func deleteWalletBackup(namespace: String, recordId: String, policy: CloudAccessPolicy) async throws 
     
-    func deleteNamespace(namespace: String, policy: CloudAccessPolicy) async throws
-
+    func deleteNamespace(namespace: String, policy: CloudAccessPolicy) async throws 
+    
     /**
      * List all namespace IDs (subdirectories of cspp-namespaces/)
      */
