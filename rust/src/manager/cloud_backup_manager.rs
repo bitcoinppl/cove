@@ -59,6 +59,8 @@ use super::connectivity_manager::CONNECTIVITY_MANAGER;
 type LocalWalletSecret = crate::backup::model::WalletSecret;
 
 const PASSKEY_RP_ID: &str = "covebitcoinwallet.com";
+pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str =
+    "master key backup is missing from cloud storage";
 pub(super) const CLOUD_BACKUP_IO_CONCURRENCY: usize = 4;
 type Message = CloudBackupReconcileMessage;
 
@@ -1421,9 +1423,7 @@ impl RustCloudBackupManager {
                 return CloudSyncHealth::Uploading;
             }
 
-            return CloudSyncHealth::Failed(
-                "master key backup is missing from cloud storage".into(),
-            );
+            return CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into());
         }
 
         if Self::sync_health_has_pending_wallet_upload(&sync_states) {
@@ -2260,6 +2260,9 @@ fn sync_health_failed_message(
 
     failed_state.error.clone()
 }
+
+pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str =
+    "master key backup is missing from cloud storage";
 
 fn sync_health_missing_wallet_message(missing_wallet_count: usize) -> String {
     if missing_wallet_count == 1 {
