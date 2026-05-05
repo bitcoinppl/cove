@@ -137,7 +137,7 @@ package org.bitcoinppl.cove.cloudbackup
          }
      }
 
-     LaunchedEffect(Unit) {
+     LaunchedEffect(manager) {
          manager.dispatch(CloudBackupManagerAction.EnterDetail)
      }
 

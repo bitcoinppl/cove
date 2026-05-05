@@ -362,10 +362,6 @@ struct OtherBackupsSection: View {
             Text(title)
         }
     }
-
-    private func pluralize(_ count: Int, singular: String, plural: String) -> String {
-        "\(count) \(count == 1 ? singular : plural)"
-    }
 }
 
 private struct OtherBackupsRecoveryResult: Identifiable {
@@ -392,10 +388,10 @@ private struct OtherBackupsRecoveryResult: Identifiable {
 
         return parts.joined(separator: " ")
     }
+}
 
-    private func pluralize(_ count: Int, singular: String, plural: String) -> String {
-        "\(count) \(count == 1 ? singular : plural)"
-    }
+private func pluralize(_ count: Int, singular: String, plural: String) -> String {
+    "\(count) \(count == 1 ? singular : plural)"
 }
 
 private struct CloudOnlySectionContent: View {
