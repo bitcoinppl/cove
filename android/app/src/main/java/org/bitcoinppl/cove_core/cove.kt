@@ -1432,6 +1432,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_state(
     ): Short
+    external fun uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_status(
+    ): Short
     external fun uniffi_cove_checksum_method_rustconnectivitymanager_state(
     ): Short
     external fun uniffi_cove_checksum_method_rustimportwalletmanager_dispatch(
@@ -2488,6 +2490,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_rustconnectivitymanager_set_connection_state(`ptr`: Long,`isConnected`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_cove_fn_method_rustconnectivitymanager_set_connection_status(`ptr`: Long,`status`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_cove_fn_method_rustconnectivitymanager_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_rustimportwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -3193,6 +3197,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_authmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_catastrophicrecoveryerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_deepverificationfailure_message(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_coincontrollistsortkey_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -4113,6 +4119,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_state() != 17798.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_status() != 59768.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_state() != 43225.toShort()) {
@@ -18712,6 +18721,8 @@ public interface RustConnectivityManagerInterface {
     
     fun `setConnectionState`(`isConnected`: kotlin.Boolean)
     
+    fun `setConnectionStatus`(`status`: ConnectivityStatus)
+    
     fun `state`(): ConnectivityState
     
     companion object
@@ -18846,6 +18857,18 @@ open class RustConnectivityManager: Disposable, AutoCloseable, RustConnectivityM
     UniffiLib.uniffi_cove_fn_method_rustconnectivitymanager_set_connection_state(
         it,
         FfiConverterBoolean.lower(`isConnected`),_status)
+}
+    }
+    
+    
+
+    override fun `setConnectionStatus`(`status`: ConnectivityStatus)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustconnectivitymanager_set_connection_status(
+        it,
+        FfiConverterTypeConnectivityStatus.lower(`status`),_status)
 }
     }
     
@@ -27967,6 +27990,44 @@ public object FfiConverterTypeCloudBackupRestoreReport: FfiConverterRustBuffer<C
 
 
 
+data class CloudBackupRetryContext (
+    var `issue`: CloudBackupRetryIssue
+    , 
+    var `action`: CloudBackupRetryAction
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRetryContext: FfiConverterRustBuffer<CloudBackupRetryContext> {
+    override fun read(buf: ByteBuffer): CloudBackupRetryContext {
+        return CloudBackupRetryContext(
+            FfiConverterTypeCloudBackupRetryIssue.read(buf),
+            FfiConverterTypeCloudBackupRetryAction.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupRetryContext) = (
+            FfiConverterTypeCloudBackupRetryIssue.allocationSize(value.`issue`) +
+            FfiConverterTypeCloudBackupRetryAction.allocationSize(value.`action`)
+    )
+
+    override fun write(value: CloudBackupRetryContext, buf: ByteBuffer) {
+            FfiConverterTypeCloudBackupRetryIssue.write(value.`issue`, buf)
+            FfiConverterTypeCloudBackupRetryAction.write(value.`action`, buf)
+    }
+}
+
+
+
 data class CloudBackupState (
     var `status`: CloudBackupStatus
     , 
@@ -33828,89 +33889,6 @@ public object FfiConverterTypeCkTapError : FfiConverterRustBuffer<CkTapException
 
 
 
-sealed class CloudBackupDetailResult {
-    
-    data class Success(
-        val v1: org.bitcoinppl.cove_core.CloudBackupDetail) : CloudBackupDetailResult()
-        
-    {
-        
-
-        companion object
-    }
-    
-    data class AccessError(
-        val v1: kotlin.String) : CloudBackupDetailResult()
-        
-    {
-        
-
-        companion object
-    }
-    
-
-    
-
-    
-    
-
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeCloudBackupDetailResult : FfiConverterRustBuffer<CloudBackupDetailResult>{
-    override fun read(buf: ByteBuffer): CloudBackupDetailResult {
-        return when(buf.getInt()) {
-            1 -> CloudBackupDetailResult.Success(
-                FfiConverterTypeCloudBackupDetail.read(buf),
-                )
-            2 -> CloudBackupDetailResult.AccessError(
-                FfiConverterString.read(buf),
-                )
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
-    }
-
-    override fun allocationSize(value: CloudBackupDetailResult): ULong = when(value) {
-        is CloudBackupDetailResult.Success -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeCloudBackupDetail.allocationSize(value.v1)
-            )
-        }
-        is CloudBackupDetailResult.AccessError -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
-            )
-        }
-    }
-
-    override fun write(value: CloudBackupDetailResult, buf: ByteBuffer) {
-        when(value) {
-            is CloudBackupDetailResult.Success -> {
-                buf.putInt(1)
-                FfiConverterTypeCloudBackupDetail.write(value.v1, buf)
-                Unit
-            }
-            is CloudBackupDetailResult.AccessError -> {
-                buf.putInt(2)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-}
-
-
-
-
-
 sealed class CloudBackupManagerAction {
     
     object EnableCloudBackup : CloudBackupManagerAction()
@@ -34907,6 +34885,73 @@ public object FfiConverterTypeCloudBackupRestoreStage: FfiConverterRustBuffer<Cl
     override fun allocationSize(value: CloudBackupRestoreStage) = 4UL
 
     override fun write(value: CloudBackupRestoreStage, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class CloudBackupRetryAction {
+    
+    VERIFY,
+    VERIFY_DISCOVERABLE;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRetryAction: FfiConverterRustBuffer<CloudBackupRetryAction> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupRetryAction.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupRetryAction) = 4UL
+
+    override fun write(value: CloudBackupRetryAction, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class CloudBackupRetryIssue {
+    
+    CONNECTIVITY;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRetryIssue: FfiConverterRustBuffer<CloudBackupRetryIssue> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupRetryIssue.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupRetryIssue) = 4UL
+
+    override fun write(value: CloudBackupRetryIssue, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }
@@ -36219,6 +36264,7 @@ public object FfiConverterTypeColdWalletRoute: FfiConverterRustBuffer<ColdWallet
 
 enum class ConnectivityStatus {
     
+    UNKNOWN,
     CONNECTED,
     DISCONNECTED;
 
@@ -36753,7 +36799,8 @@ sealed class DeepVerificationFailure {
      */
     data class Retry(
         val `message`: kotlin.String, 
-        val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?) : DeepVerificationFailure()
+        val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?, 
+        val `retryContext`: org.bitcoinppl.cove_core.CloudBackupRetryContext?) : DeepVerificationFailure()
         
     {
         
@@ -36806,6 +36853,16 @@ sealed class DeepVerificationFailure {
     
 
     
+     fun `message`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_deepverificationfailure_message(FfiConverterTypeDeepVerificationFailure.lower(this),
+        _status)
+}
+    )
+    }
+    
+
     
 
 
@@ -36821,6 +36878,7 @@ public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<D
             1 -> DeepVerificationFailure.Retry(
                 FfiConverterString.read(buf),
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
+                FfiConverterOptionalTypeCloudBackupRetryContext.read(buf),
                 )
             2 -> DeepVerificationFailure.RecreateManifest(
                 FfiConverterString.read(buf),
@@ -36847,6 +36905,7 @@ public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<D
                 4UL
                 + FfiConverterString.allocationSize(value.`message`)
                 + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
+                + FfiConverterOptionalTypeCloudBackupRetryContext.allocationSize(value.`retryContext`)
             )
         }
         is DeepVerificationFailure.RecreateManifest -> {
@@ -36883,6 +36942,7 @@ public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<D
                 buf.putInt(1)
                 FfiConverterString.write(value.`message`, buf)
                 FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
+                FfiConverterOptionalTypeCloudBackupRetryContext.write(value.`retryContext`, buf)
                 Unit
             }
             is DeepVerificationFailure.RecreateManifest -> {
@@ -53901,6 +53961,38 @@ public object FfiConverterOptionalTypeCloudBackupRestoreReport: FfiConverterRust
         } else {
             buf.put(1)
             FfiConverterTypeCloudBackupRestoreReport.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeCloudBackupRetryContext: FfiConverterRustBuffer<CloudBackupRetryContext?> {
+    override fun read(buf: ByteBuffer): CloudBackupRetryContext? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudBackupRetryContext.read(buf)
+    }
+
+    override fun allocationSize(value: CloudBackupRetryContext?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudBackupRetryContext.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudBackupRetryContext?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudBackupRetryContext.write(value, buf)
         }
     }
 }
