@@ -16,7 +16,6 @@ use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError, CloudBackupKeychain,
     DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, PASSKEY_RP_ID,
     PendingVerificationCompletion, PendingVerificationUpload, RustCloudBackupManager,
-    VerificationFailureKind,
     cloud_inventory::CloudWalletInventory,
     wallets::{WalletBackupLookup, WalletBackupReader, prepare_wallet_backup},
 };
@@ -187,13 +186,14 @@ impl VerificationSession {
                     Err(unsupported) => {
                         let version = unsupported.0;
                         return Ok(EncryptedMasterKeyStep::Finished(
-                            DeepVerificationResult::Failed(DeepVerificationFailure {
-                                kind: VerificationFailureKind::UnsupportedVersion,
-                                message: format!(
-                                    "master key backup version {version} is not supported",
-                                ),
-                                detail: self.detail(),
-                            }),
+                            DeepVerificationResult::Failed(
+                                DeepVerificationFailure::UnsupportedVersion {
+                                    message: format!(
+                                        "master key backup version {version} is not supported",
+                                    ),
+                                    detail: self.detail(),
+                                },
+                            ),
                         ));
                     }
                 }
@@ -557,8 +557,7 @@ impl VerificationSession {
 
     /// Builds a retryable verification failure while preserving the latest backup detail for UI recovery prompts
     fn retry_result(&self, message: impl Into<String>) -> DeepVerificationResult {
-        DeepVerificationResult::Failed(DeepVerificationFailure {
-            kind: VerificationFailureKind::Retry,
+        DeepVerificationResult::Failed(DeepVerificationFailure::Retry {
             message: message.into(),
             detail: self.detail(),
         })
@@ -566,20 +565,18 @@ impl VerificationSession {
 
     /// Builds the failure shown when wallet blobs are missing but local data can recreate the manifest
     fn recreate_manifest_result(&self) -> DeepVerificationResult {
-        DeepVerificationResult::Failed(DeepVerificationFailure {
-            kind: VerificationFailureKind::RecreateManifest { warning: RECREATE_WARNING.into() },
+        DeepVerificationResult::Failed(DeepVerificationFailure::RecreateManifest {
             message: "wallet backups not found in iCloud namespace".into(),
+            warning: RECREATE_WARNING.into(),
             detail: self.detail(),
         })
     }
 
     /// Builds the failure shown when the backup cannot be trusted and should be recreated from scratch
     fn reinitialize_result(&self, message: impl Into<String>) -> DeepVerificationResult {
-        DeepVerificationResult::Failed(DeepVerificationFailure {
-            kind: VerificationFailureKind::ReinitializeBackup {
-                warning: REINITIALIZE_WARNING.into(),
-            },
+        DeepVerificationResult::Failed(DeepVerificationFailure::ReinitializeBackup {
             message: message.into(),
+            warning: REINITIALIZE_WARNING.into(),
             detail: self.detail(),
         })
     }

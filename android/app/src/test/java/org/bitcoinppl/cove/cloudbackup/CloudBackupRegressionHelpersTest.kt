@@ -4,7 +4,6 @@ import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceFlow
 import org.bitcoinppl.cove_core.CloudBackupStatus
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
-import org.bitcoinppl.cove_core.VerificationFailureKind
 import org.bitcoinppl.cove_core.VerificationState
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.junit.Assert.assertEquals
@@ -137,8 +136,7 @@ class CloudBackupRegressionHelpersTest {
                 status = CloudBackupStatus.Enabled,
                 verification =
                     VerificationState.Failed(
-                        DeepVerificationFailure(
-                            kind = VerificationFailureKind.Retry,
+                        DeepVerificationFailure.Retry(
                             message = "Drive unavailable",
                             detail = null,
                         ),

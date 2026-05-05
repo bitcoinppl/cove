@@ -75,7 +75,7 @@ mod tests {
         CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupPromptState,
         CloudBackupState, CloudBackupStatus, RecoveryAction, RecoveryState, VerificationState,
     };
-    use crate::manager::cloud_backup_manager::{DeepVerificationFailure, VerificationFailureKind};
+    use crate::manager::cloud_backup_manager::DeepVerificationFailure;
 
     #[test]
     fn existing_backup_prompt_has_highest_priority() {
@@ -152,8 +152,7 @@ mod tests {
     fn failed_verification_keeps_prompt_active() {
         let prompt_state = CloudBackupPromptState::default();
         let state = CloudBackupState {
-            verification: VerificationState::Failed(DeepVerificationFailure {
-                kind: VerificationFailureKind::Retry,
+            verification: VerificationState::Failed(DeepVerificationFailure::Retry {
                 message: "verification failed".into(),
                 detail: None,
             }),

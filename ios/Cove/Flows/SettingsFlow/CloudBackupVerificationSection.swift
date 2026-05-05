@@ -170,15 +170,15 @@ struct VerificationSection: View {
     @ViewBuilder
     private func failureSection(_ failure: DeepVerificationFailure) -> some View {
         Section {
-            switch failure.kind {
-            case .retry:
-                retryFailureContent(failure.message)
-            case let .recreateManifest(warning):
-                recreateManifestContent(message: failure.message, warning: warning)
-            case let .reinitializeBackup(warning):
-                reinitializeBackupContent(message: failure.message, warning: warning)
-            case .unsupportedVersion:
-                unsupportedVersionContent(failure.message)
+            switch failure {
+            case let .retry(message, _):
+                retryFailureContent(message)
+            case let .recreateManifest(message, warning, _):
+                recreateManifestContent(message: message, warning: warning)
+            case let .reinitializeBackup(message, warning, _):
+                reinitializeBackupContent(message: message, warning: warning)
+            case let .unsupportedVersion(message, _):
+                unsupportedVersionContent(message)
             }
         }
 

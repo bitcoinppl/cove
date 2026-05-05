@@ -261,23 +261,16 @@ pub enum CloudBackupVerificationMetadata {
     NeedsVerification,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct DeepVerificationFailure {
-    pub kind: VerificationFailureKind,
-    pub message: String,
-    pub detail: Option<CloudBackupDetail>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum VerificationFailureKind {
+pub enum DeepVerificationFailure {
     /// Transient iCloud/network/passkey error — safe to retry
-    Retry,
+    Retry { message: String, detail: Option<CloudBackupDetail> },
     /// Manifest missing, master key verified intact — recreate from local wallets
-    RecreateManifest { warning: String },
+    RecreateManifest { message: String, warning: String, detail: Option<CloudBackupDetail> },
     /// No verified cloud or local master key available — full re-enable needed
-    ReinitializeBackup { warning: String },
+    ReinitializeBackup { message: String, warning: String, detail: Option<CloudBackupDetail> },
     /// Backup uses a newer format — do not overwrite
-    UnsupportedVersion,
+    UnsupportedVersion { message: String, detail: Option<CloudBackupDetail> },
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -477,20 +470,17 @@ pub(crate) enum BlockingCloudStep {
     DetailRefresh,
 }
 
-/// Tracks passkey material created during enable before the flow fully completes
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PendingEnableSessionKind {
-    /// A new passkey and master key are staged while the user confirms Create New Backup
-    AwaitingForceNewConfirmation,
-
-    /// Upload already started and should retry with the same staged passkey material
-    RetryUpload,
-}
-
-pub(crate) struct PendingEnableSession {
-    kind: PendingEnableSessionKind,
+pub(crate) struct PendingEnableSessionMaterial {
     master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
     passkey: Zeroizing<UnpersistedPrfKey>,
+}
+
+/// Tracks passkey material created during enable before the flow fully completes
+pub(crate) enum PendingEnableSession {
+    /// A new passkey and master key are staged while the user confirms Create New Backup
+    AwaitingForceNewConfirmation(PendingEnableSessionMaterial),
+    /// Upload already started and should retry with the same staged passkey material
+    RetryUpload(PendingEnableSessionMaterial),
 }
 
 fn cloud_only_cache_is_stale(
@@ -538,32 +528,9 @@ impl std::fmt::Debug for PendingEnableSession {
     }
 }
 
-impl PendingEnableSession {
-    #[cfg(test)]
+impl PendingEnableSessionMaterial {
     fn new(master_key: cove_cspp::master_key::MasterKey, passkey: UnpersistedPrfKey) -> Self {
-        Self::awaiting_confirmation(master_key, passkey)
-    }
-
-    fn awaiting_confirmation(
-        master_key: cove_cspp::master_key::MasterKey,
-        passkey: UnpersistedPrfKey,
-    ) -> Self {
-        Self {
-            kind: PendingEnableSessionKind::AwaitingForceNewConfirmation,
-            master_key: Zeroizing::new(master_key),
-            passkey: Zeroizing::new(passkey),
-        }
-    }
-
-    fn retry_upload(
-        master_key: cove_cspp::master_key::MasterKey,
-        passkey: UnpersistedPrfKey,
-    ) -> Self {
-        Self {
-            kind: PendingEnableSessionKind::RetryUpload,
-            master_key: Zeroizing::new(master_key),
-            passkey: Zeroizing::new(passkey),
-        }
+        Self { master_key: Zeroizing::new(master_key), passkey: Zeroizing::new(passkey) }
     }
 
     fn into_parts(
@@ -572,12 +539,73 @@ impl PendingEnableSession {
         (self.master_key, self.passkey)
     }
 
+    fn namespace_id(&self) -> String {
+        self.master_key.namespace_id()
+    }
+}
+
+impl PendingEnableSession {
+    fn awaiting_confirmation(
+        master_key: cove_cspp::master_key::MasterKey,
+        passkey: UnpersistedPrfKey,
+    ) -> Self {
+        Self::AwaitingForceNewConfirmation(PendingEnableSessionMaterial::new(master_key, passkey))
+    }
+
+    fn retry_upload(
+        master_key: cove_cspp::master_key::MasterKey,
+        passkey: UnpersistedPrfKey,
+    ) -> Self {
+        Self::RetryUpload(PendingEnableSessionMaterial::new(master_key, passkey))
+    }
+
+    fn into_parts(
+        self,
+    ) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<UnpersistedPrfKey>) {
+        match self {
+            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
+                material.into_parts()
+            }
+        }
+    }
+
+    fn namespace_id(&self) -> String {
+        match self {
+            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
+                material.namespace_id()
+            }
+        }
+    }
+
     fn is_retry_upload(&self) -> bool {
-        matches!(self.kind, PendingEnableSessionKind::RetryUpload)
+        matches!(self, Self::RetryUpload(_))
     }
 
     fn is_awaiting_force_new_confirmation(&self) -> bool {
-        matches!(self.kind, PendingEnableSessionKind::AwaitingForceNewConfirmation)
+        matches!(self, Self::AwaitingForceNewConfirmation(_))
+    }
+}
+
+#[uniffi::export]
+impl DeepVerificationFailure {
+    pub fn message(&self) -> String {
+        match self {
+            Self::Retry { message, .. }
+            | Self::RecreateManifest { message, .. }
+            | Self::ReinitializeBackup { message, .. }
+            | Self::UnsupportedVersion { message, .. } => message.clone(),
+        }
+    }
+}
+
+impl DeepVerificationFailure {
+    pub(crate) fn detail(&self) -> Option<&CloudBackupDetail> {
+        match self {
+            Self::Retry { detail, .. }
+            | Self::RecreateManifest { detail, .. }
+            | Self::ReinitializeBackup { detail, .. }
+            | Self::UnsupportedVersion { detail, .. } => detail.as_ref(),
+        }
     }
 }
 

@@ -28424,49 +28424,6 @@ public object FfiConverterTypeContinueFromInit: FfiConverterRustBuffer<ContinueF
 
 
 
-data class DeepVerificationFailure (
-    var `kind`: VerificationFailureKind
-    , 
-    var `message`: kotlin.String
-    , 
-    var `detail`: CloudBackupDetail?
-    
-){
-    
-
-    
-
-    
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeDeepVerificationFailure: FfiConverterRustBuffer<DeepVerificationFailure> {
-    override fun read(buf: ByteBuffer): DeepVerificationFailure {
-        return DeepVerificationFailure(
-            FfiConverterTypeVerificationFailureKind.read(buf),
-            FfiConverterString.read(buf),
-            FfiConverterOptionalTypeCloudBackupDetail.read(buf),
-        )
-    }
-
-    override fun allocationSize(value: DeepVerificationFailure) = (
-            FfiConverterTypeVerificationFailureKind.allocationSize(value.`kind`) +
-            FfiConverterString.allocationSize(value.`message`) +
-            FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
-    )
-
-    override fun write(value: DeepVerificationFailure, buf: ByteBuffer) {
-            FfiConverterTypeVerificationFailureKind.write(value.`kind`, buf)
-            FfiConverterString.write(value.`message`, buf)
-            FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
-    }
-}
-
-
-
 data class DeepVerificationReport (
     /**
      * Cloud master key PRF wrapping was repaired
@@ -36786,6 +36743,173 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
     }
 
 }
+
+
+
+sealed class DeepVerificationFailure {
+    
+    /**
+     * Transient iCloud/network/passkey error — safe to retry
+     */
+    data class Retry(
+        val `message`: kotlin.String, 
+        val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?) : DeepVerificationFailure()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Manifest missing, master key verified intact — recreate from local wallets
+     */
+    data class RecreateManifest(
+        val `message`: kotlin.String, 
+        val `warning`: kotlin.String, 
+        val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?) : DeepVerificationFailure()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * No verified cloud or local master key available — full re-enable needed
+     */
+    data class ReinitializeBackup(
+        val `message`: kotlin.String, 
+        val `warning`: kotlin.String, 
+        val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?) : DeepVerificationFailure()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Backup uses a newer format — do not overwrite
+     */
+    data class UnsupportedVersion(
+        val `message`: kotlin.String, 
+        val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?) : DeepVerificationFailure()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<DeepVerificationFailure>{
+    override fun read(buf: ByteBuffer): DeepVerificationFailure {
+        return when(buf.getInt()) {
+            1 -> DeepVerificationFailure.Retry(
+                FfiConverterString.read(buf),
+                FfiConverterOptionalTypeCloudBackupDetail.read(buf),
+                )
+            2 -> DeepVerificationFailure.RecreateManifest(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterOptionalTypeCloudBackupDetail.read(buf),
+                )
+            3 -> DeepVerificationFailure.ReinitializeBackup(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterOptionalTypeCloudBackupDetail.read(buf),
+                )
+            4 -> DeepVerificationFailure.UnsupportedVersion(
+                FfiConverterString.read(buf),
+                FfiConverterOptionalTypeCloudBackupDetail.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: DeepVerificationFailure): ULong = when(value) {
+        is DeepVerificationFailure.Retry -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+                + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
+            )
+        }
+        is DeepVerificationFailure.RecreateManifest -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+                + FfiConverterString.allocationSize(value.`warning`)
+                + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
+            )
+        }
+        is DeepVerificationFailure.ReinitializeBackup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+                + FfiConverterString.allocationSize(value.`warning`)
+                + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
+            )
+        }
+        is DeepVerificationFailure.UnsupportedVersion -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+                + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
+            )
+        }
+    }
+
+    override fun write(value: DeepVerificationFailure, buf: ByteBuffer) {
+        when(value) {
+            is DeepVerificationFailure.Retry -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.`message`, buf)
+                FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
+                Unit
+            }
+            is DeepVerificationFailure.RecreateManifest -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`message`, buf)
+                FfiConverterString.write(value.`warning`, buf)
+                FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
+                Unit
+            }
+            is DeepVerificationFailure.ReinitializeBackup -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.`message`, buf)
+                FfiConverterString.write(value.`warning`, buf)
+                FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
+                Unit
+            }
+            is DeepVerificationFailure.UnsupportedVersion -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`message`, buf)
+                FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
 
 
 
@@ -48813,129 +48937,6 @@ public object FfiConverterTypeUrType : FfiConverterRustBuffer<UrType>{
             is UrType.Unknown -> {
                 buf.putInt(7)
                 FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-}
-
-
-
-
-
-sealed class VerificationFailureKind {
-    
-    /**
-     * Transient iCloud/network/passkey error — safe to retry
-     */
-    object Retry : VerificationFailureKind()
-    
-    
-    /**
-     * Manifest missing, master key verified intact — recreate from local wallets
-     */
-    data class RecreateManifest(
-        val `warning`: kotlin.String) : VerificationFailureKind()
-        
-    {
-        
-
-        companion object
-    }
-    
-    /**
-     * No verified cloud or local master key available — full re-enable needed
-     */
-    data class ReinitializeBackup(
-        val `warning`: kotlin.String) : VerificationFailureKind()
-        
-    {
-        
-
-        companion object
-    }
-    
-    /**
-     * Backup uses a newer format — do not overwrite
-     */
-    object UnsupportedVersion : VerificationFailureKind()
-    
-    
-
-    
-
-    
-    
-
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeVerificationFailureKind : FfiConverterRustBuffer<VerificationFailureKind>{
-    override fun read(buf: ByteBuffer): VerificationFailureKind {
-        return when(buf.getInt()) {
-            1 -> VerificationFailureKind.Retry
-            2 -> VerificationFailureKind.RecreateManifest(
-                FfiConverterString.read(buf),
-                )
-            3 -> VerificationFailureKind.ReinitializeBackup(
-                FfiConverterString.read(buf),
-                )
-            4 -> VerificationFailureKind.UnsupportedVersion
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
-    }
-
-    override fun allocationSize(value: VerificationFailureKind): ULong = when(value) {
-        is VerificationFailureKind.Retry -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is VerificationFailureKind.RecreateManifest -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.`warning`)
-            )
-        }
-        is VerificationFailureKind.ReinitializeBackup -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.`warning`)
-            )
-        }
-        is VerificationFailureKind.UnsupportedVersion -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-    }
-
-    override fun write(value: VerificationFailureKind, buf: ByteBuffer) {
-        when(value) {
-            is VerificationFailureKind.Retry -> {
-                buf.putInt(1)
-                Unit
-            }
-            is VerificationFailureKind.RecreateManifest -> {
-                buf.putInt(2)
-                FfiConverterString.write(value.`warning`, buf)
-                Unit
-            }
-            is VerificationFailureKind.ReinitializeBackup -> {
-                buf.putInt(3)
-                FfiConverterString.write(value.`warning`, buf)
-                Unit
-            }
-            is VerificationFailureKind.UnsupportedVersion -> {
-                buf.putInt(4)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

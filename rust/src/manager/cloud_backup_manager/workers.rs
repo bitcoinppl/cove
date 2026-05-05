@@ -387,7 +387,7 @@ impl CloudBackupSupervisor {
         };
 
         let should_delete_remote = pending.is_retry_upload();
-        let namespace_id = pending.master_key.namespace_id();
+        let namespace_id = pending.namespace_id();
 
         if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
             warn!("Discard pending enable failed to clear local cloud backup state: {error}");

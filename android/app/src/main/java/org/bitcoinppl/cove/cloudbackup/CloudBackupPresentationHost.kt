@@ -482,7 +482,7 @@ private fun CloudBackupVerificationPrompt(
 
     val message =
         when {
-            failure != null -> failure.message
+            failure != null -> failure.message()
             isVerifying ->
                 "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey."
             else ->

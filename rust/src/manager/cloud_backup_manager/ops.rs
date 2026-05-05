@@ -1443,8 +1443,8 @@ mod tests {
     use crate::label_manager::LabelManager;
     use crate::manager::cloud_backup_manager::{
         CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupKeychain,
-        CloudBackupPromptIntent, DeepVerificationReport, DeepVerificationResult,
-        PendingVerificationCompletion, PendingVerificationUpload, VerificationFailureKind,
+        CloudBackupPromptIntent, DeepVerificationFailure, DeepVerificationReport,
+        DeepVerificationResult, PendingVerificationCompletion, PendingVerificationUpload,
         VerificationState,
     };
     use crate::manager::cloud_backup_manager::{
@@ -4078,13 +4078,12 @@ mod tests {
         let result = manager.deep_verify_cloud_backup(true).await;
 
         match result {
-            DeepVerificationResult::Failed(failure) => {
-                assert_eq!(failure.kind, VerificationFailureKind::Retry);
+            DeepVerificationResult::Failed(DeepVerificationFailure::Retry { message, detail }) => {
                 assert_eq!(
-                    failure.message,
+                    message,
                     "failed to auto-sync missing wallet backups: cloud storage error: upload failed: upload failed"
                 );
-                let detail = failure.detail.expect("expected detail on retry failure");
+                let detail = detail.expect("expected detail on retry failure");
                 assert_eq!(detail.needs_sync.len(), 1);
                 assert_eq!(detail.needs_sync[0].record_id, record_id);
             }
@@ -4571,14 +4570,10 @@ mod tests {
         let result = manager.deep_verify_cloud_backup(true).await;
 
         match result {
-            DeepVerificationResult::Failed(failure) => {
-                assert_eq!(failure.kind, VerificationFailureKind::Retry);
-                assert_eq!(
-                    failure.message,
-                    "failed to refresh remote wallet truth for some wallets"
-                );
+            DeepVerificationResult::Failed(DeepVerificationFailure::Retry { message, detail }) => {
+                assert_eq!(message, "failed to refresh remote wallet truth for some wallets");
 
-                let detail = failure.detail.expect("expected verification detail");
+                let detail = detail.expect("expected verification detail");
                 assert_eq!(detail.needs_sync.len(), 1);
                 assert_eq!(detail.needs_sync[0].record_id, record_id);
                 assert_eq!(
@@ -4681,7 +4676,7 @@ mod tests {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         cspp.save_master_key(&master_key).unwrap();
         manager
-            .replace_pending_enable_session(PendingEnableSession::new(
+            .replace_pending_enable_session(PendingEnableSession::awaiting_confirmation(
                 master_key,
                 UnpersistedPrfKey {
                     prf_key: [7; 32],
@@ -4764,7 +4759,7 @@ mod tests {
         let expected_namespace = master_key.namespace_id();
         let expected_credential_id = vec![1, 2, 3];
         manager
-            .replace_pending_enable_session(PendingEnableSession::new(
+            .replace_pending_enable_session(PendingEnableSession::awaiting_confirmation(
                 master_key,
                 UnpersistedPrfKey {
                     prf_key: [7; 32],
@@ -4798,7 +4793,7 @@ mod tests {
         let expected_namespace = master_key.namespace_id();
         let expected_credential_id = vec![1, 2, 3];
         manager
-            .replace_pending_enable_session(PendingEnableSession::new(
+            .replace_pending_enable_session(PendingEnableSession::awaiting_confirmation(
                 master_key,
                 UnpersistedPrfKey {
                     prf_key: [7; 32],
@@ -4832,7 +4827,7 @@ mod tests {
         let expected_namespace = master_key.namespace_id();
         let expected_credential_id = vec![1, 2, 3];
         manager
-            .replace_pending_enable_session(PendingEnableSession::new(
+            .replace_pending_enable_session(PendingEnableSession::awaiting_confirmation(
                 master_key,
                 UnpersistedPrfKey {
                     prf_key: [7; 32],
@@ -4963,7 +4958,7 @@ mod tests {
         CONNECTIVITY_MANAGER.set_connection_state(true);
 
         manager
-            .replace_pending_enable_session(PendingEnableSession::new(
+            .replace_pending_enable_session(PendingEnableSession::awaiting_confirmation(
                 cove_cspp::master_key::MasterKey::generate(),
                 UnpersistedPrfKey {
                     prf_key: [7; 32],

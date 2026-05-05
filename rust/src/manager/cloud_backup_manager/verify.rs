@@ -21,7 +21,7 @@ use super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
     CloudBackupStatus, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
     PendingVerificationCompletion, PendingVerificationUpload, RecoveryState,
-    RustCloudBackupManager, VerificationFailureKind, VerificationState,
+    RustCloudBackupManager, VerificationState,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
@@ -65,8 +65,7 @@ impl RustCloudBackupManager {
             Ok(result) => result,
             Err(error) => {
                 error!("Deep verification unexpected error: {error}");
-                DeepVerificationResult::Failed(DeepVerificationFailure {
-                    kind: VerificationFailureKind::Retry,
+                DeepVerificationResult::Failed(DeepVerificationFailure::Retry {
                     message: error.to_string(),
                     detail: None,
                 })

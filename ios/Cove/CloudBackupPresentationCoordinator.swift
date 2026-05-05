@@ -405,7 +405,7 @@ private struct CloudBackupVerificationPromptView: View {
     }
 
     private var message: String {
-        if let failure { return failure.message }
+        if let failure { return failure.message() }
         if isVerifying { return "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey." }
 
         return "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey."

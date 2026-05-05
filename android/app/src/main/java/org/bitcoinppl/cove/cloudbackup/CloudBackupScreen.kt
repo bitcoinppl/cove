@@ -78,7 +78,6 @@ package org.bitcoinppl.cove.cloudbackup
  import org.bitcoinppl.cove_core.RecoveryAction
  import org.bitcoinppl.cove_core.RecoveryState
  import org.bitcoinppl.cove_core.SyncState
- import org.bitcoinppl.cove_core.VerificationFailureKind
  import org.bitcoinppl.cove_core.VerificationState
  import org.bitcoinppl.cove_core.WalletMode
  import org.bitcoinppl.cove_core.device.CloudSyncHealth
@@ -1273,8 +1272,8 @@ package org.bitcoinppl.cove.cloudbackup
      onRecreate: () -> Unit,
      onReinitialize: () -> Unit,
  ) {
-     when (val kind = failure.kind) {
-         is VerificationFailureKind.Retry -> {
+     when (failure) {
+         is DeepVerificationFailure.Retry -> {
              ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
              MaterialDivider()
              MaterialSettingsItem(
@@ -1290,29 +1289,29 @@ package org.bitcoinppl.cove.cloudbackup
              )
          }
 
-         is VerificationFailureKind.RecreateManifest -> {
+         is DeepVerificationFailure.RecreateManifest -> {
              ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
              MaterialDivider()
              MaterialSettingsItem(
                  title = "Recreate Backup Index",
-                 subtitle = kind.warning,
+                 subtitle = failure.warning,
                  onClick = onRecreate,
                  leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
              )
          }
 
-         is VerificationFailureKind.ReinitializeBackup -> {
+         is DeepVerificationFailure.ReinitializeBackup -> {
              ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
              MaterialDivider()
              MaterialSettingsItem(
                  title = "Reinitialize Cloud Backup",
-                 subtitle = kind.warning,
+                 subtitle = failure.warning,
                  onClick = onReinitialize,
                  leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
              )
          }
 
-         is VerificationFailureKind.UnsupportedVersion -> {
+         is DeepVerificationFailure.UnsupportedVersion -> {
              ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
          }
      }

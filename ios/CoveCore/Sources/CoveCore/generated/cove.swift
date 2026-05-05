@@ -13862,64 +13862,6 @@ public func FfiConverterTypeContinueFromInit_lower(_ value: ContinueFromInit) ->
 }
 
 
-public struct DeepVerificationFailure: Equatable, Hashable {
-    public var kind: VerificationFailureKind
-    public var message: String
-    public var detail: CloudBackupDetail?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(kind: VerificationFailureKind, message: String, detail: CloudBackupDetail?) {
-        self.kind = kind
-        self.message = message
-        self.detail = detail
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension DeepVerificationFailure: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeDeepVerificationFailure: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DeepVerificationFailure {
-        return
-            try DeepVerificationFailure(
-                kind: FfiConverterTypeVerificationFailureKind.read(from: &buf), 
-                message: FfiConverterString.read(from: &buf), 
-                detail: FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: DeepVerificationFailure, into buf: inout [UInt8]) {
-        FfiConverterTypeVerificationFailureKind.write(value.kind, into: &buf)
-        FfiConverterString.write(value.message, into: &buf)
-        FfiConverterOptionTypeCloudBackupDetail.write(value.detail, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeDeepVerificationFailure_lift(_ buf: RustBuffer) throws -> DeepVerificationFailure {
-    return try FfiConverterTypeDeepVerificationFailure.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeDeepVerificationFailure_lower(_ value: DeepVerificationFailure) -> RustBuffer {
-    return FfiConverterTypeDeepVerificationFailure.lower(value)
-}
-
-
 public struct DeepVerificationReport: Equatable, Hashable {
     /**
      * Cloud master key PRF wrapping was repaired
@@ -20748,6 +20690,124 @@ public func FfiConverterTypeDatabaseError_lift(_ buf: RustBuffer) throws -> Data
 public func FfiConverterTypeDatabaseError_lower(_ value: DatabaseError) -> RustBuffer {
     return FfiConverterTypeDatabaseError.lower(value)
 }
+
+
+
+public enum DeepVerificationFailure: Equatable, Hashable {
+    
+    /**
+     * Transient iCloud/network/passkey error — safe to retry
+     */
+    case retry(message: String, detail: CloudBackupDetail?
+    )
+    /**
+     * Manifest missing, master key verified intact — recreate from local wallets
+     */
+    case recreateManifest(message: String, warning: String, detail: CloudBackupDetail?
+    )
+    /**
+     * No verified cloud or local master key available — full re-enable needed
+     */
+    case reinitializeBackup(message: String, warning: String, detail: CloudBackupDetail?
+    )
+    /**
+     * Backup uses a newer format — do not overwrite
+     */
+    case unsupportedVersion(message: String, detail: CloudBackupDetail?
+    )
+
+
+
+public func message() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_deepverificationfailure_message(
+            FfiConverterTypeDeepVerificationFailure_lower(self),$0
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension DeepVerificationFailure: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDeepVerificationFailure: FfiConverterRustBuffer {
+    typealias SwiftType = DeepVerificationFailure
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DeepVerificationFailure {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .retry(message: try FfiConverterString.read(from: &buf), detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
+        )
+        
+        case 2: return .recreateManifest(message: try FfiConverterString.read(from: &buf), warning: try FfiConverterString.read(from: &buf), detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
+        )
+        
+        case 3: return .reinitializeBackup(message: try FfiConverterString.read(from: &buf), warning: try FfiConverterString.read(from: &buf), detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
+        )
+        
+        case 4: return .unsupportedVersion(message: try FfiConverterString.read(from: &buf), detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DeepVerificationFailure, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .retry(message,detail):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(message, into: &buf)
+            FfiConverterOptionTypeCloudBackupDetail.write(detail, into: &buf)
+            
+        
+        case let .recreateManifest(message,warning,detail):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(warning, into: &buf)
+            FfiConverterOptionTypeCloudBackupDetail.write(detail, into: &buf)
+            
+        
+        case let .reinitializeBackup(message,warning,detail):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(warning, into: &buf)
+            FfiConverterOptionTypeCloudBackupDetail.write(detail, into: &buf)
+            
+        
+        case let .unsupportedVersion(message,detail):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(message, into: &buf)
+            FfiConverterOptionTypeCloudBackupDetail.write(detail, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDeepVerificationFailure_lift(_ buf: RustBuffer) throws -> DeepVerificationFailure {
+    return try FfiConverterTypeDeepVerificationFailure.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDeepVerificationFailure_lower(_ value: DeepVerificationFailure) -> RustBuffer {
+    return FfiConverterTypeDeepVerificationFailure.lower(value)
+}
+
 
 
 
@@ -30177,104 +30237,6 @@ public func FfiConverterTypeUrType_lift(_ buf: RustBuffer) throws -> UrType {
 #endif
 public func FfiConverterTypeUrType_lower(_ value: UrType) -> RustBuffer {
     return FfiConverterTypeUrType.lower(value)
-}
-
-
-
-
-public enum VerificationFailureKind: Equatable, Hashable {
-    
-    /**
-     * Transient iCloud/network/passkey error — safe to retry
-     */
-    case retry
-    /**
-     * Manifest missing, master key verified intact — recreate from local wallets
-     */
-    case recreateManifest(warning: String
-    )
-    /**
-     * No verified cloud or local master key available — full re-enable needed
-     */
-    case reinitializeBackup(warning: String
-    )
-    /**
-     * Backup uses a newer format — do not overwrite
-     */
-    case unsupportedVersion
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension VerificationFailureKind: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeVerificationFailureKind: FfiConverterRustBuffer {
-    typealias SwiftType = VerificationFailureKind
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VerificationFailureKind {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .retry
-        
-        case 2: return .recreateManifest(warning: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 3: return .reinitializeBackup(warning: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 4: return .unsupportedVersion
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: VerificationFailureKind, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .retry:
-            writeInt(&buf, Int32(1))
-        
-        
-        case let .recreateManifest(warning):
-            writeInt(&buf, Int32(2))
-            FfiConverterString.write(warning, into: &buf)
-            
-        
-        case let .reinitializeBackup(warning):
-            writeInt(&buf, Int32(3))
-            FfiConverterString.write(warning, into: &buf)
-            
-        
-        case .unsupportedVersion:
-            writeInt(&buf, Int32(4))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeVerificationFailureKind_lift(_ buf: RustBuffer) throws -> VerificationFailureKind {
-    return try FfiConverterTypeVerificationFailureKind.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeVerificationFailureKind_lower(_ value: VerificationFailureKind) -> RustBuffer {
-    return FfiConverterTypeVerificationFailureKind.lower(value)
 }
 
 
