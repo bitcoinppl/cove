@@ -11,8 +11,10 @@ use crate::database::cloud_backup::{
     CloudBlobUploadedPendingConfirmationState, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
-use crate::manager::cloud_backup_manager::RustCloudBackupManager;
 use crate::manager::cloud_backup_manager::wallets::WalletBackupReader;
+use crate::manager::cloud_backup_manager::{
+    RustCloudBackupManager, SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
+};
 
 enum BlobCheckResult {
     Confirmed,
@@ -280,6 +282,17 @@ impl PendingUploadVerifier {
                     PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at: checked_at })
                 }
                 BlobCheckResult::NotYetUploaded
+                    if Self::master_key_confirmation_expired(sync_state, current, checked_at) =>
+                {
+                    PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                        revision_hash: Some(current.revision_hash.clone()),
+                        retryable: false,
+                        error: SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into(),
+                        issue: None,
+                        failed_at: checked_at,
+                    })
+                }
+                BlobCheckResult::NotYetUploaded
                 | BlobCheckResult::Stale(_)
                 | BlobCheckResult::Failed { retryable: true, .. } => {
                     PersistedCloudBlobState::UploadedPendingConfirmation(
@@ -403,6 +416,16 @@ impl PendingUploadVerifier {
         sync_state.wallet_id.is_some()
             && next_attempt_count >= MAX_PENDING_WALLET_UPLOAD_CONFIRMATION_ATTEMPTS
     }
+
+    fn master_key_confirmation_expired(
+        sync_state: &PersistedCloudBlobSyncState,
+        current: &CloudBlobUploadedPendingConfirmationState,
+        checked_at: u64,
+    ) -> bool {
+        sync_state.wallet_id.is_none()
+            && checked_at.saturating_sub(current.uploaded_at)
+                >= super::MAX_PENDING_UPLOAD_VERIFICATION_DELAY.as_secs()
+    }
 }
 
 #[cfg(test)]
@@ -443,7 +466,7 @@ mod tests {
         let blob = PersistedCloudBlobSyncState {
             kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
-            wallet_id: None,
+            wallet_id: Some("wallet-a".into()),
             record_id: "wallet-a".into(),
             state: PersistedCloudBlobState::UploadedPendingConfirmation(
                 CloudBlobUploadedPendingConfirmationState {
@@ -472,6 +495,43 @@ mod tests {
 
         assert_eq!(state.attempt_count, 1);
         assert!(state.last_checked_at.is_some());
+    }
+
+    #[test]
+    fn apply_blob_result_fails_expired_master_key_confirmation() {
+        let checked_at = u64::try_from(jiff::Timestamp::now().as_second()).unwrap_or(0);
+        let uploaded_at = checked_at
+            .saturating_sub(super::super::MAX_PENDING_UPLOAD_VERIFICATION_DELAY.as_secs());
+        let blob = PersistedCloudBlobSyncState {
+            kind: CloudUploadKind::BackupBlob,
+            namespace_id: "ns-1".into(),
+            wallet_id: None,
+            record_id: "master-key".into(),
+            state: PersistedCloudBlobState::UploadedPendingConfirmation(
+                CloudBlobUploadedPendingConfirmationState {
+                    revision_hash: "master-key-wrapper".into(),
+                    uploaded_at,
+                    attempt_count: 0,
+                    last_checked_at: None,
+                },
+            ),
+        };
+
+        let current = match &blob.state {
+            PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
+            _ => panic!("expected uploaded pending confirmation state"),
+        };
+
+        let blob = PendingUploadVerifier::apply_blob_result(
+            &blob,
+            &current,
+            &BlobCheckResult::NotYetUploaded,
+        );
+
+        assert!(matches!(
+            blob.state,
+            PersistedCloudBlobState::Failed(CloudBlobFailedState { retryable: false, .. })
+        ));
     }
 
     #[test]

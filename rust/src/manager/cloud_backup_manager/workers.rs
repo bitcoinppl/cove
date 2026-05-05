@@ -13,7 +13,6 @@ use tracing::{error, warn};
 use self::restore::CloudBackupRestoreWorker;
 pub(crate) use self::restore::{RestoreOperation, RestoredPasskeyMaterial};
 use self::sync_health::CloudBackupSyncHealthWorker;
-pub(crate) use self::sync_health::SyncHealthWorkerState;
 use self::uploads::CloudBackupUploadWorker;
 use super::keychain::CloudBackupKeychain;
 use super::{

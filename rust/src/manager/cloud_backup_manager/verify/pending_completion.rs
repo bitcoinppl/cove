@@ -276,6 +276,7 @@ impl RustCloudBackupManager {
         }
         self.set_verification(VerificationState::Verified(report));
         self.set_recovery(RecoveryState::Idle);
+        self.refresh_sync_health();
     }
 
     pub(crate) fn apply_failed_verification(&self, failure: DeepVerificationFailure) {
@@ -284,5 +285,6 @@ impl RustCloudBackupManager {
             self.set_detail(Some(detail));
         }
         self.set_verification(VerificationState::Failed(failure));
+        self.refresh_sync_health();
     }
 }

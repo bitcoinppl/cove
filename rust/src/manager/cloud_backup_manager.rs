@@ -51,9 +51,7 @@ use self::wallets::wallet_metadata_change_requires_upload;
 use self::wallets::{
     UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader, all_local_wallets, count_all_wallets,
 };
-use self::workers::{
-    CloudBackupOperation, CloudBackupSupervisor, RestoreOperation, SyncHealthWorkerState,
-};
+use self::workers::{CloudBackupOperation, CloudBackupSupervisor, RestoreOperation};
 use super::connectivity_manager::CONNECTIVITY_MANAGER;
 
 type LocalWalletSecret = crate::backup::model::WalletSecret;
@@ -487,13 +485,6 @@ enum PendingEnableSessionKind {
 
     /// Upload already started and should retry with the same staged passkey material
     RetryUpload,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PendingMasterKeyUpload {
-    None,
-    InGrace,
-    Expired,
 }
 
 pub(crate) struct PendingEnableSession {
@@ -1388,10 +1379,7 @@ impl RustCloudBackupManager {
             .ok_or_else(|| CloudBackupError::Internal("namespace_id not found in keychain".into()))
     }
 
-    pub(crate) async fn compute_sync_health(
-        &self,
-        worker_state: SyncHealthWorkerState,
-    ) -> CloudSyncHealth {
+    pub(crate) async fn compute_sync_health(&self) -> CloudSyncHealth {
         if !Self::load_persisted_state().is_configured() {
             return CloudSyncHealth::Unknown;
         }
@@ -1424,11 +1412,7 @@ impl RustCloudBackupManager {
             return sync_health;
         }
 
-        let pending_master_key_upload =
-            Self::pending_master_key_upload_confirmation(&worker_state, &namespace, &sync_states);
-        if pending_master_key_upload == PendingMasterKeyUpload::None
-            && Self::sync_health_has_pending_upload(&sync_states)
-        {
+        if Self::sync_health_has_pending_upload(&sync_states) {
             return CloudSyncHealth::Uploading;
         }
 
@@ -1447,18 +1431,10 @@ impl RustCloudBackupManager {
                 return CloudSyncHealth::AllUploaded;
             }
 
-            if pending_master_key_upload == PendingMasterKeyUpload::InGrace {
-                return CloudSyncHealth::Uploading;
-            }
-
             return CloudSyncHealth::NoFiles;
         }
 
         if !master_key_uploaded {
-            if pending_master_key_upload == PendingMasterKeyUpload::InGrace {
-                return CloudSyncHealth::Uploading;
-            }
-
             return CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into());
         }
 
@@ -1549,29 +1525,6 @@ impl RustCloudBackupManager {
                         | PersistedCloudBlobState::UploadedPendingConfirmation(_)
                 )
         })
-    }
-
-    fn pending_master_key_upload_confirmation(
-        worker_state: &SyncHealthWorkerState,
-        namespace: &str,
-        sync_states: &[PersistedCloudBlobSyncState],
-    ) -> PendingMasterKeyUpload {
-        let pending_master_key_upload = sync_states.iter().any(|sync_state| {
-            let is_master_key_record = sync_state.wallet_id.is_none();
-            let is_pending =
-                matches!(sync_state.state, PersistedCloudBlobState::UploadedPendingConfirmation(_));
-
-            is_master_key_record && is_pending
-        });
-        if !pending_master_key_upload {
-            return PendingMasterKeyUpload::None;
-        }
-
-        if worker_state.master_key_upload_in_grace(namespace) {
-            PendingMasterKeyUpload::InGrace
-        } else {
-            PendingMasterKeyUpload::Expired
-        }
     }
 
     fn sync_health_from_cloud_error(error: CloudStorageError) -> CloudSyncHealth {
@@ -2296,9 +2249,6 @@ fn sync_health_failed_message(
 
     failed_state.error.clone()
 }
-
-pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str =
-    "master key backup is missing from cloud storage";
 
 fn sync_health_missing_wallet_message(missing_wallet_count: usize) -> String {
     if missing_wallet_count == 1 {

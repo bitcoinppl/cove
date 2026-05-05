@@ -20,8 +20,8 @@ use super::wallets::persist_enabled_cloud_backup_state;
 use super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
     CloudBackupStatus, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    PendingVerificationCompletion, RecoveryState, RustCloudBackupManager, VerificationFailureKind,
-    VerificationState,
+    PendingVerificationCompletion, PendingVerificationUpload, RecoveryState,
+    RustCloudBackupManager, VerificationFailureKind, VerificationState,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
@@ -175,6 +175,20 @@ impl RustCloudBackupManager {
             .await
             .map_err(CloudBackupError::from)?;
 
+        self.replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: true,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace,
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        ));
+
         info!("Repaired cloud master key wrapper with repaired passkey association");
         Ok(())
     }
@@ -209,6 +223,7 @@ impl RustCloudBackupManager {
             None => {}
         }
 
+        self.refresh_sync_health();
         Ok(())
     }
 

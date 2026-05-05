@@ -222,6 +222,9 @@ impl RustCloudBackupManager {
             wallets_unsupported: 0,
             detail: None,
         };
+        let mut pending_uploads = pending_uploads;
+        pending_uploads.insert(0, PendingVerificationUpload::master_key_wrapper());
+
         self.replace_pending_verification_completion(PendingVerificationCompletion::new(
             report,
             namespace_id.to_owned(),
@@ -1432,13 +1435,18 @@ mod tests {
         PersistedCloudBlobSyncState,
     };
     use crate::label_manager::LabelManager;
-    use crate::manager::cloud_backup_manager::keychain::{
-        CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, CloudBackupKeychainError,
-    };
     use crate::manager::cloud_backup_manager::{
         CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupKeychain,
-        CloudBackupPromptIntent, DeepVerificationResult, VerificationFailureKind,
-        VerificationState, workers::SyncHealthWorkerState,
+        CloudBackupPromptIntent, DeepVerificationReport, DeepVerificationResult,
+        PendingVerificationCompletion, PendingVerificationUpload, VerificationFailureKind,
+        VerificationState,
+    };
+    use crate::manager::cloud_backup_manager::{
+        SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE, cspp_master_key_record_id,
+        keychain::{
+            CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY,
+            CloudBackupKeychainError,
+        },
     };
     use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
     use crate::manager::wallet_manager::RustWalletManager;
@@ -2528,6 +2536,38 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 1);
+
+        let metadata = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![metadata]);
+        globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+        globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+        manager.set_sync_health(CloudSyncHealth::Failed(
+            SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into(),
+        ));
+
+        manager.do_repair_passkey_wrapper_no_discovery().await.unwrap();
+        manager.finalize_passkey_repair().await.unwrap();
+
+        for _ in 0..20 {
+            if manager.state().sync_health == CloudSyncHealth::Uploading {
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        assert_eq!(manager.state().sync_health, CloudSyncHealth::Uploading);
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn reupload_all_wallets_does_not_create_master_key_for_existing_namespace() {
         let _guard = test_lock().lock();
         cove_tokio::init();
@@ -3222,7 +3262,7 @@ mod tests {
         );
 
         assert_eq!(
-            manager.compute_sync_health(SyncHealthWorkerState::default()).await,
+            manager.compute_sync_health().await,
             CloudSyncHealth::AuthorizationRequired("failed".into()),
         );
 
@@ -3244,17 +3284,14 @@ mod tests {
 
         let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
         persist_pending_master_key_confirmation(namespace_id.clone());
-        let worker_state =
-            SyncHealthWorkerState::with_master_key_upload_grace(namespace_id.clone());
-
-        assert_eq!(
-            manager.compute_sync_health(worker_state.clone()).await,
-            CloudSyncHealth::Uploading
-        );
+        assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading);
 
         globals.cloud.set_master_key_backup(namespace_id, vec![1, 2, 3]);
 
-        assert_eq!(manager.compute_sync_health(worker_state).await, CloudSyncHealth::AllUploaded);
+        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+
+        assert!(!has_more_pending);
+        assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::AllUploaded);
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
@@ -3264,7 +3301,7 @@ mod tests {
         reason = "tests serialize shared cloud backup globals across awaits"
     )]
     #[tokio::test(flavor = "current_thread")]
-    async fn sync_health_reports_missing_master_key_after_pending_confirmation_grace() {
+    async fn sync_health_reports_uploading_for_fresh_pending_master_key_with_local_wallets() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
@@ -3277,9 +3314,66 @@ mod tests {
         let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
         persist_pending_master_key_confirmation(namespace_id);
 
+        assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading,);
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
+    async fn force_new_reports_uploading_while_master_key_confirmation_is_pending() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+        globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+        globals.cloud.set_master_key_backup("existing-namespace".into(), vec![1, 2, 3]);
+        globals.cloud.set_wallet_files("existing-namespace".into(), vec!["wallet-1.json".into()]);
+
+        let metadata = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![metadata]);
+
+        manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+        manager.do_enable_cloud_backup_force_new().await.unwrap();
+
+        let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+        CloudStorage::global_silent_client()
+            .delete_wallet_backup(namespace_id.clone(), cspp_master_key_record_id())
+            .await
+            .unwrap();
+        persist_pending_master_key_confirmation(namespace_id);
+
+        assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading,);
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
+    async fn sync_health_reports_missing_master_key_without_pending_confirmation() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = global_manager();
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+        configure_enabled_cloud_backup(&manager, globals, 1);
+
+        let metadata = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![metadata]);
+
         assert_eq!(
-            manager.compute_sync_health(SyncHealthWorkerState::default()).await,
-            CloudSyncHealth::Failed("master key backup is missing from cloud storage".into()),
+            manager.compute_sync_health().await,
+            CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into()),
         );
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
@@ -4011,6 +4105,85 @@ mod tests {
         }
 
         assert!(!manager.has_pending_cloud_upload_verification());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 1);
+
+        let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+        let metadata = xpub_only_wallet_metadata();
+        let record_id = wallet_record_id(metadata.id.as_ref());
+        persist_xpub_wallets(vec![metadata.clone()]);
+        let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+            .load_master_key_from_store()
+            .unwrap()
+            .unwrap();
+        let prepared = crate::manager::cloud_backup_manager::wallets::prepare_wallet_backup(
+            &metadata,
+            metadata.wallet_mode,
+        )
+        .await
+        .unwrap();
+
+        globals.cloud.set_master_key_backup(namespace_id.clone(), vec![1, 2, 3]);
+        globals.cloud.set_wallet_backup(
+            namespace_id.clone(),
+            record_id.clone(),
+            encrypted_wallet_backup_bytes(&metadata, &master_key, &prepared.revision_hash, 1).await,
+        );
+        globals.cloud.set_wallet_files(
+            namespace_id.clone(),
+            vec![wallet_filename_from_record_id(&record_id)],
+        );
+        persist_pending_master_key_confirmation(namespace_id.clone());
+        manager
+            .mark_blob_uploaded_pending_confirmation(
+                &namespace_id,
+                Some(metadata.id),
+                record_id.clone(),
+                prepared.revision_hash.clone(),
+                jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+            )
+            .unwrap();
+        manager.replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace_id,
+            vec![
+                PendingVerificationUpload::master_key_wrapper(),
+                PendingVerificationUpload::new(record_id, prepared.revision_hash),
+            ],
+        ));
+
+        assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading,);
+
+        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+
+        assert!(!has_more_pending);
+        assert!(manager.pending_verification_completion().is_none());
+        assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::AllUploaded,);
+
+        for _ in 0..20 {
+            if manager.state().sync_health == CloudSyncHealth::AllUploaded {
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        assert_eq!(manager.state().sync_health, CloudSyncHealth::AllUploaded);
     }
 
     #[tokio::test(flavor = "current_thread")]
