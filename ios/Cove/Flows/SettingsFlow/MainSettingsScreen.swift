@@ -318,7 +318,7 @@ struct MainSettingsScreen: View {
         } else if manager.hasPendingUploadVerification {
             Image(systemName: "arrow.clockwise.icloud")
                 .foregroundStyle(.blue)
-            Text("Cloud Backup Verifying")
+            Text("Cloud Backup Confirming")
         } else {
             Image(
                 systemName: manager.isVerificationStale

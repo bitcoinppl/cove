@@ -16,6 +16,8 @@ use super::wallets::{
     WalletRestoreSession,
 };
 
+#[cfg(test)]
+use super::PendingUploadVerificationState;
 use super::workers::RestoredPasskeyMaterial;
 use super::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupKeychain,
@@ -232,7 +234,7 @@ impl RustCloudBackupManager {
             namespace_id.to_owned(),
             pending_uploads,
         ));
-        self.set_verification(VerificationState::Verifying);
+        self.set_verification(VerificationState::Idle);
 
         Ok(())
     }
@@ -2504,10 +2506,8 @@ mod tests {
 
         assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
         let state = manager.state();
-        assert!(matches!(
-            state.verification,
-            VerificationState::Verifying | VerificationState::Verified(_)
-        ));
+        assert!(matches!(state.verification, VerificationState::Idle));
+        assert_eq!(state.pending_upload_verification, PendingUploadVerificationState::Confirming);
         assert!(matches!(state.prompt_intent, CloudBackupPromptIntent::None));
         assert!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).is_some());
         assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_some());
@@ -2538,7 +2538,7 @@ mod tests {
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
         manager.clear_runtime_passkey_authorization();
         manager.clear_pending_verification_completion();
-        manager.set_pending_upload_verification(false);
+        manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
         manager.set_verification(VerificationState::Idle);
         Database::global().cloud_blob_sync_states.delete_all().unwrap();
         globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
@@ -3872,6 +3872,42 @@ mod tests {
 
         assert!(!has_more_pending);
         assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::AllUploaded);
+        assert_eq!(
+            manager.state().pending_upload_verification,
+            PendingUploadVerificationState::Idle
+        );
+        assert!(matches!(manager.state().verification, VerificationState::Idle));
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
+    async fn pending_upload_verification_blocks_on_cloud_authorization() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = global_manager();
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+        persist_pending_master_key_confirmation(namespace_id.clone());
+        globals.cloud.fail_master_key_download_authorization_required(
+            namespace_id,
+            "authorization required",
+        );
+
+        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+
+        assert!(has_more_pending);
+        assert_eq!(
+            manager.state().pending_upload_verification,
+            PendingUploadVerificationState::BlockedOnAuthorization
+        );
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
@@ -4673,6 +4709,28 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn manual_verification_clears_interactive_state_when_awaiting_upload_confirmation() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
+        let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+
+        manager.handle_start_verification(true).await;
+
+        let state = manager.state();
+        assert!(matches!(state.verification, VerificationState::Idle));
+        assert_eq!(state.pending_upload_verification, PendingUploadVerificationState::Confirming);
+        assert!(manager.pending_verification_completion().is_some());
+
+        let detail = state.detail.expect("expected verification detail");
+        assert_eq!(detail.up_to_date.len(), 1);
+        assert!(detail.needs_sync.is_empty());
+        assert_eq!(detail.up_to_date[0].record_id, record_id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn pending_upload_verification_finalizes_awaiting_deep_verify() {
         let _guard = test_lock().lock();
         cove_tokio::init();
@@ -4691,6 +4749,10 @@ mod tests {
 
         assert!(!has_more_pending);
         assert!(manager.pending_verification_completion().is_none());
+        assert_eq!(
+            manager.state().pending_upload_verification,
+            PendingUploadVerificationState::Idle
+        );
 
         match manager.state().verification {
             VerificationState::Verified(report) => {
@@ -5493,7 +5555,7 @@ mod tests {
         let restarted_manager = init_manager();
         restarted_manager.sync_persisted_state();
         restarted_manager.clear_pending_verification_completion();
-        restarted_manager.set_pending_upload_verification(false);
+        restarted_manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
         restarted_manager.set_verification(VerificationState::Idle);
         Database::global().cloud_blob_sync_states.delete_all().unwrap();
         globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));

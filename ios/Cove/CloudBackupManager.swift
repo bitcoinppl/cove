@@ -60,14 +60,16 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.syncError
     }
 
+    var pendingUploadVerification: PendingUploadVerificationState {
+        state.pendingUploadVerification
+    }
+
     var hasPendingUploadVerification: Bool {
-        state.hasPendingUploadVerification
+        pendingUploadVerification != .idle
     }
 
     var isBackgroundVerifying: Bool {
-        guard hasPendingUploadVerification else { return false }
-        if case .verifying = verification { return true }
-        return false
+        hasPendingUploadVerification
     }
 
     var shouldPromptVerification: Bool {
@@ -161,7 +163,7 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         case let .verificationMetadata(verificationMetadata):
             state.verificationMetadata = verificationMetadata
         case let .pendingUploadVerification(pending):
-            state.hasPendingUploadVerification = pending
+            state.pendingUploadVerification = pending
         case let .detail(detail):
             state.detail = detail
         case let .verification(verification):

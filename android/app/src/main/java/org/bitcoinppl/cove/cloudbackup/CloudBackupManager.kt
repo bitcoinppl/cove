@@ -24,6 +24,7 @@ import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.OtherBackupsOperation
+import org.bitcoinppl.cove_core.PendingUploadVerificationState
 import org.bitcoinppl.cove_core.RecoveryState
 import org.bitcoinppl.cove_core.RustCloudBackupManager
 import org.bitcoinppl.cove_core.SyncState
@@ -99,14 +100,17 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
     val otherBackupsOperation: OtherBackupsOperation
         get() = state.otherBackupsOperation
 
+    val pendingUploadVerification: PendingUploadVerificationState
+        get() = state.pendingUploadVerification
+
     val hasPendingUploadVerification: Boolean
-        get() = state.hasPendingUploadVerification
+        get() = pendingUploadVerification != PendingUploadVerificationState.IDLE
 
     val shouldPromptVerification: Boolean
         get() = state.shouldPromptVerification && !isBackgroundVerifying
 
     val isBackgroundVerifying: Boolean
-        get() = hasPendingUploadVerification && verification is VerificationState.Verifying
+        get() = hasPendingUploadVerification
 
     val isUnverified: Boolean
         get() = !isBackgroundVerifying && state.verificationMetadata is CloudBackupVerificationMetadata.NeedsVerification
@@ -198,7 +202,7 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
             is CloudBackupReconcileMessage.SyncError -> state = state.copy(syncError = message.v1)
             is CloudBackupReconcileMessage.VerificationPrompt -> state = state.copy(shouldPromptVerification = message.v1)
             is CloudBackupReconcileMessage.VerificationMetadata -> state = state.copy(verificationMetadata = message.v1)
-            is CloudBackupReconcileMessage.PendingUploadVerification -> state = state.copy(hasPendingUploadVerification = message.v1)
+            is CloudBackupReconcileMessage.PendingUploadVerification -> state = state.copy(pendingUploadVerification = message.v1)
             is CloudBackupReconcileMessage.Detail -> state = state.copy(detail = message.v1)
             is CloudBackupReconcileMessage.Verification -> state = state.copy(verification = message.v1)
             is CloudBackupReconcileMessage.Sync -> state = state.copy(sync = message.v1)

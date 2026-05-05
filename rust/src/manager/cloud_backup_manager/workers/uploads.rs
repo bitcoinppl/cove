@@ -160,7 +160,7 @@ impl CloudBackupUploadWorker {
             }
         }
 
-        manager.set_pending_upload_verification(manager.has_pending_cloud_upload_verification());
+        manager.refresh_pending_upload_verification_state();
     }
 
     pub(crate) async fn schedule_wallet_upload(
@@ -288,9 +288,7 @@ impl CloudBackupUploadWorker {
         if let Some(error_message) = error_message {
             if deferred {
                 info!("Cloud backup upload deferred for wallet_id={wallet_id}: {error_message}");
-                manager.set_pending_upload_verification(
-                    manager.has_pending_cloud_upload_verification(),
-                );
+                manager.refresh_pending_upload_verification_state();
                 let delay = self.next_wallet_upload_retry_delay(&wallet_id);
                 self.schedule_wallet_upload_after(wallet_id, delay);
                 return;

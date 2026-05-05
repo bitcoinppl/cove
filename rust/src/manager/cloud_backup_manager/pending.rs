@@ -8,7 +8,7 @@ use backon::{BackoffBuilder as _, FibonacciBuilder};
 use cove_util::ResultExt as _;
 
 use self::queue_processor::PendingUploadVerifier;
-use super::{CloudBackupError, RustCloudBackupManager};
+use super::{CloudBackupError, PendingUploadVerificationState, RustCloudBackupManager};
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
@@ -86,7 +86,7 @@ impl RustCloudBackupManager {
             );
         }
 
-        self.set_pending_upload_verification(true);
+        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
         self.wake_pending_upload_verifier();
         self.start_pending_upload_verification_loop();
 
@@ -123,7 +123,7 @@ impl RustCloudBackupManager {
             );
         }
 
-        self.set_pending_upload_verification(true);
+        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
         self.wake_pending_upload_verifier();
         self.start_pending_upload_verification_loop();
 
@@ -181,7 +181,7 @@ impl RustCloudBackupManager {
                 .map_err_prefix("remove cloud blob sync state", CloudBackupError::Internal)?;
         }
 
-        self.set_pending_upload_verification(self.has_pending_cloud_upload_verification());
+        self.refresh_pending_upload_verification_state();
         self.wake_pending_upload_verifier();
 
         Ok(())

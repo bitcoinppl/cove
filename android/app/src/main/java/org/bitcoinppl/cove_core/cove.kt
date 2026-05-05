@@ -28043,7 +28043,7 @@ data class CloudBackupState (
     , 
     var `syncError`: kotlin.String?
     , 
-    var `hasPendingUploadVerification`: kotlin.Boolean
+    var `pendingUploadVerification`: PendingUploadVerificationState
     , 
     var `shouldPromptVerification`: kotlin.Boolean
     , 
@@ -28085,7 +28085,7 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterOptionalTypeCloudBackupRestoreProgress.read(buf),
             FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
             FfiConverterOptionalString.read(buf),
-            FfiConverterBoolean.read(buf),
+            FfiConverterTypePendingUploadVerificationState.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterTypeCloudBackupVerificationMetadata.read(buf),
             FfiConverterOptionalTypeCloudBackupDetail.read(buf),
@@ -28106,7 +28106,7 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterOptionalTypeCloudBackupRestoreProgress.allocationSize(value.`restoreProgress`) +
             FfiConverterOptionalTypeCloudBackupRestoreReport.allocationSize(value.`restoreReport`) +
             FfiConverterOptionalString.allocationSize(value.`syncError`) +
-            FfiConverterBoolean.allocationSize(value.`hasPendingUploadVerification`) +
+            FfiConverterTypePendingUploadVerificationState.allocationSize(value.`pendingUploadVerification`) +
             FfiConverterBoolean.allocationSize(value.`shouldPromptVerification`) +
             FfiConverterTypeCloudBackupVerificationMetadata.allocationSize(value.`verificationMetadata`) +
             FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`) +
@@ -28126,7 +28126,7 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterOptionalTypeCloudBackupRestoreProgress.write(value.`restoreProgress`, buf)
             FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.`restoreReport`, buf)
             FfiConverterOptionalString.write(value.`syncError`, buf)
-            FfiConverterBoolean.write(value.`hasPendingUploadVerification`, buf)
+            FfiConverterTypePendingUploadVerificationState.write(value.`pendingUploadVerification`, buf)
             FfiConverterBoolean.write(value.`shouldPromptVerification`, buf)
             FfiConverterTypeCloudBackupVerificationMetadata.write(value.`verificationMetadata`, buf)
             FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
@@ -34490,7 +34490,7 @@ sealed class CloudBackupReconcileMessage {
     }
     
     data class PendingUploadVerification(
-        val v1: kotlin.Boolean) : CloudBackupReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.PendingUploadVerificationState) : CloudBackupReconcileMessage()
         
     {
         
@@ -34611,7 +34611,7 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 FfiConverterTypeCloudBackupVerificationMetadata.read(buf),
                 )
             9 -> CloudBackupReconcileMessage.PendingUploadVerification(
-                FfiConverterBoolean.read(buf),
+                FfiConverterTypePendingUploadVerificationState.read(buf),
                 )
             10 -> CloudBackupReconcileMessage.Detail(
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
@@ -34702,7 +34702,7 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterBoolean.allocationSize(value.v1)
+                + FfiConverterTypePendingUploadVerificationState.allocationSize(value.v1)
             )
         }
         is CloudBackupReconcileMessage.Detail -> {
@@ -34807,7 +34807,7 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             }
             is CloudBackupReconcileMessage.PendingUploadVerification -> {
                 buf.putInt(9)
-                FfiConverterBoolean.write(value.v1, buf)
+                FfiConverterTypePendingUploadVerificationState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Detail -> {
@@ -42294,6 +42294,41 @@ public object FfiConverterTypePendingOrConfirmed : FfiConverterRustBuffer<Pendin
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class PendingUploadVerificationState {
+    
+    IDLE,
+    CONFIRMING,
+    BLOCKED_ON_AUTHORIZATION;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePendingUploadVerificationState: FfiConverterRustBuffer<PendingUploadVerificationState> {
+    override fun read(buf: ByteBuffer) = try {
+        PendingUploadVerificationState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: PendingUploadVerificationState) = 4UL
+
+    override fun write(value: PendingUploadVerificationState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 

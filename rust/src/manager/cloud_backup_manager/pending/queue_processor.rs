@@ -13,7 +13,7 @@ use crate::database::cloud_backup::{
 };
 use crate::manager::cloud_backup_manager::wallets::WalletBackupReader;
 use crate::manager::cloud_backup_manager::{
-    RustCloudBackupManager, SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
+    PendingUploadVerificationState, RustCloudBackupManager, SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
 };
 
 enum BlobCheckResult {
@@ -119,7 +119,7 @@ impl PendingUploadVerifier {
         }
 
         let has_pending = self.0.has_pending_cloud_upload_verification();
-        self.send_pending_state(has_pending);
+        self.send_pending_state(blocked_on_authorization, has_pending);
         self.0.refresh_sync_health();
 
         let outcome =
@@ -405,8 +405,16 @@ impl PendingUploadVerifier {
         }
     }
 
-    fn send_pending_state(&self, pending: bool) {
-        self.0.set_pending_upload_verification(pending);
+    fn send_pending_state(&self, blocked_on_authorization: bool, pending: bool) {
+        let state = if blocked_on_authorization {
+            PendingUploadVerificationState::BlockedOnAuthorization
+        } else if pending || self.0.pending_verification_completion().is_some() {
+            PendingUploadVerificationState::Confirming
+        } else {
+            PendingUploadVerificationState::Idle
+        };
+
+        self.0.set_pending_upload_verification(state);
     }
 
     fn should_retry_wallet_upload(

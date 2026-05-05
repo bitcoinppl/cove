@@ -1,6 +1,6 @@
 use super::{
     CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupState, CloudBackupStatus,
-    RecoveryAction, RecoveryState, VerificationState,
+    PendingUploadVerificationState, RecoveryAction, RecoveryState, VerificationState,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -52,17 +52,19 @@ impl CloudBackupPromptState {
             return CloudBackupPromptIntent::MissingPasskeyReminder;
         }
 
-        // decide whether verification needs user attention while accounting for background upload checks
+        // decide whether verification needs user attention
         use VerificationState as Vs;
         match (&state.verification, state.should_prompt_verification) {
-            (Vs::Verifying, _) if state.has_pending_upload_verification => {
-                CloudBackupPromptIntent::None
-            }
             (Vs::Verifying | Vs::Failed(_), _) => CloudBackupPromptIntent::VerificationPrompt,
-            (Vs::Idle | Vs::Verified(_) | Vs::PasskeyConfirmed | Vs::Cancelled, true) => {
+            (Vs::Idle | Vs::Verified(_) | Vs::PasskeyConfirmed | Vs::Cancelled, true)
+                if matches!(
+                    state.pending_upload_verification,
+                    PendingUploadVerificationState::Idle
+                ) =>
+            {
                 CloudBackupPromptIntent::VerificationPrompt
             }
-            (Vs::Idle | Vs::Verified(_) | Vs::PasskeyConfirmed | Vs::Cancelled, false) => {
+            (Vs::Idle | Vs::Verified(_) | Vs::PasskeyConfirmed | Vs::Cancelled, _) => {
                 CloudBackupPromptIntent::None
             }
         }
@@ -73,7 +75,8 @@ impl CloudBackupPromptState {
 mod tests {
     use super::{
         CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupPromptState,
-        CloudBackupState, CloudBackupStatus, RecoveryAction, RecoveryState, VerificationState,
+        CloudBackupState, CloudBackupStatus, PendingUploadVerificationState, RecoveryAction,
+        RecoveryState, VerificationState,
     };
     use crate::manager::cloud_backup_manager::DeepVerificationFailure;
 
@@ -139,9 +142,9 @@ mod tests {
     fn background_verification_suppresses_verification_prompt() {
         let prompt_state = CloudBackupPromptState::default();
         let state = CloudBackupState {
-            has_pending_upload_verification: true,
+            pending_upload_verification: PendingUploadVerificationState::Confirming,
             should_prompt_verification: true,
-            verification: VerificationState::Verifying,
+            verification: VerificationState::Idle,
             ..CloudBackupState::default()
         };
 

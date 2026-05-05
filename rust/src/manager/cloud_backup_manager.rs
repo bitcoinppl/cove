@@ -44,7 +44,8 @@ use crate::wallet::metadata::{
 
 use self::cloud_inventory::RemoteWalletTruth;
 pub use self::detail::{
-    CloudOnlyOperation, CloudOnlyState, RecoveryAction, RecoveryState, SyncState, VerificationState,
+    CloudOnlyOperation, CloudOnlyState, PendingUploadVerificationState, RecoveryAction,
+    RecoveryState, SyncState, VerificationState,
 };
 pub(crate) use self::keychain::CloudBackupKeychain;
 use self::prompt::CloudBackupPromptState;
@@ -128,7 +129,7 @@ pub enum CloudBackupReconcileMessage {
     SyncError(Option<String>),
     VerificationPrompt(bool),
     VerificationMetadata(CloudBackupVerificationMetadata),
-    PendingUploadVerification(bool),
+    PendingUploadVerification(PendingUploadVerificationState),
     Detail(Option<CloudBackupDetail>),
     Verification(VerificationState),
     Sync(SyncState),
@@ -303,7 +304,7 @@ pub struct CloudBackupState {
     pub restore_progress: Option<CloudBackupRestoreProgress>,
     pub restore_report: Option<CloudBackupRestoreReport>,
     pub sync_error: Option<String>,
-    pub has_pending_upload_verification: bool,
+    pub pending_upload_verification: PendingUploadVerificationState,
     pub should_prompt_verification: bool,
     pub verification_metadata: CloudBackupVerificationMetadata,
     pub detail: Option<CloudBackupDetail>,
@@ -325,7 +326,7 @@ impl Default for CloudBackupState {
             restore_progress: None,
             restore_report: None,
             sync_error: None,
-            has_pending_upload_verification: false,
+            pending_upload_verification: PendingUploadVerificationState::Idle,
             should_prompt_verification: false,
             verification_metadata: CloudBackupVerificationMetadata::NotConfigured,
             detail: None,
@@ -1200,13 +1201,31 @@ impl RustCloudBackupManager {
         self.refresh_prompt_intent();
     }
 
-    pub(crate) fn set_pending_upload_verification(&self, pending: bool) {
+    pub(crate) fn set_pending_upload_verification(&self, pending: PendingUploadVerificationState) {
         self.set_and_notify_field(
             pending,
-            |state| &mut state.has_pending_upload_verification,
+            |state| &mut state.pending_upload_verification,
             Message::PendingUploadVerification,
         );
         self.refresh_prompt_intent();
+    }
+
+    pub(crate) fn refresh_pending_upload_verification_state(&self) {
+        self.set_pending_upload_verification(self.current_pending_upload_verification_state());
+    }
+
+    pub(crate) fn current_pending_upload_verification_state(
+        &self,
+    ) -> PendingUploadVerificationState {
+        if self.has_pending_cloud_upload_verification() {
+            return PendingUploadVerificationState::Confirming;
+        }
+
+        if self.pending_verification_completion().is_some() {
+            return PendingUploadVerificationState::Confirming;
+        }
+
+        PendingUploadVerificationState::Idle
     }
 
     pub(crate) fn set_detail(&self, detail: Option<CloudBackupDetail>) {
@@ -1338,7 +1357,7 @@ impl RustCloudBackupManager {
         self.set_restore_report(None);
         self.set_sync_error(None);
         self.set_sync_health(CloudSyncHealth::Unknown);
-        self.set_pending_upload_verification(false);
+        self.set_pending_upload_verification(PendingUploadVerificationState::Idle);
         self.set_detail(None);
         self.set_verification(VerificationState::Idle);
         self.set_sync(SyncState::Idle);
@@ -1803,6 +1822,7 @@ impl RustCloudBackupManager {
         }
 
         send!(self.supervisor.cache_pending_verification_completion(completion));
+        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
     }
 
     pub(crate) fn pending_verification_completion(&self) -> Option<PendingVerificationCompletion> {
@@ -1827,6 +1847,7 @@ impl RustCloudBackupManager {
         }
 
         send!(self.supervisor.clear_pending_verification_completion());
+        self.refresh_pending_upload_verification_state();
     }
 
     async fn load_remote_wallet_truth(
@@ -1981,7 +2002,11 @@ impl RustCloudBackupManager {
         state.status = Self::runtime_status_for(&db_state);
         state.verification_metadata = CloudBackupVerificationMetadata::from(&db_state);
         state.should_prompt_verification = db_state.should_prompt_verification();
-        state.has_pending_upload_verification = self.has_pending_cloud_upload_verification();
+        if state.pending_upload_verification
+            != PendingUploadVerificationState::BlockedOnAuthorization
+        {
+            state.pending_upload_verification = self.current_pending_upload_verification_state();
+        }
         state.prompt_intent = self.prompt_state.lock().resolve(&state);
         state
     }
@@ -2015,7 +2040,7 @@ impl RustCloudBackupManager {
         let db_state = Self::load_persisted_state();
         self.set_status(Self::runtime_status_for(&db_state));
         self.refresh_persisted_flags();
-        self.set_pending_upload_verification(self.has_pending_cloud_upload_verification());
+        self.refresh_pending_upload_verification_state();
     }
 
     pub fn cloud_storage_did_change(&self) {
@@ -2098,7 +2123,7 @@ impl RustCloudBackupManager {
         self.set_restore_report(None);
         self.set_sync_error(None);
         self.refresh_persisted_flags();
-        self.set_pending_upload_verification(false);
+        self.set_pending_upload_verification(PendingUploadVerificationState::Idle);
         self.set_detail(None);
         self.set_verification(VerificationState::Idle);
         self.set_sync(SyncState::Idle);

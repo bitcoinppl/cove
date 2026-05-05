@@ -119,6 +119,8 @@ struct CloudBackupDetailScreen: View {
                 syncHealth: manager.syncHealth,
                 manager: manager
             )
+
+            pendingUploadConfirmationSection
         } else if shouldShowLoadingState {
             Section {
                 VStack(spacing: 12) {
@@ -131,6 +133,28 @@ struct CloudBackupDetailScreen: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var pendingUploadConfirmationSection: some View {
+        switch manager.pendingUploadVerification {
+        case .idle:
+            EmptyView()
+        case .confirming:
+            Section {
+                HStack {
+                    ProgressView()
+                        .padding(.trailing, 8)
+
+                    Text("Confirming latest cloud upload")
+                }
+            }
+        case .blockedOnAuthorization:
+            Section {
+                Label("Waiting for iCloud authorization", systemImage: "icloud.slash")
+                    .foregroundStyle(.orange)
             }
         }
     }

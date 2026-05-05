@@ -132,7 +132,7 @@ impl RustCloudBackupManager {
         }
 
         if updated {
-            self.set_pending_upload_verification(self.has_pending_cloud_upload_verification());
+            self.refresh_pending_upload_verification_state();
         }
     }
 }

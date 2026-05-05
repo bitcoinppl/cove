@@ -75,6 +75,7 @@ package org.bitcoinppl.cove.cloudbackup
  import org.bitcoinppl.cove_core.DeepVerificationFailure
  import org.bitcoinppl.cove_core.DeepVerificationReport
  import org.bitcoinppl.cove_core.OtherBackupsOperation
+ import org.bitcoinppl.cove_core.PendingUploadVerificationState
  import org.bitcoinppl.cove_core.RecoveryAction
  import org.bitcoinppl.cove_core.RecoveryState
  import org.bitcoinppl.cove_core.SyncState
@@ -94,6 +95,7 @@ package org.bitcoinppl.cove.cloudbackup
  internal fun cloudBackupDetailBodyState(
      status: CloudBackupStatus,
      verification: VerificationState,
+     pendingUploadVerification: PendingUploadVerificationState,
      hasDetail: Boolean,
  ): CloudBackupDetailBodyState? =
      when {
@@ -105,6 +107,10 @@ package org.bitcoinppl.cove.cloudbackup
          verification !is VerificationState.Failed -> CloudBackupDetailBodyState.LOADING
          else -> null
      }
+
+ internal fun shouldShowPendingUploadConfirmationStatus(
+     pendingUploadVerification: PendingUploadVerificationState,
+ ): Boolean = pendingUploadVerification != PendingUploadVerificationState.IDLE
 
  internal fun shouldFetchCloudOnly(cloudOnly: CloudOnlyState): Boolean =
      cloudOnly is CloudOnlyState.NotFetched
@@ -414,6 +420,7 @@ package org.bitcoinppl.cove.cloudbackup
          cloudBackupDetailBodyState(
              status = manager.status,
              verification = manager.verification,
+             pendingUploadVerification = manager.pendingUploadVerification,
              hasDetail = manager.detail != null,
          )
      val showFallbackVerificationSection = shouldShowFallbackVerificationSection(bodyState)
@@ -463,12 +470,52 @@ package org.bitcoinppl.cove.cloudbackup
              null -> Unit
          }
 
+         if (shouldShowPendingUploadConfirmationStatus(manager.pendingUploadVerification)) {
+             PendingUploadConfirmationStatus(manager.pendingUploadVerification)
+         }
+
          if (showFallbackVerificationSection) {
              VerificationSection(
                  manager = manager,
                  onRecreate = onRecreate,
                  onReinitialize = onReinitialize,
              )
+         }
+     }
+ }
+
+ @Composable
+ private fun PendingUploadConfirmationStatus(
+     pendingUploadVerification: PendingUploadVerificationState,
+ ) {
+     when (pendingUploadVerification) {
+         PendingUploadVerificationState.IDLE -> Unit
+         PendingUploadVerificationState.CONFIRMING -> {
+             CloudBackupProgressCard(
+                 title = "Confirming latest cloud upload",
+                 message = "Cloud storage is finishing the newest backup update",
+             )
+         }
+         PendingUploadVerificationState.BLOCKED_ON_AUTHORIZATION -> {
+             Card(
+                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                 colors =
+                     CardDefaults.cardColors(
+                         containerColor = MaterialTheme.colorScheme.errorContainer,
+                     ),
+             ) {
+                 Row(
+                     modifier = Modifier.padding(16.dp),
+                     verticalAlignment = Alignment.CenterVertically,
+                 ) {
+                     Icon(Icons.Default.CloudOff, contentDescription = null)
+                     Spacer(modifier = Modifier.width(12.dp))
+                     Text(
+                         "Waiting for cloud authorization",
+                         style = MaterialTheme.typography.bodyMedium,
+                     )
+                 }
+             }
          }
      }
  }

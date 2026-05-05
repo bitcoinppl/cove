@@ -26,6 +26,13 @@ pub enum VerificationState {
     Cancelled,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PendingUploadVerificationState {
+    Idle,
+    Confirming,
+    BlockedOnAuthorization,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum SyncState {
     Idle,
@@ -222,9 +229,11 @@ impl RustCloudBackupManager {
                 self.apply_verified_report(report);
             }
             DeepVerificationResult::AwaitingUploadConfirmation(report) => {
-                if let Some(detail) = report.detail {
+                if let Some(detail) = report.detail.clone() {
                     self.set_detail(Some(detail));
                 }
+                self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
+                self.set_verification(VerificationState::Idle);
             }
             DeepVerificationResult::PasskeyConfirmed(detail) => {
                 if let Some(detail) = detail {

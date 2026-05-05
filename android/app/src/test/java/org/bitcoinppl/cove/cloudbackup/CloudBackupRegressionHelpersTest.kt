@@ -4,6 +4,7 @@ import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceFlow
 import org.bitcoinppl.cove_core.CloudBackupStatus
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
+import org.bitcoinppl.cove_core.PendingUploadVerificationState
 import org.bitcoinppl.cove_core.VerificationState
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.junit.Assert.assertEquals
@@ -116,6 +117,7 @@ class CloudBackupRegressionHelpersTest {
             cloudBackupDetailBodyState(
                 status = CloudBackupStatus.Enabled,
                 verification = VerificationState.Cancelled,
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
                 hasDetail = true,
             ),
         )
@@ -124,6 +126,7 @@ class CloudBackupRegressionHelpersTest {
             cloudBackupDetailBodyState(
                 status = CloudBackupStatus.Enabled,
                 verification = VerificationState.Cancelled,
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
                 hasDetail = false,
             ),
         )
@@ -142,6 +145,7 @@ class CloudBackupRegressionHelpersTest {
                             retryContext = null,
                         ),
                     ),
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
                 hasDetail = false,
             )
 
@@ -154,6 +158,48 @@ class CloudBackupRegressionHelpersTest {
     fun cloudOnlyAutoFetchOnlyRunsFromNotFetched() {
         assertTrue(shouldFetchCloudOnly(CloudOnlyState.NotFetched))
         assertFalse(shouldFetchCloudOnly(CloudOnlyState.Loading))
+    }
+
+    @Test
+    fun pendingUploadConfirmationDoesNotReplaceDetailContent() {
+        assertEquals(
+            CloudBackupDetailBodyState.DETAIL,
+            cloudBackupDetailBodyState(
+                status = CloudBackupStatus.Enabled,
+                verification = VerificationState.Idle,
+                pendingUploadVerification = PendingUploadVerificationState.CONFIRMING,
+                hasDetail = true,
+            ),
+        )
+        assertTrue(
+            shouldShowPendingUploadConfirmationStatus(PendingUploadVerificationState.CONFIRMING),
+        )
+    }
+
+    @Test
+    fun interactiveVerificationKeepsVerifyingBody() {
+        assertEquals(
+            CloudBackupDetailBodyState.VERIFYING,
+            cloudBackupDetailBodyState(
+                status = CloudBackupStatus.Enabled,
+                verification = VerificationState.Verifying,
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
+                hasDetail = true,
+            ),
+        )
+    }
+
+    @Test
+    fun pendingUploadConfirmationWithoutDetailKeepsBackgroundLoadingBody() {
+        assertEquals(
+            CloudBackupDetailBodyState.LOADING,
+            cloudBackupDetailBodyState(
+                status = CloudBackupStatus.Enabled,
+                verification = VerificationState.Idle,
+                pendingUploadVerification = PendingUploadVerificationState.CONFIRMING,
+                hasDetail = false,
+            ),
+        )
     }
 
     @Test
