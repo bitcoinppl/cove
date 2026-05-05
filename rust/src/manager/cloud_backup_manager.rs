@@ -52,7 +52,7 @@ use self::wallets::{
     UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader, all_local_wallets, count_all_wallets,
 };
 use self::workers::{CloudBackupOperation, CloudBackupSupervisor, RestoreOperation};
-use super::connectivity_manager::CONNECTIVITY_MANAGER;
+use super::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
 type LocalWalletSecret = crate::backup::model::WalletSecret;
 
@@ -194,10 +194,10 @@ pub struct CloudBackupWalletItem {
     pub record_id: String,
 }
 
-#[derive(Debug, Clone, uniffi::Enum)]
+#[derive(Debug)]
 pub enum CloudBackupDetailResult {
     Success(CloudBackupDetail),
-    AccessError(String),
+    AccessError(CloudBackupError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -264,13 +264,34 @@ pub enum CloudBackupVerificationMetadata {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum DeepVerificationFailure {
     /// Transient iCloud/network/passkey error — safe to retry
-    Retry { message: String, detail: Option<CloudBackupDetail> },
+    Retry {
+        message: String,
+        detail: Option<CloudBackupDetail>,
+        retry_context: Option<CloudBackupRetryContext>,
+    },
     /// Manifest missing, master key verified intact — recreate from local wallets
     RecreateManifest { message: String, warning: String, detail: Option<CloudBackupDetail> },
     /// No verified cloud or local master key available — full re-enable needed
     ReinitializeBackup { message: String, warning: String, detail: Option<CloudBackupDetail> },
     /// Backup uses a newer format — do not overwrite
     UnsupportedVersion { message: String, detail: Option<CloudBackupDetail> },
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudBackupRetryIssue {
+    Connectivity,
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudBackupRetryAction {
+    Verify,
+    VerifyDiscoverable,
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct CloudBackupRetryContext {
+    pub issue: CloudBackupRetryIssue,
+    pub action: CloudBackupRetryAction,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -292,19 +313,6 @@ pub struct CloudBackupState {
     pub cloud_only: CloudOnlyState,
     pub cloud_only_operation: CloudOnlyOperation,
     pub other_backups_operation: OtherBackupsOperation,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct PendingConnectivityVerification {
-    pub force_discoverable: bool,
-}
-
-#[derive(Debug, Default)]
-struct ConnectivityRecoveryState {
-    pending_detail_refresh: bool,
-    retrying_detail_refresh: bool,
-    pending_verification: Option<PendingConnectivityVerification>,
-    retrying_verification: bool,
 }
 
 impl Default for CloudBackupState {
@@ -612,6 +620,14 @@ impl DeepVerificationFailure {
 }
 
 impl DeepVerificationFailure {
+    pub(crate) fn retry(
+        message: impl Into<String>,
+        detail: Option<CloudBackupDetail>,
+        retry_context: Option<CloudBackupRetryContext>,
+    ) -> Self {
+        Self::Retry { message: message.into(), detail, retry_context }
+    }
+
     pub(crate) fn detail(&self) -> Option<&CloudBackupDetail> {
         match self {
             Self::Retry { detail, .. }
@@ -624,25 +640,37 @@ impl DeepVerificationFailure {
     pub(crate) fn is_connectivity_retry(&self) -> bool {
         matches!(
             self,
-            Self::Retry { message, .. }
-                if message == &offline_error_for_step(BlockingCloudStep::Verify).to_string()
+            Self::Retry {
+                retry_context: Some(CloudBackupRetryContext {
+                    issue: CloudBackupRetryIssue::Connectivity,
+                    ..
+                }),
+                ..
+            }
         )
+    }
+
+    pub(crate) fn connectivity_retry_action(&self) -> Option<CloudBackupRetryAction> {
+        match self {
+            Self::Retry {
+                retry_context:
+                    Some(CloudBackupRetryContext { issue: CloudBackupRetryIssue::Connectivity, action }),
+                ..
+            } => Some(*action),
+            _ => None,
+        }
     }
 }
 
-impl DeepVerificationResult {
-    pub(crate) fn is_connectivity_failure(&self) -> bool {
-        matches!(self, Self::Failed(failure) if failure.is_connectivity_retry())
+impl CloudBackupRetryContext {
+    pub(crate) fn connectivity(action: CloudBackupRetryAction) -> Self {
+        Self { issue: CloudBackupRetryIssue::Connectivity, action }
     }
 }
 
 impl CloudBackupDetailResult {
     pub(crate) fn is_connectivity_access_error(&self) -> bool {
-        matches!(
-            self,
-            Self::AccessError(error)
-                if error == &offline_error_for_step(BlockingCloudStep::DetailRefresh).to_string()
-        )
+        matches!(self, Self::AccessError(error) if is_connectivity_related_issue(error.cloud_storage_issue()))
     }
 }
 
@@ -877,7 +905,6 @@ pub struct RustCloudBackupManager {
     pub reconcile_receiver: Arc<Receiver<Message>>,
     prompt_state: Arc<parking_lot::Mutex<CloudBackupPromptState>>,
     cloud_only_detail_snapshot: Arc<RwLock<Option<CloudBackupDetail>>>,
-    connectivity_recovery: Arc<parking_lot::Mutex<ConnectivityRecoveryState>>,
     pub(crate) supervisor: Addr<CloudBackupSupervisor>,
 }
 
@@ -923,8 +950,12 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub(crate) fn is_offline(&self) -> bool {
-        !CONNECTIVITY_MANAGER.is_connected()
+    pub(crate) fn connection_status(&self) -> ConnectivityStatus {
+        CONNECTIVITY_MANAGER.connection_status()
+    }
+
+    pub(crate) fn is_known_offline(&self) -> bool {
+        CONNECTIVITY_MANAGER.known_disconnected()
     }
 
     pub(crate) fn offline_error_for_step(&self, step: BlockingCloudStep) -> CloudBackupError {
@@ -935,8 +966,8 @@ impl RustCloudBackupManager {
         &self,
         step: BlockingCloudStep,
     ) -> Result<(), CloudBackupError> {
-        if self.is_offline() {
-            return Err(self.offline_error_for_step(step));
+        if self.is_known_offline() {
+            return Err(offline_error_for_step(step));
         }
 
         Ok(())
@@ -951,9 +982,6 @@ impl RustCloudBackupManager {
             reconcile_receiver: Arc::new(receiver),
             prompt_state: Arc::new(parking_lot::Mutex::new(CloudBackupPromptState::default())),
             cloud_only_detail_snapshot: Arc::new(RwLock::new(None)),
-            connectivity_recovery: Arc::new(parking_lot::Mutex::new(
-                ConnectivityRecoveryState::default(),
-            )),
             supervisor: spawn_actor(CloudBackupSupervisor::new(manager.clone())),
         });
 
@@ -1029,14 +1057,14 @@ impl RustCloudBackupManager {
                     break;
                 };
 
-                let connected = CONNECTIVITY_MANAGER.connected();
-                manager.handle_connectivity_change(connected);
+                let status = CONNECTIVITY_MANAGER.connection_status();
+                manager.handle_connectivity_change(status);
             }
         });
     }
 
-    pub(crate) fn handle_connectivity_change(&self, connected: bool) {
-        if !connected {
+    pub(crate) fn handle_connectivity_change(&self, status: ConnectivityStatus) {
+        if status != ConnectivityStatus::Connected {
             return;
         }
 
@@ -1044,85 +1072,27 @@ impl RustCloudBackupManager {
         send!(self.supervisor.resume_wallet_uploads_from_persisted_state());
         send!(self.supervisor.wake_pending_upload_verifier());
         self.start_pending_upload_verification_loop();
-        self.resume_pending_connectivity_retries();
+        self.resume_failed_connectivity_verification();
     }
 
-    fn resume_pending_connectivity_retries(&self) {
-        let (retry_detail_refresh, retry_verification) = {
-            let mut recovery = self.connectivity_recovery.lock();
-            let retry_detail_refresh = recovery.pending_detail_refresh;
-            let retry_verification = recovery.pending_verification.take();
-
-            if retry_detail_refresh {
-                recovery.pending_detail_refresh = false;
-                recovery.retrying_detail_refresh = true;
-            }
-
-            if retry_verification.is_some() {
-                recovery.retrying_verification = true;
-            }
-
-            (retry_detail_refresh, retry_verification)
-        };
-
-        if retry_detail_refresh {
-            send!(self.supervisor.retry_refresh_detail_after_connectivity());
-        }
-
-        if let Some(retry) = retry_verification {
-            send!(self.supervisor.retry_verification_after_connectivity(retry.force_discoverable));
-        }
-    }
-
-    pub(crate) fn request_detail_refresh_connectivity_retry(&self) -> bool {
-        let should_retry_now = {
-            let mut recovery = self.connectivity_recovery.lock();
-            if self.is_offline() {
-                recovery.pending_detail_refresh = true;
-                false
-            } else if recovery.retrying_detail_refresh {
-                false
-            } else {
-                recovery.retrying_detail_refresh = true;
-                true
+    fn resume_failed_connectivity_verification(&self) {
+        let retry_action = {
+            let state = self.state.read();
+            match &state.verification {
+                VerificationState::Failed(failure) => failure.connectivity_retry_action(),
+                _ => None,
             }
         };
 
-        if should_retry_now {
-            send!(self.supervisor.retry_refresh_detail_after_connectivity());
-        }
-
-        should_retry_now
-    }
-
-    pub(crate) fn finish_detail_refresh_connectivity_retry(&self) {
-        self.connectivity_recovery.lock().retrying_detail_refresh = false;
-    }
-
-    pub(crate) fn request_verification_connectivity_retry(&self, force_discoverable: bool) -> bool {
-        let retry = PendingConnectivityVerification { force_discoverable };
-        let should_retry_now = {
-            let mut recovery = self.connectivity_recovery.lock();
-            if self.is_offline() {
-                recovery.pending_verification = Some(retry);
-                false
-            } else if recovery.retrying_verification {
-                false
-            } else {
-                recovery.retrying_verification = true;
-                true
+        match retry_action {
+            Some(CloudBackupRetryAction::Verify) => {
+                send!(self.supervisor.start_verification(false))
             }
-        };
-
-        if should_retry_now {
-            send!(self.supervisor.retry_verification_after_connectivity(force_discoverable));
+            Some(CloudBackupRetryAction::VerifyDiscoverable) => {
+                send!(self.supervisor.start_verification(true));
+            }
+            None => {}
         }
-
-        should_retry_now
-    }
-
-    pub(crate) fn finish_verification_connectivity_retry(&self) {
-        self.connectivity_recovery.lock().retrying_verification = false;
     }
 
     pub(crate) fn set_sync_health(&self, sync_health: CloudSyncHealth) {
@@ -1736,7 +1706,7 @@ impl RustCloudBackupManager {
             return;
         }
 
-        if self.is_offline() {
+        if self.is_known_offline() {
             return;
         }
 

@@ -139,6 +139,7 @@ class CloudBackupRegressionHelpersTest {
                         DeepVerificationFailure.Retry(
                             message = "Drive unavailable",
                             detail = null,
+                            retryContext = null,
                         ),
                     ),
                 hasDetail = false,

@@ -262,10 +262,7 @@ impl RustCloudBackupManager {
         completion: &PendingVerificationCompletion,
         message: impl Into<String>,
     ) -> DeepVerificationFailure {
-        DeepVerificationFailure::Retry {
-            message: message.into(),
-            detail: completion.report().detail.clone(),
-        }
+        DeepVerificationFailure::retry(message, completion.report().detail.clone(), None)
     }
 
     pub(crate) fn apply_verified_report(&self, report: DeepVerificationReport) {

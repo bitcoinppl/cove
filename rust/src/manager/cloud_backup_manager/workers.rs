@@ -20,6 +20,7 @@ use super::{
     PendingVerificationCompletion, RecoveryAction, RustCloudBackupManager, VerificationState,
     WalletId,
 };
+use crate::manager::connectivity_manager::ConnectivityStatus;
 
 #[derive(Debug, Clone)]
 pub(crate) enum CloudBackupOperation {
@@ -51,24 +52,58 @@ enum DetailEntryPlan {
     StartPasskeyVerification { force_discoverable: bool },
 }
 
-fn apply_refresh_detail_result(
-    manager: &RustCloudBackupManager,
-    result: Option<CloudBackupDetailResult>,
-) {
-    let Some(result) = result else { return };
-    let is_connectivity_error = result.is_connectivity_access_error();
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DetailRefreshAttempt {
+    Initial,
+    AutomaticConnectivityRetry,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum VerificationAttempt {
+    Initial,
+    AutomaticConnectivityRetry,
+}
+
+fn should_retry_connectivity_failure(status: ConnectivityStatus) -> bool {
+    matches!(status, ConnectivityStatus::Unknown | ConnectivityStatus::Connected)
+}
+
+fn apply_refresh_detail_result(manager: &RustCloudBackupManager, result: &CloudBackupDetailResult) {
     match result {
         CloudBackupDetailResult::Success(detail) => {
-            manager.set_detail(Some(detail));
+            manager.set_detail(Some(detail.clone()));
         }
         CloudBackupDetailResult::AccessError(error) => {
-            if is_connectivity_error && manager.request_detail_refresh_connectivity_retry() {
-                return;
-            }
-
             error!("Failed to refresh detail: {error}");
         }
     }
+}
+
+fn refresh_detail_needs_connectivity_retry(
+    manager: &RustCloudBackupManager,
+    attempt: DetailRefreshAttempt,
+    result: &Option<CloudBackupDetailResult>,
+) -> bool {
+    if attempt != DetailRefreshAttempt::Initial {
+        return false;
+    }
+
+    let Some(result) = result else { return false };
+    result.is_connectivity_access_error()
+        && should_retry_connectivity_failure(manager.connection_status())
+}
+
+fn verification_needs_connectivity_retry(
+    manager: &RustCloudBackupManager,
+    attempt: VerificationAttempt,
+    result: &DeepVerificationResult,
+) -> bool {
+    if attempt != VerificationAttempt::Initial {
+        return false;
+    }
+
+    matches!(result, DeepVerificationResult::Failed(failure) if failure.is_connectivity_retry())
+        && should_retry_connectivity_failure(manager.connection_status())
 }
 
 #[derive(Debug)]
@@ -208,38 +243,48 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn start_refresh_detail(&mut self) -> ActorResult<()> {
-        self.start_refresh_detail_with_context(false).await
+        self.start_refresh_detail_with_context(DetailRefreshAttempt::Initial).await
     }
 
     async fn start_refresh_detail_with_context(
         &mut self,
-        is_connectivity_retry: bool,
+        attempt: DetailRefreshAttempt,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        manager.refresh_sync_health();
-        self.addr.send_fut_with(move |addr| async move {
-            let result = manager.refresh_cloud_backup_detail().await;
-            send!(addr.complete_refresh_detail(result, is_connectivity_retry));
-        });
+        self.schedule_refresh_detail(manager, attempt);
 
         Produces::ok(())
     }
 
-    pub async fn retry_refresh_detail_after_connectivity(&mut self) -> ActorResult<()> {
-        self.start_refresh_detail_with_context(true).await
+    fn schedule_refresh_detail(
+        &self,
+        manager: Arc<RustCloudBackupManager>,
+        attempt: DetailRefreshAttempt,
+    ) {
+        manager.refresh_sync_health();
+        self.addr.send_fut_with(move |addr| async move {
+            let result = manager.refresh_cloud_backup_detail().await;
+            send!(addr.complete_refresh_detail(result, attempt));
+        });
     }
 
     pub async fn complete_refresh_detail(
         &mut self,
         result: Option<CloudBackupDetailResult>,
-        is_connectivity_retry: bool,
+        attempt: DetailRefreshAttempt,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        apply_refresh_detail_result(&manager, result);
-        if is_connectivity_retry {
-            manager.finish_detail_refresh_connectivity_retry();
+
+        if refresh_detail_needs_connectivity_retry(&manager, attempt, &result) {
+            self.schedule_refresh_detail(manager, DetailRefreshAttempt::AutomaticConnectivityRetry);
+            return Produces::ok(());
         }
+
+        if let Some(result) = result {
+            apply_refresh_detail_result(&manager, &result);
+        }
+
         Produces::ok(())
     }
 
@@ -280,47 +325,61 @@ impl CloudBackupSupervisor {
         result: Option<CloudBackupDetailResult>,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        apply_refresh_detail_result(&manager, result);
+        if let Some(result) = result {
+            apply_refresh_detail_result(&manager, &result);
+        }
 
         Produces::ok(())
     }
 
     pub async fn start_verification(&mut self, force_discoverable: bool) -> ActorResult<()> {
-        self.start_verification_with_context(force_discoverable, false).await
+        self.start_verification_with_context(force_discoverable, VerificationAttempt::Initial).await
     }
 
     async fn start_verification_with_context(
         &mut self,
         force_discoverable: bool,
-        is_connectivity_retry: bool,
+        attempt: VerificationAttempt,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         self.pending_verification_completion = None;
         manager.set_verification(VerificationState::Verifying);
-        self.addr.send_fut_with(move |addr| async move {
-            let result = manager.deep_verify_cloud_backup(force_discoverable).await;
-            send!(addr.complete_verification(result, force_discoverable, is_connectivity_retry));
-        });
+        self.schedule_verification(manager, force_discoverable, attempt);
 
         Produces::ok(())
     }
 
-    pub async fn retry_verification_after_connectivity(
-        &mut self,
+    fn schedule_verification(
+        &self,
+        manager: Arc<RustCloudBackupManager>,
         force_discoverable: bool,
-    ) -> ActorResult<()> {
-        self.start_verification_with_context(force_discoverable, true).await
+        attempt: VerificationAttempt,
+    ) {
+        self.addr.send_fut_with(move |addr| async move {
+            let result = manager.deep_verify_cloud_backup(force_discoverable).await;
+            send!(addr.complete_verification(result, force_discoverable, attempt));
+        });
     }
 
     pub async fn complete_verification(
         &mut self,
         result: DeepVerificationResult,
         force_discoverable: bool,
-        is_connectivity_retry: bool,
+        attempt: VerificationAttempt,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        manager.handle_deep_verification_result(result, force_discoverable, is_connectivity_retry);
+
+        if verification_needs_connectivity_retry(&manager, attempt, &result) {
+            self.schedule_verification(
+                manager,
+                force_discoverable,
+                VerificationAttempt::AutomaticConnectivityRetry,
+            );
+            return Produces::ok(());
+        }
+
+        manager.handle_deep_verification_result(result);
         Produces::ok(())
     }
 

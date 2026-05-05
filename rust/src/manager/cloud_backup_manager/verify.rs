@@ -19,9 +19,10 @@ use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
 use super::wallets::persist_enabled_cloud_backup_state;
 use super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
-    CloudBackupStatus, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    PendingVerificationCompletion, PendingVerificationUpload, RecoveryState,
-    RustCloudBackupManager, VerificationState,
+    CloudBackupRetryAction, CloudBackupRetryContext, CloudBackupStatus, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
+    PendingVerificationUpload, RecoveryState, RustCloudBackupManager, VerificationState,
+    is_connectivity_related_issue,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
@@ -65,10 +66,21 @@ impl RustCloudBackupManager {
             Ok(result) => result,
             Err(error) => {
                 error!("Deep verification unexpected error: {error}");
-                DeepVerificationResult::Failed(DeepVerificationFailure::Retry {
-                    message: error.to_string(),
-                    detail: None,
-                })
+                let retry_context = is_connectivity_related_issue(error.cloud_storage_issue())
+                    .then(|| {
+                        let action = if force_discoverable {
+                            CloudBackupRetryAction::VerifyDiscoverable
+                        } else {
+                            CloudBackupRetryAction::Verify
+                        };
+                        CloudBackupRetryContext::connectivity(action)
+                    });
+
+                DeepVerificationResult::Failed(DeepVerificationFailure::retry(
+                    error.to_string(),
+                    None,
+                    retry_context,
+                ))
             }
         };
 

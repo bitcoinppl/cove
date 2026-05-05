@@ -45,6 +45,7 @@ final class CloudConnectivityMonitor: ConnectivityAccess, @unchecked Sendable {
     }
 
     private func updateRustConnectivity(_ isConnected: Bool) {
-        RustConnectivityManager().setConnectionState(isConnected: isConnected)
+        let status: ConnectivityStatus = isConnected ? .connected : .disconnected
+        RustConnectivityManager().setConnectionStatus(status: status)
     }
 }

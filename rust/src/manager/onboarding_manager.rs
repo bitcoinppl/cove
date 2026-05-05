@@ -489,7 +489,7 @@ impl RustOnboardingManager {
 
         let me = Arc::clone(self);
         cove_tokio::task::spawn(async move {
-            if CLOUD_BACKUP_MANAGER.is_offline() {
+            if CLOUD_BACKUP_MANAGER.is_known_offline() {
                 me.finish_cloud_check(CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline));
                 return;
             }

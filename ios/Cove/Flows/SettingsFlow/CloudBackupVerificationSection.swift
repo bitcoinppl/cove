@@ -171,7 +171,7 @@ struct VerificationSection: View {
     private func failureSection(_ failure: DeepVerificationFailure) -> some View {
         Section {
             switch failure {
-            case let .retry(message, _):
+            case let .retry(message, _, _):
                 retryFailureContent(message)
             case let .recreateManifest(message, warning, _):
                 recreateManifestContent(message: message, warning: warning)

@@ -1545,7 +1545,7 @@ mod tests {
             CloudBackupKeychainError,
         },
     };
-    use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
+    use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
     use crate::manager::wallet_manager::RustWalletManager;
     use crate::wallet::{
         Wallet,
@@ -2908,7 +2908,7 @@ mod tests {
         };
 
         assert_eq!(
-            error,
+            error.to_string(),
             "offline: Reconnect to the internet, then try refreshing cloud backup details again"
         );
     }
@@ -3530,7 +3530,7 @@ mod tests {
             .unwrap();
         manager.set_sync_error(Some("upload failed".into()));
 
-        manager.handle_connectivity_change(true);
+        manager.handle_connectivity_change(ConnectivityStatus::Connected);
 
         assert_eq!(manager.state().sync_error.as_deref(), Some("upload failed"));
     }
@@ -3543,7 +3543,7 @@ mod tests {
         configure_enabled_cloud_backup(&manager, globals, 0);
         manager.set_sync_error(Some("upload failed".into()));
 
-        manager.handle_connectivity_change(true);
+        manager.handle_connectivity_change(ConnectivityStatus::Connected);
 
         assert!(manager.state().sync_error.is_none());
     }
@@ -3567,7 +3567,7 @@ mod tests {
         .await;
 
         CONNECTIVITY_MANAGER.set_connection_state(true);
-        manager.handle_connectivity_change(true);
+        manager.handle_connectivity_change(ConnectivityStatus::Connected);
 
         wait_for_test_condition(
             Duration::from_secs(1),
@@ -3578,24 +3578,20 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn reconnect_retries_detail_refresh_after_offline_failure() {
+    async fn connected_connectivity_failure_retries_detail_refresh_once() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
         let manager = init_manager();
         configure_enabled_cloud_backup(&manager, globals, 0);
-        CONNECTIVITY_MANAGER.set_connection_state(false);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        globals.cloud.fail_next_list_wallet_files_offline("offline");
 
         call!(manager.supervisor.start_refresh_detail()).await.unwrap();
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        assert!(manager.state().detail.is_none());
-
-        CONNECTIVITY_MANAGER.set_connection_state(true);
-        manager.handle_connectivity_change(true);
 
         wait_for_test_condition(
             Duration::from_secs(1),
-            "expected reconnect to refresh detail",
+            "expected connectivity retry to refresh detail",
             || manager.state().detail.is_some(),
         )
         .await;
@@ -3623,6 +3619,26 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn unknown_connectivity_does_not_block_verification() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+        seed_verifiable_cloud_master_key(globals);
+        CONNECTIVITY_MANAGER.set_connection_status(ConnectivityStatus::Unknown);
+
+        call!(manager.supervisor.start_verification(false)).await.unwrap();
+
+        wait_for_test_condition(
+            Duration::from_secs(1),
+            "expected unknown connectivity to attempt verification",
+            || matches!(manager.state().verification, VerificationState::Verified(_)),
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn non_connectivity_verification_failure_does_not_retry_on_reconnect() {
         let _guard = test_lock().lock();
         cove_tokio::init();
@@ -3641,9 +3657,9 @@ mod tests {
         .await;
 
         CONNECTIVITY_MANAGER.set_connection_state(false);
-        manager.handle_connectivity_change(false);
+        manager.handle_connectivity_change(ConnectivityStatus::Disconnected);
         CONNECTIVITY_MANAGER.set_connection_state(true);
-        manager.handle_connectivity_change(true);
+        manager.handle_connectivity_change(ConnectivityStatus::Connected);
 
         assert_test_condition_stays_true(
             Duration::from_millis(150),
@@ -4617,7 +4633,11 @@ mod tests {
         let result = manager.deep_verify_cloud_backup(true).await;
 
         match result {
-            DeepVerificationResult::Failed(DeepVerificationFailure::Retry { message, detail }) => {
+            DeepVerificationResult::Failed(DeepVerificationFailure::Retry {
+                message,
+                detail,
+                ..
+            }) => {
                 assert_eq!(
                     message,
                     "failed to auto-sync missing wallet backups: cloud storage error: upload failed: upload failed"
@@ -5109,7 +5129,11 @@ mod tests {
         let result = manager.deep_verify_cloud_backup(true).await;
 
         match result {
-            DeepVerificationResult::Failed(DeepVerificationFailure::Retry { message, detail }) => {
+            DeepVerificationResult::Failed(DeepVerificationFailure::Retry {
+                message,
+                detail,
+                ..
+            }) => {
                 assert_eq!(message, "failed to refresh remote wallet truth for some wallets");
 
                 let detail = detail.expect("expected verification detail");

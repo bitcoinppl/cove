@@ -1,20 +1,37 @@
 use std::sync::{
     Arc, LazyLock,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicU8, Ordering},
 };
 
 use flume::{Receiver, Sender, TrySendError};
 use parking_lot::Mutex;
-
-use cove_device::connectivity::Connectivity;
 
 pub static CONNECTIVITY_MANAGER: LazyLock<Arc<RustConnectivityManager>> =
     LazyLock::new(RustConnectivityManager::init);
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum ConnectivityStatus {
+    Unknown,
     Connected,
     Disconnected,
+}
+
+impl ConnectivityStatus {
+    const fn as_u8(self) -> u8 {
+        match self {
+            Self::Unknown => 0,
+            Self::Connected => 1,
+            Self::Disconnected => 2,
+        }
+    }
+
+    const fn from_u8(value: u8) -> Self {
+        match value {
+            1 => Self::Connected,
+            2 => Self::Disconnected,
+            _ => Self::Unknown,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Record)]
@@ -24,26 +41,28 @@ pub struct ConnectivityState {
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustConnectivityManager {
-    is_connected: Arc<AtomicBool>,
+    status: Arc<AtomicU8>,
     subscribers: Arc<Mutex<Vec<Sender<()>>>>,
 }
 
 impl RustConnectivityManager {
     fn init() -> Arc<Self> {
-        let initial_connected = if let Some(connectivity) = Connectivity::try_global() {
-            connectivity.is_connected()
-        } else {
-            false
-        };
-
         Arc::new(Self {
-            is_connected: Arc::new(AtomicBool::new(initial_connected)),
+            status: Arc::new(AtomicU8::new(ConnectivityStatus::Unknown.as_u8())),
             subscribers: Arc::new(Mutex::new(Vec::new())),
         })
     }
 
+    pub(crate) fn connection_status(&self) -> ConnectivityStatus {
+        ConnectivityStatus::from_u8(self.status.load(Ordering::Acquire))
+    }
+
     pub(crate) fn connected(&self) -> bool {
-        self.is_connected.load(Ordering::Acquire)
+        self.connection_status() == ConnectivityStatus::Connected
+    }
+
+    pub(crate) fn known_disconnected(&self) -> bool {
+        self.connection_status() == ConnectivityStatus::Disconnected
     }
 
     pub(crate) fn subscribe(&self) -> Receiver<()> {
@@ -52,9 +71,9 @@ impl RustConnectivityManager {
         receiver
     }
 
-    fn set_connection_state_internal(&self, is_connected: bool) -> bool {
-        let previous = self.is_connected.swap(is_connected, Ordering::AcqRel);
-        if previous == is_connected {
+    fn set_connection_status_internal(&self, status: ConnectivityStatus) -> bool {
+        let previous = self.status.swap(status.as_u8(), Ordering::AcqRel);
+        if previous == status.as_u8() {
             return false;
         }
 
@@ -80,21 +99,24 @@ impl RustConnectivityManager {
     }
 
     pub fn state(&self) -> ConnectivityState {
-        ConnectivityState {
-            status: if self.connected() {
-                ConnectivityStatus::Connected
-            } else {
-                ConnectivityStatus::Disconnected
-            },
-        }
+        ConnectivityState { status: self.connection_status() }
     }
 
     pub fn is_connected(&self) -> bool {
         self.connected()
     }
 
+    pub fn set_connection_status(&self, status: ConnectivityStatus) {
+        self.set_connection_status_internal(status);
+    }
+
     pub fn set_connection_state(&self, is_connected: bool) {
-        self.set_connection_state_internal(is_connected);
+        let status = if is_connected {
+            ConnectivityStatus::Connected
+        } else {
+            ConnectivityStatus::Disconnected
+        };
+        self.set_connection_status(status);
     }
 }
 
@@ -106,23 +128,30 @@ mod tests {
     fn subscribe_receives_changes() {
         let manager = RustConnectivityManager::init();
         let receiver = manager.subscribe();
-        let next = !manager.connected();
 
-        manager.set_connection_state(next);
+        manager.set_connection_status(ConnectivityStatus::Connected);
 
         receiver.recv().unwrap();
-        assert_eq!(manager.connected(), next);
+        assert_eq!(manager.connection_status(), ConnectivityStatus::Connected);
     }
 
     #[test]
     fn subscribe_ignores_unchanged_value() {
         let manager = RustConnectivityManager::init();
         let receiver = manager.subscribe();
-        let initial = manager.connected();
 
-        manager.set_connection_state(initial);
+        manager.set_connection_status(ConnectivityStatus::Unknown);
 
         assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn initial_status_is_unknown() {
+        let manager = RustConnectivityManager::init();
+
+        assert_eq!(manager.connection_status(), ConnectivityStatus::Unknown);
+        assert!(!manager.connected());
+        assert!(!manager.known_disconnected());
     }
 
     #[test]
@@ -148,14 +177,14 @@ mod tests {
         let manager = RustConnectivityManager::init();
         let receiver = manager.subscribe();
 
-        manager.is_connected.store(false, Ordering::Release);
-        manager.set_connection_state_internal(true);
-        manager.set_connection_state_internal(false);
+        manager.status.store(ConnectivityStatus::Disconnected.as_u8(), Ordering::Release);
+        manager.set_connection_status_internal(ConnectivityStatus::Connected);
+        manager.set_connection_status_internal(ConnectivityStatus::Disconnected);
 
         receiver.recv().unwrap();
 
         assert!(receiver.try_recv().is_err());
-        assert!(!manager.connected());
+        assert_eq!(manager.connection_status(), ConnectivityStatus::Disconnected);
     }
 
     #[test]

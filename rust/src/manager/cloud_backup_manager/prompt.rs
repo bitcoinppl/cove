@@ -155,6 +155,7 @@ mod tests {
             verification: VerificationState::Failed(DeepVerificationFailure::Retry {
                 message: "verification failed".into(),
                 detail: None,
+                retry_context: None,
             }),
             ..CloudBackupState::default()
         };

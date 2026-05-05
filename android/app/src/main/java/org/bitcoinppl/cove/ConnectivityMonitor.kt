@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import org.bitcoinppl.cove_core.ConnectivityStatus
 import org.bitcoinppl.cove_core.RustConnectivityManager
 import org.bitcoinppl.cove_core.device.ConnectivityAccess
 
@@ -57,8 +58,15 @@ class ConnectivityMonitor(
     }
 
     private fun pushConnectivityState(connected: Boolean) {
+        val status =
+            if (connected) {
+                ConnectivityStatus.CONNECTED
+            } else {
+                ConnectivityStatus.DISCONNECTED
+            }
+
         RustConnectivityManager().use { rustConnectivityManager ->
-            rustConnectivityManager.setConnectionState(connected)
+            rustConnectivityManager.setConnectionStatus(status)
         }
     }
 

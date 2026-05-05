@@ -14,9 +14,9 @@ use super::wrapper_repair::{WrapperRepairError, WrapperRepairOperation, WrapperR
 use crate::manager::cloud_backup_manager::pending::remote_wallet_revision_matches;
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError,
-    CloudBackupKeychain, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    PASSKEY_RP_ID, PendingVerificationCompletion, PendingVerificationUpload,
-    RustCloudBackupManager, blocking_cloud_error,
+    CloudBackupKeychain, CloudBackupRetryAction, CloudBackupRetryContext, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, PASSKEY_RP_ID, PendingVerificationCompletion,
+    PendingVerificationUpload, RustCloudBackupManager, blocking_cloud_error,
     cloud_inventory::CloudWalletInventory,
     is_connectivity_related_issue, offline_error_for_step,
     wallets::{WalletBackupLookup, WalletBackupReader, prepare_wallet_backup},
@@ -610,10 +610,29 @@ impl VerificationSession {
 
     /// Builds a retryable verification failure while preserving the latest backup detail for UI recovery prompts
     fn retry_result(&self, message: impl Into<String>) -> DeepVerificationResult {
-        DeepVerificationResult::Failed(DeepVerificationFailure::Retry {
-            message: message.into(),
-            detail: self.detail(),
-        })
+        self.retry_result_with_context(message, None)
+    }
+
+    fn retry_result_with_context(
+        &self,
+        message: impl Into<String>,
+        retry_context: Option<CloudBackupRetryContext>,
+    ) -> DeepVerificationResult {
+        DeepVerificationResult::Failed(DeepVerificationFailure::retry(
+            message,
+            self.detail(),
+            retry_context,
+        ))
+    }
+
+    fn connectivity_retry_context(&self) -> CloudBackupRetryContext {
+        let action = if self.force_discoverable {
+            CloudBackupRetryAction::VerifyDiscoverable
+        } else {
+            CloudBackupRetryAction::Verify
+        };
+
+        CloudBackupRetryContext::connectivity(action)
     }
 
     fn cloud_storage_retry_result(
@@ -624,7 +643,10 @@ impl VerificationSession {
         let error = CloudBackupError::cloud_storage_context(context, error);
         let error = blocking_cloud_error(BlockingCloudStep::Verify, error);
 
-        self.retry_result(error.to_string())
+        let retry_context = is_connectivity_related_issue(error.cloud_storage_issue())
+            .then(|| self.connectivity_retry_context());
+
+        self.retry_result_with_context(error.to_string(), retry_context)
     }
 
     fn cloud_backup_retry_result(
@@ -633,8 +655,10 @@ impl VerificationSession {
         error: &CloudBackupError,
     ) -> DeepVerificationResult {
         if is_connectivity_related_issue(error.cloud_storage_issue()) {
-            return self
-                .retry_result(offline_error_for_step(BlockingCloudStep::Verify).to_string());
+            return self.retry_result_with_context(
+                offline_error_for_step(BlockingCloudStep::Verify).to_string(),
+                Some(self.connectivity_retry_context()),
+            );
         }
 
         self.retry_result(format!("{context}: {error}"))
