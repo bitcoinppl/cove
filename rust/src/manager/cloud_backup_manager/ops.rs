@@ -456,7 +456,13 @@ impl RustCloudBackupManager {
         let current_namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global_explicit_client();
         let passkey = PasskeyAccess::global();
-        let namespaces = self.other_backup_namespaces(&cloud, &current_namespace).await?;
+        let namespaces = self
+            .other_backup_namespaces(
+                &cloud,
+                &current_namespace,
+                BlockingCloudStep::RecoverOtherBackups,
+            )
+            .await?;
         if namespaces.is_empty() {
             return Err(CloudBackupError::Internal("no other cloud backups found".into()));
         }
@@ -485,15 +491,15 @@ impl RustCloudBackupManager {
         self.ensure_cloud_connectivity(BlockingCloudStep::DeleteOtherBackups)?;
         let current_namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global_explicit_client();
-        let namespaces = self.other_backup_namespaces(&cloud, &current_namespace).await?;
+        let namespaces = self
+            .other_backup_namespaces(
+                &cloud,
+                &current_namespace,
+                BlockingCloudStep::DeleteOtherBackups,
+            )
+            .await?;
 
         for namespace in namespaces {
-            if namespace == current_namespace {
-                return Err(CloudBackupError::Internal(
-                    "refusing to delete the active cloud backup namespace".into(),
-                ));
-            }
-
             cloud.delete_namespace(namespace.clone()).await.map_err(|error| {
                 blocking_cloud_error(
                     BlockingCloudStep::DeleteOtherBackups,
@@ -2287,8 +2293,6 @@ mod tests {
 
     #[test]
     fn blocking_cloud_error_rewrites_unavailable_storage_errors_to_offline() {
-        let manager = init_manager();
-
         let error = blocking_cloud_error(
             BlockingCloudStep::Enable,
             CloudBackupError::CloudStorage(CloudStorageError::NotAvailable(

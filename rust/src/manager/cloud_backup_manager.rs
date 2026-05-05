@@ -1257,7 +1257,10 @@ impl RustCloudBackupManager {
         wallet_record_ids: &[String],
         remote_wallet_truth: RemoteWalletTruth,
     ) -> Result<CloudBackupDetail, CloudBackupError> {
-        let other_backups = self.other_backup_summary().await?;
+        let other_backups = self.other_backup_summary().await.unwrap_or_else(|error| {
+            warn!("Failed to summarize other cloud backups: {error}");
+            CloudBackupOtherBackupsSummary::default()
+        });
 
         Ok(self::cloud_inventory::CloudWalletInventory::load_with_remote_truth(
             wallet_record_ids,
@@ -1272,7 +1275,9 @@ impl RustCloudBackupManager {
     ) -> Result<CloudBackupOtherBackupsSummary, CloudBackupError> {
         let current_namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global_explicit_client();
-        let namespaces = self.other_backup_namespaces(&cloud, &current_namespace).await?;
+        let namespaces = self
+            .other_backup_namespaces(&cloud, &current_namespace, BlockingCloudStep::DetailRefresh)
+            .await?;
         let mut wallet_count = 0;
 
         for namespace in &namespaces {
@@ -1295,10 +1300,11 @@ impl RustCloudBackupManager {
         &self,
         cloud: &CloudStorageClient,
         current_namespace: &str,
+        step: BlockingCloudStep,
     ) -> Result<Vec<String>, CloudBackupError> {
         let mut namespaces = cloud.list_namespaces().await.map_err(|error| {
             blocking_cloud_error(
-                BlockingCloudStep::DetailRefresh,
+                step,
                 CloudBackupError::cloud_storage_context("list cloud backup namespaces", error),
             )
         })?;
