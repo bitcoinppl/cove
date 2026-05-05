@@ -1058,9 +1058,9 @@ impl RustWalletManager {
             wallet_metadata.clone()
         };
 
-        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
-
         Database::global().wallets.mark_wallet_as_verified(&metadata.id)?;
+
+        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
 
         Ok(())
     }
