@@ -1,12 +1,12 @@
-use cove_device::cloud_storage::CloudStorage;
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 
 use super::{CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager};
 use crate::database::Database;
-use crate::manager::cloud_backup_manager::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
 use crate::manager::cloud_backup_manager::wallets::count_all_wallets;
+use crate::manager::cloud_backup_manager::{CloudBackupKeychain, CloudBackupOtherBackupsSummary};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BackupIntegrityIssue {
@@ -18,6 +18,14 @@ enum BackupIntegrityIssue {
     RemoteBackupFreshnessUnknown,
     LocalWalletInventoryUnreadable,
     WalletsNotBackedUp,
+}
+
+#[derive(Debug, Clone, Copy, derive_more::Display)]
+enum IntegrityDetailContext {
+    #[display("startup")]
+    Startup,
+    #[display("detail")]
+    Detail,
 }
 
 impl BackupIntegrityIssue {
@@ -131,15 +139,12 @@ impl RustCloudBackupManager {
         };
 
         let cloud = CloudStorage::global_silent_client();
-        let other_backups = match self.other_backup_summary(&cloud).await {
-            Ok(other_backups) => other_backups,
-            Err(error) => {
-                warn!("Backup integrity: other backup summary failed: {error}");
-                return;
-            }
-        };
-
-        self.set_detail(Some(inventory.build_detail(other_backups)));
+        if let Some(other_backups) = self
+            .other_backup_summary_for_integrity_check(&cloud, IntegrityDetailContext::Startup)
+            .await
+        {
+            self.set_detail(Some(inventory.build_detail(other_backups)));
+        }
 
         let unsynced = inventory.upload_candidate_wallets();
         let handled_unsynced = !unsynced.is_empty();
@@ -215,15 +220,26 @@ impl RustCloudBackupManager {
             }
         };
 
-        let other_backups = match self.other_backup_summary(&cloud).await {
-            Ok(other_backups) => other_backups,
-            Err(error) => {
-                warn!("Backup integrity: detail other backup summary failed: {error}");
-                return;
-            }
-        };
+        if let Some(other_backups) = self
+            .other_backup_summary_for_integrity_check(&cloud, IntegrityDetailContext::Detail)
+            .await
+        {
+            self.set_detail(Some(inventory.build_detail(other_backups)));
+        }
+    }
 
-        self.set_detail(Some(inventory.build_detail(other_backups)));
+    async fn other_backup_summary_for_integrity_check(
+        &self,
+        cloud: &CloudStorageClient,
+        context: IntegrityDetailContext,
+    ) -> Option<CloudBackupOtherBackupsSummary> {
+        match self.other_backup_summary(cloud).await {
+            Ok(other_backups) => Some(other_backups),
+            Err(error) => {
+                warn!("Backup integrity: {context} other backup summary failed: {error}");
+                None
+            }
+        }
     }
 
     fn finish_backup_integrity_check(

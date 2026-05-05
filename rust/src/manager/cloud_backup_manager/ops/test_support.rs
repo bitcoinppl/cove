@@ -136,6 +136,7 @@ impl KeychainAccess for MockKeychain {
 struct MockCloudState {
     wallet_files: HashMap<String, Vec<String>>,
     master_key_backups: HashMap<String, Vec<u8>>,
+    master_key_download_errors: HashMap<String, CloudStorageError>,
     wallet_backups: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_overrides: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_errors: HashMap<(String, String), CloudStorageError>,
@@ -144,6 +145,7 @@ struct MockCloudState {
     upload_master_key_error: Option<CloudStorageError>,
     next_upload_wallet_backup_error: Option<CloudStorageError>,
     upload_wallet_backup_error: Option<CloudStorageError>,
+    list_namespaces_error: Option<CloudStorageError>,
     reflect_uploaded_wallets_in_listing: bool,
     uploaded_wallet_backups: Vec<(String, String)>,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
@@ -206,6 +208,11 @@ impl MockCloudStorage {
             Some(CloudStorageError::DownloadFailed(message.into()));
     }
 
+    pub(crate) fn fail_list_namespaces(&self, message: &str) {
+        self.state.lock().list_namespaces_error =
+            Some(CloudStorageError::DownloadFailed(message.into()));
+    }
+
     pub(crate) fn clear_list_wallet_files_non_interactive_failure(&self) {
         self.state.lock().list_wallet_files_non_interactive_error = None;
     }
@@ -213,6 +220,13 @@ impl MockCloudStorage {
     pub(crate) fn fail_master_key_upload(&self, message: &str) {
         self.state.lock().upload_master_key_error =
             Some(CloudStorageError::UploadFailed(message.into()));
+    }
+
+    pub(crate) fn fail_master_key_download_offline(&self, namespace: String, message: &str) {
+        self.state
+            .lock()
+            .master_key_download_errors
+            .insert(namespace, CloudStorageError::Offline(message.into()));
     }
 
     pub(crate) fn fail_wallet_backup_upload(&self, message: &str) {
@@ -332,6 +346,10 @@ impl CloudStorageAccess for MockCloudStorage {
         namespace: String,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
+        if let Some(error) = self.state.lock().master_key_download_errors.get(&namespace).cloned() {
+            return Err(error);
+        }
+
         self.state
             .lock()
             .master_key_backups
@@ -412,6 +430,10 @@ impl CloudStorageAccess for MockCloudStorage {
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
         let state = self.state.lock();
+        if let Some(error) = state.list_namespaces_error.clone() {
+            return Err(error);
+        }
+
         let mut namespaces: std::collections::HashSet<String> =
             state.wallet_files.keys().cloned().collect();
         namespaces.extend(state.master_key_backups.keys().cloned());

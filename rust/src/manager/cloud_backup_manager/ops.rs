@@ -2698,6 +2698,37 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn detail_refresh_fails_when_other_backup_namespace_inspection_fails() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+        globals.cloud.set_wallet_files(current_namespace, Vec::new());
+
+        let other_master_key = cove_cspp::master_key::MasterKey::generate();
+        let other_namespace = other_master_key.namespace_id();
+        globals.cloud.set_master_key_backup(other_namespace.clone(), vec![1, 2, 3]);
+        globals.cloud.fail_master_key_download_offline(
+            other_namespace,
+            "offline while inspecting namespace",
+        );
+
+        let Some(CloudBackupDetailResult::AccessError(error)) =
+            manager.refresh_cloud_backup_detail().await
+        else {
+            panic!("expected cloud backup detail access error");
+        };
+
+        assert_eq!(
+            error,
+            "offline: Reconnect to the internet, then try refreshing cloud backup details again"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn recover_other_backups_keeps_current_passkey_metadata() {
         let _guard = test_lock().lock();
         cove_tokio::init();
@@ -2805,6 +2836,45 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn recover_other_backups_returns_offline_when_namespace_inspection_is_offline() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let other_master_key = cove_cspp::master_key::MasterKey::generate();
+        let other_namespace = other_master_key.namespace_id();
+        let encrypted_master =
+            cove_cspp::master_key_crypto::encrypt_master_key(&other_master_key, &[7; 32], &[9; 32])
+                .unwrap();
+        globals.cloud.set_master_key_backup(
+            other_namespace.clone(),
+            serde_json::to_vec(&encrypted_master).unwrap(),
+        );
+        globals.cloud.fail_master_key_download_offline(
+            other_namespace,
+            "offline while inspecting namespace",
+        );
+
+        let result = manager.do_recover_other_backups().await;
+
+        match result {
+            Err(CloudBackupError::Offline(message)) => {
+                assert_eq!(
+                    message,
+                    "Reconnect to the internet, then try recovering the other cloud backups again"
+                );
+            }
+            Ok(report) => panic!(
+                "expected offline error, got report with {} restored wallet(s)",
+                report.wallets_restored
+            ),
+            Err(error) => panic!("expected offline error, got {error:?}"),
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn delete_other_backups_removes_only_non_current_namespaces() {
         let _guard = test_lock().lock();
         cove_tokio::init();
@@ -2841,6 +2911,46 @@ mod tests {
             globals.cloud.deleted_namespace_policies(),
             vec![CloudAccessPolicy::ConsentAllowed]
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn delete_other_backups_returns_offline_when_namespace_inspection_is_offline() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+        globals.cloud.set_master_key_backup(current_namespace.clone(), vec![1, 2, 3]);
+
+        let other_master_key = cove_cspp::master_key::MasterKey::generate();
+        let other_namespace = other_master_key.namespace_id();
+        let encrypted_master =
+            cove_cspp::master_key_crypto::encrypt_master_key(&other_master_key, &[7; 32], &[9; 32])
+                .unwrap();
+        globals.cloud.set_master_key_backup(
+            other_namespace.clone(),
+            serde_json::to_vec(&encrypted_master).unwrap(),
+        );
+        globals.cloud.fail_master_key_download_offline(
+            other_namespace.clone(),
+            "offline while inspecting namespace",
+        );
+
+        let result = manager.do_delete_other_backups().await;
+
+        match result {
+            Err(CloudBackupError::Offline(message)) => {
+                assert_eq!(
+                    message,
+                    "Reconnect to the internet, then try deleting the other cloud backups again"
+                );
+            }
+            Ok(()) => panic!("expected offline error"),
+            Err(error) => panic!("expected offline error, got {error:?}"),
+        }
+        assert!(globals.cloud.has_namespace(&other_namespace));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -3833,6 +3943,31 @@ mod tests {
         assert!(detail.needs_sync.is_empty());
         assert_eq!(detail.up_to_date[0].record_id, record_id);
         assert_eq!(detail.up_to_date[0].sync_status, CloudBackupWalletStatus::Confirmed);
+        manager.clear_wallet_upload_debouncers_for_test().await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn integrity_auto_backup_continues_when_other_backup_summary_fails() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let metadata = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![metadata]);
+
+        let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+        CloudBackupKeychain::global()
+            .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
+            .unwrap();
+        globals.cloud.fail_list_namespaces("offline while listing namespaces");
+
+        let warning = manager.verify_backup_integrity_impl().await;
+
+        assert!(warning.is_none());
+        assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
+        assert!(manager.state().detail.is_none());
         manager.clear_wallet_upload_debouncers_for_test().await;
     }
 

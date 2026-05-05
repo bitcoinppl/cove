@@ -1379,7 +1379,13 @@ impl RustCloudBackupManager {
                 Ok(_) => backup_namespaces.push(namespace),
                 Err(CloudStorageError::NotFound(_)) => {}
                 Err(error) => {
-                    warn!("Failed to inspect other backup namespace {namespace}: {error}");
+                    return Err(blocking_cloud_error(
+                        step,
+                        CloudBackupError::cloud_storage_context(
+                            "inspect cloud backup namespace",
+                            error,
+                        ),
+                    ));
                 }
             }
         }
