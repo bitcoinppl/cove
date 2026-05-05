@@ -343,6 +343,14 @@ impl CloudBackupSupervisor {
         Produces::ok(None)
     }
 
+    pub async fn has_awaiting_force_new_pending_enable_session(&self) -> ActorResult<bool> {
+        Produces::ok(
+            self.pending_enable_session
+                .as_ref()
+                .is_some_and(PendingEnableSession::is_awaiting_force_new_confirmation),
+        )
+    }
+
     pub async fn clear_pending_enable_session(&mut self) -> ActorResult<()> {
         self.pending_enable_session = None;
         Produces::ok(())

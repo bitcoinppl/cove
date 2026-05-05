@@ -480,6 +480,10 @@ impl MockPasskeyProviderImpl {
         *self.authenticate_count.lock()
     }
 
+    pub(crate) fn create_count(&self) -> usize {
+        *self.create_count.lock()
+    }
+
     pub(crate) fn discover_count(&self) -> usize {
         *self.discover_count.lock()
     }
