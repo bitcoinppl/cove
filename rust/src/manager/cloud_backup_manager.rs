@@ -52,7 +52,9 @@ use self::prompt::CloudBackupPromptState;
 pub(crate) use self::store::CloudBackupStore;
 use self::wallets::wallet_metadata_change_requires_upload;
 use self::wallets::{UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader};
-use self::workers::{CloudBackupOperation, CloudBackupSupervisor, RestoreOperation};
+use self::workers::{
+    CloudBackupCleanupJob, CloudBackupOperation, CloudBackupSupervisor, RestoreOperation,
+};
 use super::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
 type LocalWalletSecret = crate::backup::model::WalletSecret;
@@ -1804,6 +1806,10 @@ impl RustCloudBackupManager {
 
     pub(crate) fn clear_pending_enable_session(&self) {
         send!(self.supervisor.clear_pending_enable_session());
+    }
+
+    pub(crate) fn enqueue_cleanup(&self, job: CloudBackupCleanupJob) {
+        send!(self.supervisor.enqueue_cleanup(job));
     }
 
     pub(crate) fn replace_pending_verification_completion(

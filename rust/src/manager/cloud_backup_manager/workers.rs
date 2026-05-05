@@ -1,3 +1,4 @@
+mod cleanup;
 mod restore;
 mod sync_health;
 mod uploads;
@@ -10,6 +11,10 @@ use cove_device::cloud_storage::CloudStorage;
 use cove_tokio::task::spawn_actor;
 use tracing::{error, warn};
 
+use self::cleanup::CloudBackupCleanupWorker;
+pub(crate) use self::cleanup::{
+    CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob,
+};
 use self::restore::CloudBackupRestoreWorker;
 pub(crate) use self::restore::{RestoreOperation, RestoredPasskeyMaterial};
 use self::sync_health::CloudBackupSyncHealthWorker;
@@ -110,6 +115,7 @@ fn verification_needs_connectivity_retry(
 pub(crate) struct CloudBackupSupervisor {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
+    cleanup: Addr<CloudBackupCleanupWorker>,
     restore: Addr<CloudBackupRestoreWorker>,
     sync_health: Addr<CloudBackupSyncHealthWorker>,
     uploads: Addr<CloudBackupUploadWorker>,
@@ -132,6 +138,7 @@ impl CloudBackupSupervisor {
     pub(crate) fn new(manager: Weak<RustCloudBackupManager>) -> Self {
         Self {
             addr: WeakAddr::default(),
+            cleanup: spawn_actor(CloudBackupCleanupWorker::new(manager.clone())),
             restore: spawn_actor(CloudBackupRestoreWorker::new(manager.clone())),
             sync_health: spawn_actor(CloudBackupSyncHealthWorker::new(manager.clone())),
             uploads: spawn_actor(CloudBackupUploadWorker::new(manager.clone())),
@@ -586,6 +593,11 @@ impl CloudBackupSupervisor {
         self.pending_enable_session = None;
         call!(self.sync_health.clear_upload_runtime_state()).await?;
         call!(self.uploads.clear_upload_runtime_state()).await?;
+        Produces::ok(())
+    }
+
+    pub async fn enqueue_cleanup(&mut self, job: CloudBackupCleanupJob) -> ActorResult<()> {
+        call!(self.cleanup.enqueue_cleanup(job)).await?;
         Produces::ok(())
     }
 }
