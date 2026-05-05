@@ -1456,9 +1456,14 @@ impl RustCloudBackupManager {
         cloud: &CloudStorageClient,
     ) -> Result<CloudBackupOtherBackupsSummary, CloudBackupError> {
         let current_namespace = self.current_namespace_id()?;
-        let current_wallet_record_ids =
-            current_namespace_wallet_record_ids(cloud, &current_namespace).await?;
-        let known_wallet_record_ids = self.known_wallet_record_ids(current_wallet_record_ids)?;
+        let current_wallet_record_ids: HashSet<_> = current_namespace_wallet_record_ids(
+            cloud,
+            &current_namespace,
+            BlockingCloudStep::DetailRefresh,
+        )
+        .await?
+        .into_iter()
+        .collect();
         let namespaces = self
             .other_backup_namespaces(cloud, &current_namespace, BlockingCloudStep::DetailRefresh)
             .await?;
@@ -1471,7 +1476,7 @@ impl RustCloudBackupManager {
                 Ok(record_ids) => {
                     let unrecovered_wallet_count = record_ids
                         .iter()
-                        .filter(|record_id| !known_wallet_record_ids.contains(*record_id))
+                        .filter(|record_id| !current_wallet_record_ids.contains(*record_id))
                         .count() as u32;
 
                     if unrecovered_wallet_count > 0 {
@@ -1487,23 +1492,6 @@ impl RustCloudBackupManager {
         }
 
         Ok(CloudBackupOtherBackupsSummary { namespace_count, wallet_count })
-    }
-
-    fn known_wallet_record_ids<I>(
-        &self,
-        current_wallet_record_ids: I,
-    ) -> Result<HashSet<String>, CloudBackupError>
-    where
-        I: IntoIterator<Item = String>,
-    {
-        let mut known_wallet_record_ids: HashSet<String> =
-            current_wallet_record_ids.into_iter().collect();
-
-        for wallet in all_local_wallets(&Database::global())? {
-            known_wallet_record_ids.insert(wallet_record_id(wallet.id.as_ref()));
-        }
-
-        Ok(known_wallet_record_ids)
     }
 
     pub(crate) async fn other_backup_namespaces(
@@ -2438,15 +2426,16 @@ fn sync_health_missing_wallet_message(missing_wallet_count: usize) -> String {
     format!("{missing_wallet_count} wallet backups are missing from cloud storage")
 }
 
-async fn current_namespace_wallet_record_ids(
+pub(crate) async fn current_namespace_wallet_record_ids(
     cloud: &CloudStorageClient,
     current_namespace: &str,
+    step: BlockingCloudStep,
 ) -> Result<Vec<String>, CloudBackupError> {
     match cloud.list_wallet_backups(current_namespace.to_owned()).await {
         Ok(record_ids) => Ok(record_ids),
         Err(CloudStorageError::NotFound(_)) => Ok(Vec::new()),
         Err(error) => Err(blocking_cloud_error(
-            BlockingCloudStep::DetailRefresh,
+            step,
             CloudBackupError::cloud_storage_context("list wallet backups", error),
         )),
     }
