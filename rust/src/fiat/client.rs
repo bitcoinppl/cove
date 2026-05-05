@@ -304,21 +304,21 @@ mod tests {
     }
 
     async fn test_get_prices() {
-        crate::database::delete_database();
+        crate::database::test_support::delete_database();
         let fiat_client = &FIAT_CLIENT;
         let fiat = fiat_client.get_or_fetch_prices().await.unwrap();
         assert!(fiat.usd > 0);
     }
 
     async fn test_get_price_for() {
-        crate::database::delete_database();
+        crate::database::test_support::delete_database();
         let fiat_client = &FIAT_CLIENT;
         let fiat = fiat_client.price_for(FiatCurrency::Usd).await.unwrap();
         assert!(fiat > 0);
     }
 
     async fn test_get_value_in_usd() {
-        crate::database::delete_database();
+        crate::database::test_support::delete_database();
         let fiat_client = &FIAT_CLIENT;
         let fiat = fiat_client.get_or_fetch_prices().await.unwrap();
         let value_in_usd = fiat_client
@@ -330,7 +330,7 @@ mod tests {
     }
 
     async fn test_get_value_in_usd_with_currency() {
-        crate::database::delete_database();
+        crate::database::test_support::delete_database();
         let fiat_client = &FIAT_CLIENT;
         let fiat = fiat_client.get_or_fetch_prices().await.unwrap();
 

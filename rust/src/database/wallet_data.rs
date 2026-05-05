@@ -252,12 +252,15 @@ impl From<ScanningInfo> for ScanState {
 }
 
 #[cfg(test)]
-impl WalletDataDb {
-    pub fn new_test(id: WalletId) -> (Self, tempfile::TempDir) {
-        super::encrypted_backend::set_test_encryption_key();
+pub(crate) mod test_support {
+    use super::*;
+
+    pub(crate) fn new_test_wallet_data_db(id: WalletId) -> (WalletDataDb, tempfile::TempDir) {
+        crate::database::encrypted_backend::tests::set_test_encryption_key();
         DATABASE_CONNECTIONS.write().remove(&id);
         let tmp = tempfile::tempdir().expect("failed to create temp dir");
-        let db = Self::new_with_db_location(id, tmp.path()).expect("failed to create test db");
+        let db =
+            WalletDataDb::new_with_db_location(id, tmp.path()).expect("failed to create test db");
         (db, tmp)
     }
 }

@@ -23,9 +23,6 @@ use self::recovery::{
 };
 use super::MigrationFailure;
 
-#[cfg(test)]
-use self::recovery::{recover_legacy_at_path, recover_main_migration, recover_wallet_migration};
-
 #[derive(Debug, thiserror::Error)]
 enum WalletMigrationError {
     #[error("wallet migration cancelled")]
@@ -423,7 +420,11 @@ mod tests {
 
     use redb::{ReadableTableMetadata as _, TableDefinition};
 
+    use super::recovery::{
+        recover_legacy_at_path, recover_main_migration, recover_wallet_migration,
+    };
     use super::*;
+    use crate::database::encrypted_backend::tests::set_test_encryption_key;
     use crate::database::{
         cloud_backup, encrypted_backend, global_cache, global_config, global_flag,
         historical_price, unsigned_transactions, wallet, wallet_data,
@@ -446,7 +447,7 @@ mod tests {
     }
 
     fn setup_test_key() {
-        encrypted_backend::set_test_encryption_key();
+        set_test_encryption_key();
     }
 
     fn create_encrypted_redb_at(path: &Path) {

@@ -48,13 +48,6 @@ impl Updater {
     }
 
     pub fn global() -> &'static Self {
-        #[cfg(test)]
-        {
-            let (sender, receiver) = flume::bounded(1000);
-            Box::leak(Box::new(receiver));
-            Self::init(sender);
-        }
-
         UPDATER.get().expect("updater is not initialized")
     }
 
@@ -69,4 +62,15 @@ impl Updater {
 pub trait FfiReconcile: Send + Sync + 'static {
     /// Essentially a callback to the frontend
     fn reconcile(&self, message: AppStateReconcileMessage);
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    pub(crate) fn init_noop_updater() {
+        let (sender, receiver) = flume::bounded(1000);
+        Box::leak(Box::new(receiver));
+        Updater::init(sender);
+    }
 }
