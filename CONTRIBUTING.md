@@ -6,6 +6,8 @@ Cove is a simple, intuitive, but powerful Bitcoin wallet. The goal is to help ne
 
 That balance matters whenever adding new functionality. Every feature must earn its place by remaining simple and intuitive. If we cannot make a feature feel simple and intuitive, we probably should not add it.
 
+Prefer direct, structurally correct fixes over temporary workarounds. A larger diff is acceptable when it is needed to solve the requested change cleanly across the affected layers.
+
 ## Prerequisites
 
 - [Rust](https://rustup.rs)
