@@ -896,9 +896,17 @@ struct MainSettingsScreen: View {
             }
 
         case .cloudBackupOnboarding:
-            SettingsCloudBackupEnableSheet(onDismiss: {
-                sheetState = .none
-            })
+            SettingsCloudBackupEnableSheet(
+                onComplete: {
+                    sheetState = .none
+                    DispatchQueue.main.async {
+                        app.pushRoute(.settings(.cloudBackup))
+                    }
+                },
+                onDismiss: {
+                    sheetState = .none
+                }
+            )
         }
     }
 
@@ -941,9 +949,22 @@ struct MainSettingsScreen: View {
 }
 
 private struct SettingsCloudBackupEnableSheet: View {
+    private enum PasskeyEnableFlow {
+        case idle
+        case choosing
+        case startedEnable
+
+        var isChoosing: Bool {
+            if case .choosing = self { return true }
+            return false
+        }
+    }
+
     @State private var manager = CloudBackupManager.shared
     @State private var isStartingEnable = false
+    @State private var passkeyEnableFlow = PasskeyEnableFlow.idle
 
+    let onComplete: () -> Void
     let onDismiss: () -> Void
 
     private var message: String? {
@@ -963,18 +984,53 @@ private struct SettingsCloudBackupEnableSheet: View {
         }()
     }
 
-    private var shouldDismissForPrompt: Bool {
-        if case .none = manager.promptIntent { return false }
+    private func shouldDismiss(for promptIntent: CloudBackupPromptIntent) -> Bool {
+        if case .none = promptIntent { return false }
         return true
     }
 
+    private func shouldSuppressEnablePasskeyChoicePrompt(
+        _ promptIntent: CloudBackupPromptIntent
+    ) -> Bool {
+        guard case .startedEnable = passkeyEnableFlow else { return false }
+        if case .passkeyChoice(.enable) = promptIntent { return true }
+        return false
+    }
+
+    private func startEnable(action: CloudBackupManagerAction) {
+        guard !isBusy else { return }
+        passkeyEnableFlow = .startedEnable
+        isStartingEnable = true
+        manager.dispatch(action: action)
+    }
+
+    private func handlePromptIntent(_ promptIntent: CloudBackupPromptIntent) {
+        if shouldSuppressEnablePasskeyChoicePrompt(promptIntent) {
+            passkeyEnableFlow = .idle
+            isStartingEnable = false
+            manager.dispatch(action: .dismissPasskeyChoicePrompt)
+            return
+        }
+
+        if shouldDismiss(for: promptIntent) {
+            onDismiss()
+        }
+    }
+
     var body: some View {
+        let showingPasskeyChoice = Binding(
+            get: { passkeyEnableFlow.isChoosing },
+            set: { isPresented in
+                guard !isPresented, case .choosing = passkeyEnableFlow else { return }
+                passkeyEnableFlow = .idle
+            }
+        )
+
         ZStack {
             CloudBackupEnableOnboardingView(
                 onEnable: {
                     guard !isBusy else { return }
-                    isStartingEnable = true
-                    manager.dispatch(action: .enableCloudBackup)
+                    passkeyEnableFlow = .choosing
                 },
                 onCancel: onDismiss,
                 message: message,
@@ -993,13 +1049,25 @@ private struct SettingsCloudBackupEnableSheet: View {
             }
 
             if case .enabled = status {
-                onDismiss()
+                onComplete()
             }
         }
-        .onChange(of: manager.promptIntent, initial: true) { _, _ in
-            if shouldDismissForPrompt {
-                onDismiss()
+        .onChange(of: manager.promptIntent, initial: true) { _, promptIntent in
+            handlePromptIntent(promptIntent)
+        }
+        .alert(
+            "Passkey Options",
+            isPresented: showingPasskeyChoice
+        ) {
+            Button("Use Existing Passkey") {
+                startEnable(action: .enableCloudBackup)
             }
+            Button("Create New Passkey") {
+                startEnable(action: .enableCloudBackupNoDiscovery)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Would you like to use an existing passkey or create a new one?")
         }
     }
 }

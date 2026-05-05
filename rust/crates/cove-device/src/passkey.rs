@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
+use minicbor::decode::{Decode, Decoder, Error as DecodeError};
 use once_cell::sync::OnceCell;
 use tracing::warn;
 
 static REF: OnceCell<PasskeyAccess> = OnceCell::new();
+const AUTH_DATA_FIELD: &str = "authData";
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum PasskeyError {
-    #[error("not supported: {0}")]
-    NotSupported(String),
+    #[error("not supported: {reason}")]
+    NotSupported { reason: PasskeyFailureReason },
 
     #[error("passkey provider does not support PRF")]
     PrfUnsupportedProvider,
@@ -17,14 +19,64 @@ pub enum PasskeyError {
     #[error("user cancelled")]
     UserCancelled,
 
-    #[error("creation failed: {0}")]
-    CreationFailed(String),
-
-    #[error("authentication failed: {0}")]
-    AuthenticationFailed(String),
+    #[error("{operation} failed: {reason}")]
+    RequestFailed { operation: PasskeyOperation, reason: PasskeyFailureReason },
 
     #[error("no credential found")]
     NoCredentialFound,
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum, thiserror::Error)]
+#[uniffi::export(Display)]
+pub enum PasskeyOperation {
+    #[error("registration")]
+    Registration,
+
+    #[error("discover assertion")]
+    DiscoverAssertion,
+
+    #[error("authenticate assertion")]
+    AuthenticateAssertion,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum, thiserror::Error)]
+#[uniffi::export(Display)]
+pub enum PasskeyFailureReason {
+    #[error("platform authorization failed")]
+    PlatformAuthorizationFailed,
+
+    #[error("invalid response")]
+    InvalidResponse,
+
+    #[error("not handled")]
+    NotHandled,
+
+    #[error("interrupted")]
+    Interrupted,
+
+    #[error("provider configuration")]
+    ProviderConfiguration,
+
+    #[error("no create option")]
+    NoCreateOption,
+
+    #[error("device not configured")]
+    DeviceNotConfigured,
+
+    #[error("unexpected credential type")]
+    UnexpectedCredentialType,
+
+    #[error("missing credential id")]
+    MissingCredentialId,
+
+    #[error("malformed response")]
+    MalformedResponse,
+
+    #[error("timed out")]
+    TimedOut,
+
+    #[error("unknown: {diagnostic_message}")]
+    Unknown { diagnostic_message: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -32,6 +84,19 @@ pub enum PasskeyCredentialPresence {
     Present,
     Missing,
     Indeterminate,
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum PasskeyRegistrationPlatform {
+    Ios,
+    Android,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct PasskeyRegistrationResult {
+    pub credential_id: Vec<u8>,
+    pub provider_aaguid: String,
+    pub registered_platform: PasskeyRegistrationPlatform,
 }
 
 /// Result from discovering a synced passkey during restore
@@ -51,7 +116,7 @@ pub trait PasskeyProvider: Send + Sync + std::fmt::Debug + 'static {
         rp_id: String,
         user_id: Vec<u8>,
         challenge: Vec<u8>,
-    ) -> Result<Vec<u8>, PasskeyError>;
+    ) -> Result<PasskeyRegistrationResult, PasskeyError>;
 
     /// Authenticate with a known credential_id (enable flow, re-enable)
     fn authenticate_with_prf(
@@ -123,7 +188,7 @@ impl PasskeyAccess {
         rp_id: String,
         user_id: Vec<u8>,
         challenge: Vec<u8>,
-    ) -> Result<Vec<u8>, PasskeyError> {
+    ) -> Result<PasskeyRegistrationResult, PasskeyError> {
         self.0.create_passkey(rp_id, user_id, challenge)
     }
 
@@ -152,5 +217,166 @@ impl PasskeyAccess {
         credential_id: Vec<u8>,
     ) -> PasskeyCredentialPresence {
         self.0.check_passkey_presence(rp_id, credential_id)
+    }
+}
+
+#[uniffi::export]
+pub fn passkey_aaguid_from_attestation_object(
+    attestation_object: Vec<u8>,
+) -> Result<String, PasskeyError> {
+    extract_aaguid_from_attestation_object(&attestation_object).map_err(|reason| {
+        PasskeyError::RequestFailed { operation: PasskeyOperation::Registration, reason }
+    })
+}
+
+fn extract_aaguid_from_attestation_object(
+    attestation_object: &[u8],
+) -> Result<String, PasskeyFailureReason> {
+    let auth_data = attestation_auth_data(attestation_object)?;
+    extract_aaguid_from_auth_data(auth_data)
+}
+
+fn attestation_auth_data(attestation_object: &[u8]) -> Result<&[u8], PasskeyFailureReason> {
+    let mut decoder = Decoder::new(attestation_object);
+    let attestation_object = AttestationObject::decode(&mut decoder, &mut ())
+        .map_err(|_| PasskeyFailureReason::MalformedResponse)?;
+
+    Ok(attestation_object.auth_data)
+}
+
+struct AttestationObject<'a> {
+    auth_data: &'a [u8],
+}
+
+impl<'b, C> Decode<'b, C> for AttestationObject<'b> {
+    fn decode(decoder: &mut Decoder<'b>, _: &mut C) -> Result<Self, DecodeError> {
+        let Some(map_len) = decoder.map()? else {
+            return Err(DecodeError::message("indefinite attestation object"));
+        };
+
+        let mut auth_data = None;
+        for _ in 0..map_len {
+            match AttestationObjectField::from_key(decoder.str()?) {
+                AttestationObjectField::AuthData => {
+                    if auth_data.is_some() {
+                        return Err(DecodeError::message("duplicate authData"));
+                    }
+
+                    auth_data = Some(decoder.bytes()?);
+                }
+                AttestationObjectField::Unknown => decoder.skip()?,
+            }
+        }
+
+        let Some(auth_data) = auth_data else {
+            return Err(DecodeError::message("missing authData"));
+        };
+
+        Ok(Self { auth_data })
+    }
+}
+
+enum AttestationObjectField {
+    AuthData,
+    Unknown,
+}
+
+impl AttestationObjectField {
+    fn from_key(key: &str) -> Self {
+        match key {
+            AUTH_DATA_FIELD => Self::AuthData,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+fn extract_aaguid_from_auth_data(auth_data: &[u8]) -> Result<String, PasskeyFailureReason> {
+    const FLAGS_INDEX: usize = 32;
+    const ATTESTED_CREDENTIAL_DATA_FLAG: u8 = 0x40;
+    const AAGUID_START: usize = 37;
+    const AAGUID_END: usize = AAGUID_START + 16;
+
+    if auth_data.len() < AAGUID_END {
+        return Err(PasskeyFailureReason::MalformedResponse);
+    }
+
+    if auth_data[FLAGS_INDEX] & ATTESTED_CREDENTIAL_DATA_FLAG == 0 {
+        return Err(PasskeyFailureReason::InvalidResponse);
+    }
+
+    Ok(format_aaguid(&auth_data[AAGUID_START..AAGUID_END]))
+}
+
+fn format_aaguid(aaguid: &[u8]) -> String {
+    format!(
+        "{}-{}-{}-{}-{}",
+        hex::encode(&aaguid[0..4]),
+        hex::encode(&aaguid[4..6]),
+        hex::encode(&aaguid[6..8]),
+        hex::encode(&aaguid[8..10]),
+        hex::encode(&aaguid[10..16])
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn attestation_object(auth_data: &[u8]) -> Vec<u8> {
+        let mut cbor = Vec::new();
+        let mut encoder = minicbor::Encoder::new(&mut cbor);
+        encoder.map(3).unwrap();
+        encoder.str("fmt").unwrap();
+        encoder.str("none").unwrap();
+        encoder.str(AUTH_DATA_FIELD).unwrap();
+        encoder.bytes(auth_data).unwrap();
+        encoder.str("attStmt").unwrap();
+        encoder.map(0).unwrap();
+
+        cbor
+    }
+
+    #[test]
+    fn extracts_auth_data_from_attestation_object() {
+        let auth_data = [1, 2, 3, 4];
+        let attestation_object = attestation_object(&auth_data);
+
+        assert_eq!(attestation_auth_data(&attestation_object).unwrap(), auth_data);
+    }
+
+    #[test]
+    fn rejects_attestation_object_without_auth_data() {
+        let mut cbor = Vec::new();
+        let mut encoder = minicbor::Encoder::new(&mut cbor);
+        encoder.map(1).unwrap();
+        encoder.str("fmt").unwrap();
+        encoder.str("none").unwrap();
+
+        assert_eq!(attestation_auth_data(&cbor), Err(PasskeyFailureReason::MalformedResponse));
+    }
+
+    #[test]
+    fn extracts_aaguid_from_auth_data() {
+        let mut auth_data = vec![0u8; 37 + 16];
+        auth_data[32] = 0x40;
+        auth_data[37..53].copy_from_slice(&[
+            0xea, 0x9b, 0x8d, 0x66, 0x4d, 0x01, 0x1d, 0x21, 0x3c, 0xe4, 0xb6, 0xb4, 0x8c, 0xb5,
+            0x75, 0xd4,
+        ]);
+
+        assert_eq!(
+            extract_aaguid_from_auth_data(&auth_data).unwrap(),
+            "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4"
+        );
+    }
+
+    #[test]
+    fn rejects_auth_data_without_attested_credential_data() {
+        let auth_data = vec![0u8; 37 + 16];
+
+        assert_eq!(
+            extract_aaguid_from_auth_data(&auth_data),
+            Err(PasskeyFailureReason::InvalidResponse)
+        );
     }
 }

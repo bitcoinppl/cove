@@ -29,7 +29,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Warning
@@ -249,7 +248,7 @@ internal fun OnboardingBackupWalletView(
                 title = "Enable Cloud Backup",
                 subtitle = "Encrypt and store a backup in Google Drive protected by your passkey",
                 actionTitle = if (cloudBackupEnabled) "Enabled" else "Enable",
-                icon = Icons.Default.Lock,
+                icon = Icons.Default.CloudDownload,
                 isComplete = cloudBackupEnabled,
                 onClick = onEnableCloudBackup,
                 modifier = Modifier.testTag("onboarding.cloudBackup.prompt"),
@@ -292,11 +291,28 @@ internal fun OnboardingSecretWordsView(
 
     OnboardingBackground {
         Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 24.dp)
+                        .padding(top = 20.dp),
+                horizontalArrangement = Arrangement.Start,
+            ) {
+                Text(
+                    text = "Back",
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable(onClick = onBack),
+                )
+            }
+
             Column(
                 modifier =
                     Modifier
                         .weight(1f)
-                        .statusBarsPadding()
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 24.dp)
                         .padding(top = 32.dp),
@@ -343,13 +359,7 @@ internal fun OnboardingSecretWordsView(
                         .navigationBarsPadding()
                         .padding(horizontal = 24.dp)
                         .padding(top = 12.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                OnboardingSecondaryButton(
-                    text = "Back",
-                    onClick = onBack,
-                )
-
                 OnboardingPrimaryButton(
                     text = "I Saved These Words",
                     onClick = onSaved,
@@ -449,7 +459,7 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
         )
     } else {
         OnboardingPromptScreen(
-            icon = Icons.Default.Lock,
+            icon = Icons.Default.CloudDownload,
             title = "Protect this wallet with Cloud Backup?",
             subtitle = "Cloud Backup makes it easier to recover this wallet if you lose this device.",
         ) {
@@ -508,7 +518,7 @@ private fun OnboardingHardwareImportCloudBackupStepView(
         )
     } else {
         OnboardingPromptScreen(
-            icon = Icons.Default.Lock,
+            icon = Icons.Default.CloudDownload,
             title = "Protect this hardware wallet with Cloud Backup?",
             subtitle = "Cloud Backup makes it easier to restore this wallet's configuration and labels if you lose this device.",
         ) {
@@ -576,7 +586,7 @@ private fun OnboardingCloudBackupDetailsStepView(
     val onboardingMessage =
         when (val status = backupManager.status) {
             CloudBackupStatus.UnsupportedPasskeyProvider ->
-                "This passkey provider did not confirm support for Cloud Backup. Try another supported provider."
+                "This passkey provider did not confirm support for Cloud Backup. Try another supported provider such as 1Password or Bitwarden."
             is CloudBackupStatus.Error -> status.v1
             else -> null
         }
@@ -700,7 +710,7 @@ private fun CloudBackupEnableOnboardingView(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Cloud Backup is end-to-end encrypted before it leaves your device and stored in Google Drive app data, secured by a passkey that only you control.",
+                        text = "Cloud Backup is end-to-end encrypted before it leaves your device and stored in Google Drive, secured by a passkey that only you control.",
                         color = OnboardingTextSecondary,
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                     )
@@ -740,7 +750,7 @@ private fun CloudBackupEnableOnboardingView(
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = "Secured with passkey + Google Drive",
+                                    text = "Secured with Passkey + Google Drive",
                                     color = CoveColor.coveLightGray.copy(alpha = 0.75f),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
@@ -751,9 +761,9 @@ private fun CloudBackupEnableOnboardingView(
                             text =
                                 when (context) {
                                     CloudBackupEnableOnboardingContext.STANDARD ->
-                                        "Your wallet backup is end-to-end encrypted before upload and stored in Google Drive app data. Only your passkey can decrypt it, so both are needed to restore your wallets."
+                                        "Your wallet backup is end-to-end encrypted before upload and stored in Google Drive. Only your passkey can decrypt it, so both are needed to restore your wallets."
                                     CloudBackupEnableOnboardingContext.HARDWARE_IMPORT ->
-                                        "This backs up your imported hardware wallet configuration and labels in Google Drive app data, and it also enables backup for compatible wallets you create in Cove later. Your hardware wallet seed and private keys are not backed up by Cove."
+                                        "This backs up your imported hardware wallet configuration and labels in Google Drive, and it also enables backup for compatible wallets you create in Cove later. Your hardware wallet seed and private keys are not backed up by Cove."
                                 },
                             color = CoveColor.coveLightGray.copy(alpha = 0.60f),
                             style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
@@ -1060,11 +1070,13 @@ internal fun OnboardingExchangeFundingView(
     var addressRaw by remember { mutableStateOf<String?>(null) }
     var addressText by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var didCopyAddress by remember { mutableStateOf(false) }
 
     LaunchedEffect(walletId) {
         addressRaw = null
         addressText = null
         errorMessage = null
+        didCopyAddress = false
 
         if (walletId == null) {
             errorMessage = "Unable to load a deposit address for this wallet."
@@ -1088,64 +1100,55 @@ internal fun OnboardingExchangeFundingView(
     }
 
     OnboardingBackground {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 32.dp),
-        ) {
-            Text(
-                text = "Your wallet is ready to fund",
-                color = Color.White,
-                fontSize = 34.sp,
-                lineHeight = 38.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+        Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp)
+                        .padding(top = 32.dp),
+            ) {
+                Text(
+                    text = "Your wallet is ready to fund",
+                    color = Color.White,
+                    fontSize = 34.sp,
+                    lineHeight = 38.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
 
-            Spacer(modifier = Modifier.size(12.dp))
+                Spacer(modifier = Modifier.size(12.dp))
 
-            Text(
-                text = "Move your Bitcoin off the exchange and into the wallet you now control.",
-                color = OnboardingTextSecondary,
-                style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
-            )
+                Text(
+                    text = "Move your Bitcoin off the exchange and into the wallet you now control.",
+                    color = OnboardingTextSecondary,
+                    style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+                )
 
-            Spacer(modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.size(24.dp))
 
-            when {
-                errorMessage != null -> {
-                    OnboardingInlineMessage(text = errorMessage!!)
-                }
-                addressRaw != null && addressText != null -> {
-                    val qrBitmap =
-                        remember(addressRaw) {
-                            QrCodeGenerator.generate(
-                                text = addressRaw!!,
-                                size = 512,
-                                errorCorrectionLevel = ErrorCorrectionLevel.L,
-                            )
-                        }
+                when {
+                    errorMessage != null -> {
+                        OnboardingInlineMessage(text = errorMessage!!)
+                    }
+                    addressRaw != null && addressText != null -> {
+                        val qrBitmap =
+                            remember(addressRaw) {
+                                QrCodeGenerator.generate(
+                                    text = addressRaw!!,
+                                    size = 512,
+                                    errorCorrectionLevel = ErrorCorrectionLevel.L,
+                                )
+                            }
 
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = OnboardingCardFill,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, OnboardingCardBorder),
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(18.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(18.dp),
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                             Box(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(16.dp))
+                                        .clip(RoundedCornerShape(18.dp))
                                         .background(Color.White)
-                                        .padding(14.dp),
+                                        .padding(12.dp),
                             ) {
                                 Image(
                                     bitmap = qrBitmap.asImageBitmap(),
@@ -1155,7 +1158,15 @@ internal fun OnboardingExchangeFundingView(
                                 )
                             }
 
-                            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .background(OnboardingCardFill, RoundedCornerShape(16.dp))
+                                        .border(1.dp, OnboardingCardBorder, RoundedCornerShape(16.dp))
+                                        .padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
                                 Text(
                                     text = "Deposit address",
                                     color = CoveColor.coveLightGray.copy(alpha = 0.72f),
@@ -1170,35 +1181,39 @@ internal fun OnboardingExchangeFundingView(
                             }
 
                             OnboardingSecondaryButton(
-                                text = "Copy Address",
+                                text = if (didCopyAddress) "Copied" else "Copy Address",
                                 onClick = {
                                     clipboard.setPrimaryClip(ClipData.newPlainText("Bitcoin Address", addressRaw!!))
+                                    didCopyAddress = true
                                 },
                             )
                         }
                     }
-                }
-                else -> {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        CircularProgressIndicator(color = Color.White)
-                        Text(
-                            text = "Loading deposit address",
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                    else -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            CircularProgressIndicator(color = Color.White)
+                            Text(
+                                text = "Loading deposit address",
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.size(24.dp))
-
             OnboardingPrimaryButton(
                 text = "Continue",
                 onClick = onContinue,
+                modifier =
+                    Modifier
+                        .padding(horizontal = 24.dp)
+                        .padding(top = 14.dp, bottom = 24.dp)
+                        .navigationBarsPadding(),
             )
         }
     }

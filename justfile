@@ -10,7 +10,7 @@ list:
 # Run an xtask command
 [group('utils')]
 xtask *args:
-    cd rust && cargo build --package xtask -q && ./target/debug/xtask {{args}}
+    cd rust && cargo xtask {{args}}
 
 # Sign a PSBT and output all formats (base64, hex, binary, bbqr-gif, ur-gif)
 # Requires MNEMONIC env var (set in .envrc or pass directly)
@@ -114,6 +114,13 @@ build-ios-release:
 
 [private]
 alias bir := build-ios-release
+
+# Bump iOS build, build release bindings, then upload to TestFlight
+[group('build')]
+testflight:
+    just bump build ios
+    just bir
+    just xtask upload-testflight
 
 # Build iOS debug for device
 [group('build')]

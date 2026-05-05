@@ -51,6 +51,7 @@ internal fun OnboardingContainer(
             OnboardingRestoreOfferView(
                 warningMessage = restoreWarningMessage,
                 errorMessage = manager.state.errorMessage,
+                providerHint = manager.state.cloudRestoreProviderHint,
                 onRestore = { manager.dispatch(OnboardingAction.StartRestore) },
                 onSkip = { manager.dispatch(OnboardingAction.SkipRestore) },
             )
@@ -115,16 +116,6 @@ internal fun OnboardingContainer(
                 onBack = { manager.dispatch(OnboardingAction.Back) },
             )
 
-        OnboardingStep.SOFTWARE_CHOICE ->
-            OnboardingSoftwareChoiceScreen(
-                errorMessage = manager.state.errorMessage,
-                onRestoreFromCoveBackup = onOpenCloudRestore,
-                onSelectSoftwareAction = { selection ->
-                    manager.dispatch(OnboardingAction.SelectSoftwareAction(selection))
-                },
-                onBack = { manager.dispatch(OnboardingAction.Back) },
-            )
-
         OnboardingStep.CREATING_WALLET ->
             OnboardingCreatingWalletView(
                 onContinue = { manager.dispatch(OnboardingAction.ContinueWalletCreation) },
@@ -172,9 +163,11 @@ internal fun OnboardingContainer(
 
         OnboardingStep.SOFTWARE_IMPORT ->
             OnboardingSoftwareImportFlowView(
+                errorMessage = manager.state.errorMessage,
                 onImported = { walletId ->
                     manager.dispatch(OnboardingAction.SoftwareImportCompleted(walletId))
                 },
+                onCreateWallet = { manager.dispatch(OnboardingAction.CreateSoftwareWallet) },
                 onBack = { manager.dispatch(OnboardingAction.Back) },
             )
     }

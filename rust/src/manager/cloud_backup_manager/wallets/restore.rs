@@ -9,10 +9,10 @@ use cove_util::ResultExt as _;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
-use super::super::{CloudBackupError, LocalWalletMode, LocalWalletSecret};
 use super::payload::{convert_cloud_secret, descriptor_pair_from_cloud};
 use super::{DownloadedWalletBackup, RemoteWalletBackupSummary, decode_cloud_labels_jsonl};
 use crate::backup::import::{LabelRestoreBehavior, LabelRestoreWarning, restore_wallet_labels};
+use crate::manager::cloud_backup_manager::{CloudBackupError, LocalWalletMode, LocalWalletSecret};
 use crate::wallet::fingerprint::Fingerprint;
 use crate::wallet::metadata::WalletMetadata;
 

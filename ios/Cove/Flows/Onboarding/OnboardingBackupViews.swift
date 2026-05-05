@@ -1,4 +1,5 @@
 import CoreImage.CIFilterBuiltins
+import MijickPopups
 import SwiftUI
 import UIKit
 
@@ -361,7 +362,7 @@ private struct OnboardingSoftwareImportCloudBackupChoiceView: View {
     }
 }
 
-private struct OnboardingHardwareImportCloudBackupChoiceView: View {
+struct OnboardingHardwareImportCloudBackupChoiceView: View {
     let onEnable: () -> Void
     let onSkip: () -> Void
 
@@ -423,6 +424,8 @@ struct OnboardingExchangeFundingView: View {
     @State private var walletManager: WalletManager?
     @State private var addressInfo: AddressInfo?
     @State private var errorMessage: String?
+    @State private var didCopyAddress = false
+    @State private var copyResetTask: Task<Void, Never>?
     private let pasteboard = UIPasteboard.general
 
     var body: some View {
@@ -468,8 +471,10 @@ struct OnboardingExchangeFundingView: View {
                                     .stroke(Color.coveLightGray.opacity(0.15), lineWidth: 1)
                             )
 
-                            Button("Copy Address") {
-                                pasteboard.string = addressInfo.addressUnformatted()
+                            Button {
+                                copyAddress(addressInfo)
+                            } label: {
+                                Text(didCopyAddress ? "Copied" : "Copy Address")
                             }
                             .buttonStyle(OnboardingSecondaryButtonStyle())
                         }
@@ -520,6 +525,30 @@ struct OnboardingExchangeFundingView: View {
         } catch {
             await MainActor.run {
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func copyAddress(_ addressInfo: AddressInfo) {
+        pasteboard.string = addressInfo.addressUnformatted()
+
+        withAnimation {
+            didCopyAddress = true
+        }
+
+        Task { @MainActor in
+            await FloaterPopup(text: "Address Copied")
+                .dismissAfter(2)
+                .present()
+        }
+
+        copyResetTask?.cancel()
+        copyResetTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+
+            withAnimation {
+                didCopyAddress = false
             }
         }
     }

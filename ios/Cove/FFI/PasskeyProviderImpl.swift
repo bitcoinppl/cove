@@ -3,6 +3,34 @@ import AuthenticationServices
 @_exported import CoveCore
 import Foundation
 
+private enum PasskeyOperationContext: Equatable {
+    case registration
+    case discoverAssertion
+    case authenticateAssertion
+
+    var logDescription: String {
+        switch self {
+        case .registration:
+            "registration"
+        case .discoverAssertion:
+            "discover assertion"
+        case .authenticateAssertion:
+            "authenticate assertion"
+        }
+    }
+
+    var operation: PasskeyOperation {
+        switch self {
+        case .registration:
+            .registration
+        case .discoverAssertion:
+            .discoverAssertion
+        case .authenticateAssertion:
+            .authenticateAssertion
+        }
+    }
+}
+
 final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
     private enum RegistrationPrfSupportState {
         case confirmedSupported
@@ -33,7 +61,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         true
     }
 
-    func createPasskey(rpId: String, userId: Data, challenge: Data) throws -> Data {
+    func createPasskey(rpId: String, userId: Data, challenge: Data) throws -> PasskeyRegistrationResult {
         precondition(!Thread.isMainThread, "createPasskey must not be called from the main thread")
 
         let registration = try performRegistrationRequest(
@@ -42,7 +70,22 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             challenge: challenge
         )
         _ = try validateRegistrationPrfMetadata(registration)
-        return registration.credentialID
+
+        let providerAaguid: String
+        if let attestationObject = registration.rawAttestationObject {
+            providerAaguid = try passkeyAaguidFromAttestationObject(
+                attestationObject: attestationObject
+            )
+        } else {
+            Log.warn("[PASSKEY] registration attestation object missing, using iOS fallback AAGUID")
+            providerAaguid = "00000000-0000-0000-0000-000000000000"
+        }
+
+        return PasskeyRegistrationResult(
+            credentialId: registration.credentialID,
+            providerAaguid: providerAaguid,
+            registeredPlatform: .ios
+        )
     }
 
     func authenticateWithPrf(
@@ -58,7 +101,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             credentialId: credentialId,
             prfSalt: prfSalt,
             challenge: challenge,
-            context: "authenticate"
+            context: .authenticateAssertion
         )
         return prfOutput
     }
@@ -129,7 +172,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             credentialId: nil,
             prfSalt: prfSalt,
             challenge: challenge,
-            context: "discover"
+            context: .discoverAssertion
         )
         return DiscoveredPasskeyResult(
             prfOutput: prfOutput,
@@ -142,7 +185,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         userId: Data,
         challenge: Data
     ) throws -> ASAuthorizationPlatformPublicKeyCredentialRegistration {
-        let delegate = PasskeyDelegate(context: "registration")
+        let delegate = PasskeyDelegate(context: .registration)
         let controller: ASAuthorizationController
 
         controller = DispatchQueue.main.sync {
@@ -172,7 +215,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             let registration =
             credential as? ASAuthorizationPlatformPublicKeyCredentialRegistration
         else {
-            throw PasskeyError.CreationFailed("unexpected credential type")
+            throw PasskeyError.RequestFailed(
+                operation: .registration,
+                reason: .unexpectedCredentialType
+            )
         }
 
         Log.info("[PASSKEY] registration request succeeded credential_len=\(registration.credentialID.count)")
@@ -202,7 +248,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         credentialId: Data?,
         prfSalt: Data,
         challenge: Data,
-        context: String
+        context: PasskeyOperationContext
     ) throws -> (Data, ASAuthorizationPlatformPublicKeyCredentialAssertion) {
         // avoid an automatic second assertion here because targeted auth retries
         // can cause the native sign-in sheet to disappear and reappear
@@ -219,7 +265,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             return (prfOutput, assertion)
         } catch let error as PrfExtractionError {
             Log.warn(
-                "[PASSKEY] \(context) could not obtain usable PRF output: \(error.logDescription)"
+                "[PASSKEY] \(context.logDescription) could not obtain usable PRF output: \(error.logDescription)"
             )
             throw PasskeyError.PrfUnsupportedProvider
         }
@@ -230,14 +276,14 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         credentialId: Data?,
         prfSalt: Data,
         challenge: Data,
-        context: String
+        context: PasskeyOperationContext
     ) throws -> ASAuthorizationPlatformPublicKeyCredentialAssertion {
-        let delegate = PasskeyDelegate(context: "\(context) assertion")
+        let delegate = PasskeyDelegate(context: context)
         let controller: ASAuthorizationController
 
         controller = DispatchQueue.main.sync {
             Log.info(
-                "[PASSKEY] \(context) assertion request start rpId=\(rpId) targeted=\(credentialId != nil)"
+                "[PASSKEY] \(context.logDescription) request start rpId=\(rpId) targeted=\(credentialId != nil)"
             )
             let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
                 relyingPartyIdentifier: rpId
@@ -276,19 +322,22 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             if credentialId == nil {
                 throw PasskeyError.NoCredentialFound
             }
-            throw PasskeyError.AuthenticationFailed("unexpected credential type")
+            throw PasskeyError.RequestFailed(
+                operation: context.operation,
+                reason: .unexpectedCredentialType
+            )
         }
 
-        Log.info("[PASSKEY] \(context) assertion request succeeded credential_len=\(assertion.credentialID.count)")
+        Log.info("[PASSKEY] \(context.logDescription) request succeeded credential_len=\(assertion.credentialID.count)")
         return assertion
     }
 
     private func extractPrfOutput(
         from assertion: ASAuthorizationPlatformPublicKeyCredentialAssertion,
-        context: String
+        context: PasskeyOperationContext
     ) throws -> Data {
         if assertion.prf == nil {
-            Log.error("[PASSKEY] \(context) assertion PRF output is missing")
+            Log.error("[PASSKEY] \(context.logDescription) PRF output is missing")
         }
 
         guard let prfKey = assertion.prf?.first else {
@@ -343,19 +392,27 @@ private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
 {
     private let semaphore = DispatchSemaphore(value: 0)
     private var result: Result<ASAuthorizationCredential, Error>?
-    private let context: String
+    private let context: PasskeyOperationContext
 
-    init(context: String) {
+    init(context: PasskeyOperationContext) {
         self.context = context
     }
 
     func waitForResult() throws -> ASAuthorizationCredential {
         let status = semaphore.wait(timeout: .now() + 120)
         if status == .timedOut {
-            Log.error("[PASSKEY] \(context) timed out after 120s")
-            throw PasskeyError.AuthenticationFailed("passkey operation timed out after 120s")
+            Log.error("[PASSKEY] \(context.logDescription) timed out after 120s")
+            throw PasskeyError.RequestFailed(
+                operation: context.operation,
+                reason: .timedOut
+            )
         }
-        guard let result else { throw PasskeyError.AuthenticationFailed("no result received from delegate") }
+        guard let result else {
+            throw PasskeyError.RequestFailed(
+                operation: context.operation,
+                reason: .unknown(diagnosticMessage: "no result received from delegate")
+            )
+        }
         return try result.get()
     }
 
@@ -367,7 +424,7 @@ private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         controller _: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-        Log.info("[PASSKEY] \(context) completed credential_type=\(type(of: authorization.credential))")
+        Log.info("[PASSKEY] \(context.logDescription) completed credential_type=\(type(of: authorization.credential))")
         result = .success(authorization.credential)
         semaphore.signal()
     }
@@ -381,24 +438,61 @@ private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
             switch authError.code {
             case .canceled:
                 Log.info(
-                    "[PASSKEY] \(context) cancelled code=\(authError.code.rawValue) description=\(error.localizedDescription)"
+                    "[PASSKEY] \(context.logDescription) cancelled code=\(authError.code.rawValue) description=\(error.localizedDescription)"
                 )
                 result = .failure(PasskeyError.UserCancelled)
-            default:
+            case .failed where context == .discoverAssertion:
                 Log.warn(
-                    "[PASSKEY] \(context) failed code=\(authError.code.rawValue) description=\(error.localizedDescription)"
+                    "[PASSKEY] \(context.logDescription) platform authorization failed code=\(authError.code.rawValue) description=\(error.localizedDescription)"
                 )
                 result = .failure(
-                    PasskeyError.AuthenticationFailed(error.localizedDescription)
+                    PasskeyError.RequestFailed(
+                        operation: context.operation,
+                        reason: .platformAuthorizationFailed
+                    )
+                )
+            default:
+                Log.warn(
+                    "[PASSKEY] \(context.logDescription) failed code=\(authError.code.rawValue) description=\(error.localizedDescription)"
+                )
+                result = .failure(
+                    PasskeyError.RequestFailed(
+                        operation: context.operation,
+                        reason: passkeyFailureReason(
+                            for: authError.code,
+                            diagnosticMessage: error.localizedDescription
+                        )
+                    )
                 )
             }
         case nil:
-            Log.warn("[PASSKEY] \(context) failed with non-auth error: \(error.localizedDescription)")
+            Log.warn("[PASSKEY] \(context.logDescription) failed with non-auth error: \(error.localizedDescription)")
             result = .failure(
-                PasskeyError.AuthenticationFailed(error.localizedDescription)
+                PasskeyError.RequestFailed(
+                    operation: context.operation,
+                    reason: .unknown(diagnosticMessage: error.localizedDescription)
+                )
             )
         }
         semaphore.signal()
+    }
+}
+
+private func passkeyFailureReason(
+    for code: ASAuthorizationError.Code,
+    diagnosticMessage: String
+) -> PasskeyFailureReason {
+    switch code {
+    case .failed:
+        .unknown(diagnosticMessage: diagnosticMessage)
+    case .invalidResponse:
+        .invalidResponse
+    case .notHandled:
+        .notHandled
+    case .notInteractive:
+        .notHandled
+    default:
+        .unknown(diagnosticMessage: diagnosticMessage)
     }
 }
 

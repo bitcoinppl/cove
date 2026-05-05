@@ -22,6 +22,8 @@ pub(super) struct UnpersistedPrfKey {
     pub(super) prf_key: [u8; 32],
     pub(super) prf_salt: [u8; 32],
     pub(super) credential_id: Vec<u8>,
+    #[zeroize(skip)]
+    pub(super) provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
 }
 
 impl UnpersistedPrfKey {
@@ -30,6 +32,7 @@ impl UnpersistedPrfKey {
             prf_key: self.prf_key,
             prf_salt: self.prf_salt,
             credential_id: self.credential_id.clone(),
+            provider_hint: self.provider_hint.clone(),
         }
     }
 

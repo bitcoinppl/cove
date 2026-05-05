@@ -28,6 +28,7 @@ pub use bdk::{
 };
 
 pub use redb::{
-    WalletMigration, count_redb_wallets_needing_migration, main_database_needs_migration,
-    migrate_main_database_if_needed, recover_interrupted_migrations,
+    WalletMigration, count_redb_wallets_needing_migration, known_wallet_ids_from_main_database,
+    main_database_needs_migration, migrate_main_database_if_needed,
+    recover_interrupted_main_migration, recover_interrupted_wallet_migrations,
 };

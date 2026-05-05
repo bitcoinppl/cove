@@ -1,14 +1,12 @@
-use cove_cspp::CsppStore as _;
 use cove_device::cloud_storage::CloudStorage;
-use cove_device::keychain::{CSPP_PRF_SALT_KEY, Keychain};
+use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 
-use super::super::cloud_inventory::CloudWalletInventory;
-use super::super::wallets::count_all_wallets;
-use super::{
-    CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager, downgrade_cloud_backup_state,
-};
+use super::{CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager};
 use crate::database::Database;
+use crate::manager::cloud_backup_manager::CloudBackupKeychain;
+use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
+use crate::manager::cloud_backup_manager::wallets::count_all_wallets;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BackupIntegrityIssue {
@@ -55,14 +53,15 @@ impl RustCloudBackupManager {
         let mut issues = Vec::new();
 
         let keychain = Keychain::global();
+        let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
         let cspp = cove_cspp::Cspp::new(keychain.clone());
         if !cspp.has_master_key() {
             issues.push(BackupIntegrityIssue::MasterKeyMissing);
         }
 
         let mut downgrade = None;
-        let has_prf_salt = keychain.get(CSPP_PRF_SALT_KEY.into()).is_some();
-        let stored_credential_id = keychain.load_cspp_credential_id();
+        let has_prf_salt = cloud_keychain.has_prf_salt();
+        let stored_credential_id = cloud_keychain.load_credential_id();
 
         // keep launch integrity checks non-interactive so app startup never presents passkey UI
         if stored_credential_id.is_none() {
@@ -236,7 +235,7 @@ impl RustCloudBackupManager {
         info!("Cloud backup integrity: applying downgrade={downgrade:?}");
 
         let current = RustCloudBackupManager::load_persisted_state();
-        let Some(new_state) = downgrade_cloud_backup_state(&current, downgrade) else {
+        let Some(new_state) = downgrade.apply_to(&current) else {
             return;
         };
 

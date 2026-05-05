@@ -14,12 +14,12 @@ use cove_util::ResultExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
-use super::super::ops::load_master_key_for_cloud_action;
-use super::super::{CloudBackupError, RustCloudBackupManager};
 use super::{
     PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, all_local_wallets,
     persist_enabled_cloud_backup_state, prepare_wallet_backup,
 };
+use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
+use crate::manager::cloud_backup_manager::{CloudBackupError, RustCloudBackupManager};
 
 const STALE_UPLOADING_RETRY_THRESHOLD_SECS: u64 = 60;
 
@@ -254,7 +254,7 @@ impl RustCloudBackupManager {
         error: CloudStorageError,
     ) -> Result<(), CloudBackupError> {
         let issue = Self::cloud_storage_issue(&error);
-        let retryable = is_upload_failure_retryable(&error);
+        let retryable = Self::is_upload_failure_retryable(&error);
         let persisted_issue = Self::cloud_blob_failure_issue(issue);
         let cloud_error = CloudBackupError::CloudStorage(error);
         if Self::is_connectivity_related_issue(issue) {
@@ -291,7 +291,7 @@ impl RustCloudBackupManager {
         self.mark_blob_failed_if_current(
             current_state,
             revision_hash,
-            is_upload_preparation_failure_retryable(&error),
+            Self::is_upload_preparation_failure_retryable(&error),
             Self::cloud_blob_failure_issue(issue),
             error.to_string(),
         )?;
@@ -306,7 +306,7 @@ impl RustCloudBackupManager {
             return Ok(Some(current_state));
         };
 
-        if !is_stale_uploading_state(uploading_state.started_at) {
+        if !Self::is_stale_uploading_state(uploading_state.started_at) {
             return Ok(Some(current_state));
         }
 
@@ -413,11 +413,42 @@ impl RustCloudBackupManager {
             uploaded_at,
         )
     }
-}
 
-fn is_stale_uploading_state(started_at: u64) -> bool {
-    let now: u64 = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
-    now.saturating_sub(started_at) >= STALE_UPLOADING_RETRY_THRESHOLD_SECS
+    fn is_stale_uploading_state(started_at: u64) -> bool {
+        let now: u64 = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        now.saturating_sub(started_at) >= STALE_UPLOADING_RETRY_THRESHOLD_SECS
+    }
+
+    fn is_upload_preparation_failure_retryable(error: &CloudBackupError) -> bool {
+        match error {
+            CloudBackupError::Cloud(_)
+            | CloudBackupError::CloudStorage(_)
+            | CloudBackupError::CloudStorageContext { .. }
+            | CloudBackupError::Offline(_)
+            | CloudBackupError::Deferred(_) => true,
+            CloudBackupError::NotSupported(_)
+            | CloudBackupError::UnsupportedPasskeyProvider
+            | CloudBackupError::RecoveryRequired(_)
+            | CloudBackupError::Passkey(_)
+            | CloudBackupError::Crypto(_)
+            | CloudBackupError::Internal(_)
+            | CloudBackupError::Compatibility(_)
+            | CloudBackupError::PasskeyMismatch
+            | CloudBackupError::PasskeyDiscoveryCancelled
+            | CloudBackupError::Cancelled => false,
+        }
+    }
+
+    fn is_upload_failure_retryable(error: &CloudStorageError) -> bool {
+        matches!(
+            error,
+            CloudStorageError::AuthorizationRequired(_)
+                | CloudStorageError::Offline(_)
+                | CloudStorageError::NotAvailable(_)
+                | CloudStorageError::UploadFailed(_)
+                | CloudStorageError::DownloadFailed(_)
+        )
+    }
 }
 
 pub async fn upload_all_wallets(
@@ -444,35 +475,4 @@ pub async fn upload_all_wallets(
     }
 
     Ok(uploaded_wallets)
-}
-
-fn is_upload_preparation_failure_retryable(error: &CloudBackupError) -> bool {
-    match error {
-        CloudBackupError::Cloud(_)
-        | CloudBackupError::CloudStorage(_)
-        | CloudBackupError::CloudStorageContext { .. }
-        | CloudBackupError::Offline(_)
-        | CloudBackupError::Deferred(_) => true,
-        CloudBackupError::NotSupported(_)
-        | CloudBackupError::UnsupportedPasskeyProvider
-        | CloudBackupError::RecoveryRequired(_)
-        | CloudBackupError::Passkey(_)
-        | CloudBackupError::Crypto(_)
-        | CloudBackupError::Internal(_)
-        | CloudBackupError::Compatibility(_)
-        | CloudBackupError::PasskeyMismatch
-        | CloudBackupError::PasskeyDiscoveryCancelled
-        | CloudBackupError::Cancelled => false,
-    }
-}
-
-fn is_upload_failure_retryable(error: &CloudStorageError) -> bool {
-    matches!(
-        error,
-        CloudStorageError::AuthorizationRequired(_)
-            | CloudStorageError::Offline(_)
-            | CloudStorageError::NotAvailable(_)
-            | CloudStorageError::UploadFailed(_)
-            | CloudStorageError::DownloadFailed(_)
-    )
 }

@@ -130,7 +130,7 @@ class FullLaunchOnboardingRobot(
 
     fun chooseSoftwareWallet(): FullLaunchOnboardingRobot {
         device.waitUntilVisible(tag("onboarding.storage.software")).click()
-        device.waitUntilVisible(text("What would you like to do?"))
+        device.waitUntilVisible(text("Import your software wallet"))
 
         return this
     }
@@ -139,13 +139,6 @@ class FullLaunchOnboardingRobot(
         device.waitUntilVisible(tag("onboarding.software.create")).click()
         device.waitUntilVisible(text("Creating your wallet"))
         device.waitUntilVisible(textContains("Back up your wallet"), timeoutMillis = 10_000)
-
-        return this
-    }
-
-    fun chooseSoftwareImport(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.software.import")).click()
-        device.waitUntilVisible(text("Import your software wallet"))
 
         return this
     }

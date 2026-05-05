@@ -419,6 +419,46 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+    typealias FfiType = UInt64
+    typealias SwiftType = UInt64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterBool : FfiConverter {
+    typealias FfiType = Int8
+    typealias SwiftType = Bool
+
+    public static func lift(_ value: Int8) throws -> Bool {
+        return value != 0
+    }
+
+    public static func lower(_ value: Bool) -> Int8 {
+        return value ? 1 : 0
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bool {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Bool, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterString: FfiConverter {
     typealias SwiftType = String
     typealias FfiType = RustBuffer
@@ -473,6 +513,219 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
         writeInt(&buf, len)
         writeBytes(&buf, value)
     }
+}
+
+
+
+
+/**
+ * Shared source of truth for stale async-work tokens
+ *
+ * A generation token only answers whether work was started before the latest
+ * invalidation. It does not serialize later state mutations; owners of the
+ * mutated state must check the token and apply changes at their own
+ * serialization boundary.
+ */
+public protocol GenerationTrackerProtocol: AnyObject, Sendable {
+    
+    func advance()  -> GenerationToken
+    
+    func capture()  -> GenerationToken
+    
+    func isCurrent(capturedToken: GenerationToken)  -> Bool
+    
+}
+/**
+ * Shared source of truth for stale async-work tokens
+ *
+ * A generation token only answers whether work was started before the latest
+ * invalidation. It does not serialize later state mutations; owners of the
+ * mutated state must check the token and apply changes at their own
+ * serialization boundary.
+ */
+open class GenerationTracker: GenerationTrackerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_util_fn_clone_generationtracker(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+    uniffi_cove_util_fn_constructor_generationtracker_new($0
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_util_fn_free_generationtracker(handle, $0) }
+    }
+
+    
+
+    
+open func advance() -> GenerationToken  {
+    return try!  FfiConverterTypeGenerationToken_lift(try! rustCall() {
+    uniffi_cove_util_fn_method_generationtracker_advance(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func capture() -> GenerationToken  {
+    return try!  FfiConverterTypeGenerationToken_lift(try! rustCall() {
+    uniffi_cove_util_fn_method_generationtracker_capture(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func isCurrent(capturedToken: GenerationToken) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_util_fn_method_generationtracker_is_current(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeGenerationToken_lower(capturedToken),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGenerationTracker: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = GenerationTracker
+
+    public static func lift(_ handle: UInt64) throws -> GenerationTracker {
+        return GenerationTracker(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: GenerationTracker) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GenerationTracker {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: GenerationTracker, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGenerationTracker_lift(_ handle: UInt64) throws -> GenerationTracker {
+    return try FfiConverterTypeGenerationTracker.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGenerationTracker_lower(_ value: GenerationTracker) -> UInt64 {
+    return FfiConverterTypeGenerationTracker.lower(value)
+}
+
+
+
+
+/**
+ * Captured generation value that can cross async and platform boundaries
+ */
+public struct GenerationToken: Equatable, Hashable {
+    public var value: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: UInt64) {
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension GenerationToken: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGenerationToken: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GenerationToken {
+        return
+            try GenerationToken(
+                value: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GenerationToken, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGenerationToken_lift(_ buf: RustBuffer) throws -> GenerationToken {
+    return try FfiConverterTypeGenerationToken.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGenerationToken_lower(_ value: GenerationToken) -> RustBuffer {
+    return FfiConverterTypeGenerationToken.lower(value)
 }
 
 #if swift(>=5.8)
@@ -575,6 +828,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_util_checksum_func_hextoutf8string() != 44131) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_util_checksum_method_generationtracker_advance() != 52427) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_util_checksum_method_generationtracker_capture() != 44477) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_util_checksum_method_generationtracker_is_current() != 28139) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_util_checksum_constructor_generationtracker_new() != 38534) {
         return InitializationResult.apiChecksumMismatch
     }
 
