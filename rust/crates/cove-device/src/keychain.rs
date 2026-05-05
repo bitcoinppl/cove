@@ -18,10 +18,6 @@ use rand::RngExt as _;
 const LOCAL_DB_KEY_NAME: &str = "local::v1::db_encryption_key";
 const LOCAL_DB_KEY_CRYPTOR: &str = "local::v1::db_encryption_key_cryptor";
 
-pub const CSPP_CREDENTIAL_ID_KEY: &str = "cspp::v1::credential_id";
-pub const CSPP_PRF_SALT_KEY: &str = "cspp::v1::prf_salt";
-pub const CSPP_NAMESPACE_ID_KEY: &str = "cspp::v1::namespace_id";
-
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum KeychainError {
@@ -151,35 +147,6 @@ impl Keychain {
         self.0.delete(LOCAL_DB_KEY_NAME.into());
     }
 
-    fn save_entries_with_rollback(&self, entries: &[(&str, String)]) -> Result<(), KeychainError> {
-        let previous_values: Vec<_> = entries
-            .iter()
-            .map(|(key, _)| ((*key).to_string(), self.0.get((*key).to_string())))
-            .collect();
-
-        for (key, value) in entries {
-            if let Err(error) = self.0.save((*key).to_string(), value.clone()) {
-                self.restore_entries(&previous_values);
-                return Err(error);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn restore_entries(&self, previous_values: &[(String, Option<String>)]) {
-        for (key, previous_value) in previous_values {
-            match previous_value {
-                Some(value) => {
-                    let _ = self.0.save(key.clone(), value.clone());
-                }
-                None => {
-                    self.0.delete(key.clone());
-                }
-            }
-        }
-    }
-
     fn save_with_fresh_cryptor(
         &self,
         cryptor_key: String,
@@ -202,49 +169,6 @@ impl Keychain {
         }
 
         Ok(())
-    }
-
-    /// Saves CSPP passkey credentials (credential_id and PRF salt) to the keychain
-    ///
-    /// Hex-encodes both values before saving
-    pub fn save_cspp_passkey(
-        &self,
-        credential_id: &[u8],
-        prf_salt: [u8; 32],
-    ) -> Result<(), KeychainError> {
-        self.save_entries_with_rollback(&[
-            (CSPP_CREDENTIAL_ID_KEY, hex::encode(credential_id)),
-            (CSPP_PRF_SALT_KEY, hex::encode(prf_salt)),
-        ])
-    }
-
-    /// Loads the stored CSPP passkey credential ID from the keychain
-    pub fn load_cspp_credential_id(&self) -> Option<Vec<u8>> {
-        self.get(CSPP_CREDENTIAL_ID_KEY.into()).and_then(|hex_str| {
-            hex::decode(hex_str)
-                .inspect_err(|error| warn!("Failed to decode stored credential_id: {error}"))
-                .ok()
-        })
-    }
-
-    /// Saves CSPP passkey credentials and namespace ID to the keychain
-    pub fn save_cspp_passkey_and_namespace(
-        &self,
-        credential_id: &[u8],
-        prf_salt: [u8; 32],
-        namespace_id: &str,
-    ) -> Result<(), KeychainError> {
-        self.save_entries_with_rollback(&[
-            (CSPP_CREDENTIAL_ID_KEY, hex::encode(credential_id)),
-            (CSPP_PRF_SALT_KEY, hex::encode(prf_salt)),
-            (CSPP_NAMESPACE_ID_KEY, namespace_id.to_owned()),
-        ])
-    }
-
-    /// Clears persisted CSPP passkey credentials without touching namespace state
-    pub fn clear_cspp_passkey(&self) {
-        self.0.delete(CSPP_CREDENTIAL_ID_KEY.into());
-        self.0.delete(CSPP_PRF_SALT_KEY.into());
     }
 
     /// Saves a wallet's mnemonic seed encrypted in the keychain
@@ -588,49 +512,6 @@ mod tests {
         Keychain(Arc::new(Box::new(mock)))
     }
 
-    #[derive(Debug)]
-    struct FailNthSave {
-        entries: Mutex<HashMap<String, String>>,
-        save_count: Mutex<u32>,
-        fail_at: u32,
-    }
-
-    impl FailNthSave {
-        fn new(fail_at: u32, entries: Vec<(&str, &str)>) -> Self {
-            Self {
-                entries: Mutex::new(
-                    entries
-                        .into_iter()
-                        .map(|(key, value)| (key.to_string(), value.to_string()))
-                        .collect(),
-                ),
-                save_count: Mutex::new(0),
-                fail_at,
-            }
-        }
-    }
-
-    impl KeychainAccess for FailNthSave {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            let mut save_count = self.save_count.lock().unwrap();
-            *save_count += 1;
-            if *save_count == self.fail_at {
-                return Err(KeychainError::Save);
-            }
-
-            self.entries.lock().unwrap().insert(key, value);
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.entries.lock().unwrap().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.entries.lock().unwrap().remove(&key).is_some()
-        }
-    }
-
     #[test]
     fn get_local_encryption_key_returns_none_when_empty() {
         let kc = make_keychain(MockKeychain::new());
@@ -714,65 +595,5 @@ mod tests {
 
         assert!(kc.0.get(LOCAL_DB_KEY_CRYPTOR.into()).is_none());
         assert!(kc.0.get(LOCAL_DB_KEY_NAME.into()).is_none());
-    }
-
-    #[test]
-    fn save_cspp_passkey_rolls_back_on_second_save_failure() {
-        let kc = Keychain(Arc::new(Box::new(FailNthSave::new(
-            2,
-            vec![(CSPP_CREDENTIAL_ID_KEY, "old_credential"), (CSPP_PRF_SALT_KEY, "old_salt")],
-        ))));
-
-        let err = kc.save_cspp_passkey(&[1, 2, 3], [7; 32]).unwrap_err();
-        assert!(matches!(err, KeychainError::Save));
-        assert_eq!(kc.0.get(CSPP_CREDENTIAL_ID_KEY.into()).as_deref(), Some("old_credential"));
-        assert_eq!(kc.0.get(CSPP_PRF_SALT_KEY.into()).as_deref(), Some("old_salt"));
-    }
-
-    #[test]
-    fn save_cspp_passkey_and_namespace_rolls_back_on_third_save_failure() {
-        let kc = Keychain(Arc::new(Box::new(FailNthSave::new(
-            3,
-            vec![
-                (CSPP_CREDENTIAL_ID_KEY, "old_credential"),
-                (CSPP_PRF_SALT_KEY, "old_salt"),
-                (CSPP_NAMESPACE_ID_KEY, "old_namespace"),
-            ],
-        ))));
-
-        let err =
-            kc.save_cspp_passkey_and_namespace(&[1, 2, 3], [9; 32], "new_namespace").unwrap_err();
-        assert!(matches!(err, KeychainError::Save));
-        assert_eq!(kc.0.get(CSPP_CREDENTIAL_ID_KEY.into()).as_deref(), Some("old_credential"));
-        assert_eq!(kc.0.get(CSPP_PRF_SALT_KEY.into()).as_deref(), Some("old_salt"));
-        assert_eq!(kc.0.get(CSPP_NAMESPACE_ID_KEY.into()).as_deref(), Some("old_namespace"));
-    }
-
-    #[test]
-    fn load_cspp_credential_id_returns_none_for_invalid_hex_and_decodes_valid_hex() {
-        let kc = make_keychain(MockKeychain::new());
-        kc.0.save(CSPP_CREDENTIAL_ID_KEY.into(), "not-hex".into()).unwrap();
-
-        assert!(kc.load_cspp_credential_id().is_none());
-
-        let credential_id = vec![1, 2, 3, 254, 255];
-        kc.0.save(CSPP_CREDENTIAL_ID_KEY.into(), hex::encode(&credential_id)).unwrap();
-
-        assert_eq!(kc.load_cspp_credential_id(), Some(credential_id));
-    }
-
-    #[test]
-    fn clear_cspp_passkey_removes_credential_and_salt_only() {
-        let kc = make_keychain(MockKeychain::with_entries(vec![
-            (CSPP_CREDENTIAL_ID_KEY, "credential"),
-            (CSPP_PRF_SALT_KEY, "salt"),
-            (CSPP_NAMESPACE_ID_KEY, "namespace"),
-        ]));
-
-        kc.clear_cspp_passkey();
-
-        assert!(kc.0.get(CSPP_CREDENTIAL_ID_KEY.into()).is_none());
-        assert!(kc.0.get(CSPP_PRF_SALT_KEY.into()).is_none());
-        assert_eq!(kc.0.get(CSPP_NAMESPACE_ID_KEY.into()).as_deref(), Some("namespace"));
     }
 }

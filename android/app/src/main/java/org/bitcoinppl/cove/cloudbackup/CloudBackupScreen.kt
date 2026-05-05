@@ -111,7 +111,7 @@ package org.bitcoinppl.cove.cloudbackup
  internal fun shouldShowFallbackVerificationSection(
      bodyState: CloudBackupDetailBodyState?,
  ): Boolean = bodyState == null
- 
+
  @OptIn(ExperimentalMaterial3Api::class)
  @Composable
  fun CloudBackupScreen(
@@ -121,7 +121,6 @@ package org.bitcoinppl.cove.cloudbackup
      val manager = remember { CloudBackupManager.getInstance() }
      val coordinator = LocalCloudBackupPresentationCoordinator.current
  
-     var hasAutoVerified by remember { mutableStateOf(false) }
      var showRecreateConfirmation by remember { mutableStateOf(false) }
      var showReinitializeConfirmation by remember { mutableStateOf(false) }
  
@@ -137,19 +136,8 @@ package org.bitcoinppl.cove.cloudbackup
          }
      }
  
-    LaunchedEffect(manager.status, manager.isCloudBackupEnabled) {
-         val supportedStatus =
-             manager.status !is CloudBackupStatus.PasskeyMissing &&
-                 manager.status !is CloudBackupStatus.UnsupportedPasskeyProvider &&
-                 manager.isCloudBackupEnabled
- 
-         if (supportedStatus) {
-             manager.dispatch(CloudBackupManagerAction.RefreshDetail)
-             if (!hasAutoVerified) {
-                 hasAutoVerified = true
-                 manager.dispatch(CloudBackupManagerAction.StartVerificationDiscoverable)
-             }
-         }
+     LaunchedEffect(Unit) {
+         manager.dispatch(CloudBackupManagerAction.EnterDetail)
      }
  
      Scaffold(

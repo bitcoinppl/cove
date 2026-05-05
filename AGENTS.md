@@ -1,5 +1,7 @@
 The role of this file is to describe common mistakes and confusion points that agents might encounter as they work in this project. If you ever encounter something in the project that surprises you, please alert the developer working with you and indicate that this is the case in the AGENTS.md file to help prevent future agents from having the same issue.
 
+## Rust Rules
+
 - Use `cove_util::ResultExt::map_err_str` instead of `.map_err(|e| Error::Variant(e.to_string()))` — it's cleaner and equivalent
 - Use `cove_util::ResultExt::map_err_prefix` instead of `.map_err(|e| Error::Variant(format!("context: {e}")))` when the prefix is a static string — produces `"context: error_message"`
 - Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing Rust actors, async manager methods, worker tasks, Rust closure-based orchestration, reconciliation, shared state, locks, dispatch, or UniFFI manager boundaries
@@ -11,3 +13,5 @@ The role of this file is to describe common mistakes and confusion points that a
 - never manually edit generated files
 - no mod.rs files use the other format module_name.rs module_name/new_module.rs
 - generated UniFFI Kotlin enum readers have a tight ordinal contract with Rust enum variant order, for example `AppAction` ordinals in the generated `FfiConverterTypeAppAction` reader; never reorder, insert, or remove Rust variants without regenerating bindings and updating the generated checksum, because stale generated files can map ordinals like `SelectWallet`, `SelectLatestOrNewWallet`, and `ChangeNetwork` to the wrong action
+- don't be afraid to change uniffi bindings and api shape
+- no test specific code in production code only in test modules

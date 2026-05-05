@@ -1194,6 +1194,64 @@ public func FfiConverterTypeDiscoveredPasskeyResult_lower(_ value: DiscoveredPas
 }
 
 
+public struct PasskeyRegistrationResult: Equatable, Hashable {
+    public var credentialId: Data
+    public var providerAaguid: String
+    public var registeredPlatform: PasskeyRegistrationPlatform
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(credentialId: Data, providerAaguid: String, registeredPlatform: PasskeyRegistrationPlatform) {
+        self.credentialId = credentialId
+        self.providerAaguid = providerAaguid
+        self.registeredPlatform = registeredPlatform
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PasskeyRegistrationResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyRegistrationResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyRegistrationResult {
+        return
+            try PasskeyRegistrationResult(
+                credentialId: FfiConverterData.read(from: &buf), 
+                providerAaguid: FfiConverterString.read(from: &buf), 
+                registeredPlatform: FfiConverterTypePasskeyRegistrationPlatform.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PasskeyRegistrationResult, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.credentialId, into: &buf)
+        FfiConverterString.write(value.providerAaguid, into: &buf)
+        FfiConverterTypePasskeyRegistrationPlatform.write(value.registeredPlatform, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyRegistrationResult_lift(_ buf: RustBuffer) throws -> PasskeyRegistrationResult {
+    return try FfiConverterTypePasskeyRegistrationResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyRegistrationResult_lower(_ value: PasskeyRegistrationResult) -> RustBuffer {
+    return FfiConverterTypePasskeyRegistrationResult.lower(value)
+}
+
+
 
 public enum CloudAccessPolicy: Equatable, Hashable {
     
@@ -1703,13 +1761,11 @@ enum PasskeyError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
-    case NotSupported(String
+    case NotSupported(reason: PasskeyFailureReason
     )
     case PrfUnsupportedProvider
     case UserCancelled
-    case CreationFailed(String
-    )
-    case AuthenticationFailed(String
+    case RequestFailed(operation: PasskeyOperation, reason: PasskeyFailureReason
     )
     case NoCredentialFound
 
@@ -1752,17 +1808,15 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
 
         
         case 1: return .NotSupported(
-            try FfiConverterString.read(from: &buf)
+            reason: try FfiConverterTypePasskeyFailureReason.read(from: &buf)
             )
         case 2: return .PrfUnsupportedProvider
         case 3: return .UserCancelled
-        case 4: return .CreationFailed(
-            try FfiConverterString.read(from: &buf)
+        case 4: return .RequestFailed(
+            operation: try FfiConverterTypePasskeyOperation.read(from: &buf), 
+            reason: try FfiConverterTypePasskeyFailureReason.read(from: &buf)
             )
-        case 5: return .AuthenticationFailed(
-            try FfiConverterString.read(from: &buf)
-            )
-        case 6: return .NoCredentialFound
+        case 5: return .NoCredentialFound
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1775,9 +1829,9 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
 
         
         
-        case let .NotSupported(v1):
+        case let .NotSupported(reason):
             writeInt(&buf, Int32(1))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterTypePasskeyFailureReason.write(reason, into: &buf)
             
         
         case .PrfUnsupportedProvider:
@@ -1788,18 +1842,14 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         
         
-        case let .CreationFailed(v1):
+        case let .RequestFailed(operation,reason):
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
-        case let .AuthenticationFailed(v1):
-            writeInt(&buf, Int32(5))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterTypePasskeyOperation.write(operation, into: &buf)
+            FfiConverterTypePasskeyFailureReason.write(reason, into: &buf)
             
         
         case .NoCredentialFound:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(5))
         
         }
     }
@@ -1819,6 +1869,304 @@ public func FfiConverterTypePasskeyError_lift(_ buf: RustBuffer) throws -> Passk
 public func FfiConverterTypePasskeyError_lower(_ value: PasskeyError) -> RustBuffer {
     return FfiConverterTypePasskeyError.lower(value)
 }
+
+
+
+public enum PasskeyFailureReason: Equatable, Hashable, CustomStringConvertible {
+    
+    case platformAuthorizationFailed
+    case invalidResponse
+    case notHandled
+    case interrupted
+    case providerConfiguration
+    case noCreateOption
+    case deviceNotConfigured
+    case unexpectedCredentialType
+    case missingCredentialId
+    case malformedResponse
+    case timedOut
+    case unknown(diagnosticMessage: String
+    )
+
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_device_fn_method_passkeyfailurereason_uniffi_trait_display(
+            FfiConverterTypePasskeyFailureReason_lower(self),$0
+    )
+}
+    )
+}
+}
+
+#if compiler(>=6)
+extension PasskeyFailureReason: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyFailureReason: FfiConverterRustBuffer {
+    typealias SwiftType = PasskeyFailureReason
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyFailureReason {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .platformAuthorizationFailed
+        
+        case 2: return .invalidResponse
+        
+        case 3: return .notHandled
+        
+        case 4: return .interrupted
+        
+        case 5: return .providerConfiguration
+        
+        case 6: return .noCreateOption
+        
+        case 7: return .deviceNotConfigured
+        
+        case 8: return .unexpectedCredentialType
+        
+        case 9: return .missingCredentialId
+        
+        case 10: return .malformedResponse
+        
+        case 11: return .timedOut
+        
+        case 12: return .unknown(diagnosticMessage: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PasskeyFailureReason, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .platformAuthorizationFailed:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .invalidResponse:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .notHandled:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .interrupted:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .providerConfiguration:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .noCreateOption:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .deviceNotConfigured:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .unexpectedCredentialType:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .missingCredentialId:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .malformedResponse:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .timedOut:
+            writeInt(&buf, Int32(11))
+        
+        
+        case let .unknown(diagnosticMessage):
+            writeInt(&buf, Int32(12))
+            FfiConverterString.write(diagnosticMessage, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyFailureReason_lift(_ buf: RustBuffer) throws -> PasskeyFailureReason {
+    return try FfiConverterTypePasskeyFailureReason.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyFailureReason_lower(_ value: PasskeyFailureReason) -> RustBuffer {
+    return FfiConverterTypePasskeyFailureReason.lower(value)
+}
+
+
+
+
+public enum PasskeyOperation: Equatable, Hashable, CustomStringConvertible {
+    
+    case registration
+    case discoverAssertion
+    case authenticateAssertion
+
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_device_fn_method_passkeyoperation_uniffi_trait_display(
+            FfiConverterTypePasskeyOperation_lower(self),$0
+    )
+}
+    )
+}
+}
+
+#if compiler(>=6)
+extension PasskeyOperation: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyOperation: FfiConverterRustBuffer {
+    typealias SwiftType = PasskeyOperation
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyOperation {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .registration
+        
+        case 2: return .discoverAssertion
+        
+        case 3: return .authenticateAssertion
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PasskeyOperation, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .registration:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .discoverAssertion:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .authenticateAssertion:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyOperation_lift(_ buf: RustBuffer) throws -> PasskeyOperation {
+    return try FfiConverterTypePasskeyOperation.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyOperation_lower(_ value: PasskeyOperation) -> RustBuffer {
+    return FfiConverterTypePasskeyOperation.lower(value)
+}
+
+
+
+
+public enum PasskeyRegistrationPlatform: Equatable, Hashable {
+    
+    case ios
+    case android
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PasskeyRegistrationPlatform: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyRegistrationPlatform: FfiConverterRustBuffer {
+    typealias SwiftType = PasskeyRegistrationPlatform
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyRegistrationPlatform {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .ios
+        
+        case 2: return .android
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PasskeyRegistrationPlatform, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .ios:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .android:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyRegistrationPlatform_lift(_ buf: RustBuffer) throws -> PasskeyRegistrationPlatform {
+    return try FfiConverterTypePasskeyRegistrationPlatform.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyRegistrationPlatform_lower(_ value: PasskeyRegistrationPlatform) -> RustBuffer {
+    return FfiConverterTypePasskeyRegistrationPlatform.lower(value)
+}
+
 
 
 
@@ -2817,7 +3165,7 @@ public protocol PasskeyProvider: AnyObject, Sendable {
     /**
      * Create a new passkey credential
      */
-    func createPasskey(rpId: String, userId: Data, challenge: Data) throws  -> Data
+    func createPasskey(rpId: String, userId: Data, challenge: Data) throws  -> PasskeyRegistrationResult
     
     /**
      * Authenticate with a known credential_id (enable flow, re-enable)
@@ -2878,7 +3226,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
             uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
         ) in
             let makeCall = {
-                () throws -> Data in
+                () throws -> PasskeyRegistrationResult in
                 guard let uniffiObj = try? FfiConverterCallbackInterfacePasskeyProvider.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
@@ -2890,7 +3238,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
             }
 
             
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterData.lower($0) }
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypePasskeyRegistrationResult_lower($0) }
             uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
@@ -3267,6 +3615,13 @@ private func uniffiForeignFutureDroppedCallback(handle: UInt64) {
 public func uniffiForeignFutureHandleCountCoveDevice() -> Int {
     UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.count
 }
+public func passkeyAaguidFromAttestationObject(attestationObject: Data)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypePasskeyError_lift) {
+    uniffi_cove_device_fn_func_passkey_aaguid_from_attestation_object(
+        FfiConverterData.lower(attestationObject),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -3282,6 +3637,9 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_cove_device_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object() != 43803) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 42755) {
         return InitializationResult.apiChecksumMismatch
@@ -3346,7 +3704,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_keychainaccess_delete() != 1213) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 57897) {
+    if (uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 17856) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_passkeyprovider_authenticate_with_prf() != 17002) {

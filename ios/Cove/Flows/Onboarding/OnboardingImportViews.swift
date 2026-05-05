@@ -10,7 +10,9 @@ struct OnboardingSoftwareImportFlowView: View {
 
     @State private var mode: Mode = .chooser
 
+    let errorMessage: String?
     let onImported: (WalletId) -> Void
+    let onCreateWallet: () -> Void
     let onBack: () -> Void
 
     var body: some View {
@@ -21,6 +23,10 @@ struct OnboardingSoftwareImportFlowView: View {
                 title: "Import your software wallet",
                 subtitle: "Choose how you want to bring your existing wallet into Cove."
             ) {
+                if let errorMessage {
+                    OnboardingInlineMessage(text: errorMessage)
+                }
+
                 VStack(spacing: 14) {
                     OnboardingChoiceCard(
                         title: "Enter recovery words",
@@ -41,6 +47,14 @@ struct OnboardingSoftwareImportFlowView: View {
 
                 Button("Back", action: onBack)
                     .buttonStyle(OnboardingSecondaryButtonStyle())
+
+                Button("Create a new wallet instead", action: onCreateWallet)
+                    .font(OnboardingRecoveryTypography.bodySemibold)
+                    .foregroundStyle(.white.opacity(0.68))
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 2)
+                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
             }
 
         case .wordCount:
@@ -85,6 +99,7 @@ struct OnboardingSoftwareImportFlowView: View {
                 HotWalletImportScreen(
                     numberOfWords: .twelve,
                     importType: .qr,
+                    autoImportScannedWords: true,
                     onImported: onImported
                 )
             }

@@ -1,11 +1,10 @@
-use cove_device::keychain::Keychain;
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use cove_tokio::unblock;
 use rand::RngExt as _;
 use tracing::info;
 
-use super::super::{CloudBackupError, PASSKEY_RP_ID};
 use super::session::VerificationSession;
+use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID};
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct AuthenticatedPasskey {
@@ -37,13 +36,13 @@ enum StoredPasskeyAuthOutcome {
 
 /// Authenticates backup passkeys against the PRF salt from a master-key backup
 pub(crate) struct PasskeyAuthenticator {
-    keychain: Keychain,
+    keychain: CloudBackupKeychain,
     passkey: PasskeyAccess,
 }
 
 impl PasskeyAuthenticator {
     /// Builds an authenticator from cheap device-service handles
-    pub(crate) fn new(keychain: &Keychain, passkey: &PasskeyAccess) -> Self {
+    pub(crate) fn new(keychain: &CloudBackupKeychain, passkey: &PasskeyAccess) -> Self {
         Self { keychain: keychain.clone(), passkey: passkey.clone() }
     }
 
@@ -126,7 +125,7 @@ impl PasskeyAuthenticator {
         &self,
         prf_salt: &[u8; 32],
     ) -> Result<StoredPasskeyAuthOutcome, CloudBackupError> {
-        let Some(credential_id) = self.keychain.load_cspp_credential_id() else {
+        let Some(credential_id) = self.keychain.load_credential_id() else {
             return Ok(StoredPasskeyAuthOutcome::NoCredentialFound);
         };
 
@@ -204,7 +203,7 @@ impl VerificationSession {
             PasskeyAuthPolicy::StoredThenDiscover
         };
 
-        PasskeyAuthenticator::new(&self.keychain, &self.passkey)
+        PasskeyAuthenticator::new(&self.cloud_keychain, &self.passkey)
             .authenticate_with_policy(prf_salt, policy)
             .await
     }
@@ -222,6 +221,7 @@ fn map_discovery_error(error: PasskeyError) -> Result<PasskeyAuthOutcome, CloudB
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cove_device::passkey::{PasskeyFailureReason, PasskeyOperation};
 
     #[test]
     fn map_discovery_error_returns_user_cancelled() {
@@ -237,10 +237,13 @@ mod tests {
 
     #[test]
     fn map_discovery_error_preserves_unexpected_errors() {
-        let error =
-            map_discovery_error(PasskeyError::AuthenticationFailed("boom".into())).unwrap_err();
+        let error = map_discovery_error(PasskeyError::RequestFailed {
+            operation: PasskeyOperation::AuthenticateAssertion,
+            reason: PasskeyFailureReason::Unknown { diagnostic_message: "boom".into() },
+        })
+        .unwrap_err();
         assert!(
-            matches!(error, CloudBackupError::Passkey(message) if message == "authentication failed: boom")
+            matches!(error, CloudBackupError::Passkey(message) if message == "authenticate assertion failed: unknown: boom")
         );
     }
 

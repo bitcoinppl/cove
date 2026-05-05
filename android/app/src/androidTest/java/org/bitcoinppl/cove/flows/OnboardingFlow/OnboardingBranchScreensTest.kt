@@ -13,7 +13,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.OnboardingBranch
-import org.bitcoinppl.cove_core.OnboardingSoftwareSelection
 import org.bitcoinppl.cove_core.OnboardingStorageSelection
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -102,26 +101,6 @@ class OnboardingBranchScreensTest {
 
         compose.card("Software wallet").performClick()
         assertEquals(OnboardingStorageSelection.SOFTWARE_WALLET, selected)
-    }
-
-    @Test
-    fun softwareChoiceExposesCreateAndImportBranches() {
-        var selected: OnboardingSoftwareSelection? = null
-
-        compose.setOnboardingContent {
-            OnboardingSoftwareChoiceScreen(
-                errorMessage = null,
-                onRestoreFromCoveBackup = null,
-                onSelectSoftwareAction = { selected = it },
-                onBack = {},
-            )
-        }
-
-        compose.card("Create a new wallet").performClick()
-        assertEquals(OnboardingSoftwareSelection.CREATE_NEW_WALLET, selected)
-
-        compose.card("Import existing wallet").performClick()
-        assertEquals(OnboardingSoftwareSelection.IMPORT_EXISTING_WALLET, selected)
     }
 
     @Test
@@ -378,12 +357,16 @@ class OnboardingBranchScreensTest {
 
         compose.setOnboardingContent {
             OnboardingSoftwareImportFlowView(
+                errorMessage = null,
                 onImported = {},
+                onCreateWallet = { selected = "create" },
                 onBack = { selected = "back" },
             )
         }
 
         compose.onNodeWithText("Import your software wallet").assertIsDisplayed()
+        compose.button("Create a new wallet instead").performClick()
+        assertEquals("create", selected)
         compose.card("Enter recovery words").performClick()
         compose.onNodeWithText("How many words do you have?").assertIsDisplayed()
         compose.card("12 words").assertIsDisplayed()
@@ -398,7 +381,9 @@ class OnboardingBranchScreensTest {
     fun softwareImportManualScreensOpenWithoutUsingQrScanner() {
         compose.setOnboardingContent {
             OnboardingSoftwareImportFlowView(
+                errorMessage = null,
                 onImported = {},
+                onCreateWallet = {},
                 onBack = {},
             )
         }
@@ -409,7 +394,9 @@ class OnboardingBranchScreensTest {
 
         compose.setOnboardingContent {
             OnboardingSoftwareImportFlowView(
+                errorMessage = null,
                 onImported = {},
+                onCreateWallet = {},
                 onBack = {},
             )
         }

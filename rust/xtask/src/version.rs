@@ -263,18 +263,22 @@ fn bump_android_build_number(sh: &Shell) -> Result<()> {
 struct IncrementReplaceArgs<'a> {
     key: &'a str,
     terminator: char,
-    replace_suffix: &'a str,
     platform: &'a str,
     field_label: &'a str,
 }
 
 fn increment_and_replace(content: String, args: IncrementReplaceArgs) -> String {
-    if let Some(code) = extract_u32_value(&content, args.key, args.terminator) {
+    let codes = extract_u32_values(&content, args.key, args.terminator);
+
+    if let Some(code) = codes.into_iter().max() {
         let new_code = code + 1;
-        let new_content = content.replace(
-            &format!("{}{}{}", args.key, code, args.replace_suffix),
-            &format!("{}{}{}", args.key, new_code, args.replace_suffix),
-        );
+        let new_content = replace_u32_values(&content, args.key, args.terminator, |value, raw| {
+            if value.is_some() {
+                new_code.to_string()
+            } else {
+                raw.to_string()
+            }
+        });
         print_success(&format!(
             "Updated {} {}: {} -> {}",
             args.platform, args.field_label, code, new_code
@@ -292,7 +296,6 @@ fn increment_and_replace_ios(content: String) -> String {
         IncrementReplaceArgs {
             key: "CURRENT_PROJECT_VERSION = ",
             terminator: ';',
-            replace_suffix: ";",
             platform: "iOS",
             field_label: "CURRENT_PROJECT_VERSION",
         },
@@ -305,7 +308,6 @@ fn increment_and_replace_android(content: String) -> String {
         IncrementReplaceArgs {
             key: "versionCode = ",
             terminator: '\n',
-            replace_suffix: "",
             platform: "Android",
             field_label: "versionCode",
         },
@@ -320,9 +322,74 @@ fn extract_version(content: &str, key: &str, terminator: char) -> Option<String>
     Some(version)
 }
 
-fn extract_u32_value(content: &str, key: &str, terminator: char) -> Option<u32> {
-    let start = content.find(key)?;
+fn extract_u32_values(content: &str, key: &str, terminator: char) -> Vec<u32> {
+    content
+        .match_indices(key)
+        .filter_map(|(start, _)| extract_u32_value_at(content, start, key, terminator))
+        .collect()
+}
+
+fn extract_u32_value_at(content: &str, start: usize, key: &str, terminator: char) -> Option<u32> {
     let remainder = &content[start..];
     let end = remainder.find(terminator)?;
+
     remainder[..end].strip_prefix(key)?.trim().parse::<u32>().ok()
+}
+
+fn replace_u32_values(
+    content: &str,
+    key: &str,
+    terminator: char,
+    replacement: impl Fn(Option<u32>, &str) -> String,
+) -> String {
+    let mut next_search_start = 0;
+    let mut next_copy_start = 0;
+    let mut new_content = String::with_capacity(content.len());
+
+    while let Some(relative_start) = content[next_search_start..].find(key) {
+        let start = next_search_start + relative_start;
+        let value_start = start + key.len();
+        let Some(relative_end) = content[value_start..].find(terminator) else {
+            break;
+        };
+        let value_end = value_start + relative_end;
+        let raw_value = &content[value_start..value_end];
+        let value = raw_value.trim().parse::<u32>().ok();
+
+        new_content.push_str(&content[next_copy_start..value_start]);
+        new_content.push_str(&replacement(value, raw_value));
+
+        next_search_start = value_end;
+        next_copy_start = value_end;
+    }
+
+    new_content.push_str(&content[next_copy_start..]);
+    new_content
+}
+
+#[cfg(test)]
+mod tests {
+    use super::increment_and_replace_ios;
+
+    #[test]
+    fn bumps_all_ios_build_numbers_from_highest_value() {
+        let content = "\
+CURRENT_PROJECT_VERSION = 5;
+CURRENT_PROJECT_VERSION = 5;
+CURRENT_PROJECT_VERSION = 75;
+CURRENT_PROJECT_VERSION = 75;
+";
+
+        let updated = increment_and_replace_ios(content.to_string());
+
+        assert_eq!(
+            updated,
+            "\
+CURRENT_PROJECT_VERSION = 76;
+CURRENT_PROJECT_VERSION = 76;
+CURRENT_PROJECT_VERSION = 76;
+CURRENT_PROJECT_VERSION = 76;
+"
+        );
+    }
 }

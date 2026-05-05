@@ -21,6 +21,20 @@
                ReferencedContainer = "container:Cove.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "C0B000072F00000000000001"
+               BuildableName = "CoveTests.xctest"
+               BlueprintName = "CoveTests"
+               ReferencedContainer = "container:Cove.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -39,6 +53,17 @@
          </ExecutionAction>
       </PreActions>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "C0B000072F00000000000001"
+               BuildableName = "CoveTests.xctest"
+               BlueprintName = "CoveTests"
+               ReferencedContainer = "container:Cove.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
          <TestableReference
             skipped = "YES"
             parallelizable = "YES">

@@ -1,7 +1,6 @@
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::CloudStorageClient;
-use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use cove_tokio::unblock;
 use cove_util::ResultExt as _;
@@ -9,11 +8,12 @@ use rand::RngExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
-use super::super::{
-    CloudBackupError, PASSKEY_RP_ID, RustCloudBackupManager, cspp_master_key_record_id,
-};
 use crate::manager::cloud_backup_manager::wallets::{
     PasskeyMaterialAcquirer, WalletBackupLookup, WalletBackupReader,
+};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID, RustCloudBackupManager,
+    cspp_master_key_record_id,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +57,7 @@ struct WrapperRepairCredentials {
     prf_key: [u8; 32],
     prf_salt: [u8; 32],
     credential_id: Vec<u8>,
+    provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
 }
 
 struct LocalKeyVerifier {
@@ -112,7 +113,7 @@ impl LocalKeyVerifier {
 /// Repairs the cloud master-key wrapper after proving the local master key is valid
 pub(super) struct WrapperRepairOperation {
     manager: RustCloudBackupManager,
-    keychain: Keychain,
+    keychain: CloudBackupKeychain,
     cloud: CloudStorageClient,
     passkey: PasskeyAccess,
     namespace: String,
@@ -121,7 +122,7 @@ pub(super) struct WrapperRepairOperation {
 impl WrapperRepairOperation {
     pub(super) fn new(
         manager: &RustCloudBackupManager,
-        keychain: &Keychain,
+        keychain: &CloudBackupKeychain,
         cloud: &CloudStorageClient,
         passkey: &PasskeyAccess,
         namespace: &str,
@@ -147,10 +148,11 @@ impl WrapperRepairOperation {
         let credentials =
             self.credentials(strategy).await.map_err(WrapperRepairError::Operation)?;
 
-        let encrypted_backup = master_key_crypto::encrypt_master_key(
+        let encrypted_backup = master_key_crypto::encrypt_master_key_with_provider_hint(
             local_master_key,
             &credentials.prf_key,
             &credentials.prf_salt,
+            credentials.provider_hint.clone(),
         )
         .map_err_str(CloudBackupError::Crypto)
         .map_err(WrapperRepairError::Operation)?;
@@ -166,7 +168,7 @@ impl WrapperRepairOperation {
             .map_err(WrapperRepairError::Operation)?;
 
         self.keychain
-            .save_cspp_passkey(&credentials.credential_id, credentials.prf_salt)
+            .save_passkey(&credentials.credential_id, credentials.prf_salt)
             .map_err_prefix("save cspp credentials", CloudBackupError::Internal)
             .map_err(WrapperRepairError::Operation)?;
 
@@ -208,9 +210,10 @@ impl WrapperRepairOperation {
             WrapperRepairStrategy::CreateNew => {
                 let new_prf =
                     PasskeyMaterialAcquirer::new(&self.passkey).create_for_wrapper_repair().await?;
+                let provider_hint = new_prf.provider_hint.clone();
                 let (prf_key, prf_salt, credential_id) = new_prf.into_parts();
 
-                Ok(WrapperRepairCredentials { prf_key, prf_salt, credential_id })
+                Ok(WrapperRepairCredentials { prf_key, prf_salt, credential_id, provider_hint })
             }
 
             WrapperRepairStrategy::DiscoverOrCreate => {
@@ -218,9 +221,10 @@ impl WrapperRepairOperation {
                     .discover_or_create_for_wrapper_repair()
                     .await?;
                 info!("Using discovered-or-new passkey for wrapper repair");
+                let provider_hint = passkey.provider_hint.clone();
                 let (prf_key, prf_salt, credential_id) = passkey.into_parts();
 
-                Ok(WrapperRepairCredentials { prf_key, prf_salt, credential_id })
+                Ok(WrapperRepairCredentials { prf_key, prf_salt, credential_id, provider_hint })
             }
 
             WrapperRepairStrategy::ReuseExisting(credential_id) => {
@@ -244,7 +248,12 @@ impl WrapperRepairOperation {
 
                 info!("Reusing discovered passkey for wrapper repair");
 
-                Ok(WrapperRepairCredentials { prf_key, prf_salt, credential_id })
+                Ok(WrapperRepairCredentials {
+                    prf_key,
+                    prf_salt,
+                    credential_id,
+                    provider_hint: None,
+                })
             }
         }
     }

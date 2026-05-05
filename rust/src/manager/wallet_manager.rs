@@ -1022,10 +1022,7 @@ impl RustWalletManager {
     pub async fn start_wallet_scan(&self) -> Result<(), Error> {
         debug!("start_wallet_scan: {}", self.id);
 
-        let actor = self.actor.clone();
-        tokio::spawn(async move {
-            send!(actor.wallet_scan_and_notify(false));
-        });
+        send!(self.actor.wallet_scan_and_notify(false));
 
         Ok(())
     }
@@ -1034,10 +1031,7 @@ impl RustWalletManager {
     pub async fn force_wallet_scan(&self) {
         debug!("force_wallet_scan: {}", self.id);
 
-        let actor = self.actor.clone();
-        tokio::spawn(async move {
-            send!(actor.wallet_scan_and_notify(true));
-        });
+        send!(self.actor.wallet_scan_and_notify(true));
     }
 
     #[uniffi::method]
@@ -1050,10 +1044,7 @@ impl RustWalletManager {
             )));
         }
 
-        let actor = self.actor.clone();
-        task::spawn(async move {
-            send!(actor.perform_rescan_full_scan(gap_limit));
-        });
+        send!(self.actor.perform_rescan_full_scan(gap_limit));
 
         Ok(())
     }

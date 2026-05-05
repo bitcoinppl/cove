@@ -4,7 +4,7 @@ use tracing::error;
 use super::{
     CLOUD_BACKUP_MANAGER, CloudBackupError, CloudBackupManagerAction, CloudBackupPasskeyChoiceFlow,
     CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    RustCloudBackupManager, runtime_actor::CloudBackupOperation,
+    RustCloudBackupManager, workers::CloudBackupOperation,
 };
 
 type Action = CloudBackupManagerAction;
@@ -108,6 +108,7 @@ impl RustCloudBackupManager {
                 CLOUD_BACKUP_MANAGER.clone().spawn_delete_cloud_wallet(record_id);
             }
             A::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
+            A::EnterDetail => CLOUD_BACKUP_MANAGER.clone().spawn_enter_detail(),
         }
     }
 }
@@ -117,14 +118,14 @@ impl RustCloudBackupManager {
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
-        CLOUD_BACKUP_MANAGER.clone().spawn_verification(false);
+        send!(self.supervisor.start_verification(false));
     }
 
     fn start_verification_discoverable(&self) {
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
-        CLOUD_BACKUP_MANAGER.clone().spawn_verification(true);
+        send!(self.supervisor.start_verification(true));
     }
 
     fn dismiss_verification_prompt(&self) {
@@ -133,41 +134,40 @@ impl RustCloudBackupManager {
         }
     }
 
-    fn spawn_verification(self: std::sync::Arc<Self>, force_discoverable: bool) {
-        let operation = CloudBackupOperation::Verification { force_discoverable };
-        send!(self.runtime.start_operation(operation, None));
-    }
-
     fn spawn_recovery(self: std::sync::Arc<Self>, action: RecoveryAction) {
         let operation = CloudBackupOperation::Recovery { action };
-        send!(self.runtime.start_operation(operation, None));
+        send!(self.supervisor.start_operation(operation, None));
     }
 
     fn spawn_repair_passkey(self: std::sync::Arc<Self>, no_discovery: bool) {
         let operation = CloudBackupOperation::RepairPasskey { no_discovery };
-        send!(self.runtime.start_operation(operation, None));
+        send!(self.supervisor.start_operation(operation, None));
     }
 
     fn spawn_sync(self: std::sync::Arc<Self>) {
-        send!(self.runtime.start_operation(CloudBackupOperation::Sync, None));
+        send!(self.supervisor.start_operation(CloudBackupOperation::Sync, None));
     }
 
     fn spawn_fetch_cloud_only(self: std::sync::Arc<Self>) {
-        send!(self.runtime.start_operation(CloudBackupOperation::FetchCloudOnly, None));
+        send!(self.supervisor.start_operation(CloudBackupOperation::FetchCloudOnly, None));
     }
 
     fn spawn_restore_cloud_wallet(self: std::sync::Arc<Self>, record_id: String) {
         let operation = CloudBackupOperation::RestoreCloudWallet;
-        send!(self.runtime.start_operation(operation, Some(record_id)));
+        send!(self.supervisor.start_operation(operation, Some(record_id)));
     }
 
     fn spawn_delete_cloud_wallet(self: std::sync::Arc<Self>, record_id: String) {
         let operation = CloudBackupOperation::DeleteCloudWallet;
-        send!(self.runtime.start_operation(operation, Some(record_id)));
+        send!(self.supervisor.start_operation(operation, Some(record_id)));
     }
 
     fn spawn_refresh_detail(self: std::sync::Arc<Self>) {
-        send!(self.runtime.start_operation(CloudBackupOperation::RefreshDetail, None));
+        send!(self.supervisor.start_refresh_detail());
+    }
+
+    fn spawn_enter_detail(self: std::sync::Arc<Self>) {
+        send!(self.supervisor.start_enter_detail());
     }
 
     pub(crate) async fn handle_start_verification(&self, force_discoverable: bool) {
@@ -175,7 +175,10 @@ impl RustCloudBackupManager {
         self.set_verification(VerificationState::Verifying);
 
         let result = self.deep_verify_cloud_backup(force_discoverable).await;
+        self.apply_deep_verification_result(result);
+    }
 
+    pub(crate) fn apply_deep_verification_result(&self, result: DeepVerificationResult) {
         match result {
             DeepVerificationResult::Verified(report) => {
                 self.apply_verified_report(report);
@@ -331,7 +334,7 @@ impl RustCloudBackupManager {
 
         match self.do_fetch_cloud_only_wallets().await {
             Ok(items) => {
-                self.set_cloud_only(CloudOnlyState::Loaded { wallets: items });
+                self.set_loaded_cloud_only(items);
             }
             Err(error) => {
                 error!("Failed to fetch cloud-only wallets: {error}");

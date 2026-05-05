@@ -1,14 +1,21 @@
 use std::time::Duration;
 
-use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
+use backon::{ExponentialBuilder, Retryable as _};
+use cove_cspp::backup_data::{
+    EncryptedMasterKeyBackup, MasterKeyBackupVersion, PasskeyProviderHint,
+    PasskeyRegistrationPlatform as BackupPasskeyRegistrationPlatform,
+};
 use cove_device::cloud_storage::CloudStorageClient;
-use cove_device::passkey::{PasskeyAccess, PasskeyError};
+use cove_device::passkey::{
+    PasskeyAccess, PasskeyError, PasskeyFailureReason, PasskeyOperation,
+    PasskeyRegistrationPlatform, PasskeyRegistrationResult,
+};
 use cove_tokio::unblock;
 use rand::RngExt as _;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
-use super::super::{CloudBackupError, PASSKEY_RP_ID};
 use super::UnpersistedPrfKey;
+use crate::manager::cloud_backup_manager::{CloudBackupError, PASSKEY_RP_ID};
 
 async fn delay_before_new_passkey_auth() {
     let delay = Duration::from_secs(3);
@@ -104,24 +111,19 @@ impl PasskeyMaterialAcquirer {
         info!("{}", context.attempt_message);
         let prf_salt: [u8; 32] = rand::rng().random();
 
-        let discovery = {
-            let passkey = self.passkey.clone();
-            unblock::run_blocking(move || {
-                passkey.discover_and_authenticate_with_prf(
-                    PASSKEY_RP_ID.to_string(),
-                    prf_salt.to_vec(),
-                    random_challenge(),
-                )
-            })
-            .await
-        };
+        let discovery = self.discover_with_platform_authorization_retry(prf_salt).await;
 
         match discovery {
             Ok(discovered) => {
                 let prf_key = prf_output_to_key(discovered.prf_output)?;
                 info!("{}", context.discovered_message);
 
-                Ok(UnpersistedPrfKey { prf_key, prf_salt, credential_id: discovered.credential_id })
+                Ok(UnpersistedPrfKey {
+                    prf_key,
+                    prf_salt,
+                    credential_id: discovered.credential_id,
+                    provider_hint: None,
+                })
             }
             Err(PasskeyError::UserCancelled) => {
                 info!("{}", context.cancelled_message);
@@ -154,12 +156,47 @@ impl PasskeyMaterialAcquirer {
         self.create_for_wrapper_repair().await
     }
 
+    async fn discover_with_platform_authorization_retry(
+        &self,
+        prf_salt: [u8; 32],
+    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
+        (|| self.discover_with_prf_salt(prf_salt))
+            .retry(
+                ExponentialBuilder::default()
+                    .with_min_delay(Duration::from_millis(50))
+                    .without_max_times()
+                    .with_total_delay(Some(Duration::from_secs(2))),
+            )
+            .when(is_platform_authorization_error)
+            .notify(|error, delay| {
+                warn!(
+                    "Passkey platform authorization failed before presentation: {error}; retrying in {delay:?}"
+                );
+            })
+            .await
+    }
+
+    async fn discover_with_prf_salt(
+        &self,
+        prf_salt: [u8; 32],
+    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
+        let passkey = self.passkey.clone();
+        unblock::run_blocking(move || {
+            passkey.discover_and_authenticate_with_prf(
+                PASSKEY_RP_ID.to_string(),
+                prf_salt.to_vec(),
+                random_challenge(),
+            )
+        })
+        .await
+    }
+
     async fn create_new_prf_key_with_mapper(
         &self,
         map_passkey_error: fn(PasskeyError) -> CloudBackupError,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
         let prf_salt: [u8; 32] = rand::rng().random();
-        let credential_id = {
+        let registration = {
             let passkey = self.passkey.clone();
             unblock::run_blocking(move || {
                 passkey.create_passkey(
@@ -171,6 +208,7 @@ impl PasskeyMaterialAcquirer {
             .await
             .map_err(map_passkey_error)?
         };
+        let credential_id = registration.credential_id.clone();
 
         // wait briefly before targeted auth so iOS can settle after registration
         // without probing for presence and flashing another native passkey sheet
@@ -191,8 +229,28 @@ impl PasskeyMaterialAcquirer {
             .map_err(map_passkey_error)?
         };
 
-        Ok(UnpersistedPrfKey { prf_key: prf_output_to_key(prf_output)?, prf_salt, credential_id })
+        Ok(UnpersistedPrfKey {
+            prf_key: prf_output_to_key(prf_output)?,
+            prf_salt,
+            credential_id,
+            provider_hint: Some(passkey_provider_hint(registration)),
+        })
     }
+}
+
+fn passkey_provider_hint(registration: PasskeyRegistrationResult) -> PasskeyProviderHint {
+    let registered_platform = match registration.registered_platform {
+        PasskeyRegistrationPlatform::Ios => BackupPasskeyRegistrationPlatform::Ios,
+        PasskeyRegistrationPlatform::Android => BackupPasskeyRegistrationPlatform::Android,
+    };
+    let registered_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+
+    debug!(
+        "Captured passkey provider hint aaguid={} registered_platform={registered_platform:?} registered_at={registered_at}",
+        registration.provider_aaguid
+    );
+
+    PasskeyProviderHint { aaguid: registration.provider_aaguid, registered_platform, registered_at }
 }
 
 /// Matches a discoverable passkey against candidate cloud backup namespaces
@@ -262,18 +320,8 @@ impl NamespacePasskeyMatcher {
         }
 
         let (namespace_id, first_encrypted) = &downloaded[0];
-        let discovery = {
-            let passkey = self.passkey.clone();
-            let prf_salt = first_encrypted.prf_salt;
-            unblock::run_blocking(move || {
-                passkey.discover_and_authenticate_with_prf(
-                    PASSKEY_RP_ID.to_string(),
-                    prf_salt.to_vec(),
-                    random_challenge(),
-                )
-            })
-            .await
-        };
+        let discovery =
+            self.discover_with_platform_authorization_retry(first_encrypted.prf_salt).await;
         let discovered = match discovery {
             Ok(discovered) => discovered,
             Err(PasskeyError::UserCancelled) => return Ok(NamespaceMatchOutcome::UserDeclined),
@@ -359,6 +407,52 @@ impl NamespacePasskeyMatcher {
 
         Ok(NamespaceMatchOutcome::NoMatch)
     }
+
+    async fn discover_with_platform_authorization_retry(
+        &self,
+        prf_salt: [u8; 32],
+    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
+        (|| self.discover_with_prf_salt(prf_salt))
+            .retry(
+                ExponentialBuilder::default()
+                    .with_min_delay(Duration::from_millis(50))
+                    .without_max_times()
+                    .with_total_delay(Some(Duration::from_secs(2))),
+            )
+            .when(is_platform_authorization_error)
+            .notify(|error, delay| {
+                warn!(
+                    "Passkey platform authorization failed before presentation: {error}; retrying in {delay:?}"
+                );
+            })
+            .await
+    }
+
+    async fn discover_with_prf_salt(
+        &self,
+        prf_salt: [u8; 32],
+    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
+        let passkey = self.passkey.clone();
+        unblock::run_blocking(move || {
+            passkey.discover_and_authenticate_with_prf(
+                PASSKEY_RP_ID.to_string(),
+                prf_salt.to_vec(),
+                random_challenge(),
+            )
+        })
+        .await
+    }
+}
+
+fn is_platform_authorization_error(error: &PasskeyError) -> bool {
+    matches!(
+        error,
+        PasskeyError::RequestFailed {
+            operation: PasskeyOperation::DiscoverAssertion,
+            reason: PasskeyFailureReason::PlatformAuthorizationFailed,
+            ..
+        }
+    )
 }
 
 fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {

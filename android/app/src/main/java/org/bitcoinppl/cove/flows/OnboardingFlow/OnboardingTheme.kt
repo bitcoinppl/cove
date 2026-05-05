@@ -11,13 +11,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,6 +32,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material3.Button
@@ -115,49 +119,60 @@ internal fun OnboardingPromptScreen(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     OnboardingBackground(modifier = modifier) {
-        Column(
+        BoxWithConstraints(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 28.dp, vertical = 18.dp),
+                    .navigationBarsPadding(),
         ) {
-            topContent?.invoke(this)
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = maxHeight)
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 24.dp),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                topContent?.invoke(this)
 
-            Spacer(modifier = Modifier.height(24.dp))
+                OnboardingStatusHero(
+                    icon = icon,
+                    pulse = true,
+                )
 
-            OnboardingStatusHero(
-                icon = icon,
-                pulse = true,
-            )
+                Spacer(modifier = Modifier.height(36.dp))
 
-            Spacer(modifier = Modifier.height(44.dp))
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = title,
+                        color = Color.White,
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 38.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
 
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 38.sp,
-                modifier = Modifier.fillMaxWidth(),
-            )
+                    Text(
+                        text = subtitle,
+                        color = OnboardingTextSecondary,
+                        style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(26.dp))
 
-            Text(
-                text = subtitle,
-                color = OnboardingTextSecondary,
-                style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            content()
-
-            Spacer(modifier = Modifier.height(28.dp))
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                ) {
+                    content()
+                }
+            }
         }
     }
 }
@@ -302,7 +317,7 @@ internal fun OnboardingPrimaryButton(
                 disabledContainerColor = Color.Transparent,
                 disabledContentColor = Color.White.copy(alpha = 0.45f),
             ),
-        contentPadding = ButtonDefaults.ContentPadding,
+        contentPadding = PaddingValues(0.dp),
     ) {
         Box(
             modifier =
@@ -355,7 +370,7 @@ internal fun OnboardingSecondaryButton(
                 disabledContentColor = Color.White.copy(alpha = 0.45f),
             ),
         border = androidx.compose.foundation.BorderStroke(1.dp, OnboardingCardBorder),
-        contentPadding = ButtonDefaults.ContentPadding,
+        contentPadding = PaddingValues(0.dp),
     ) {
         Text(
             text = text,
@@ -393,15 +408,16 @@ internal fun OnboardingChoiceCard(
             Box(
                 modifier =
                     Modifier
-                        .size(42.dp)
+                        .size(48.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(OnboardingGradientLight.copy(alpha = 0.14f)),
+                        .background(OnboardingGradientLight.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = OnboardingGradientLight,
+                    modifier = Modifier.size(19.dp),
                 )
             }
 
@@ -419,6 +435,13 @@ internal fun OnboardingChoiceCard(
                     style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                 )
             }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.46f),
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
@@ -451,19 +474,13 @@ internal fun OnboardingStatusCard(
                         Modifier
                             .size(42.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                if (isComplete) {
-                                    OnboardingSuccess.copy(alpha = 0.14f)
-                                } else {
-                                    OnboardingGradientLight.copy(alpha = 0.14f)
-                                },
-                            ),
+                            .background(OnboardingGradientLight.copy(alpha = 0.16f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = if (isComplete) Icons.Default.Check else icon,
+                        imageVector = icon,
                         contentDescription = null,
-                        tint = if (isComplete) OnboardingSuccess else OnboardingGradientLight,
+                        tint = OnboardingGradientLight,
                     )
                 }
 
@@ -481,21 +498,24 @@ internal fun OnboardingStatusCard(
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                     )
                 }
+
+                if (isComplete) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = OnboardingSuccess,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            if (isComplete) {
-                OnboardingSecondaryButton(
-                    text = actionTitle,
-                    onClick = onClick,
-                )
-            } else {
-                OnboardingPrimaryButton(
-                    text = actionTitle,
-                    onClick = onClick,
-                )
-            }
+            OnboardingSecondaryButton(
+                text = actionTitle,
+                onClick = onClick,
+                enabled = true,
+            )
         }
     }
 }
@@ -507,29 +527,18 @@ internal fun OnboardingInlineMessage(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = OnboardingWarning.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(14.dp),
+        color = Color.Red.copy(alpha = 0.20f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, OnboardingWarning.copy(alpha = 0.30f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.35f)),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Icon(
-                imageVector = Icons.Default.CloudDownload,
-                contentDescription = null,
-                tint = OnboardingWarning,
-                modifier = Modifier.padding(top = 2.dp).size(16.dp),
-            )
-            Text(
-                text = text,
-                color = OnboardingWarning.copy(alpha = 0.96f),
-                style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
-            )
-        }
+        Text(
+            text = text,
+            color = Color.White,
+            style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+            modifier = Modifier.padding(14.dp),
+        )
     }
 }
 

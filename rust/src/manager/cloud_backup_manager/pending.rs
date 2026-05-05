@@ -59,6 +59,7 @@ impl RustCloudBackupManager {
         revision_hash: String,
         uploaded_at: u64,
     ) -> Result<(), CloudBackupError> {
+        let starts_master_key_grace = wallet_id.is_none();
         let sync_state = PersistedCloudBlobSyncState {
             kind: CloudUploadKind::BackupBlob,
             namespace_id: namespace_id.to_string(),
@@ -78,6 +79,13 @@ impl RustCloudBackupManager {
             .cloud_blob_sync_states
             .set(&sync_state)
             .map_err_prefix("persist uploaded cloud blob state", CloudBackupError::Internal)?;
+
+        if starts_master_key_grace {
+            send!(
+                self.supervisor
+                    .start_master_key_upload_confirmation_grace(namespace_id.to_string())
+            );
+        }
 
         self.set_pending_upload_verification(true);
         self.wake_pending_upload_verifier();
@@ -107,6 +115,13 @@ impl RustCloudBackupManager {
 
         if !updated {
             return Ok(false);
+        }
+
+        if current_state.wallet_id.is_none() {
+            send!(
+                self.supervisor
+                    .start_master_key_upload_confirmation_grace(current_state.namespace_id.clone())
+            );
         }
 
         self.set_pending_upload_verification(true);
@@ -174,7 +189,7 @@ impl RustCloudBackupManager {
     }
 
     pub(super) fn start_pending_upload_verification_loop(&self) {
-        send!(self.runtime.ensure_pending_upload_verification_loop());
+        send!(self.supervisor.ensure_pending_upload_verification_loop());
     }
 
     pub(crate) async fn verify_pending_uploads_once(&self) -> PendingUploadVerificationStatus {
@@ -182,7 +197,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn wake_pending_upload_verifier(&self) {
-        send!(self.runtime.wake_pending_upload_verifier());
+        send!(self.supervisor.wake_pending_upload_verifier());
     }
 }
 

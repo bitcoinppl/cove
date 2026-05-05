@@ -20,7 +20,7 @@ use crate::{
         client::{FIAT_CLIENT, PriceResponse},
     },
     keychain::{Keychain, KeychainError},
-    manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
+    manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, CloudBackupKeychain},
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     network::Network,
     node::{Node, client::NodeClient},
@@ -581,6 +581,10 @@ impl FfiApp {
             if let Err(error) = crate::wallet::delete_wallet_specific_data(wallet_id) {
                 error!("Unable to delete wallet persisted bdk data: {error}");
             }
+        }
+
+        if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
+            error!("Unable to clear cloud backup keychain state: {error}");
         }
 
         database.dangerous_reset_all_data();

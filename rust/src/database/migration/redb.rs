@@ -1,22 +1,27 @@
 mod copy;
 mod recovery;
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use eyre::{Context as _, Result};
+use redb::{ReadableTable as _, TableHandle as _};
 use tracing::{error, info, warn};
 
 use crate::bootstrap::Migration;
 use crate::database::encrypted_backend::EncryptedBackend;
 use cove_common::consts::{ROOT_DATA_DIR, WALLET_DATA_DIR};
+use cove_types::{WalletId, redb::Json};
 
-use self::copy::{copy_table, verify_encrypted_redb_db};
-use self::recovery::recover_interrupted_migrations as recover_interrupted_migrations_impl;
+use self::copy::{
+    RawKey, RawValue, copy_table, verify_all_source_tables_copied, verify_encrypted_redb_db,
+};
+use self::recovery::{
+    recover_interrupted_main_migration as recover_interrupted_main_migration_impl,
+    recover_interrupted_wallet_migrations as recover_interrupted_wallet_migrations_impl,
+};
 use super::MigrationFailure;
-
-#[cfg(test)]
-use self::copy::{RawKey, RawValue};
 
 #[cfg(test)]
 use self::recovery::{recover_legacy_at_path, recover_main_migration, recover_wallet_migration};
@@ -59,8 +64,12 @@ fn wallet_database_paths(wallet_dir: &Path) -> DatabasePaths {
     }
 }
 
-pub fn recover_interrupted_migrations() -> Result<()> {
-    recover_interrupted_migrations_impl()
+pub fn recover_interrupted_main_migration() -> Result<()> {
+    recover_interrupted_main_migration_impl()
+}
+
+pub fn recover_interrupted_wallet_migrations() -> Result<()> {
+    recover_interrupted_wallet_migrations_impl()
 }
 
 /// Check whether the main database needs migration (legacy plaintext exists, encrypted does not)
@@ -81,12 +90,19 @@ fn needs_legacy_rename(wallet_dir: &Path) -> bool {
     paths.source.exists() && !paths.dest.exists() && EncryptedBackend::is_encrypted(&paths.source)
 }
 
-/// Count wallet subdirectories that have an unencrypted wallet_data.json
+/// Count known wallet subdirectories that still need redb migration
 ///
 /// Best-effort: returns 0 if the directory is unreadable. The actual
 /// migration in `WalletMigration::run()` will surface any real I/O errors
-pub fn count_redb_wallets_needing_migration() -> u32 {
-    let entries = match std::fs::read_dir(&*WALLET_DATA_DIR) {
+pub fn count_redb_wallets_needing_migration(known_wallet_ids: &BTreeSet<WalletId>) -> u32 {
+    count_redb_wallets_needing_migration_in(&WALLET_DATA_DIR, known_wallet_ids)
+}
+
+fn count_redb_wallets_needing_migration_in(
+    dir: &Path,
+    known_wallet_ids: &BTreeSet<WalletId>,
+) -> u32 {
+    let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return 0,
         Err(e) => {
@@ -105,11 +121,63 @@ pub fn count_redb_wallets_needing_migration() -> u32 {
             }
         };
         let dir = entry.path();
+        if !is_known_wallet_dir(&dir, known_wallet_ids) {
+            continue;
+        }
+
         if needs_redb_migration(&dir) || needs_legacy_rename(&dir) {
             count += 1;
         }
     }
     count
+}
+
+pub fn known_wallet_ids_from_main_database() -> Result<BTreeSet<WalletId>> {
+    known_wallet_ids_from_main_database_at(&main_database_paths(&ROOT_DATA_DIR).dest)
+}
+
+fn known_wallet_ids_from_main_database_at(path: &Path) -> Result<BTreeSet<WalletId>> {
+    if !path.exists() {
+        return Ok(BTreeSet::new());
+    }
+
+    let key = crate::database::encrypted_backend::encryption_key()
+        .ok_or_else(|| eyre::eyre!("encryption key must be set before reading wallet metadata"))?;
+
+    let backend =
+        EncryptedBackend::open(path, &key).context("failed to open encrypted main database")?;
+
+    let db = redb::Database::builder()
+        .create_with_backend(backend)
+        .context("failed to init encrypted main database")?;
+
+    known_wallet_ids_from_database(&db)
+}
+
+fn known_wallet_ids_from_database(db: &redb::Database) -> Result<BTreeSet<WalletId>> {
+    let read_txn = db.begin_read().context("failed to begin main database wallet read")?;
+    let raw_def = redb::TableDefinition::<
+        RawKey<&str>,
+        RawValue<Json<Vec<crate::wallet::metadata::WalletMetadata>>>,
+    >::new(crate::database::wallet::TABLE.name());
+
+    let table = match read_txn.open_table(raw_def) {
+        Ok(table) => table,
+        Err(redb::TableError::TableDoesNotExist(_)) => return Ok(BTreeSet::new()),
+        Err(error) => return Err(error).context("failed to open wallet metadata table"),
+    };
+
+    let mut ids = BTreeSet::new();
+    for entry in table.iter().context("failed to iterate wallet metadata table")? {
+        let (_, value) = entry.context("failed to read wallet metadata row")?;
+        let wallets: Vec<crate::wallet::metadata::WalletMetadata> =
+            serde_json::from_slice(value.value())
+                .context("failed to decode wallet metadata row")?;
+
+        ids.extend(wallets.into_iter().map(|wallet| wallet.id));
+    }
+
+    Ok(ids)
 }
 
 /// Migrate the main redb database from plaintext to encrypted if needed
@@ -175,6 +243,7 @@ fn migrate_database(
     let dst_db = create_encrypted_dst(&paths.tmp)?;
 
     copy_tables(&src_db, &dst_db)?;
+    verify_all_source_tables_copied(&src_db, &dst_db)?;
 
     drop(src_db);
     drop(dst_db);
@@ -201,6 +270,8 @@ fn migrate_main_database(source_path: &Path) -> Result<bool> {
             copy_table(src_db, dst_db, crate::database::global_flag::TABLE)?;
             copy_table(src_db, dst_db, crate::database::global_config::TABLE)?;
             copy_table(src_db, dst_db, crate::database::global_cache::TABLE)?;
+            copy_table(src_db, dst_db, crate::database::cloud_backup::CLOUD_BACKUP_STATE_TABLE)?;
+            copy_table(src_db, dst_db, crate::database::cloud_backup::CLOUD_BLOB_SYNC_STATE_TABLE)?;
             copy_table(src_db, dst_db, crate::database::wallet::TABLE)?;
             copy_table(src_db, dst_db, crate::database::unsigned_transactions::MAIN_TABLE)?;
             copy_table(src_db, dst_db, crate::database::unsigned_transactions::BY_WALLET_TABLE)?;
@@ -216,11 +287,12 @@ fn migrate_main_database(source_path: &Path) -> Result<bool> {
 pub struct WalletMigration {
     dir: PathBuf,
     migration: Arc<Migration>,
+    known_wallet_ids: BTreeSet<WalletId>,
 }
 
 impl WalletMigration {
-    pub fn new(migration: Arc<Migration>) -> Self {
-        Self { dir: WALLET_DATA_DIR.to_path_buf(), migration }
+    pub fn new(migration: Arc<Migration>, known_wallet_ids: BTreeSet<WalletId>) -> Self {
+        Self { dir: WALLET_DATA_DIR.to_path_buf(), migration, known_wallet_ids }
     }
 
     pub fn run(&self) -> Result<()> {
@@ -238,7 +310,13 @@ impl WalletMigration {
             self.check_cancelled()?;
 
             let entry = entry.context("failed to read directory entry during wallet migration")?;
-            self.migrate_entry(&entry.path(), &mut failures);
+            let wallet_dir = entry.path();
+            if !self.is_known_wallet_dir(&wallet_dir) {
+                self.log_skipped_orphan(&wallet_dir);
+                continue;
+            }
+
+            self.migrate_entry(&wallet_dir, &mut failures);
         }
 
         if !failures.is_empty() {
@@ -255,6 +333,17 @@ impl WalletMigration {
         }
 
         Ok(())
+    }
+
+    fn is_known_wallet_dir(&self, wallet_dir: &Path) -> bool {
+        is_known_wallet_dir(wallet_dir, &self.known_wallet_ids)
+    }
+
+    fn log_skipped_orphan(&self, wallet_dir: &Path) {
+        if needs_redb_migration(wallet_dir) || needs_legacy_rename(wallet_dir) {
+            let dir = wallet_dir.display();
+            warn!("Skipping redb migration for orphan wallet data directory at {dir}");
+        }
     }
 
     fn migrate_entry(&self, wallet_dir: &Path, failures: &mut Vec<MigrationFailure>) {
@@ -296,6 +385,14 @@ impl WalletMigration {
     }
 }
 
+fn is_known_wallet_dir(wallet_dir: &Path, known_wallet_ids: &BTreeSet<WalletId>) -> bool {
+    let Some(name) = wallet_dir.file_name().and_then(std::ffi::OsStr::to_str) else {
+        return false;
+    };
+
+    known_wallet_ids.contains(name)
+}
+
 fn migrate_wallet_database(source_path: &Path) -> Result<()> {
     let wallet_dir = source_path.parent().unwrap_or(source_path);
     let paths = wallet_database_paths(wallet_dir);
@@ -328,14 +425,23 @@ mod tests {
 
     use super::*;
     use crate::database::{
-        encrypted_backend, global_cache, global_config, global_flag, historical_price,
-        unsigned_transactions, wallet, wallet_data,
+        cloud_backup, encrypted_backend, global_cache, global_config, global_flag,
+        historical_price, unsigned_transactions, wallet, wallet_data,
     };
+    use crate::wallet::metadata::{WalletMetadata, WalletMode};
     use tempfile::TempDir;
 
     impl WalletMigration {
         fn with_dir(dir: PathBuf, migration: Arc<Migration>) -> Self {
-            Self { dir, migration }
+            Self { dir, migration, known_wallet_ids: BTreeSet::new() }
+        }
+
+        fn with_dir_and_known_wallet_ids(
+            dir: PathBuf,
+            migration: Arc<Migration>,
+            known_wallet_ids: BTreeSet<WalletId>,
+        ) -> Self {
+            Self { dir, migration, known_wallet_ids }
         }
     }
 
@@ -358,6 +464,34 @@ mod tests {
         write_txn.commit().unwrap();
     }
 
+    fn create_encrypted_main_db_with_wallets(path: &Path, wallets: Vec<WalletMetadata>) {
+        let key = encrypted_backend::encryption_key().unwrap();
+        let backend = EncryptedBackend::create(path, &key).unwrap();
+        let db = redb::Database::builder()
+            .create_with_file_format_v3(true)
+            .create_with_backend(backend)
+            .unwrap();
+
+        let write_txn = db.begin_write().unwrap();
+        {
+            let mut table = write_txn.open_table(wallet::TABLE).unwrap();
+            let key = wallet::WalletKey::from((crate::network::Network::Bitcoin, WalletMode::Main))
+                .to_string();
+            table.insert(&*key, wallets).unwrap();
+        }
+        write_txn.commit().unwrap();
+    }
+
+    fn wallet_metadata_with_id(id: &str) -> WalletMetadata {
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.id = id.into();
+        metadata
+    }
+
+    fn wallet_ids(ids: &[&str]) -> BTreeSet<WalletId> {
+        ids.iter().copied().map(WalletId::from).collect()
+    }
+
     fn create_plaintext_main_db(dir: &TempDir) -> PathBuf {
         let path = dir.path().join("cove.db");
         let db = redb::Database::create(&path).unwrap();
@@ -378,7 +512,11 @@ mod tests {
     }
 
     fn create_plaintext_wallet_db(dir: &TempDir) -> PathBuf {
-        let wallet_dir = dir.path().join("test_wallet_id");
+        create_plaintext_wallet_db_named(dir, "test_wallet_id")
+    }
+
+    fn create_plaintext_wallet_db_named(dir: &TempDir, wallet_id: &str) -> PathBuf {
+        let wallet_dir = dir.path().join(wallet_id);
         std::fs::create_dir_all(&wallet_dir).unwrap();
         let path = wallet_dir.join("wallet_data.json");
 
@@ -481,6 +619,60 @@ mod tests {
     }
 
     #[test]
+    fn migrate_main_database_copies_cloud_backup_rows() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source_path = create_plaintext_main_db(&dir);
+        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+
+        let backup_state = cloud_backup::PersistedCloudBackupState {
+            status: cloud_backup::PersistedCloudBackupStatus::Unverified,
+            last_sync: Some(42),
+            wallet_count: Some(2),
+            ..cloud_backup::PersistedCloudBackupState::default()
+        };
+        let sync_state = cloud_backup::PersistedCloudBlobSyncState {
+            kind: cloud_backup::CloudUploadKind::BackupBlob,
+            namespace_id: "namespace".into(),
+            wallet_id: None,
+            record_id: "wallet-a".into(),
+            state: cloud_backup::PersistedCloudBlobState::Dirty(
+                cloud_backup::CloudBlobDirtyState { changed_at: 7 },
+            ),
+        };
+
+        {
+            let db = redb::Database::open(&source_path).unwrap();
+            let write_txn = db.begin_write().unwrap();
+            {
+                let mut table =
+                    write_txn.open_table(cloud_backup::CLOUD_BACKUP_STATE_TABLE).unwrap();
+                table.insert("current", backup_state.clone()).unwrap();
+            }
+            {
+                let mut table =
+                    write_txn.open_table(cloud_backup::CLOUD_BLOB_SYNC_STATE_TABLE).unwrap();
+                table.insert(sync_state.record_id.as_str(), sync_state.clone()).unwrap();
+            }
+            write_txn.commit().unwrap();
+        }
+
+        migrate_main_database(&source_path).unwrap();
+
+        let key = encrypted_backend::encryption_key().unwrap();
+        let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
+        let db = redb::Database::builder().create_with_backend(backend).unwrap();
+        let read_txn = db.begin_read().unwrap();
+
+        let backup_table = read_txn.open_table(cloud_backup::CLOUD_BACKUP_STATE_TABLE).unwrap();
+        assert_eq!(backup_table.get("current").unwrap().unwrap().value(), backup_state);
+
+        let sync_table = read_txn.open_table(cloud_backup::CLOUD_BLOB_SYNC_STATE_TABLE).unwrap();
+        assert_eq!(sync_table.get("wallet-a").unwrap().unwrap().value(), sync_state);
+    }
+
+    #[test]
     fn migrate_wallet_database_roundtrip() {
         setup_test_key();
 
@@ -544,12 +736,10 @@ mod tests {
 
         recover_main_migration(dir.path()).unwrap();
 
-        // should finish the rename
-        assert!(dest.exists());
+        // source still exists, so retry from source instead of trusting an unpromoted temp
+        assert!(!dest.exists());
         assert!(!tmp.exists());
-        assert!(verify_encrypted_redb_db(&dest).unwrap());
-        // plaintext cleaned up since dest is now verified
-        assert!(!source.exists());
+        assert!(source.exists());
     }
 
     #[test]
@@ -571,12 +761,13 @@ mod tests {
     }
 
     #[test]
-    fn recover_main_preserves_plaintext_when_encrypted_corrupt() {
+    fn recover_main_quarantines_corrupt_encrypted_when_plaintext_exists() {
         setup_test_key();
 
         let dir = TempDir::new().unwrap();
         let source = dir.path().join(LEGACY_MAIN_DB);
         let dest = dir.path().join(ENCRYPTED_MAIN_DB);
+        let corrupt = dir.path().join("cove.encrypted.db.corrupt");
 
         // both exist but dest is corrupt
         std::fs::write(&source, b"old_plaintext").unwrap();
@@ -584,8 +775,25 @@ mod tests {
 
         recover_main_migration(dir.path()).unwrap();
 
-        // should preserve plaintext since encrypted is corrupt
         assert!(source.exists());
+        assert!(!dest.exists());
+        assert!(corrupt.exists());
+        assert_eq!(std::fs::read(&corrupt).unwrap(), b"corrupt_encrypted");
+    }
+
+    #[test]
+    fn recover_main_preserves_corrupt_encrypted_when_no_plaintext_exists() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source = dir.path().join(LEGACY_MAIN_DB);
+        let dest = dir.path().join(ENCRYPTED_MAIN_DB);
+
+        std::fs::write(&dest, b"corrupt_encrypted").unwrap();
+
+        recover_main_migration(dir.path()).unwrap();
+
+        assert!(!source.exists());
         assert!(dest.exists());
     }
 
@@ -628,10 +836,31 @@ mod tests {
 
         recover_wallet_migration(&wallet_dir).unwrap();
 
-        assert!(dest.exists());
+        assert!(!dest.exists());
         assert!(!tmp.exists());
-        assert!(verify_encrypted_redb_db(&dest).unwrap());
-        assert!(!source.exists());
+        assert!(source.exists());
+    }
+
+    #[test]
+    fn recover_wallet_quarantines_corrupt_encrypted_when_plaintext_exists() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let wallet_dir = dir.path().join("wallet_id");
+        std::fs::create_dir_all(&wallet_dir).unwrap();
+
+        let source = wallet_dir.join(LEGACY_WALLET_DB);
+        let dest = wallet_dir.join(ENCRYPTED_WALLET_DB);
+        let corrupt = wallet_dir.join("wallet_data.encrypted.json.redb.corrupt");
+
+        std::fs::write(&source, b"old_data").unwrap();
+        std::fs::write(&dest, b"corrupt_encrypted").unwrap();
+
+        recover_wallet_migration(&wallet_dir).unwrap();
+
+        assert!(source.exists());
+        assert!(!dest.exists());
+        assert!(corrupt.exists());
     }
 
     #[test]
@@ -641,6 +870,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("cove.db");
         let bak_path = dir.path().join("cove.db.bak");
+        let corrupt_path = dir.path().join("cove.db.corrupt");
 
         // main DB exists but is corrupt, .bak is a valid encrypted DB
         std::fs::write(&db_path, b"corrupt_data").unwrap();
@@ -648,9 +878,11 @@ mod tests {
 
         recover_legacy_at_path(&db_path).unwrap();
 
-        // should have restored from .bak
+        // should restore from .bak without deleting the corrupt DB
         assert!(db_path.exists());
         assert!(!bak_path.exists());
+        assert!(corrupt_path.exists());
+        assert_eq!(std::fs::read(&corrupt_path).unwrap(), b"corrupt_data");
         assert!(verify_encrypted_redb_db(&db_path).unwrap());
     }
 
@@ -690,6 +922,40 @@ mod tests {
         assert!(db_path.exists());
         assert!(!bak_path.exists());
         assert_eq!(std::fs::read(&db_path).unwrap(), b"backup_data");
+    }
+
+    #[test]
+    fn recover_legacy_tmp_only_promotes_valid_tmp() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("cove.db");
+        let tmp_path = dir.path().join("cove.db.enc.tmp");
+
+        create_encrypted_redb_at(&tmp_path);
+
+        recover_legacy_at_path(&db_path).unwrap();
+
+        assert!(db_path.exists());
+        assert!(!tmp_path.exists());
+        assert!(verify_encrypted_redb_db(&db_path).unwrap());
+    }
+
+    #[test]
+    fn recover_legacy_tmp_only_preserves_invalid_tmp() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("cove.db");
+        let tmp_path = dir.path().join("cove.db.enc.tmp");
+
+        std::fs::write(&tmp_path, b"corrupt_tmp").unwrap();
+
+        recover_legacy_at_path(&db_path).unwrap();
+
+        assert!(!db_path.exists());
+        assert!(tmp_path.exists());
+        assert_eq!(std::fs::read(&tmp_path).unwrap(), b"corrupt_tmp");
     }
 
     #[test]
@@ -773,6 +1039,8 @@ mod tests {
             write_txn.open_table(global_flag::TABLE).unwrap();
             write_txn.open_table(global_config::TABLE).unwrap();
             write_txn.open_table(global_cache::TABLE).unwrap();
+            write_txn.open_table(cloud_backup::CLOUD_BACKUP_STATE_TABLE).unwrap();
+            write_txn.open_table(cloud_backup::CLOUD_BLOB_SYNC_STATE_TABLE).unwrap();
             write_txn.open_table(wallet::TABLE).unwrap();
             write_txn.open_table(unsigned_transactions::MAIN_TABLE).unwrap();
             write_txn.open_table(unsigned_transactions::BY_WALLET_TABLE).unwrap();
@@ -802,6 +1070,40 @@ mod tests {
             missing.is_empty(),
             "Tables in source but not in destination (migration missed them): {missing:?}"
         );
+    }
+
+    #[test]
+    fn migrate_main_database_fails_if_source_table_is_not_copied() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source_path = create_plaintext_main_db(&dir);
+        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+        let tmp_path = dest_path.with_extension("db.tmp");
+        let future_table: TableDefinition<&str, &str> = TableDefinition::new("future_table");
+
+        {
+            let db = redb::Database::open(&source_path).unwrap();
+            let write_txn = db.begin_write().unwrap();
+            {
+                let mut table = write_txn.open_table(future_table).unwrap();
+                table.insert("key", "value").unwrap();
+            }
+            write_txn.commit().unwrap();
+        }
+
+        let result = migrate_main_database(&source_path);
+        assert!(result.is_err(), "migration should fail instead of dropping an unknown table");
+        assert!(result.unwrap_err().to_string().contains("future_table"));
+        assert!(source_path.exists());
+        assert!(!dest_path.exists());
+        assert!(tmp_path.exists());
+
+        recover_main_migration(dir.path()).unwrap();
+
+        assert!(source_path.exists());
+        assert!(!dest_path.exists());
+        assert!(!tmp_path.exists());
     }
 
     #[test]
@@ -849,6 +1151,37 @@ mod tests {
             missing.is_empty(),
             "Tables in source but not in destination (migration missed them): {missing:?}"
         );
+    }
+
+    #[test]
+    fn known_wallet_ids_reads_wallet_metadata_from_main_database() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join(ENCRYPTED_MAIN_DB);
+        create_encrypted_main_db_with_wallets(
+            &path,
+            vec![wallet_metadata_with_id("wallet_good"), wallet_metadata_with_id("wallet_other")],
+        );
+
+        let ids = known_wallet_ids_from_main_database_at(&path).unwrap();
+
+        assert!(ids.contains("wallet_good"));
+        assert!(ids.contains("wallet_other"));
+    }
+
+    #[test]
+    fn count_redb_wallets_needing_migration_ignores_orphan_dirs() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        create_plaintext_wallet_db_named(&dir, "wallet_good");
+        create_plaintext_wallet_db_named(&dir, "wallet_orphan");
+
+        let count =
+            count_redb_wallets_needing_migration_in(dir.path(), &wallet_ids(&["wallet_good"]));
+
+        assert_eq!(count, 1);
     }
 
     #[test]
@@ -922,8 +1255,12 @@ mod tests {
 
         let cancelled = Arc::new(AtomicBool::new(false));
         let migration = Arc::new(Migration::new(2, cancelled));
-        let result =
-            WalletMigration::with_dir(dir.path().to_path_buf(), Arc::clone(&migration)).run();
+        let result = WalletMigration::with_dir_and_known_wallet_ids(
+            dir.path().to_path_buf(),
+            Arc::clone(&migration),
+            wallet_ids(&["wallet_bad", "wallet_good"]),
+        )
+        .run();
 
         // should report error for the bad wallet
         assert!(result.is_err());
@@ -947,5 +1284,58 @@ mod tests {
         let good_encrypted = good_dir.join(ENCRYPTED_WALLET_DB);
         assert!(good_encrypted.exists(), "good wallet should have encrypted DB");
         assert!(EncryptedBackend::is_encrypted(&good_encrypted), "good wallet should be encrypted");
+    }
+
+    #[test]
+    fn wallet_migration_skips_orphan_wallet_dirs() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+
+        let orphan_dir = dir.path().join("wallet_orphan");
+        std::fs::create_dir_all(&orphan_dir).unwrap();
+        let orphan_db = orphan_dir.join("wallet_data.json");
+        std::fs::write(&orphan_db, b"not a valid redb database").unwrap();
+
+        let good_db = create_plaintext_wallet_db_named(&dir, "wallet_good");
+        let good_dir = good_db.parent().unwrap();
+
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let migration = Arc::new(Migration::new(1, cancelled));
+        WalletMigration::with_dir_and_known_wallet_ids(
+            dir.path().to_path_buf(),
+            Arc::clone(&migration),
+            wallet_ids(&["wallet_good"]),
+        )
+        .run()
+        .unwrap();
+
+        assert_eq!(migration.progress().current, 1);
+        assert!(orphan_db.exists(), "orphan source should be left untouched");
+        assert!(!orphan_dir.join(ENCRYPTED_WALLET_DB).exists());
+        assert!(good_dir.join(ENCRYPTED_WALLET_DB).exists());
+    }
+
+    #[test]
+    fn wallet_migration_fails_known_corrupt_wallet_dir() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let bad_dir = dir.path().join("wallet_bad");
+        std::fs::create_dir_all(&bad_dir).unwrap();
+        let bad_db = bad_dir.join("wallet_data.json");
+        std::fs::write(&bad_db, b"not a valid redb database").unwrap();
+
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let migration = Arc::new(Migration::new(1, cancelled));
+        let result = WalletMigration::with_dir_and_known_wallet_ids(
+            dir.path().to_path_buf(),
+            migration,
+            wallet_ids(&["wallet_bad"]),
+        )
+        .run();
+
+        assert!(result.is_err());
+        assert!(bad_db.exists(), "known corrupt source should be preserved");
     }
 }

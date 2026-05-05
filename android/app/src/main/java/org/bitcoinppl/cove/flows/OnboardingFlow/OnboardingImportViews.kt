@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.io.File
@@ -90,7 +91,9 @@ private sealed interface HardwareImportMode {
 
 @Composable
 internal fun OnboardingSoftwareImportFlowView(
+    errorMessage: String?,
     onImported: (WalletId) -> Unit,
+    onCreateWallet: () -> Unit,
     onBack: () -> Unit,
 ) {
     var mode by remember { mutableStateOf<SoftwareImportMode>(SoftwareImportMode.Chooser) }
@@ -102,6 +105,11 @@ internal fun OnboardingSoftwareImportFlowView(
                 title = "Import your software wallet",
                 subtitle = "Choose how you want to bring your existing wallet into Cove.",
             ) {
+                if (errorMessage != null) {
+                    OnboardingInlineMessage(text = errorMessage)
+                    Spacer(modifier = Modifier.size(14.dp))
+                }
+
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OnboardingChoiceCard(
                         title = "Enter recovery words",
@@ -123,6 +131,22 @@ internal fun OnboardingSoftwareImportFlowView(
                     text = "Back",
                     onClick = onBack,
                 )
+
+                Spacer(modifier = Modifier.size(2.dp))
+
+                TextButton(
+                    onClick = onCreateWallet,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag("onboarding.software.create"),
+                ) {
+                    Text(
+                        text = "Create a new wallet instead",
+                        color = OnboardingTextSecondary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
 
         SoftwareImportMode.WordCount ->
@@ -164,8 +188,9 @@ internal fun OnboardingSoftwareImportFlowView(
 
         SoftwareImportMode.Qr ->
             OnboardingHotWalletImportView(
-                numberOfWords = NumberOfBip39Words.TWENTY_FOUR,
+                numberOfWords = NumberOfBip39Words.TWELVE,
                 importType = ImportType.QR,
+                autoImportScannedWords = true,
                 onBack = { mode = SoftwareImportMode.Chooser },
                 onImported = onImported,
             )
@@ -176,6 +201,7 @@ internal fun OnboardingSoftwareImportFlowView(
 private fun OnboardingHotWalletImportView(
     numberOfWords: NumberOfBip39Words,
     importType: ImportType,
+    autoImportScannedWords: Boolean = false,
     onBack: () -> Unit,
     onImported: (WalletId) -> Unit,
 ) {
@@ -216,6 +242,7 @@ private fun OnboardingHotWalletImportView(
                 onBackPressed = onBack,
                 onImported = onImported,
                 showNfcAction = false,
+                autoImportScannedWords = autoImportScannedWords,
             )
         else ->
             OnboardingImportErrorView(
@@ -255,7 +282,7 @@ internal fun OnboardingHardwareImportFlowView(
                     )
                     OnboardingChoiceCard(
                         title = "Scan with NFC",
-                        subtitle = "Hold your hardware wallet or export tag near your phone.",
+                        subtitle = "Hold your hardware wallet or export tag near the top of your phone.",
                         icon = Icons.Default.Nfc,
                         onClick = { mode = HardwareImportMode.Nfc },
                     )
@@ -465,7 +492,7 @@ private fun OnboardingHardwareNfcImportView(
     OnboardingPromptScreen(
         icon = Icons.Default.Nfc,
         title = "Scan your hardware wallet with NFC",
-        subtitle = "Hold your hardware wallet or export tag near your phone.",
+        subtitle = "Hold your hardware wallet or export tag near the top of your phone.",
     ) {
         if (activity == null || nfcReader == null) {
             OnboardingInlineMessage(text = "NFC is not available on this device.")
@@ -477,7 +504,7 @@ private fun OnboardingHardwareNfcImportView(
 
         if (nfcReader != null && nfcReader.readingState != NfcReadingState.WAITING) {
             Text(
-                text = nfcReader.message.ifEmpty { "Hold your phone near the NFC tag" },
+                text = nfcReader.message.ifEmpty { "Hold the top of your phone near the NFC tag" },
                 color = Color.White,
                 style = MaterialTheme.typography.bodyMedium,
             )

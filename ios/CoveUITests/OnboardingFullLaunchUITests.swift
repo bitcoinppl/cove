@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 final class OnboardingFullLaunchUITests: XCTestCase {
@@ -24,8 +25,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
 
-        XCTAssertTrue(app.staticTexts["What would you like to do?"].waitForExistence(timeout: 10))
-        button(startingWith: "Import existing wallet").tap()
+        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
 
         importKnownEmptyMainnetWalletWords()
         app.buttons["Not Now"].tap()
@@ -74,7 +74,10 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         app.buttons["Continue"].tap()
 
         XCTAssertTrue(app.staticTexts["Your wallet is ready to fund"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.staticTexts["Loading deposit address"].waitForExistence(timeout: 10) || app.staticTexts["Deposit address"].exists)
+        XCTAssertTrue(app.staticTexts["Deposit address"].waitForExistence(timeout: 30))
+
+        app.buttons["Copy Address"].tap()
+        XCTAssertTrue(app.buttons["Copied"].waitForExistence(timeout: 2))
     }
 
     func testHardwareWalletUserCanReachImportChoices() {
@@ -117,8 +120,8 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
 
-        XCTAssertTrue(app.staticTexts["What would you like to do?"].waitForExistence(timeout: 10))
-        button(startingWith: "Create a new wallet").tap()
+        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
+        app.buttons["Create a new wallet instead"].tap()
 
         assertBackupWallet(titlePrefix: "Back up your wallet")
         viewRecoveryWords()
@@ -129,9 +132,6 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
-
-        XCTAssertTrue(app.staticTexts["What would you like to do?"].waitForExistence(timeout: 10))
-        button(startingWith: "Import existing wallet").tap()
 
         XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
         XCTAssertTrue(button(startingWith: "Enter recovery words").exists)
@@ -144,8 +144,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
 
-        XCTAssertTrue(app.staticTexts["What would you like to do?"].waitForExistence(timeout: 10))
-        button(startingWith: "Import existing wallet").tap()
+        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
         button(startingWith: "Scan QR code").tap()
 
         assertQrScannerVisible()
@@ -157,8 +156,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
 
-        XCTAssertTrue(app.staticTexts["What would you like to do?"].waitForExistence(timeout: 10))
-        button(startingWith: "Import existing wallet").tap()
+        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
 
         importKnownEmptyMainnetWalletWords()
         app.buttons["Not Now"].tap()
@@ -166,7 +164,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         chooseNativeImportedWalletFromSelectionSheet()
 
         XCTAssertTrue(app.staticTexts["Transactions"].waitForExistence(timeout: 30))
-        XCTAssertTrue(staticText(containing: "0 sats").waitForExistence(timeout: 30))
+        XCTAssertTrue(staticText(containing: "0 BTC").waitForExistence(timeout: 30))
     }
 
     func testNewUserCanReachBackupWallet() {
@@ -270,10 +268,10 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
     private func chooseNativeImportedWalletFromSelectionSheet() {
         XCTAssertTrue(app.staticTexts["Multiple wallets found, please choose one"].waitForExistence(timeout: 30))
-        XCTAssertTrue(app.buttons["Keep Current"].exists)
+        XCTAssertTrue(button(startingWith: "Keep Current").exists)
         XCTAssertTrue(app.staticTexts["Wrapped Segwit"].exists || app.buttons["Wrapped Segwit"].exists)
         XCTAssertTrue(app.staticTexts["Legacy"].exists || app.buttons["Legacy"].exists)
-        app.buttons["Keep Current"].tap()
+        button(startingWith: "Keep Current").tap()
         XCTAssertTrue(app.staticTexts["Transactions"].waitForExistence(timeout: 30))
     }
 
@@ -287,12 +285,11 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         button(startingWith: "12 words").tap()
         XCTAssertTrue(app.navigationBars["Import Wallet"].waitForExistence(timeout: 10))
 
-        for (index, word) in knownEmptyMainnetMnemonic.enumerated() {
-            let field = app.textFields["hotWalletImport.word.\(index + 1)"]
-            XCTAssertTrue(field.waitForExistence(timeout: 10))
-            field.tap()
-            field.typeText(word)
-        }
+        let firstField = app.textFields["hotWalletImport.word.1"]
+        XCTAssertTrue(firstField.waitForExistence(timeout: 10))
+        firstField.tap()
+        UIPasteboard.general.string = knownEmptyMainnetMnemonic.joined(separator: " ")
+        firstField.typeKey("v", modifierFlags: .command)
 
         dismissKeyboardIfVisible()
         app.buttons["hotWalletImport.import"].tap()
@@ -344,6 +341,6 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     private func element(identifier: String) -> XCUIElement {
-        app.descendants(matching: .any)[identifier]
+        app.buttons[identifier]
     }
 }

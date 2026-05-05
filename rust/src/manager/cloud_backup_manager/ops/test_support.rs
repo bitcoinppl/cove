@@ -1,10 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use act_zero::call;
 use bip39::Mnemonic;
-use cove_cspp::CsppStore;
 use cove_cspp::backup_data::{
     MASTER_KEY_RECORD_ID, WalletEntry, WalletMode as CloudWalletMode, WalletSecret,
     wallet_filename_from_record_id,
@@ -12,10 +11,11 @@ use cove_cspp::backup_data::{
 use cove_device::cloud_storage::{
     CloudAccessPolicy, CloudStorage, CloudStorageAccess, CloudStorageError, CloudSyncHealth,
 };
-use cove_device::keychain::{CSPP_NAMESPACE_ID_KEY, Keychain, KeychainAccess};
+use cove_device::keychain::{Keychain, KeychainAccess};
 use cove_device::passkey::{
     DiscoveredPasskeyResult, PasskeyAccess, PasskeyCredentialPresence, PasskeyError,
-    PasskeyProvider,
+    PasskeyFailureReason, PasskeyOperation, PasskeyProvider, PasskeyRegistrationPlatform,
+    PasskeyRegistrationResult,
 };
 use parking_lot::Mutex;
 use sha2::Digest as _;
@@ -27,6 +27,10 @@ use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue, CloudBlobUploadingState,
     CloudUploadKind, PersistedCloudBackupState, PersistedCloudBackupStatus,
     PersistedCloudBlobState, PersistedCloudBlobSyncState,
+};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupKeychain, cloud_backup_test_lock, ensure_cloud_backup_test_tokio_runtime,
+    workers::RestoreOperation,
 };
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
@@ -62,19 +66,53 @@ impl cove_cspp::CsppStore for MockStoreHandle {
 
 type MockDiscoverResult = Result<(Vec<u8>, Vec<u8>), PasskeyError>;
 type MockPasskeyActionResult = Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>;
+type MockPasskeyCreateResult = Arc<Mutex<Option<Result<PasskeyRegistrationResult, PasskeyError>>>>;
 #[derive(Debug, Clone, Default)]
 pub(crate) struct MockKeychain {
     entries: Arc<Mutex<HashMap<String, String>>>,
+    fail_save_at: Arc<Mutex<Option<usize>>>,
+    fail_delete_at: Arc<Mutex<Option<usize>>>,
+    save_count: Arc<Mutex<usize>>,
+    delete_count: Arc<Mutex<usize>>,
 }
 
 impl MockKeychain {
     fn reset(&self) {
         self.entries.lock().clear();
+        *self.fail_save_at.lock() = None;
+        *self.fail_delete_at.lock() = None;
+        *self.save_count.lock() = 0;
+        *self.delete_count.lock() = 0;
+    }
+
+    pub(crate) fn set_entries(&self, entries: Vec<(&str, &str)>) {
+        *self.entries.lock() =
+            entries.into_iter().map(|(key, value)| (key.into(), value.into())).collect();
+    }
+
+    pub(crate) fn get_entry(&self, key: &str) -> Option<String> {
+        self.entries.lock().get(key).cloned()
+    }
+
+    pub(crate) fn fail_save_at(&self, save_attempt: usize) {
+        *self.save_count.lock() = 0;
+        *self.fail_save_at.lock() = Some(save_attempt);
+    }
+
+    pub(crate) fn fail_delete_at(&self, delete_attempt: usize) {
+        *self.delete_count.lock() = 0;
+        *self.fail_delete_at.lock() = Some(delete_attempt);
     }
 }
 
 impl KeychainAccess for MockKeychain {
     fn save(&self, key: String, value: String) -> Result<(), cove_device::keychain::KeychainError> {
+        let mut save_count = self.save_count.lock();
+        *save_count += 1;
+        if Some(*save_count) == *self.fail_save_at.lock() {
+            return Err(cove_device::keychain::KeychainError::Save);
+        }
+
         self.entries.lock().insert(key, value);
         Ok(())
     }
@@ -84,6 +122,12 @@ impl KeychainAccess for MockKeychain {
     }
 
     fn delete(&self, key: String) -> bool {
+        let mut delete_count = self.delete_count.lock();
+        *delete_count += 1;
+        if Some(*delete_count) == *self.fail_delete_at.lock() {
+            return false;
+        }
+
         self.entries.lock().remove(&key).is_some()
     }
 }
@@ -371,41 +415,73 @@ impl CloudStorageAccess for MockCloudStorage {
 
 #[derive(Debug, Clone)]
 pub(crate) struct MockPasskeyProviderImpl {
-    discover_result: Arc<Mutex<MockDiscoverResult>>,
-    create_result: MockPasskeyActionResult,
+    discover_results: Arc<Mutex<VecDeque<MockDiscoverResult>>>,
+    create_result: MockPasskeyCreateResult,
     authenticate_result: MockPasskeyActionResult,
+    create_count: Arc<Mutex<usize>>,
+    authenticate_count: Arc<Mutex<usize>>,
+    discover_count: Arc<Mutex<usize>>,
 }
 
 impl Default for MockPasskeyProviderImpl {
     fn default() -> Self {
         Self {
-            discover_result: Arc::new(Mutex::new(Err(PasskeyError::NoCredentialFound))),
+            discover_results: Arc::new(Mutex::new(VecDeque::new())),
             create_result: Arc::new(Mutex::new(None)),
             authenticate_result: Arc::new(Mutex::new(None)),
+            create_count: Arc::new(Mutex::new(0)),
+            authenticate_count: Arc::new(Mutex::new(0)),
+            discover_count: Arc::new(Mutex::new(0)),
         }
     }
 }
 
 impl MockPasskeyProviderImpl {
     pub(crate) fn reset(&self) {
-        *self.discover_result.lock() = Err(PasskeyError::NoCredentialFound);
+        self.discover_results.lock().clear();
         *self.create_result.lock() = None;
         *self.authenticate_result.lock() = None;
+        *self.create_count.lock() = 0;
+        *self.authenticate_count.lock() = 0;
+        *self.discover_count.lock() = 0;
     }
 
     pub(crate) fn set_discover_result(
         &self,
         result: Result<DiscoveredPasskeyResult, PasskeyError>,
     ) {
-        *self.discover_result.lock() = result.map(|value| (value.prf_output, value.credential_id));
+        let mut results = self.discover_results.lock();
+        results.clear();
+        results.push_back(result.map(|value| (value.prf_output, value.credential_id)));
+    }
+
+    pub(crate) fn push_discover_result(
+        &self,
+        result: Result<DiscoveredPasskeyResult, PasskeyError>,
+    ) {
+        self.discover_results
+            .lock()
+            .push_back(result.map(|value| (value.prf_output, value.credential_id)));
     }
 
     pub(crate) fn set_create_result(&self, result: Result<Vec<u8>, PasskeyError>) {
-        *self.create_result.lock() = Some(result);
+        *self.create_result.lock() = Some(result.map(|credential_id| PasskeyRegistrationResult {
+            credential_id,
+            provider_aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+            registered_platform: PasskeyRegistrationPlatform::Android,
+        }));
     }
 
     pub(crate) fn set_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
         *self.authenticate_result.lock() = Some(result);
+    }
+
+    pub(crate) fn authenticate_count(&self) -> usize {
+        *self.authenticate_count.lock()
+    }
+
+    pub(crate) fn discover_count(&self) -> usize {
+        *self.discover_count.lock()
     }
 }
 
@@ -415,9 +491,15 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _rp_id: String,
         _user_id: Vec<u8>,
         _challenge: Vec<u8>,
-    ) -> Result<Vec<u8>, PasskeyError> {
+    ) -> Result<PasskeyRegistrationResult, PasskeyError> {
+        *self.create_count.lock() += 1;
         self.create_result.lock().take().unwrap_or_else(|| {
-            Err(PasskeyError::CreationFailed("unexpected create_passkey call".into()))
+            Err(PasskeyError::RequestFailed {
+                operation: PasskeyOperation::Registration,
+                reason: PasskeyFailureReason::Unknown {
+                    diagnostic_message: "unexpected create_passkey call".into(),
+                },
+            })
         })
     }
 
@@ -428,8 +510,14 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _prf_salt: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
+        *self.authenticate_count.lock() += 1;
         self.authenticate_result.lock().take().unwrap_or_else(|| {
-            Err(PasskeyError::AuthenticationFailed("unexpected authenticate_with_prf call".into()))
+            Err(PasskeyError::RequestFailed {
+                operation: PasskeyOperation::AuthenticateAssertion,
+                reason: PasskeyFailureReason::Unknown {
+                    diagnostic_message: "unexpected authenticate_with_prf call".into(),
+                },
+            })
         })
     }
 
@@ -439,9 +527,15 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _prf_salt: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<DiscoveredPasskeyResult, PasskeyError> {
-        self.discover_result.lock().clone().map(|(prf_output, credential_id)| {
-            DiscoveredPasskeyResult { prf_output, credential_id }
-        })
+        *self.discover_count.lock() += 1;
+        self.discover_results
+            .lock()
+            .pop_front()
+            .unwrap_or(Err(PasskeyError::NoCredentialFound))
+            .map(|(prf_output, credential_id)| DiscoveredPasskeyResult {
+                prf_output,
+                credential_id,
+            })
     }
 
     fn is_prf_supported(&self) -> bool {
@@ -486,7 +580,7 @@ impl TestGlobals {
 }
 
 pub(crate) fn init_test_runtime() {
-    super::super::ensure_cloud_backup_test_tokio_runtime();
+    ensure_cloud_backup_test_tokio_runtime();
 }
 
 pub(crate) fn test_globals() -> &'static TestGlobals {
@@ -496,7 +590,7 @@ pub(crate) fn test_globals() -> &'static TestGlobals {
 }
 
 pub(crate) fn test_lock() -> &'static parking_lot::Mutex<()> {
-    super::super::cloud_backup_test_lock()
+    cloud_backup_test_lock()
 }
 
 fn clear_local_wallets() {
@@ -509,7 +603,7 @@ fn clear_local_wallets() {
 }
 
 pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
-    let namespace_id = Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()).unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
     let changed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
 
@@ -548,7 +642,7 @@ pub(crate) fn persist_failed_blob_state_with_issue(
     retryable: bool,
     issue: Option<CloudBlobFailureIssue>,
 ) {
-    let namespace_id = Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()).unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
     let failed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
 
@@ -571,7 +665,7 @@ pub(crate) fn persist_failed_blob_state_with_issue(
 }
 
 pub(crate) fn persist_uploading_blob_state(wallet_id: WalletId, started_at: u64) {
-    let namespace_id = Keychain::global().get(CSPP_NAMESPACE_ID_KEY.into()).unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
 
     Database::global()
@@ -608,10 +702,10 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
     std::thread::spawn(move || reset_manager.debug_reset_cloud_backup_state())
         .join()
         .expect("reset cloud backup test state thread");
-    let runtime = manager.runtime.clone();
+    let supervisor = manager.supervisor.clone();
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     let _task = cove_tokio::task::spawn(async move {
-        let result = call!(runtime.clear_upload_runtime_state()).await;
+        let result = call!(supervisor.clear_upload_runtime_state()).await;
         sender.send(result).expect("send clear upload runtime state result");
     });
     receiver
@@ -662,7 +756,7 @@ pub(crate) fn configure_enabled_cloud_backup(
     let master_key = cove_cspp::master_key::MasterKey::generate();
     let namespace = master_key.namespace_id();
     let keychain = Keychain::global();
-    keychain.save(CSPP_NAMESPACE_ID_KEY.into(), namespace).unwrap();
+    CloudBackupKeychain::new(keychain.clone()).save_namespace_id(&namespace).unwrap();
     cove_cspp::Cspp::new(keychain.clone()).save_master_key(&master_key).unwrap();
 
     manager
@@ -685,7 +779,7 @@ pub(crate) fn enable_cloud_backup_without_reset(
     let master_key = cove_cspp::master_key::MasterKey::generate();
     let namespace = master_key.namespace_id();
     let keychain = Keychain::global();
-    keychain.save(CSPP_NAMESPACE_ID_KEY.into(), namespace).unwrap();
+    CloudBackupKeychain::new(keychain.clone()).save_namespace_id(&namespace).unwrap();
     cove_cspp::Cspp::new(keychain.clone()).save_master_key(&master_key).unwrap();
 
     manager
@@ -826,7 +920,7 @@ pub(crate) fn prepare_deep_verify_with_unsynced_wallet(
     }));
 
     let keychain = Keychain::global();
-    keychain.save(CSPP_NAMESPACE_ID_KEY.into(), namespace).unwrap();
+    CloudBackupKeychain::new(keychain.clone()).save_namespace_id(&namespace).unwrap();
     cove_cspp::Cspp::new(keychain.clone()).save_master_key(&master_key).unwrap();
 
     manager
@@ -849,22 +943,24 @@ pub(crate) fn prepare_deep_verify_with_unsynced_wallet(
     metadata
 }
 pub(crate) async fn clear_wallet_upload_runtime_for_test_async(manager: &RustCloudBackupManager) {
-    call!(manager.runtime.clear_upload_runtime_state()).await.expect("clear upload runtime state");
+    call!(manager.supervisor.clear_upload_runtime_state())
+        .await
+        .expect("clear upload runtime state");
 }
 
 pub(crate) async fn run_wallet_upload_for_test_async(
     manager: &RustCloudBackupManager,
     wallet_id: WalletId,
 ) {
-    call!(manager.runtime.run_wallet_upload_inline_for_test(wallet_id))
+    call!(manager.supervisor.run_wallet_upload_inline_for_test(wallet_id))
         .await
         .expect("run wallet upload");
 }
 
 pub(crate) async fn new_restore_operation_for_test(
     manager: &RustCloudBackupManager,
-) -> super::super::runtime_actor::RestoreOperation {
-    call!(manager.runtime.new_restore_operation()).await.expect("create restore operation")
+) -> RestoreOperation {
+    call!(manager.supervisor.new_restore_operation()).await.expect("create restore operation")
 }
 
 #[cfg(test)]
@@ -876,15 +972,18 @@ mod tests {
         let provider = MockPasskeyProviderImpl::default();
         provider.set_create_result(Ok(vec![1, 2, 3]));
 
-        assert_eq!(
-            provider
-                .create_passkey("rp".into(), vec![1], vec![2])
-                .expect("configured create result"),
-            vec![1, 2, 3]
-        );
+        let registration = provider
+            .create_passkey("rp".into(), vec![1], vec![2])
+            .expect("configured create result");
+        assert_eq!(registration.credential_id, vec![1, 2, 3]);
+        assert_eq!(registration.provider_aaguid, "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4");
+        assert_eq!(registration.registered_platform, PasskeyRegistrationPlatform::Android);
         assert!(matches!(
             provider.create_passkey("rp".into(), vec![1], vec![2]),
-            Err(PasskeyError::CreationFailed(message)) if message == "unexpected create_passkey call"
+            Err(PasskeyError::RequestFailed {
+                operation: PasskeyOperation::Registration,
+                reason: PasskeyFailureReason::Unknown { diagnostic_message },
+            }) if diagnostic_message == "unexpected create_passkey call"
         ));
     }
 
@@ -901,8 +1000,10 @@ mod tests {
         );
         assert!(matches!(
             provider.authenticate_with_prf("rp".into(), vec![1], vec![2], vec![3]),
-            Err(PasskeyError::AuthenticationFailed(message))
-                if message == "unexpected authenticate_with_prf call"
+            Err(PasskeyError::RequestFailed {
+                operation: PasskeyOperation::AuthenticateAssertion,
+                reason: PasskeyFailureReason::Unknown { diagnostic_message },
+            }) if diagnostic_message == "unexpected authenticate_with_prf call"
         ));
     }
 }
