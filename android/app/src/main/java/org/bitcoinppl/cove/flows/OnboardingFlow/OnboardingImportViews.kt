@@ -92,8 +92,11 @@ private sealed interface HardwareImportMode {
 @Composable
 internal fun OnboardingSoftwareImportFlowView(
     errorMessage: String?,
+    cloudRestoreAlertVisible: Boolean,
     onImported: (WalletId) -> Unit,
     onCreateWallet: () -> Unit,
+    onRestoreFromCloudBackup: () -> Unit,
+    onDismissCloudRestoreAlert: () -> Unit,
     onBack: () -> Unit,
 ) {
     var mode by remember { mutableStateOf<SoftwareImportMode>(SoftwareImportMode.Chooser) }
@@ -195,6 +198,12 @@ internal fun OnboardingSoftwareImportFlowView(
                 onImported = onImported,
             )
     }
+
+    CloudRestoreFoundAlert(
+        visible = cloudRestoreAlertVisible,
+        onRestore = onRestoreFromCloudBackup,
+        onContinue = onDismissCloudRestoreAlert,
+    )
 }
 
 @Composable
@@ -255,7 +264,10 @@ private fun OnboardingHotWalletImportView(
 
 @Composable
 internal fun OnboardingHardwareImportFlowView(
+    cloudRestoreAlertVisible: Boolean,
     onImported: (WalletId) -> Unit,
+    onRestoreFromCloudBackup: () -> Unit,
+    onDismissCloudRestoreAlert: () -> Unit,
     onBack: () -> Unit,
 ) {
     var mode by remember { mutableStateOf<HardwareImportMode>(HardwareImportMode.Chooser) }
@@ -314,6 +326,37 @@ internal fun OnboardingHardwareImportFlowView(
                 onBack = { mode = HardwareImportMode.Chooser },
             )
     }
+
+    CloudRestoreFoundAlert(
+        visible = cloudRestoreAlertVisible,
+        onRestore = onRestoreFromCloudBackup,
+        onContinue = onDismissCloudRestoreAlert,
+    )
+}
+
+@Composable
+private fun CloudRestoreFoundAlert(
+    visible: Boolean,
+    onRestore: () -> Unit,
+    onContinue: () -> Unit,
+) {
+    if (!visible) return
+
+    AlertDialog(
+        onDismissRequest = onContinue,
+        title = { Text("Cove backup found") },
+        text = { Text("We found a cloud backup for this account.") },
+        confirmButton = {
+            TextButton(onClick = onRestore) {
+                Text("Restore from Cove backup")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onContinue) {
+                Text("Continue setup")
+            }
+        },
+    )
 }
 
 @Composable

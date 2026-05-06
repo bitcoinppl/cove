@@ -139,19 +139,25 @@ struct OnboardingContainer: View {
 
         case .hardwareImport:
             OnboardingHardwareImportFlowView(
+                cloudRestoreAlertVisible: manager.state.cloudRestoreAlertVisible,
                 onImported: { walletId in
                     manager.dispatch(.hardwareImportCompleted(walletId: walletId))
                 },
+                onRestoreFromCloudBackup: { manager.dispatch(.openCloudRestore) },
+                onDismissCloudRestoreAlert: { manager.dispatch(.dismissCloudRestoreAlert) },
                 onBack: { manager.dispatch(.back) }
             )
 
         case .softwareImport:
             OnboardingSoftwareImportFlowView(
                 errorMessage: manager.state.errorMessage,
+                cloudRestoreAlertVisible: manager.state.cloudRestoreAlertVisible,
                 onImported: { walletId in
                     manager.dispatch(.softwareImportCompleted(walletId: walletId))
                 },
                 onCreateWallet: { manager.dispatch(.createSoftwareWallet) },
+                onRestoreFromCloudBackup: { manager.dispatch(.openCloudRestore) },
+                onDismissCloudRestoreAlert: { manager.dispatch(.dismissCloudRestoreAlert) },
                 onBack: { manager.dispatch(.back) }
             )
         }

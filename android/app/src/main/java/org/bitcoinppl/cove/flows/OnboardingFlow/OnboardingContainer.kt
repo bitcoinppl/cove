@@ -19,7 +19,7 @@ internal fun OnboardingContainer(
     }
 
     val onOpenCloudRestore =
-        if (manager.state.cloudRestoreState != OnboardingCloudRestoreState.NO_BACKUP_FOUND) {
+        if (manager.state.shouldOfferCloudRestore) {
             { manager.dispatch(OnboardingAction.OpenCloudRestore) }
         } else {
             null
@@ -135,8 +135,13 @@ internal fun OnboardingContainer(
 
         OnboardingStep.HARDWARE_IMPORT ->
             OnboardingHardwareImportFlowView(
+                cloudRestoreAlertVisible = manager.state.cloudRestoreAlertVisible,
                 onImported = { walletId ->
                     manager.dispatch(OnboardingAction.HardwareImportCompleted(walletId))
+                },
+                onRestoreFromCloudBackup = { manager.dispatch(OnboardingAction.OpenCloudRestore) },
+                onDismissCloudRestoreAlert = {
+                    manager.dispatch(OnboardingAction.DismissCloudRestoreAlert)
                 },
                 onBack = { manager.dispatch(OnboardingAction.Back) },
             )
@@ -144,10 +149,15 @@ internal fun OnboardingContainer(
         OnboardingStep.SOFTWARE_IMPORT ->
             OnboardingSoftwareImportFlowView(
                 errorMessage = manager.state.errorMessage,
+                cloudRestoreAlertVisible = manager.state.cloudRestoreAlertVisible,
                 onImported = { walletId ->
                     manager.dispatch(OnboardingAction.SoftwareImportCompleted(walletId))
                 },
                 onCreateWallet = { manager.dispatch(OnboardingAction.CreateSoftwareWallet) },
+                onRestoreFromCloudBackup = { manager.dispatch(OnboardingAction.OpenCloudRestore) },
+                onDismissCloudRestoreAlert = {
+                    manager.dispatch(OnboardingAction.DismissCloudRestoreAlert)
+                },
                 onBack = { manager.dispatch(OnboardingAction.Back) },
             )
     }

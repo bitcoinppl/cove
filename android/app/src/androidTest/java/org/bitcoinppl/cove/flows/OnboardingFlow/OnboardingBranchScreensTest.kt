@@ -336,8 +336,11 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingSoftwareImportFlowView(
                 errorMessage = null,
+                cloudRestoreAlertVisible = false,
                 onImported = {},
                 onCreateWallet = { selected = "create" },
+                onRestoreFromCloudBackup = {},
+                onDismissCloudRestoreAlert = {},
                 onBack = { selected = "back" },
             )
         }
@@ -360,8 +363,11 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingSoftwareImportFlowView(
                 errorMessage = null,
+                cloudRestoreAlertVisible = false,
                 onImported = {},
                 onCreateWallet = {},
+                onRestoreFromCloudBackup = {},
+                onDismissCloudRestoreAlert = {},
                 onBack = {},
             )
         }
@@ -373,8 +379,11 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingSoftwareImportFlowView(
                 errorMessage = null,
+                cloudRestoreAlertVisible = false,
                 onImported = {},
                 onCreateWallet = {},
+                onRestoreFromCloudBackup = {},
+                onDismissCloudRestoreAlert = {},
                 onBack = {},
             )
         }
@@ -390,7 +399,10 @@ class OnboardingBranchScreensTest {
 
         compose.setOnboardingContent {
             OnboardingHardwareImportFlowView(
+                cloudRestoreAlertVisible = false,
                 onImported = {},
+                onRestoreFromCloudBackup = {},
+                onDismissCloudRestoreAlert = {},
                 onBack = { selected = "back" },
             )
         }
@@ -406,7 +418,10 @@ class OnboardingBranchScreensTest {
     fun hardwareImportFileAndNfcScreensBackOutWithoutImportingHardwareData() {
         compose.setOnboardingContent {
             OnboardingHardwareImportFlowView(
+                cloudRestoreAlertVisible = false,
                 onImported = {},
+                onRestoreFromCloudBackup = {},
+                onDismissCloudRestoreAlert = {},
                 onBack = {},
             )
         }
