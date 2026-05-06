@@ -13042,14 +13042,14 @@ public struct CloudBackupDetail: Equatable, Hashable {
      * Number of wallets in the cloud that aren't on this device
      */
     public var cloudOnlyCount: UInt32
-    public var otherBackups: CloudBackupOtherBackupsSummary
+    public var otherBackups: CloudBackupOtherBackupsState
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(lastSync: UInt64?, upToDate: [CloudBackupWalletItem], needsSync: [CloudBackupWalletItem], 
         /**
          * Number of wallets in the cloud that aren't on this device
-         */cloudOnlyCount: UInt32, otherBackups: CloudBackupOtherBackupsSummary) {
+         */cloudOnlyCount: UInt32, otherBackups: CloudBackupOtherBackupsState) {
         self.lastSync = lastSync
         self.upToDate = upToDate
         self.needsSync = needsSync
@@ -13077,7 +13077,7 @@ public struct FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer {
                 upToDate: FfiConverterSequenceTypeCloudBackupWalletItem.read(from: &buf), 
                 needsSync: FfiConverterSequenceTypeCloudBackupWalletItem.read(from: &buf), 
                 cloudOnlyCount: FfiConverterUInt32.read(from: &buf), 
-                otherBackups: FfiConverterTypeCloudBackupOtherBackupsSummary.read(from: &buf)
+                otherBackups: FfiConverterTypeCloudBackupOtherBackupsState.read(from: &buf)
         )
     }
 
@@ -13086,7 +13086,7 @@ public struct FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer {
         FfiConverterSequenceTypeCloudBackupWalletItem.write(value.upToDate, into: &buf)
         FfiConverterSequenceTypeCloudBackupWalletItem.write(value.needsSync, into: &buf)
         FfiConverterUInt32.write(value.cloudOnlyCount, into: &buf)
-        FfiConverterTypeCloudBackupOtherBackupsSummary.write(value.otherBackups, into: &buf)
+        FfiConverterTypeCloudBackupOtherBackupsState.write(value.otherBackups, into: &buf)
     }
 }
 
@@ -18764,6 +18764,78 @@ public func FfiConverterTypeCloudBackupManagerAction_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeCloudBackupManagerAction_lower(_ value: CloudBackupManagerAction) -> RustBuffer {
     return FfiConverterTypeCloudBackupManagerAction.lower(value)
+}
+
+
+
+
+public enum CloudBackupOtherBackupsState: Equatable, Hashable {
+    
+    case loaded(summary: CloudBackupOtherBackupsSummary
+    )
+    case loadFailed(error: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupOtherBackupsState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupOtherBackupsState: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupOtherBackupsState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupOtherBackupsState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .loaded(summary: try FfiConverterTypeCloudBackupOtherBackupsSummary.read(from: &buf)
+        )
+        
+        case 2: return .loadFailed(error: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupOtherBackupsState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .loaded(summary):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeCloudBackupOtherBackupsSummary.write(summary, into: &buf)
+            
+        
+        case let .loadFailed(error):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(error, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupOtherBackupsState_lift(_ buf: RustBuffer) throws -> CloudBackupOtherBackupsState {
+    return try FfiConverterTypeCloudBackupOtherBackupsState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupOtherBackupsState_lower(_ value: CloudBackupOtherBackupsState) -> RustBuffer {
+    return FfiConverterTypeCloudBackupOtherBackupsState.lower(value)
 }
 
 
@@ -24576,6 +24648,7 @@ public enum OnboardingAction: Equatable, Hashable {
     case acceptTerms
     case back
     case beginCloudBackupEnable
+    case continueFromCloudBackupSuccess
 
 
 
@@ -24649,6 +24722,8 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
         case 23: return .back
         
         case 24: return .beginCloudBackupEnable
+        
+        case 25: return .continueFromCloudBackupSuccess
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -24757,6 +24832,10 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
         
         case .beginCloudBackupEnable:
             writeInt(&buf, Int32(24))
+        
+        
+        case .continueFromCloudBackupSuccess:
+            writeInt(&buf, Int32(25))
         
         }
     }
@@ -25134,6 +25213,7 @@ public enum OnboardingStep: Equatable, Hashable {
     case hardwareImport
     case softwareImport
     case terms
+    case cloudBackupSuccess
 
 
 
@@ -25186,6 +25266,8 @@ public struct FfiConverterTypeOnboardingStep: FfiConverterRustBuffer {
         case 15: return .softwareImport
         
         case 16: return .terms
+        
+        case 17: return .cloudBackupSuccess
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -25257,6 +25339,10 @@ public struct FfiConverterTypeOnboardingStep: FfiConverterRustBuffer {
         
         case .terms:
             writeInt(&buf, Int32(16))
+        
+        
+        case .cloudBackupSuccess:
+            writeInt(&buf, Int32(17))
         
         }
     }

@@ -27774,7 +27774,7 @@ data class CloudBackupDetail (
      */
     var `cloudOnlyCount`: kotlin.UInt
     , 
-    var `otherBackups`: CloudBackupOtherBackupsSummary
+    var `otherBackups`: CloudBackupOtherBackupsState
     
 ){
     
@@ -27795,7 +27795,7 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterSequenceTypeCloudBackupWalletItem.read(buf),
             FfiConverterSequenceTypeCloudBackupWalletItem.read(buf),
             FfiConverterUInt.read(buf),
-            FfiConverterTypeCloudBackupOtherBackupsSummary.read(buf),
+            FfiConverterTypeCloudBackupOtherBackupsState.read(buf),
         )
     }
 
@@ -27804,7 +27804,7 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterSequenceTypeCloudBackupWalletItem.allocationSize(value.`upToDate`) +
             FfiConverterSequenceTypeCloudBackupWalletItem.allocationSize(value.`needsSync`) +
             FfiConverterUInt.allocationSize(value.`cloudOnlyCount`) +
-            FfiConverterTypeCloudBackupOtherBackupsSummary.allocationSize(value.`otherBackups`)
+            FfiConverterTypeCloudBackupOtherBackupsState.allocationSize(value.`otherBackups`)
     )
 
     override fun write(value: CloudBackupDetail, buf: ByteBuffer) {
@@ -27812,7 +27812,7 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterSequenceTypeCloudBackupWalletItem.write(value.`upToDate`, buf)
             FfiConverterSequenceTypeCloudBackupWalletItem.write(value.`needsSync`, buf)
             FfiConverterUInt.write(value.`cloudOnlyCount`, buf)
-            FfiConverterTypeCloudBackupOtherBackupsSummary.write(value.`otherBackups`, buf)
+            FfiConverterTypeCloudBackupOtherBackupsState.write(value.`otherBackups`, buf)
     }
 }
 
@@ -34261,6 +34261,89 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             }
             is CloudBackupManagerAction.EnterDetail -> {
                 buf.putInt(23)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+sealed class CloudBackupOtherBackupsState {
+    
+    data class Loaded(
+        val `summary`: org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary) : CloudBackupOtherBackupsState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class LoadFailed(
+        val `error`: kotlin.String) : CloudBackupOtherBackupsState()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupOtherBackupsState : FfiConverterRustBuffer<CloudBackupOtherBackupsState>{
+    override fun read(buf: ByteBuffer): CloudBackupOtherBackupsState {
+        return when(buf.getInt()) {
+            1 -> CloudBackupOtherBackupsState.Loaded(
+                FfiConverterTypeCloudBackupOtherBackupsSummary.read(buf),
+                )
+            2 -> CloudBackupOtherBackupsState.LoadFailed(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupOtherBackupsState): ULong = when(value) {
+        is CloudBackupOtherBackupsState.Loaded -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupOtherBackupsSummary.allocationSize(value.`summary`)
+            )
+        }
+        is CloudBackupOtherBackupsState.LoadFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`error`)
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupOtherBackupsState, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupOtherBackupsState.Loaded -> {
+                buf.putInt(1)
+                FfiConverterTypeCloudBackupOtherBackupsSummary.write(value.`summary`, buf)
+                Unit
+            }
+            is CloudBackupOtherBackupsState.LoadFailed -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`error`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -41280,6 +41363,12 @@ sealed class OnboardingAction {
     object Back : OnboardingAction()
     
     
+    object BeginCloudBackupEnable : OnboardingAction()
+    
+    
+    object ContinueFromCloudBackupSuccess : OnboardingAction()
+    
+    
 
     
 
@@ -41329,6 +41418,8 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 )
             22 -> OnboardingAction.AcceptTerms
             23 -> OnboardingAction.Back
+            24 -> OnboardingAction.BeginCloudBackupEnable
+            25 -> OnboardingAction.ContinueFromCloudBackupSuccess
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -41477,6 +41568,18 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 4UL
             )
         }
+        is OnboardingAction.BeginCloudBackupEnable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OnboardingAction.ContinueFromCloudBackupSuccess -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: OnboardingAction, buf: ByteBuffer) {
@@ -41576,6 +41679,14 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
             }
             is OnboardingAction.Back -> {
                 buf.putInt(23)
+                Unit
+            }
+            is OnboardingAction.BeginCloudBackupEnable -> {
+                buf.putInt(24)
+                Unit
+            }
+            is OnboardingAction.ContinueFromCloudBackupSuccess -> {
+                buf.putInt(25)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -41990,7 +42101,8 @@ enum class OnboardingStep {
     EXCHANGE_FUNDING,
     HARDWARE_IMPORT,
     SOFTWARE_IMPORT,
-    TERMS;
+    TERMS,
+    CLOUD_BACKUP_SUCCESS;
 
     
 

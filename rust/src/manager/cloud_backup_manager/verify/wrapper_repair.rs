@@ -24,7 +24,7 @@ enum LocalKeyProof {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub(super) enum WrapperRepairError {
+pub(crate) enum WrapperRepairError {
     #[error("local master key cannot decrypt existing cloud wallet backups")]
     WrongKey,
 
@@ -51,7 +51,7 @@ impl From<WrapperRepairError> for CloudBackupError {
 
 /// Chooses how wrapper repair should acquire passkey material
 #[derive(Debug)]
-pub(super) enum WrapperRepairStrategy {
+pub(crate) enum WrapperRepairStrategy {
     CreateNew,
     DiscoverOrCreate,
     ReuseExisting(Vec<u8>),
@@ -116,7 +116,7 @@ impl LocalKeyVerifier {
 }
 
 /// Repairs the cloud master-key wrapper after proving the local master key is valid
-pub(super) struct WrapperRepairOperation {
+pub(crate) struct WrapperRepairOperation {
     manager: RustCloudBackupManager,
     keychain: CloudBackupKeychain,
     cloud: CloudStorageClient,
@@ -125,7 +125,7 @@ pub(super) struct WrapperRepairOperation {
 }
 
 impl WrapperRepairOperation {
-    pub(super) fn new(
+    pub(crate) fn new(
         manager: &RustCloudBackupManager,
         keychain: &CloudBackupKeychain,
         cloud: &CloudStorageClient,
@@ -142,7 +142,7 @@ impl WrapperRepairOperation {
     }
 
     /// Verifies the local key, uploads a repaired wrapper, then persists the selected credential
-    pub(super) async fn run(
+    pub(crate) async fn run(
         &self,
         local_master_key: &MasterKey,
         wallet_record_ids: &[String],

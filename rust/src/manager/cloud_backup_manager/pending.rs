@@ -19,6 +19,7 @@ use crate::wallet::metadata::WalletId;
 
 pub(crate) use detail::remote_wallet_revision_matches;
 
+pub(crate) const MASTER_KEY_UPLOAD_CONFIRMATION_GRACE: Duration = Duration::from_secs(60);
 pub(super) const MAX_PENDING_UPLOAD_VERIFICATION_DELAY: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

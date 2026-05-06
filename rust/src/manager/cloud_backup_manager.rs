@@ -210,7 +210,13 @@ pub struct CloudBackupDetail {
     pub needs_sync: Vec<CloudBackupWalletItem>,
     /// Number of wallets in the cloud that aren't on this device
     pub cloud_only_count: u32,
-    pub other_backups: CloudBackupOtherBackupsSummary,
+    pub other_backups: CloudBackupOtherBackupsState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupOtherBackupsState {
+    Loaded { summary: CloudBackupOtherBackupsSummary },
+    LoadFailed { error: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, uniffi::Record)]
@@ -1432,7 +1438,7 @@ impl RustCloudBackupManager {
         remote_wallet_truth: RemoteWalletTruth,
     ) -> Result<CloudBackupDetail, CloudBackupError> {
         let cloud = CloudStorage::global_explicit_client();
-        let other_backups = self.other_backup_summary(&cloud).await?;
+        let other_backups = self.other_backup_state(&cloud).await;
 
         Ok(self::cloud_inventory::CloudWalletInventory::load_with_remote_truth(
             wallet_record_ids,
@@ -1440,6 +1446,19 @@ impl RustCloudBackupManager {
         )
         .await?
         .build_detail(other_backups))
+    }
+
+    pub(crate) async fn other_backup_state(
+        &self,
+        cloud: &CloudStorageClient,
+    ) -> CloudBackupOtherBackupsState {
+        match self.other_backup_summary(cloud).await {
+            Ok(summary) => CloudBackupOtherBackupsState::Loaded { summary },
+            Err(error) => {
+                warn!("Failed to summarize other cloud backups: {error}");
+                CloudBackupOtherBackupsState::LoadFailed { error: error.to_string() }
+            }
+        }
     }
 
     pub(crate) async fn other_backup_summary(
@@ -1465,19 +1484,23 @@ impl RustCloudBackupManager {
         for namespace in &namespaces {
             match cloud.list_wallet_backups(namespace.clone()).await {
                 Ok(record_ids) => {
+                    namespace_count += 1;
                     let unrecovered_wallet_count = record_ids
                         .iter()
                         .filter(|record_id| !current_wallet_record_ids.contains(*record_id))
                         .count() as u32;
 
-                    if unrecovered_wallet_count > 0 {
-                        namespace_count += 1;
-                        wallet_count += unrecovered_wallet_count;
-                    }
+                    wallet_count += unrecovered_wallet_count;
                 }
                 Err(CloudStorageError::NotFound(_)) => {}
                 Err(error) => {
-                    warn!("Failed to count other backup namespace {namespace}: {error}");
+                    return Err(blocking_cloud_error(
+                        BlockingCloudStep::DetailRefresh,
+                        CloudBackupError::cloud_storage_context(
+                            format!("count wallets in other backup namespace {namespace}"),
+                            error,
+                        ),
+                    ));
                 }
             }
         }
@@ -1540,6 +1563,13 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) async fn compute_sync_health(&self) -> CloudSyncHealth {
+        self.compute_sync_health_with_master_key_grace(None).await
+    }
+
+    pub(crate) async fn compute_sync_health_with_master_key_grace(
+        &self,
+        master_key_upload_grace_namespace: Option<&str>,
+    ) -> CloudSyncHealth {
         if !Self::load_persisted_state().is_configured() {
             return CloudSyncHealth::Unknown;
         }
@@ -1573,6 +1603,10 @@ impl RustCloudBackupManager {
         }
 
         if Self::sync_health_has_pending_upload(&sync_states) {
+            return CloudSyncHealth::Uploading;
+        }
+
+        if master_key_upload_grace_namespace == Some(namespace.as_str()) {
             return CloudSyncHealth::Uploading;
         }
 
@@ -2493,7 +2527,7 @@ mod tests {
             up_to_date: Vec::new(),
             needs_sync: Vec::new(),
             cloud_only_count,
-            other_backups: CloudBackupOtherBackupsSummary::default(),
+            other_backups: CloudBackupOtherBackupsState::Loaded { summary: Default::default() },
         }
     }
 

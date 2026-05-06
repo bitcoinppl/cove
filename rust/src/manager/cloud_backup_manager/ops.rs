@@ -1701,9 +1701,9 @@ mod tests {
     use crate::label_manager::LabelManager;
     use crate::manager::cloud_backup_manager::{
         CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupKeychain,
-        CloudBackupPromptIntent, DeepVerificationFailure, DeepVerificationReport,
-        DeepVerificationResult, PendingVerificationCompletion, PendingVerificationUpload,
-        VerificationState,
+        CloudBackupOtherBackupsState, CloudBackupPromptIntent, DeepVerificationFailure,
+        DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
+        PendingVerificationUpload, VerificationState,
     };
     use crate::manager::cloud_backup_manager::{
         SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE, cspp_master_key_record_id,
@@ -1763,6 +1763,7 @@ mod tests {
                 .unwrap();
 
         globals.cloud.set_master_key_backup(namespace, serde_json::to_vec(&encrypted).unwrap());
+        CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
         globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
             prf_output: prf_key.to_vec(),
             credential_id: vec![1, 2, 3],
@@ -3354,8 +3355,11 @@ mod tests {
             panic!("expected cloud backup detail");
         };
 
-        assert_eq!(detail.other_backups.namespace_count, 1);
-        assert_eq!(detail.other_backups.wallet_count, 2);
+        let CloudBackupOtherBackupsState::Loaded { summary } = detail.other_backups else {
+            panic!("expected loaded other backups");
+        };
+        assert_eq!(summary.namespace_count, 1);
+        assert_eq!(summary.wallet_count, 2);
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -3401,12 +3405,12 @@ mod tests {
 
         let summary =
             manager.other_backup_summary(&CloudStorage::global_explicit_client()).await.unwrap();
-        assert_eq!(summary.namespace_count, 0);
+        assert_eq!(summary.namespace_count, 1);
         assert_eq!(summary.wallet_count, 0);
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn detail_refresh_fails_when_other_backup_namespace_inspection_fails() {
+    async fn detail_refresh_marks_other_backups_failed_when_namespace_inspection_fails() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
@@ -3424,14 +3428,17 @@ mod tests {
             "offline while inspecting namespace",
         );
 
-        let Some(CloudBackupDetailResult::AccessError(error)) =
+        let Some(CloudBackupDetailResult::Success(detail)) =
             manager.refresh_cloud_backup_detail().await
         else {
-            panic!("expected cloud backup detail access error");
+            panic!("expected cloud backup detail");
         };
 
+        let CloudBackupOtherBackupsState::LoadFailed { error } = detail.other_backups else {
+            panic!("expected failed other backups state");
+        };
         assert_eq!(
-            error.to_string(),
+            error,
             "offline: Reconnect to the internet, then try refreshing cloud backup details again"
         );
     }
@@ -4526,6 +4533,31 @@ mod tests {
         reason = "tests serialize shared cloud backup globals across awaits"
     )]
     #[tokio::test(flavor = "current_thread")]
+    async fn sync_health_respects_master_key_upload_confirmation_grace() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = global_manager();
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+        configure_enabled_cloud_backup(&manager, globals, 1);
+
+        let metadata = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![metadata]);
+        let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+
+        assert_eq!(
+            manager.compute_sync_health_with_master_key_grace(Some(&namespace_id)).await,
+            CloudSyncHealth::Uploading,
+        );
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
     async fn startup_resume_retries_interrupted_uploading_wallets() {
         let _guard = test_lock().lock();
         cove_tokio::init();
@@ -4945,7 +4977,8 @@ mod tests {
 
         assert!(warning.is_none());
         assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
-        assert!(manager.state().detail.is_none());
+        let detail = manager.state().detail.expect("expected cloud backup detail");
+        assert!(matches!(detail.other_backups, CloudBackupOtherBackupsState::LoadFailed { .. }));
         manager.clear_wallet_upload_debouncers_for_test().await;
     }
 
@@ -5306,6 +5339,7 @@ mod tests {
         let globals = test_globals();
         let manager = init_manager();
         configure_enabled_cloud_backup(&manager, globals, 1);
+        seed_verifiable_cloud_master_key(globals);
 
         let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
         let metadata = xpub_only_wallet_metadata();
@@ -5322,7 +5356,6 @@ mod tests {
         .await
         .unwrap();
 
-        globals.cloud.set_master_key_backup(namespace_id.clone(), vec![1, 2, 3]);
         globals.cloud.set_wallet_backup(
             namespace_id.clone(),
             record_id.clone(),

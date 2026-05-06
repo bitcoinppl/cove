@@ -134,10 +134,12 @@ async fn run_cleanup_job(mut job: CloudBackupCleanupJob) -> Result<(), CloudBack
 
         match cloud.delete_namespace(source.namespace_id.clone()).await {
             Ok(()) => info!("Deleted merged cloud backup namespace {}", source.namespace_id),
-            Err(error) => warn!(
-                "Skipping cloud backup namespace cleanup namespace={} reason=delete_failed error={}",
-                source.namespace_id, error
-            ),
+            Err(error) => {
+                return Err(CloudBackupError::cloud_storage_context(
+                    format!("delete merged cloud backup namespace {}", source.namespace_id),
+                    error,
+                ));
+            }
         }
     }
 

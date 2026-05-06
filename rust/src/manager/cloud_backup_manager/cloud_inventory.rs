@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::wallets::RemoteWalletBackupSummary;
 use super::{
-    CloudBackupDetail, CloudBackupError, CloudBackupOtherBackupsSummary, CloudBackupStore,
+    CloudBackupDetail, CloudBackupError, CloudBackupOtherBackupsState, CloudBackupStore,
     CloudBackupWalletItem, CloudBackupWalletStatus,
 };
 use crate::database::Database;
@@ -13,17 +13,17 @@ use crate::wallet::metadata::WalletMetadata;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct RemoteWalletTruth {
-    pub(super) summaries_by_record_id: HashMap<String, RemoteWalletBackupSummary>,
-    pub(super) unsupported_record_ids: HashSet<String>,
-    pub(super) unknown_record_ids: HashSet<String>,
+    pub(crate) summaries_by_record_id: HashMap<String, RemoteWalletBackupSummary>,
+    pub(crate) unsupported_record_ids: HashSet<String>,
+    pub(crate) unknown_record_ids: HashSet<String>,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct LocalWalletSnapshot {
-    pub(super) metadata: WalletMetadata,
-    pub(super) record_id: String,
-    pub(super) revision_hash: String,
-    pub(super) local_label_count: u32,
+pub(crate) struct LocalWalletSnapshot {
+    pub(crate) metadata: WalletMetadata,
+    pub(crate) record_id: String,
+    pub(crate) revision_hash: String,
+    pub(crate) local_label_count: u32,
 }
 
 enum WalletItemBucket {
@@ -39,7 +39,7 @@ enum RemoteWalletState {
     Stale(RemoteWalletBackupSummary),
 }
 
-pub(super) struct CloudWalletInventory {
+pub(crate) struct CloudWalletInventory {
     last_sync: Option<u64>,
     local_wallets: Vec<LocalWalletSnapshot>,
     cloud_wallet_record_ids: HashSet<String>,
@@ -49,7 +49,7 @@ pub(super) struct CloudWalletInventory {
 }
 
 impl CloudWalletInventory {
-    pub(super) async fn load_with_remote_truth(
+    pub(crate) async fn load_with_remote_truth(
         wallet_record_ids: &[String],
         remote_wallet_truth: RemoteWalletTruth,
     ) -> Result<Self, CloudBackupError> {
@@ -69,11 +69,11 @@ impl CloudWalletInventory {
         })
     }
 
-    pub(super) fn cloud_wallet_count(&self) -> usize {
+    pub(crate) fn cloud_wallet_count(&self) -> usize {
         self.cloud_wallet_record_ids.len()
     }
 
-    pub(super) fn upload_candidate_wallets(&self) -> Vec<WalletMetadata> {
+    pub(crate) fn upload_candidate_wallets(&self) -> Vec<WalletMetadata> {
         if self.strict_cloud_presence {
             return self
                 .local_wallets
@@ -90,9 +90,9 @@ impl CloudWalletInventory {
             .collect()
     }
 
-    pub(super) fn build_detail(
+    pub(crate) fn build_detail(
         &self,
-        other_backups: CloudBackupOtherBackupsSummary,
+        other_backups: CloudBackupOtherBackupsState,
     ) -> CloudBackupDetail {
         let local_record_ids: HashSet<_> =
             self.local_wallets.iter().map(|wallet| wallet.record_id.clone()).collect();
@@ -125,7 +125,7 @@ impl CloudWalletInventory {
         }
     }
 
-    pub(super) fn has_unknown_remote_wallets(&self) -> bool {
+    pub(crate) fn has_unknown_remote_wallets(&self) -> bool {
         self.local_wallets.iter().any(|wallet| {
             matches!(
                 self.sync_status_for_wallet(wallet),
@@ -575,7 +575,8 @@ mod tests {
 
         assert!(upload_candidates.is_empty());
 
-        let detail = inventory.build_detail(CloudBackupOtherBackupsSummary::default());
+        let detail = inventory
+            .build_detail(CloudBackupOtherBackupsState::Loaded { summary: Default::default() });
 
         assert_eq!(detail.needs_sync.len(), 2);
         assert!(detail.needs_sync.iter().any(|item| {
@@ -615,7 +616,8 @@ mod tests {
         );
         assert!(inventory.upload_candidate_wallets().is_empty());
 
-        let detail = inventory.build_detail(CloudBackupOtherBackupsSummary::default());
+        let detail = inventory
+            .build_detail(CloudBackupOtherBackupsState::Loaded { summary: Default::default() });
 
         assert_eq!(detail.needs_sync.len(), 1);
         assert_eq!(detail.needs_sync[0].record_id, wallet.record_id);

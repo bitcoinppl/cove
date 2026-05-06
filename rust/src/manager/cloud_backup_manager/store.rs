@@ -29,10 +29,7 @@ impl CloudBackupStore {
     }
 
     pub(crate) fn persist_enabled(&self, wallet_count: u32) -> Result<(), CloudBackupError> {
-        self.persist_enabled_with_last_verified_at(
-            wallet_count,
-            self.0.cloud_backup_state.get().ok().and_then(|state| state.last_verified_at),
-        )
+        self.persist_enabled_preserving_verification(wallet_count)
     }
 
     pub(crate) fn persist_enabled_reset_verification(
@@ -105,7 +102,7 @@ impl CloudBackupStore {
         Ok(uploaded_wallets)
     }
 
-    pub(super) async fn local_inventory_snapshots(
+    pub(crate) async fn local_inventory_snapshots(
         &self,
     ) -> Result<Vec<LocalWalletSnapshot>, CloudBackupError> {
         stream::iter(self.all_wallets()?)
@@ -138,10 +135,9 @@ impl CloudBackupStore {
             })
     }
 
-    fn persist_enabled_with_last_verified_at(
+    fn persist_enabled_preserving_verification(
         &self,
         wallet_count: u32,
-        last_verified_at: Option<u64>,
     ) -> Result<(), CloudBackupError> {
         let now = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
         let current = self
@@ -161,7 +157,7 @@ impl CloudBackupStore {
                 },
                 last_sync: Some(now),
                 wallet_count: Some(wallet_count),
-                last_verified_at,
+                last_verified_at: current.last_verified_at,
                 last_verification_requested_at: current.last_verification_requested_at,
                 last_verification_dismissed_at: current.last_verification_dismissed_at,
                 pending_verification_completion: current.pending_verification_completion,

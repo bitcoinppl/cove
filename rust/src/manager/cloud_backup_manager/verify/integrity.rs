@@ -6,7 +6,7 @@ use super::{CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager};
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, CloudBackupOtherBackupsSummary, CloudBackupStore,
+    CloudBackupKeychain, CloudBackupOtherBackupsState, CloudBackupStore,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,12 +140,10 @@ impl RustCloudBackupManager {
         };
 
         let cloud = CloudStorage::global_silent_client();
-        if let Some(other_backups) = self
-            .other_backup_summary_for_integrity_check(&cloud, IntegrityDetailContext::Startup)
-            .await
-        {
-            self.set_detail(Some(inventory.build_detail(other_backups)));
-        }
+        let other_backups = self
+            .other_backup_state_for_integrity_check(&cloud, IntegrityDetailContext::Startup)
+            .await;
+        self.set_detail(Some(inventory.build_detail(other_backups)));
 
         let unsynced = inventory.upload_candidate_wallets();
         let handled_unsynced = !unsynced.is_empty();
@@ -221,24 +219,22 @@ impl RustCloudBackupManager {
             }
         };
 
-        if let Some(other_backups) = self
-            .other_backup_summary_for_integrity_check(&cloud, IntegrityDetailContext::Detail)
-            .await
-        {
-            self.set_detail(Some(inventory.build_detail(other_backups)));
-        }
+        let other_backups = self
+            .other_backup_state_for_integrity_check(&cloud, IntegrityDetailContext::Detail)
+            .await;
+        self.set_detail(Some(inventory.build_detail(other_backups)));
     }
 
-    async fn other_backup_summary_for_integrity_check(
+    async fn other_backup_state_for_integrity_check(
         &self,
         cloud: &CloudStorageClient,
         context: IntegrityDetailContext,
-    ) -> Option<CloudBackupOtherBackupsSummary> {
+    ) -> CloudBackupOtherBackupsState {
         match self.other_backup_summary(cloud).await {
-            Ok(other_backups) => Some(other_backups),
+            Ok(summary) => CloudBackupOtherBackupsState::Loaded { summary },
             Err(error) => {
                 warn!("Backup integrity: {context} other backup summary failed: {error}");
-                None
+                CloudBackupOtherBackupsState::LoadFailed { error: error.to_string() }
             }
         }
     }

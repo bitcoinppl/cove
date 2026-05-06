@@ -21,9 +21,9 @@ use self::sync_health::CloudBackupSyncHealthWorker;
 use self::uploads::CloudBackupUploadWorker;
 use super::keychain::CloudBackupKeychain;
 use super::{
-    CloudBackupDetailResult, CloudBackupStatus, DeepVerificationResult, PendingEnableSession,
-    PendingVerificationCompletion, RecoveryAction, RustCloudBackupManager, VerificationState,
-    WalletId,
+    CloudBackupDetailResult, CloudBackupStatus, DeepVerificationResult, OtherBackupsOperation,
+    PendingEnableSession, PendingVerificationCompletion, RecoveryAction, RustCloudBackupManager,
+    VerificationState, WalletId,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -230,14 +230,41 @@ impl CloudBackupSupervisor {
                 });
             }
             CloudBackupOperation::RecoverOtherBackups => {
+                if !Self::begin_other_backups_operation(&manager, OtherBackupsOperation::Recovering)
+                {
+                    return;
+                }
+
                 cove_tokio::task::spawn(
                     async move { manager.handle_recover_other_backups().await },
                 );
             }
             CloudBackupOperation::DeleteOtherBackups => {
+                if !Self::begin_other_backups_operation(&manager, OtherBackupsOperation::Deleting) {
+                    return;
+                }
+
                 cove_tokio::task::spawn(async move { manager.handle_delete_other_backups().await });
             }
         }
+    }
+
+    fn begin_other_backups_operation(
+        manager: &RustCloudBackupManager,
+        operation: OtherBackupsOperation,
+    ) -> bool {
+        if !matches!(
+            &manager.state.read().other_backups_operation,
+            OtherBackupsOperation::Idle
+                | OtherBackupsOperation::Recovered { .. }
+                | OtherBackupsOperation::Deleted
+                | OtherBackupsOperation::Failed { .. }
+        ) {
+            return false;
+        }
+
+        manager.set_other_backups_operation(operation);
+        true
     }
 
     pub async fn start_operation(

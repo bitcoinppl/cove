@@ -175,28 +175,60 @@ impl RustCloudBackupManager {
             .collect();
 
         for upload in completion.uploads() {
-            let PendingVerificationUpload::Wallet { .. } = upload else { continue };
-
-            match self
-                .verify_pending_wallet_backup(
-                    &completion,
-                    upload,
-                    sync_states_by_record_id.get(upload.record_id()),
-                    &critical_key,
-                )
-                .await?
-            {
-                PendingWalletVerificationOutcome::Pending => {
-                    return Ok(FinalizePendingVerificationResult::Pending);
+            match upload {
+                PendingVerificationUpload::MasterKeyWrapper => {
+                    self.verify_pending_master_key_wrapper(&completion, &master_key).await?;
                 }
-                PendingWalletVerificationOutcome::Verified => report.wallets_verified += 1,
-                PendingWalletVerificationOutcome::Failed => report.wallets_failed += 1,
-                PendingWalletVerificationOutcome::Unsupported => report.wallets_unsupported += 1,
+                PendingVerificationUpload::Wallet { .. } => {
+                    match self
+                        .verify_pending_wallet_backup(
+                            &completion,
+                            upload,
+                            sync_states_by_record_id.get(upload.record_id()),
+                            &critical_key,
+                        )
+                        .await?
+                    {
+                        PendingWalletVerificationOutcome::Pending => {
+                            return Ok(FinalizePendingVerificationResult::Pending);
+                        }
+                        PendingWalletVerificationOutcome::Verified => report.wallets_verified += 1,
+                        PendingWalletVerificationOutcome::Failed => report.wallets_failed += 1,
+                        PendingWalletVerificationOutcome::Unsupported => {
+                            report.wallets_unsupported += 1;
+                        }
+                    }
+                }
             }
         }
 
         report.detail = self.pending_verification_detail(&completion).await;
         Ok(FinalizePendingVerificationResult::Completed(report))
+    }
+
+    async fn verify_pending_master_key_wrapper(
+        &self,
+        completion: &PendingVerificationCompletion,
+        local_master_key: &cove_cspp::master_key::MasterKey,
+    ) -> Result<(), Box<DeepVerificationFailure>> {
+        let recovered_master_key = self
+            .recover_local_master_key_from_cloud_without_discovery(
+                completion.namespace_id(),
+                "repaired master key wrapper could not be verified",
+            )
+            .await
+            .map_err(|error| {
+                Box::new(self.pending_verification_failure(completion, error.to_string()))
+            })?;
+
+        if recovered_master_key.as_bytes() == local_master_key.as_bytes() {
+            return Ok(());
+        }
+
+        Err(Box::new(self.pending_verification_failure(
+            completion,
+            "repaired master key wrapper decrypted the wrong master key",
+        )))
     }
 
     async fn verify_pending_wallet_backup(

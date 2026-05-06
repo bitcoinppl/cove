@@ -5,7 +5,7 @@ use cove_device::cloud_storage::CloudSyncHealth;
 use cove_util::{GenerationToken, GenerationTracker};
 
 use crate::manager::cloud_backup_manager::RustCloudBackupManager;
-use crate::manager::cloud_backup_manager::pending::MAX_PENDING_UPLOAD_VERIFICATION_DELAY;
+use crate::manager::cloud_backup_manager::pending::MASTER_KEY_UPLOAD_CONFIRMATION_GRACE;
 
 #[derive(Debug)]
 pub(crate) struct CloudBackupSyncHealthWorker {
@@ -55,8 +55,15 @@ impl CloudBackupSyncHealthWorker {
         };
 
         let generation = self.sync_health_refresh_generations.advance();
+        let master_key_upload_grace_namespace =
+            self.master_key_upload_grace.as_ref().map(|grace| grace.namespace_id.clone());
         self.addr.send_fut_with(move |addr| async move {
-            let sync_health = manager.compute_sync_health().await;
+            let sync_health = match master_key_upload_grace_namespace.as_deref() {
+                Some(namespace) => {
+                    manager.compute_sync_health_with_master_key_grace(Some(namespace)).await
+                }
+                None => manager.compute_sync_health().await,
+            };
             send!(addr.complete_sync_health_refresh(generation, sync_health));
         });
     }
@@ -70,7 +77,7 @@ impl CloudBackupSyncHealthWorker {
             Some(MasterKeyUploadGrace { namespace_id: namespace_id.clone(), generation });
 
         self.addr.send_fut_with(move |addr| async move {
-            tokio::time::sleep(MAX_PENDING_UPLOAD_VERIFICATION_DELAY).await;
+            tokio::time::sleep(MASTER_KEY_UPLOAD_CONFIRMATION_GRACE).await;
             send!(addr.expire_master_key_upload_confirmation_grace(namespace_id, generation));
         });
 

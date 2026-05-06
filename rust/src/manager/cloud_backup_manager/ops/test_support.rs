@@ -449,8 +449,15 @@ impl CloudStorageAccess for MockCloudStorage {
 
         state.deleted_namespace_policies.push(policy);
         state.master_key_backups.remove(&namespace);
+        state.master_key_download_errors.remove(&namespace);
         state.wallet_files.remove(&namespace);
         state.wallet_backups.retain(|(backup_namespace, _), _| backup_namespace != &namespace);
+        state
+            .wallet_backup_download_overrides
+            .retain(|(backup_namespace, _), _| backup_namespace != &namespace);
+        state
+            .wallet_backup_download_errors
+            .retain(|(backup_namespace, _), _| backup_namespace != &namespace);
         state
             .uploaded_wallet_backups
             .retain(|(uploaded_namespace, _)| uploaded_namespace != &namespace);

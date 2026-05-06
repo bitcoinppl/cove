@@ -4,7 +4,7 @@ use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
-use super::PendingUploadVerificationStatus;
+use super::{MASTER_KEY_UPLOAD_CONFIRMATION_GRACE, PendingUploadVerificationStatus};
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
@@ -441,7 +441,7 @@ impl PendingUploadVerifier {
     ) -> bool {
         sync_state.wallet_id.is_none()
             && checked_at.saturating_sub(current.uploaded_at)
-                >= super::MAX_PENDING_UPLOAD_VERIFICATION_DELAY.as_secs()
+                >= MASTER_KEY_UPLOAD_CONFIRMATION_GRACE.as_secs()
     }
 }
 
@@ -515,8 +515,8 @@ mod tests {
     #[test]
     fn apply_blob_result_fails_expired_master_key_confirmation() {
         let checked_at = u64::try_from(jiff::Timestamp::now().as_second()).unwrap_or(0);
-        let uploaded_at = checked_at
-            .saturating_sub(super::super::MAX_PENDING_UPLOAD_VERIFICATION_DELAY.as_secs());
+        let uploaded_at =
+            checked_at.saturating_sub(super::super::MASTER_KEY_UPLOAD_CONFIRMATION_GRACE.as_secs());
         let blob = PersistedCloudBlobSyncState {
             namespace_id: "ns-1".into(),
             wallet_id: None,

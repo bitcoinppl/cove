@@ -182,8 +182,6 @@ impl RustCloudBackupManager {
             return;
         }
 
-        self.set_other_backups_operation(OtherBackupsOperation::Recovering);
-
         send!(self.supervisor.start_operation(CloudBackupOperation::RecoverOtherBackups, None));
     }
 
@@ -197,8 +195,6 @@ impl RustCloudBackupManager {
         ) {
             return;
         }
-
-        self.set_other_backups_operation(OtherBackupsOperation::Deleting);
 
         send!(self.supervisor.start_operation(CloudBackupOperation::DeleteOtherBackups, None));
     }
