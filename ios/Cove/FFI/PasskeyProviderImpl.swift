@@ -112,6 +112,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             "checkPasskeyPresence must not be called from the main thread"
         )
 
+        // passkey authorization requests can present iOS UI, so do not use this for background polling
         let credentialSummary = credentialSummary(credentialId)
         Log.info("[PASSKEY] presence check start rpId=\(rpId) credential=\(credentialSummary)")
 

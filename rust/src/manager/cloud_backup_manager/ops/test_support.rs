@@ -618,10 +618,6 @@ impl MockPasskeyProviderImpl {
         *self.authenticate_result.lock() = Some(result);
     }
 
-    pub(crate) fn set_presence_results(&self, results: Vec<PasskeyCredentialPresence>) {
-        *self.presence_results.lock() = results.into();
-    }
-
     pub(crate) fn authenticate_count(&self) -> usize {
         *self.authenticate_count.lock()
     }

@@ -520,6 +520,14 @@ impl CloudBackupSupervisor {
         )
     }
 
+    pub async fn has_awaiting_saved_passkey_confirmation_session(&self) -> ActorResult<bool> {
+        Produces::ok(
+            self.pending_enable_session
+                .as_ref()
+                .is_some_and(PendingEnableSession::is_awaiting_saved_passkey_confirmation),
+        )
+    }
+
     pub async fn clear_pending_enable_session(&mut self) -> ActorResult<()> {
         self.pending_enable_session = None;
         Produces::ok(())

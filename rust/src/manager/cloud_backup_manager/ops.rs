@@ -4,7 +4,7 @@ use std::time::Duration;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
-use cove_device::passkey::{PasskeyAccess, PasskeyCredentialPresence};
+use cove_device::passkey::PasskeyAccess;
 use cove_util::ResultExt as _;
 use futures::stream::{self, StreamExt as _};
 use tracing::{info, warn};
@@ -42,8 +42,6 @@ const CLOUD_ONLY_RESTORE_RECOVERY_MESSAGE: &str =
 const RECREATE_MANIFEST_RECOVERY_MESSAGE: &str =
     "Cloud backup needs verification before the backup index can be recreated";
 const UNSUPPORTED_CLOUD_ONLY_WALLET_NAME: &str = "Unsupported wallet backup";
-const NEW_PASSKEY_AVAILABILITY_WINDOW: Duration = Duration::from_secs(10);
-const NEW_PASSKEY_AVAILABILITY_POLL_INTERVAL: Duration = Duration::from_millis(500);
 enum FinalizeUploadStateMode {
     PreserveVerification,
     ResetVerification,
@@ -110,35 +108,10 @@ impl RustCloudBackupManager {
 
         tokio::time::sleep(Duration::from_secs(3)).await;
 
-        self.set_enable_state(CloudBackupEnableState::WaitingForPasskeyAvailability);
-        if self.wait_for_staged_passkey_availability().await {
-            return self.confirm_saved_passkey_from_pending_session().await;
-        }
-
+        // do not poll credential presence here; platform presence checks can show passkey UI
+        // after registration, so confirmation must happen only from an explicit user action
         self.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
         Ok(())
-    }
-
-    async fn wait_for_staged_passkey_availability(&self) -> bool {
-        let deadline = tokio::time::Instant::now() + NEW_PASSKEY_AVAILABILITY_WINDOW;
-        while tokio::time::Instant::now() < deadline {
-            let Some(pending) = self.take_saved_passkey_confirmation_session().await else {
-                return false;
-            };
-
-            let passkey_access = PasskeyAccess::global();
-            let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
-            let presence = acquirer.check_presence(pending.credential_id()).await;
-            self.replace_pending_enable_session(pending).await;
-
-            if matches!(presence, PasskeyCredentialPresence::Present) {
-                return true;
-            }
-
-            tokio::time::sleep(NEW_PASSKEY_AVAILABILITY_POLL_INTERVAL).await;
-        }
-
-        false
     }
 
     pub(crate) async fn handle_confirm_saved_passkey(&self) {
@@ -200,6 +173,15 @@ impl RustCloudBackupManager {
 
         self.set_existing_backup_found_prompt();
         self.clear_enable_progress(CloudBackupStatus::Disabled);
+        true
+    }
+
+    async fn keep_awaiting_saved_passkey_confirmation(&self) -> bool {
+        if !self.has_awaiting_saved_passkey_confirmation_session().await {
+            return false;
+        }
+
+        self.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
         true
     }
 
@@ -990,6 +972,9 @@ impl RustCloudBackupManager {
         if self.keep_awaiting_force_new_confirmation().await {
             return Ok(());
         }
+        if self.keep_awaiting_saved_passkey_confirmation().await {
+            return Ok(());
+        }
 
         let passkey_access = PasskeyAccess::global();
         let keychain = Keychain::global();
@@ -1082,6 +1067,9 @@ impl RustCloudBackupManager {
                 .await;
         }
         if self.keep_awaiting_force_new_confirmation().await {
+            return Ok(());
+        }
+        if self.keep_awaiting_saved_passkey_confirmation().await {
             return Ok(());
         }
 
@@ -2922,7 +2910,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread", start_paused = true)]
-    async fn registered_passkey_present_proceeds_through_targeted_auth_and_upload() {
+    async fn registered_passkey_stages_confirmation_without_automatic_auth() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
@@ -2936,15 +2924,16 @@ mod tests {
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 
         assert_eq!(globals.passkey.create_count(), 1);
-        assert_eq!(globals.passkey.authenticate_count(), 1);
-        assert_eq!(globals.passkey.authenticated_credential_ids(), vec![vec![1, 2, 3]]);
-        assert_eq!(CloudBackupKeychain::global().load_credential_id(), Some(vec![1, 2, 3]));
-        assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-        assert!(manager.take_pending_enable_session().await.is_none());
+        assert_eq!(globals.passkey.authenticate_count(), 0);
+        assert_eq!(CloudBackupKeychain::global().load_credential_id(), None);
+        assert_eq!(manager.state().enable_state, CloudBackupEnableState::NeedsPasskeyConfirmation);
+
+        let pending = manager.take_pending_enable_session().await.unwrap();
+        assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
     }
 
     #[tokio::test(flavor = "current_thread", start_paused = true)]
-    async fn registered_passkey_delayed_presence_proceeds_automatically() {
+    async fn registered_passkey_confirmation_session_prevents_duplicate_create() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
@@ -2953,22 +2942,22 @@ mod tests {
         reset_cloud_backup_test_state(&manager, globals);
         CONNECTIVITY_MANAGER.set_connection_state(true);
         globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-        globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
-        globals.passkey.set_presence_results(vec![
-            PasskeyCredentialPresence::Missing,
-            PasskeyCredentialPresence::Indeterminate,
-            PasskeyCredentialPresence::Present,
-        ]);
 
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+        manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 
-        assert_eq!(globals.passkey.authenticate_count(), 1);
-        assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-        assert!(manager.take_pending_enable_session().await.is_none());
+        assert_eq!(globals.passkey.create_count(), 1);
+        assert_eq!(globals.passkey.authenticate_count(), 0);
+        assert_eq!(manager.state().enable_state, CloudBackupEnableState::NeedsPasskeyConfirmation);
+
+        let pending = manager.take_pending_enable_session().await.unwrap();
+        assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
+        let (_, pending_passkey) = pending.into_parts();
+        assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
     }
 
     #[tokio::test(flavor = "current_thread", start_paused = true)]
-    async fn registered_passkey_timeout_stages_confirmation_without_duplicate_create() {
+    async fn registered_passkey_stages_confirmation_without_duplicate_create() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
@@ -2977,7 +2966,6 @@ mod tests {
         reset_cloud_backup_test_state(&manager, globals);
         CONNECTIVITY_MANAGER.set_connection_state(true);
         globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-        globals.passkey.set_presence_results(vec![PasskeyCredentialPresence::Missing; 25]);
 
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 
@@ -3002,7 +2990,6 @@ mod tests {
         reset_cloud_backup_test_state(&manager, globals);
         CONNECTIVITY_MANAGER.set_connection_state(true);
         globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-        globals.passkey.set_presence_results(vec![PasskeyCredentialPresence::Missing; 25]);
 
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 
@@ -3026,7 +3013,6 @@ mod tests {
         reset_cloud_backup_test_state(&manager, globals);
         CONNECTIVITY_MANAGER.set_connection_state(true);
         globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-        globals.passkey.set_presence_results(vec![PasskeyCredentialPresence::Indeterminate; 25]);
 
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 

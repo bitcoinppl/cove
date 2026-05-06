@@ -7,7 +7,7 @@ use cove_cspp::backup_data::{
 };
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_device::passkey::{
-    PasskeyAccess, PasskeyCredentialPresence, PasskeyError, PasskeyFailureReason, PasskeyOperation,
+    PasskeyAccess, PasskeyError, PasskeyFailureReason, PasskeyOperation,
     PasskeyRegistrationPlatform, PasskeyRegistrationResult, PasskeyRegistrationUser,
 };
 use cove_tokio::unblock;
@@ -112,16 +112,6 @@ impl PasskeyMaterialAcquirer {
             credential_id: staged.credential_id.clone(),
             provider_hint: staged.provider_hint.clone(),
         })
-    }
-
-    /// Silently checks whether a staged credential can be resolved by the provider
-    pub async fn check_presence(&self, credential_id: &[u8]) -> PasskeyCredentialPresence {
-        let passkey = self.passkey.clone();
-        let credential_id = credential_id.to_vec();
-        unblock::run_blocking(move || {
-            passkey.check_passkey_presence(PASSKEY_RP_ID.to_string(), credential_id)
-        })
-        .await
     }
 
     /// Discovers an existing passkey for wrapper repair or creates a new one

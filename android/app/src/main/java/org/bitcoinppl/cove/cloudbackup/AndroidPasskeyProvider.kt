@@ -164,6 +164,7 @@ class AndroidPasskeyProvider(
         credentialId: ByteArray,
     ): PasskeyCredentialPresence {
         enforceBackgroundThread("checkPasskeyPresence")
+        // credentialManager.getCredential can present UI, so do not use this for background polling
         return runBlocking {
             try {
                 val activity = ForegroundUiBridge.requireActivity()

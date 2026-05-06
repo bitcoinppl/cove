@@ -588,10 +588,6 @@ impl PendingEnableSessionMaterial {
         self.master_key.namespace_id()
     }
 
-    fn credential_id(&self) -> &[u8] {
-        &self.passkey.credential_id
-    }
-
     fn has_prf_key(&self) -> bool {
         self.passkey.has_prf_key()
     }
@@ -630,14 +626,6 @@ impl PendingEnableSession {
         }
     }
 
-    fn credential_id(&self) -> &[u8] {
-        match self {
-            Self::AwaitingForceNewConfirmation(material)
-            | Self::RetryUpload(material)
-            | Self::AwaitingSavedPasskeyConfirmation(material) => material.credential_id(),
-        }
-    }
-
     fn has_prf_key(&self) -> bool {
         match self {
             Self::AwaitingForceNewConfirmation(material)
@@ -652,6 +640,10 @@ impl PendingEnableSession {
 
     fn is_awaiting_force_new_confirmation(&self) -> bool {
         matches!(self, Self::AwaitingForceNewConfirmation(_))
+    }
+
+    fn is_awaiting_saved_passkey_confirmation(&self) -> bool {
+        matches!(self, Self::AwaitingSavedPasskeyConfirmation(_))
     }
 
     fn awaiting_saved_passkey_confirmation(
@@ -1894,6 +1886,12 @@ impl RustCloudBackupManager {
         act_zero::call!(self.supervisor.has_awaiting_force_new_pending_enable_session())
             .await
             .expect("check pending enable session")
+    }
+
+    pub(crate) async fn has_awaiting_saved_passkey_confirmation_session(&self) -> bool {
+        act_zero::call!(self.supervisor.has_awaiting_saved_passkey_confirmation_session())
+            .await
+            .expect("check saved passkey confirmation session")
     }
 
     pub(crate) async fn take_pending_enable_session(&self) -> Option<PendingEnableSession> {
