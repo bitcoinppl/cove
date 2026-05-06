@@ -61,13 +61,13 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         true
     }
 
-    func createPasskey(rpId: String, userId: Data, challenge: Data) throws -> PasskeyRegistrationResult {
+    func createPasskey(rpId: String, challenge: Data, user: PasskeyRegistrationUser) throws -> PasskeyRegistrationResult {
         precondition(!Thread.isMainThread, "createPasskey must not be called from the main thread")
 
         let registration = try performRegistrationRequest(
             rpId: rpId,
-            userId: userId,
-            challenge: challenge
+            challenge: challenge,
+            user: user
         )
         _ = try validateRegistrationPrfMetadata(registration)
 
@@ -182,8 +182,8 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
 
     private func performRegistrationRequest(
         rpId: String,
-        userId: Data,
-        challenge: Data
+        challenge: Data,
+        user: PasskeyRegistrationUser
     ) throws -> ASAuthorizationPlatformPublicKeyCredentialRegistration {
         let delegate = PasskeyDelegate(context: .registration)
         let controller: ASAuthorizationController
@@ -196,9 +196,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
 
             let request = provider.createCredentialRegistrationRequest(
                 challenge: challenge,
-                name: "Cove Wallet",
-                userID: userId
+                name: user.name,
+                userID: user.id
             )
+            request.displayName = user.displayName
             request.prf = .checkForSupport
 
             let ctrl = ASAuthorizationController(authorizationRequests: [request])

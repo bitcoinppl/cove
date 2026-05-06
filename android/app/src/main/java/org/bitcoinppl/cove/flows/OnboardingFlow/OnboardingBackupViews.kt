@@ -72,6 +72,7 @@ import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove_core.CloudBackupEnableState
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceFlow
 import org.bitcoinppl.cove_core.CloudBackupPromptIntent
@@ -604,7 +605,9 @@ private fun OnboardingCloudBackupDetailsStepView(
     val isPromptingForEnableChoice =
         promptIntent is CloudBackupPromptIntent.PasskeyChoice &&
             promptIntent.v1 == CloudBackupPasskeyChoiceFlow.ENABLE
-    val isBusy = backupManager.status is CloudBackupStatus.Enabling
+    val isBusy =
+        backupManager.status is CloudBackupStatus.Enabling &&
+            backupManager.enableState != CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION
 
     fun completeIfEnabled() {
         if (didReportEnabled) return
@@ -621,17 +624,28 @@ private fun OnboardingCloudBackupDetailsStepView(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        CloudBackupEnableOnboardingView(
-            onEnable = {
-                if (!isBusy && !isPromptingForEnableChoice) {
-                    onEnable()
-                }
-            },
-            onCancel = onSkip,
-            message = onboardingMessage,
-            isBusy = isBusy || isPromptingForEnableChoice,
-            context = context,
-        )
+        if (backupManager.enableState == CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION) {
+            CloudBackupPasskeyConfirmationStep(
+                onContinue = {
+                    backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
+                },
+                onCancel = {
+                    backupManager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
+                },
+            )
+        } else {
+            CloudBackupEnableOnboardingView(
+                onEnable = {
+                    if (!isBusy && !isPromptingForEnableChoice) {
+                        onEnable()
+                    }
+                },
+                onCancel = onSkip,
+                message = onboardingMessage,
+                isBusy = isBusy || isPromptingForEnableChoice,
+                context = context,
+            )
+        }
 
         if (isBusy) {
             Box(
@@ -652,15 +666,16 @@ private fun OnboardingCloudBackupDetailsStepView(
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         CircularProgressIndicator(color = Color.White)
+                        val (title, subtitle) = cloudBackupEnableBusyCopy(backupManager.enableState)
                         Text(
-                            text = "Waiting for your new passkey to become available...",
+                            text = title,
                             color = Color.White,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center,
                         )
                         Text(
-                            text = "Cloud Backup will continue automatically",
+                            text = subtitle,
                             color = OnboardingTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
@@ -671,6 +686,62 @@ private fun OnboardingCloudBackupDetailsStepView(
         }
     }
 }
+
+@Composable
+private fun CloudBackupPasskeyConfirmationStep(
+    onContinue: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    OnboardingBackground {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            OnboardingStatusHero(
+                icon = Icons.Default.Lock,
+                tint = Color(0xFFFFD166),
+                fillColor = Color(0xFFFFD166).copy(alpha = 0.12f),
+            )
+            Spacer(modifier = Modifier.height(28.dp))
+            Text(
+                text = "Confirm your passkey",
+                color = Color.White,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Your passkey was saved. Cove needs to confirm it once before enabling Cloud Backup. If it does not appear right away, use the option to search your passkey/password manager app.",
+                color = OnboardingTextSecondary,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(28.dp))
+            OnboardingPrimaryButton(text = "Continue", onClick = onContinue)
+            Spacer(modifier = Modifier.height(12.dp))
+            OnboardingSecondaryButton(text = "Cancel", onClick = onCancel)
+        }
+    }
+}
+
+private fun cloudBackupEnableBusyCopy(enableState: CloudBackupEnableState): Pair<String, String> =
+    when (enableState) {
+        CloudBackupEnableState.CREATING_PASSKEY ->
+            "Creating your passkey..." to "Cloud Backup will continue automatically"
+        CloudBackupEnableState.WAITING_FOR_PASSKEY_AVAILABILITY ->
+            "Checking that your passkey is available..." to
+                "This can take a few seconds after saving it in your passkey/password manager app"
+        CloudBackupEnableState.UPLOADING_BACKUP ->
+            "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+        CloudBackupEnableState.IDLE,
+        CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION,
+        -> "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+    }
 
 @Composable
 internal fun OnboardingCloudBackupSuccessView(

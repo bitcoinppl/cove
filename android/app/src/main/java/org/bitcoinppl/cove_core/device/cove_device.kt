@@ -666,7 +666,7 @@ internal interface UniffiCallbackInterfaceKeychainAccessMethod2 : com.sun.jna.Ca
     fun callback(`uniffiHandle`: Long,`key`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfacePasskeyProviderMethod0 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`userId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`user`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfacePasskeyProviderMethod1 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`credentialId`: RustBuffer.ByValue,`prfSalt`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
@@ -1166,7 +1166,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_keychainaccess_delete() != 1213.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 17856.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 48177.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_passkeyprovider_authenticate_with_prf() != 17002.toShort()) {
@@ -2987,6 +2987,49 @@ public object FfiConverterTypePasskeyRegistrationResult: FfiConverterRustBuffer<
 
 
 
+data class PasskeyRegistrationUser (
+    var `id`: kotlin.ByteArray
+    , 
+    var `name`: kotlin.String
+    , 
+    var `displayName`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyRegistrationUser: FfiConverterRustBuffer<PasskeyRegistrationUser> {
+    override fun read(buf: ByteBuffer): PasskeyRegistrationUser {
+        return PasskeyRegistrationUser(
+            FfiConverterByteArray.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PasskeyRegistrationUser) = (
+            FfiConverterByteArray.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterString.allocationSize(value.`displayName`)
+    )
+
+    override fun write(value: PasskeyRegistrationUser, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`id`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterString.write(value.`displayName`, buf)
+    }
+}
+
+
+
 
 enum class CloudAccessPolicy {
     
@@ -4651,7 +4694,7 @@ public interface PasskeyProvider {
     /**
      * Create a new passkey credential
      */
-    fun `createPasskey`(`rpId`: kotlin.String, `userId`: kotlin.ByteArray, `challenge`: kotlin.ByteArray): PasskeyRegistrationResult
+    fun `createPasskey`(`rpId`: kotlin.String, `challenge`: kotlin.ByteArray, `user`: PasskeyRegistrationUser): PasskeyRegistrationResult
     
     /**
      * Authenticate with a known credential_id (enable flow, re-enable)
@@ -4686,13 +4729,13 @@ public interface PasskeyProvider {
 // Put the implementation in an object so we don't pollute the top-level namespace
 internal object uniffiCallbackInterfacePasskeyProvider {
     internal object `createPasskey`: UniffiCallbackInterfacePasskeyProviderMethod0 {
-        override fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`userId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+        override fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`user`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypePasskeyProvider.handleMap.get(uniffiHandle)
             val makeCall = { ->
                 uniffiObj.`createPasskey`(
                     FfiConverterString.lift(`rpId`),
-                    FfiConverterByteArray.lift(`userId`),
                     FfiConverterByteArray.lift(`challenge`),
+                    FfiConverterTypePasskeyRegistrationUser.lift(`user`),
                 )
             }
             val writeReturn = { value: PasskeyRegistrationResult -> uniffiOutReturn.setValue(FfiConverterTypePasskeyRegistrationResult.lower(value)) }

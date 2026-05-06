@@ -79,6 +79,15 @@ pub enum CloudBackupStatus {
     Error(String),
 }
 
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudBackupEnableState {
+    Idle,
+    CreatingPasskey,
+    WaitingForPasskeyAvailability,
+    NeedsPasskeyConfirmation,
+    UploadingBackup,
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupPasskeyChoiceFlow {
     Enable,
@@ -99,6 +108,7 @@ pub enum CloudBackupManagerAction {
     EnableCloudBackup,
     EnableCloudBackupForceNew,
     EnableCloudBackupNoDiscovery,
+    ConfirmSavedPasskey,
     DiscardPendingEnableCloudBackup,
     DismissPasskeyChoicePrompt,
     DismissMissingPasskeyReminder,
@@ -129,6 +139,7 @@ pub enum CloudBackupReconcileMessage {
     RestoreProgress(Option<CloudBackupRestoreProgress>),
     RestoreReport(Option<CloudBackupRestoreReport>),
     SyncError(Option<String>),
+    EnableState(CloudBackupEnableState),
     VerificationPrompt(bool),
     VerificationMetadata(CloudBackupVerificationMetadata),
     PendingUploadVerification(PendingUploadVerificationState),
@@ -312,6 +323,7 @@ pub struct CloudBackupState {
     pub restore_progress: Option<CloudBackupRestoreProgress>,
     pub restore_report: Option<CloudBackupRestoreReport>,
     pub sync_error: Option<String>,
+    pub enable_state: CloudBackupEnableState,
     pub pending_upload_verification: PendingUploadVerificationState,
     pub should_prompt_verification: bool,
     pub verification_metadata: CloudBackupVerificationMetadata,
@@ -334,6 +346,7 @@ impl Default for CloudBackupState {
             restore_progress: None,
             restore_report: None,
             sync_error: None,
+            enable_state: CloudBackupEnableState::Idle,
             pending_upload_verification: PendingUploadVerificationState::Idle,
             should_prompt_verification: false,
             verification_metadata: CloudBackupVerificationMetadata::NotConfigured,
@@ -511,6 +524,8 @@ pub(crate) enum PendingEnableSession {
     AwaitingForceNewConfirmation(PendingEnableSessionMaterial),
     /// Upload already started and should retry with the same staged passkey material
     RetryUpload(PendingEnableSessionMaterial),
+    /// A registered passkey is staged until targeted PRF auth confirms it can be used
+    AwaitingSavedPasskeyConfirmation(PendingEnableSessionMaterial),
 }
 
 fn cloud_only_cache_is_stale(
@@ -572,6 +587,14 @@ impl PendingEnableSessionMaterial {
     fn namespace_id(&self) -> String {
         self.master_key.namespace_id()
     }
+
+    fn credential_id(&self) -> &[u8] {
+        &self.passkey.credential_id
+    }
+
+    fn has_prf_key(&self) -> bool {
+        self.passkey.has_prf_key()
+    }
 }
 
 impl PendingEnableSession {
@@ -593,17 +616,33 @@ impl PendingEnableSession {
         self,
     ) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<UnpersistedPrfKey>) {
         match self {
-            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
-                material.into_parts()
-            }
+            Self::AwaitingForceNewConfirmation(material)
+            | Self::RetryUpload(material)
+            | Self::AwaitingSavedPasskeyConfirmation(material) => material.into_parts(),
         }
     }
 
     fn namespace_id(&self) -> String {
         match self {
-            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
-                material.namespace_id()
-            }
+            Self::AwaitingForceNewConfirmation(material)
+            | Self::RetryUpload(material)
+            | Self::AwaitingSavedPasskeyConfirmation(material) => material.namespace_id(),
+        }
+    }
+
+    fn credential_id(&self) -> &[u8] {
+        match self {
+            Self::AwaitingForceNewConfirmation(material)
+            | Self::RetryUpload(material)
+            | Self::AwaitingSavedPasskeyConfirmation(material) => material.credential_id(),
+        }
+    }
+
+    fn has_prf_key(&self) -> bool {
+        match self {
+            Self::AwaitingForceNewConfirmation(material)
+            | Self::RetryUpload(material)
+            | Self::AwaitingSavedPasskeyConfirmation(material) => material.has_prf_key(),
         }
     }
 
@@ -613,6 +652,15 @@ impl PendingEnableSession {
 
     fn is_awaiting_force_new_confirmation(&self) -> bool {
         matches!(self, Self::AwaitingForceNewConfirmation(_))
+    }
+
+    fn awaiting_saved_passkey_confirmation(
+        master_key: cove_cspp::master_key::MasterKey,
+        passkey: UnpersistedPrfKey,
+    ) -> Self {
+        Self::AwaitingSavedPasskeyConfirmation(PendingEnableSessionMaterial::new(
+            master_key, passkey,
+        ))
     }
 }
 
@@ -1173,6 +1221,14 @@ impl RustCloudBackupManager {
 
     pub(crate) fn set_sync_error(&self, sync_error: Option<String>) {
         self.set_and_notify_field(sync_error, |state| &mut state.sync_error, Message::SyncError);
+    }
+
+    pub(crate) fn set_enable_state(&self, enable_state: CloudBackupEnableState) {
+        self.set_and_notify_field(
+            enable_state,
+            |state| &mut state.enable_state,
+            Message::EnableState,
+        );
     }
 
     pub(crate) fn refresh_sync_health(&self) {
@@ -1826,6 +1882,14 @@ impl RustCloudBackupManager {
             .expect("take retry pending enable session")
     }
 
+    pub(crate) async fn take_saved_passkey_confirmation_session(
+        &self,
+    ) -> Option<PendingEnableSession> {
+        act_zero::call!(self.supervisor.take_saved_passkey_confirmation_session())
+            .await
+            .expect("take saved passkey confirmation session")
+    }
+
     pub(crate) async fn has_awaiting_force_new_pending_enable_session(&self) -> bool {
         act_zero::call!(self.supervisor.has_awaiting_force_new_pending_enable_session())
             .await
@@ -2011,6 +2075,7 @@ impl RustCloudBackupManager {
     pub(super) fn finish_background_operation_error(&self, error: &CloudBackupError) {
         self.set_progress(None);
         self.set_restore_progress(None);
+        self.set_enable_state(CloudBackupEnableState::Idle);
         self.set_status(Self::status_for_operation_error(error));
     }
 }

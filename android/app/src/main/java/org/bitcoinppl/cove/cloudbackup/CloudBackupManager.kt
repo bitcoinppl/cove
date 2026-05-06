@@ -12,6 +12,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove_core.CloudBackupDetail
+import org.bitcoinppl.cove_core.CloudBackupEnableState
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupManagerReconciler
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceFlow
@@ -81,6 +82,9 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
 
     val detail: CloudBackupDetail?
         get() = state.detail
+
+    val enableState: CloudBackupEnableState
+        get() = state.enableState
 
     val verification: VerificationState
         get() = state.verification
@@ -200,6 +204,7 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
             is CloudBackupReconcileMessage.RestoreProgress -> state = state.copy(restoreProgress = message.v1)
             is CloudBackupReconcileMessage.RestoreReport -> state = state.copy(restoreReport = message.v1)
             is CloudBackupReconcileMessage.SyncError -> state = state.copy(syncError = message.v1)
+            is CloudBackupReconcileMessage.EnableState -> state = state.copy(enableState = message.v1)
             is CloudBackupReconcileMessage.VerificationPrompt -> state = state.copy(shouldPromptVerification = message.v1)
             is CloudBackupReconcileMessage.VerificationMetadata -> state = state.copy(verificationMetadata = message.v1)
             is CloudBackupReconcileMessage.PendingUploadVerification -> state = state.copy(pendingUploadVerification = message.v1)

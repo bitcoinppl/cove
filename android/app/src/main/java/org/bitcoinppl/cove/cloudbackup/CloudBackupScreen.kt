@@ -66,6 +66,7 @@ package org.bitcoinppl.cove.cloudbackup
  import org.bitcoinppl.cove.views.MaterialSettingsItem
  import org.bitcoinppl.cove.views.SectionHeader
  import org.bitcoinppl.cove_core.CloudBackupDetail
+ import org.bitcoinppl.cove_core.CloudBackupEnableState
  import org.bitcoinppl.cove_core.CloudBackupManagerAction
  import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
  import org.bitcoinppl.cove_core.CloudBackupStatus
@@ -184,10 +185,7 @@ package org.bitcoinppl.cove.cloudbackup
                  }
 
                  is CloudBackupStatus.Enabling -> {
-                     CloudBackupProgressContent(
-                         title = "Setting up cloud backup",
-                         message = "Creating your encrypted backup and passkey",
-                     )
+                     CloudBackupEnableProgressOrConfirmation(manager)
                  }
 
                  is CloudBackupStatus.Restoring -> {
@@ -271,6 +269,66 @@ package org.bitcoinppl.cove.cloudbackup
                  TextButton(onClick = { showReinitializeConfirmation = false }) { Text("Cancel") }
              },
          )
+     }
+ }
+
+ @Composable
+ private fun CloudBackupEnableProgressOrConfirmation(manager: CloudBackupManager) {
+     if (manager.enableState == CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION) {
+         CloudBackupPasskeyConfirmationContent(
+             onContinue = { manager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey) },
+             onCancel = { manager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup) },
+         )
+         return
+     }
+
+     val (title, message) = cloudBackupEnableProgressCopy(manager.enableState)
+     CloudBackupProgressContent(title = title, message = message)
+ }
+
+ private fun cloudBackupEnableProgressCopy(enableState: CloudBackupEnableState): Pair<String, String> =
+     when (enableState) {
+         CloudBackupEnableState.CREATING_PASSKEY ->
+             "Creating your passkey..." to "Cloud Backup will continue automatically"
+         CloudBackupEnableState.WAITING_FOR_PASSKEY_AVAILABILITY ->
+             "Checking that your passkey is available..." to
+                 "This can take a few seconds after saving it in your passkey/password manager app"
+         CloudBackupEnableState.UPLOADING_BACKUP ->
+             "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+         CloudBackupEnableState.IDLE,
+         CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION,
+         -> "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+     }
+
+ @Composable
+ private fun CloudBackupPasskeyConfirmationContent(
+     onContinue: () -> Unit,
+     onCancel: () -> Unit,
+ ) {
+     Column(
+         modifier =
+             Modifier
+                 .fillMaxSize()
+                 .padding(24.dp),
+         horizontalAlignment = Alignment.CenterHorizontally,
+         verticalArrangement = Arrangement.Center,
+     ) {
+         Icon(Icons.Default.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+         Spacer(modifier = Modifier.height(16.dp))
+         Text("Confirm your passkey", style = MaterialTheme.typography.titleLarge)
+         Spacer(modifier = Modifier.height(12.dp))
+         Text(
+             "Your passkey was saved. Cove needs to confirm it once before enabling Cloud Backup. If it does not appear right away, use the option to search your passkey/password manager app.",
+             style = MaterialTheme.typography.bodyMedium,
+             color = MaterialTheme.colorScheme.onSurfaceVariant,
+         )
+         Spacer(modifier = Modifier.height(24.dp))
+         Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
+             Text("Continue")
+         }
+         TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+             Text("Cancel")
+         }
      }
  }
 

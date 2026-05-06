@@ -7,8 +7,8 @@ use cove_cspp::backup_data::{
 };
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_device::passkey::{
-    PasskeyAccess, PasskeyError, PasskeyFailureReason, PasskeyOperation,
-    PasskeyRegistrationPlatform, PasskeyRegistrationResult,
+    PasskeyAccess, PasskeyCredentialPresence, PasskeyError, PasskeyFailureReason, PasskeyOperation,
+    PasskeyRegistrationPlatform, PasskeyRegistrationResult, PasskeyRegistrationUser,
 };
 use cove_tokio::unblock;
 use rand::RngExt as _;
@@ -17,7 +17,10 @@ use tracing::{debug, info, warn};
 use super::UnpersistedPrfKey;
 use crate::manager::cloud_backup_manager::{CloudBackupError, PASSKEY_RP_ID};
 
-async fn delay_before_new_passkey_auth() {
+const PASSKEY_DISPLAY_NAME: &str = "Cove Cloud Backup";
+const PASSKEY_SUFFIX_ALPHABET: &[u8; 32] = b"23456789abcdefghijkmnpqrstuvwxyz";
+
+pub(crate) async fn delay_before_new_passkey_auth() {
     let delay = Duration::from_secs(3);
     info!("Waiting {delay:?} before authenticating new passkey");
     tokio::time::sleep(delay).await;
@@ -36,6 +39,11 @@ pub enum NamespaceMatchOutcome {
     NoMatch,
     Inconclusive,
     UnsupportedVersions,
+}
+
+pub enum EnablePasskeyMaterial {
+    Authenticated(UnpersistedPrfKey),
+    Registered(UnpersistedPrfKey),
 }
 
 struct PasskeyMaterialDiscoveryContext {
@@ -71,6 +79,51 @@ impl PasskeyMaterialAcquirer {
         self.create_new_prf_key_with_mapper(map_enable_passkey_error).await
     }
 
+    /// Registers an enable passkey without immediately authenticating it
+    pub async fn register_for_enable(&self) -> Result<UnpersistedPrfKey, CloudBackupError> {
+        info!("Registering new passkey for cloud backup enable");
+        let prf_salt: [u8; 32] = rand::rng().random();
+        let registration = self.create_passkey_registration(map_enable_passkey_error).await?;
+
+        Ok(UnpersistedPrfKey {
+            prf_key: [0; 32],
+            prf_salt,
+            credential_id: registration.credential_id.clone(),
+            provider_hint: Some(passkey_provider_hint(registration)),
+        })
+    }
+
+    /// Confirms a registered enable passkey by acquiring PRF material with targeted auth
+    pub async fn confirm_registered_for_enable(
+        &self,
+        staged: &UnpersistedPrfKey,
+    ) -> Result<UnpersistedPrfKey, CloudBackupError> {
+        let prf_output = self
+            .authenticate_registered(
+                &staged.credential_id,
+                staged.prf_salt,
+                map_enable_passkey_error,
+            )
+            .await?;
+
+        Ok(UnpersistedPrfKey {
+            prf_key: prf_output_to_key(prf_output)?,
+            prf_salt: staged.prf_salt,
+            credential_id: staged.credential_id.clone(),
+            provider_hint: staged.provider_hint.clone(),
+        })
+    }
+
+    /// Silently checks whether a staged credential can be resolved by the provider
+    pub async fn check_presence(&self, credential_id: &[u8]) -> PasskeyCredentialPresence {
+        let passkey = self.passkey.clone();
+        let credential_id = credential_id.to_vec();
+        unblock::run_blocking(move || {
+            passkey.check_passkey_presence(PASSKEY_RP_ID.to_string(), credential_id)
+        })
+        .await
+    }
+
     /// Discovers an existing passkey for wrapper repair or creates a new one
     pub async fn discover_or_create_for_wrapper_repair(
         &self,
@@ -87,21 +140,41 @@ impl PasskeyMaterialAcquirer {
         .await
     }
 
-    /// Discovers an existing passkey for enabling cloud backup or creates a new one
-    pub async fn discover_or_create_for_enable(
+    /// Discovers an existing enable passkey or registers a new passkey for later confirmation
+    pub async fn discover_or_register_for_enable(
         &self,
-    ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        self.discover_or_create(PasskeyMaterialDiscoveryContext {
-            fallback_context: "cloud backup enable",
-            attempt_message:
-                "Attempting passkey discovery before creating new cloud backup enable passkey",
-            discovered_message: "Discovered existing passkey for cloud backup enable",
-            cancelled_message: "User cancelled passkey discovery for cloud backup enable",
-            missing_message: "No existing passkey found for cloud backup enable, creating new",
-            failed_message: "Cloud backup enable discovery failed",
-            create_for_enable: true,
-        })
-        .await
+    ) -> Result<EnablePasskeyMaterial, CloudBackupError> {
+        info!("Attempting passkey discovery before registering new cloud backup enable passkey");
+        let prf_salt: [u8; 32] = rand::rng().random();
+
+        match self.discover_with_platform_authorization_retry(prf_salt).await {
+            Ok(discovered) => {
+                let prf_key = prf_output_to_key(discovered.prf_output)?;
+                info!("Discovered existing passkey for cloud backup enable");
+
+                Ok(EnablePasskeyMaterial::Authenticated(UnpersistedPrfKey {
+                    prf_key,
+                    prf_salt,
+                    credential_id: discovered.credential_id,
+                    provider_hint: None,
+                }))
+            }
+            Err(PasskeyError::UserCancelled) => {
+                info!("User cancelled passkey discovery for cloud backup enable");
+                Err(CloudBackupError::PasskeyDiscoveryCancelled)
+            }
+            Err(PasskeyError::NoCredentialFound) => {
+                info!("No existing passkey found for cloud backup enable, registering new");
+                self.register_for_enable().await.map(EnablePasskeyMaterial::Registered)
+            }
+            Err(PasskeyError::PrfUnsupportedProvider) => {
+                Err(CloudBackupError::UnsupportedPasskeyProvider)
+            }
+            Err(error) => {
+                warn!("Cloud backup enable discovery failed ({error}), registering new passkey");
+                self.register_for_enable().await.map(EnablePasskeyMaterial::Registered)
+            }
+        }
     }
 
     async fn discover_or_create(
@@ -196,38 +269,15 @@ impl PasskeyMaterialAcquirer {
         map_passkey_error: fn(PasskeyError) -> CloudBackupError,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
         let prf_salt: [u8; 32] = rand::rng().random();
-        let registration = {
-            let passkey = self.passkey.clone();
-            unblock::run_blocking(move || {
-                passkey.create_passkey(
-                    PASSKEY_RP_ID.to_string(),
-                    rand::rng().random::<[u8; 16]>().to_vec(),
-                    random_challenge(),
-                )
-            })
-            .await
-            .map_err(map_passkey_error)?
-        };
+        let registration = self.create_passkey_registration(map_passkey_error).await?;
         let credential_id = registration.credential_id.clone();
 
         // wait briefly before targeted auth so iOS can settle after registration
         // without probing for presence and flashing another native passkey sheet
         delay_before_new_passkey_auth().await;
 
-        let prf_output = {
-            let passkey = self.passkey.clone();
-            let credential_id = credential_id.clone();
-            unblock::run_blocking(move || {
-                passkey.authenticate_with_prf(
-                    PASSKEY_RP_ID.to_string(),
-                    credential_id,
-                    prf_salt.to_vec(),
-                    random_challenge(),
-                )
-            })
-            .await
-            .map_err(map_passkey_error)?
-        };
+        let prf_output =
+            self.authenticate_registered(&credential_id, prf_salt, map_passkey_error).await?;
 
         Ok(UnpersistedPrfKey {
             prf_key: prf_output_to_key(prf_output)?,
@@ -236,6 +286,61 @@ impl PasskeyMaterialAcquirer {
             provider_hint: Some(passkey_provider_hint(registration)),
         })
     }
+
+    async fn create_passkey_registration(
+        &self,
+        map_passkey_error: fn(PasskeyError) -> CloudBackupError,
+    ) -> Result<PasskeyRegistrationResult, CloudBackupError> {
+        let passkey = self.passkey.clone();
+        let user = passkey_registration_user();
+        unblock::run_blocking(move || {
+            passkey.create_passkey(PASSKEY_RP_ID.to_string(), random_challenge(), user)
+        })
+        .await
+        .map_err(map_passkey_error)
+    }
+
+    async fn authenticate_registered(
+        &self,
+        credential_id: &[u8],
+        prf_salt: [u8; 32],
+        map_passkey_error: fn(PasskeyError) -> CloudBackupError,
+    ) -> Result<Vec<u8>, CloudBackupError> {
+        let passkey = self.passkey.clone();
+        let credential_id = credential_id.to_vec();
+        unblock::run_blocking(move || {
+            passkey.authenticate_with_prf(
+                PASSKEY_RP_ID.to_string(),
+                credential_id,
+                prf_salt.to_vec(),
+                random_challenge(),
+            )
+        })
+        .await
+        .map_err(map_passkey_error)
+    }
+}
+
+fn passkey_registration_user() -> PasskeyRegistrationUser {
+    let id = rand::rng().random::<[u8; 16]>().to_vec();
+    PasskeyRegistrationUser {
+        name: format!("{PASSKEY_DISPLAY_NAME} ({})", passkey_name_suffix(&id)),
+        display_name: PASSKEY_DISPLAY_NAME.into(),
+        id,
+    }
+}
+
+fn passkey_name_suffix(user_id: &[u8]) -> String {
+    let mut bytes = [0u8; 3];
+    for (slot, byte) in bytes.iter_mut().zip(user_id.iter()) {
+        *slot = *byte;
+    }
+
+    let value = (u32::from(bytes[0]) << 16) | (u32::from(bytes[1]) << 8) | u32::from(bytes[2]);
+    [15, 10, 5, 0]
+        .into_iter()
+        .map(|shift| PASSKEY_SUFFIX_ALPHABET[((value >> shift) & 0x1f) as usize] as char)
+        .collect()
 }
 
 fn passkey_provider_hint(registration: PasskeyRegistrationResult) -> PasskeyProviderHint {

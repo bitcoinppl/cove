@@ -15,7 +15,7 @@ use cove_device::keychain::{Keychain, KeychainAccess};
 use cove_device::passkey::{
     DiscoveredPasskeyResult, PasskeyAccess, PasskeyCredentialPresence, PasskeyError,
     PasskeyFailureReason, PasskeyOperation, PasskeyProvider, PasskeyRegistrationPlatform,
-    PasskeyRegistrationResult,
+    PasskeyRegistrationResult, PasskeyRegistrationUser,
 };
 use parking_lot::Mutex;
 use sha2::Digest as _;
@@ -67,6 +67,7 @@ impl cove_cspp::CsppStore for MockStoreHandle {
 type MockDiscoverResult = Result<(Vec<u8>, Vec<u8>), PasskeyError>;
 type MockPasskeyActionResult = Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>;
 type MockPasskeyCreateResult = Arc<Mutex<Option<Result<PasskeyRegistrationResult, PasskeyError>>>>;
+type MockPasskeyPresenceResults = Arc<Mutex<VecDeque<PasskeyCredentialPresence>>>;
 #[derive(Debug, Clone, Default)]
 pub(crate) struct MockKeychain {
     entries: Arc<Mutex<HashMap<String, String>>>,
@@ -556,6 +557,8 @@ pub(crate) struct MockPasskeyProviderImpl {
     create_count: Arc<Mutex<usize>>,
     authenticate_count: Arc<Mutex<usize>>,
     discover_count: Arc<Mutex<usize>>,
+    presence_results: MockPasskeyPresenceResults,
+    authenticated_credential_ids: Arc<Mutex<Vec<Vec<u8>>>>,
 }
 
 impl Default for MockPasskeyProviderImpl {
@@ -567,6 +570,8 @@ impl Default for MockPasskeyProviderImpl {
             create_count: Arc::new(Mutex::new(0)),
             authenticate_count: Arc::new(Mutex::new(0)),
             discover_count: Arc::new(Mutex::new(0)),
+            presence_results: Arc::new(Mutex::new(VecDeque::new())),
+            authenticated_credential_ids: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -579,6 +584,8 @@ impl MockPasskeyProviderImpl {
         *self.create_count.lock() = 0;
         *self.authenticate_count.lock() = 0;
         *self.discover_count.lock() = 0;
+        self.presence_results.lock().clear();
+        self.authenticated_credential_ids.lock().clear();
     }
 
     pub(crate) fn set_discover_result(
@@ -611,6 +618,10 @@ impl MockPasskeyProviderImpl {
         *self.authenticate_result.lock() = Some(result);
     }
 
+    pub(crate) fn set_presence_results(&self, results: Vec<PasskeyCredentialPresence>) {
+        *self.presence_results.lock() = results.into();
+    }
+
     pub(crate) fn authenticate_count(&self) -> usize {
         *self.authenticate_count.lock()
     }
@@ -622,14 +633,18 @@ impl MockPasskeyProviderImpl {
     pub(crate) fn discover_count(&self) -> usize {
         *self.discover_count.lock()
     }
+
+    pub(crate) fn authenticated_credential_ids(&self) -> Vec<Vec<u8>> {
+        self.authenticated_credential_ids.lock().clone()
+    }
 }
 
 impl PasskeyProvider for MockPasskeyProviderImpl {
     fn create_passkey(
         &self,
         _rp_id: String,
-        _user_id: Vec<u8>,
         _challenge: Vec<u8>,
+        _user: PasskeyRegistrationUser,
     ) -> Result<PasskeyRegistrationResult, PasskeyError> {
         *self.create_count.lock() += 1;
         self.create_result.lock().take().unwrap_or_else(|| {
@@ -645,11 +660,12 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
     fn authenticate_with_prf(
         &self,
         _rp_id: String,
-        _credential_id: Vec<u8>,
+        credential_id: Vec<u8>,
         _prf_salt: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
         *self.authenticate_count.lock() += 1;
+        self.authenticated_credential_ids.lock().push(credential_id);
         self.authenticate_result.lock().take().unwrap_or_else(|| {
             Err(PasskeyError::RequestFailed {
                 operation: PasskeyOperation::AuthenticateAssertion,
@@ -686,7 +702,7 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _rp_id: String,
         _credential_id: Vec<u8>,
     ) -> PasskeyCredentialPresence {
-        PasskeyCredentialPresence::Present
+        self.presence_results.lock().pop_front().unwrap_or(PasskeyCredentialPresence::Present)
     }
 }
 
@@ -1104,19 +1120,27 @@ pub(crate) async fn new_restore_operation_for_test(
 mod tests {
     use super::*;
 
+    fn test_passkey_user() -> PasskeyRegistrationUser {
+        PasskeyRegistrationUser {
+            id: vec![1],
+            name: "Cove Cloud Backup (test)".into(),
+            display_name: "Cove Cloud Backup".into(),
+        }
+    }
+
     #[test]
     fn passkey_create_result_is_consumed_after_first_use() {
         let provider = MockPasskeyProviderImpl::default();
         provider.set_create_result(Ok(vec![1, 2, 3]));
 
         let registration = provider
-            .create_passkey("rp".into(), vec![1], vec![2])
+            .create_passkey("rp".into(), vec![2], test_passkey_user())
             .expect("configured create result");
         assert_eq!(registration.credential_id, vec![1, 2, 3]);
         assert_eq!(registration.provider_aaguid, "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4");
         assert_eq!(registration.registered_platform, PasskeyRegistrationPlatform::Android);
         assert!(matches!(
-            provider.create_passkey("rp".into(), vec![1], vec![2]),
+            provider.create_passkey("rp".into(), vec![2], test_passkey_user()),
             Err(PasskeyError::RequestFailed {
                 operation: PasskeyOperation::Registration,
                 reason: PasskeyFailureReason::Unknown { diagnostic_message },

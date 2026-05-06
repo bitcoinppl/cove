@@ -82,6 +82,9 @@ impl RustCloudBackupManager {
                 self.clear_passkey_choice_prompt();
                 self.enable_cloud_backup_no_discovery();
             }
+            A::ConfirmSavedPasskey => {
+                self.confirm_saved_passkey();
+            }
             A::DiscardPendingEnableCloudBackup => {
                 self.discard_pending_enable_cloud_backup();
             }
@@ -211,6 +214,10 @@ impl RustCloudBackupManager {
 
     fn spawn_enter_detail(self: std::sync::Arc<Self>) {
         send!(self.supervisor.start_enter_detail());
+    }
+
+    fn confirm_saved_passkey(&self) {
+        send!(self.supervisor.confirm_saved_passkey());
     }
 
     pub(crate) async fn handle_start_verification(&self, force_discoverable: bool) {

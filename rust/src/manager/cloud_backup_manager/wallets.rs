@@ -30,6 +30,10 @@ impl UnpersistedPrfKey {
         }
     }
 
+    pub(super) fn has_prf_key(&self) -> bool {
+        self.prf_key != [0; 32]
+    }
+
     pub(crate) fn into_parts(mut self) -> ([u8; 32], [u8; 32], Vec<u8>) {
         let credential_id = std::mem::take(&mut self.credential_id);
 
@@ -57,7 +61,8 @@ pub(crate) struct PreparedWalletBackup {
 }
 
 pub(crate) use passkey::{
-    NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
+    EnablePasskeyMaterial, NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher,
+    PasskeyMaterialAcquirer,
 };
 #[cfg(test)]
 pub(crate) use payload::convert_cloud_secret;

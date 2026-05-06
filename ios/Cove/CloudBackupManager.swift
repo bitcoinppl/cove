@@ -60,6 +60,10 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.syncError
     }
 
+    var enableState: CloudBackupEnableState {
+        state.enableState
+    }
+
     var pendingUploadVerification: PendingUploadVerificationState {
         state.pendingUploadVerification
     }
@@ -162,6 +166,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
             state.restoreReport = report
         case let .syncError(syncError):
             state.syncError = syncError
+        case let .enableState(enableState):
+            state.enableState = enableState
         case let .verificationPrompt(pending):
             state.shouldPromptVerification = pending
         case let .verificationMetadata(verificationMetadata):

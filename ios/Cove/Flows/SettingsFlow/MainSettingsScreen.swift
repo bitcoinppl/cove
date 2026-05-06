@@ -979,7 +979,11 @@ private struct SettingsCloudBackupEnableSheet: View {
     }
 
     private var isBusy: Bool {
-        isStartingEnable || {
+        if manager.enableState == .needsPasskeyConfirmation {
+            return false
+        }
+
+        return isStartingEnable || {
             if case .enabling = manager.status { true } else { false }
         }()
     }
@@ -1027,18 +1031,30 @@ private struct SettingsCloudBackupEnableSheet: View {
         )
 
         ZStack {
-            CloudBackupEnableOnboardingView(
-                onEnable: {
-                    guard !isBusy else { return }
-                    passkeyEnableFlow = .choosing
-                },
-                onCancel: onDismiss,
-                message: message,
-                isBusy: isBusy
-            )
+            if manager.enableState == .needsPasskeyConfirmation {
+                CloudBackupEnableConfirmationView(
+                    onContinue: {
+                        manager.dispatch(action: .confirmSavedPasskey)
+                    },
+                    onCancel: {
+                        manager.dispatch(action: .discardPendingEnableCloudBackup)
+                        onDismiss()
+                    }
+                )
+            } else {
+                CloudBackupEnableOnboardingView(
+                    onEnable: {
+                        guard !isBusy else { return }
+                        passkeyEnableFlow = .choosing
+                    },
+                    onCancel: onDismiss,
+                    message: message,
+                    isBusy: isBusy
+                )
+            }
 
             if isBusy {
-                CloudBackupEnableBusyOverlay()
+                CloudBackupEnableBusyOverlay(enableState: manager.enableState)
             }
         }
         .onChange(of: manager.status, initial: true) { _, status in

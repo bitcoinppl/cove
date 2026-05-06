@@ -1252,6 +1252,64 @@ public func FfiConverterTypePasskeyRegistrationResult_lower(_ value: PasskeyRegi
 }
 
 
+public struct PasskeyRegistrationUser: Equatable, Hashable {
+    public var id: Data
+    public var name: String
+    public var displayName: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: Data, name: String, displayName: String) {
+        self.id = id
+        self.name = name
+        self.displayName = displayName
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PasskeyRegistrationUser: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyRegistrationUser: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyRegistrationUser {
+        return
+            try PasskeyRegistrationUser(
+                id: FfiConverterData.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PasskeyRegistrationUser, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyRegistrationUser_lift(_ buf: RustBuffer) throws -> PasskeyRegistrationUser {
+    return try FfiConverterTypePasskeyRegistrationUser.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyRegistrationUser_lower(_ value: PasskeyRegistrationUser) -> RustBuffer {
+    return FfiConverterTypePasskeyRegistrationUser.lower(value)
+}
+
+
 
 public enum CloudAccessPolicy: Equatable, Hashable {
     
@@ -3210,7 +3268,7 @@ public protocol PasskeyProvider: AnyObject, Sendable {
     /**
      * Create a new passkey credential
      */
-    func createPasskey(rpId: String, userId: Data, challenge: Data) throws  -> PasskeyRegistrationResult
+    func createPasskey(rpId: String, challenge: Data, user: PasskeyRegistrationUser) throws  -> PasskeyRegistrationResult
     
     /**
      * Authenticate with a known credential_id (enable flow, re-enable)
@@ -3265,8 +3323,8 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
         createPasskey: { (
             uniffiHandle: UInt64,
             rpId: RustBuffer,
-            userId: RustBuffer,
             challenge: RustBuffer,
+            user: RustBuffer,
             uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
             uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
         ) in
@@ -3277,8 +3335,8 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 }
                 return try uniffiObj.createPasskey(
                      rpId: try FfiConverterString.lift(rpId),
-                     userId: try FfiConverterData.lift(userId),
-                     challenge: try FfiConverterData.lift(challenge)
+                     challenge: try FfiConverterData.lift(challenge),
+                     user: try FfiConverterTypePasskeyRegistrationUser_lift(user)
                 )
             }
 
@@ -3752,7 +3810,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_keychainaccess_delete() != 1213) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 17856) {
+    if (uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 48177) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_passkeyprovider_authenticate_with_prf() != 17002) {

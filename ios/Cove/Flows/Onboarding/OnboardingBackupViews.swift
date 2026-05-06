@@ -274,7 +274,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private var isBusy: Bool {
-        isEnablingCloudBackup
+        isEnablingCloudBackup && backupManager.enableState != .needsPasskeyConfirmation
     }
 
     private var isEnablingCloudBackup: Bool {
@@ -295,19 +295,30 @@ private struct OnboardingCloudBackupDetailsStepView: View {
 
     var body: some View {
         ZStack {
-            CloudBackupEnableOnboardingView(
-                onEnable: {
-                    guard !isBusy, !isPromptingForEnableChoice else { return }
-                    onEnable()
-                },
-                onCancel: onSkip,
-                message: onboardingMessage,
-                isBusy: isBusy || isPromptingForEnableChoice,
-                context: context
-            )
+            if backupManager.enableState == .needsPasskeyConfirmation {
+                CloudBackupEnableConfirmationView(
+                    onContinue: {
+                        backupManager.dispatch(action: .confirmSavedPasskey)
+                    },
+                    onCancel: {
+                        backupManager.dispatch(action: .discardPendingEnableCloudBackup)
+                    }
+                )
+            } else {
+                CloudBackupEnableOnboardingView(
+                    onEnable: {
+                        guard !isBusy, !isPromptingForEnableChoice else { return }
+                        onEnable()
+                    },
+                    onCancel: onSkip,
+                    message: onboardingMessage,
+                    isBusy: isBusy || isPromptingForEnableChoice,
+                    context: context
+                )
+            }
 
             if isBusy {
-                CloudBackupEnableBusyOverlay()
+                CloudBackupEnableBusyOverlay(enableState: backupManager.enableState)
             }
         }
         .task {

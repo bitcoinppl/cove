@@ -21,9 +21,9 @@ use self::sync_health::CloudBackupSyncHealthWorker;
 use self::uploads::CloudBackupUploadWorker;
 use super::keychain::CloudBackupKeychain;
 use super::{
-    CloudBackupDetailResult, CloudBackupStatus, DeepVerificationResult, OtherBackupsOperation,
-    PendingEnableSession, PendingVerificationCompletion, RecoveryAction, RustCloudBackupManager,
-    VerificationState, WalletId,
+    CloudBackupDetailResult, CloudBackupEnableState, CloudBackupStatus, DeepVerificationResult,
+    OtherBackupsOperation, PendingEnableSession, PendingVerificationCompletion, RecoveryAction,
+    RustCloudBackupManager, VerificationState, WalletId,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -491,6 +491,27 @@ impl CloudBackupSupervisor {
         Produces::ok(None)
     }
 
+    pub async fn take_saved_passkey_confirmation_session(
+        &mut self,
+    ) -> ActorResult<Option<PendingEnableSession>> {
+        let pending = self.pending_enable_session.take();
+        if matches!(pending, Some(PendingEnableSession::AwaitingSavedPasskeyConfirmation(_))) {
+            return Produces::ok(pending);
+        }
+
+        self.pending_enable_session = pending;
+        Produces::ok(None)
+    }
+
+    pub async fn confirm_saved_passkey(&mut self) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        manager.set_enable_state(CloudBackupEnableState::CreatingPasskey);
+        cove_tokio::task::spawn(async move { manager.handle_confirm_saved_passkey().await });
+
+        Produces::ok(())
+    }
+
     pub async fn has_awaiting_force_new_pending_enable_session(&self) -> ActorResult<bool> {
         Produces::ok(
             self.pending_enable_session
@@ -522,6 +543,10 @@ impl CloudBackupSupervisor {
 
     pub async fn discard_pending_enable_cloud_backup(&mut self) -> ActorResult<()> {
         let Some(pending) = self.pending_enable_session.take() else {
+            if let Some(manager) = self.manager() {
+                manager.set_enable_state(CloudBackupEnableState::Idle);
+                manager.set_status(CloudBackupStatus::Disabled);
+            }
             return Produces::ok(());
         };
 
@@ -530,6 +555,11 @@ impl CloudBackupSupervisor {
 
         if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
             warn!("Discard pending enable failed to clear local cloud backup state: {error}");
+        }
+
+        if let Some(manager) = self.manager() {
+            manager.set_enable_state(CloudBackupEnableState::Idle);
+            manager.set_status(CloudBackupStatus::Disabled);
         }
 
         if should_delete_remote {
