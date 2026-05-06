@@ -143,14 +143,7 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     }
 
     func startVerification() {
-        rustBridge.async {
-            if self.rust.hasPendingCloudUploadVerification() {
-                self.rust.resumePendingCloudUploadVerification()
-                return
-            }
-
-            self.rust.dispatch(action: .startVerification)
-        }
+        dispatch(.startVerification)
     }
 
     private func apply(_ message: Message) {

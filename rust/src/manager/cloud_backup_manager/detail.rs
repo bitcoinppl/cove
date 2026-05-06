@@ -124,9 +124,15 @@ impl RustCloudBackupManager {
 
 impl RustCloudBackupManager {
     fn start_verification(&self) {
+        if self.has_pending_cloud_upload_verification() {
+            self.resume_pending_cloud_upload_verification();
+            return;
+        }
+
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
+
         send!(self.supervisor.start_verification(false));
     }
 

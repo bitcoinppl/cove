@@ -1701,9 +1701,9 @@ mod tests {
     use crate::label_manager::LabelManager;
     use crate::manager::cloud_backup_manager::{
         CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupKeychain,
-        CloudBackupOtherBackupsState, CloudBackupPromptIntent, DeepVerificationFailure,
-        DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
-        PendingVerificationUpload, VerificationState,
+        CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPromptIntent,
+        DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+        PendingVerificationCompletion, PendingVerificationUpload, VerificationState,
     };
     use crate::manager::cloud_backup_manager::{
         SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE, cspp_master_key_record_id,
@@ -5287,6 +5287,52 @@ mod tests {
         assert_eq!(detail.up_to_date.len(), 1);
         assert!(detail.needs_sync.is_empty());
         assert_eq!(detail.up_to_date[0].record_id, record_id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn start_verification_dispatch_resumes_pending_upload_verification() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+        persist_pending_master_key_confirmation(namespace_id.clone());
+        manager.replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace_id.clone(),
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        ));
+        globals.cloud.fail_master_key_download_authorization_required(
+            namespace_id,
+            "authorization required",
+        );
+
+        manager.dispatch(CloudBackupManagerAction::StartVerification);
+
+        wait_for_test_condition(
+            Duration::from_secs(1),
+            "expected pending upload verification to pause on authorization",
+            || {
+                matches!(
+                    manager.state().pending_upload_verification,
+                    PendingUploadVerificationState::BlockedOnAuthorization
+                )
+            },
+        )
+        .await;
+
+        assert!(manager.pending_verification_completion().is_some());
+        assert!(!matches!(manager.state().verification, VerificationState::Verifying));
     }
 
     #[tokio::test(flavor = "current_thread")]
