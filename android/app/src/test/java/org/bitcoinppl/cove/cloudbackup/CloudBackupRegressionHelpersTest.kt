@@ -250,4 +250,77 @@ class CloudBackupRegressionHelpersTest {
             ),
         )
     }
+
+    @Test
+    fun onboardingPolicySuppressesVerificationPrompt() {
+        val context = presentableCloudBackupContext(CloudBackupPresentationPolicy.ONBOARDING)
+
+        assertFalse(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.VerificationPrompt,
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    @Test
+    fun onboardingPolicySuppressesMissingPasskeyReminder() {
+        val context = presentableCloudBackupContext(CloudBackupPresentationPolicy.ONBOARDING)
+
+        assertFalse(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.MissingPasskeyReminder,
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    @Test
+    fun onboardingPolicyAllowsEnablePrompts() {
+        val context = presentableCloudBackupContext(CloudBackupPresentationPolicy.ONBOARDING)
+
+        assertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.ExistingBackupFound,
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+        assertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.PasskeyChoice(CloudBackupPasskeyChoiceFlow.ENABLE),
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    @Test
+    fun normalPolicyAllowsVerificationPromptWhenUnblocked() {
+        val context = presentableCloudBackupContext(CloudBackupPresentationPolicy.REQUIRES_UNLOCKED_AUTH)
+
+        assertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.VerificationPrompt,
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    private fun presentableCloudBackupContext(
+        presentationPolicy: CloudBackupPresentationPolicy,
+    ): CloudBackupPresentationContext =
+        CloudBackupPresentationContext(
+            isActivityResumed = true,
+            isUnlocked = true,
+            isInDecoyMode = false,
+            isCoverPresented = false,
+            appHasAlert = false,
+            appHasSheet = false,
+            isViewingCloudBackup = false,
+            presentationPolicy = presentationPolicy,
+        )
 }

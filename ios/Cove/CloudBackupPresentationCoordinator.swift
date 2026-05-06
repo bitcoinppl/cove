@@ -2,7 +2,7 @@ import SwiftUI
 
 @_exported import CoveCore
 
-private enum CloudBackupRootPresentation: Equatable {
+enum CloudBackupRootPresentation: Equatable {
     case existingBackupFound
     case passkeyChoice(CloudBackupPasskeyChoiceFlow)
     case missingPasskeyReminder
@@ -45,6 +45,36 @@ enum CloudBackupPresentationPolicy: Equatable {
 
     var requiresUnlockedAuth: Bool {
         self == .requiresUnlockedAuth
+    }
+
+    var suppressesGenericPrompts: Bool {
+        self == .onboarding
+    }
+}
+
+func isCloudBackupPresentationPresentable(
+    presentation: CloudBackupRootPresentation,
+    context: CloudBackupPresentationContext,
+    hasBlockers: Bool
+) -> Bool {
+    guard context.scenePhase == .active else { return false }
+    guard !context.presentationPolicy.requiresUnlockedAuth || context.isUnlocked else {
+        return false
+    }
+    guard !context.isCoverPresented else { return false }
+    guard !context.appHasAlert else { return false }
+    guard !context.appHasSheet else { return false }
+    guard !hasBlockers else { return false }
+
+    switch presentation {
+    case .existingBackupFound, .passkeyChoice:
+        return true
+    case .missingPasskeyReminder, .verificationPrompt:
+        guard !context.presentationPolicy.suppressesGenericPrompts else {
+            return false
+        }
+
+        return !context.isViewingCloudBackup
     }
 }
 
@@ -168,21 +198,11 @@ final class CloudBackupPresentationCoordinator {
     }
 
     private func isPromptPresentable(_ presentation: CloudBackupRootPresentation) -> Bool {
-        guard context.scenePhase == .active else { return false }
-        guard !context.presentationPolicy.requiresUnlockedAuth || context.isUnlocked else {
-            return false
-        }
-        guard !context.isCoverPresented else { return false }
-        guard !context.appHasAlert else { return false }
-        guard !context.appHasSheet else { return false }
-        guard blockers.isEmpty else { return false }
-
-        switch presentation {
-        case .existingBackupFound, .passkeyChoice:
-            return true
-        case .missingPasskeyReminder, .verificationPrompt:
-            return !context.isViewingCloudBackup
-        }
+        isCloudBackupPresentationPresentable(
+            presentation: presentation,
+            context: context,
+            hasBlockers: !blockers.isEmpty
+        )
     }
 
     private func resumeQueuedPresentation() {

@@ -78,6 +78,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
+import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationPolicy
 import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
@@ -458,6 +459,12 @@ class MainActivity : FragmentActivity() {
                     app = app,
                     auth = auth,
                     isCoverPresented = isPrivacyCoverVisible,
+                    presentationPolicy =
+                        if (startupMode == StartupMode.ONBOARDING) {
+                            CloudBackupPresentationPolicy.ONBOARDING
+                        } else {
+                            CloudBackupPresentationPolicy.REQUIRES_UNLOCKED_AUTH
+                        },
                 ) {
                     Scaffold(
                         containerColor = Color.Transparent,

@@ -83,7 +83,19 @@ data class CloudBackupPresentationContext(
     val appHasAlert: Boolean = false,
     val appHasSheet: Boolean = false,
     val isViewingCloudBackup: Boolean = false,
+    val presentationPolicy: CloudBackupPresentationPolicy = CloudBackupPresentationPolicy.REQUIRES_UNLOCKED_AUTH,
 )
+
+enum class CloudBackupPresentationPolicy {
+    REQUIRES_UNLOCKED_AUTH,
+    ONBOARDING,
+}
+
+private val CloudBackupPresentationPolicy.requiresUnlockedAuth: Boolean
+    get() = this == CloudBackupPresentationPolicy.REQUIRES_UNLOCKED_AUTH
+
+private val CloudBackupPresentationPolicy.suppressesGenericPrompts: Boolean
+    get() = this == CloudBackupPresentationPolicy.ONBOARDING
 
 enum class CloudBackupPresentationBlocker {
     SETTINGS_LOCAL_MODAL,
@@ -96,7 +108,7 @@ internal fun isCloudBackupPresentationPresentable(
     hasBlockers: Boolean,
 ): Boolean {
     if (!context.isActivityResumed) return false
-    if (!context.isUnlocked) return false
+    if (context.presentationPolicy.requiresUnlockedAuth && !context.isUnlocked) return false
     if (context.isInDecoyMode) return false
     if (context.isCoverPresented) return false
     if (context.appHasAlert) return false
@@ -109,7 +121,7 @@ internal fun isCloudBackupPresentationPresentable(
         -> true
         CloudBackupRootPresentation.MissingPasskeyReminder,
         CloudBackupRootPresentation.VerificationPrompt,
-        -> !context.isViewingCloudBackup
+        -> !context.presentationPolicy.suppressesGenericPrompts && !context.isViewingCloudBackup
     }
 }
 
@@ -277,6 +289,7 @@ fun CloudBackupPresentationHost(
     app: AppManager,
     auth: AuthManager,
     isCoverPresented: Boolean,
+    presentationPolicy: CloudBackupPresentationPolicy = CloudBackupPresentationPolicy.REQUIRES_UNLOCKED_AUTH,
     content: @Composable () -> Unit,
 ) {
     val manager = remember { CloudBackupManager.getInstance() }
@@ -293,6 +306,7 @@ fun CloudBackupPresentationHost(
             appHasAlert = app.alertState != null,
             appHasSheet = app.sheetState != null,
             isViewingCloudBackup = app.currentRoute == Route.Settings(SettingsRoute.CloudBackup),
+            presentationPolicy = presentationPolicy,
         )
 
     DisposableEffect(lifecycleOwner) {
