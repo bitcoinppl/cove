@@ -181,12 +181,6 @@ final class CloudBackupPresentationCoordinator {
         case .existingBackupFound, .passkeyChoice:
             return true
         case .missingPasskeyReminder, .verificationPrompt:
-            if case .verificationPrompt = presentation,
-               case .verifying = CloudBackupManager.shared.verification
-            {
-                return false
-            }
-
             return !context.isViewingCloudBackup
         }
     }

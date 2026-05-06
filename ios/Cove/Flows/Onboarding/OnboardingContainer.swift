@@ -126,6 +126,11 @@ struct OnboardingContainer: View {
                 onSkip: { manager.dispatch(.skipCloudBackup) }
             )
 
+        case .cloudBackupSuccess:
+            OnboardingCloudBackupSuccessView {
+                manager.dispatch(.continueFromCloudBackupSuccess)
+            }
+
         case .secretWords:
             OnboardingSecretWordsView(
                 words: manager.state.createdWords,
@@ -141,7 +146,7 @@ struct OnboardingContainer: View {
 
         case .hardwareImport:
             OnboardingHardwareImportFlowView(
-                cloudRestoreAlertVisible: manager.state.cloudRestoreAlertVisible,
+                cloudRestoreAlertVisible: cloudRestoreAlertVisibleBinding,
                 onImported: { walletId in
                     manager.dispatch(.hardwareImportCompleted(walletId: walletId))
                 },
@@ -153,7 +158,7 @@ struct OnboardingContainer: View {
         case .softwareImport:
             OnboardingSoftwareImportFlowView(
                 errorMessage: manager.state.errorMessage,
-                cloudRestoreAlertVisible: manager.state.cloudRestoreAlertVisible,
+                cloudRestoreAlertVisible: cloudRestoreAlertVisibleBinding,
                 onImported: { walletId in
                     manager.dispatch(.softwareImportCompleted(walletId: walletId))
                 },
@@ -163,5 +168,16 @@ struct OnboardingContainer: View {
                 onBack: { manager.dispatch(.back) }
             )
         }
+    }
+
+    private var cloudRestoreAlertVisibleBinding: Binding<Bool> {
+        Binding(
+            get: { manager.state.cloudRestoreAlertVisible },
+            set: { isPresented in
+                if !isPresented {
+                    manager.dispatch(.dismissCloudRestoreAlert)
+                }
+            }
+        )
     }
 }

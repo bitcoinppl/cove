@@ -255,7 +255,7 @@ private struct OnboardingHardwareImportCloudBackupStepView: View {
 
 private struct OnboardingCloudBackupDetailsStepView: View {
     @State private var backupManager = CloudBackupManager.shared
-    @State private var didComplete = false
+    @State private var didReportEnabled = false
 
     let onEnable: () -> Void
     let onEnabled: () -> Void
@@ -322,7 +322,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private func completeIfEnabled(status: CloudBackupStatus? = nil) {
-        guard !didComplete else { return }
+        guard !didReportEnabled else { return }
         let currentStatus = status ?? backupManager.status
         let isEnabled = if case .enabled = currentStatus {
             true
@@ -330,8 +330,48 @@ private struct OnboardingCloudBackupDetailsStepView: View {
             backupManager.isCloudBackupEnabled
         }
         guard isEnabled else { return }
-        didComplete = true
+        didReportEnabled = true
         onEnabled()
+    }
+}
+
+struct OnboardingCloudBackupSuccessView: View {
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            OnboardingStatusHero(
+                systemImage: "checkmark",
+                tint: .lightGreen,
+                fillColor: Color.lightGreen.opacity(0.12),
+                iconSize: 26
+            )
+
+            Spacer()
+                .frame(height: 36)
+
+            Text("Cloud Backup enabled successfully")
+                .font(OnboardingRecoveryTypography.compactTitle)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+
+            Spacer(minLength: 0)
+
+            Button(action: onContinue) {
+                Text("Continue")
+            }
+            .buttonStyle(OnboardingPrimaryButtonStyle())
+            .padding(.horizontal, 24)
+
+            Spacer()
+                .frame(height: 28)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onboardingRecoveryBackground()
     }
 }
 

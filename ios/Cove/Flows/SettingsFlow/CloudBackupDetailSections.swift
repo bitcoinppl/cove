@@ -29,8 +29,13 @@ struct DetailFormContent: View {
         if showCloudOnlySection {
             CloudOnlySection(manager: manager)
         }
-        if detail.otherBackups.namespaceCount > 0 {
-            OtherBackupsSection(summary: detail.otherBackups, manager: manager)
+        switch detail.otherBackups {
+        case let .loaded(summary):
+            if summary.namespaceCount > 0 {
+                OtherBackupsSection(summary: summary, manager: manager)
+            }
+        case let .loadFailed(error):
+            OtherBackupsLoadFailedSection(error: error)
         }
     }
 
@@ -361,6 +366,22 @@ struct OtherBackupsSection: View {
                 Image(systemName: systemImage)
             }
             Text(title)
+        }
+    }
+}
+
+struct OtherBackupsLoadFailedSection: View {
+    let error: String
+
+    var body: some View {
+        Section(header: Text("Other Cloud Backups")) {
+            Text("Could not load other cloud backups.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(.red)
         }
     }
 }

@@ -11,7 +11,7 @@ struct OnboardingSoftwareImportFlowView: View {
     @State private var mode: Mode = .chooser
 
     let errorMessage: String?
-    let cloudRestoreAlertVisible: Bool
+    let cloudRestoreAlertVisible: Binding<Bool>
     let onImported: (WalletId) -> Void
     let onCreateWallet: () -> Void
     let onRestoreFromCloudBackup: () -> Void
@@ -130,7 +130,7 @@ struct OnboardingHardwareImportFlowView: View {
 
     @State private var mode: Mode = .chooser
 
-    let cloudRestoreAlertVisible: Bool
+    let cloudRestoreAlertVisible: Binding<Bool>
     let onImported: (WalletId) -> Void
     let onRestoreFromCloudBackup: () -> Void
     let onDismissCloudRestoreAlert: () -> Void
@@ -208,11 +208,11 @@ struct OnboardingHardwareImportFlowView: View {
 
 private extension View {
     func cloudRestoreAlert(
-        isPresented: Bool,
+        isPresented: Binding<Bool>,
         onRestore: @escaping () -> Void,
         onContinue: @escaping () -> Void
     ) -> some View {
-        alert("Cove backup found", isPresented: .constant(isPresented)) {
+        alert("Cove backup found", isPresented: isPresented) {
             Button("Restore from Cove backup", action: onRestore)
             Button("Continue setup", role: .cancel, action: onContinue)
         } message: {
