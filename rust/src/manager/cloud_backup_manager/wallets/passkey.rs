@@ -18,7 +18,7 @@ use super::UnpersistedPrfKey;
 use crate::manager::cloud_backup_manager::{CloudBackupError, PASSKEY_RP_ID};
 
 const PASSKEY_DISPLAY_NAME: &str = "Cove Cloud Backup";
-const PASSKEY_SUFFIX_ALPHABET: &[u8; 32] = b"23456789abcdefghijkmnpqrstuvwxyz";
+const PASSKEY_SUFFIX_ALPHABET: &[u8; 32] = b"23456789ABCDEFGHIJKMNPQRSTUVWXYZ";
 
 pub(crate) async fn delay_before_new_passkey_auth() {
     let delay = Duration::from_secs(3);
