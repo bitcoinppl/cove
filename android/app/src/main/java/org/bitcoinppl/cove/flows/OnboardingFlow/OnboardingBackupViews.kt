@@ -73,6 +73,8 @@ import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceFlow
+import org.bitcoinppl.cove_core.CloudBackupPromptIntent
 import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
@@ -418,24 +420,28 @@ private fun OnboardingWordCard(
 @Composable
 internal fun OnboardingCloudBackupStepView(
     branch: OnboardingBranch?,
+    onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
 ) {
     when (branch) {
         OnboardingBranch.SOFTWARE_IMPORT -> {
             OnboardingSoftwareImportCloudBackupStepView(
+                onEnable = onEnable,
                 onEnabled = onEnabled,
                 onSkip = onSkip,
             )
         }
         OnboardingBranch.HARDWARE -> {
             OnboardingHardwareImportCloudBackupStepView(
+                onEnable = onEnable,
                 onEnabled = onEnabled,
                 onSkip = onSkip,
             )
         }
         else -> {
             OnboardingCloudBackupDetailsStepView(
+                onEnable = onEnable,
                 onEnabled = onEnabled,
                 onSkip = onSkip,
                 context = CloudBackupEnableOnboardingContext.STANDARD,
@@ -446,6 +452,7 @@ internal fun OnboardingCloudBackupStepView(
 
 @Composable
 private fun OnboardingSoftwareImportCloudBackupStepView(
+    onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -453,6 +460,7 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
 
     if (showingDetails) {
         OnboardingCloudBackupDetailsStepView(
+            onEnable = onEnable,
             onEnabled = onEnabled,
             onSkip = { showingDetails = false },
             context = CloudBackupEnableOnboardingContext.STANDARD,
@@ -505,6 +513,7 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
 
 @Composable
 private fun OnboardingHardwareImportCloudBackupStepView(
+    onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -512,6 +521,7 @@ private fun OnboardingHardwareImportCloudBackupStepView(
 
     if (showingDetails) {
         OnboardingCloudBackupDetailsStepView(
+            onEnable = onEnable,
             onEnabled = onEnabled,
             onSkip = { showingDetails = false },
             context = CloudBackupEnableOnboardingContext.HARDWARE_IMPORT,
@@ -575,13 +585,13 @@ private fun OnboardingHardwareImportCloudBackupStepView(
 
 @Composable
 private fun OnboardingCloudBackupDetailsStepView(
+    onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
     context: CloudBackupEnableOnboardingContext,
 ) {
     val backupManager = remember { CloudBackupManager.getInstance() }
-    var didComplete by remember { mutableStateOf(false) }
-    var isStartingEnable by remember { mutableStateOf(false) }
+    var didReportEnabled by remember { mutableStateOf(false) }
 
     val onboardingMessage =
         when (val status = backupManager.status) {
@@ -590,36 +600,36 @@ private fun OnboardingCloudBackupDetailsStepView(
             is CloudBackupStatus.Error -> status.v1
             else -> null
         }
-    val isBusy = isStartingEnable || backupManager.status is CloudBackupStatus.Enabling
+    val promptIntent = backupManager.promptIntent
+    val isPromptingForEnableChoice =
+        promptIntent is CloudBackupPromptIntent.PasskeyChoice &&
+            promptIntent.v1 == CloudBackupPasskeyChoiceFlow.ENABLE
+    val isBusy = backupManager.status is CloudBackupStatus.Enabling
 
     fun completeIfEnabled() {
-        if (didComplete) return
+        if (didReportEnabled) return
         if (!shouldCompleteOnboardingCloudBackup(backupManager.status, backupManager.isCloudBackupEnabled, backupManager.isConfigured)) {
             return
         }
 
-        didComplete = true
+        didReportEnabled = true
         onEnabled()
     }
 
     LaunchedEffect(backupManager.status, backupManager.isCloudBackupEnabled, backupManager.isConfigured) {
-        if (backupManager.status !is CloudBackupStatus.Enabling) {
-            isStartingEnable = false
-        }
         completeIfEnabled()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         CloudBackupEnableOnboardingView(
             onEnable = {
-                if (!isBusy) {
-                    isStartingEnable = true
-                    backupManager.dispatch(CloudBackupManagerAction.EnableCloudBackupNoDiscovery)
+                if (!isBusy && !isPromptingForEnableChoice) {
+                    onEnable()
                 }
             },
             onCancel = onSkip,
             message = onboardingMessage,
-            isBusy = isBusy,
+            isBusy = isBusy || isPromptingForEnableChoice,
             context = context,
         )
 
@@ -658,6 +668,49 @@ private fun OnboardingCloudBackupDetailsStepView(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun OnboardingCloudBackupSuccessView(
+    onContinue: () -> Unit,
+) {
+    OnboardingBackground {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Spacer(modifier = Modifier.weight(1f, fill = true))
+
+            OnboardingStatusHero(
+                icon = Icons.Default.Check,
+                tint = OnboardingSuccess,
+                fillColor = OnboardingSuccess.copy(alpha = 0.12f),
+            )
+
+            Spacer(modifier = Modifier.height(36.dp))
+
+            Text(
+                text = "Cloud Backup enabled successfully",
+                color = Color.White,
+                fontSize = 28.sp,
+                lineHeight = 34.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(modifier = Modifier.weight(1f, fill = true))
+
+            OnboardingPrimaryButton(
+                text = "Continue",
+                onClick = onContinue,
+                modifier = Modifier.testTag("onboarding.cloudBackup.success.continue"),
+            )
         }
     }
 }

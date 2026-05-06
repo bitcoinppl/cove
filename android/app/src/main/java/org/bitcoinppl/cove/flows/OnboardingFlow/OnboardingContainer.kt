@@ -115,8 +115,14 @@ internal fun OnboardingContainer(
         OnboardingStep.CLOUD_BACKUP ->
             OnboardingCloudBackupStepView(
                 branch = manager.state.branch,
+                onEnable = { manager.dispatch(OnboardingAction.BeginCloudBackupEnable) },
                 onEnabled = { manager.dispatch(OnboardingAction.CloudBackupEnabled) },
                 onSkip = { manager.dispatch(OnboardingAction.SkipCloudBackup) },
+            )
+
+        OnboardingStep.CLOUD_BACKUP_SUCCESS ->
+            OnboardingCloudBackupSuccessView(
+                onContinue = { manager.dispatch(OnboardingAction.ContinueFromCloudBackupSuccess) },
             )
 
         OnboardingStep.SECRET_WORDS ->

@@ -67,6 +67,7 @@ package org.bitcoinppl.cove.cloudbackup
  import org.bitcoinppl.cove.views.SectionHeader
  import org.bitcoinppl.cove_core.CloudBackupDetail
  import org.bitcoinppl.cove_core.CloudBackupManagerAction
+ import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
  import org.bitcoinppl.cove_core.CloudBackupStatus
  import org.bitcoinppl.cove_core.CloudBackupWalletItem
  import org.bitcoinppl.cove_core.CloudBackupWalletStatus
@@ -680,12 +681,20 @@ package org.bitcoinppl.cove.cloudbackup
          CloudOnlySection(manager = manager)
      }
 
-     if (detail.otherBackups.namespaceCount.toInt() > 0) {
-         OtherBackupsSection(
-             namespaceCount = detail.otherBackups.namespaceCount.toInt(),
-             walletCount = detail.otherBackups.walletCount.toInt(),
-             manager = manager,
-         )
+     when (val otherBackups = detail.otherBackups) {
+         is CloudBackupOtherBackupsState.Loaded -> {
+             val summary = otherBackups.summary
+             if (summary.namespaceCount.toInt() > 0) {
+                 OtherBackupsSection(
+                     namespaceCount = summary.namespaceCount.toInt(),
+                     walletCount = summary.walletCount.toInt(),
+                     manager = manager,
+                 )
+             }
+         }
+         is CloudBackupOtherBackupsState.LoadFailed -> {
+             OtherBackupsLoadFailedSection(error = otherBackups.error)
+         }
      }
 
      VerificationSection(
@@ -840,6 +849,28 @@ package org.bitcoinppl.cove.cloudbackup
              maxLines = 1,
              overflow = TextOverflow.Ellipsis,
          )
+     }
+ }
+
+ @Composable
+ private fun OtherBackupsLoadFailedSection(error: String) {
+     SectionHeader("Other Cloud Backups", modifier = Modifier.padding(horizontal = 16.dp))
+     MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
+         Column {
+             Text(
+                 text = "Could not load other cloud backups.",
+                 style = MaterialTheme.typography.bodySmall,
+                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+             )
+             MaterialDivider()
+             Text(
+                 text = error,
+                 style = MaterialTheme.typography.bodySmall,
+                 color = MaterialTheme.colorScheme.error,
+                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+             )
+         }
      }
  }
 

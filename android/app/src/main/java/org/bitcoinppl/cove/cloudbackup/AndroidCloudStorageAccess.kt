@@ -346,14 +346,18 @@ class AndroidCloudStorageAccess internal constructor(
             interactive = policy.allowsConsent(),
             onError = { error -> mapDriveDeleteError(error, namespace) },
         ) { token ->
-            val namespaceFolderId =
-                findNamespaceFolderId(token, namespace) ?: throw DriveHttpException(404, "namespace not found")
+            val mutex = namespaceFolderMutexes.getOrPut(namespace) { Mutex() }
+            mutex.withLock {
+                val namespaceFolderId =
+                    findNamespaceFolderId(token, namespace)
+                        ?: throw DriveHttpException(404, "namespace not found")
 
-            driveRequest(
-                token = token,
-                method = "DELETE",
-                url = "${DriveApi.FILES_ENDPOINT}/$namespaceFolderId",
-            )
+                driveRequest(
+                    token = token,
+                    method = "DELETE",
+                    url = "${DriveApi.FILES_ENDPOINT}/$namespaceFolderId",
+                )
+            }
         }
     }
 
