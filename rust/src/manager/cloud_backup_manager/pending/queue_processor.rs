@@ -406,12 +406,21 @@ impl PendingUploadVerifier {
     }
 
     fn send_pending_state(&self, blocked_on_authorization: bool, pending: bool) {
-        let state = if blocked_on_authorization {
-            PendingUploadVerificationState::BlockedOnAuthorization
-        } else if pending || self.0.pending_verification_completion().is_some() {
-            PendingUploadVerificationState::Confirming
-        } else {
-            PendingUploadVerificationState::Idle
+        if blocked_on_authorization {
+            let state = PendingUploadVerificationState::BlockedOnAuthorization;
+            self.0.set_pending_upload_verification(state);
+            return;
+        }
+
+        if pending {
+            let state = PendingUploadVerificationState::Confirming;
+            self.0.set_pending_upload_verification(state);
+            return;
+        }
+
+        let state = match self.0.pending_verification_completion() {
+            Some(_) => PendingUploadVerificationState::Confirming,
+            None => PendingUploadVerificationState::Idle,
         };
 
         self.0.set_pending_upload_verification(state);

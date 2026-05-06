@@ -46,7 +46,6 @@ pub enum OnboardingStep {
     Restoring,
     Welcome,
     BitcoinChoice,
-    ReturningUserChoice,
     StorageChoice,
     CreatingWallet,
     BackupWallet,
@@ -74,12 +73,6 @@ pub enum OnboardingStorageSelection {
     SoftwareWallet,
 }
 
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum OnboardingReturningUserSelection {
-    RestoreFromCoveBackup,
-    UseAnotherWallet,
-}
-
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Default, uniffi::Enum)]
 pub enum OnboardingCloudRestoreState {
     #[default]
@@ -100,6 +93,7 @@ pub struct OnboardingState {
     pub cloud_restore_message: Option<String>,
     pub cloud_restore_provider_hint: Option<CloudRestoreProviderHint>,
     pub should_offer_cloud_restore: bool,
+    pub cloud_restore_alert_visible: bool,
     pub error_message: Option<String>,
 }
 
@@ -113,7 +107,6 @@ pub struct CloudRestoreProviderHint {
 pub enum OnboardingAction {
     ContinueFromWelcome,
     SelectHasBitcoin { has_bitcoin: bool },
-    SelectReturningUserFlow { selection: OnboardingReturningUserSelection },
     SelectStorage { selection: OnboardingStorageSelection },
     CreateSoftwareWallet,
     ContinueWalletCreation,
@@ -127,6 +120,7 @@ pub enum OnboardingAction {
     SoftwareImportCompleted { wallet_id: WalletId },
     HardwareImportCompleted { wallet_id: WalletId },
     OpenCloudRestore,
+    DismissCloudRestoreAlert,
     StartRestore,
     SkipRestore,
     ContinueWithoutCloudRestore,
@@ -149,6 +143,7 @@ pub enum OnboardingReconcileMessage {
     CloudRestoreMessageChanged(Option<String>),
     CloudRestoreProviderHintChanged(Option<CloudRestoreProviderHint>),
     ShouldOfferCloudRestore(bool),
+    CloudRestoreAlertVisible(bool),
     ErrorMessageChanged(Option<String>),
     Complete,
 }
@@ -255,7 +250,6 @@ enum FlowState {
     BitcoinChoice {
         error_message: Option<String>,
     },
-    ReturningUserChoice,
     StorageChoice {
         error_message: Option<String>,
     },
@@ -316,8 +310,9 @@ enum RestoreOrigin {
     Startup,
     Welcome,
     BitcoinChoice,
-    ReturningUserChoice,
     StorageChoice,
+    HardwareImport,
+    SoftwareImport,
 }
 
 #[derive(Debug, Clone)]
@@ -325,6 +320,7 @@ struct InternalState {
     flow: FlowState,
     cloud_restore_discovery: CloudRestoreDiscovery,
     restore_offer_allowed: bool,
+    cloud_restore_alert_dismissed: bool,
     ui: OnboardingState,
 }
 
@@ -420,6 +416,10 @@ impl RustOnboardingManager {
         info!("Onboarding: dispatch action={action:?}");
 
         let command = self.mutate_state(|state, deferred| {
+            if matches!(action, OnboardingAction::DismissCloudRestoreAlert) {
+                state.cloud_restore_alert_dismissed = true;
+            }
+
             let command = state.flow.apply_user_action(
                 action,
                 state.cloud_restore_discovery.clone(),
@@ -722,8 +722,15 @@ impl InternalState {
     fn new(flow: FlowState) -> Self {
         let cloud_restore_discovery = CloudRestoreDiscovery::Checking;
         let restore_offer_allowed = true;
-        let ui = flow.ui_state(&cloud_restore_discovery, false);
-        Self { flow, cloud_restore_discovery, restore_offer_allowed, ui }
+        let cloud_restore_alert_dismissed = false;
+        let ui = flow.ui_state(&cloud_restore_discovery, false, false);
+        Self {
+            flow,
+            cloud_restore_discovery,
+            restore_offer_allowed,
+            cloud_restore_alert_dismissed,
+            ui,
+        }
     }
 
     fn maybe_advance_accepted_terms(&mut self, command: TransitionCommand) -> TransitionCommand {
@@ -754,8 +761,11 @@ impl InternalState {
     }
 
     fn sync_ui(&mut self, deferred: &mut DeferredSender<Message>) {
-        let next_ui =
-            self.flow.ui_state(&self.cloud_restore_discovery, self.should_offer_cloud_restore());
+        let next_ui = self.flow.ui_state(
+            &self.cloud_restore_discovery,
+            self.should_offer_cloud_restore(),
+            self.cloud_restore_alert_visible(),
+        );
 
         if self.ui.branch != next_ui.branch {
             deferred.queue(Message::Branch(next_ui.branch));
@@ -784,6 +794,9 @@ impl InternalState {
         if self.ui.should_offer_cloud_restore != next_ui.should_offer_cloud_restore {
             deferred.queue(Message::ShouldOfferCloudRestore(next_ui.should_offer_cloud_restore));
         }
+        if self.ui.cloud_restore_alert_visible != next_ui.cloud_restore_alert_visible {
+            deferred.queue(Message::CloudRestoreAlertVisible(next_ui.cloud_restore_alert_visible));
+        }
         if self.ui.error_message != next_ui.error_message {
             deferred.queue(Message::ErrorMessageChanged(next_ui.error_message.clone()));
         }
@@ -797,6 +810,12 @@ impl InternalState {
     fn should_offer_cloud_restore(&self) -> bool {
         self.restore_offer_allowed
             && matches!(self.cloud_restore_discovery, CloudRestoreDiscovery::BackupFound(_))
+    }
+
+    fn cloud_restore_alert_visible(&self) -> bool {
+        self.should_offer_cloud_restore()
+            && !self.cloud_restore_alert_dismissed
+            && matches!(self.flow, FlowState::HardwareImport | FlowState::SoftwareImport { .. })
     }
 }
 
@@ -820,7 +839,7 @@ impl FlowState {
             (
                 Self::BitcoinChoice { .. },
                 OnboardingAction::SelectHasBitcoin { has_bitcoin: true },
-            ) => (Self::ReturningUserChoice, TransitionCommand::None),
+            ) => (Self::StorageChoice { error_message: None }, TransitionCommand::None),
             (
                 Self::BitcoinChoice { .. },
                 OnboardingAction::SelectHasBitcoin { has_bitcoin: false },
@@ -831,24 +850,6 @@ impl FlowState {
                     TransitionCommand::CreateWallet(OnboardingBranch::NewUser),
                 )
             }
-            (
-                Self::ReturningUserChoice,
-                OnboardingAction::SelectReturningUserFlow {
-                    selection: OnboardingReturningUserSelection::RestoreFromCoveBackup,
-                },
-            ) => (
-                Self::restore_entry_for(
-                    cloud_restore_discovery,
-                    RestoreOrigin::ReturningUserChoice,
-                ),
-                TransitionCommand::None,
-            ),
-            (
-                Self::ReturningUserChoice,
-                OnboardingAction::SelectReturningUserFlow {
-                    selection: OnboardingReturningUserSelection::UseAnotherWallet,
-                },
-            ) => (Self::StorageChoice { error_message: None }, TransitionCommand::None),
             (
                 Self::StorageChoice { .. },
                 OnboardingAction::SelectStorage { selection: OnboardingStorageSelection::Exchange },
@@ -864,19 +865,13 @@ impl FlowState {
                 OnboardingAction::SelectStorage {
                     selection: OnboardingStorageSelection::HardwareWallet,
                 },
-            ) => {
-                *restore_offer_allowed = false;
-                (Self::HardwareImport, TransitionCommand::None)
-            }
+            ) => (Self::HardwareImport, TransitionCommand::None),
             (
                 Self::StorageChoice { .. },
                 OnboardingAction::SelectStorage {
                     selection: OnboardingStorageSelection::SoftwareWallet,
                 },
-            ) => {
-                *restore_offer_allowed = false;
-                (Self::SoftwareImport { error_message: None }, TransitionCommand::None)
-            }
+            ) => (Self::SoftwareImport { error_message: None }, TransitionCommand::None),
             (Self::SoftwareImport { .. }, OnboardingAction::CreateSoftwareWallet) => {
                 *restore_offer_allowed = false;
                 (
@@ -997,6 +992,18 @@ impl FlowState {
                 Self::restore_entry_for(cloud_restore_discovery, RestoreOrigin::StorageChoice),
                 TransitionCommand::None,
             ),
+            (Self::HardwareImport, OnboardingAction::OpenCloudRestore) => (
+                Self::restore_entry_for(cloud_restore_discovery, RestoreOrigin::HardwareImport),
+                TransitionCommand::None,
+            ),
+            (Self::SoftwareImport { .. }, OnboardingAction::OpenCloudRestore) => (
+                Self::restore_entry_for(cloud_restore_discovery, RestoreOrigin::SoftwareImport),
+                TransitionCommand::None,
+            ),
+            (
+                state @ (Self::HardwareImport | Self::SoftwareImport { .. }),
+                OnboardingAction::DismissCloudRestoreAlert,
+            ) => (state, TransitionCommand::None),
             (Self::RestoreOffer { origin, .. }, OnboardingAction::StartRestore) => {
                 (Self::Restoring { origin }, TransitionCommand::None)
             }
@@ -1024,11 +1031,8 @@ impl FlowState {
             (Self::BitcoinChoice { .. }, OnboardingAction::Back) => {
                 (Self::Welcome { error_message: None }, TransitionCommand::None)
             }
-            (Self::ReturningUserChoice, OnboardingAction::Back) => {
-                (Self::BitcoinChoice { error_message: None }, TransitionCommand::None)
-            }
             (Self::StorageChoice { .. }, OnboardingAction::Back) => {
-                (Self::ReturningUserChoice, TransitionCommand::None)
+                (Self::BitcoinChoice { error_message: None }, TransitionCommand::None)
             }
             (Self::SoftwareImport { .. }, OnboardingAction::Back) => {
                 (Self::StorageChoice { error_message: None }, TransitionCommand::None)
@@ -1120,12 +1124,11 @@ impl FlowState {
                 Self::RestoreOffer { origin: RestoreOrigin::BitcoinChoice, error_message: None }
             }
             (
-                Self::ReturningUserChoice,
+                Self::StorageChoice { .. },
                 InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(_)),
-            ) if restore_offer_allowed => Self::RestoreOffer {
-                origin: RestoreOrigin::ReturningUserChoice,
-                error_message: None,
-            },
+            ) if restore_offer_allowed => {
+                Self::RestoreOffer { origin: RestoreOrigin::StorageChoice, error_message: None }
+            }
             (state, InternalEvent::CloudCheckFinished(_)) => state,
             (Self::BitcoinChoice { .. }, InternalEvent::WalletCreated { flow })
                 if flow.branch == OnboardingBranch::NewUser =>
@@ -1179,8 +1182,13 @@ impl FlowState {
         &self,
         cloud_restore_discovery: &CloudRestoreDiscovery,
         should_offer_cloud_restore: bool,
+        cloud_restore_alert_visible: bool,
     ) -> OnboardingState {
-        let mut state = Self::base_ui_state(cloud_restore_discovery, should_offer_cloud_restore);
+        let mut state = Self::base_ui_state(
+            cloud_restore_discovery,
+            should_offer_cloud_restore,
+            cloud_restore_alert_visible,
+        );
 
         match self {
             Self::CloudCheck { .. } => {
@@ -1214,10 +1222,6 @@ impl FlowState {
                 state.error_message = error_message.clone();
                 state
             }
-            Self::ReturningUserChoice => {
-                state.step = OnboardingStep::ReturningUserChoice;
-                state
-            }
             Self::StorageChoice { error_message } => {
                 state.step = OnboardingStep::StorageChoice;
                 state.error_message = error_message.clone();
@@ -1228,12 +1232,14 @@ impl FlowState {
                 flow,
                 cloud_restore_discovery,
                 should_offer_cloud_restore,
+                cloud_restore_alert_visible,
             ),
             Self::BackupWallet(flow) => Self::project_created_wallet(
                 OnboardingStep::BackupWallet,
                 flow,
                 cloud_restore_discovery,
                 should_offer_cloud_restore,
+                cloud_restore_alert_visible,
             ),
             Self::CloudBackup(CloudBackupFlow::CreatedWallet(flow)) => {
                 Self::project_created_wallet(
@@ -1241,6 +1247,7 @@ impl FlowState {
                     flow,
                     cloud_restore_discovery,
                     should_offer_cloud_restore,
+                    cloud_restore_alert_visible,
                 )
             }
             Self::CloudBackup(CloudBackupFlow::SoftwareImport { .. }) => {
@@ -1258,12 +1265,14 @@ impl FlowState {
                 flow,
                 cloud_restore_discovery,
                 should_offer_cloud_restore,
+                cloud_restore_alert_visible,
             ),
             Self::ExchangeFunding(flow) => Self::project_created_wallet(
                 OnboardingStep::ExchangeFunding,
                 flow,
                 cloud_restore_discovery,
                 should_offer_cloud_restore,
+                cloud_restore_alert_visible,
             ),
             Self::HardwareImport => {
                 state.step = OnboardingStep::HardwareImport;
@@ -1341,12 +1350,14 @@ impl FlowState {
     fn base_ui_state(
         cloud_restore_discovery: &CloudRestoreDiscovery,
         should_offer_cloud_restore: bool,
+        cloud_restore_alert_visible: bool,
     ) -> OnboardingState {
         OnboardingState {
             cloud_restore_state: cloud_restore_discovery.ui_state(),
             cloud_restore_message: cloud_restore_discovery.message(),
             cloud_restore_provider_hint: cloud_restore_discovery.provider_hint(),
             should_offer_cloud_restore,
+            cloud_restore_alert_visible,
             ..OnboardingState::default()
         }
     }
@@ -1356,6 +1367,7 @@ impl FlowState {
         flow: &CreatedWalletFlow,
         cloud_restore_discovery: &CloudRestoreDiscovery,
         should_offer_cloud_restore: bool,
+        cloud_restore_alert_visible: bool,
     ) -> OnboardingState {
         OnboardingState {
             step,
@@ -1367,6 +1379,7 @@ impl FlowState {
             cloud_restore_message: cloud_restore_discovery.message(),
             cloud_restore_provider_hint: cloud_restore_discovery.provider_hint(),
             should_offer_cloud_restore,
+            cloud_restore_alert_visible,
             error_message: None,
         }
     }
@@ -1393,7 +1406,6 @@ impl FlowState {
                 | Self::RestoreOffline { .. }
                 | Self::Welcome { .. }
                 | Self::BitcoinChoice { .. }
-                | Self::ReturningUserChoice
                 | Self::StorageChoice { .. }
         )
     }
@@ -1560,16 +1572,14 @@ impl RestoreOrigin {
             Self::Startup => FlowState::terms(TermsContext::StartupRestoreRecovery, None),
             Self::Welcome => FlowState::Welcome { error_message: None },
             Self::BitcoinChoice => FlowState::BitcoinChoice { error_message: None },
-            Self::ReturningUserChoice => FlowState::ReturningUserChoice,
             Self::StorageChoice => FlowState::StorageChoice { error_message: None },
+            Self::HardwareImport => FlowState::HardwareImport,
+            Self::SoftwareImport => FlowState::SoftwareImport { error_message: None },
         }
     }
 
     fn flow_state_after_restore_unavailable(self) -> FlowState {
-        match self {
-            Self::ReturningUserChoice => FlowState::StorageChoice { error_message: None },
-            _ => self.flow_state(),
-        }
+        self.flow_state()
     }
 }
 
@@ -1949,7 +1959,7 @@ mod tests {
         let wallet_id = WalletId::new();
         let flow = FlowState::CloudBackup(CloudBackupFlow::HardwareImport { wallet_id });
 
-        let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false);
+        let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false, false);
 
         assert_eq!(state.step, OnboardingStep::CloudBackup);
         assert_eq!(state.branch, Some(OnboardingBranch::Hardware));
@@ -2159,9 +2169,41 @@ mod tests {
     }
 
     #[test]
+    fn welcome_continues_to_bitcoin_choice() {
+        let mut flow = FlowState::Welcome { error_message: None };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::ContinueFromWelcome,
+            CloudRestoreDiscovery::Checking,
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(flow, FlowState::BitcoinChoice { error_message: None }));
+        assert!(restore_offer_allowed);
+    }
+
+    #[test]
+    fn existing_bitcoin_choice_goes_directly_to_storage_choice() {
+        let mut flow = FlowState::BitcoinChoice { error_message: None };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::SelectHasBitcoin { has_bitcoin: true },
+            CloudRestoreDiscovery::Checking,
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
+        assert!(restore_offer_allowed);
+    }
+
+    #[test]
     fn selecting_hardware_wallet_goes_to_hardware_import() {
         let mut flow = FlowState::StorageChoice { error_message: None };
-        let mut restore_offer_allowed = false;
+        let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
             OnboardingAction::SelectStorage {
@@ -2173,13 +2215,13 @@ mod tests {
 
         assert_eq!(command, TransitionCommand::None);
         assert!(matches!(flow, FlowState::HardwareImport));
-        assert!(!restore_offer_allowed);
+        assert!(restore_offer_allowed);
     }
 
     #[test]
     fn selecting_software_wallet_goes_to_software_import() {
         let mut flow = FlowState::StorageChoice { error_message: None };
-        let mut restore_offer_allowed = false;
+        let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
             OnboardingAction::SelectStorage {
@@ -2191,7 +2233,21 @@ mod tests {
 
         assert_eq!(command, TransitionCommand::None);
         assert!(matches!(flow, FlowState::SoftwareImport { error_message: None }));
-        assert!(!restore_offer_allowed);
+        assert!(restore_offer_allowed);
+    }
+
+    #[test]
+    fn storage_choice_back_returns_to_bitcoin_choice() {
+        let mut flow = FlowState::StorageChoice { error_message: Some("create failed".into()) };
+        let mut restore_offer_allowed = true;
+
+        flow.apply_user_action(
+            OnboardingAction::Back,
+            CloudRestoreDiscovery::Checking,
+            &mut restore_offer_allowed,
+        );
+
+        assert!(matches!(flow, FlowState::BitcoinChoice { error_message: None }));
     }
 
     #[test]
@@ -2240,7 +2296,7 @@ mod tests {
 
     #[test]
     fn restoring_failure_returns_to_restore_offer_with_error() {
-        let mut flow = FlowState::Restoring { origin: RestoreOrigin::ReturningUserChoice };
+        let mut flow = FlowState::Restoring { origin: RestoreOrigin::StorageChoice };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
@@ -2253,7 +2309,7 @@ mod tests {
         assert!(matches!(
             flow,
             FlowState::RestoreOffer {
-                origin: RestoreOrigin::ReturningUserChoice,
+                origin: RestoreOrigin::StorageChoice,
                 error_message: Some(message),
             } if message == "passkey verification failed"
         ));
@@ -2261,13 +2317,11 @@ mod tests {
 
     #[test]
     fn explicit_restore_without_backup_goes_to_restore_unavailable() {
-        let mut flow = FlowState::ReturningUserChoice;
+        let mut flow = FlowState::StorageChoice { error_message: None };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
-            OnboardingAction::SelectReturningUserFlow {
-                selection: OnboardingReturningUserSelection::RestoreFromCoveBackup,
-            },
+            OnboardingAction::OpenCloudRestore,
             CloudRestoreDiscovery::NoBackupFound,
             &mut restore_offer_allowed,
         );
@@ -2275,28 +2329,23 @@ mod tests {
         assert_eq!(command, TransitionCommand::None);
         assert!(matches!(
             flow,
-            FlowState::RestoreUnavailable { origin: RestoreOrigin::ReturningUserChoice }
+            FlowState::RestoreUnavailable { origin: RestoreOrigin::StorageChoice }
         ));
     }
 
     #[test]
     fn explicit_restore_while_offline_goes_to_restore_offline() {
-        let mut flow = FlowState::ReturningUserChoice;
+        let mut flow = FlowState::StorageChoice { error_message: None };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
-            OnboardingAction::SelectReturningUserFlow {
-                selection: OnboardingReturningUserSelection::RestoreFromCoveBackup,
-            },
+            OnboardingAction::OpenCloudRestore,
             CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline),
             &mut restore_offer_allowed,
         );
 
         assert_eq!(command, TransitionCommand::None);
-        assert!(matches!(
-            flow,
-            FlowState::RestoreOffline { origin: RestoreOrigin::ReturningUserChoice }
-        ));
+        assert!(matches!(flow, FlowState::RestoreOffline { origin: RestoreOrigin::StorageChoice }));
     }
 
     #[test]
@@ -2325,7 +2374,7 @@ mod tests {
         let scenarios = [
             (FlowState::Welcome { error_message: None }, RestoreOrigin::Welcome),
             (FlowState::BitcoinChoice { error_message: None }, RestoreOrigin::BitcoinChoice),
-            (FlowState::ReturningUserChoice, RestoreOrigin::ReturningUserChoice),
+            (FlowState::StorageChoice { error_message: None }, RestoreOrigin::StorageChoice),
         ];
 
         for (mut flow, expected_origin) in scenarios {
@@ -2346,8 +2395,8 @@ mod tests {
     }
 
     #[test]
-    fn backup_found_does_not_auto_switch_on_late_screens() {
-        let mut flow = FlowState::StorageChoice { error_message: None };
+    fn backup_found_on_import_screen_leaves_step_for_alert() {
+        let mut flow = FlowState::HardwareImport;
         let mut discovery = CloudRestoreDiscovery::Checking;
 
         flow.apply_event(
@@ -2357,7 +2406,65 @@ mod tests {
         );
 
         assert_eq!(discovery, CloudRestoreDiscovery::BackupFound(None));
-        assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
+        assert!(matches!(flow, FlowState::HardwareImport));
+    }
+
+    #[test]
+    fn backup_found_on_import_screen_sets_alert_state() {
+        let mut state = preview_internal_state(
+            FlowState::SoftwareImport { error_message: None },
+            CloudRestoreDiscovery::Checking,
+        );
+
+        state.flow.apply_event(
+            InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(None)),
+            &mut state.cloud_restore_discovery,
+            state.restore_offer_allowed,
+        );
+        let mut deferred = DeferredSender::new(MessageSender::new(flume::bounded(16).0));
+        state.sync_ui(&mut deferred);
+
+        assert_eq!(state.ui.step, OnboardingStep::SoftwareImport);
+        assert!(state.ui.cloud_restore_alert_visible);
+    }
+
+    #[test]
+    fn dismissed_cloud_restore_alert_stays_hidden() {
+        let manager =
+            preview_manager(FlowState::HardwareImport, CloudRestoreDiscovery::BackupFound(None));
+
+        manager.dispatch(OnboardingAction::DismissCloudRestoreAlert);
+
+        assert_eq!(manager.state().step, OnboardingStep::HardwareImport);
+        assert!(!manager.state().cloud_restore_alert_visible);
+    }
+
+    #[test]
+    fn opening_restore_from_import_returns_to_import_on_skip() {
+        let mut flow = FlowState::SoftwareImport { error_message: None };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::OpenCloudRestore,
+            CloudRestoreDiscovery::BackupFound(None),
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(
+            flow,
+            FlowState::RestoreOffer { origin: RestoreOrigin::SoftwareImport, error_message: None }
+        ));
+
+        let command = flow.apply_user_action(
+            OnboardingAction::SkipRestore,
+            CloudRestoreDiscovery::BackupFound(None),
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(!restore_offer_allowed);
+        assert!(matches!(flow, FlowState::SoftwareImport { error_message: None }));
     }
 
     #[test]
@@ -2389,7 +2496,7 @@ mod tests {
                 false,
             );
 
-            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false);
+            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false, false);
             assert_eq!(state.step, step);
             assert_eq!(state.error_message.as_deref(), Some("create failed"));
         }
@@ -2430,7 +2537,7 @@ mod tests {
             assert_eq!(command, expected_command);
             assert!(!restore_offer_allowed);
 
-            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false);
+            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false, false);
             assert_eq!(state.step, expected_step);
             assert_eq!(state.error_message, None);
         }
@@ -2445,7 +2552,7 @@ mod tests {
             ),
             (
                 FlowState::StorageChoice { error_message: Some("create failed".into()) },
-                OnboardingStep::ReturningUserChoice,
+                OnboardingStep::BitcoinChoice,
             ),
             (
                 FlowState::SoftwareImport { error_message: Some("create failed".into()) },
@@ -2464,7 +2571,7 @@ mod tests {
 
             assert_eq!(command, TransitionCommand::None);
 
-            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false);
+            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false, false);
             assert_eq!(state.step, expected_step);
             assert_eq!(state.error_message, None);
         }
@@ -2491,7 +2598,7 @@ mod tests {
         ];
 
         for (flow, expected_step, expected_error) in scenarios {
-            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false);
+            let state = flow.ui_state(&CloudRestoreDiscovery::Checking, false, false);
 
             assert_eq!(state.step, expected_step);
             assert_eq!(state.error_message.as_deref(), Some(expected_error));
@@ -2548,7 +2655,7 @@ mod tests {
 
         assert_eq!(discovery, CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline));
         assert!(matches!(flow, FlowState::RestoreOffline { origin: RestoreOrigin::Startup }));
-        assert_eq!(flow.ui_state(&discovery, false).step, OnboardingStep::RestoreOffline);
+        assert_eq!(flow.ui_state(&discovery, false, false).step, OnboardingStep::RestoreOffline);
     }
 
     #[test]
@@ -2719,8 +2826,8 @@ mod tests {
     }
 
     #[test]
-    fn continue_without_cloud_restore_from_returning_user_goes_to_storage_choice() {
-        let mut flow = FlowState::RestoreUnavailable { origin: RestoreOrigin::ReturningUserChoice };
+    fn continue_without_cloud_restore_from_import_returns_to_import() {
+        let mut flow = FlowState::RestoreUnavailable { origin: RestoreOrigin::SoftwareImport };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
@@ -2730,7 +2837,7 @@ mod tests {
         );
 
         assert_eq!(command, TransitionCommand::None);
-        assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
+        assert!(matches!(flow, FlowState::SoftwareImport { error_message: None }));
     }
 
     #[test]
@@ -3091,9 +3198,25 @@ mod tests {
         flow: FlowState,
         cloud_restore_discovery: CloudRestoreDiscovery,
     ) -> InternalState {
-        let ui = flow.ui_state(&cloud_restore_discovery, false);
+        let restore_offer_allowed = true;
+        let cloud_restore_alert_dismissed = false;
+        let should_offer_cloud_restore =
+            matches!(cloud_restore_discovery, CloudRestoreDiscovery::BackupFound(_));
+        let cloud_restore_alert_visible = should_offer_cloud_restore
+            && matches!(flow, FlowState::HardwareImport | FlowState::SoftwareImport { .. });
+        let ui = flow.ui_state(
+            &cloud_restore_discovery,
+            should_offer_cloud_restore,
+            cloud_restore_alert_visible,
+        );
 
-        InternalState { flow, cloud_restore_discovery, restore_offer_allowed: true, ui }
+        InternalState {
+            flow,
+            cloud_restore_discovery,
+            restore_offer_allowed,
+            cloud_restore_alert_dismissed,
+            ui,
+        }
     }
 
     fn preview_manager(
