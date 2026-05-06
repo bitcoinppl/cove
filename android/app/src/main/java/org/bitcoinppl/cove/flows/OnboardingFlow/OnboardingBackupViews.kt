@@ -608,6 +608,8 @@ private fun OnboardingCloudBackupDetailsStepView(
     val isBusy =
         backupManager.status is CloudBackupStatus.Enabling &&
             backupManager.enableState != CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION
+    val needsPasskeyConfirmation =
+        backupManager.enableState == CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION
 
     fun completeIfEnabled() {
         if (didReportEnabled) return
@@ -624,28 +626,30 @@ private fun OnboardingCloudBackupDetailsStepView(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (backupManager.enableState == CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION) {
-            CloudBackupPasskeyConfirmationStep(
-                onContinue = {
+        CloudBackupEnableOnboardingView(
+            onEnable = {
+                if (isBusy || isPromptingForEnableChoice) {
+                    return@CloudBackupEnableOnboardingView
+                }
+
+                if (needsPasskeyConfirmation) {
                     backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
-                },
-                onCancel = {
+                    return@CloudBackupEnableOnboardingView
+                }
+
+                onEnable()
+            },
+            onCancel = {
+                if (needsPasskeyConfirmation) {
                     backupManager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
-                },
-            )
-        } else {
-            CloudBackupEnableOnboardingView(
-                onEnable = {
-                    if (!isBusy && !isPromptingForEnableChoice) {
-                        onEnable()
-                    }
-                },
-                onCancel = onSkip,
-                message = onboardingMessage,
-                isBusy = isBusy || isPromptingForEnableChoice,
-                context = context,
-            )
-        }
+                }
+
+                onSkip()
+            },
+            message = onboardingMessage,
+            isBusy = isBusy || isPromptingForEnableChoice,
+            context = context,
+        )
 
         if (isBusy) {
             Box(
@@ -683,48 +687,6 @@ private fun OnboardingCloudBackupDetailsStepView(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun CloudBackupPasskeyConfirmationStep(
-    onContinue: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    OnboardingBackground {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp, vertical = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            OnboardingStatusHero(
-                icon = Icons.Default.Lock,
-                tint = Color(0xFFFFD166),
-                fillColor = Color(0xFFFFD166).copy(alpha = 0.12f),
-            )
-            Spacer(modifier = Modifier.height(28.dp))
-            Text(
-                text = "Confirm your passkey",
-                color = Color.White,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Your passkey was saved. Cove needs to confirm it once before enabling Cloud Backup. If it does not appear right away, use the option to search your passkey/password manager app.",
-                color = OnboardingTextSecondary,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-            )
-            Spacer(modifier = Modifier.height(28.dp))
-            OnboardingPrimaryButton(text = "Continue", onClick = onContinue)
-            Spacer(modifier = Modifier.height(12.dp))
-            OnboardingSecondaryButton(text = "Cancel", onClick = onCancel)
         }
     }
 }

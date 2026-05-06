@@ -293,29 +293,38 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         return false
     }
 
+    private var needsPasskeyConfirmation: Bool {
+        backupManager.enableState == .needsPasskeyConfirmation
+    }
+
+    private func handleEnableTap() {
+        guard !isBusy, !isPromptingForEnableChoice else { return }
+
+        if needsPasskeyConfirmation {
+            backupManager.dispatch(action: .confirmSavedPasskey)
+            return
+        }
+
+        onEnable()
+    }
+
+    private func handleSkipTap() {
+        if needsPasskeyConfirmation {
+            backupManager.dispatch(action: .discardPendingEnableCloudBackup)
+        }
+
+        onSkip()
+    }
+
     var body: some View {
         ZStack {
-            if backupManager.enableState == .needsPasskeyConfirmation {
-                CloudBackupEnableConfirmationView(
-                    onContinue: {
-                        backupManager.dispatch(action: .confirmSavedPasskey)
-                    },
-                    onCancel: {
-                        backupManager.dispatch(action: .discardPendingEnableCloudBackup)
-                    }
-                )
-            } else {
-                CloudBackupEnableOnboardingView(
-                    onEnable: {
-                        guard !isBusy, !isPromptingForEnableChoice else { return }
-                        onEnable()
-                    },
-                    onCancel: onSkip,
-                    message: onboardingMessage,
-                    isBusy: isBusy || isPromptingForEnableChoice,
-                    context: context
-                )
-            }
+            CloudBackupEnableOnboardingView(
+                onEnable: handleEnableTap,
+                onCancel: handleSkipTap,
+                message: onboardingMessage,
+                isBusy: isBusy || isPromptingForEnableChoice,
+                context: context
+            )
 
             if isBusy {
                 CloudBackupEnableBusyOverlay(enableState: backupManager.enableState)
