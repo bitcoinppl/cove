@@ -5,6 +5,7 @@ The role of this file is to describe common mistakes and confusion points that a
 - Use `cove_util::ResultExt::map_err_str` instead of `.map_err(|e| Error::Variant(e.to_string()))` — it's cleaner and equivalent
 - Use `cove_util::ResultExt::map_err_prefix` instead of `.map_err(|e| Error::Variant(format!("context: {e}")))` when the prefix is a static string — produces `"context: error_message"`
 - Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing Rust actors, async manager methods, worker tasks, Rust closure-based orchestration, reconciliation, shared state, locks, dispatch, or UniFFI manager boundaries
+- For topic-specific guidance (passkeys, iCloud Drive, iOS/Android parity), read the docs linked from [ARCHITECTURE.md](ARCHITECTURE.md)
 - prefer structurally correct fixes over temporary workarounds, even when the diff is larger
 - start with the correct data model; use typed Rust state, enums, records, and persisted schema to represent the real domain instead of adding temporary caller-specific conditionals
 - For long-lived UI-facing managers, prefer `dispatch(action:)` for user intents and keep named methods for reads, bootstrap/lifecycle hooks, and special service-style operations, use `state()` for the initial snapshot only, and send typed delta reconcile messages for ongoing UI updates instead of re-sending the whole state after every mutation
