@@ -142,6 +142,7 @@ struct MockCloudState {
     wallet_backup_download_errors: HashMap<(String, String), CloudStorageError>,
     next_list_wallet_files_error: Option<CloudStorageError>,
     list_wallet_files_error: Option<CloudStorageError>,
+    list_wallet_files_namespace_errors: HashMap<String, CloudStorageError>,
     list_wallet_files_non_interactive_error: Option<CloudStorageError>,
     upload_master_key_error: Option<CloudStorageError>,
     next_upload_wallet_backup_error: Option<CloudStorageError>,
@@ -204,6 +205,14 @@ impl MockCloudStorage {
     pub(crate) fn fail_list_wallet_files(&self, message: &str) {
         self.state.lock().list_wallet_files_error =
             Some(CloudStorageError::DownloadFailed(message.into()));
+    }
+
+    pub(crate) fn fail_list_wallet_files_for_namespace(
+        &self,
+        namespace: String,
+        error: CloudStorageError,
+    ) {
+        self.state.lock().list_wallet_files_namespace_errors.insert(namespace, error);
     }
 
     pub(crate) fn fail_next_list_wallet_files_offline(&self, message: &str) {
@@ -500,6 +509,10 @@ impl CloudStorageAccess for MockCloudStorage {
         if let Some(error) = error {
             return Err(error);
         }
+        if let Some(error) = state.list_wallet_files_namespace_errors.get(&namespace).cloned() {
+            return Err(error);
+        }
+
         let mut wallet_files = state.wallet_files.get(&namespace).cloned().unwrap_or_default();
 
         if state.reflect_uploaded_wallets_in_listing {

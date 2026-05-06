@@ -1482,17 +1482,9 @@ impl RustCloudBackupManager {
         let mut wallet_count = 0;
 
         for namespace in &namespaces {
-            match cloud.list_wallet_backups(namespace.clone()).await {
-                Ok(record_ids) => {
-                    namespace_count += 1;
-                    let unrecovered_wallet_count = record_ids
-                        .iter()
-                        .filter(|record_id| !current_wallet_record_ids.contains(*record_id))
-                        .count() as u32;
-
-                    wallet_count += unrecovered_wallet_count;
-                }
-                Err(CloudStorageError::NotFound(_)) => {}
+            let record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
+                Ok(record_ids) => record_ids,
+                Err(CloudStorageError::NotFound(_)) => Vec::new(),
                 Err(error) => {
                     return Err(blocking_cloud_error(
                         BlockingCloudStep::DetailRefresh,
@@ -1502,7 +1494,15 @@ impl RustCloudBackupManager {
                         ),
                     ));
                 }
-            }
+            };
+
+            namespace_count += 1;
+            let unrecovered_wallet_count = record_ids
+                .iter()
+                .filter(|record_id| !current_wallet_record_ids.contains(*record_id))
+                .count() as u32;
+
+            wallet_count += unrecovered_wallet_count;
         }
 
         Ok(CloudBackupOtherBackupsSummary { namespace_count, wallet_count })

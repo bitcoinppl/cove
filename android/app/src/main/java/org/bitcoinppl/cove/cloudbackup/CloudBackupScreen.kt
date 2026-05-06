@@ -90,6 +90,7 @@ package org.bitcoinppl.cove.cloudbackup
      VERIFYING,
      DETAIL,
      CANCELLED_RECOVERY,
+     AUTHORIZATION_BLOCKED,
      LOADING,
  }
 
@@ -105,6 +106,8 @@ package org.bitcoinppl.cove.cloudbackup
          verification is VerificationState.Verifying -> CloudBackupDetailBodyState.VERIFYING
          hasDetail -> CloudBackupDetailBodyState.DETAIL
          verification is VerificationState.Cancelled -> CloudBackupDetailBodyState.CANCELLED_RECOVERY
+         pendingUploadVerification == PendingUploadVerificationState.BLOCKED_ON_AUTHORIZATION ->
+             CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED
          verification !is VerificationState.Failed -> CloudBackupDetailBodyState.LOADING
          else -> null
      }
@@ -462,6 +465,9 @@ package org.bitcoinppl.cove.cloudbackup
              CloudBackupDetailBodyState.CANCELLED_RECOVERY -> {
                  CancelledVerificationRecoveryContent(manager = manager)
              }
+             CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED -> {
+                 PendingUploadConfirmationStatus(PendingUploadVerificationState.BLOCKED_ON_AUTHORIZATION)
+             }
              CloudBackupDetailBodyState.LOADING -> {
                  CloudBackupProgressCard(
                      title = "Loading cloud backup",
@@ -471,7 +477,10 @@ package org.bitcoinppl.cove.cloudbackup
              null -> Unit
          }
 
-         if (shouldShowPendingUploadConfirmationStatus(manager.pendingUploadVerification)) {
+         if (
+             bodyState != CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED &&
+                 shouldShowPendingUploadConfirmationStatus(manager.pendingUploadVerification)
+         ) {
              PendingUploadConfirmationStatus(manager.pendingUploadVerification)
          }
 

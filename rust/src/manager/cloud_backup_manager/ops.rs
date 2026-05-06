@@ -2725,6 +2725,46 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn detail_entry_does_not_restart_rust_owned_verification_states() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+
+        let states = [
+            VerificationState::Verifying,
+            VerificationState::Verified(DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            }),
+            VerificationState::PasskeyConfirmed,
+        ];
+
+        for verification in states {
+            configure_enabled_cloud_backup(&manager, globals, 0);
+            manager.clear_runtime_passkey_authorization();
+            manager.clear_pending_verification_completion();
+            manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
+            manager.set_verification(verification);
+            globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+
+            let discover_count = globals.passkey.discover_count();
+            let authenticate_count = globals.passkey.authenticate_count();
+
+            call!(manager.supervisor.start_enter_detail()).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(50)).await;
+
+            assert_eq!(globals.passkey.discover_count(), discover_count);
+            assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn deep_verify_authenticates_before_loading_wallet_inventory() {
         let _guard = test_lock().lock();
         cove_tokio::init();
@@ -3235,6 +3275,25 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn wrapper_repair_does_not_upload_when_passkey_persistence_fails() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+        globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+        globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+        globals.keychain.fail_save_at(1);
+
+        let error = manager.do_repair_passkey_wrapper_no_discovery().await.unwrap_err();
+
+        assert!(error.to_string().contains("save cspp credentials"), "{error}");
+        assert!(!globals.cloud.has_master_key_backup(&namespace));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn reupload_all_wallets_does_not_create_master_key_for_existing_namespace() {
         let _guard = test_lock().lock();
         cove_tokio::init();
@@ -3401,6 +3460,28 @@ mod tests {
                 .into_iter()
                 .map(wallet_filename_from_record_id)
                 .collect(),
+        );
+
+        let summary =
+            manager.other_backup_summary(&CloudStorage::global_explicit_client()).await.unwrap();
+        assert_eq!(summary.namespace_count, 1);
+        assert_eq!(summary.wallet_count, 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn other_backup_summary_counts_empty_namespace_when_wallet_listing_is_missing() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let other_master_key = cove_cspp::master_key::MasterKey::generate();
+        let other_namespace = other_master_key.namespace_id();
+        globals.cloud.set_master_key_backup(other_namespace.clone(), vec![1, 2, 3]);
+        globals.cloud.fail_list_wallet_files_for_namespace(
+            other_namespace,
+            CloudStorageError::NotFound("wallet files missing".into()),
         );
 
         let summary =

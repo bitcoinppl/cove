@@ -54,6 +54,7 @@ enum DetailEntryPlan {
     RefreshOnly,
     ResumePendingUploadConfirmation(PendingVerificationCompletion),
     UseFreshEnableProof(RuntimePasskeyAuthorization),
+    ContinueRustOwnedVerification,
     StartPasskeyVerification { force_discoverable: bool },
 }
 
@@ -342,6 +343,7 @@ impl CloudBackupSupervisor {
             DetailEntryPlan::ResumePendingUploadConfirmation(completion) => {
                 debug_assert!(!completion.uploads().is_empty());
             }
+            DetailEntryPlan::ContinueRustOwnedVerification => {}
             DetailEntryPlan::RefreshOnly => {}
         }
 
@@ -421,6 +423,15 @@ impl CloudBackupSupervisor {
         let state = manager.state.read().clone();
         if !matches!(state.status, CloudBackupStatus::Enabled) {
             return DetailEntryPlan::RefreshOnly;
+        }
+
+        if matches!(
+            state.verification,
+            VerificationState::Verifying
+                | VerificationState::Verified(_)
+                | VerificationState::PasskeyConfirmed
+        ) {
+            return DetailEntryPlan::ContinueRustOwnedVerification;
         }
 
         if let Some(completion) = self.pending_verification_completion.clone() {

@@ -239,6 +239,7 @@ class OnboardingHelpersTest {
             cloudRestoreMessage = null,
             cloudRestoreProviderHint = null,
             shouldOfferCloudRestore = false,
+            cloudRestoreAlertVisible = false,
             errorMessage = null,
         )
 }

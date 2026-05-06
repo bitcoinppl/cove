@@ -203,6 +203,19 @@ class CloudBackupRegressionHelpersTest {
     }
 
     @Test
+    fun blockedPendingUploadAuthorizationWithoutDetailShowsAuthorizationBody() {
+        assertEquals(
+            CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED,
+            cloudBackupDetailBodyState(
+                status = CloudBackupStatus.Enabled,
+                verification = VerificationState.Idle,
+                pendingUploadVerification = PendingUploadVerificationState.BLOCKED_ON_AUTHORIZATION,
+                hasDetail = false,
+            ),
+        )
+    }
+
+    @Test
     fun decoyModeBlocksAllCloudBackupRootPresentations() {
         val context =
             CloudBackupPresentationContext(

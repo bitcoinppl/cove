@@ -423,15 +423,20 @@ impl RustOnboardingManager {
         info!("Onboarding: dispatch action={action:?}");
 
         let command = self.mutate_state(|state, deferred| {
-            if matches!(action, OnboardingAction::DismissCloudRestoreAlert) {
-                state.cloud_restore_alert_dismissed = true;
-            }
-
             let command = state.flow.apply_user_action(
-                action,
+                action.clone(),
                 state.cloud_restore_discovery.clone(),
                 &mut state.restore_offer_allowed,
             );
+            if matches!(action, OnboardingAction::DismissCloudRestoreAlert)
+                && matches!(
+                    state.flow,
+                    FlowState::HardwareImport | FlowState::SoftwareImport { .. }
+                )
+            {
+                state.cloud_restore_alert_dismissed = true;
+            }
+
             let command = state.maybe_advance_accepted_terms(command);
             state.sync_ui(deferred);
             command
@@ -1487,6 +1492,8 @@ impl FlowState {
                 | Self::Welcome { .. }
                 | Self::BitcoinChoice { .. }
                 | Self::StorageChoice { .. }
+                | Self::HardwareImport
+                | Self::SoftwareImport { .. }
         )
     }
 
@@ -2631,6 +2638,24 @@ mod tests {
     }
 
     #[test]
+    fn stale_dismiss_cloud_restore_alert_outside_import_does_not_hide_later_import_alert() {
+        let manager = preview_manager(
+            FlowState::Welcome { error_message: None },
+            CloudRestoreDiscovery::BackupFound(None),
+        );
+
+        manager.dispatch(OnboardingAction::DismissCloudRestoreAlert);
+        manager.dispatch(OnboardingAction::ContinueFromWelcome);
+        manager.dispatch(OnboardingAction::SelectHasBitcoin { has_bitcoin: true });
+        manager.dispatch(OnboardingAction::SelectStorage {
+            selection: OnboardingStorageSelection::SoftwareWallet,
+        });
+
+        assert_eq!(manager.state().step, OnboardingStep::SoftwareImport);
+        assert!(manager.state().cloud_restore_alert_visible);
+    }
+
+    #[test]
     fn opening_restore_from_import_returns_to_import_on_skip() {
         let mut flow = FlowState::SoftwareImport { error_message: None };
         let mut restore_offer_allowed = true;
@@ -3058,6 +3083,37 @@ mod tests {
         assert_eq!(state.ui.step, OnboardingStep::Welcome);
         assert_eq!(state.ui.cloud_restore_state, OnboardingCloudRestoreState::Checking);
         assert_eq!(state.ui.cloud_restore_message, None);
+    }
+
+    #[test]
+    fn offline_retry_rechecks_on_import_screens_and_shows_alert_after_backup_found() {
+        let scenarios = [
+            (FlowState::HardwareImport, OnboardingStep::HardwareImport),
+            (FlowState::SoftwareImport { error_message: None }, OnboardingStep::SoftwareImport),
+        ];
+
+        for (flow, expected_step) in scenarios {
+            let mut state = preview_internal_state(
+                flow,
+                CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline),
+            );
+
+            assert!(prepare_offline_cloud_check_retry(&mut state));
+            assert_eq!(state.cloud_restore_discovery, CloudRestoreDiscovery::Checking);
+            assert_eq!(state.ui.step, expected_step);
+            assert_eq!(state.ui.cloud_restore_state, OnboardingCloudRestoreState::Checking);
+
+            state.flow.apply_event(
+                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(None)),
+                &mut state.cloud_restore_discovery,
+                state.restore_offer_allowed,
+            );
+            let mut deferred = DeferredSender::new(MessageSender::new(flume::bounded(16).0));
+            state.sync_ui(&mut deferred);
+
+            assert_eq!(state.ui.step, expected_step);
+            assert!(state.ui.cloud_restore_alert_visible);
+        }
     }
 
     #[test]
