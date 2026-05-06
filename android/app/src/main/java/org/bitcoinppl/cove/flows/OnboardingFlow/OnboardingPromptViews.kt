@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.Download
@@ -57,7 +56,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -799,42 +797,6 @@ internal fun OnboardingBitcoinChoiceScreen(
                 modifier = Modifier.testTag("onboarding.bitcoinChoice.existing"),
             )
         }
-    }
-}
-
-@Composable
-internal fun OnboardingReturningUserChoiceScreen(
-    onRestoreFromCoveBackup: () -> Unit,
-    onUseAnotherWallet: () -> Unit,
-    onBack: () -> Unit,
-) {
-    OnboardingPromptScreen(
-        icon = Icons.Default.Download,
-        title = "How would you like to continue?",
-        subtitle = "Restore from an existing Cove backup or connect another wallet you already use.",
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            OnboardingChoiceCard(
-                title = stringResource(R.string.onboarding_restore_card_title),
-                subtitle = stringResource(R.string.onboarding_restore_card_subtitle),
-                icon = Icons.Default.CloudDownload,
-                onClick = onRestoreFromCoveBackup,
-            )
-            OnboardingChoiceCard(
-                title = "Use another wallet",
-                subtitle = "Import or connect a wallet from somewhere else",
-                icon = Icons.Default.Storage,
-                onClick = onUseAnotherWallet,
-                modifier = Modifier.testTag("onboarding.returningUser.anotherWallet"),
-            )
-        }
-
-        Spacer(modifier = Modifier.size(14.dp))
-
-        OnboardingSecondaryButton(
-            text = "Back",
-            onClick = onBack,
-        )
     }
 }
 

@@ -59,28 +59,6 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
-    fun existingUserCanChooseRestoreOrAnotherWallet() {
-        var selected = ""
-
-        compose.setOnboardingContent {
-            OnboardingReturningUserChoiceScreen(
-                onRestoreFromCoveBackup = { selected = "restore" },
-                onUseAnotherWallet = { selected = "another" },
-                onBack = { selected = "back" },
-            )
-        }
-
-        compose.card("Restore from Cove backup").performClick()
-        assertEquals("restore", selected)
-
-        compose.card("Use another wallet").performClick()
-        assertEquals("another", selected)
-
-        compose.button("Back").performClick()
-        assertEquals("back", selected)
-    }
-
-    @Test
     fun storageChoiceExposesExchangeHardwareAndSoftwareBranches() {
         var selected: OnboardingStorageSelection? = null
 

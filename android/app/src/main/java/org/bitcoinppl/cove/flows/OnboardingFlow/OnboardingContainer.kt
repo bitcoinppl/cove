@@ -5,7 +5,6 @@ import androidx.compose.runtime.LaunchedEffect
 import org.bitcoinppl.cove.OnboardingManager
 import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingCloudRestoreState
-import org.bitcoinppl.cove_core.OnboardingReturningUserSelection
 import org.bitcoinppl.cove_core.OnboardingStep
 
 @Composable
@@ -85,25 +84,6 @@ internal fun OnboardingContainer(
                 errorMessage = manager.state.errorMessage,
                 onNewHere = { manager.dispatch(OnboardingAction.SelectHasBitcoin(false)) },
                 onHasBitcoin = { manager.dispatch(OnboardingAction.SelectHasBitcoin(true)) },
-            )
-
-        OnboardingStep.RETURNING_USER_CHOICE ->
-            OnboardingReturningUserChoiceScreen(
-                onRestoreFromCoveBackup = {
-                    manager.dispatch(
-                        OnboardingAction.SelectReturningUserFlow(
-                            OnboardingReturningUserSelection.RESTORE_FROM_COVE_BACKUP,
-                        ),
-                    )
-                },
-                onUseAnotherWallet = {
-                    manager.dispatch(
-                        OnboardingAction.SelectReturningUserFlow(
-                            OnboardingReturningUserSelection.USE_ANOTHER_WALLET,
-                        ),
-                    )
-                },
-                onBack = { manager.dispatch(OnboardingAction.Back) },
             )
 
         OnboardingStep.STORAGE_CHOICE ->

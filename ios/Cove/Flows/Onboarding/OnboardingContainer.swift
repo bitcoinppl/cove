@@ -91,19 +91,6 @@ struct OnboardingContainer: View {
                 onHasBitcoin: { manager.dispatch(.selectHasBitcoin(hasBitcoin: true)) }
             )
 
-        case .returningUserChoice:
-            OnboardingReturningUserChoiceScreen(
-                onRestoreFromCoveBackup: {
-                    manager.dispatch(
-                        .selectReturningUserFlow(selection: .restoreFromCoveBackup)
-                    )
-                },
-                onUseAnotherWallet: {
-                    manager.dispatch(.selectReturningUserFlow(selection: .useAnotherWallet))
-                },
-                onBack: { manager.dispatch(.back) }
-            )
-
         case .storageChoice:
             OnboardingStorageChoiceScreen(
                 errorMessage: manager.state.errorMessage,
