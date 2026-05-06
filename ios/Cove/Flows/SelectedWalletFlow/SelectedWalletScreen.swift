@@ -50,6 +50,7 @@ struct SelectedWalletScreen: View {
     @State private var showLabelsQrExport = false
     @State private var showExportXpubConfirmation = false
     @State private var showXpubQrExport = false
+    @State private var pendingRenameNavigationTask: Task<Void, Never>? = nil
 
     /// private
     @State private var runPostRefresh = false
@@ -173,6 +174,21 @@ struct SelectedWalletScreen: View {
         showXpubQrExport = true
     }
 
+    private func showRenameFromTitleMenu() {
+        let walletId = metadata.id
+
+        pendingRenameNavigationTask?.cancel()
+        pendingRenameNavigationTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(350))
+            } catch {
+                return
+            }
+
+            app.pushRoute(Route.settings(.wallet(id: walletId, route: .changeName)))
+        }
+    }
+
     func shareXpubFile() {
         Task {
             do {
@@ -243,7 +259,7 @@ struct SelectedWalletScreen: View {
         )
         .contextMenu {
             Button("Change Name") {
-                app.pushRoute(Route.settings(.wallet(id: metadata.id, route: .changeName)))
+                showRenameFromTitleMenu()
             }
         }
     }
@@ -516,7 +532,9 @@ struct SelectedWalletScreen: View {
             app.isPastHeader = false
         }
         .onDisappear {
-            // reset scroll state when leaving this screen
+            pendingRenameNavigationTask?.cancel()
+            pendingRenameNavigationTask = nil
+
             app.isPastHeader = false
         }
         .alert(
