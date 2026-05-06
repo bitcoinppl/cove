@@ -114,8 +114,8 @@ impl RustCloudBackupManager {
         Ok(())
     }
 
-    pub(crate) async fn handle_confirm_saved_passkey(&self) {
-        match self.confirm_saved_passkey_from_pending_session().await {
+    pub(crate) async fn handle_confirm_saved_passkey_session(&self, pending: PendingEnableSession) {
+        match self.confirm_saved_passkey_from_session(pending).await {
             Ok(()) => {}
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
                 self.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
@@ -131,11 +131,10 @@ impl RustCloudBackupManager {
         }
     }
 
-    async fn confirm_saved_passkey_from_pending_session(&self) -> Result<(), CloudBackupError> {
-        let Some(pending) = self.take_saved_passkey_confirmation_session().await else {
-            self.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
-            return Ok(());
-        };
+    async fn confirm_saved_passkey_from_session(
+        &self,
+        pending: PendingEnableSession,
+    ) -> Result<(), CloudBackupError> {
         let (master_key, staged_passkey) = pending.into_parts();
         let passkey_access = PasskeyAccess::global();
         let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
@@ -2994,12 +2993,52 @@ mod tests {
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 
         globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
-        manager.handle_confirm_saved_passkey().await;
+        let pending = manager.take_pending_enable_session().await.unwrap();
+        manager.handle_confirm_saved_passkey_session(pending).await;
 
         assert_eq!(globals.passkey.create_count(), 1);
         assert_eq!(globals.passkey.authenticate_count(), 1);
         assert_eq!(globals.passkey.authenticated_credential_ids(), vec![vec![1, 2, 3]]);
         assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+        assert!(manager.take_pending_enable_session().await.is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        manager
+            .replace_pending_enable_session(
+                PendingEnableSession::awaiting_saved_passkey_confirmation(
+                    master_key,
+                    UnpersistedPrfKey {
+                        prf_key: [0; 32],
+                        prf_salt: [9; 32],
+                        credential_id: vec![1, 2, 3],
+                        provider_hint: None,
+                    },
+                ),
+            )
+            .await;
+
+        globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+        manager.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey);
+        manager.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey);
+
+        wait_for_test_condition(
+            Duration::from_secs(1),
+            "saved passkey confirmation should enable cloud backup",
+            || manager.current_status() == CloudBackupStatus::Enabled,
+        )
+        .await;
+
+        assert_eq!(globals.passkey.authenticate_count(), 1);
         assert!(manager.take_pending_enable_session().await.is_none());
     }
 
@@ -3017,7 +3056,8 @@ mod tests {
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 
         globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
-        manager.handle_confirm_saved_passkey().await;
+        let pending = manager.take_pending_enable_session().await.unwrap();
+        manager.handle_confirm_saved_passkey_session(pending).await;
 
         assert_eq!(manager.state().enable_state, CloudBackupEnableState::NeedsPasskeyConfirmation);
         let pending = manager.take_pending_enable_session().await.unwrap();
@@ -3641,31 +3681,29 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn other_backup_summary_counts_only_wallets_missing_from_current_namespace() {
+    async fn other_backup_summary_counts_only_wallets_missing_from_local_wallets() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
         let manager = init_manager();
         configure_enabled_cloud_backup(&manager, globals, 0);
 
+        let metadata = xpub_only_wallet_metadata();
+        let local_record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+        persist_xpub_wallets(vec![metadata]);
+
         let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
-        globals.cloud.set_wallet_files(
-            current_namespace.clone(),
-            ["wallet-1", "wallet-2", "wallet-3", "wallet-4"]
-                .into_iter()
-                .map(wallet_filename_from_record_id)
-                .collect(),
-        );
+        globals.cloud.set_wallet_files(current_namespace.clone(), Vec::new());
 
         let other_master_key = cove_cspp::master_key::MasterKey::generate();
         let other_namespace = other_master_key.namespace_id();
         globals.cloud.set_master_key_backup(other_namespace.clone(), vec![1, 2, 3]);
         globals.cloud.set_wallet_files(
             other_namespace,
-            ["wallet-1", "wallet-2", "wallet-3", "wallet-4", "wallet-5"]
-                .into_iter()
-                .map(wallet_filename_from_record_id)
-                .collect(),
+            vec![
+                wallet_filename_from_record_id(&local_record_id),
+                wallet_filename_from_record_id("missing-local-wallet"),
+            ],
         );
 
         let summary =
@@ -3675,16 +3713,13 @@ mod tests {
 
         globals.cloud.set_wallet_files(
             current_namespace,
-            ["wallet-1", "wallet-2", "wallet-3", "wallet-4", "wallet-5"]
-                .into_iter()
-                .map(wallet_filename_from_record_id)
-                .collect(),
+            vec![wallet_filename_from_record_id("missing-local-wallet")],
         );
 
         let summary =
             manager.other_backup_summary(&CloudStorage::global_explicit_client()).await.unwrap();
         assert_eq!(summary.namespace_count, 1);
-        assert_eq!(summary.wallet_count, 0);
+        assert_eq!(summary.wallet_count, 1);
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -4524,11 +4559,13 @@ mod tests {
             })
             .unwrap();
         manager.set_sync_error(Some("upload failed".into()));
+        manager.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
         CONNECTIVITY_MANAGER.set_connection_state(false);
 
         reset_cloud_backup_test_state_with_hook(&manager, globals, || {
             assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
             assert!(manager.state().sync_error.is_none());
+            assert_eq!(manager.state().enable_state, CloudBackupEnableState::Idle);
         });
 
         assert!(CONNECTIVITY_MANAGER.is_connected());
@@ -4819,6 +4856,31 @@ mod tests {
 
         let metadata = xpub_only_wallet_metadata();
         persist_xpub_wallets(vec![metadata]);
+
+        assert_eq!(
+            manager.compute_sync_health().await,
+            CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into()),
+        );
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
+    async fn sync_health_reports_missing_master_key_before_pending_wallet_uploads() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = global_manager();
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+        configure_enabled_cloud_backup(&manager, globals, 1);
+
+        let metadata = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![metadata.clone()]);
+        persist_dirty_blob_state(metadata.id);
 
         assert_eq!(
             manager.compute_sync_health().await,
@@ -6255,6 +6317,21 @@ mod tests {
         .await;
 
         assert!(cspp.load_master_key_from_store().unwrap().is_none());
+    }
+
+    #[test]
+    fn clear_in_process_state_for_local_reset_clears_enable_state() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        manager.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
+
+        manager.clear_in_process_state_for_local_reset();
+
+        assert_eq!(manager.state().enable_state, CloudBackupEnableState::Idle);
     }
 
     #[tokio::test(flavor = "current_thread")]

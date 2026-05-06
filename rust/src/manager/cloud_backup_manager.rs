@@ -1413,6 +1413,7 @@ impl RustCloudBackupManager {
         self.set_restore_report(None);
         self.set_sync_error(None);
         self.set_sync_health(CloudSyncHealth::Unknown);
+        self.set_enable_state(CloudBackupEnableState::Idle);
         self.set_pending_upload_verification(PendingUploadVerificationState::Idle);
         self.set_detail(None);
         self.set_verification(VerificationState::Idle);
@@ -1514,14 +1515,7 @@ impl RustCloudBackupManager {
         cloud: &CloudStorageClient,
     ) -> Result<CloudBackupOtherBackupsSummary, CloudBackupError> {
         let current_namespace = self.current_namespace_id()?;
-        let current_wallet_record_ids: HashSet<_> = current_namespace_wallet_record_ids(
-            cloud,
-            &current_namespace,
-            BlockingCloudStep::DetailRefresh,
-        )
-        .await?
-        .into_iter()
-        .collect();
+        let local_wallet_record_ids = self.expected_wallet_record_ids().await?;
         let namespaces = self
             .other_backup_namespaces(cloud, &current_namespace, BlockingCloudStep::DetailRefresh)
             .await?;
@@ -1547,7 +1541,7 @@ impl RustCloudBackupManager {
             namespace_count += 1;
             let unrecovered_wallet_count = record_ids
                 .iter()
-                .filter(|record_id| !current_wallet_record_ids.contains(*record_id))
+                .filter(|record_id| !local_wallet_record_ids.contains(*record_id))
                 .count() as u32;
 
             wallet_count += unrecovered_wallet_count;
@@ -1650,11 +1644,11 @@ impl RustCloudBackupManager {
             return sync_health;
         }
 
-        if Self::sync_health_has_pending_upload(&sync_states) {
+        if master_key_upload_grace_namespace == Some(namespace.as_str()) {
             return CloudSyncHealth::Uploading;
         }
 
-        if master_key_upload_grace_namespace == Some(namespace.as_str()) {
+        if Self::sync_health_has_pending_master_key_upload(&sync_states) {
             return CloudSyncHealth::Uploading;
         }
 
@@ -1746,20 +1740,24 @@ impl RustCloudBackupManager {
         })
     }
 
-    fn sync_health_has_pending_upload(sync_states: &[PersistedCloudBlobSyncState]) -> bool {
-        sync_states.iter().any(|sync_state| {
-            matches!(
-                sync_state.state,
-                PersistedCloudBlobState::Dirty(_)
-                    | PersistedCloudBlobState::Uploading(_)
-                    | PersistedCloudBlobState::UploadedPendingConfirmation(_)
-            )
-        })
-    }
-
     fn sync_health_has_pending_wallet_upload(sync_states: &[PersistedCloudBlobSyncState]) -> bool {
         sync_states.iter().any(|sync_state| {
             sync_state.wallet_id.is_some()
+                && matches!(
+                    sync_state.state,
+                    PersistedCloudBlobState::Dirty(_)
+                        | PersistedCloudBlobState::Uploading(_)
+                        | PersistedCloudBlobState::UploadedPendingConfirmation(_)
+                )
+        })
+    }
+
+    fn sync_health_has_pending_master_key_upload(
+        sync_states: &[PersistedCloudBlobSyncState],
+    ) -> bool {
+        sync_states.iter().any(|sync_state| {
+            sync_state.wallet_id.is_none()
+                && sync_state.record_id == MASTER_KEY_RECORD_ID
                 && matches!(
                     sync_state.state,
                     PersistedCloudBlobState::Dirty(_)
@@ -1872,14 +1870,6 @@ impl RustCloudBackupManager {
         act_zero::call!(self.supervisor.take_retry_pending_enable_session())
             .await
             .expect("take retry pending enable session")
-    }
-
-    pub(crate) async fn take_saved_passkey_confirmation_session(
-        &self,
-    ) -> Option<PendingEnableSession> {
-        act_zero::call!(self.supervisor.take_saved_passkey_confirmation_session())
-            .await
-            .expect("take saved passkey confirmation session")
     }
 
     pub(crate) async fn has_awaiting_force_new_pending_enable_session(&self) -> bool {
@@ -2226,6 +2216,7 @@ impl RustCloudBackupManager {
         self.set_restore_report(None);
         self.set_sync_error(None);
         self.refresh_persisted_flags();
+        self.set_enable_state(CloudBackupEnableState::Idle);
         self.set_pending_upload_verification(PendingUploadVerificationState::Idle);
         self.set_detail(None);
         self.set_verification(VerificationState::Idle);

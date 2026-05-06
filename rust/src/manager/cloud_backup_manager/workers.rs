@@ -491,23 +491,20 @@ impl CloudBackupSupervisor {
         Produces::ok(None)
     }
 
-    pub async fn take_saved_passkey_confirmation_session(
-        &mut self,
-    ) -> ActorResult<Option<PendingEnableSession>> {
-        let pending = self.pending_enable_session.take();
-        if matches!(pending, Some(PendingEnableSession::AwaitingSavedPasskeyConfirmation(_))) {
-            return Produces::ok(pending);
-        }
-
-        self.pending_enable_session = pending;
-        Produces::ok(None)
-    }
-
     pub async fn confirm_saved_passkey(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
+        let pending = match self.pending_enable_session.take() {
+            Some(session @ PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)) => session,
+            other => {
+                self.pending_enable_session = other;
+                return Produces::ok(());
+            }
+        };
 
         manager.set_enable_state(CloudBackupEnableState::CreatingPasskey);
-        cove_tokio::task::spawn(async move { manager.handle_confirm_saved_passkey().await });
+        cove_tokio::task::spawn(async move {
+            manager.handle_confirm_saved_passkey_session(pending).await;
+        });
 
         Produces::ok(())
     }
