@@ -30,6 +30,8 @@ struct SelectedWalletScreen: View {
     /// nav bar height (~50) + scroll view system insets (~50)
     /// safeAreaInsets.top handles device-specific differences (notch, Dynamic Island)
     private let navBarAndScrollInsets: CGFloat = 100
+    /// Delay long enough for SwiftUI to dismiss the title context menu before routing
+    private let contextMenuDismissNavigationDelay: Duration = .milliseconds(350)
 
     /// public
     var manager: WalletManager
@@ -180,7 +182,7 @@ struct SelectedWalletScreen: View {
         pendingRenameNavigationTask?.cancel()
         pendingRenameNavigationTask = Task { @MainActor in
             do {
-                try await Task.sleep(for: .milliseconds(350))
+                try await Task.sleep(for: contextMenuDismissNavigationDelay)
             } catch {
                 return
             }
