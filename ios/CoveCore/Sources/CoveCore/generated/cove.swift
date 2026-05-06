@@ -24575,6 +24575,7 @@ public enum OnboardingAction: Equatable, Hashable {
     )
     case acceptTerms
     case back
+    case beginCloudBackupEnable
 
 
 
@@ -24646,6 +24647,8 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
         case 22: return .acceptTerms
         
         case 23: return .back
+        
+        case 24: return .beginCloudBackupEnable
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -24750,6 +24753,10 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
         
         case .back:
             writeInt(&buf, Int32(23))
+        
+        
+        case .beginCloudBackupEnable:
+            writeInt(&buf, Int32(24))
         
         }
     }

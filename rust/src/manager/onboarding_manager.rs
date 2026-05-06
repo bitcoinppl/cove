@@ -19,7 +19,9 @@ use crate::{
     app::{App, AppAction, FfiApp},
     database::{Database, global_config::GlobalConfigKey},
     manager::{
-        cloud_backup_manager::{CLOUD_BACKUP_MANAGER, CloudStorageIssue},
+        cloud_backup_manager::{
+            CLOUD_BACKUP_MANAGER, CloudBackupPasskeyChoiceFlow, CloudStorageIssue,
+        },
         connectivity_manager::CONNECTIVITY_MANAGER,
     },
     mnemonic::{Mnemonic as StoredMnemonic, MnemonicExt, NumberOfBip39Words},
@@ -128,6 +130,7 @@ pub enum OnboardingAction {
     RestoreFailed { error: String },
     AcceptTerms,
     Back,
+    BeginCloudBackupEnable,
 }
 
 type Message = OnboardingReconcileMessage;
@@ -274,6 +277,7 @@ enum FlowState {
 enum TransitionCommand {
     None,
     CreateWallet(OnboardingBranch),
+    BeginCloudBackupEnable { backup_found: bool },
     CompleteOnboarding(CompletionTarget),
 }
 
@@ -563,8 +567,23 @@ impl RustOnboardingManager {
         match command {
             TransitionCommand::None => {}
             TransitionCommand::CreateWallet(branch) => self.create_wallet_for_branch(branch),
+            TransitionCommand::BeginCloudBackupEnable { backup_found } => {
+                self.begin_cloud_backup_enable(backup_found);
+            }
             TransitionCommand::CompleteOnboarding(target) => self.complete_onboarding(target),
         }
+    }
+
+    fn begin_cloud_backup_enable(&self, backup_found: bool) {
+        if backup_found {
+            CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
+            CLOUD_BACKUP_MANAGER.set_passkey_choice_prompt(CloudBackupPasskeyChoiceFlow::Enable);
+            return;
+        }
+
+        CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
+        CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
+        CLOUD_BACKUP_MANAGER.enable_cloud_backup_no_discovery();
     }
 
     fn maybe_advance_accepted_terms(&self) {
@@ -892,6 +911,15 @@ impl FlowState {
             (Self::BackupWallet(flow), OnboardingAction::OpenCloudBackup) => {
                 (Self::CloudBackup(CloudBackupFlow::CreatedWallet(flow)), TransitionCommand::None)
             }
+            (state @ Self::CloudBackup(_), OnboardingAction::BeginCloudBackupEnable) => (
+                state,
+                TransitionCommand::BeginCloudBackupEnable {
+                    backup_found: matches!(
+                        cloud_restore_discovery,
+                        CloudRestoreDiscovery::BackupFound(_)
+                    ),
+                },
+            ),
             (
                 Self::CloudBackup(CloudBackupFlow::CreatedWallet(mut flow)),
                 OnboardingAction::CloudBackupEnabled,
@@ -1888,6 +1916,52 @@ mod tests {
                     },
                 ..
             } => {
+                assert_eq!(id, wallet_id)
+            }
+            other => panic!("unexpected flow state: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn begin_cloud_backup_enable_uses_backup_found_discovery() {
+        let wallet_id = WalletId::new();
+        let mut flow = FlowState::CloudBackup(CloudBackupFlow::SoftwareImport {
+            wallet_id: wallet_id.clone(),
+        });
+        let mut restore_offer_allowed = false;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::BeginCloudBackupEnable,
+            CloudRestoreDiscovery::BackupFound(None),
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::BeginCloudBackupEnable { backup_found: true });
+        match flow {
+            FlowState::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id: id }) => {
+                assert_eq!(id, wallet_id)
+            }
+            other => panic!("unexpected flow state: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn begin_cloud_backup_enable_uses_no_discovery_when_no_backup_found() {
+        let wallet_id = WalletId::new();
+        let mut flow = FlowState::CloudBackup(CloudBackupFlow::HardwareImport {
+            wallet_id: wallet_id.clone(),
+        });
+        let mut restore_offer_allowed = false;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::BeginCloudBackupEnable,
+            CloudRestoreDiscovery::NoBackupFound,
+            &mut restore_offer_allowed,
+        );
+
+        assert_eq!(command, TransitionCommand::BeginCloudBackupEnable { backup_found: false });
+        match flow {
+            FlowState::CloudBackup(CloudBackupFlow::HardwareImport { wallet_id: id }) => {
                 assert_eq!(id, wallet_id)
             }
             other => panic!("unexpected flow state: {other:?}"),

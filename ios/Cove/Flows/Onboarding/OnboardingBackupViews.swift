@@ -174,6 +174,7 @@ struct OnboardingSecretWordsView: View {
 
 struct OnboardingCloudBackupStepView: View {
     let branch: OnboardingBranch?
+    let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
 
@@ -181,18 +182,21 @@ struct OnboardingCloudBackupStepView: View {
         switch branch {
         case .softwareImport:
             OnboardingSoftwareImportCloudBackupStepView(
+                onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: onSkip
             )
 
         case .hardware:
             OnboardingHardwareImportCloudBackupStepView(
+                onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: onSkip
             )
 
         case .newUser, .exchange, .softwareCreate, nil:
             OnboardingCloudBackupDetailsStepView(
+                onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: onSkip,
                 context: .standard
@@ -204,12 +208,14 @@ struct OnboardingCloudBackupStepView: View {
 private struct OnboardingSoftwareImportCloudBackupStepView: View {
     @State private var showingDetails = false
 
+    let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
 
     var body: some View {
         if showingDetails {
             OnboardingCloudBackupDetailsStepView(
+                onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: { showingDetails = false },
                 context: .standard
@@ -226,12 +232,14 @@ private struct OnboardingSoftwareImportCloudBackupStepView: View {
 private struct OnboardingHardwareImportCloudBackupStepView: View {
     @State private var showingDetails = false
 
+    let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
 
     var body: some View {
         if showingDetails {
             OnboardingCloudBackupDetailsStepView(
+                onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: { showingDetails = false },
                 context: .hardwareImport
@@ -248,8 +256,8 @@ private struct OnboardingHardwareImportCloudBackupStepView: View {
 private struct OnboardingCloudBackupDetailsStepView: View {
     @State private var backupManager = CloudBackupManager.shared
     @State private var didComplete = false
-    @State private var isStartingEnable = false
 
+    let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
     let context: CloudBackupEnableOnboardingContext
@@ -266,22 +274,35 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private var isBusy: Bool {
-        isStartingEnable || {
-            if case .enabling = backupManager.status { true } else { false }
-        }()
+        isEnablingCloudBackup
+    }
+
+    private var isEnablingCloudBackup: Bool {
+        if case .enabling = backupManager.status {
+            return true
+        }
+
+        return false
+    }
+
+    private var isPromptingForEnableChoice: Bool {
+        if case .passkeyChoice(.enable) = backupManager.promptIntent {
+            return true
+        }
+
+        return false
     }
 
     var body: some View {
         ZStack {
             CloudBackupEnableOnboardingView(
                 onEnable: {
-                    guard !isBusy else { return }
-                    isStartingEnable = true
-                    backupManager.dispatch(action: .enableCloudBackupNoDiscovery)
+                    guard !isBusy, !isPromptingForEnableChoice else { return }
+                    onEnable()
                 },
                 onCancel: onSkip,
                 message: onboardingMessage,
-                isBusy: isBusy,
+                isBusy: isBusy || isPromptingForEnableChoice,
                 context: context
             )
 
@@ -293,11 +314,6 @@ private struct OnboardingCloudBackupDetailsStepView: View {
             completeIfEnabled()
         }
         .onChange(of: backupManager.status, initial: true) { _, status in
-            if case .enabling = status {
-                isStartingEnable = false
-            } else if isStartingEnable {
-                isStartingEnable = false
-            }
             completeIfEnabled(status: status)
         }
         .onChange(of: backupManager.isConfigured) { _, _ in

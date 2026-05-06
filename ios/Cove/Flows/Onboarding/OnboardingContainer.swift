@@ -9,7 +9,8 @@ struct OnboardingContainer: View {
         CloudBackupPresentationHost(
             app: manager.app,
             auth: auth,
-            isCoverPresented: false
+            isCoverPresented: false,
+            presentationPolicy: .onboarding
         ) {
             stepView(for: manager.state.step)
                 .onChange(of: manager.isComplete) { _, complete in
@@ -120,6 +121,7 @@ struct OnboardingContainer: View {
         case .cloudBackup:
             OnboardingCloudBackupStepView(
                 branch: manager.state.branch,
+                onEnable: { manager.dispatch(.beginCloudBackupEnable) },
                 onEnabled: { manager.dispatch(.cloudBackupEnabled) },
                 onSkip: { manager.dispatch(.skipCloudBackup) }
             )

@@ -311,7 +311,7 @@ struct OtherBackupsSection: View {
             )
         ) {
             Button("Verify Current Passkey") {
-                manager.dispatch(action: .startVerification)
+                manager.startVerification()
             }
             Button("Done", role: .cancel) {}
         } message: {

@@ -31,11 +31,21 @@ struct CloudBackupPresentationContext: Equatable {
     var appHasAlert = false
     var appHasSheet = false
     var isViewingCloudBackup = false
+    var presentationPolicy = CloudBackupPresentationPolicy.requiresUnlockedAuth
 }
 
 enum CloudBackupPresentationBlocker: Hashable {
     case settingsLocalModal
     case cloudBackupDetailDialog
+}
+
+enum CloudBackupPresentationPolicy: Equatable {
+    case requiresUnlockedAuth
+    case onboarding
+
+    var requiresUnlockedAuth: Bool {
+        self == .requiresUnlockedAuth
+    }
 }
 
 @MainActor
@@ -159,7 +169,9 @@ final class CloudBackupPresentationCoordinator {
 
     private func isPromptPresentable(_ presentation: CloudBackupRootPresentation) -> Bool {
         guard context.scenePhase == .active else { return false }
-        guard context.isUnlocked else { return false }
+        guard !context.presentationPolicy.requiresUnlockedAuth || context.isUnlocked else {
+            return false
+        }
         guard !context.isCoverPresented else { return false }
         guard !context.appHasAlert else { return false }
         guard !context.appHasSheet else { return false }
@@ -204,6 +216,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
     let app: AppManager
     let auth: AuthManager
     let isCoverPresented: Bool
+    let presentationPolicy: CloudBackupPresentationPolicy
     let content: Content
 
     @State private var manager = CloudBackupManager.shared
@@ -213,11 +226,13 @@ struct CloudBackupPresentationHost<Content: View>: View {
         app: AppManager,
         auth: AuthManager,
         isCoverPresented: Bool,
+        presentationPolicy: CloudBackupPresentationPolicy = .requiresUnlockedAuth,
         @ViewBuilder content: () -> Content
     ) {
         self.app = app
         self.auth = auth
         self.isCoverPresented = isCoverPresented
+        self.presentationPolicy = presentationPolicy
         self.content = content()
     }
 
@@ -283,7 +298,8 @@ struct CloudBackupPresentationHost<Content: View>: View {
             isCoverPresented: isCoverPresented,
             appHasAlert: app.alertState != nil,
             appHasSheet: app.sheetState != nil,
-            isViewingCloudBackup: app.currentRoute.isEqual(routeToCheck: .settings(.cloudBackup))
+            isViewingCloudBackup: app.currentRoute.isEqual(routeToCheck: .settings(.cloudBackup)),
+            presentationPolicy: presentationPolicy
         )
     }
 
@@ -382,7 +398,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
                     },
                     onVerify: {
                         coordinator.dismissCurrentPresentation()
-                        manager.dispatch(action: .startVerification)
+                        manager.startVerification()
                     }
                 )
                 .interactiveDismissDisabled(true)

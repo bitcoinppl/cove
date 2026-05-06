@@ -46,7 +46,7 @@ struct VerificationSection: View {
                     .foregroundStyle(.secondary)
 
                 Button {
-                    manager.dispatch(action: .startVerification)
+                    manager.startVerification()
                 } label: {
                     Label("Verify Now", systemImage: "checkmark.shield")
                 }
@@ -81,7 +81,7 @@ struct VerificationSection: View {
                 .foregroundStyle(.secondary)
 
             Button {
-                manager.dispatch(action: .startVerification)
+                manager.startVerification()
             } label: {
                 Label("Run Full Verification", systemImage: "checkmark.shield")
             }
@@ -104,7 +104,7 @@ struct VerificationSection: View {
             .foregroundStyle(.secondary)
 
             Button {
-                manager.dispatch(action: .startVerification)
+                manager.startVerification()
             } label: {
                 Label("Verify Now", systemImage: "checkmark.shield")
             }
@@ -273,7 +273,7 @@ struct VerificationSection: View {
             }
 
             Button {
-                manager.dispatch(action: .startVerification)
+                manager.startVerification()
             } label: {
                 Label("Verify Again", systemImage: "checkmark.shield")
             }
@@ -309,7 +309,7 @@ struct VerificationSection: View {
 
     private var retryButton: some View {
         Button {
-            manager.dispatch(action: .startVerification)
+            manager.startVerification()
         } label: {
             Label("Try Again", systemImage: "arrow.clockwise")
         }
