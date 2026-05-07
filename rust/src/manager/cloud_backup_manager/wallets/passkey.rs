@@ -18,7 +18,9 @@ use super::UnpersistedPrfKey;
 use crate::manager::cloud_backup_manager::{CloudBackupError, PASSKEY_RP_ID};
 
 const PASSKEY_DISPLAY_NAME: &str = "Cove Cloud Backup";
-const PASSKEY_SUFFIX_ALPHABET: &[u8; 32] = b"23456789ABCDEFGHIJKMNPQRSTUVWXYZ";
+const PASSKEY_SUFFIX_ALPHABET: &[u8; 36] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const PASSKEY_SUFFIX_EPOCH_SECONDS: i64 = 1_767_225_600;
+const PASSKEY_SUFFIX_MIN_LENGTH: usize = 4;
 
 pub(crate) async fn delay_before_new_passkey_auth() {
     let delay = Duration::from_secs(3);
@@ -314,23 +316,39 @@ impl PasskeyMaterialAcquirer {
 fn passkey_registration_user() -> PasskeyRegistrationUser {
     let id = rand::rng().random::<[u8; 16]>().to_vec();
     PasskeyRegistrationUser {
-        name: format!("{PASSKEY_DISPLAY_NAME} ({})", passkey_name_suffix(&id)),
+        name: format!("{PASSKEY_DISPLAY_NAME} ({})", passkey_name_suffix()),
         display_name: PASSKEY_DISPLAY_NAME.into(),
         id,
     }
 }
 
-fn passkey_name_suffix(user_id: &[u8]) -> String {
-    let mut bytes = [0u8; 3];
-    for (slot, byte) in bytes.iter_mut().zip(user_id.iter()) {
-        *slot = *byte;
+fn passkey_name_suffix() -> String {
+    passkey_name_suffix_for_timestamp(jiff::Timestamp::now())
+}
+
+fn passkey_name_suffix_for_timestamp(timestamp: jiff::Timestamp) -> String {
+    let seconds_since_epoch = timestamp.as_second().saturating_sub(PASSKEY_SUFFIX_EPOCH_SECONDS);
+
+    base36_passkey_suffix(u64::try_from(seconds_since_epoch).unwrap_or(0))
+}
+
+fn base36_passkey_suffix(mut value: u64) -> String {
+    let mut encoded = Vec::new();
+    loop {
+        let index = usize::try_from(value % 36).unwrap_or(0);
+        encoded.push(PASSKEY_SUFFIX_ALPHABET[index] as char);
+        value /= 36;
+
+        if value == 0 {
+            break;
+        }
     }
 
-    let value = (u32::from(bytes[0]) << 16) | (u32::from(bytes[1]) << 8) | u32::from(bytes[2]);
-    [15, 10, 5, 0]
-        .into_iter()
-        .map(|shift| PASSKEY_SUFFIX_ALPHABET[((value >> shift) & 0x1f) as usize] as char)
-        .collect()
+    while encoded.len() < PASSKEY_SUFFIX_MIN_LENGTH {
+        encoded.push('0');
+    }
+
+    encoded.into_iter().rev().collect()
 }
 
 fn passkey_provider_hint(registration: PasskeyRegistrationResult) -> PasskeyProviderHint {
@@ -580,4 +598,34 @@ fn prf_output_to_key(prf_output: Vec<u8>) -> Result<[u8; 32], CloudBackupError> 
 
 fn random_challenge() -> Vec<u8> {
     rand::rng().random::<[u8; 32]>().to_vec()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn passkey_suffix_encodes_seconds_since_2026_utc_epoch() {
+        assert_eq!(base36_passkey_suffix(0), "0000");
+        assert_eq!(base36_passkey_suffix(1), "0001");
+        assert_eq!(base36_passkey_suffix(35), "000Z");
+        assert_eq!(base36_passkey_suffix(36), "0010");
+    }
+
+    #[test]
+    fn passkey_suffix_uses_january_2026_epoch() {
+        let epoch = jiff::Timestamp::from_second(PASSKEY_SUFFIX_EPOCH_SECONDS).unwrap();
+        let after_epoch = jiff::Timestamp::from_second(PASSKEY_SUFFIX_EPOCH_SECONDS + 1).unwrap();
+
+        assert_eq!(passkey_name_suffix_for_timestamp(epoch), "0000");
+        assert_eq!(passkey_name_suffix_for_timestamp(after_epoch), "0001");
+    }
+
+    #[test]
+    fn passkey_suffix_is_deterministic_for_later_timestamp() {
+        let timestamp =
+            jiff::Timestamp::from_second(PASSKEY_SUFFIX_EPOCH_SECONDS + 12_345).unwrap();
+
+        assert_eq!(passkey_name_suffix_for_timestamp(timestamp), "09IX");
+    }
 }
