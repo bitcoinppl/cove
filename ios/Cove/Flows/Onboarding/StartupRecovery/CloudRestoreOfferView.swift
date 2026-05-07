@@ -152,12 +152,6 @@ struct CloudRestoreOfferView: View {
                         .font(OnboardingRecoveryTypography.subheadline.weight(.semibold))
                         .foregroundStyle(.coveLightGray.opacity(0.72))
 
-                    providerDetailItem(
-                        icon: "person.badge.key",
-                        label: "LOOK FOR",
-                        value: passkeyDisplayName(providerHint)
-                    )
-
                     if let providerName = providerHint.providerName {
                         HStack(alignment: .center, spacing: 14) {
                             providerDetailItem(

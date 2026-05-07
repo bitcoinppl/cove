@@ -497,13 +497,6 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
                     fontWeight = FontWeight.SemiBold,
                 )
 
-                ProviderDetailItem(
-                    icon = Icons.Default.Person,
-                    label = "LOOK FOR",
-                    value = providerHint.passkeyDisplayName(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
                 val providerName = providerHint.providerName
                 if (providerName != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
