@@ -25,6 +25,7 @@ use flume::{Receiver, Sender};
 use futures::TryStreamExt as _;
 use futures::stream::{self, StreamExt as _};
 use parking_lot::RwLock;
+use sha2::{Digest as _, Sha256};
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
@@ -2348,6 +2349,10 @@ fn reinit_database_after_catastrophic_recovery() -> Result<(), CatastrophicRecov
 #[uniffi::export]
 pub fn cspp_master_key_record_id() -> String {
     MASTER_KEY_RECORD_ID.to_string()
+}
+
+pub(crate) fn master_key_wrapper_revision_hash(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
 }
 
 #[uniffi::export]

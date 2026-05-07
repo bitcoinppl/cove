@@ -13,7 +13,7 @@ use crate::manager::cloud_backup_manager::wallets::{
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID, RustCloudBackupManager,
-    cspp_master_key_record_id,
+    cspp_master_key_record_id, master_key_wrapper_revision_hash,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,6 +162,7 @@ impl WrapperRepairOperation {
 
         let backup_json =
             serde_json::to_vec(&encrypted_backup).map_err_str(CloudBackupError::Internal)?;
+        let master_key_wrapper_revision = master_key_wrapper_revision_hash(&backup_json);
 
         self.keychain
             .save_passkey(&credentials.credential_id, credentials.prf_salt)
@@ -184,7 +185,7 @@ impl WrapperRepairOperation {
             self.namespace.as_str(),
             None,
             cspp_master_key_record_id(),
-            "master-key-wrapper".into(),
+            master_key_wrapper_revision,
             jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
         )?;
 

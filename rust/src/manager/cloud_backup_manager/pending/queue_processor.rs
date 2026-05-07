@@ -14,6 +14,7 @@ use crate::database::cloud_backup::{
 use crate::manager::cloud_backup_manager::wallets::WalletBackupReader;
 use crate::manager::cloud_backup_manager::{
     PendingUploadVerificationState, RustCloudBackupManager, SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
+    master_key_wrapper_revision_hash,
 };
 
 enum BlobCheckResult {
@@ -182,16 +183,30 @@ impl PendingUploadVerifier {
         current: &CloudBlobUploadedPendingConfirmationState,
     ) -> BlobCheckResult {
         if sync_state.wallet_id.is_none() {
-            return self.check_master_key_wrapper(&sync_state.namespace_id).await;
+            return self.check_master_key_wrapper(&sync_state.namespace_id, current).await;
         }
 
         self.check_wallet_blob(sync_state, current).await
     }
 
-    async fn check_master_key_wrapper(&self, namespace_id: &str) -> BlobCheckResult {
+    async fn check_master_key_wrapper(
+        &self,
+        namespace_id: &str,
+        current: &CloudBlobUploadedPendingConfirmationState,
+    ) -> BlobCheckResult {
         let cloud = CloudStorage::global_silent_client();
         match cloud.download_master_key_backup(namespace_id.to_string()).await {
-            Ok(_) => BlobCheckResult::Confirmed,
+            Ok(bytes) => {
+                let remote_revision = master_key_wrapper_revision_hash(&bytes);
+                if remote_revision == current.revision_hash {
+                    BlobCheckResult::Confirmed
+                } else {
+                    BlobCheckResult::terminal_failure(format!(
+                        "master key wrapper hash mismatch expected_revision={} actual_revision={remote_revision}",
+                        current.revision_hash
+                    ))
+                }
+            }
             Err(CloudStorageError::NotFound(_)) => BlobCheckResult::NotYetUploaded,
             Err(error) => BlobCheckResult::cloud_storage_failure(error),
         }

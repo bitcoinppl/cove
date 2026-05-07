@@ -1429,6 +1429,7 @@ impl RustCloudBackupManager {
         .map_err_str(CloudBackupError::Crypto)?;
         let master_json =
             serde_json::to_vec(&encrypted_master).map_err_str(CloudBackupError::Internal)?;
+        let master_key_wrapper_revision = super::master_key_wrapper_revision_hash(&master_json);
 
         info!("Enable: uploading master key");
         cloud.upload_master_key_backup(namespace_id.clone(), master_json).await.map_err(
@@ -1458,7 +1459,7 @@ impl RustCloudBackupManager {
             &namespace_id,
             None,
             super::cspp_master_key_record_id(),
-            "master-key-wrapper".into(),
+            master_key_wrapper_revision,
             uploaded_at,
         )?;
 
@@ -1814,6 +1815,7 @@ mod tests {
             CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY,
             CloudBackupKeychainError,
         },
+        master_key_wrapper_revision_hash,
     };
     use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
     use crate::manager::wallet_manager::RustWalletManager;
@@ -1853,7 +1855,7 @@ mod tests {
         RustCloudBackupManager::init()
     }
 
-    fn seed_verifiable_cloud_master_key(globals: &TestGlobals) {
+    fn seed_verifiable_cloud_master_key(globals: &TestGlobals) -> String {
         let prf_key = [7u8; 32];
         let prf_salt = [9u8; 32];
         let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
@@ -1865,13 +1867,16 @@ mod tests {
             cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &prf_key, &prf_salt)
                 .unwrap();
 
-        globals.cloud.set_master_key_backup(namespace, serde_json::to_vec(&encrypted).unwrap());
+        let master_json = serde_json::to_vec(&encrypted).unwrap();
+        let revision_hash = master_key_wrapper_revision_hash(&master_json);
+        globals.cloud.set_master_key_backup(namespace, master_json);
         CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
         globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
             prf_output: prf_key.to_vec(),
             credential_id: vec![1, 2, 3],
         }));
         globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+        revision_hash
     }
 
     fn global_manager() -> Arc<RustCloudBackupManager> {
@@ -1879,7 +1884,10 @@ mod tests {
         CLOUD_BACKUP_MANAGER.clone()
     }
 
-    fn persist_pending_master_key_confirmation(namespace_id: String) {
+    fn persist_pending_master_key_confirmation(
+        namespace_id: String,
+        revision_hash: impl Into<String>,
+    ) {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState {
@@ -1888,7 +1896,7 @@ mod tests {
                 record_id: crate::manager::cloud_backup_manager::cspp_master_key_record_id(),
                 state: PersistedCloudBlobState::UploadedPendingConfirmation(
                     CloudBlobUploadedPendingConfirmationState {
-                        revision_hash: "master-key-wrapper".into(),
+                        revision_hash: revision_hash.into(),
                         uploaded_at: jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
                         attempt_count: 0,
                         last_checked_at: None,
@@ -3013,6 +3021,7 @@ mod tests {
         reset_cloud_backup_test_state(&manager, globals);
         CONNECTIVITY_MANAGER.set_connection_state(true);
         let master_key = cove_cspp::master_key::MasterKey::generate();
+        cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
         manager
             .replace_pending_enable_session(
                 PendingEnableSession::awaiting_saved_passkey_confirmation(
@@ -3040,6 +3049,17 @@ mod tests {
 
         assert_eq!(globals.passkey.authenticate_count(), 1);
         assert!(manager.take_pending_enable_session().await.is_none());
+
+        let authenticate_count = globals.passkey.authenticate_count();
+        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+
+        assert!(!has_more_pending);
+        assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
+        assert_eq!(
+            manager.state().pending_upload_verification,
+            PendingUploadVerificationState::Idle
+        );
+        assert!(matches!(manager.state().verification, VerificationState::Verified(_)));
     }
 
     #[tokio::test(flavor = "current_thread", start_paused = true)]
@@ -4733,10 +4753,12 @@ mod tests {
         configure_enabled_cloud_backup(&manager, globals, 0);
 
         let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
-        persist_pending_master_key_confirmation(namespace_id.clone());
+        let master_json = vec![1, 2, 3];
+        let master_revision = master_key_wrapper_revision_hash(&master_json);
+        persist_pending_master_key_confirmation(namespace_id.clone(), master_revision);
         assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading);
 
-        globals.cloud.set_master_key_backup(namespace_id, vec![1, 2, 3]);
+        globals.cloud.set_master_key_backup(namespace_id, master_json);
 
         let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
 
@@ -4765,7 +4787,7 @@ mod tests {
         configure_enabled_cloud_backup(&manager, globals, 0);
 
         let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
-        persist_pending_master_key_confirmation(namespace_id.clone());
+        persist_pending_master_key_confirmation(namespace_id.clone(), "pending");
         globals.cloud.fail_master_key_download_authorization_required(
             namespace_id,
             "authorization required",
@@ -4798,7 +4820,7 @@ mod tests {
         let metadata = xpub_only_wallet_metadata();
         persist_xpub_wallets(vec![metadata]);
         let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
-        persist_pending_master_key_confirmation(namespace_id);
+        persist_pending_master_key_confirmation(namespace_id, "pending");
 
         assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading,);
 
@@ -4834,7 +4856,7 @@ mod tests {
             .delete_wallet_backup(namespace_id.clone(), cspp_master_key_record_id())
             .await
             .unwrap();
-        persist_pending_master_key_confirmation(namespace_id);
+        persist_pending_master_key_confirmation(namespace_id, "pending");
 
         assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading,);
 
@@ -5660,7 +5682,7 @@ mod tests {
         configure_enabled_cloud_backup(&manager, globals, 0);
 
         let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
-        persist_pending_master_key_confirmation(namespace_id.clone());
+        persist_pending_master_key_confirmation(namespace_id.clone(), "pending");
         manager.replace_pending_verification_completion(PendingVerificationCompletion::new(
             DeepVerificationReport {
                 master_key_wrapper_repaired: false,
@@ -5741,13 +5763,56 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn pending_upload_verification_fails_master_key_wrapper_hash_mismatch() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+        let expected_master_json = vec![1, 2, 3];
+        let expected_revision = master_key_wrapper_revision_hash(&expected_master_json);
+        persist_pending_master_key_confirmation(namespace_id.clone(), expected_revision);
+        globals.cloud.set_master_key_backup(namespace_id.clone(), vec![4, 5, 6]);
+        manager.replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace_id,
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        ));
+
+        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+
+        assert!(!has_more_pending);
+        assert!(manager.pending_verification_completion().is_none());
+        assert_eq!(
+            manager.state().pending_upload_verification,
+            PendingUploadVerificationState::Idle
+        );
+        match manager.state().verification {
+            VerificationState::Failed(DeepVerificationFailure::Retry { message, .. }) => {
+                assert!(message.contains("master key wrapper hash mismatch"));
+            }
+            other => panic!("expected failed verification, got {other:?}"),
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
         let manager = init_manager();
         configure_enabled_cloud_backup(&manager, globals, 1);
-        seed_verifiable_cloud_master_key(globals);
+        let master_revision = seed_verifiable_cloud_master_key(globals);
 
         let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
         let metadata = xpub_only_wallet_metadata();
@@ -5773,7 +5838,7 @@ mod tests {
             namespace_id.clone(),
             vec![wallet_filename_from_record_id(&record_id)],
         );
-        persist_pending_master_key_confirmation(namespace_id.clone());
+        persist_pending_master_key_confirmation(namespace_id.clone(), master_revision);
         manager
             .mark_blob_uploaded_pending_confirmation(
                 &namespace_id,

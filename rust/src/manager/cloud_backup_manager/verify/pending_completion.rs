@@ -13,7 +13,7 @@ use super::{
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, PendingVerificationUpload,
+    CloudBackupDetail, PendingVerificationUpload, master_key_wrapper_revision_hash,
     wallets::{WalletBackupLookup, WalletBackupReader},
 };
 
@@ -177,7 +177,12 @@ impl RustCloudBackupManager {
         for upload in completion.uploads() {
             match upload {
                 PendingVerificationUpload::MasterKeyWrapper => {
-                    self.verify_pending_master_key_wrapper(&completion, &master_key).await?;
+                    self.verify_pending_master_key_wrapper(
+                        &completion,
+                        upload,
+                        sync_states_by_record_id.get(upload.record_id()),
+                    )
+                    .await?;
                 }
                 PendingVerificationUpload::Wallet { .. } => {
                     match self
@@ -209,25 +214,30 @@ impl RustCloudBackupManager {
     async fn verify_pending_master_key_wrapper(
         &self,
         completion: &PendingVerificationCompletion,
-        local_master_key: &cove_cspp::master_key::MasterKey,
+        upload: &PendingVerificationUpload,
+        sync_state: Option<&PersistedCloudBlobState>,
     ) -> Result<(), Box<DeepVerificationFailure>> {
-        let recovered_master_key = self
-            .recover_local_master_key_from_cloud_without_discovery(
-                completion.namespace_id(),
-                "repaired master key wrapper could not be verified",
-            )
+        let expected_revision = sync_state
+            .and_then(PersistedCloudBlobState::revision_hash)
+            .unwrap_or_else(|| upload.expected_revision());
+
+        let bytes = CloudStorage::global_silent_client()
+            .download_master_key_backup(completion.namespace_id().to_string())
             .await
             .map_err(|error| {
                 Box::new(self.pending_verification_failure(completion, error.to_string()))
             })?;
+        let actual_revision = master_key_wrapper_revision_hash(&bytes);
 
-        if recovered_master_key.as_bytes() == local_master_key.as_bytes() {
+        if actual_revision == expected_revision {
             return Ok(());
         }
 
         Err(Box::new(self.pending_verification_failure(
             completion,
-            "repaired master key wrapper decrypted the wrong master key",
+            format!(
+                "master key wrapper hash mismatch expected_revision={expected_revision} actual_revision={actual_revision}"
+            ),
         )))
     }
 
