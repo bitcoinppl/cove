@@ -86,6 +86,11 @@ enum CloudBackupVerificationFeedback: Equatable {
     case failureAlert(title: String, message: String)
 }
 
+private struct CloudBackupSuccessFloater: Identifiable, Equatable {
+    let id = UUID()
+    let text: String
+}
+
 func cloudBackupVerificationFeedback(
     for presentation: CloudBackupVerificationPresentation
 ) -> CloudBackupVerificationFeedback? {
@@ -284,6 +289,8 @@ struct CloudBackupPresentationHost<Content: View>: View {
 
     @State private var manager = CloudBackupManager.shared
     @State private var coordinator = CloudBackupPresentationCoordinator()
+    @State private var successFloater: CloudBackupSuccessFloater?
+    @State private var successFloaterDismissTask: Task<Void, Never>?
 
     init(
         app: AppManager,
@@ -435,14 +442,55 @@ struct CloudBackupPresentationHost<Content: View>: View {
         return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey named Cove Cloud Backup (\(hint.nameSuffix)), use that passkey instead."
     }
 
+    private func showSuccessFloater(_ text: String) {
+        successFloaterDismissTask?.cancel()
+
+        let floater = CloudBackupSuccessFloater(text: text)
+        successFloater = floater
+        successFloaterDismissTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                dismissSuccessFloater(id: floater.id)
+            }
+        }
+    }
+
+    private func dismissSuccessFloater(id: UUID? = nil) {
+        if let id, successFloater?.id != id {
+            return
+        }
+
+        successFloaterDismissTask?.cancel()
+        successFloaterDismissTask = nil
+        successFloater = nil
+    }
+
+    @ViewBuilder
+    private var successFloaterOverlay: some View {
+        if let successFloater {
+            FloaterPopupView(text: successFloater.text)
+                .padding(.top, 14)
+                .gesture(
+                    DragGesture()
+                        .onEnded { gesture in
+                            if abs(gesture.translation.width) > 40 || abs(gesture.translation.height) > 40 {
+                                dismissSuccessFloater(id: successFloater.id)
+                            }
+                        }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(1)
+        }
+    }
+
     private func handleVerificationPresentation(_ presentation: CloudBackupVerificationPresentation) {
         guard let feedback = cloudBackupVerificationFeedback(for: presentation) else { return }
 
         switch feedback {
         case let .successFloater(text):
-            Task {
-                await FloaterPopup(text: text).dismissAfter(2).present()
-            }
+            showSuccessFloater(text)
         case let .failureAlert(title, message):
             app.alertState = .init(.general(title: title, message: message))
         }
@@ -450,6 +498,10 @@ struct CloudBackupPresentationHost<Content: View>: View {
 
     var body: some View {
         content
+            .overlay(alignment: .top) {
+                successFloaterOverlay
+            }
+            .animation(.easeInOut(duration: 0.2), value: successFloater)
             .environment(coordinator)
             .onChange(of: presentationContext, initial: true) { _, context in
                 coordinator.update(context: context)
