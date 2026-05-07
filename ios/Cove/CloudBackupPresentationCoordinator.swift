@@ -323,9 +323,15 @@ struct CloudBackupPresentationHost<Content: View>: View {
 
         switch (flow, existing) {
         case (.enable, true):
-            manager.dispatch(action: .enableCloudBackup)
+            manager.dispatch(action: .enableCloudBackup(.init(
+                savedPasskeyConfirmation: .manual,
+                verificationSource: .rootPrompt
+            )))
         case (.enable, false):
-            manager.dispatch(action: .enableCloudBackupNoDiscovery)
+            manager.dispatch(action: .enableCloudBackupNoDiscovery(.init(
+                savedPasskeyConfirmation: .manual,
+                verificationSource: .rootPrompt
+            )))
         case (.repairPasskey, true):
             manager.dispatch(action: .repairPasskey)
         case (.repairPasskey, false):
@@ -362,7 +368,10 @@ struct CloudBackupPresentationHost<Content: View>: View {
             ) {
                 Button("Create New Backup", role: .destructive) {
                     coordinator.dismissCurrentPresentation()
-                    manager.dispatch(action: .enableCloudBackupForceNew)
+                    manager.dispatch(action: .enableCloudBackupForceNew(.init(
+                        savedPasskeyConfirmation: .manual,
+                        verificationSource: .rootPrompt
+                    )))
                 }
                 Button("Cancel", role: .cancel) {
                     coordinator.dismissCurrentPresentation()
@@ -412,7 +421,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
                     },
                     onVerify: {
                         coordinator.dismissCurrentPresentation()
-                        manager.startVerification()
+                        manager.startVerification(source: .rootPrompt)
                     }
                 )
                 .interactiveDismissDisabled(true)

@@ -37,19 +37,23 @@ impl CloudBackupVerificationCoordinator {
         }
     }
 
-    pub(crate) fn begin_background_confirmation() -> CloudBackupVerificationEffect {
+    pub(crate) fn begin_background_confirmation(
+        source: CloudBackupVerificationSource,
+    ) -> CloudBackupVerificationEffect {
         CloudBackupVerificationEffect {
-            presentation: Some(CloudBackupVerificationPresentation::BackgroundConfirming),
+            presentation: Some(CloudBackupVerificationPresentation::BackgroundConfirming(source)),
             pending_upload_verification: Some(PendingUploadVerificationState::Confirming),
             verification: Some(VerificationState::Idle),
             ..CloudBackupVerificationEffect::default()
         }
     }
 
-    pub(crate) fn block_background_on_authorization() -> CloudBackupVerificationEffect {
+    pub(crate) fn block_background_on_authorization(
+        source: CloudBackupVerificationSource,
+    ) -> CloudBackupVerificationEffect {
         CloudBackupVerificationEffect {
             presentation: Some(
-                CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization,
+                CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization(source),
             ),
             pending_upload_verification: Some(
                 PendingUploadVerificationState::BlockedOnAuthorization,
@@ -60,15 +64,18 @@ impl CloudBackupVerificationCoordinator {
 
     pub(crate) fn pending_upload_state(
         pending: PendingUploadVerificationState,
+        source: CloudBackupVerificationSource,
     ) -> CloudBackupVerificationEffect {
         match pending {
             PendingUploadVerificationState::Idle => CloudBackupVerificationEffect {
                 pending_upload_verification: Some(PendingUploadVerificationState::Idle),
                 ..CloudBackupVerificationEffect::default()
             },
-            PendingUploadVerificationState::Confirming => Self::begin_background_confirmation(),
+            PendingUploadVerificationState::Confirming => {
+                Self::begin_background_confirmation(source)
+            }
             PendingUploadVerificationState::BlockedOnAuthorization => {
-                Self::block_background_on_authorization()
+                Self::block_background_on_authorization(source)
             }
         }
     }
@@ -126,10 +133,12 @@ impl CloudBackupVerificationCoordinator {
             CloudBackupVerificationPresentation::ManualVerifying { source }
             | CloudBackupVerificationPresentation::Completed { source }
             | CloudBackupVerificationPresentation::Failed { source, .. } => *source,
+            CloudBackupVerificationPresentation::BackgroundConfirming(source)
+            | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization(source) => {
+                *source
+            }
             CloudBackupVerificationPresentation::Hidden
-            | CloudBackupVerificationPresentation::NeedsDecision { .. }
-            | CloudBackupVerificationPresentation::BackgroundConfirming
-            | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization => {
+            | CloudBackupVerificationPresentation::NeedsDecision { .. } => {
                 CloudBackupVerificationSource::Settings
             }
         }
@@ -169,11 +178,15 @@ mod tests {
 
     #[test]
     fn background_confirmation_clears_interactive_verification() {
-        let effect = CloudBackupVerificationCoordinator::begin_background_confirmation();
+        let effect = CloudBackupVerificationCoordinator::begin_background_confirmation(
+            CloudBackupVerificationSource::Onboarding,
+        );
 
         assert_eq!(
             effect.presentation,
-            Some(CloudBackupVerificationPresentation::BackgroundConfirming)
+            Some(CloudBackupVerificationPresentation::BackgroundConfirming(
+                CloudBackupVerificationSource::Onboarding,
+            ))
         );
         assert_eq!(
             effect.pending_upload_verification,
@@ -184,11 +197,15 @@ mod tests {
 
     #[test]
     fn authorization_block_uses_background_presentation() {
-        let effect = CloudBackupVerificationCoordinator::block_background_on_authorization();
+        let effect = CloudBackupVerificationCoordinator::block_background_on_authorization(
+            CloudBackupVerificationSource::RootPrompt,
+        );
 
         assert_eq!(
             effect.presentation,
-            Some(CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization)
+            Some(CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization(
+                CloudBackupVerificationSource::RootPrompt,
+            ))
         );
         assert_eq!(
             effect.pending_upload_verification,
@@ -231,12 +248,14 @@ mod tests {
     }
 
     #[test]
-    fn current_source_defaults_background_to_settings() {
+    fn current_source_preserves_background_source() {
         assert_eq!(
             CloudBackupVerificationCoordinator::current_source(
-                &CloudBackupVerificationPresentation::BackgroundConfirming,
+                &CloudBackupVerificationPresentation::BackgroundConfirming(
+                    CloudBackupVerificationSource::Onboarding,
+                ),
             ),
-            CloudBackupVerificationSource::Settings
+            CloudBackupVerificationSource::Onboarding
         );
     }
 }

@@ -59,8 +59,8 @@ impl CloudBackupPromptState {
             }
             CloudBackupVerificationPresentation::Hidden
             | CloudBackupVerificationPresentation::ManualVerifying { .. }
-            | CloudBackupVerificationPresentation::BackgroundConfirming
-            | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization
+            | CloudBackupVerificationPresentation::BackgroundConfirming(_)
+            | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization(_)
             | CloudBackupVerificationPresentation::Completed { .. }
             | CloudBackupVerificationPresentation::Failed { .. } => CloudBackupPromptIntent::None,
         }
@@ -140,7 +140,9 @@ mod tests {
     fn background_verification_suppresses_verification_prompt() {
         let prompt_state = CloudBackupPromptState::default();
         let state = CloudBackupState {
-            verification_presentation: CloudBackupVerificationPresentation::BackgroundConfirming,
+            verification_presentation: CloudBackupVerificationPresentation::BackgroundConfirming(
+                CloudBackupVerificationSource::Settings,
+            ),
             ..CloudBackupState::default()
         };
 

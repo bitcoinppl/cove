@@ -51,8 +51,8 @@ pub enum CloudBackupVerificationPresentation {
     ManualVerifying {
         source: CloudBackupVerificationSource,
     },
-    BackgroundConfirming,
-    BackgroundBlockedOnAuthorization,
+    BackgroundConfirming(CloudBackupVerificationSource),
+    BackgroundBlockedOnAuthorization(CloudBackupVerificationSource),
     /// Completion feedback should match the source instead of reopening the sheet
     Completed {
         source: CloudBackupVerificationSource,
@@ -107,18 +107,18 @@ impl RustCloudBackupManager {
     pub fn dispatch(&self, action: Action) {
         use Action as A;
         match action {
-            A::EnableCloudBackup => {
+            A::EnableCloudBackup(context) => {
                 self.clear_passkey_choice_prompt();
-                self.enable_cloud_backup();
+                self.enable_cloud_backup(context);
             }
-            A::EnableCloudBackupForceNew => {
+            A::EnableCloudBackupForceNew(context) => {
                 self.clear_existing_backup_found_prompt();
-                self.enable_cloud_backup_force_new();
+                self.enable_cloud_backup_force_new(context);
             }
-            A::EnableCloudBackupNoDiscovery => {
+            A::EnableCloudBackupNoDiscovery(context) => {
                 self.clear_existing_backup_found_prompt();
                 self.clear_passkey_choice_prompt();
-                self.enable_cloud_backup_no_discovery();
+                self.enable_cloud_backup_no_discovery(context);
             }
             A::ConfirmSavedPasskey => {
                 self.confirm_saved_passkey();
@@ -130,8 +130,8 @@ impl RustCloudBackupManager {
             A::DismissMissingPasskeyReminder => self.dismiss_missing_passkey_prompt(),
             A::RestoreFromCloudBackup => self.restore_from_cloud_backup(),
             A::CancelRestore => self.cancel_restore(),
-            A::StartVerification { source } => self.start_verification(source),
-            A::StartVerificationDiscoverable { source } => {
+            A::StartVerification(source) => self.start_verification(source),
+            A::StartVerificationDiscoverable(source) => {
                 self.start_verification_discoverable(source);
             }
             A::DismissVerificationPrompt => self.dismiss_verification_prompt(),
@@ -151,10 +151,10 @@ impl RustCloudBackupManager {
             }
             A::SyncUnsynced => CLOUD_BACKUP_MANAGER.clone().spawn_sync(),
             A::FetchCloudOnly => CLOUD_BACKUP_MANAGER.clone().spawn_fetch_cloud_only(),
-            A::RestoreCloudWallet { record_id } => {
+            A::RestoreCloudWallet(record_id) => {
                 CLOUD_BACKUP_MANAGER.clone().spawn_restore_cloud_wallet(record_id);
             }
-            A::DeleteCloudWallet { record_id } => {
+            A::DeleteCloudWallet(record_id) => {
                 CLOUD_BACKUP_MANAGER.clone().spawn_delete_cloud_wallet(record_id);
             }
             A::RecoverOtherBackups => CLOUD_BACKUP_MANAGER.clone().spawn_recover_other_backups(),
@@ -200,7 +200,7 @@ impl RustCloudBackupManager {
     }
 
     fn spawn_recovery(self: std::sync::Arc<Self>, action: RecoveryAction) {
-        let operation = CloudBackupOperation::Recovery { action };
+        let operation = CloudBackupOperation::Recovery(action);
         send!(self.supervisor.start_operation(operation, None));
     }
 
@@ -217,14 +217,14 @@ impl RustCloudBackupManager {
         send!(self.supervisor.start_operation(CloudBackupOperation::FetchCloudOnly, None));
     }
 
-    fn spawn_restore_cloud_wallet(self: std::sync::Arc<Self>, record_id: String) {
+    fn spawn_restore_cloud_wallet(self: std::sync::Arc<Self>, record_id: super::RecordId) {
         let operation = CloudBackupOperation::RestoreCloudWallet;
-        send!(self.supervisor.start_operation(operation, Some(record_id)));
+        send!(self.supervisor.start_operation(operation, Some(record_id.into())));
     }
 
-    fn spawn_delete_cloud_wallet(self: std::sync::Arc<Self>, record_id: String) {
+    fn spawn_delete_cloud_wallet(self: std::sync::Arc<Self>, record_id: super::RecordId) {
         let operation = CloudBackupOperation::DeleteCloudWallet;
-        send!(self.supervisor.start_operation(operation, Some(record_id)));
+        send!(self.supervisor.start_operation(operation, Some(record_id.into())));
     }
 
     fn spawn_recover_other_backups(self: std::sync::Arc<Self>) {
@@ -299,7 +299,9 @@ impl RustCloudBackupManager {
                     self.set_detail(Some(detail));
                 }
                 self.apply_verification_effect(
-                    CloudBackupVerificationCoordinator::begin_background_confirmation(),
+                    CloudBackupVerificationCoordinator::begin_background_confirmation(
+                        self.current_verification_source(),
+                    ),
                 );
             }
             DeepVerificationResult::PasskeyConfirmed(detail) => {

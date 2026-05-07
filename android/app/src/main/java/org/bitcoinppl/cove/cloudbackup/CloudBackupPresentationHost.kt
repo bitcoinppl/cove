@@ -55,6 +55,7 @@ import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceFlow
 import org.bitcoinppl.cove_core.CloudBackupPromptIntent
+import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
@@ -361,7 +362,11 @@ fun CloudBackupPresentationHost(
                     TextButton(
                         onClick = {
                             coordinator.dismissCurrentPresentation()
-                            manager.dispatch(CloudBackupManagerAction.EnableCloudBackupForceNew)
+                            manager.dispatch(
+                                manualEnableCloudBackupForceNew(
+                                    CloudBackupVerificationSource.ROOT_PROMPT,
+                                ),
+                            )
                         },
                     ) { Text("Create New Backup") }
                 },
@@ -394,7 +399,11 @@ fun CloudBackupPresentationHost(
                                 coordinator.dismissCurrentPresentation()
                                 when (presentation.flow) {
                                     CloudBackupPasskeyChoiceFlow.ENABLE ->
-                                        manager.dispatch(CloudBackupManagerAction.EnableCloudBackup)
+                                        manager.dispatch(
+                                            manualEnableCloudBackup(
+                                                CloudBackupVerificationSource.ROOT_PROMPT,
+                                            ),
+                                        )
                                     CloudBackupPasskeyChoiceFlow.REPAIR_PASSKEY ->
                                         manager.dispatch(CloudBackupManagerAction.RepairPasskey)
                                 }
@@ -405,7 +414,11 @@ fun CloudBackupPresentationHost(
                                 coordinator.dismissCurrentPresentation()
                                 when (presentation.flow) {
                                     CloudBackupPasskeyChoiceFlow.ENABLE ->
-                                        manager.dispatch(CloudBackupManagerAction.EnableCloudBackupNoDiscovery)
+                                        manager.dispatch(
+                                            manualEnableCloudBackupNoDiscovery(
+                                                CloudBackupVerificationSource.ROOT_PROMPT,
+                                            ),
+                                        )
                                     CloudBackupPasskeyChoiceFlow.REPAIR_PASSKEY ->
                                         manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery)
                                 }
@@ -464,7 +477,11 @@ fun CloudBackupPresentationHost(
                     manager.dispatch(CloudBackupManagerAction.DismissVerificationPrompt)
                 },
                 onVerify = {
-                    manager.dispatch(CloudBackupManagerAction.StartVerification)
+                    manager.dispatch(
+                        CloudBackupManagerAction.StartVerification(
+                            CloudBackupVerificationSource.ROOT_PROMPT,
+                        ),
+                    )
                 },
             )
         }

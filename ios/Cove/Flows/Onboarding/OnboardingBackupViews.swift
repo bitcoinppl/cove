@@ -284,8 +284,10 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     private var isBusy: Bool {
         if case .verifying = backupManager.verification { return true }
         if case .confirming = backupManager.pendingUploadVerification { return true }
+        if case .confirmingSavedPasskey = backupManager.enableState { return true }
+        if needsAutomaticPasskeyConfirmation { return true }
 
-        return isEnablingCloudBackup && backupManager.enableState != .needsPasskeyConfirmation
+        return isEnablingCloudBackup && !needsManualPasskeyConfirmation
     }
 
     private var isEnablingCloudBackup: Bool {
@@ -304,28 +306,42 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         return false
     }
 
-    private var needsPasskeyConfirmation: Bool {
-        backupManager.enableState == .needsPasskeyConfirmation
+    private var savedPasskeyConfirmationMode: SavedPasskeyConfirmationMode? {
+        guard case let .awaitingSavedPasskeyConfirmation(mode) = backupManager.enableState else {
+            return nil
+        }
+
+        return mode
+    }
+
+    private var needsAutomaticPasskeyConfirmation: Bool {
+        savedPasskeyConfirmationMode == .automatic
+    }
+
+    private var needsManualPasskeyConfirmation: Bool {
+        savedPasskeyConfirmationMode == .manual
     }
 
     private var primaryButtonTitle: String {
         if case .failed = backupManager.verification { return "Try Again" }
-        return needsPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
+        return needsManualPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
     }
 
     private func handleEnableTap() {
         guard !isBusy, !isPromptingForEnableChoice else { return }
 
-        if needsPasskeyConfirmation { return backupManager.dispatch(action: .confirmSavedPasskey) }
+        if needsManualPasskeyConfirmation {
+            return backupManager.dispatch(action: .confirmSavedPasskey)
+        }
         if case .failed = backupManager.verification {
-            return backupManager.dispatch(action: .startVerification)
+            return backupManager.dispatch(action: .startVerification(.onboarding))
         }
 
         onEnable()
     }
 
     private func handleSkipTap() {
-        if needsPasskeyConfirmation {
+        if needsManualPasskeyConfirmation {
             backupManager.dispatch(action: .discardPendingEnableCloudBackup)
         }
 
@@ -333,7 +349,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private func autoConfirmSavedPasskeyIfNeeded() {
-        guard needsPasskeyConfirmation, !didAutoConfirmSavedPasskey, !didReportEnabled else {
+        guard needsAutomaticPasskeyConfirmation, !didAutoConfirmSavedPasskey, !didReportEnabled else {
             return
         }
 

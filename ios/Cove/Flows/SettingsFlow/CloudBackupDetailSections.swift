@@ -316,7 +316,7 @@ struct OtherBackupsSection: View {
             )
         ) {
             Button("Verify Current Passkey") {
-                manager.startVerification()
+                manager.startVerification(source: .cloudBackupDetail)
             }
             Button("Done", role: .cancel) {}
         } message: {
@@ -508,7 +508,7 @@ private struct CloudOnlyActionDialogs: ViewModifier {
                             return
                         }
 
-                        manager.dispatch(action: .restoreCloudWallet(recordId: item.recordId))
+                        manager.dispatch(action: .restoreCloudWallet(item.recordId))
                     }
                     Button("Delete from iCloud", role: .destructive) {
                         walletToDelete = item
@@ -525,7 +525,7 @@ private struct CloudOnlyActionDialogs: ViewModifier {
             ) {
                 if let item = walletToDelete {
                     Button("Delete", role: .destructive) {
-                        manager.dispatch(action: .deleteCloudWallet(recordId: item.recordId))
+                        manager.dispatch(action: .deleteCloudWallet(item.recordId))
                     }
                 }
                 Button("Cancel", role: .cancel) {}

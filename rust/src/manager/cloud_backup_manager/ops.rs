@@ -24,12 +24,13 @@ use super::workers::{
     RestoredPasskeyMaterial,
 };
 use super::{
-    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupEnableState, CloudBackupError,
-    CloudBackupKeychain, CloudBackupPasskeyChoiceFlow, CloudBackupRestoreProgress,
-    CloudBackupRestoreReport, CloudBackupRestoreStage, CloudBackupStatus, CloudBackupStore,
-    CloudBackupWalletItem, CloudBackupWalletStatus, DeepVerificationReport, PendingEnableSession,
+    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupEnableContext,
+    CloudBackupEnableState, CloudBackupError, CloudBackupKeychain, CloudBackupPasskeyChoiceFlow,
+    CloudBackupRestoreProgress, CloudBackupRestoreReport, CloudBackupRestoreStage,
+    CloudBackupStatus, CloudBackupStore, CloudBackupVerificationSource, CloudBackupWalletItem,
+    CloudBackupWalletStatus, DeepVerificationReport, PendingEnableSession,
     PendingVerificationCompletion, PendingVerificationUpload, RestoreOperation,
-    RustCloudBackupManager, VerificationState, blocking_cloud_error,
+    RustCloudBackupManager, SavedPasskeyConfirmationMode, VerificationState, blocking_cloud_error,
     current_namespace_wallet_record_ids, is_connectivity_related_issue,
 };
 use crate::database::Database;
@@ -99,9 +100,14 @@ impl RustCloudBackupManager {
         &self,
         master_key: cove_cspp::master_key::MasterKey,
         passkey: UnpersistedPrfKey,
+        context: CloudBackupEnableContext,
     ) -> Result<(), CloudBackupError> {
         self.replace_pending_enable_session(
-            PendingEnableSession::awaiting_saved_passkey_confirmation(master_key, passkey),
+            PendingEnableSession::awaiting_saved_passkey_confirmation(
+                master_key,
+                passkey,
+                context.verification_source,
+            ),
         )
         .await;
         self.set_enable_state(CloudBackupEnableState::CreatingPasskey);
@@ -110,7 +116,9 @@ impl RustCloudBackupManager {
 
         // do not poll credential presence here; platform presence checks can show passkey UI
         // after registration, so confirmation must happen only from an explicit user action
-        self.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
+        self.set_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            context.saved_passkey_confirmation,
+        ));
         Ok(())
     }
 
@@ -118,11 +126,15 @@ impl RustCloudBackupManager {
         match self.confirm_saved_passkey_from_session(pending).await {
             Ok(()) => {}
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
-                self.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
+                self.set_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+                    SavedPasskeyConfirmationMode::Manual,
+                ));
             }
             Err(CloudBackupError::Passkey(_))
             | Err(CloudBackupError::UnsupportedPasskeyProvider) => {
-                self.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
+                self.set_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+                    SavedPasskeyConfirmationMode::Manual,
+                ));
             }
             Err(error) => {
                 warn!("Confirm saved passkey failed: {error}");
@@ -135,6 +147,7 @@ impl RustCloudBackupManager {
         &self,
         pending: PendingEnableSession,
     ) -> Result<(), CloudBackupError> {
+        let verification_source = pending.verification_source();
         let (master_key, staged_passkey) = pending.into_parts();
         let passkey_access = PasskeyAccess::global();
         let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
@@ -146,6 +159,7 @@ impl RustCloudBackupManager {
                     Keychain::global(),
                     master_key,
                     Zeroizing::new(passkey),
+                    verification_source,
                 )
                 .await
             }
@@ -156,6 +170,7 @@ impl RustCloudBackupManager {
                     PendingEnableSession::awaiting_saved_passkey_confirmation(
                         cove_cspp::master_key::MasterKey::from_bytes(*master_key.as_bytes()),
                         staged_passkey.copy_for_retry(),
+                        verification_source,
                     ),
                 )
                 .await;
@@ -180,7 +195,9 @@ impl RustCloudBackupManager {
             return false;
         }
 
-        self.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
+        self.set_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            SavedPasskeyConfirmationMode::Manual,
+        ));
         true
     }
 
@@ -294,6 +311,7 @@ impl RustCloudBackupManager {
         passkey: &UnpersistedPrfKey,
         namespace_id: &str,
         pending_uploads: Vec<PendingVerificationUpload>,
+        verification_source: CloudBackupVerificationSource,
     ) -> Result<(), CloudBackupError> {
         let decrypted_master =
             master_key_crypto::decrypt_master_key(encrypted_master, &passkey.prf_key)
@@ -323,11 +341,10 @@ impl RustCloudBackupManager {
         let mut pending_uploads = pending_uploads;
         pending_uploads.insert(0, PendingVerificationUpload::master_key_wrapper());
 
-        self.replace_pending_verification_completion(PendingVerificationCompletion::new(
-            report,
-            namespace_id.to_owned(),
-            pending_uploads,
-        ));
+        self.replace_pending_verification_completion_for_source(
+            PendingVerificationCompletion::new(report, namespace_id.to_owned(), pending_uploads),
+            verification_source,
+        );
         self.set_verification(VerificationState::Idle);
 
         Ok(())
@@ -653,12 +670,25 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) async fn do_enable_cloud_backup(&self) -> Result<(), CloudBackupError> {
+        self.do_enable_cloud_backup_with_context(CloudBackupEnableContext::settings_manual()).await
+    }
+
+    pub(crate) async fn do_enable_cloud_backup_with_context(
+        &self,
+        context: CloudBackupEnableContext,
+    ) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
         if let Some(pending) = self.take_retry_pending_enable_session().await {
+            let verification_source = pending.verification_source();
             let (master_key, passkey) = pending.into_parts();
             info!("Enable: retrying pending upload with existing passkey material");
             return self
-                .enable_cloud_backup_with_passkey_material(Keychain::global(), master_key, passkey)
+                .enable_cloud_backup_with_passkey_material(
+                    Keychain::global(),
+                    master_key,
+                    passkey,
+                    verification_source,
+                )
                 .await;
         }
 
@@ -684,7 +714,7 @@ impl RustCloudBackupManager {
             .is_some();
 
         if has_local_master_key {
-            return self.do_enable_cloud_backup_create_new().await;
+            return self.do_enable_cloud_backup_create_new_with_context(context).await;
         }
 
         // no local master key — check iCloud for existing namespaces to recover
@@ -703,7 +733,7 @@ impl RustCloudBackupManager {
         namespaces.sort();
 
         if namespaces.is_empty() {
-            return self.do_enable_cloud_backup_create_new().await;
+            return self.do_enable_cloud_backup_create_new_with_context(context).await;
         }
 
         info!("Enable: found {} existing namespace(s), attempting recovery", namespaces.len());
@@ -959,13 +989,30 @@ impl RustCloudBackupManager {
     /// Called directly when `do_enable_cloud_backup` determines no recovery is needed,
     /// or via `do_enable_cloud_backup_force_new` when the user confirms creating a
     /// new backup after being warned about existing ones
+    #[cfg(test)]
     pub(crate) async fn do_enable_cloud_backup_create_new(&self) -> Result<(), CloudBackupError> {
+        self.do_enable_cloud_backup_create_new_with_context(
+            CloudBackupEnableContext::settings_manual(),
+        )
+        .await
+    }
+
+    pub(crate) async fn do_enable_cloud_backup_create_new_with_context(
+        &self,
+        context: CloudBackupEnableContext,
+    ) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
         if let Some(pending) = self.take_retry_pending_enable_session().await {
+            let verification_source = pending.verification_source();
             let (master_key, passkey) = pending.into_parts();
             info!("Enable: retrying pending upload with existing passkey material");
             return self
-                .enable_cloud_backup_with_passkey_material(Keychain::global(), master_key, passkey)
+                .enable_cloud_backup_with_passkey_material(
+                    Keychain::global(),
+                    master_key,
+                    passkey,
+                    verification_source,
+                )
                 .await;
         }
         if self.keep_awaiting_force_new_confirmation().await {
@@ -996,7 +1043,9 @@ impl RustCloudBackupManager {
             Ok(EnablePasskeyMaterial::Authenticated(passkey)) => passkey,
             Ok(EnablePasskeyMaterial::Registered(passkey)) => {
                 info!("Enable: passkey registered, confirming availability");
-                return self.stage_registered_passkey_for_confirmation(master_key, passkey).await;
+                return self
+                    .stage_registered_passkey_for_confirmation(master_key, passkey, context)
+                    .await;
             }
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
                 self.rollback_new_local_master_key(
@@ -1024,11 +1073,23 @@ impl RustCloudBackupManager {
             keychain,
             Zeroizing::new(master_key),
             Zeroizing::new(passkey),
+            context.verification_source,
         )
         .await
     }
 
+    #[cfg(test)]
     pub(crate) async fn do_enable_cloud_backup_force_new(&self) -> Result<(), CloudBackupError> {
+        self.do_enable_cloud_backup_force_new_with_context(
+            CloudBackupEnableContext::settings_manual(),
+        )
+        .await
+    }
+
+    pub(crate) async fn do_enable_cloud_backup_force_new_with_context(
+        &self,
+        context: CloudBackupEnableContext,
+    ) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
         let keychain = Keychain::global();
 
@@ -1040,6 +1101,7 @@ impl RustCloudBackupManager {
                     .stage_registered_passkey_for_confirmation(
                         cove_cspp::master_key::MasterKey::from_bytes(*master_key.as_bytes()),
                         passkey.copy_for_retry(),
+                        context,
                     )
                     .await;
             }
@@ -1047,22 +1109,44 @@ impl RustCloudBackupManager {
             let (master_key, passkey) = pending.into_parts();
             info!("Enable: committing pending create-first cloud backup");
             return self
-                .enable_cloud_backup_with_passkey_material(keychain, master_key, passkey)
+                .enable_cloud_backup_with_passkey_material(
+                    keychain,
+                    master_key,
+                    passkey,
+                    context.verification_source,
+                )
                 .await;
         }
 
-        self.do_enable_cloud_backup_create_new().await
+        self.do_enable_cloud_backup_create_new_with_context(context).await
     }
 
     /// Same as `do_enable_cloud_backup_create_new` but skips passkey discovery,
     /// going straight to passkey registration
+    #[cfg(test)]
     pub(crate) async fn do_enable_cloud_backup_no_discovery(&self) -> Result<(), CloudBackupError> {
+        self.do_enable_cloud_backup_no_discovery_with_context(
+            CloudBackupEnableContext::settings_manual(),
+        )
+        .await
+    }
+
+    pub(crate) async fn do_enable_cloud_backup_no_discovery_with_context(
+        &self,
+        context: CloudBackupEnableContext,
+    ) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
         if let Some(pending) = self.take_retry_pending_enable_session().await {
+            let verification_source = pending.verification_source();
             let (master_key, passkey) = pending.into_parts();
             info!("Enable (no discovery): retrying pending upload with existing passkey material");
             return self
-                .enable_cloud_backup_with_passkey_material(Keychain::global(), master_key, passkey)
+                .enable_cloud_backup_with_passkey_material(
+                    Keychain::global(),
+                    master_key,
+                    passkey,
+                    verification_source,
+                )
                 .await;
         }
         if self.keep_awaiting_force_new_confirmation().await {
@@ -1130,7 +1214,9 @@ impl RustCloudBackupManager {
                 existing_namespaces.len()
             );
             self.replace_pending_enable_session(PendingEnableSession::awaiting_confirmation(
-                master_key, passkey,
+                master_key,
+                passkey,
+                context.verification_source,
             ))
             .await;
             self.set_existing_backup_found_prompt();
@@ -1139,7 +1225,7 @@ impl RustCloudBackupManager {
         }
 
         info!("Enable (no discovery): passkey registered, confirming availability");
-        self.stage_registered_passkey_for_confirmation(master_key, passkey).await
+        self.stage_registered_passkey_for_confirmation(master_key, passkey, context).await
     }
 
     pub(super) async fn do_restore_from_cloud_backup(
@@ -1409,6 +1495,7 @@ impl RustCloudBackupManager {
         keychain: &Keychain,
         master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
         passkey: Zeroizing<UnpersistedPrfKey>,
+        verification_source: CloudBackupVerificationSource,
     ) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
         self.set_enable_state(CloudBackupEnableState::UploadingBackup);
@@ -1417,6 +1504,7 @@ impl RustCloudBackupManager {
         self.replace_pending_enable_session(PendingEnableSession::retry_upload(
             cove_cspp::master_key::MasterKey::from_bytes(*master_key.as_bytes()),
             passkey.copy_for_retry(),
+            verification_source,
         ))
         .await;
 
@@ -1477,6 +1565,7 @@ impl RustCloudBackupManager {
             &passkey,
             &namespace_id,
             pending_uploads,
+            verification_source,
         )
         .await?;
         self.clear_pending_enable_session();
@@ -2934,7 +3023,12 @@ mod tests {
         assert_eq!(globals.passkey.create_count(), 1);
         assert_eq!(globals.passkey.authenticate_count(), 0);
         assert_eq!(CloudBackupKeychain::global().load_credential_id(), None);
-        assert_eq!(manager.state().enable_state, CloudBackupEnableState::NeedsPasskeyConfirmation);
+        assert_eq!(
+            manager.state().enable_state,
+            CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+                SavedPasskeyConfirmationMode::Manual,
+            )
+        );
 
         let pending = manager.take_pending_enable_session().await.unwrap();
         assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
@@ -2956,7 +3050,12 @@ mod tests {
 
         assert_eq!(globals.passkey.create_count(), 1);
         assert_eq!(globals.passkey.authenticate_count(), 0);
-        assert_eq!(manager.state().enable_state, CloudBackupEnableState::NeedsPasskeyConfirmation);
+        assert_eq!(
+            manager.state().enable_state,
+            CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+                SavedPasskeyConfirmationMode::Manual,
+            )
+        );
 
         let pending = manager.take_pending_enable_session().await.unwrap();
         assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
@@ -2979,7 +3078,12 @@ mod tests {
 
         assert_eq!(globals.passkey.create_count(), 1);
         assert_eq!(globals.passkey.authenticate_count(), 0);
-        assert_eq!(manager.state().enable_state, CloudBackupEnableState::NeedsPasskeyConfirmation);
+        assert_eq!(
+            manager.state().enable_state,
+            CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+                SavedPasskeyConfirmationMode::Manual,
+            )
+        );
 
         let pending = manager.take_pending_enable_session().await.unwrap();
         assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
@@ -3033,6 +3137,7 @@ mod tests {
                         credential_id: vec![1, 2, 3],
                         provider_hint: None,
                     },
+                    CloudBackupVerificationSource::Settings,
                 ),
             )
             .await;
@@ -3080,7 +3185,12 @@ mod tests {
         let pending = manager.take_pending_enable_session().await.unwrap();
         manager.handle_confirm_saved_passkey_session(pending).await;
 
-        assert_eq!(manager.state().enable_state, CloudBackupEnableState::NeedsPasskeyConfirmation);
+        assert_eq!(
+            manager.state().enable_state,
+            CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+                SavedPasskeyConfirmationMode::Manual,
+            )
+        );
         let pending = manager.take_pending_enable_session().await.unwrap();
         assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
     }
@@ -4580,7 +4690,9 @@ mod tests {
             })
             .unwrap();
         manager.set_sync_error(Some("upload failed".into()));
-        manager.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
+        manager.set_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            SavedPasskeyConfirmationMode::Manual,
+        ));
         CONNECTIVITY_MANAGER.set_connection_state(false);
 
         reset_cloud_backup_test_state_with_hook(&manager, globals, || {
@@ -5702,9 +5814,9 @@ mod tests {
             "authorization required",
         );
 
-        manager.dispatch(CloudBackupManagerAction::StartVerification {
-            source: CloudBackupVerificationSource::Settings,
-        });
+        manager.dispatch(CloudBackupManagerAction::StartVerification(
+            CloudBackupVerificationSource::Settings,
+        ));
 
         wait_for_test_condition(
             Duration::from_secs(1),
@@ -6340,6 +6452,7 @@ mod tests {
                     credential_id: vec![1, 2, 3],
                     provider_hint: None,
                 },
+                CloudBackupVerificationSource::Settings,
             ))
             .await;
 
@@ -6372,6 +6485,7 @@ mod tests {
                     credential_id: vec![1, 2, 3],
                     provider_hint: None,
                 },
+                CloudBackupVerificationSource::Settings,
             ))
             .await;
 
@@ -6395,7 +6509,9 @@ mod tests {
         let manager = init_manager();
 
         reset_cloud_backup_test_state(&manager, globals);
-        manager.set_enable_state(CloudBackupEnableState::NeedsPasskeyConfirmation);
+        manager.set_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            SavedPasskeyConfirmationMode::Manual,
+        ));
 
         manager.clear_in_process_state_for_local_reset();
 
@@ -6438,6 +6554,7 @@ mod tests {
                     credential_id: expected_credential_id.clone(),
                     provider_hint: None,
                 },
+                CloudBackupVerificationSource::Settings,
             ))
             .await;
 
@@ -6472,6 +6589,7 @@ mod tests {
                     credential_id: expected_credential_id.clone(),
                     provider_hint: None,
                 },
+                CloudBackupVerificationSource::Settings,
             ))
             .await;
 
@@ -6506,6 +6624,7 @@ mod tests {
                     credential_id: expected_credential_id.clone(),
                     provider_hint: None,
                 },
+                CloudBackupVerificationSource::Settings,
             ))
             .await;
 
@@ -6637,6 +6756,7 @@ mod tests {
                     credential_id: vec![1, 2, 3],
                     provider_hint: None,
                 },
+                CloudBackupVerificationSource::Settings,
             ))
             .await;
 

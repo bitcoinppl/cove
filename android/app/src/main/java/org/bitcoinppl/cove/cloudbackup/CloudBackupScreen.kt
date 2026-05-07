@@ -70,6 +70,7 @@ package org.bitcoinppl.cove.cloudbackup
  import org.bitcoinppl.cove_core.CloudBackupManagerAction
  import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
  import org.bitcoinppl.cove_core.CloudBackupStatus
+ import org.bitcoinppl.cove_core.CloudBackupVerificationSource
  import org.bitcoinppl.cove_core.CloudBackupWalletItem
  import org.bitcoinppl.cove_core.CloudBackupWalletStatus
  import org.bitcoinppl.cove_core.CloudOnlyOperation
@@ -180,7 +181,7 @@ package org.bitcoinppl.cove.cloudbackup
                          modifier = Modifier.fillMaxSize(),
                          message = null,
                          isBusy = false,
-                         onEnable = { manager.dispatch(CloudBackupManagerAction.EnableCloudBackup) },
+                         onEnable = { manager.dispatch(manualEnableCloudBackup(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
                      )
                  }
 
@@ -208,7 +209,7 @@ package org.bitcoinppl.cove.cloudbackup
                              modifier = Modifier.fillMaxSize(),
                              message = status.v1,
                              isBusy = false,
-                             onEnable = { manager.dispatch(CloudBackupManagerAction.EnableCloudBackup) },
+                             onEnable = { manager.dispatch(manualEnableCloudBackup(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
                          )
                      }
                  }
@@ -274,7 +275,10 @@ package org.bitcoinppl.cove.cloudbackup
 
  @Composable
  private fun CloudBackupEnableProgressOrConfirmation(manager: CloudBackupManager) {
-     if (manager.enableState == CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION) {
+     val enableState = manager.enableState
+     if (enableState is CloudBackupEnableState.AwaitingSavedPasskeyConfirmation &&
+         enableState.v1 == org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode.MANUAL
+     ) {
          CloudBackupPasskeyConfirmationContent(
              onContinue = { manager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey) },
              onCancel = { manager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup) },
@@ -282,21 +286,25 @@ package org.bitcoinppl.cove.cloudbackup
          return
      }
 
-     val (title, message) = cloudBackupEnableProgressCopy(manager.enableState)
+     val (title, message) = cloudBackupEnableProgressCopy(enableState)
      CloudBackupProgressContent(title = title, message = message)
  }
 
  private fun cloudBackupEnableProgressCopy(enableState: CloudBackupEnableState): Pair<String, String> =
      when (enableState) {
-         CloudBackupEnableState.CREATING_PASSKEY ->
+         CloudBackupEnableState.CreatingPasskey ->
              "Creating your passkey..." to "Cloud Backup will continue automatically"
-         CloudBackupEnableState.WAITING_FOR_PASSKEY_AVAILABILITY ->
+         CloudBackupEnableState.WaitingForPasskeyAvailability ->
              "Checking that your passkey is available..." to
                  "This can take a few seconds after saving it in your passkey/password manager app"
-         CloudBackupEnableState.UPLOADING_BACKUP ->
+         is CloudBackupEnableState.AwaitingSavedPasskeyConfirmation ->
+             "Checking that your passkey is available..." to
+                 "This can take a few seconds after saving it in your passkey/password manager app"
+         CloudBackupEnableState.ConfirmingSavedPasskey ->
+             "Confirming your passkey..." to "Cloud Backup will continue automatically"
+         CloudBackupEnableState.UploadingBackup ->
              "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
-         CloudBackupEnableState.IDLE,
-         CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION,
+         CloudBackupEnableState.Idle,
          -> "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
      }
 
@@ -646,7 +654,13 @@ package org.bitcoinppl.cove.cloudbackup
          )
 
          Button(
-             onClick = { manager.dispatch(CloudBackupManagerAction.EnableCloudBackupNoDiscovery) },
+             onClick = {
+                 manager.dispatch(
+                     manualEnableCloudBackupNoDiscovery(
+                         CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                     ),
+                 )
+             },
              modifier = Modifier.fillMaxWidth(),
          ) {
              Text("Try Again")
@@ -1060,7 +1074,11 @@ package org.bitcoinppl.cove.cloudbackup
                  TextButton(
                      onClick = {
                          recoveryResult = null
-                         manager.dispatch(CloudBackupManagerAction.StartVerification)
+                         manager.dispatch(
+                             CloudBackupManagerAction.StartVerification(
+                                 CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                             ),
+                         )
                      },
                  ) { Text("Verify Current Passkey") }
              },
@@ -1270,7 +1288,13 @@ package org.bitcoinppl.cove.cloudbackup
                      MaterialSettingsItem(
                          title = "Verify Now",
                          subtitle = "Run verification to confirm your cloud backup can be decrypted and restored",
-                         onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+                         onClick = {
+                             manager.dispatch(
+                                 CloudBackupManagerAction.StartVerification(
+                                     CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                                 ),
+                             )
+                         },
                          leadingContent = { Icon(Icons.Default.Security, contentDescription = null) },
                      )
                  }
@@ -1290,7 +1314,13 @@ package org.bitcoinppl.cove.cloudbackup
                      MaterialSettingsItem(
                          title = "Passkey verified",
                          subtitle = "Run a full verification to confirm wallet backups can be decrypted",
-                         onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+                         onClick = {
+                             manager.dispatch(
+                                 CloudBackupManagerAction.StartVerification(
+                                     CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                                 ),
+                             )
+                         },
                          leadingContent = { Icon(Icons.Default.Security, contentDescription = null, tint = Color(0xFF2E7D32)) },
                      )
                  }
@@ -1338,7 +1368,13 @@ package org.bitcoinppl.cove.cloudbackup
                 MaterialDivider()
                 MaterialSettingsItem(
                     title = "Verify Again",
-                    onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+                    onClick = {
+                        manager.dispatch(
+                            CloudBackupManagerAction.StartVerification(
+                                CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                            ),
+                        )
+                    },
                     leadingContent = { Icon(Icons.Default.Security, contentDescription = null) },
                 )
             }
@@ -1353,7 +1389,13 @@ package org.bitcoinppl.cove.cloudbackup
      MaterialSettingsItem(
          title = "Verification was cancelled",
          subtitle = "Try verification again or create a new passkey if your old one was deleted",
-         onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+         onClick = {
+             manager.dispatch(
+                 CloudBackupManagerAction.StartVerification(
+                     CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                 ),
+             )
+         },
          leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null, tint = Color(0xFFED6C02)) },
      )
      MaterialDivider()
@@ -1423,7 +1465,13 @@ package org.bitcoinppl.cove.cloudbackup
              MaterialDivider()
              MaterialSettingsItem(
                  title = "Try Again",
-                 onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+                 onClick = {
+                     manager.dispatch(
+                         CloudBackupManagerAction.StartVerification(
+                             CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                         ),
+                     )
+                 },
                  leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
              )
              MaterialDivider()

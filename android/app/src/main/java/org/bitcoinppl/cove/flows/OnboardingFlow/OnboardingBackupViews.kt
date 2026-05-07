@@ -80,7 +80,9 @@ import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
 import org.bitcoinppl.cove_core.CloudBackupStatus
+import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.PendingUploadVerificationState
+import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 import org.bitcoinppl.cove_core.VerificationState
 import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingBranch
@@ -607,19 +609,25 @@ private fun OnboardingCloudBackupDetailsStepView(
     val verificationFailed = backupManager.verification is VerificationState.Failed
     val isConfirmingUpload =
         backupManager.pendingUploadVerification == PendingUploadVerificationState.CONFIRMING
+    val savedPasskeyConfirmationMode =
+        (backupManager.enableState as? CloudBackupEnableState.AwaitingSavedPasskeyConfirmation)?.v1
+    val needsAutomaticPasskeyConfirmation =
+        savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.AUTOMATIC
+    val needsManualPasskeyConfirmation =
+        savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.MANUAL
     val isEnabling =
         backupManager.status is CloudBackupStatus.Enabling &&
-            backupManager.enableState != CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION
+            !needsManualPasskeyConfirmation
     val isBusy =
         isVerifying ||
             isConfirmingUpload ||
+            backupManager.enableState == CloudBackupEnableState.ConfirmingSavedPasskey ||
+            needsAutomaticPasskeyConfirmation ||
             isEnabling
-    val needsPasskeyConfirmation =
-        backupManager.enableState == CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION
     val primaryButtonTitle =
         when {
             verificationFailed -> "Try Again"
-            needsPasskeyConfirmation -> "Confirm Passkey"
+            needsManualPasskeyConfirmation -> "Confirm Passkey"
             else -> null
         }
             ?: "Enable Cloud Backup"
@@ -652,7 +660,7 @@ private fun OnboardingCloudBackupDetailsStepView(
     }
 
     LaunchedEffect(backupManager.enableState) {
-        if (needsPasskeyConfirmation && !didAutoConfirmSavedPasskey && !didReportEnabled) {
+        if (needsAutomaticPasskeyConfirmation && !didAutoConfirmSavedPasskey && !didReportEnabled) {
             didAutoConfirmSavedPasskey = true
             backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
         }
@@ -665,20 +673,24 @@ private fun OnboardingCloudBackupDetailsStepView(
                     return@CloudBackupEnableOnboardingView
                 }
 
-                if (needsPasskeyConfirmation) {
+                if (needsManualPasskeyConfirmation) {
                     backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
                     return@CloudBackupEnableOnboardingView
                 }
 
                 if (verificationFailed) {
-                    backupManager.dispatch(CloudBackupManagerAction.StartVerification)
+                    backupManager.dispatch(
+                        CloudBackupManagerAction.StartVerification(
+                            CloudBackupVerificationSource.ONBOARDING,
+                        ),
+                    )
                     return@CloudBackupEnableOnboardingView
                 }
 
                 onEnable()
             },
             onCancel = {
-                if (needsPasskeyConfirmation) {
+                if (needsManualPasskeyConfirmation) {
                     backupManager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
                 }
 
@@ -732,15 +744,19 @@ private fun OnboardingCloudBackupDetailsStepView(
 
 private fun cloudBackupEnableBusyCopy(enableState: CloudBackupEnableState): Pair<String, String> =
     when (enableState) {
-        CloudBackupEnableState.CREATING_PASSKEY ->
+        CloudBackupEnableState.CreatingPasskey ->
             "Creating your passkey..." to "Cloud Backup will continue automatically"
-        CloudBackupEnableState.WAITING_FOR_PASSKEY_AVAILABILITY ->
+        CloudBackupEnableState.WaitingForPasskeyAvailability ->
             "Checking that your passkey is available..." to
                 "This can take a few seconds after saving it in your passkey/password manager app"
-        CloudBackupEnableState.UPLOADING_BACKUP ->
+        is CloudBackupEnableState.AwaitingSavedPasskeyConfirmation ->
+            "Checking that your passkey is available..." to
+                "This can take a few seconds after saving it in your passkey/password manager app"
+        CloudBackupEnableState.ConfirmingSavedPasskey ->
+            "Confirming your passkey..." to "Cloud Backup will continue automatically"
+        CloudBackupEnableState.UploadingBackup ->
             "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
-        CloudBackupEnableState.IDLE,
-        CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION,
+        CloudBackupEnableState.Idle,
         -> "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
     }
 

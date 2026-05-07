@@ -402,7 +402,10 @@ struct MainSettingsScreen: View {
             }
 
             SettingsRow(title: "Retry", symbol: "arrow.clockwise") {
-                manager.dispatch(action: .enableCloudBackup)
+                manager.dispatch(action: .enableCloudBackup(.init(
+                    savedPasskeyConfirmation: .manual,
+                    verificationSource: .settings
+                )))
             }
         }
     }
@@ -979,7 +982,7 @@ private struct SettingsCloudBackupEnableSheet: View {
     }
 
     private var isBusy: Bool {
-        if manager.enableState == .needsPasskeyConfirmation {
+        if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableState {
             return false
         }
 
@@ -1031,7 +1034,7 @@ private struct SettingsCloudBackupEnableSheet: View {
         )
 
         ZStack {
-            if manager.enableState == .needsPasskeyConfirmation {
+            if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableState {
                 CloudBackupEnableConfirmationView(
                     onContinue: {
                         manager.dispatch(action: .confirmSavedPasskey)
@@ -1076,10 +1079,16 @@ private struct SettingsCloudBackupEnableSheet: View {
             isPresented: showingPasskeyChoice
         ) {
             Button("Use Existing Passkey") {
-                startEnable(action: .enableCloudBackup)
+                startEnable(action: .enableCloudBackup(.init(
+                    savedPasskeyConfirmation: .manual,
+                    verificationSource: .settings
+                )))
             }
             Button("Create New Passkey") {
-                startEnable(action: .enableCloudBackupNoDiscovery)
+                startEnable(action: .enableCloudBackupNoDiscovery(.init(
+                    savedPasskeyConfirmation: .manual,
+                    verificationSource: .settings
+                )))
             }
             Button("Cancel", role: .cancel) {}
         } message: {

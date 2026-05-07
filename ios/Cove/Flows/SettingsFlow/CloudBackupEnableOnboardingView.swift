@@ -332,16 +332,20 @@ struct CloudBackupEnableBusyOverlay: View {
             "Creating your passkey..."
         case .waitingForPasskeyAvailability:
             "Checking that your passkey is available..."
+        case .awaitingSavedPasskeyConfirmation:
+            "Checking that your passkey is available..."
+        case .confirmingSavedPasskey:
+            "Confirming your passkey..."
         case .uploadingBackup:
             "Creating your encrypted backup..."
-        case .idle, .needsPasskeyConfirmation:
+        case .idle:
             "Creating your encrypted backup..."
         }
     }
 
     private var subtitle: String {
         switch enableState {
-        case .waitingForPasskeyAvailability:
+        case .waitingForPasskeyAvailability, .awaitingSavedPasskeyConfirmation:
             "This can take a few seconds after saving it in your passkey/password manager app"
         default:
             "Cloud Backup will continue automatically"

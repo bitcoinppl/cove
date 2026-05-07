@@ -118,6 +118,10 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.verification
     }
 
+    var verificationPresentation: CloudBackupVerificationPresentation {
+        state.verificationPresentation
+    }
+
     var sync: SyncState {
         state.sync
     }
@@ -146,8 +150,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         rustBridge.async { self.rust.dispatch(action: action) }
     }
 
-    func startVerification() {
-        dispatch(.startVerification)
+    func startVerification(source: CloudBackupVerificationSource = .settings) {
+        dispatch(.startVerification(source))
     }
 
     private func apply(_ message: Message) {
@@ -172,6 +176,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
             state.shouldPromptVerification = pending
         case let .verificationMetadata(verificationMetadata):
             state.verificationMetadata = verificationMetadata
+        case let .verificationPresentation(presentation):
+            state.verificationPresentation = presentation
         case let .pendingUploadVerification(pending):
             state.pendingUploadVerification = pending
         case let .detail(detail):

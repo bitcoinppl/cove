@@ -27818,6 +27818,44 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
 
 
 
+data class CloudBackupEnableContext (
+    var `savedPasskeyConfirmation`: SavedPasskeyConfirmationMode
+    , 
+    var `verificationSource`: CloudBackupVerificationSource
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupEnableContext: FfiConverterRustBuffer<CloudBackupEnableContext> {
+    override fun read(buf: ByteBuffer): CloudBackupEnableContext {
+        return CloudBackupEnableContext(
+            FfiConverterTypeSavedPasskeyConfirmationMode.read(buf),
+            FfiConverterTypeCloudBackupVerificationSource.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupEnableContext) = (
+            FfiConverterTypeSavedPasskeyConfirmationMode.allocationSize(value.`savedPasskeyConfirmation`) +
+            FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`verificationSource`)
+    )
+
+    override fun write(value: CloudBackupEnableContext, buf: ByteBuffer) {
+            FfiConverterTypeSavedPasskeyConfirmationMode.write(value.`savedPasskeyConfirmation`, buf)
+            FfiConverterTypeCloudBackupVerificationSource.write(value.`verificationSource`, buf)
+    }
+}
+
+
+
 data class CloudBackupOtherBackupsSummary (
     var `namespaceCount`: kotlin.UInt
     , 
@@ -33951,36 +33989,128 @@ public object FfiConverterTypeCkTapError : FfiConverterRustBuffer<CkTapException
 
 
 
-
-enum class CloudBackupEnableState {
+sealed class CloudBackupEnableState {
     
-    IDLE,
-    CREATING_PASSKEY,
-    WAITING_FOR_PASSKEY_AVAILABILITY,
-    NEEDS_PASSKEY_CONFIRMATION,
-    UPLOADING_BACKUP;
+    object Idle : CloudBackupEnableState()
+    
+    
+    object CreatingPasskey : CloudBackupEnableState()
+    
+    
+    object WaitingForPasskeyAvailability : CloudBackupEnableState()
+    
+    
+    data class AwaitingSavedPasskeyConfirmation(
+        val v1: org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode) : CloudBackupEnableState()
+        
+    {
+        
 
+        companion object
+    }
+    
+    object ConfirmingSavedPasskey : CloudBackupEnableState()
+    
+    
+    object UploadingBackup : CloudBackupEnableState()
+    
+    
+
+    
+
+    
     
 
 
     companion object
 }
 
-
 /**
  * @suppress
  */
-public object FfiConverterTypeCloudBackupEnableState: FfiConverterRustBuffer<CloudBackupEnableState> {
-    override fun read(buf: ByteBuffer) = try {
-        CloudBackupEnableState.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+public object FfiConverterTypeCloudBackupEnableState : FfiConverterRustBuffer<CloudBackupEnableState>{
+    override fun read(buf: ByteBuffer): CloudBackupEnableState {
+        return when(buf.getInt()) {
+            1 -> CloudBackupEnableState.Idle
+            2 -> CloudBackupEnableState.CreatingPasskey
+            3 -> CloudBackupEnableState.WaitingForPasskeyAvailability
+            4 -> CloudBackupEnableState.AwaitingSavedPasskeyConfirmation(
+                FfiConverterTypeSavedPasskeyConfirmationMode.read(buf),
+                )
+            5 -> CloudBackupEnableState.ConfirmingSavedPasskey
+            6 -> CloudBackupEnableState.UploadingBackup
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
     }
 
-    override fun allocationSize(value: CloudBackupEnableState) = 4UL
+    override fun allocationSize(value: CloudBackupEnableState): ULong = when(value) {
+        is CloudBackupEnableState.Idle -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupEnableState.CreatingPasskey -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupEnableState.WaitingForPasskeyAvailability -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupEnableState.AwaitingSavedPasskeyConfirmation -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSavedPasskeyConfirmationMode.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupEnableState.ConfirmingSavedPasskey -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupEnableState.UploadingBackup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
 
     override fun write(value: CloudBackupEnableState, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
+        when(value) {
+            is CloudBackupEnableState.Idle -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupEnableState.CreatingPasskey -> {
+                buf.putInt(2)
+                Unit
+            }
+            is CloudBackupEnableState.WaitingForPasskeyAvailability -> {
+                buf.putInt(3)
+                Unit
+            }
+            is CloudBackupEnableState.AwaitingSavedPasskeyConfirmation -> {
+                buf.putInt(4)
+                FfiConverterTypeSavedPasskeyConfirmationMode.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupEnableState.ConfirmingSavedPasskey -> {
+                buf.putInt(5)
+                Unit
+            }
+            is CloudBackupEnableState.UploadingBackup -> {
+                buf.putInt(6)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 
@@ -33990,14 +34120,32 @@ public object FfiConverterTypeCloudBackupEnableState: FfiConverterRustBuffer<Clo
 
 sealed class CloudBackupManagerAction {
     
-    object EnableCloudBackup : CloudBackupManagerAction()
+    data class EnableCloudBackup(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupManagerAction()
+        
+    {
+        
+
+        companion object
+    }
     
+    data class EnableCloudBackupForceNew(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupManagerAction()
+        
+    {
+        
+
+        companion object
+    }
     
-    object EnableCloudBackupForceNew : CloudBackupManagerAction()
-    
-    
-    object EnableCloudBackupNoDiscovery : CloudBackupManagerAction()
-    
+    data class EnableCloudBackupNoDiscovery(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupManagerAction()
+        
+    {
+        
+
+        companion object
+    }
     
     object ConfirmSavedPasskey : CloudBackupManagerAction()
     
@@ -34018,7 +34166,7 @@ sealed class CloudBackupManagerAction {
     
     
     data class StartVerification(
-        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupManagerAction()
+        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupManagerAction()
         
     {
         
@@ -34027,7 +34175,7 @@ sealed class CloudBackupManagerAction {
     }
     
     data class StartVerificationDiscoverable(
-        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupManagerAction()
+        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupManagerAction()
         
     {
         
@@ -34057,7 +34205,7 @@ sealed class CloudBackupManagerAction {
     
     
     data class RestoreCloudWallet(
-        val `recordId`: kotlin.String) : CloudBackupManagerAction()
+        val v1: org.bitcoinppl.cove_core.RecordId) : CloudBackupManagerAction()
         
     {
         
@@ -34066,7 +34214,7 @@ sealed class CloudBackupManagerAction {
     }
     
     data class DeleteCloudWallet(
-        val `recordId`: kotlin.String) : CloudBackupManagerAction()
+        val v1: org.bitcoinppl.cove_core.RecordId) : CloudBackupManagerAction()
         
     {
         
@@ -34102,9 +34250,15 @@ sealed class CloudBackupManagerAction {
 public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<CloudBackupManagerAction>{
     override fun read(buf: ByteBuffer): CloudBackupManagerAction {
         return when(buf.getInt()) {
-            1 -> CloudBackupManagerAction.EnableCloudBackup
-            2 -> CloudBackupManagerAction.EnableCloudBackupForceNew
-            3 -> CloudBackupManagerAction.EnableCloudBackupNoDiscovery
+            1 -> CloudBackupManagerAction.EnableCloudBackup(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                )
+            2 -> CloudBackupManagerAction.EnableCloudBackupForceNew(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                )
+            3 -> CloudBackupManagerAction.EnableCloudBackupNoDiscovery(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                )
             4 -> CloudBackupManagerAction.ConfirmSavedPasskey
             5 -> CloudBackupManagerAction.DiscardPendingEnableCloudBackup
             6 -> CloudBackupManagerAction.DismissPasskeyChoicePrompt
@@ -34125,10 +34279,10 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             17 -> CloudBackupManagerAction.SyncUnsynced
             18 -> CloudBackupManagerAction.FetchCloudOnly
             19 -> CloudBackupManagerAction.RestoreCloudWallet(
-                FfiConverterString.read(buf),
+                FfiConverterTypeRecordId.read(buf),
                 )
             20 -> CloudBackupManagerAction.DeleteCloudWallet(
-                FfiConverterString.read(buf),
+                FfiConverterTypeRecordId.read(buf),
                 )
             21 -> CloudBackupManagerAction.RecoverOtherBackups
             22 -> CloudBackupManagerAction.DeleteOtherBackups
@@ -34143,18 +34297,21 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.EnableCloudBackupForceNew -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.EnableCloudBackupNoDiscovery -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.ConfirmSavedPasskey -> {
@@ -34197,14 +34354,14 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.StartVerificationDiscoverable -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.DismissVerificationPrompt -> {
@@ -34253,14 +34410,14 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.`recordId`)
+                + FfiConverterTypeRecordId.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.DeleteCloudWallet -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.`recordId`)
+                + FfiConverterTypeRecordId.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.RecoverOtherBackups -> {
@@ -34293,14 +34450,17 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
         when(value) {
             is CloudBackupManagerAction.EnableCloudBackup -> {
                 buf.putInt(1)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.EnableCloudBackupForceNew -> {
                 buf.putInt(2)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.EnableCloudBackupNoDiscovery -> {
                 buf.putInt(3)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.ConfirmSavedPasskey -> {
@@ -34329,12 +34489,12 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             }
             is CloudBackupManagerAction.StartVerification -> {
                 buf.putInt(10)
-                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.StartVerificationDiscoverable -> {
                 buf.putInt(11)
-                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.DismissVerificationPrompt -> {
@@ -34367,12 +34527,12 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             }
             is CloudBackupManagerAction.RestoreCloudWallet -> {
                 buf.putInt(19)
-                FfiConverterString.write(value.`recordId`, buf)
+                FfiConverterTypeRecordId.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.DeleteCloudWallet -> {
                 buf.putInt(20)
-                FfiConverterString.write(value.`recordId`, buf)
+                FfiConverterTypeRecordId.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.RecoverOtherBackups -> {
@@ -35497,11 +35657,23 @@ sealed class CloudBackupVerificationPresentation {
         companion object
     }
     
-    object BackgroundConfirming : CloudBackupVerificationPresentation()
+    data class BackgroundConfirming(
+        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
     
-    
-    object BackgroundBlockedOnAuthorization : CloudBackupVerificationPresentation()
-    
+    data class BackgroundBlockedOnAuthorization(
+        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
     
     /**
      * Completion feedback should match the source instead of reopening the sheet
@@ -35551,8 +35723,12 @@ public object FfiConverterTypeCloudBackupVerificationPresentation : FfiConverter
             3 -> CloudBackupVerificationPresentation.ManualVerifying(
                 FfiConverterTypeCloudBackupVerificationSource.read(buf),
                 )
-            4 -> CloudBackupVerificationPresentation.BackgroundConfirming
-            5 -> CloudBackupVerificationPresentation.BackgroundBlockedOnAuthorization
+            4 -> CloudBackupVerificationPresentation.BackgroundConfirming(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
+            5 -> CloudBackupVerificationPresentation.BackgroundBlockedOnAuthorization(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
             6 -> CloudBackupVerificationPresentation.Completed(
                 FfiConverterTypeCloudBackupVerificationSource.read(buf),
                 )
@@ -35589,12 +35765,14 @@ public object FfiConverterTypeCloudBackupVerificationPresentation : FfiConverter
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.v1)
             )
         }
         is CloudBackupVerificationPresentation.BackgroundBlockedOnAuthorization -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.v1)
             )
         }
         is CloudBackupVerificationPresentation.Completed -> {
@@ -35632,10 +35810,12 @@ public object FfiConverterTypeCloudBackupVerificationPresentation : FfiConverter
             }
             is CloudBackupVerificationPresentation.BackgroundConfirming -> {
                 buf.putInt(4)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.v1, buf)
                 Unit
             }
             is CloudBackupVerificationPresentation.BackgroundBlockedOnAuthorization -> {
                 buf.putInt(5)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.v1, buf)
                 Unit
             }
             is CloudBackupVerificationPresentation.Completed -> {
@@ -43524,6 +43704,40 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class SavedPasskeyConfirmationMode {
+    
+    AUTOMATIC,
+    MANUAL;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSavedPasskeyConfirmationMode: FfiConverterRustBuffer<SavedPasskeyConfirmationMode> {
+    override fun read(buf: ByteBuffer) = try {
+        SavedPasskeyConfirmationMode.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SavedPasskeyConfirmationMode) = 4UL
+
+    override fun write(value: SavedPasskeyConfirmationMode, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -55845,6 +56059,16 @@ public object FfiConverterSequenceTypeWalletId: FfiConverterRustBuffer<List<Wall
         }
     }
 }
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ * It's also what we have an external type that references a custom type.
+ */
+public typealias RecordId = kotlin.String
+public typealias FfiConverterTypeRecordId = FfiConverterString
 
 
 

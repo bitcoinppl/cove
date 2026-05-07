@@ -85,11 +85,33 @@ pub enum CloudBackupStatus {
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SavedPasskeyConfirmationMode {
+    Automatic,
+    Manual,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, uniffi::Record)]
+pub struct CloudBackupEnableContext {
+    pub saved_passkey_confirmation: SavedPasskeyConfirmationMode,
+    pub verification_source: CloudBackupVerificationSource,
+}
+
+impl CloudBackupEnableContext {
+    pub(crate) fn settings_manual() -> Self {
+        Self {
+            saved_passkey_confirmation: SavedPasskeyConfirmationMode::Manual,
+            verification_source: CloudBackupVerificationSource::Settings,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupEnableState {
     Idle,
     CreatingPasskey,
     WaitingForPasskeyAvailability,
-    NeedsPasskeyConfirmation,
+    AwaitingSavedPasskeyConfirmation(SavedPasskeyConfirmationMode),
+    ConfirmingSavedPasskey,
     UploadingBackup,
 }
 
@@ -110,17 +132,17 @@ pub enum CloudBackupPromptIntent {
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupManagerAction {
-    EnableCloudBackup,
-    EnableCloudBackupForceNew,
-    EnableCloudBackupNoDiscovery,
+    EnableCloudBackup(CloudBackupEnableContext),
+    EnableCloudBackupForceNew(CloudBackupEnableContext),
+    EnableCloudBackupNoDiscovery(CloudBackupEnableContext),
     ConfirmSavedPasskey,
     DiscardPendingEnableCloudBackup,
     DismissPasskeyChoicePrompt,
     DismissMissingPasskeyReminder,
     RestoreFromCloudBackup,
     CancelRestore,
-    StartVerification { source: CloudBackupVerificationSource },
-    StartVerificationDiscoverable { source: CloudBackupVerificationSource },
+    StartVerification(CloudBackupVerificationSource),
+    StartVerificationDiscoverable(CloudBackupVerificationSource),
     DismissVerificationPrompt,
     RecreateManifest,
     ReinitializeBackup,
@@ -128,8 +150,8 @@ pub enum CloudBackupManagerAction {
     RepairPasskeyNoDiscovery,
     SyncUnsynced,
     FetchCloudOnly,
-    RestoreCloudWallet { record_id: String },
-    DeleteCloudWallet { record_id: String },
+    RestoreCloudWallet(RecordId),
+    DeleteCloudWallet(RecordId),
     RecoverOtherBackups,
     DeleteOtherBackups,
     RefreshDetail,
@@ -173,6 +195,11 @@ pub struct CloudBackupProgress {
     pub completed: u32,
     pub total: u32,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, derive_more::From, derive_more::Into)]
+pub struct RecordId(String);
+
+uniffi::custom_newtype!(RecordId, String);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupRestoreStage {
@@ -524,6 +551,7 @@ pub(crate) enum BlockingCloudStep {
 pub(crate) struct PendingEnableSessionMaterial {
     master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
     passkey: Zeroizing<UnpersistedPrfKey>,
+    verification_source: CloudBackupVerificationSource,
 }
 
 /// Tracks passkey material created during enable before the flow fully completes
@@ -582,8 +610,16 @@ impl std::fmt::Debug for PendingEnableSession {
 }
 
 impl PendingEnableSessionMaterial {
-    fn new(master_key: cove_cspp::master_key::MasterKey, passkey: UnpersistedPrfKey) -> Self {
-        Self { master_key: Zeroizing::new(master_key), passkey: Zeroizing::new(passkey) }
+    fn new(
+        master_key: cove_cspp::master_key::MasterKey,
+        passkey: UnpersistedPrfKey,
+        verification_source: CloudBackupVerificationSource,
+    ) -> Self {
+        Self {
+            master_key: Zeroizing::new(master_key),
+            passkey: Zeroizing::new(passkey),
+            verification_source,
+        }
     }
 
     fn into_parts(
@@ -599,21 +635,35 @@ impl PendingEnableSessionMaterial {
     fn has_prf_key(&self) -> bool {
         self.passkey.has_prf_key()
     }
+
+    fn verification_source(&self) -> CloudBackupVerificationSource {
+        self.verification_source
+    }
 }
 
 impl PendingEnableSession {
     fn awaiting_confirmation(
         master_key: cove_cspp::master_key::MasterKey,
         passkey: UnpersistedPrfKey,
+        verification_source: CloudBackupVerificationSource,
     ) -> Self {
-        Self::AwaitingForceNewConfirmation(PendingEnableSessionMaterial::new(master_key, passkey))
+        Self::AwaitingForceNewConfirmation(PendingEnableSessionMaterial::new(
+            master_key,
+            passkey,
+            verification_source,
+        ))
     }
 
     fn retry_upload(
         master_key: cove_cspp::master_key::MasterKey,
         passkey: UnpersistedPrfKey,
+        verification_source: CloudBackupVerificationSource,
     ) -> Self {
-        Self::RetryUpload(PendingEnableSessionMaterial::new(master_key, passkey))
+        Self::RetryUpload(PendingEnableSessionMaterial::new(
+            master_key,
+            passkey,
+            verification_source,
+        ))
     }
 
     fn into_parts(
@@ -642,6 +692,14 @@ impl PendingEnableSession {
         }
     }
 
+    fn verification_source(&self) -> CloudBackupVerificationSource {
+        match self {
+            Self::AwaitingForceNewConfirmation(material)
+            | Self::RetryUpload(material)
+            | Self::AwaitingSavedPasskeyConfirmation(material) => material.verification_source(),
+        }
+    }
+
     fn is_retry_upload(&self) -> bool {
         matches!(self, Self::RetryUpload(_))
     }
@@ -657,9 +715,12 @@ impl PendingEnableSession {
     fn awaiting_saved_passkey_confirmation(
         master_key: cove_cspp::master_key::MasterKey,
         passkey: UnpersistedPrfKey,
+        verification_source: CloudBackupVerificationSource,
     ) -> Self {
         Self::AwaitingSavedPasskeyConfirmation(PendingEnableSessionMaterial::new(
-            master_key, passkey,
+            master_key,
+            passkey,
+            verification_source,
         ))
     }
 }
@@ -1353,8 +1414,19 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn set_pending_upload_verification(&self, pending: PendingUploadVerificationState) {
-        self.apply_verification_effect(CloudBackupVerificationCoordinator::pending_upload_state(
+        self.set_pending_upload_verification_for_source(
             pending,
+            self.current_verification_source(),
+        );
+    }
+
+    pub(crate) fn set_pending_upload_verification_for_source(
+        &self,
+        pending: PendingUploadVerificationState,
+        source: CloudBackupVerificationSource,
+    ) {
+        self.apply_verification_effect(CloudBackupVerificationCoordinator::pending_upload_state(
+            pending, source,
         ));
     }
 
@@ -1994,6 +2066,17 @@ impl RustCloudBackupManager {
         &self,
         completion: PendingVerificationCompletion,
     ) {
+        self.replace_pending_verification_completion_for_source(
+            completion,
+            self.current_verification_source(),
+        );
+    }
+
+    pub(crate) fn replace_pending_verification_completion_for_source(
+        &self,
+        completion: PendingVerificationCompletion,
+        source: CloudBackupVerificationSource,
+    ) {
         let persisted_completion = completion.persisted();
 
         let mut state = Self::load_persisted_state();
@@ -2006,7 +2089,10 @@ impl RustCloudBackupManager {
         }
 
         send!(self.supervisor.cache_pending_verification_completion(completion));
-        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
+        self.set_pending_upload_verification_for_source(
+            PendingUploadVerificationState::Confirming,
+            source,
+        );
     }
 
     pub(crate) fn pending_verification_completion(&self) -> Option<PendingVerificationCompletion> {
@@ -2352,16 +2438,18 @@ impl RustCloudBackupManager {
 }
 
 impl RustCloudBackupManager {
-    pub(crate) fn enable_cloud_backup(&self) {
-        send!(self.supervisor.start_operation(CloudBackupOperation::Enable, None));
+    pub(crate) fn enable_cloud_backup(&self, context: CloudBackupEnableContext) {
+        send!(self.supervisor.start_operation(CloudBackupOperation::Enable(context), None));
     }
 
-    pub(crate) fn enable_cloud_backup_force_new(&self) {
-        send!(self.supervisor.start_operation(CloudBackupOperation::EnableForceNew, None));
+    pub(crate) fn enable_cloud_backup_force_new(&self, context: CloudBackupEnableContext) {
+        send!(self.supervisor.start_operation(CloudBackupOperation::EnableForceNew(context), None));
     }
 
-    pub(crate) fn enable_cloud_backup_no_discovery(&self) {
-        send!(self.supervisor.start_operation(CloudBackupOperation::EnableNoDiscovery, None));
+    pub(crate) fn enable_cloud_backup_no_discovery(&self, context: CloudBackupEnableContext) {
+        send!(
+            self.supervisor.start_operation(CloudBackupOperation::EnableNoDiscovery(context), None)
+        );
     }
 
     /// Dismiss staged enable state for the existing-backup confirmation flow

@@ -20,7 +20,8 @@ use crate::{
     database::{Database, global_config::GlobalConfigKey},
     manager::{
         cloud_backup_manager::{
-            CLOUD_BACKUP_MANAGER, CloudBackupPasskeyChoiceFlow, CloudStorageIssue,
+            CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupPasskeyChoiceFlow,
+            CloudBackupVerificationSource, CloudStorageIssue, SavedPasskeyConfirmationMode,
         },
         connectivity_manager::CONNECTIVITY_MANAGER,
     },
@@ -592,7 +593,10 @@ impl RustOnboardingManager {
             CloudRestoreDiscovery::NoBackupFound => {
                 CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
                 CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
-                CLOUD_BACKUP_MANAGER.enable_cloud_backup_no_discovery();
+                CLOUD_BACKUP_MANAGER.enable_cloud_backup_no_discovery(CloudBackupEnableContext {
+                    saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
+                    verification_source: CloudBackupVerificationSource::Onboarding,
+                });
             }
             CloudRestoreDiscovery::Checking | CloudRestoreDiscovery::Inconclusive(_) => {}
         }

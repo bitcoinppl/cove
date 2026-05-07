@@ -22,18 +22,19 @@ use self::uploads::CloudBackupUploadWorker;
 use super::keychain::CloudBackupKeychain;
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
-    CloudBackupDetailResult, CloudBackupEnableState, CloudBackupStatus, DeepVerificationResult,
-    OtherBackupsOperation, PendingEnableSession, PendingVerificationCompletion, RecoveryAction,
-    RustCloudBackupManager, VerificationState, WalletId,
+    CloudBackupDetailResult, CloudBackupEnableContext, CloudBackupEnableState, CloudBackupStatus,
+    DeepVerificationResult, OtherBackupsOperation, PendingEnableSession,
+    PendingVerificationCompletion, RecoveryAction, RustCloudBackupManager, VerificationState,
+    WalletId,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
 #[derive(Debug, Clone)]
 pub(crate) enum CloudBackupOperation {
-    Enable,
-    EnableForceNew,
-    EnableNoDiscovery,
-    Recovery { action: RecoveryAction },
+    Enable(CloudBackupEnableContext),
+    EnableForceNew(CloudBackupEnableContext),
+    EnableNoDiscovery(CloudBackupEnableContext),
+    Recovery(RecoveryAction),
     RepairPasskey { no_discovery: bool },
     Sync,
     FetchCloudOnly,
@@ -163,7 +164,7 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else { return };
 
         match operation {
-            CloudBackupOperation::Enable => {
+            CloudBackupOperation::Enable(context) => {
                 if !manager.begin_background_operation(
                     "enable_cloud_backup",
                     Some(CloudBackupStatus::Enabling),
@@ -171,13 +172,13 @@ impl CloudBackupSupervisor {
                     return;
                 }
                 cove_tokio::task::spawn(async move {
-                    if let Err(error) = manager.do_enable_cloud_backup().await {
+                    if let Err(error) = manager.do_enable_cloud_backup_with_context(context).await {
                         error!("enable_cloud_backup failed: {error}");
                         manager.finish_background_operation_error(&error);
                     }
                 });
             }
-            CloudBackupOperation::EnableForceNew => {
+            CloudBackupOperation::EnableForceNew(context) => {
                 if !manager.begin_background_operation(
                     "enable_cloud_backup_force_new",
                     Some(CloudBackupStatus::Enabling),
@@ -185,13 +186,15 @@ impl CloudBackupSupervisor {
                     return;
                 }
                 cove_tokio::task::spawn(async move {
-                    if let Err(error) = manager.do_enable_cloud_backup_force_new().await {
+                    if let Err(error) =
+                        manager.do_enable_cloud_backup_force_new_with_context(context).await
+                    {
                         error!("enable_cloud_backup_force_new failed: {error}");
                         manager.finish_background_operation_error(&error);
                     }
                 });
             }
-            CloudBackupOperation::EnableNoDiscovery => {
+            CloudBackupOperation::EnableNoDiscovery(context) => {
                 if !manager.begin_background_operation(
                     "enable_cloud_backup_no_discovery",
                     Some(CloudBackupStatus::Enabling),
@@ -199,13 +202,15 @@ impl CloudBackupSupervisor {
                     return;
                 }
                 cove_tokio::task::spawn(async move {
-                    if let Err(error) = manager.do_enable_cloud_backup_no_discovery().await {
+                    if let Err(error) =
+                        manager.do_enable_cloud_backup_no_discovery_with_context(context).await
+                    {
                         error!("enable_cloud_backup_no_discovery failed: {error}");
                         manager.finish_background_operation_error(&error);
                     }
                 });
             }
-            CloudBackupOperation::Recovery { action } => {
+            CloudBackupOperation::Recovery(action) => {
                 cove_tokio::task::spawn(async move { manager.handle_recovery(action).await });
             }
             CloudBackupOperation::RepairPasskey { no_discovery } => {
@@ -511,7 +516,7 @@ impl CloudBackupSupervisor {
             }
         };
 
-        manager.set_enable_state(CloudBackupEnableState::CreatingPasskey);
+        manager.set_enable_state(CloudBackupEnableState::ConfirmingSavedPasskey);
         cove_tokio::task::spawn(async move {
             manager.handle_confirm_saved_passkey_session(pending).await;
         });

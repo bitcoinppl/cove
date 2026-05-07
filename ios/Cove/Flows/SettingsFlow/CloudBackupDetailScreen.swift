@@ -195,7 +195,10 @@ struct UnsupportedPasskeyProviderContent: View {
 
         Section {
             Button {
-                manager.dispatch(action: .enableCloudBackupNoDiscovery)
+                manager.dispatch(action: .enableCloudBackupNoDiscovery(.init(
+                    savedPasskeyConfirmation: .manual,
+                    verificationSource: .cloudBackupDetail
+                )))
             } label: {
                 Label("Try Again", systemImage: "arrow.clockwise")
             }
