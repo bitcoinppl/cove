@@ -1806,8 +1806,9 @@ mod tests {
     use crate::manager::cloud_backup_manager::{
         CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupKeychain,
         CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPromptIntent,
-        DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-        PendingVerificationCompletion, PendingVerificationUpload, VerificationState,
+        CloudBackupVerificationSource, DeepVerificationFailure, DeepVerificationReport,
+        DeepVerificationResult, PendingVerificationCompletion, PendingVerificationUpload,
+        VerificationState,
     };
     use crate::manager::cloud_backup_manager::{
         SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE, cspp_master_key_record_id,
@@ -5701,7 +5702,9 @@ mod tests {
             "authorization required",
         );
 
-        manager.dispatch(CloudBackupManagerAction::StartVerification);
+        manager.dispatch(CloudBackupManagerAction::StartVerification {
+            source: CloudBackupVerificationSource::Settings,
+        });
 
         wait_for_test_condition(
             Duration::from_secs(1),

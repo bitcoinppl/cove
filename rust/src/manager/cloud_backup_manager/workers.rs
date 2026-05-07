@@ -21,7 +21,8 @@ use self::sync_health::CloudBackupSyncHealthWorker;
 use self::uploads::CloudBackupUploadWorker;
 use super::keychain::CloudBackupKeychain;
 use super::{
-    CloudBackupDetailResult, CloudBackupEnableState, CloudBackupStatus, DeepVerificationResult,
+    CloudBackupDetailResult, CloudBackupEnableState, CloudBackupStatus,
+    CloudBackupVerificationPresentation, CloudBackupVerificationSource, DeepVerificationResult,
     OtherBackupsOperation, PendingEnableSession, PendingVerificationCompletion, RecoveryAction,
     RustCloudBackupManager, VerificationState, WalletId,
 };
@@ -380,6 +381,16 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         self.pending_verification_completion = None;
+        if !matches!(
+            manager.state.read().verification_presentation,
+            CloudBackupVerificationPresentation::ManualVerifying { .. }
+        ) {
+            manager.set_verification_presentation(
+                CloudBackupVerificationPresentation::ManualVerifying {
+                    source: CloudBackupVerificationSource::Settings,
+                },
+            );
+        }
         manager.set_verification(VerificationState::Verifying);
         self.schedule_verification(manager, force_discoverable, attempt);
 

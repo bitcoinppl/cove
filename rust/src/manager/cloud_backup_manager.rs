@@ -45,8 +45,9 @@ use crate::wallet::metadata::{
 
 use self::cloud_inventory::RemoteWalletTruth;
 pub use self::detail::{
-    CloudOnlyOperation, CloudOnlyState, PendingUploadVerificationState, RecoveryAction,
-    RecoveryState, SyncState, VerificationState,
+    CloudBackupVerificationPresentation, CloudBackupVerificationReason,
+    CloudBackupVerificationSource, CloudOnlyOperation, CloudOnlyState,
+    PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
 };
 pub(crate) use self::keychain::CloudBackupKeychain;
 use self::prompt::CloudBackupPromptState;
@@ -115,8 +116,8 @@ pub enum CloudBackupManagerAction {
     DismissMissingPasskeyReminder,
     RestoreFromCloudBackup,
     CancelRestore,
-    StartVerification,
-    StartVerificationDiscoverable,
+    StartVerification { source: CloudBackupVerificationSource },
+    StartVerificationDiscoverable { source: CloudBackupVerificationSource },
     DismissVerificationPrompt,
     RecreateManifest,
     ReinitializeBackup,
@@ -143,6 +144,7 @@ pub enum CloudBackupReconcileMessage {
     EnableState(CloudBackupEnableState),
     VerificationPrompt(bool),
     VerificationMetadata(CloudBackupVerificationMetadata),
+    VerificationPresentation(CloudBackupVerificationPresentation),
     PendingUploadVerification(PendingUploadVerificationState),
     Detail(Option<CloudBackupDetail>),
     Verification(VerificationState),
@@ -328,6 +330,7 @@ pub struct CloudBackupState {
     pub pending_upload_verification: PendingUploadVerificationState,
     pub should_prompt_verification: bool,
     pub verification_metadata: CloudBackupVerificationMetadata,
+    pub verification_presentation: CloudBackupVerificationPresentation,
     pub detail: Option<CloudBackupDetail>,
     pub verification: VerificationState,
     pub sync: SyncState,
@@ -351,6 +354,7 @@ impl Default for CloudBackupState {
             pending_upload_verification: PendingUploadVerificationState::Idle,
             should_prompt_verification: false,
             verification_metadata: CloudBackupVerificationMetadata::NotConfigured,
+            verification_presentation: CloudBackupVerificationPresentation::Hidden,
             detail: None,
             verification: VerificationState::Idle,
             sync: SyncState::Idle,
@@ -1167,6 +1171,32 @@ impl RustCloudBackupManager {
         self.set_prompt_intent(prompt_intent);
     }
 
+    pub(crate) fn set_verification_presentation(
+        &self,
+        presentation: CloudBackupVerificationPresentation,
+    ) {
+        self.set_and_notify_field(
+            presentation,
+            |state| &mut state.verification_presentation,
+            Message::VerificationPresentation,
+        );
+        self.refresh_prompt_intent();
+    }
+
+    pub(crate) fn current_verification_source(&self) -> CloudBackupVerificationSource {
+        match &self.state.read().verification_presentation {
+            CloudBackupVerificationPresentation::ManualVerifying { source }
+            | CloudBackupVerificationPresentation::Completed { source }
+            | CloudBackupVerificationPresentation::Failed { source, .. } => *source,
+            CloudBackupVerificationPresentation::Hidden
+            | CloudBackupVerificationPresentation::NeedsDecision { .. }
+            | CloudBackupVerificationPresentation::BackgroundConfirming
+            | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization => {
+                CloudBackupVerificationSource::Settings
+            }
+        }
+    }
+
     pub(crate) fn set_existing_backup_found_prompt(&self) {
         self.prompt_state.lock().set_existing_backup_found();
         self.refresh_prompt_intent();
@@ -1231,7 +1261,7 @@ impl RustCloudBackupManager {
     pub(crate) fn refresh_persisted_flags(&self) {
         let (verification_metadata, should_prompt_verification) = Self::load_persisted_flags();
 
-        let (metadata_changed, prompt_changed) = {
+        let (metadata_changed, prompt_changed, presentation) = {
             let mut state = self.state.write();
 
             let metadata_changed = state.verification_metadata != verification_metadata;
@@ -1244,7 +1274,34 @@ impl RustCloudBackupManager {
                 state.should_prompt_verification = should_prompt_verification;
             }
 
-            (metadata_changed, prompt_changed)
+            let presentation = if matches!(
+                verification_metadata,
+                CloudBackupVerificationMetadata::NeedsVerification
+            ) && should_prompt_verification
+                && matches!(
+                    state.pending_upload_verification,
+                    PendingUploadVerificationState::Idle
+                )
+                && matches!(state.verification, VerificationState::Idle | VerificationState::Cancelled)
+            {
+                CloudBackupVerificationPresentation::NeedsDecision {
+                    reason: CloudBackupVerificationReason::BackupChanged,
+                }
+            } else if matches!(
+                state.verification_presentation,
+                CloudBackupVerificationPresentation::NeedsDecision { .. }
+            ) {
+                CloudBackupVerificationPresentation::Hidden
+            } else {
+                state.verification_presentation.clone()
+            };
+
+            let presentation_changed = state.verification_presentation != presentation;
+            if presentation_changed {
+                state.verification_presentation = presentation.clone();
+            }
+
+            (metadata_changed, prompt_changed, presentation_changed.then_some(presentation))
         };
 
         if metadata_changed {
@@ -1253,6 +1310,10 @@ impl RustCloudBackupManager {
 
         if prompt_changed {
             self.send(Message::VerificationPrompt(should_prompt_verification));
+        }
+
+        if let Some(presentation) = presentation {
+            self.send(Message::VerificationPresentation(presentation));
         }
 
         self.refresh_prompt_intent();
@@ -1264,6 +1325,19 @@ impl RustCloudBackupManager {
             |state| &mut state.pending_upload_verification,
             Message::PendingUploadVerification,
         );
+        match pending {
+            PendingUploadVerificationState::Idle => {}
+            PendingUploadVerificationState::Confirming => {
+                self.set_verification_presentation(
+                    CloudBackupVerificationPresentation::BackgroundConfirming,
+                );
+            }
+            PendingUploadVerificationState::BlockedOnAuthorization => {
+                self.set_verification_presentation(
+                    CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization,
+                );
+            }
+        }
         self.refresh_prompt_intent();
     }
 
@@ -2100,6 +2174,20 @@ impl RustCloudBackupManager {
             != PendingUploadVerificationState::BlockedOnAuthorization
         {
             state.pending_upload_verification = self.current_pending_upload_verification_state();
+        }
+        if matches!(
+            state.verification_metadata,
+            CloudBackupVerificationMetadata::NeedsVerification
+        ) && state.should_prompt_verification
+            && matches!(
+                state.pending_upload_verification,
+                PendingUploadVerificationState::Idle
+            )
+            && matches!(state.verification, VerificationState::Idle | VerificationState::Cancelled)
+        {
+            state.verification_presentation = CloudBackupVerificationPresentation::NeedsDecision {
+                reason: CloudBackupVerificationReason::BackupChanged,
+            };
         }
         state.prompt_intent = self.prompt_state.lock().resolve(&state);
         state

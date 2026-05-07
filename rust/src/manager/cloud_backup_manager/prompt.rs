@@ -1,6 +1,6 @@
 use super::{
     CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupState, CloudBackupStatus,
-    PendingUploadVerificationState, RecoveryAction, RecoveryState, VerificationState,
+    CloudBackupVerificationPresentation, RecoveryAction, RecoveryState,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -52,21 +52,17 @@ impl CloudBackupPromptState {
             return CloudBackupPromptIntent::MissingPasskeyReminder;
         }
 
-        // decide whether verification needs user attention
-        use VerificationState as Vs;
-        match (&state.verification, state.should_prompt_verification) {
-            (Vs::Verifying | Vs::Failed(_), _) => CloudBackupPromptIntent::VerificationPrompt,
-            (Vs::Idle | Vs::Verified(_) | Vs::PasskeyConfirmed | Vs::Cancelled, true)
-                if matches!(
-                    state.pending_upload_verification,
-                    PendingUploadVerificationState::Idle
-                ) =>
-            {
+        // the verification sheet is an unanswered decision, not a status surface
+        match state.verification_presentation {
+            CloudBackupVerificationPresentation::NeedsDecision { .. } => {
                 CloudBackupPromptIntent::VerificationPrompt
             }
-            (Vs::Idle | Vs::Verified(_) | Vs::PasskeyConfirmed | Vs::Cancelled, _) => {
-                CloudBackupPromptIntent::None
-            }
+            CloudBackupVerificationPresentation::Hidden
+            | CloudBackupVerificationPresentation::ManualVerifying { .. }
+            | CloudBackupVerificationPresentation::BackgroundConfirming
+            | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization
+            | CloudBackupVerificationPresentation::Completed { .. }
+            | CloudBackupVerificationPresentation::Failed { .. } => CloudBackupPromptIntent::None,
         }
     }
 }
@@ -75,10 +71,10 @@ impl CloudBackupPromptState {
 mod tests {
     use super::{
         CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupPromptState,
-        CloudBackupState, CloudBackupStatus, PendingUploadVerificationState, RecoveryAction,
-        RecoveryState, VerificationState,
+        CloudBackupState, CloudBackupStatus, CloudBackupVerificationPresentation,
+        CloudBackupVerificationReason, CloudBackupVerificationSource, RecoveryAction,
+        RecoveryState,
     };
-    use crate::manager::cloud_backup_manager::DeepVerificationFailure;
 
     #[test]
     fn existing_backup_prompt_has_highest_priority() {
@@ -142,9 +138,7 @@ mod tests {
     fn background_verification_suppresses_verification_prompt() {
         let prompt_state = CloudBackupPromptState::default();
         let state = CloudBackupState {
-            pending_upload_verification: PendingUploadVerificationState::Confirming,
-            should_prompt_verification: true,
-            verification: VerificationState::Idle,
+            verification_presentation: CloudBackupVerificationPresentation::BackgroundConfirming,
             ..CloudBackupState::default()
         };
 
@@ -155,11 +149,23 @@ mod tests {
     fn failed_verification_keeps_prompt_active() {
         let prompt_state = CloudBackupPromptState::default();
         let state = CloudBackupState {
-            verification: VerificationState::Failed(DeepVerificationFailure::Retry {
+            verification_presentation: CloudBackupVerificationPresentation::Failed {
+                source: CloudBackupVerificationSource::RootPrompt,
                 message: "verification failed".into(),
-                detail: None,
-                retry_context: None,
-            }),
+            },
+            ..CloudBackupState::default()
+        };
+
+        assert_eq!(prompt_state.resolve(&state), CloudBackupPromptIntent::None);
+    }
+
+    #[test]
+    fn unanswered_verification_decision_shows_prompt() {
+        let prompt_state = CloudBackupPromptState::default();
+        let state = CloudBackupState {
+            verification_presentation: CloudBackupVerificationPresentation::NeedsDecision {
+                reason: CloudBackupVerificationReason::BackupChanged,
+            },
             ..CloudBackupState::default()
         };
 

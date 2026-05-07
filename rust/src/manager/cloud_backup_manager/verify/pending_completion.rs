@@ -6,14 +6,15 @@ use tracing::{error, warn};
 use zeroize::Zeroizing;
 
 use super::{
-    CloudBackupDetailResult, CloudBackupError, CloudBackupVerificationPresentation,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    PendingVerificationCompletion, RecoveryState, RustCloudBackupManager, VerificationState,
+    CloudBackupDetailResult, CloudBackupError, DeepVerificationFailure, DeepVerificationReport,
+    DeepVerificationResult, PendingVerificationCompletion, RecoveryState, RustCloudBackupManager,
+    VerificationState,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, PendingVerificationUpload, master_key_wrapper_revision_hash,
+    CloudBackupDetail, CloudBackupVerificationPresentation, PendingVerificationUpload,
+    master_key_wrapper_revision_hash,
     wallets::{WalletBackupLookup, WalletBackupReader},
 };
 
