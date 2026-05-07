@@ -967,6 +967,7 @@ private struct SettingsCloudBackupEnableSheet: View {
     @State private var isStartingEnable = false
     @State private var passkeyEnableFlow = PasskeyEnableFlow.idle
     @State private var existingBackupContext: CloudBackupEnableContext?
+    @State private var existingBackupPasskeyHint: CloudBackupPasskeyHint?
 
     let onComplete: () -> Void
     let onDismiss: () -> Void
@@ -1019,8 +1020,9 @@ private struct SettingsCloudBackupEnableSheet: View {
     }
 
     private func handlePromptIntent(_ promptIntent: CloudBackupPromptIntent) {
-        if case let .existingBackupFound(context) = promptIntent {
+        if case let .existingBackupFound(context, passkeyHint) = promptIntent {
             existingBackupContext = context
+            existingBackupPasskeyHint = passkeyHint
             passkeyEnableFlow = .idle
             isStartingEnable = false
             return
@@ -1036,6 +1038,14 @@ private struct SettingsCloudBackupEnableSheet: View {
         if shouldDismiss(for: promptIntent) {
             onDismiss()
         }
+    }
+
+    private var existingBackupMessage: String {
+        guard let existingBackupPasskeyHint else {
+            return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead."
+        }
+
+        return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey named Cove Cloud Backup (\(existingBackupPasskeyHint.nameSuffix)), use that passkey instead."
     }
 
     var body: some View {
@@ -1118,22 +1128,23 @@ private struct SettingsCloudBackupEnableSheet: View {
                         manager.dispatch(action: .discardPendingEnableCloudBackup)
                     }
                     existingBackupContext = nil
+                    existingBackupPasskeyHint = nil
                 }
             )
         ) {
             Button("Create New Backup", role: .destructive) {
                 guard let context = existingBackupContext else { return }
                 existingBackupContext = nil
+                existingBackupPasskeyHint = nil
                 manager.dispatch(action: .enableCloudBackupForceNew(context))
             }
             Button("Cancel", role: .cancel) {
                 existingBackupContext = nil
+                existingBackupPasskeyHint = nil
                 manager.dispatch(action: .discardPendingEnableCloudBackup)
             }
         } message: {
-            Text(
-                "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead."
-            )
+            Text(existingBackupMessage)
         }
     }
 }

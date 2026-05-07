@@ -354,7 +354,22 @@ struct OtherBackupsSection: View {
     private var summaryText: String {
         let namespaceLabel = pluralize(Int(summary.namespaceCount), singular: "backup set", plural: "backup sets")
         let walletLabel = pluralize(Int(summary.walletCount), singular: "wallet", plural: "wallets")
-        return "\(namespaceLabel) protected by a different passkey, containing \(walletLabel)"
+        let passkeyLabel = otherPasskeyLabel
+        return "\(namespaceLabel) protected by \(passkeyLabel), containing \(walletLabel)"
+    }
+
+    private var otherPasskeyLabel: String {
+        let suffixes = summary.passkeyHints.map(\.nameSuffix)
+
+        guard !suffixes.isEmpty else {
+            return "a different passkey"
+        }
+
+        if suffixes.count == 1 {
+            return "Cove Cloud Backup (\(suffixes[0]))"
+        }
+
+        return "passkeys \(suffixes.map { "(\($0))" }.joined(separator: ", "))"
     }
 
     private func operationLabel(title: String, systemImage: String, isLoading: Bool) -> some View {

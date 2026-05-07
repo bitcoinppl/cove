@@ -3,7 +3,7 @@ import SwiftUI
 @_exported import CoveCore
 
 enum CloudBackupRootPresentation: Equatable {
-    case existingBackupFound(CloudBackupEnableContext)
+    case existingBackupFound(CloudBackupEnableContext, CloudBackupPasskeyHint?)
     case passkeyChoice(CloudBackupPasskeyChoiceIntent)
     case missingPasskeyReminder
     case verificationPrompt
@@ -12,8 +12,8 @@ enum CloudBackupRootPresentation: Equatable {
         switch promptIntent {
         case .none:
             return nil
-        case let .existingBackupFound(context):
-            self = .existingBackupFound(context)
+        case let .existingBackupFound(context, passkeyHint):
+            self = .existingBackupFound(context, passkeyHint)
         case let .passkeyChoice(intent):
             self = .passkeyChoice(intent)
         case .missingPasskeyReminder:
@@ -301,8 +301,16 @@ struct CloudBackupPresentationHost<Content: View>: View {
     }
 
     private var existingBackupContext: CloudBackupEnableContext? {
-        if case let .existingBackupFound(context) = coordinator.currentPresentation {
+        if case let .existingBackupFound(context, _) = coordinator.currentPresentation {
             return context
+        }
+
+        return nil
+    }
+
+    private var existingBackupPasskeyHint: CloudBackupPasskeyHint? {
+        if case let .existingBackupFound(_, passkeyHint) = coordinator.currentPresentation {
+            return passkeyHint
         }
 
         return nil
@@ -311,6 +319,15 @@ struct CloudBackupPresentationHost<Content: View>: View {
     private var passkeyChoiceIntent: CloudBackupPasskeyChoiceIntent? {
         if case let .passkeyChoice(intent) = coordinator.currentPresentation {
             return intent
+        }
+
+        return nil
+    }
+
+    private var passkeyChoiceHint: CloudBackupPasskeyHint? {
+        guard let passkeyChoiceIntent else { return nil }
+        if case let .enable(_, passkeyHint) = passkeyChoiceIntent {
+            return passkeyHint
         }
 
         return nil
@@ -333,9 +350,9 @@ struct CloudBackupPresentationHost<Content: View>: View {
         coordinator.dismissCurrentPresentation()
 
         switch (intent, existing) {
-        case let (.enable(context), true):
+        case let (.enable(context, _), true):
             manager.dispatch(action: .enableCloudBackup(context))
-        case let (.enable(context), false):
+        case let (.enable(context, _), false):
             manager.dispatch(action: .enableCloudBackupNoDiscovery(context))
         case (.repairPasskey, true):
             manager.dispatch(action: .repairPasskey)
@@ -353,6 +370,19 @@ struct CloudBackupPresentationHost<Content: View>: View {
         }
 
         app.pushRoute(route)
+    }
+
+    private func existingPasskeyButtonTitle(for hint: CloudBackupPasskeyHint?) -> String {
+        guard let hint else { return "Use Existing Passkey" }
+        return "Use Existing Passkey (\(hint.nameSuffix))"
+    }
+
+    private func existingBackupMessage(for hint: CloudBackupPasskeyHint?) -> String {
+        guard let hint else {
+            return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead."
+        }
+
+        return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey named Cove Cloud Backup (\(hint.nameSuffix)), use that passkey instead."
     }
 
     var body: some View {
@@ -381,15 +411,13 @@ struct CloudBackupPresentationHost<Content: View>: View {
                     manager.dispatch(action: .discardPendingEnableCloudBackup)
                 }
             } message: {
-                Text(
-                    "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead."
-                )
+                Text(existingBackupMessage(for: existingBackupPasskeyHint))
             }
             .alert(
                 "Passkey Options",
                 isPresented: showingPasskeyChoicePrompt
             ) {
-                Button("Use Existing Passkey") {
+                Button(existingPasskeyButtonTitle(for: passkeyChoiceHint)) {
                     handlePasskeyChoice(existing: true)
                 }
                 Button("Create New Passkey") {
