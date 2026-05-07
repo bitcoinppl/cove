@@ -8094,7 +8094,7 @@ public protocol RustPendingWalletManagerProtocol: AnyObject, Sendable {
     
     func numberOfWordsCount()  -> UInt8
     
-    func saveWallet() throws  -> WalletMetadata
+    func saveWallet() throws  -> PendingWalletSaveResult
     
 }
 open class RustPendingWalletManager: RustPendingWalletManagerProtocol, @unchecked Sendable {
@@ -8217,8 +8217,8 @@ open func numberOfWordsCount() -> UInt8  {
 })
 }
     
-open func saveWallet()throws  -> WalletMetadata  {
-    return try  FfiConverterTypeWalletMetadata_lift(try rustCallWithError(FfiConverterTypePendingWalletManagerError_lift) {
+open func saveWallet()throws  -> PendingWalletSaveResult  {
+    return try  FfiConverterTypePendingWalletSaveResult_lift(try rustCallWithError(FfiConverterTypePendingWalletManagerError_lift) {
     uniffi_cove_fn_method_rustpendingwalletmanager_save_wallet(
             self.uniffiCloneHandle(),$0
     )
@@ -14952,6 +14952,60 @@ public func FfiConverterTypePendingWalletManagerState_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypePendingWalletManagerState_lower(_ value: PendingWalletManagerState) -> RustBuffer {
     return FfiConverterTypePendingWalletManagerState.lower(value)
+}
+
+
+public struct PendingWalletSaveResult {
+    public var metadata: WalletMetadata
+    public var routes: [Route]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(metadata: WalletMetadata, routes: [Route]) {
+        self.metadata = metadata
+        self.routes = routes
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PendingWalletSaveResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePendingWalletSaveResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PendingWalletSaveResult {
+        return
+            try PendingWalletSaveResult(
+                metadata: FfiConverterTypeWalletMetadata.read(from: &buf), 
+                routes: FfiConverterSequenceTypeRoute.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PendingWalletSaveResult, into buf: inout [UInt8]) {
+        FfiConverterTypeWalletMetadata.write(value.metadata, into: &buf)
+        FfiConverterSequenceTypeRoute.write(value.routes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePendingWalletSaveResult_lift(_ buf: RustBuffer) throws -> PendingWalletSaveResult {
+    return try FfiConverterTypePendingWalletSaveResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePendingWalletSaveResult_lower(_ value: PendingWalletSaveResult) -> RustBuffer {
+    return FfiConverterTypePendingWalletSaveResult.lower(value)
 }
 
 
@@ -37429,7 +37483,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustpendingwalletmanager_number_of_words_count() != 7796) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet() != 54348) {
+    if (uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet() != 9073) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_amount() != 50946) {

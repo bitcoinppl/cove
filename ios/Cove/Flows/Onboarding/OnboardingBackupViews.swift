@@ -270,12 +270,19 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         case let .error(message):
             message
         default:
-            nil
+            if case let .failed(failure) = backupManager.verification {
+                failure.message()
+            } else {
+                nil
+            }
         }
     }
 
     private var isBusy: Bool {
-        isEnablingCloudBackup && backupManager.enableState != .needsPasskeyConfirmation
+        if case .verifying = backupManager.verification { return true }
+        if case .confirming = backupManager.pendingUploadVerification { return true }
+
+        return isEnablingCloudBackup && backupManager.enableState != .needsPasskeyConfirmation
     }
 
     private var isEnablingCloudBackup: Bool {
@@ -299,7 +306,11 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private var primaryButtonTitle: String {
-        needsPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
+        if case .failed = backupManager.verification {
+            return "Try Again"
+        }
+
+        return needsPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
     }
 
     private func handleEnableTap() {
@@ -307,6 +318,11 @@ private struct OnboardingCloudBackupDetailsStepView: View {
 
         if needsPasskeyConfirmation {
             backupManager.dispatch(action: .confirmSavedPasskey)
+            return
+        }
+
+        if case .failed = backupManager.verification {
+            backupManager.dispatch(action: .startVerification)
             return
         }
 
@@ -322,7 +338,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private func autoConfirmSavedPasskeyIfNeeded() {
-        guard needsPasskeyConfirmation, !didAutoConfirmSavedPasskey else { return }
+        guard needsPasskeyConfirmation, !didAutoConfirmSavedPasskey, !didReportEnabled else { return }
         didAutoConfirmSavedPasskey = true
         backupManager.dispatch(action: .confirmSavedPasskey)
     }
@@ -349,7 +365,10 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         .onChange(of: backupManager.status, initial: true) { _, status in
             completeIfEnabled(status: status)
         }
-        .onChange(of: backupManager.isConfigured) { _, _ in
+        .onChange(of: backupManager.pendingUploadVerification) { _, _ in
+            completeIfEnabled()
+        }
+        .onChange(of: backupManager.verification) { _, _ in
             completeIfEnabled()
         }
         .onChange(of: backupManager.enableState, initial: true) { _, _ in
@@ -360,15 +379,26 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     private func completeIfEnabled(status: CloudBackupStatus? = nil) {
         guard !didReportEnabled else { return }
         let currentStatus = status ?? backupManager.status
-        let isEnabled = if case .enabled = currentStatus {
-            true
-        } else {
-            backupManager.isCloudBackupEnabled
-        }
-        guard isEnabled else { return }
+        guard shouldCompleteOnboardingCloudBackup(
+            status: currentStatus,
+            pendingUploadVerification: backupManager.pendingUploadVerification,
+            verification: backupManager.verification
+        ) else { return }
         didReportEnabled = true
         onEnabled()
     }
+}
+
+private func shouldCompleteOnboardingCloudBackup(
+    status: CloudBackupStatus,
+    pendingUploadVerification: PendingUploadVerificationState,
+    verification: VerificationState
+) -> Bool {
+    guard case .enabled = status else { return false }
+    guard case .idle = pendingUploadVerification else { return false }
+    guard case .verified = verification else { return false }
+
+    return true
 }
 
 struct OnboardingCloudBackupSuccessView: View {

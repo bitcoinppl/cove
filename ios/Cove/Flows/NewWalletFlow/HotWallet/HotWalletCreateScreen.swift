@@ -44,18 +44,6 @@ struct WordsView: View {
         groupedWords.count - 1
     }
 
-    private func resetAfterSavingWallet(_ walletId: WalletId) {
-        if CloudBackupManager.shared.shouldPromptVerification {
-            app.resetRoute(to: Route.selectedWallet(walletId))
-            return
-        }
-
-        app.resetRoute(to: [
-            Route.selectedWallet(walletId),
-            HotWalletRoute.verifyWords(walletId).intoRoute(),
-        ])
-    }
-
     var body: some View {
         Group {
             if sizeCategory >= .extraExtraLarge || isMiniDevice {
@@ -130,8 +118,8 @@ struct WordsView: View {
                     if tabIndex == lastIndex {
                         Button(action: {
                             do {
-                                let walletId = try manager.rust.saveWallet().id
-                                resetAfterSavingWallet(walletId)
+                                let result = try manager.rust.saveWallet()
+                                app.resetRoute(to: result.routes)
                             } catch {
                                 Log.error("Error \(error)")
                             }

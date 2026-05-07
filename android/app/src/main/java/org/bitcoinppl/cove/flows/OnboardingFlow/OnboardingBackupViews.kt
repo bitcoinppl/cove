@@ -80,6 +80,8 @@ import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
 import org.bitcoinppl.cove_core.CloudBackupStatus
+import org.bitcoinppl.cove_core.PendingUploadVerificationState
+import org.bitcoinppl.cove_core.VerificationState
 import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingBranch
 
@@ -147,13 +149,12 @@ internal fun shouldNotifyRestoreError(
 
 internal fun shouldCompleteOnboardingCloudBackup(
     status: CloudBackupStatus,
-    isCloudBackupEnabled: Boolean,
-    isConfigured: Boolean,
+    pendingUploadVerification: PendingUploadVerificationState,
+    verification: VerificationState,
 ): Boolean =
-    when (status) {
-        CloudBackupStatus.Enabled -> true
-        else -> isCloudBackupEnabled && isConfigured
-    }
+    status is CloudBackupStatus.Enabled &&
+        pendingUploadVerification == PendingUploadVerificationState.IDLE &&
+        verification is VerificationState.Verified
 
 @Composable
 internal fun OnboardingCreatingWalletView(
@@ -600,23 +601,41 @@ private fun OnboardingCloudBackupDetailsStepView(
             CloudBackupStatus.UnsupportedPasskeyProvider ->
                 "This passkey provider did not confirm support for Cloud Backup. Try another supported provider such as 1Password or Bitwarden."
             is CloudBackupStatus.Error -> status.v1
+            else -> (backupManager.verification as? VerificationState.Failed)?.v1?.message()
+        }
+    val isVerifying = backupManager.verification is VerificationState.Verifying
+    val verificationFailed = backupManager.verification is VerificationState.Failed
+    val isConfirmingUpload =
+        backupManager.pendingUploadVerification == PendingUploadVerificationState.CONFIRMING
+    val isEnabling =
+        backupManager.status is CloudBackupStatus.Enabling &&
+            backupManager.enableState != CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION
+    val isBusy =
+        isVerifying ||
+            isConfirmingUpload ||
+            isEnabling
+    val needsPasskeyConfirmation =
+        backupManager.enableState == CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION
+    val primaryButtonTitle =
+        when {
+            verificationFailed -> "Try Again"
+            needsPasskeyConfirmation -> "Confirm Passkey"
             else -> null
         }
+            ?: "Enable Cloud Backup"
     val promptIntent = backupManager.promptIntent
     val isPromptingForEnableChoice =
         promptIntent is CloudBackupPromptIntent.PasskeyChoice &&
             promptIntent.v1 == CloudBackupPasskeyChoiceFlow.ENABLE
-    val isBusy =
-        backupManager.status is CloudBackupStatus.Enabling &&
-            backupManager.enableState != CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION
-    val needsPasskeyConfirmation =
-        backupManager.enableState == CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION
-    val primaryButtonTitle =
-        if (needsPasskeyConfirmation) "Confirm Passkey" else "Enable Cloud Backup"
 
     fun completeIfEnabled() {
         if (didReportEnabled) return
-        if (!shouldCompleteOnboardingCloudBackup(backupManager.status, backupManager.isCloudBackupEnabled, backupManager.isConfigured)) {
+        if (!shouldCompleteOnboardingCloudBackup(
+                backupManager.status,
+                backupManager.pendingUploadVerification,
+                backupManager.verification,
+            )
+        ) {
             return
         }
 
@@ -624,12 +643,16 @@ private fun OnboardingCloudBackupDetailsStepView(
         onEnabled()
     }
 
-    LaunchedEffect(backupManager.status, backupManager.isCloudBackupEnabled, backupManager.isConfigured) {
+    LaunchedEffect(
+        backupManager.status,
+        backupManager.pendingUploadVerification,
+        backupManager.verification,
+    ) {
         completeIfEnabled()
     }
 
     LaunchedEffect(backupManager.enableState) {
-        if (needsPasskeyConfirmation && !didAutoConfirmSavedPasskey) {
+        if (needsPasskeyConfirmation && !didAutoConfirmSavedPasskey && !didReportEnabled) {
             didAutoConfirmSavedPasskey = true
             backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
         }
@@ -644,6 +667,11 @@ private fun OnboardingCloudBackupDetailsStepView(
 
                 if (needsPasskeyConfirmation) {
                     backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
+                    return@CloudBackupEnableOnboardingView
+                }
+
+                if (verificationFailed) {
+                    backupManager.dispatch(CloudBackupManagerAction.StartVerification)
                     return@CloudBackupEnableOnboardingView
                 }
 

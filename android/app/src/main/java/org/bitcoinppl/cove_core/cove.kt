@@ -4172,7 +4172,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_number_of_words_count() != 7796.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet() != 54348.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet() != 9073.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount() != 50946.toShort()) {
@@ -19665,7 +19665,7 @@ public interface RustPendingWalletManagerInterface {
     
     fun `numberOfWordsCount`(): kotlin.UByte
     
-    fun `saveWallet`(): WalletMetadata
+    fun `saveWallet`(): PendingWalletSaveResult
     
     companion object
 }
@@ -19872,8 +19872,8 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
     
 
     
-    @Throws(PendingWalletManagerException::class)override fun `saveWallet`(): WalletMetadata {
-            return FfiConverterTypeWalletMetadata.lift(
+    @Throws(PendingWalletManagerException::class)override fun `saveWallet`(): PendingWalletSaveResult {
+            return FfiConverterTypePendingWalletSaveResult.lift(
     callWithHandle {
     uniffiRustCallWithError(PendingWalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_save_wallet(
@@ -29281,6 +29281,53 @@ public object FfiConverterTypePendingWalletManagerState: FfiConverterRustBuffer<
     override fun write(value: PendingWalletManagerState, buf: ByteBuffer) {
             FfiConverterTypeNumberOfBip39Words.write(value.`numberOfWords`, buf)
             FfiConverterTypePendingWallet.write(value.`wallet`, buf)
+    }
+}
+
+
+
+data class PendingWalletSaveResult (
+    var `metadata`: WalletMetadata
+    , 
+    var `routes`: List<Route>
+    
+): Disposable{
+    
+
+    
+
+    
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        
+    Disposable.destroy(
+        this.`metadata`,
+        this.`routes`
+    )
+    }
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePendingWalletSaveResult: FfiConverterRustBuffer<PendingWalletSaveResult> {
+    override fun read(buf: ByteBuffer): PendingWalletSaveResult {
+        return PendingWalletSaveResult(
+            FfiConverterTypeWalletMetadata.read(buf),
+            FfiConverterSequenceTypeRoute.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PendingWalletSaveResult) = (
+            FfiConverterTypeWalletMetadata.allocationSize(value.`metadata`) +
+            FfiConverterSequenceTypeRoute.allocationSize(value.`routes`)
+    )
+
+    override fun write(value: PendingWalletSaveResult, buf: ByteBuffer) {
+            FfiConverterTypeWalletMetadata.write(value.`metadata`, buf)
+            FfiConverterSequenceTypeRoute.write(value.`routes`, buf)
     }
 }
 
