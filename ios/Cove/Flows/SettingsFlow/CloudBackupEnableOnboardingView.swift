@@ -11,6 +11,7 @@ struct CloudBackupEnableOnboardingView: View {
     let message: String?
     let isBusy: Bool
     let context: CloudBackupEnableOnboardingContext
+    let primaryButtonTitle: String
 
     @State private var checks: [Bool] = Array(repeating: false, count: 3)
 
@@ -23,13 +24,15 @@ struct CloudBackupEnableOnboardingView: View {
         onCancel: @escaping () -> Void,
         message: String?,
         isBusy: Bool,
-        context: CloudBackupEnableOnboardingContext = .standard
+        context: CloudBackupEnableOnboardingContext = .standard,
+        primaryButtonTitle: String = "Enable Cloud Backup"
     ) {
         self.onEnable = onEnable
         self.onCancel = onCancel
         self.message = message
         self.isBusy = isBusy
         self.context = context
+        self.primaryButtonTitle = primaryButtonTitle
     }
 
     var body: some View {
@@ -209,7 +212,7 @@ struct CloudBackupEnableOnboardingView: View {
         Button {
             if allChecked { onEnable() }
         } label: {
-            Text("Enable Cloud Backup")
+            Text(primaryButtonTitle)
         }
         .buttonStyle(OnboardingPrimaryButtonStyle())
         .disabled(!allChecked || isBusy)

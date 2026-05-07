@@ -256,6 +256,7 @@ private struct OnboardingHardwareImportCloudBackupStepView: View {
 private struct OnboardingCloudBackupDetailsStepView: View {
     @State private var backupManager = CloudBackupManager.shared
     @State private var didReportEnabled = false
+    @State private var didAutoConfirmSavedPasskey = false
 
     let onEnable: () -> Void
     let onEnabled: () -> Void
@@ -297,6 +298,10 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         backupManager.enableState == .needsPasskeyConfirmation
     }
 
+    private var primaryButtonTitle: String {
+        needsPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
+    }
+
     private func handleEnableTap() {
         guard !isBusy, !isPromptingForEnableChoice else { return }
 
@@ -316,6 +321,12 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         onSkip()
     }
 
+    private func autoConfirmSavedPasskeyIfNeeded() {
+        guard needsPasskeyConfirmation, !didAutoConfirmSavedPasskey else { return }
+        didAutoConfirmSavedPasskey = true
+        backupManager.dispatch(action: .confirmSavedPasskey)
+    }
+
     var body: some View {
         ZStack {
             CloudBackupEnableOnboardingView(
@@ -323,7 +334,8 @@ private struct OnboardingCloudBackupDetailsStepView: View {
                 onCancel: handleSkipTap,
                 message: onboardingMessage,
                 isBusy: isBusy || isPromptingForEnableChoice,
-                context: context
+                context: context,
+                primaryButtonTitle: primaryButtonTitle
             )
 
             if isBusy {
@@ -332,12 +344,16 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         }
         .task {
             completeIfEnabled()
+            autoConfirmSavedPasskeyIfNeeded()
         }
         .onChange(of: backupManager.status, initial: true) { _, status in
             completeIfEnabled(status: status)
         }
         .onChange(of: backupManager.isConfigured) { _, _ in
             completeIfEnabled()
+        }
+        .onChange(of: backupManager.enableState, initial: true) { _, _ in
+            autoConfirmSavedPasskeyIfNeeded()
         }
     }
 

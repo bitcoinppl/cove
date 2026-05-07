@@ -593,6 +593,7 @@ private fun OnboardingCloudBackupDetailsStepView(
 ) {
     val backupManager = remember { CloudBackupManager.getInstance() }
     var didReportEnabled by remember { mutableStateOf(false) }
+    var didAutoConfirmSavedPasskey by remember { mutableStateOf(false) }
 
     val onboardingMessage =
         when (val status = backupManager.status) {
@@ -610,6 +611,8 @@ private fun OnboardingCloudBackupDetailsStepView(
             backupManager.enableState != CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION
     val needsPasskeyConfirmation =
         backupManager.enableState == CloudBackupEnableState.NEEDS_PASSKEY_CONFIRMATION
+    val primaryButtonTitle =
+        if (needsPasskeyConfirmation) "Confirm Passkey" else "Enable Cloud Backup"
 
     fun completeIfEnabled() {
         if (didReportEnabled) return
@@ -623,6 +626,13 @@ private fun OnboardingCloudBackupDetailsStepView(
 
     LaunchedEffect(backupManager.status, backupManager.isCloudBackupEnabled, backupManager.isConfigured) {
         completeIfEnabled()
+    }
+
+    LaunchedEffect(backupManager.enableState) {
+        if (needsPasskeyConfirmation && !didAutoConfirmSavedPasskey) {
+            didAutoConfirmSavedPasskey = true
+            backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -649,6 +659,7 @@ private fun OnboardingCloudBackupDetailsStepView(
             message = onboardingMessage,
             isBusy = isBusy || isPromptingForEnableChoice,
             context = context,
+            primaryButtonTitle = primaryButtonTitle,
         )
 
         if (isBusy) {
@@ -755,6 +766,7 @@ private fun CloudBackupEnableOnboardingView(
     message: String?,
     isBusy: Boolean,
     context: CloudBackupEnableOnboardingContext,
+    primaryButtonTitle: String,
 ) {
     var checks by remember { mutableStateOf(listOf(false, false, false)) }
     val allChecked = checks.all { it }
@@ -886,7 +898,7 @@ private fun CloudBackupEnableOnboardingView(
                 }
 
                 OnboardingPrimaryButton(
-                    text = "Enable Cloud Backup",
+                    text = primaryButtonTitle,
                     onClick = onEnable,
                     modifier = Modifier.testTag("onboarding.cloudBackup.enable"),
                     enabled = allChecked && !isBusy,
