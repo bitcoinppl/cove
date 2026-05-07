@@ -2488,6 +2488,39 @@ mod tests {
         reason = "tests serialize shared cloud backup globals across awaits"
     )]
     #[tokio::test(flavor = "current_thread")]
+    async fn verification_prompt_restored_when_pending_upload_idle_hides_persisted_decision() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 3);
+
+        manager.backup_new_wallet(xpub_only_wallet_metadata());
+        manager.set_verification_presentation(CloudBackupVerificationPresentation::Hidden {
+            source: Some(CloudBackupVerificationSource::Settings),
+        });
+        assert_eq!(manager.state.read().prompt_intent, CloudBackupPromptIntent::None);
+
+        manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
+
+        let state = manager.state();
+        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert!(matches!(
+            state.verification_presentation,
+            CloudBackupVerificationPresentation::NeedsDecision {
+                reason: CloudBackupVerificationReason::BackupChanged,
+                ..
+            }
+        ));
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
     async fn dismiss_verification_prompt_hides_pending_decision() {
         let _guard = test_lock().lock();
         cove_tokio::init();

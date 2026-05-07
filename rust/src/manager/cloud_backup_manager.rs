@@ -1493,7 +1493,7 @@ impl RustCloudBackupManager {
         source: CloudBackupVerificationSource,
     ) {
         let (verification_metadata, should_prompt_verification) = Self::load_persisted_flags();
-        let (pending_changed, presentation) = {
+        let (pending_changed, decision_pending, presentation) = {
             let mut state = self.state.write();
             let pending_changed = state.pending_upload_verification != pending;
             if pending_changed {
@@ -1504,15 +1504,19 @@ impl RustCloudBackupManager {
             state.should_prompt_verification = should_prompt_verification;
 
             let presentation = Self::verification_decision_presentation_for_state(&state);
-            if let Some(presentation) = &presentation {
-                if state.verification_presentation != *presentation {
+            let decision_pending = presentation.is_some();
+            let presentation = if let Some(presentation) = presentation {
+                if state.verification_presentation != presentation {
                     state.verification_presentation = presentation.clone();
+                    Some(presentation)
                 } else {
-                    return (pending_changed, None);
+                    None
                 }
-            }
+            } else {
+                None
+            };
 
-            (pending_changed, presentation)
+            (pending_changed, decision_pending, presentation)
         };
 
         if pending_changed {
@@ -1521,6 +1525,11 @@ impl RustCloudBackupManager {
 
         if let Some(presentation) = presentation {
             self.send(Message::VerificationPresentation(presentation));
+            self.refresh_prompt_intent();
+            return;
+        }
+
+        if decision_pending {
             self.refresh_prompt_intent();
             return;
         }
