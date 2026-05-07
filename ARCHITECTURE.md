@@ -25,7 +25,7 @@
 
 **Layout.** The top-level crate (`rust/src/lib.rs`) re-exports a collection of domain-focused modules (wallets, routing, hardware, fiat, etc.) plus internal crates under `rust/crates/`. Everything compiles into `libcove.{a,so}` and the `coveffi` cdylib specified in `rust/uniffi.toml`.
 
-**Data model first.** When a feature or bug reveals that the current types do not describe the real domain, fix the model instead of spreading compensating logic through managers or platform code. Prefer typed states, enums, records, and persisted schema that make invalid states hard to express. If the model has to change, update the UniFFI API, generated bindings, migrations, and Swift/Kotlin call sites together so every layer shares the same contract.
+**Data model first.** Make impossible states impossible. When a feature or bug reveals that the current types do not describe the real domain, fix the model instead of spreading compensating logic through managers or platform code. Prefer typed states, enums, records, and persisted schema that encode valid states directly instead of allowing invalid field combinations. If the model has to change, update the UniFFI API, generated bindings, migrations, and Swift/Kotlin call sites together so every layer shares the same contract.
 
 **Internal crates** (`rust/crates/`):
 

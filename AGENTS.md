@@ -7,7 +7,7 @@ The role of this file is to describe common mistakes and confusion points that a
 - Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing Rust actors, async manager methods, worker tasks, Rust closure-based orchestration, reconciliation, shared state, locks, dispatch, or UniFFI manager boundaries
 - For topic-specific guidance (passkeys, iCloud Drive, iOS/Android parity), read the docs linked from [ARCHITECTURE.md](ARCHITECTURE.md)
 - prefer structurally correct fixes over temporary workarounds, even when the diff is larger
-- start with the correct data model; use typed Rust state, enums, records, and persisted schema to represent the real domain instead of adding temporary caller-specific conditionals
+- Make impossible states impossible; prefer typed domain models over caller-specific conditionals or UI-side compensation
 - For long-lived UI-facing managers, prefer `dispatch(action:)` for user intents and keep named methods for reads, bootstrap/lifecycle hooks, and special service-style operations, use `state()` for the initial snapshot only, and send typed delta reconcile messages for ongoing UI updates instead of re-sending the whole state after every mutation
 - Prefer scoped blocks to release locks or borrows instead of explicit `drop(...)` unless explicit `drop` is actually needed
 - Add blank lines between logical steps in function bodies across Rust, Swift, and Kotlin: after setup/result bindings before new control flow, after multi-line `if`/`match`/`guard`/`do`/`Task` blocks before the next independent statement, between state mutations and final returns, and between multi-line `match`/`switch` arms. Keep tightly related consecutive assignments together

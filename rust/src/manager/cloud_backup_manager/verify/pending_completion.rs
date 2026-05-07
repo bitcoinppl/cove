@@ -6,9 +6,9 @@ use tracing::{error, warn};
 use zeroize::Zeroizing;
 
 use super::{
-    CloudBackupDetailResult, CloudBackupError, DeepVerificationFailure, DeepVerificationReport,
-    DeepVerificationResult, PendingVerificationCompletion, RecoveryState, RustCloudBackupManager,
-    VerificationState,
+    CloudBackupDetailResult, CloudBackupError, CloudBackupVerificationPresentation,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    PendingVerificationCompletion, RecoveryState, RustCloudBackupManager, VerificationState,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
@@ -312,6 +312,10 @@ impl RustCloudBackupManager {
         if let Some(detail) = &report.detail {
             self.set_detail(Some(detail.clone()));
         }
+        let source = self.current_verification_source();
+        self.set_verification_presentation(CloudBackupVerificationPresentation::Completed {
+            source,
+        });
         self.set_verification(VerificationState::Verified(report));
         self.set_recovery(RecoveryState::Idle);
         self.refresh_sync_health();
@@ -322,6 +326,11 @@ impl RustCloudBackupManager {
         if let Some(detail) = failure.detail().cloned() {
             self.set_detail(Some(detail));
         }
+        let source = self.current_verification_source();
+        self.set_verification_presentation(CloudBackupVerificationPresentation::Failed {
+            source,
+            message: failure.message(),
+        });
         self.set_verification(VerificationState::Failed(failure));
         self.refresh_sync_health();
     }
