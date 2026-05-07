@@ -21,7 +21,8 @@ use crate::{
     manager::{
         cloud_backup_manager::{
             CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent,
-            CloudBackupVerificationSource, CloudStorageIssue, SavedPasskeyConfirmationMode,
+            CloudBackupPasskeyHint, CloudBackupVerificationSource, CloudStorageIssue,
+            SavedPasskeyConfirmationMode,
         },
         connectivity_manager::CONNECTIVITY_MANAGER,
     },
@@ -105,6 +106,17 @@ pub struct OnboardingState {
 pub struct CloudRestoreProviderHint {
     pub provider_name: Option<String>,
     pub registered_at: u64,
+    pub name_suffix: String,
+}
+
+impl From<&CloudRestoreProviderHint> for CloudBackupPasskeyHint {
+    fn from(value: &CloudRestoreProviderHint) -> Self {
+        Self {
+            provider_name: value.provider_name.clone(),
+            registered_at: value.registered_at,
+            name_suffix: value.name_suffix.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -585,13 +597,16 @@ impl RustOnboardingManager {
 
     fn begin_cloud_backup_enable(&self, discovery: CloudRestoreDiscovery) {
         match discovery {
-            CloudRestoreDiscovery::BackupFound(_) => {
+            CloudRestoreDiscovery::BackupFound(hint) => {
                 CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
                 CLOUD_BACKUP_MANAGER.set_passkey_choice_prompt(
-                    CloudBackupPasskeyChoiceIntent::Enable(CloudBackupEnableContext {
-                        saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
-                        verification_source: CloudBackupVerificationSource::Onboarding,
-                    }),
+                    CloudBackupPasskeyChoiceIntent::Enable(
+                        CloudBackupEnableContext {
+                            saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
+                            verification_source: CloudBackupVerificationSource::Onboarding,
+                        },
+                        hint.as_ref().map(CloudBackupPasskeyHint::from),
+                    ),
                 );
             }
             CloudRestoreDiscovery::NoBackupFound => {
@@ -1807,6 +1822,7 @@ fn resolve_provider_hint(hint: &PasskeyProviderHint) -> CloudRestoreProviderHint
     CloudRestoreProviderHint {
         provider_name: hint.known_provider().map(|provider| provider.display_name().into()),
         registered_at: hint.registered_at,
+        name_suffix: hint.name_suffix.clone(),
     }
 }
 
@@ -3367,6 +3383,7 @@ mod tests {
             aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
             registered_platform: BackupPasskeyRegistrationPlatform::Android,
             registered_at: 1_777_661_234,
+            name_suffix: "09IX".into(),
         });
 
         assert_eq!(
@@ -3374,6 +3391,7 @@ mod tests {
             CloudRestoreProviderHint {
                 provider_name: Some("Google Password Manager".into()),
                 registered_at: 1_777_661_234,
+                name_suffix: "09IX".into(),
             }
         );
     }
@@ -3384,11 +3402,16 @@ mod tests {
             aaguid: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".into(),
             registered_platform: BackupPasskeyRegistrationPlatform::Android,
             registered_at: 1_777_661_236,
+            name_suffix: "09IY".into(),
         });
 
         assert_eq!(
             hint,
-            CloudRestoreProviderHint { provider_name: None, registered_at: 1_777_661_236 }
+            CloudRestoreProviderHint {
+                provider_name: None,
+                registered_at: 1_777_661_236,
+                name_suffix: "09IY".into(),
+            }
         );
     }
 
@@ -3398,14 +3421,23 @@ mod tests {
             CloudRestoreProviderHint {
                 provider_name: Some("Apple Passwords".into()),
                 registered_at: 1_777_661_234,
+                name_suffix: "09IX".into(),
             },
-            CloudRestoreProviderHint { provider_name: None, registered_at: 1_777_661_236 },
+            CloudRestoreProviderHint {
+                provider_name: None,
+                registered_at: 1_777_661_236,
+                name_suffix: "09IY".into(),
+            },
         ])
         .expect("latest hint should be selected");
 
         assert_eq!(
             hint,
-            CloudRestoreProviderHint { provider_name: None, registered_at: 1_777_661_236 }
+            CloudRestoreProviderHint {
+                provider_name: None,
+                registered_at: 1_777_661_236,
+                name_suffix: "09IY".into(),
+            }
         );
     }
 

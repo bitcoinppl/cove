@@ -179,7 +179,7 @@ impl RustCloudBackupManager {
     async fn keep_awaiting_force_new_confirmation(&self) -> bool {
         let Some(context) = self.awaiting_force_new_enable_context().await else { return false };
 
-        self.set_existing_backup_found_prompt(context);
+        self.set_existing_backup_found_prompt(context, None);
         self.clear_enable_progress(CloudBackupStatus::Disabled);
         true
     }
@@ -731,13 +731,14 @@ impl RustCloudBackupManager {
         }
 
         info!("Enable: found {} existing namespace(s), attempting recovery", namespaces.len());
+        let passkey_hint = self.best_passkey_hint_for_namespaces(&cloud, &namespaces).await;
 
         let matcher = NamespacePasskeyMatcher::new(&cloud, passkey);
         let match_outcome = matcher.match_namespaces(&namespaces).await?;
         match match_outcome {
             NamespaceMatchOutcome::Matched(matches) => {
                 if matches.is_empty() {
-                    self.set_existing_backup_found_prompt(context);
+                    self.set_existing_backup_found_prompt(context, passkey_hint);
                     self.clear_enable_progress(CloudBackupStatus::Disabled);
                     return Ok(());
                 }
@@ -747,14 +748,17 @@ impl RustCloudBackupManager {
 
             NamespaceMatchOutcome::UserDeclined => {
                 info!("Enable: user cancelled passkey picker during namespace matching");
-                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(context));
+                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(
+                    context,
+                    passkey_hint,
+                ));
                 self.clear_enable_progress(CloudBackupStatus::Disabled);
                 Ok(())
             }
 
             NamespaceMatchOutcome::NoMatch => {
                 info!("Enable: passkey didn't match existing backups, asking user to confirm");
-                self.set_existing_backup_found_prompt(context);
+                self.set_existing_backup_found_prompt(context, passkey_hint);
                 self.clear_enable_progress(CloudBackupStatus::Disabled);
                 Ok(())
             }
@@ -1047,7 +1051,9 @@ impl RustCloudBackupManager {
                     had_local_master_key,
                     "Enable cancelled before passkey setup finished",
                 );
-                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(context));
+                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(
+                    context, None,
+                ));
                 self.clear_enable_progress(CloudBackupStatus::Disabled);
                 return Ok(());
             }
@@ -1167,7 +1173,9 @@ impl RustCloudBackupManager {
                 "Enable (no discovery): found {} existing namespace(s), waiting for confirmation before creating passkey",
                 existing_namespaces.len()
             );
-            self.set_existing_backup_found_prompt(context);
+            let passkey_hint =
+                self.best_passkey_hint_for_namespaces(&cloud, &existing_namespaces).await;
+            self.set_existing_backup_found_prompt(context, passkey_hint);
             self.clear_enable_progress(CloudBackupStatus::Disabled);
             return Ok(());
         }
@@ -1195,7 +1203,9 @@ impl RustCloudBackupManager {
         {
             EnablePasskeyAcquisition::Ready(passkey) => passkey,
             EnablePasskeyAcquisition::Cancelled => {
-                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(context));
+                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(
+                    context, None,
+                ));
                 self.clear_enable_progress(CloudBackupStatus::Disabled);
                 return Ok(());
             }
@@ -3763,9 +3773,18 @@ mod tests {
 
         let other_master_key = cove_cspp::master_key::MasterKey::generate();
         let other_namespace = other_master_key.namespace_id();
-        let encrypted_master =
-            cove_cspp::master_key_crypto::encrypt_master_key(&other_master_key, &[7; 32], &[9; 32])
-                .unwrap();
+        let encrypted_master = cove_cspp::master_key_crypto::encrypt_master_key_with_provider_hint(
+            &other_master_key,
+            &[7; 32],
+            &[9; 32],
+            Some(cove_cspp::backup_data::PasskeyProviderHint {
+                aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+                registered_platform: cove_cspp::backup_data::PasskeyRegistrationPlatform::Android,
+                registered_at: 1_777_661_234,
+                name_suffix: "09IX".into(),
+            }),
+        )
+        .unwrap();
         globals.cloud.set_master_key_backup(
             other_namespace.clone(),
             serde_json::to_vec(&encrypted_master).unwrap(),
@@ -3789,6 +3808,12 @@ mod tests {
         };
         assert_eq!(summary.namespace_count, 1);
         assert_eq!(summary.wallet_count, 2);
+        assert_eq!(summary.passkey_hints.len(), 1);
+        assert_eq!(summary.passkey_hints[0].name_suffix, "09IX");
+        assert_eq!(
+            summary.passkey_hints[0].provider_name.as_deref(),
+            Some("Google Password Manager")
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -6612,7 +6637,7 @@ mod tests {
         assert_eq!(globals.passkey.create_count(), create_count);
         assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
         match manager.state().prompt_intent {
-            CloudBackupPromptIntent::ExistingBackupFound(context) => {
+            CloudBackupPromptIntent::ExistingBackupFound(context, _) => {
                 assert_eq!(context, CloudBackupEnableContext::settings_manual());
             }
             other => panic!("expected existing backup prompt, got {other:?}"),
@@ -6657,7 +6682,7 @@ mod tests {
         assert_eq!(globals.passkey.discover_count(), 0);
         assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
         match manager.state().prompt_intent {
-            CloudBackupPromptIntent::ExistingBackupFound(context) => {
+            CloudBackupPromptIntent::ExistingBackupFound(context, _) => {
                 assert_eq!(context, CloudBackupEnableContext::settings_manual());
             }
             other => panic!("expected existing backup prompt, got {other:?}"),
@@ -6728,7 +6753,7 @@ mod tests {
         assert!(manager.take_pending_enable_session().await.is_none());
 
         match manager.state().prompt_intent {
-            CloudBackupPromptIntent::ExistingBackupFound(prompt_context) => {
+            CloudBackupPromptIntent::ExistingBackupFound(prompt_context, _) => {
                 assert_eq!(prompt_context, context);
             }
             other => panic!("expected existing backup prompt, got {other:?}"),

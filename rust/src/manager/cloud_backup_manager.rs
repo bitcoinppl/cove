@@ -117,14 +117,14 @@ pub enum CloudBackupEnableState {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupPasskeyChoiceIntent {
-    Enable(CloudBackupEnableContext),
+    Enable(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
     RepairPasskey,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupPromptIntent {
     None,
-    ExistingBackupFound(CloudBackupEnableContext),
+    ExistingBackupFound(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
     PasskeyChoice(CloudBackupPasskeyChoiceIntent),
     MissingPasskeyReminder,
     VerificationPrompt,
@@ -263,10 +263,28 @@ pub enum CloudBackupOtherBackupsState {
     LoadFailed { error: String },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, uniffi::Record)]
 pub struct CloudBackupOtherBackupsSummary {
     pub namespace_count: u32,
     pub wallet_count: u32,
+    pub passkey_hints: Vec<CloudBackupPasskeyHint>,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct CloudBackupPasskeyHint {
+    pub provider_name: Option<String>,
+    pub name_suffix: String,
+    pub registered_at: u64,
+}
+
+impl CloudBackupPasskeyHint {
+    pub(crate) fn from_provider_hint(hint: &cove_cspp::backup_data::PasskeyProviderHint) -> Self {
+        Self {
+            provider_name: hint.known_provider().map(|provider| provider.display_name().into()),
+            name_suffix: hint.name_suffix.clone(),
+            registered_at: hint.registered_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -1301,8 +1319,12 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub(crate) fn set_existing_backup_found_prompt(&self, context: CloudBackupEnableContext) {
-        self.prompt_state.lock().set_existing_backup_found(context);
+    pub(crate) fn set_existing_backup_found_prompt(
+        &self,
+        context: CloudBackupEnableContext,
+        passkey_hint: Option<CloudBackupPasskeyHint>,
+    ) {
+        self.prompt_state.lock().set_existing_backup_found(context, passkey_hint);
         self.refresh_prompt_intent();
     }
 
@@ -1712,6 +1734,7 @@ impl RustCloudBackupManager {
         let namespaces = self
             .other_backup_namespaces(cloud, &current_namespace, BlockingCloudStep::DetailRefresh)
             .await?;
+        let passkey_hints = self.passkey_hints_for_namespaces(cloud, &namespaces).await;
 
         let mut namespace_count = 0;
         let mut wallet_count = 0;
@@ -1740,7 +1763,64 @@ impl RustCloudBackupManager {
             wallet_count += unrecovered_wallet_count;
         }
 
-        Ok(CloudBackupOtherBackupsSummary { namespace_count, wallet_count })
+        Ok(CloudBackupOtherBackupsSummary { namespace_count, wallet_count, passkey_hints })
+    }
+
+    pub(crate) async fn best_passkey_hint_for_namespaces(
+        &self,
+        cloud: &CloudStorageClient,
+        namespaces: &[String],
+    ) -> Option<CloudBackupPasskeyHint> {
+        self.passkey_hints_for_namespaces(cloud, namespaces)
+            .await
+            .into_iter()
+            .max_by_key(|hint| hint.registered_at)
+    }
+
+    async fn passkey_hints_for_namespaces(
+        &self,
+        cloud: &CloudStorageClient,
+        namespaces: &[String],
+    ) -> Vec<CloudBackupPasskeyHint> {
+        let mut hints_by_suffix =
+            std::collections::HashMap::<String, CloudBackupPasskeyHint>::new();
+
+        for namespace in namespaces {
+            let Ok(master_json) =
+                cloud.download_master_key_backup(namespace.clone()).await.inspect_err(|error| {
+                    warn!("Failed to load passkey hint for namespace {namespace}: {error}")
+                })
+            else {
+                continue;
+            };
+
+            let Ok(encrypted) = serde_json::from_slice::<
+                cove_cspp::backup_data::EncryptedMasterKeyBackup,
+            >(&master_json)
+            .inspect_err(|error| {
+                warn!("Failed to parse passkey hint for namespace {namespace}: {error}")
+            }) else {
+                continue;
+            };
+
+            let Some(provider_hint) = encrypted.passkey_provider_hint.as_ref() else {
+                continue;
+            };
+            let hint = CloudBackupPasskeyHint::from_provider_hint(provider_hint);
+
+            hints_by_suffix
+                .entry(hint.name_suffix.clone())
+                .and_modify(|current| {
+                    if hint.registered_at > current.registered_at {
+                        *current = hint.clone();
+                    }
+                })
+                .or_insert(hint);
+        }
+
+        let mut hints = hints_by_suffix.into_values().collect::<Vec<_>>();
+        hints.sort_by(|lhs, rhs| rhs.registered_at.cmp(&lhs.registered_at));
+        hints
     }
 
     pub(crate) async fn other_backup_namespaces(

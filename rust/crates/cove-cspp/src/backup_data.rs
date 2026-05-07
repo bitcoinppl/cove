@@ -87,6 +87,7 @@ pub struct PasskeyProviderHint {
     pub aaguid: String,
     pub registered_platform: PasskeyRegistrationPlatform,
     pub registered_at: u64,
+    pub name_suffix: String,
 }
 
 /// Wallet data to be encrypted and uploaded to cloud backup
@@ -291,6 +292,7 @@ mod tests {
                 aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
                 registered_platform: PasskeyRegistrationPlatform::Android,
                 registered_at: 1_777_661_234,
+                name_suffix: "09IX".into(),
             }),
             prf_salt: [0xCC; 32],
             nonce: [0xDD; 12],

@@ -125,12 +125,13 @@ impl PasskeyMaterialAcquirer {
     pub async fn register_for_enable(&self) -> Result<StagedPrfKey, CloudBackupError> {
         info!("Registering new passkey for cloud backup enable");
         let prf_salt: [u8; 32] = rand::rng().random();
-        let registration = self.create_passkey_registration(map_enable_passkey_error).await?;
+        let (registration, name_suffix) =
+            self.create_passkey_registration(map_enable_passkey_error).await?;
 
         Ok(StagedPrfKey {
             prf_salt,
             credential_id: registration.credential_id.clone(),
-            provider_hint: Some(passkey_provider_hint(registration)),
+            provider_hint: Some(passkey_provider_hint(registration, name_suffix)),
         })
     }
 
@@ -268,7 +269,8 @@ impl PasskeyMaterialAcquirer {
         map_passkey_error: fn(PasskeyError) -> CloudBackupError,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
         let prf_salt: [u8; 32] = rand::rng().random();
-        let registration = self.create_passkey_registration(map_passkey_error).await?;
+        let (registration, name_suffix) =
+            self.create_passkey_registration(map_passkey_error).await?;
         let credential_id = registration.credential_id.clone();
 
         // wait briefly before targeted auth so iOS can settle after registration
@@ -282,21 +284,23 @@ impl PasskeyMaterialAcquirer {
             prf_key: prf_output_to_key(prf_output)?,
             prf_salt,
             credential_id,
-            provider_hint: Some(passkey_provider_hint(registration)),
+            provider_hint: Some(passkey_provider_hint(registration, name_suffix)),
         })
     }
 
     async fn create_passkey_registration(
         &self,
         map_passkey_error: fn(PasskeyError) -> CloudBackupError,
-    ) -> Result<PasskeyRegistrationResult, CloudBackupError> {
+    ) -> Result<(PasskeyRegistrationResult, String), CloudBackupError> {
         let passkey = self.passkey.clone();
-        let user = passkey_registration_user();
-        unblock::run_blocking(move || {
+        let (user, name_suffix) = passkey_registration_user();
+        let registration = unblock::run_blocking(move || {
             passkey.create_passkey(PASSKEY_RP_ID.to_string(), random_challenge(), user)
         })
         .await
-        .map_err(map_passkey_error)
+        .map_err(map_passkey_error)?;
+
+        Ok((registration, name_suffix))
     }
 
     async fn authenticate_registered(
@@ -320,13 +324,16 @@ impl PasskeyMaterialAcquirer {
     }
 }
 
-fn passkey_registration_user() -> PasskeyRegistrationUser {
+fn passkey_registration_user() -> (PasskeyRegistrationUser, String) {
     let id = rand::rng().random::<[u8; 16]>().to_vec();
-    PasskeyRegistrationUser {
-        name: format!("{PASSKEY_DISPLAY_NAME} ({})", passkey_name_suffix()),
+    let name_suffix = passkey_name_suffix();
+    let user = PasskeyRegistrationUser {
+        name: format!("{PASSKEY_DISPLAY_NAME} ({name_suffix})"),
         display_name: PASSKEY_DISPLAY_NAME.into(),
         id,
-    }
+    };
+
+    (user, name_suffix)
 }
 
 fn passkey_name_suffix() -> String {
@@ -358,7 +365,10 @@ fn base36_passkey_suffix(mut value: u64) -> String {
     encoded.into_iter().rev().collect()
 }
 
-fn passkey_provider_hint(registration: PasskeyRegistrationResult) -> PasskeyProviderHint {
+fn passkey_provider_hint(
+    registration: PasskeyRegistrationResult,
+    name_suffix: String,
+) -> PasskeyProviderHint {
     let registered_platform = match registration.registered_platform {
         PasskeyRegistrationPlatform::Ios => BackupPasskeyRegistrationPlatform::Ios,
         PasskeyRegistrationPlatform::Android => BackupPasskeyRegistrationPlatform::Android,
@@ -366,11 +376,16 @@ fn passkey_provider_hint(registration: PasskeyRegistrationResult) -> PasskeyProv
     let registered_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
 
     debug!(
-        "Captured passkey provider hint aaguid={} registered_platform={registered_platform:?} registered_at={registered_at}",
+        "Captured passkey provider hint aaguid={} registered_platform={registered_platform:?} registered_at={registered_at} name_suffix={name_suffix}",
         registration.provider_aaguid
     );
 
-    PasskeyProviderHint { aaguid: registration.provider_aaguid, registered_platform, registered_at }
+    PasskeyProviderHint {
+        aaguid: registration.provider_aaguid,
+        registered_platform,
+        registered_at,
+        name_suffix,
+    }
 }
 
 /// Matches a discoverable passkey against candidate cloud backup namespaces
@@ -634,5 +649,19 @@ mod tests {
             jiff::Timestamp::from_second(PASSKEY_SUFFIX_EPOCH_SECONDS + 12_345).unwrap();
 
         assert_eq!(passkey_name_suffix_for_timestamp(timestamp), "09IX");
+    }
+
+    #[test]
+    fn passkey_provider_hint_preserves_registration_suffix() {
+        let hint = passkey_provider_hint(
+            PasskeyRegistrationResult {
+                credential_id: vec![1, 2, 3],
+                provider_aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+                registered_platform: PasskeyRegistrationPlatform::Android,
+            },
+            "09IX".into(),
+        );
+
+        assert_eq!(hint.name_suffix, "09IX");
     }
 }
