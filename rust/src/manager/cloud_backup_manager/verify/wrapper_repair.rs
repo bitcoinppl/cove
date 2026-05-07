@@ -37,13 +37,11 @@ pub(crate) enum WrapperRepairError {
 
 impl From<WrapperRepairError> for CloudBackupError {
     fn from(error: WrapperRepairError) -> Self {
+        let msg = error.to_string();
+
         match error {
-            WrapperRepairError::WrongKey => CloudBackupError::Crypto(
-                "local master key cannot decrypt existing cloud wallet backups".into(),
-            ),
-            WrapperRepairError::Inconclusive => {
-                CloudBackupError::Cloud("could not download any wallet to verify local key".into())
-            }
+            WrapperRepairError::WrongKey => CloudBackupError::Crypto(msg),
+            WrapperRepairError::Inconclusive => CloudBackupError::Cloud(msg),
             WrapperRepairError::Operation(error) => error,
         }
     }

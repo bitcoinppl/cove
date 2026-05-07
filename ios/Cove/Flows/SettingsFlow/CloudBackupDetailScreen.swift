@@ -94,6 +94,8 @@ struct CloudBackupDetailScreen: View {
         } else if isPasskeyMissing {
             MissingPasskeyContent(manager: manager)
         } else {
+            pendingUploadConfirmationSection
+
             backupStatusContent
             VerificationSection(
                 manager: manager,
@@ -119,8 +121,6 @@ struct CloudBackupDetailScreen: View {
                 syncHealth: manager.syncHealth,
                 manager: manager
             )
-
-            pendingUploadConfirmationSection
         } else if shouldShowLoadingState {
             Section {
                 VStack(spacing: 12) {

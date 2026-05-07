@@ -177,12 +177,16 @@ impl RustCloudBackupManager {
         for upload in completion.uploads() {
             match upload {
                 PendingVerificationUpload::MasterKeyWrapper => {
-                    self.verify_pending_master_key_wrapper(
-                        &completion,
-                        upload,
-                        sync_states_by_record_id.get(upload.record_id()),
-                    )
-                    .await?;
+                    if !self
+                        .verify_pending_master_key_wrapper(
+                            &completion,
+                            upload,
+                            sync_states_by_record_id.get(upload.record_id()),
+                        )
+                        .await?
+                    {
+                        return Ok(FinalizePendingVerificationResult::Pending);
+                    }
                 }
                 PendingVerificationUpload::Wallet { .. } => {
                     match self
@@ -216,7 +220,7 @@ impl RustCloudBackupManager {
         completion: &PendingVerificationCompletion,
         upload: &PendingVerificationUpload,
         sync_state: Option<&PersistedCloudBlobState>,
-    ) -> Result<(), Box<DeepVerificationFailure>> {
+    ) -> Result<bool, Box<DeepVerificationFailure>> {
         let expected_revision = sync_state
             .and_then(PersistedCloudBlobState::revision_hash)
             .unwrap_or_else(|| upload.expected_revision());
@@ -230,15 +234,13 @@ impl RustCloudBackupManager {
         let actual_revision = master_key_wrapper_revision_hash(&bytes);
 
         if actual_revision == expected_revision {
-            return Ok(());
+            return Ok(true);
         }
 
-        Err(Box::new(self.pending_verification_failure(
-            completion,
-            format!(
-                "master key wrapper hash mismatch expected_revision={expected_revision} actual_revision={actual_revision}"
-            ),
-        )))
+        warn!(
+            "Pending verification: master key wrapper is still stale expected_revision={expected_revision} actual_revision={actual_revision}"
+        );
+        Ok(false)
     }
 
     async fn verify_pending_wallet_backup(

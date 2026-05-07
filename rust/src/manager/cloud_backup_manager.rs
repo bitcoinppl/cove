@@ -56,7 +56,7 @@ use self::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
 };
 use self::wallets::wallet_metadata_change_requires_upload;
-use self::wallets::{UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader};
+use self::wallets::{StagedPrfKey, UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader};
 use self::workers::{
     CloudBackupCleanupJob, CloudBackupOperation, CloudBackupSupervisor, RestoreOperation,
 };
@@ -384,7 +384,7 @@ impl Default for CloudBackupState {
             pending_upload_verification: PendingUploadVerificationState::Idle,
             should_prompt_verification: false,
             verification_metadata: CloudBackupVerificationMetadata::NotConfigured,
-            verification_presentation: CloudBackupVerificationPresentation::Hidden,
+            verification_presentation: CloudBackupVerificationPresentation::Hidden { source: None },
             detail: None,
             verification: VerificationState::Idle,
             sync: SyncState::Idle,
@@ -554,14 +554,23 @@ pub(crate) struct PendingEnableSessionMaterial {
     context: CloudBackupEnableContext,
 }
 
+pub(crate) struct PendingSavedPasskeySessionMaterial {
+    master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
+    passkey: Zeroizing<StagedPrfKey>,
+    context: CloudBackupEnableContext,
+}
+
 /// Tracks passkey material created during enable before the flow fully completes
+#[allow(dead_code)]
 pub(crate) enum PendingEnableSession {
     /// A new passkey and master key are staged while the user confirms Create New Backup
     AwaitingForceNewConfirmation(PendingEnableSessionMaterial),
+    /// A registered passkey is staged while the user confirms Create New Backup
+    AwaitingForceNewSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial),
     /// Upload already started and should retry with the same staged passkey material
     RetryUpload(PendingEnableSessionMaterial),
     /// A registered passkey is staged until targeted PRF auth confirms it can be used
-    AwaitingSavedPasskeyConfirmation(PendingEnableSessionMaterial),
+    AwaitingSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial),
 }
 
 fn cloud_only_cache_is_stale(
@@ -628,8 +637,26 @@ impl PendingEnableSessionMaterial {
         self.master_key.namespace_id()
     }
 
-    fn has_prf_key(&self) -> bool {
-        self.passkey.has_prf_key()
+    fn context(&self) -> CloudBackupEnableContext {
+        self.context
+    }
+}
+
+impl PendingSavedPasskeySessionMaterial {
+    fn new(
+        master_key: cove_cspp::master_key::MasterKey,
+        passkey: StagedPrfKey,
+        context: CloudBackupEnableContext,
+    ) -> Self {
+        Self { master_key: Zeroizing::new(master_key), passkey: Zeroizing::new(passkey), context }
+    }
+
+    fn into_parts(self) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<StagedPrfKey>) {
+        (self.master_key, self.passkey)
+    }
+
+    fn namespace_id(&self) -> String {
+        self.master_key.namespace_id()
     }
 
     fn context(&self) -> CloudBackupEnableContext {
@@ -638,6 +665,7 @@ impl PendingEnableSessionMaterial {
 }
 
 impl PendingEnableSession {
+    #[allow(dead_code)]
     fn awaiting_confirmation(
         master_key: cove_cspp::master_key::MasterKey,
         passkey: UnpersistedPrfKey,
@@ -656,36 +684,48 @@ impl PendingEnableSession {
         Self::RetryUpload(PendingEnableSessionMaterial::new(master_key, passkey, context))
     }
 
-    fn into_parts(
+    fn into_ready_parts(
         self,
     ) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<UnpersistedPrfKey>) {
         match self {
-            Self::AwaitingForceNewConfirmation(material)
-            | Self::RetryUpload(material)
+            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
+                material.into_parts()
+            }
+            Self::AwaitingForceNewSavedPasskeyConfirmation(_)
+            | Self::AwaitingSavedPasskeyConfirmation(_) => {
+                unreachable!("saved passkey sessions contain staged material")
+            }
+        }
+    }
+
+    fn into_staged_parts(
+        self,
+    ) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<StagedPrfKey>) {
+        match self {
+            Self::AwaitingForceNewSavedPasskeyConfirmation(material)
             | Self::AwaitingSavedPasskeyConfirmation(material) => material.into_parts(),
+            Self::AwaitingForceNewConfirmation(_) | Self::RetryUpload(_) => {
+                unreachable!("ready passkey sessions contain authenticated material")
+            }
         }
     }
 
     fn namespace_id(&self) -> String {
         match self {
-            Self::AwaitingForceNewConfirmation(material)
-            | Self::RetryUpload(material)
+            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
+                material.namespace_id()
+            }
+            Self::AwaitingForceNewSavedPasskeyConfirmation(material)
             | Self::AwaitingSavedPasskeyConfirmation(material) => material.namespace_id(),
-        }
-    }
-
-    fn has_prf_key(&self) -> bool {
-        match self {
-            Self::AwaitingForceNewConfirmation(material)
-            | Self::RetryUpload(material)
-            | Self::AwaitingSavedPasskeyConfirmation(material) => material.has_prf_key(),
         }
     }
 
     fn context(&self) -> CloudBackupEnableContext {
         match self {
-            Self::AwaitingForceNewConfirmation(material)
-            | Self::RetryUpload(material)
+            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
+                material.context()
+            }
+            Self::AwaitingForceNewSavedPasskeyConfirmation(material)
             | Self::AwaitingSavedPasskeyConfirmation(material) => material.context(),
         }
     }
@@ -695,7 +735,11 @@ impl PendingEnableSession {
     }
 
     fn is_awaiting_force_new_confirmation(&self) -> bool {
-        matches!(self, Self::AwaitingForceNewConfirmation(_))
+        matches!(
+            self,
+            Self::AwaitingForceNewConfirmation(_)
+                | Self::AwaitingForceNewSavedPasskeyConfirmation(_)
+        )
     }
 
     fn is_awaiting_saved_passkey_confirmation(&self) -> bool {
@@ -704,10 +748,21 @@ impl PendingEnableSession {
 
     fn awaiting_saved_passkey_confirmation(
         master_key: cove_cspp::master_key::MasterKey,
-        passkey: UnpersistedPrfKey,
+        passkey: StagedPrfKey,
         context: CloudBackupEnableContext,
     ) -> Self {
-        Self::AwaitingSavedPasskeyConfirmation(PendingEnableSessionMaterial::new(
+        Self::AwaitingSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial::new(
+            master_key, passkey, context,
+        ))
+    }
+
+    #[allow(dead_code)]
+    fn awaiting_force_new_saved_passkey_confirmation(
+        master_key: cove_cspp::master_key::MasterKey,
+        passkey: StagedPrfKey,
+        context: CloudBackupEnableContext,
+    ) -> Self {
+        Self::AwaitingForceNewSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial::new(
             master_key, passkey, context,
         ))
     }
@@ -1355,6 +1410,9 @@ impl RustCloudBackupManager {
                 ) {
                 CloudBackupVerificationCoordinator::needs_decision(
                     CloudBackupVerificationReason::BackupChanged,
+                    CloudBackupVerificationCoordinator::current_source(
+                        &state.verification_presentation,
+                    ),
                 )
                 .presentation
                 .expect("needs decision effect should include presentation")
@@ -1362,9 +1420,13 @@ impl RustCloudBackupManager {
                 state.verification_presentation,
                 CloudBackupVerificationPresentation::NeedsDecision { .. }
             ) {
-                CloudBackupVerificationCoordinator::dismiss_decision()
-                    .presentation
-                    .expect("dismiss decision effect should include presentation")
+                CloudBackupVerificationCoordinator::dismiss_decision(
+                    CloudBackupVerificationCoordinator::current_source(
+                        &state.verification_presentation,
+                    ),
+                )
+                .presentation
+                .expect("dismiss decision effect should include presentation")
             } else {
                 state.verification_presentation.clone()
             };
@@ -2275,6 +2337,9 @@ impl RustCloudBackupManager {
         {
             state.verification_presentation = CloudBackupVerificationCoordinator::needs_decision(
                 CloudBackupVerificationReason::BackupChanged,
+                CloudBackupVerificationCoordinator::current_source(
+                    &state.verification_presentation,
+                ),
             )
             .presentation
             .expect("needs decision effect should include presentation");

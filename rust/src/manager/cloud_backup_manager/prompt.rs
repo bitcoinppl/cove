@@ -58,7 +58,7 @@ impl CloudBackupPromptState {
             CloudBackupVerificationPresentation::NeedsDecision { .. } => {
                 CloudBackupPromptIntent::VerificationPrompt
             }
-            CloudBackupVerificationPresentation::Hidden
+            CloudBackupVerificationPresentation::Hidden { .. }
             | CloudBackupVerificationPresentation::ManualVerifying { .. }
             | CloudBackupVerificationPresentation::BackgroundConfirming(_)
             | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization(_)
@@ -196,6 +196,7 @@ mod tests {
         let state = CloudBackupState {
             verification_presentation: CloudBackupVerificationPresentation::NeedsDecision {
                 reason: CloudBackupVerificationReason::BackupChanged,
+                source: CloudBackupVerificationSource::Settings,
             },
             ..CloudBackupState::default()
         };

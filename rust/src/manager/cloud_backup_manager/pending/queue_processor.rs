@@ -201,10 +201,11 @@ impl PendingUploadVerifier {
                 if remote_revision == current.revision_hash {
                     BlobCheckResult::Confirmed
                 } else {
-                    BlobCheckResult::terminal_failure(format!(
+                    warn!(
                         "master key wrapper hash mismatch expected_revision={} actual_revision={remote_revision}",
                         current.revision_hash
-                    ))
+                    );
+                    BlobCheckResult::NotYetUploaded
                 }
             }
             Err(CloudStorageError::NotFound(_)) => BlobCheckResult::NotYetUploaded,

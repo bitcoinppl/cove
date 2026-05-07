@@ -238,6 +238,7 @@ fn post_save_routes(
     cloud_backup_enabled: bool,
 ) -> Vec<Route> {
     let selected_wallet = Route::SelectedWallet(wallet_id.clone());
+
     if cloud_backup_enabled {
         return vec![selected_wallet];
     }

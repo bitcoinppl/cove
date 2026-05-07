@@ -118,47 +118,24 @@ impl VerificationSession {
         let authenticated_master =
             match self.resolve_master_key_step(encrypted_master.as_ref()).await? {
                 MasterKeyResolution::Authenticated(authenticated_master) => {
-                    let master_key = authenticated_master.master_key;
-                    let master_key = self.apply_verified_cloud_master_key(master_key)?;
-                    AuthenticatedMasterKey::new(master_key, authenticated_master.source)
+                    self.apply_verified_cloud_master_key(&authenticated_master.master_key)?;
+                    authenticated_master
                 }
 
                 MasterKeyResolution::NeedsWrapperRepair { reuse_credential_id } => {
-                    if self.wallet_record_ids.is_none()
-                        && let Some(result) = self.load_wallet_inventory().await
-                    {
-                        return Ok(result);
+                    match self.repair_wrapper_from_local_key(reuse_credential_id).await? {
+                        RepairedMasterKeyResolution::Authenticated(authenticated_master) => {
+                            authenticated_master
+                        }
+                        RepairedMasterKeyResolution::Finished(result) => return Ok(result),
                     }
-
-                    let master_key =
-                        match self.repair_wrapper_from_local_key(reuse_credential_id).await? {
-                            RepairedMasterKeyResolution::Authenticated(authenticated_master) => {
-                                authenticated_master
-                            }
-                            RepairedMasterKeyResolution::Finished(result) => return Ok(result),
-                        };
-
-                    // a valid master key with no wallet inventory means the cloud manifest is missing
-                    if self.wallets_missing {
-                        return Ok(self.recreate_manifest_result());
-                    }
-
-                    master_key
                 }
 
                 MasterKeyResolution::Finished(result) => return Ok(result),
             };
 
-        if self.wallet_record_ids.is_none()
-            && !self.wallets_missing
-            && let Some(result) = self.load_wallet_inventory().await
-        {
+        if let Some(result) = self.ensure_wallet_inventory_or_short_circuit().await {
             return Ok(result);
-        }
-
-        // a valid master key with no wallet inventory means the cloud manifest is missing
-        if self.wallets_missing {
-            return Ok(self.recreate_manifest_result());
         }
 
         if let Some(result) = self.verify_wallet_backups_and_autosync(&authenticated_master).await {
@@ -204,6 +181,21 @@ impl VerificationSession {
                 Some(self.cloud_storage_retry_result("failed to list wallet backups", error))
             }
         }
+    }
+
+    async fn ensure_wallet_inventory_or_short_circuit(&mut self) -> Option<DeepVerificationResult> {
+        if self.wallet_record_ids.is_none()
+            && !self.wallets_missing
+            && let Some(result) = self.load_wallet_inventory().await
+        {
+            return Some(result);
+        }
+
+        if self.wallets_missing {
+            return Some(self.recreate_manifest_result());
+        }
+
+        None
     }
 
     async fn load_encrypted_master_key(&self) -> Result<EncryptedMasterKeyStep, CloudBackupError> {
@@ -310,13 +302,13 @@ impl VerificationSession {
 
     fn apply_verified_cloud_master_key(
         &mut self,
-        master_key: MasterKey,
-    ) -> Result<MasterKey, CloudBackupError> {
+        master_key: &MasterKey,
+    ) -> Result<(), CloudBackupError> {
         match &self.local_master_key {
             // restore the missing local key from the verified cloud backup
             None => {
                 self.cspp
-                    .save_master_key(&master_key)
+                    .save_master_key(master_key)
                     .map_err_prefix("repair local master key", CloudBackupError::Internal)?;
                 self.report.local_master_key_repaired = true;
                 info!("Repaired local master key from cloud");
@@ -325,7 +317,7 @@ impl VerificationSession {
             // replace a stale local key after cloud decryption proves the cloud key is valid
             Some(local_key) if local_key.as_bytes() != master_key.as_bytes() => {
                 self.cspp
-                    .save_master_key(&master_key)
+                    .save_master_key(master_key)
                     .map_err_prefix("repair local master key", CloudBackupError::Internal)?;
                 self.report.local_master_key_repaired = true;
                 info!("Repaired local master key to match cloud");
@@ -335,7 +327,7 @@ impl VerificationSession {
             Some(_) => {}
         }
 
-        Ok(master_key)
+        Ok(())
     }
 
     async fn repair_wrapper_from_local_key(
@@ -401,6 +393,7 @@ impl VerificationSession {
         self.report.wallets_verified = verified;
         self.report.wallets_failed = failed;
         self.report.wallets_unsupported = unsupported;
+        let other_backups = self.manager.other_backup_state(&self.cloud).await;
         let remote_wallet_truth_result =
             self.manager.load_remote_wallet_truth(&wallet_record_ids, self.cloud.clone()).await;
 
@@ -415,8 +408,7 @@ impl VerificationSession {
 
         let unsynced = match inventory_result {
             Ok(inventory) => {
-                let other_backups = self.manager.other_backup_state(&self.cloud).await;
-                let detail = inventory.build_detail(other_backups);
+                let detail = inventory.build_detail(other_backups.clone());
                 self.report.detail = Some(detail.clone());
                 if inventory.has_unknown_remote_wallets() {
                     return Some(
@@ -500,7 +492,6 @@ impl VerificationSession {
         let listed: std::collections::HashSet<_> = updated_ids.iter().cloned().collect();
         let remaining_unsynced = inventory.upload_candidate_wallets();
 
-        let other_backups = self.manager.other_backup_state(&self.cloud).await;
         self.report.detail = Some(inventory.build_detail(other_backups));
         self.wallet_record_ids = Some(updated_ids);
 

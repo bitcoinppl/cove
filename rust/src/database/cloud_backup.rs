@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use redb::{ReadableTable as _, TableDefinition};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use cove_types::redb::Json;
 use cove_util::result_ext::ResultExt as _;
@@ -117,10 +117,44 @@ pub struct PersistedDeepVerificationReport {
     pub wallets_unsupported: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum PersistedPendingVerificationUpload {
     MasterKeyWrapper,
     Wallet { record_id: String, expected_revision: String },
+}
+
+impl<'de> Deserialize<'de> for PersistedPendingVerificationUpload {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        enum TaggedUpload {
+            MasterKeyWrapper,
+            Wallet { record_id: String, expected_revision: String },
+        }
+
+        #[derive(Deserialize)]
+        struct LegacyWalletUpload {
+            record_id: String,
+            expected_revision: String,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Upload {
+            Tagged(TaggedUpload),
+            LegacyWallet(LegacyWalletUpload),
+        }
+
+        match Upload::deserialize(deserializer)? {
+            Upload::Tagged(TaggedUpload::MasterKeyWrapper) => Ok(Self::MasterKeyWrapper),
+            Upload::Tagged(TaggedUpload::Wallet { record_id, expected_revision })
+            | Upload::LegacyWallet(LegacyWalletUpload { record_id, expected_revision }) => {
+                Ok(Self::Wallet { record_id, expected_revision })
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -457,5 +491,46 @@ mod tests {
 
         assert!(!failed_state.retryable);
         assert_eq!(failed_state.issue, None);
+    }
+
+    #[test]
+    fn pending_verification_upload_accepts_legacy_plain_wallet() {
+        let upload: PersistedPendingVerificationUpload =
+            serde_json::from_value(serde_json::json!({
+                "record_id": "wallet-1",
+                "expected_revision": "rev-1"
+            }))
+            .unwrap();
+
+        assert_eq!(
+            upload,
+            PersistedPendingVerificationUpload::Wallet {
+                record_id: "wallet-1".into(),
+                expected_revision: "rev-1".into()
+            }
+        );
+    }
+
+    #[test]
+    fn pending_verification_upload_accepts_tagged_variants() {
+        let master: PersistedPendingVerificationUpload =
+            serde_json::from_value(serde_json::json!("MasterKeyWrapper")).unwrap();
+        let wallet: PersistedPendingVerificationUpload =
+            serde_json::from_value(serde_json::json!({
+                "Wallet": {
+                    "record_id": "wallet-1",
+                    "expected_revision": "rev-1"
+                }
+            }))
+            .unwrap();
+
+        assert_eq!(master, PersistedPendingVerificationUpload::MasterKeyWrapper);
+        assert_eq!(
+            wallet,
+            PersistedPendingVerificationUpload::Wallet {
+                record_id: "wallet-1".into(),
+                expected_revision: "rev-1".into()
+            }
+        );
     }
 }

@@ -395,6 +395,7 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
 
 pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
+    validate_testflight_credentials(&sh, &options)?;
     let project_snapshot = crate::version::snapshot_ios_project(&sh)?;
 
     let result = (|| {
@@ -418,6 +419,12 @@ pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()>
 
         return Err(error);
     }
+
+    Ok(())
+}
+
+fn validate_testflight_credentials(sh: &Shell, options: &TestflightUploadOptions) -> Result<()> {
+    let _ = TestflightApiCredentials::from_options(sh, options)?;
 
     Ok(())
 }

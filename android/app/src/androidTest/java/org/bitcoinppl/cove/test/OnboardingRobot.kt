@@ -70,6 +70,7 @@ class OnboardingRobot<A : ComponentActivity>(
 
     fun useAnotherWallet(): OnboardingRobot<A> {
         compose.waitUntilVisible(hasText("How do you store your Bitcoin?"))
+        compose.onNodeWithTag("onboarding.storage.software").performClick()
 
         return this
     }

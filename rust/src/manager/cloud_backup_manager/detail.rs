@@ -43,10 +43,13 @@ pub enum CloudBackupVerificationSource {
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupVerificationPresentation {
-    Hidden,
+    Hidden {
+        source: Option<CloudBackupVerificationSource>,
+    },
     /// The verification sheet is only for an unanswered user decision
     NeedsDecision {
         reason: CloudBackupVerificationReason,
+        source: CloudBackupVerificationSource,
     },
     /// Native passkey UI may appear while this state is active
     ManualVerifying {
@@ -197,7 +200,9 @@ impl RustCloudBackupManager {
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt: {error}");
         }
-        self.apply_verification_effect(CloudBackupVerificationCoordinator::dismiss_decision());
+        self.apply_verification_effect(CloudBackupVerificationCoordinator::dismiss_decision(
+            self.current_verification_source(),
+        ));
     }
 
     fn spawn_recovery(self: std::sync::Arc<Self>, action: RecoveryAction) {

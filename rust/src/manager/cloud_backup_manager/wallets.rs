@@ -30,14 +30,28 @@ impl UnpersistedPrfKey {
         }
     }
 
-    pub(super) fn has_prf_key(&self) -> bool {
-        self.prf_key != [0; 32]
-    }
-
     pub(crate) fn into_parts(mut self) -> ([u8; 32], [u8; 32], Vec<u8>) {
         let credential_id = std::mem::take(&mut self.credential_id);
 
         (self.prf_key, self.prf_salt, credential_id)
+    }
+}
+
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub(super) struct StagedPrfKey {
+    pub(super) prf_salt: [u8; 32],
+    pub(super) credential_id: Vec<u8>,
+    #[zeroize(skip)]
+    pub(super) provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
+}
+
+impl StagedPrfKey {
+    pub(super) fn copy_for_retry(&self) -> Self {
+        Self {
+            prf_salt: self.prf_salt,
+            credential_id: self.credential_id.clone(),
+            provider_hint: self.provider_hint.clone(),
+        }
     }
 }
 

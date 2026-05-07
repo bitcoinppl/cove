@@ -35679,14 +35679,21 @@ public object FfiConverterTypeCloudBackupVerificationMetadata : FfiConverterRust
 
 sealed class CloudBackupVerificationPresentation {
     
-    object Hidden : CloudBackupVerificationPresentation()
-    
+    data class Hidden(
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource?) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
     
     /**
      * The verification sheet is only for an unanswered user decision
      */
     data class NeedsDecision(
-        val `reason`: org.bitcoinppl.cove_core.CloudBackupVerificationReason) : CloudBackupVerificationPresentation()
+        val `reason`: org.bitcoinppl.cove_core.CloudBackupVerificationReason, 
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupVerificationPresentation()
         
     {
         
@@ -35765,9 +35772,12 @@ sealed class CloudBackupVerificationPresentation {
 public object FfiConverterTypeCloudBackupVerificationPresentation : FfiConverterRustBuffer<CloudBackupVerificationPresentation>{
     override fun read(buf: ByteBuffer): CloudBackupVerificationPresentation {
         return when(buf.getInt()) {
-            1 -> CloudBackupVerificationPresentation.Hidden
+            1 -> CloudBackupVerificationPresentation.Hidden(
+                FfiConverterOptionalTypeCloudBackupVerificationSource.read(buf),
+                )
             2 -> CloudBackupVerificationPresentation.NeedsDecision(
                 FfiConverterTypeCloudBackupVerificationReason.read(buf),
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
                 )
             3 -> CloudBackupVerificationPresentation.ManualVerifying(
                 FfiConverterTypeCloudBackupVerificationSource.read(buf),
@@ -35794,6 +35804,7 @@ public object FfiConverterTypeCloudBackupVerificationPresentation : FfiConverter
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterOptionalTypeCloudBackupVerificationSource.allocationSize(value.`source`)
             )
         }
         is CloudBackupVerificationPresentation.NeedsDecision -> {
@@ -35801,6 +35812,7 @@ public object FfiConverterTypeCloudBackupVerificationPresentation : FfiConverter
             (
                 4UL
                 + FfiConverterTypeCloudBackupVerificationReason.allocationSize(value.`reason`)
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
             )
         }
         is CloudBackupVerificationPresentation.ManualVerifying -> {
@@ -35845,11 +35857,13 @@ public object FfiConverterTypeCloudBackupVerificationPresentation : FfiConverter
         when(value) {
             is CloudBackupVerificationPresentation.Hidden -> {
                 buf.putInt(1)
+                FfiConverterOptionalTypeCloudBackupVerificationSource.write(value.`source`, buf)
                 Unit
             }
             is CloudBackupVerificationPresentation.NeedsDecision -> {
                 buf.putInt(2)
                 FfiConverterTypeCloudBackupVerificationReason.write(value.`reason`, buf)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
                 Unit
             }
             is CloudBackupVerificationPresentation.ManualVerifying -> {
@@ -55045,6 +55059,38 @@ public object FfiConverterOptionalTypeBlockSizeLast: FfiConverterRustBuffer<Bloc
         } else {
             buf.put(1)
             FfiConverterTypeBlockSizeLast.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeCloudBackupVerificationSource: FfiConverterRustBuffer<CloudBackupVerificationSource?> {
+    override fun read(buf: ByteBuffer): CloudBackupVerificationSource? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudBackupVerificationSource.read(buf)
+    }
+
+    override fun allocationSize(value: CloudBackupVerificationSource?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudBackupVerificationSource?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudBackupVerificationSource.write(value, buf)
         }
     }
 }

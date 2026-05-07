@@ -13,8 +13,8 @@ use zeroize::Zeroizing;
 use super::cloud_inventory::CloudWalletInventory;
 use super::wallets::{
     DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher,
-    PasskeyMaterialAcquirer, PasskeyMaterialOutcome, UnpersistedPrfKey, WalletBackupLookup,
-    WalletBackupReader, WalletRestoreSession,
+    PasskeyMaterialAcquirer, PasskeyMaterialOutcome, StagedPrfKey, UnpersistedPrfKey,
+    WalletBackupLookup, WalletBackupReader, WalletRestoreSession,
 };
 
 #[cfg(test)]
@@ -49,7 +49,7 @@ enum FinalizeUploadStateMode {
 }
 
 enum EnablePasskeyAcquisition {
-    Ready(UnpersistedPrfKey),
+    Ready(StagedPrfKey),
     Cancelled,
 }
 
@@ -99,7 +99,7 @@ impl RustCloudBackupManager {
     async fn stage_registered_passkey_for_confirmation(
         &self,
         master_key: cove_cspp::master_key::MasterKey,
-        passkey: UnpersistedPrfKey,
+        passkey: StagedPrfKey,
         context: CloudBackupEnableContext,
     ) -> Result<(), CloudBackupError> {
         self.replace_pending_enable_session(
@@ -144,7 +144,7 @@ impl RustCloudBackupManager {
         pending: PendingEnableSession,
     ) -> Result<(), CloudBackupError> {
         let context = pending.context();
-        let (master_key, staged_passkey) = pending.into_parts();
+        let (master_key, staged_passkey) = pending.into_staged_parts();
         let passkey_access = PasskeyAccess::global();
         let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
 
@@ -219,7 +219,7 @@ impl RustCloudBackupManager {
     ) -> Result<EnablePasskeyAcquisition, CloudBackupError>
     where
         F: FnOnce() -> Fut,
-        Fut: std::future::Future<Output = Result<UnpersistedPrfKey, CloudBackupError>>,
+        Fut: std::future::Future<Output = Result<StagedPrfKey, CloudBackupError>>,
     {
         match acquire().await {
             Ok(passkey) => Ok(EnablePasskeyAcquisition::Ready(passkey)),
@@ -674,7 +674,7 @@ impl RustCloudBackupManager {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
         if let Some(pending) = self.take_retry_pending_enable_session().await {
             let context = pending.context();
-            let (master_key, passkey) = pending.into_parts();
+            let (master_key, passkey) = pending.into_ready_parts();
             info!("Enable: retrying pending upload with existing passkey material");
             return self
                 .enable_cloud_backup_with_passkey_material(
@@ -998,7 +998,7 @@ impl RustCloudBackupManager {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
         if let Some(pending) = self.take_retry_pending_enable_session().await {
             let context = pending.context();
-            let (master_key, passkey) = pending.into_parts();
+            let (master_key, passkey) = pending.into_ready_parts();
             info!("Enable: retrying pending upload with existing passkey material");
             return self
                 .enable_cloud_backup_with_passkey_material(
@@ -1089,8 +1089,11 @@ impl RustCloudBackupManager {
 
         if let Some(pending) = self.take_pending_enable_session().await {
             let pending_context = pending.context();
-            if !pending.has_prf_key() {
-                let (master_key, passkey) = pending.into_parts();
+            if matches!(
+                pending,
+                PendingEnableSession::AwaitingForceNewSavedPasskeyConfirmation(_)
+            ) {
+                let (master_key, passkey) = pending.into_staged_parts();
                 info!("Enable: confirming pending saved passkey before force-new upload");
                 return self
                     .stage_registered_passkey_for_confirmation(
@@ -1101,7 +1104,7 @@ impl RustCloudBackupManager {
                     .await;
             }
 
-            let (master_key, passkey) = pending.into_parts();
+            let (master_key, passkey) = pending.into_ready_parts();
             info!("Enable: committing pending create-first cloud backup");
             return self
                 .enable_cloud_backup_with_passkey_material(
@@ -1133,7 +1136,7 @@ impl RustCloudBackupManager {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
         if let Some(pending) = self.take_retry_pending_enable_session().await {
             let context = pending.context();
-            let (master_key, passkey) = pending.into_parts();
+            let (master_key, passkey) = pending.into_ready_parts();
             info!("Enable (no discovery): retrying pending upload with existing passkey material");
             return self
                 .enable_cloud_backup_with_passkey_material(
@@ -1208,9 +1211,11 @@ impl RustCloudBackupManager {
                 "Enable (no discovery): created passkey with {} existing namespace(s), waiting for confirmation",
                 existing_namespaces.len()
             );
-            self.replace_pending_enable_session(PendingEnableSession::awaiting_confirmation(
-                master_key, passkey, context,
-            ))
+            self.replace_pending_enable_session(
+                PendingEnableSession::awaiting_force_new_saved_passkey_confirmation(
+                    master_key, passkey, context,
+                ),
+            )
             .await;
             self.set_existing_backup_found_prompt(context);
             self.clear_enable_progress(CloudBackupStatus::Disabled);
@@ -3057,7 +3062,7 @@ mod tests {
 
         let pending = manager.take_pending_enable_session().await.unwrap();
         assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-        let (_, pending_passkey) = pending.into_parts();
+        let (_, pending_passkey) = pending.into_staged_parts();
         assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
     }
 
@@ -3085,9 +3090,8 @@ mod tests {
 
         let pending = manager.take_pending_enable_session().await.unwrap();
         assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
-        let (_, pending_passkey) = pending.into_parts();
+        let (_, pending_passkey) = pending.into_staged_parts();
         assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
-        assert_eq!(pending_passkey.prf_key, [0; 32]);
     }
 
     #[tokio::test(flavor = "current_thread", start_paused = true)]
@@ -3129,8 +3133,7 @@ mod tests {
             .replace_pending_enable_session(
                 PendingEnableSession::awaiting_saved_passkey_confirmation(
                     master_key,
-                    UnpersistedPrfKey {
-                        prf_key: [0; 32],
+                    StagedPrfKey {
                         prf_salt: [9; 32],
                         credential_id: vec![1, 2, 3],
                         provider_hint: None,
@@ -5878,7 +5881,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn pending_upload_verification_fails_master_key_wrapper_hash_mismatch() {
+    async fn pending_upload_verification_keeps_master_key_wrapper_hash_mismatch_pending() {
         let _guard = test_lock().lock();
         cove_tokio::init();
         let globals = test_globals();
@@ -5906,18 +5909,13 @@ mod tests {
 
         let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
 
-        assert!(!has_more_pending);
-        assert!(manager.pending_verification_completion().is_none());
+        assert!(has_more_pending);
+        assert!(manager.pending_verification_completion().is_some());
         assert_eq!(
             manager.state().pending_upload_verification,
-            PendingUploadVerificationState::Idle
+            PendingUploadVerificationState::Confirming
         );
-        match manager.state().verification {
-            VerificationState::Failed(DeepVerificationFailure::Retry { message, .. }) => {
-                assert!(message.contains("master key wrapper hash mismatch"));
-            }
-            other => panic!("expected failed verification, got {other:?}"),
-        }
+        assert!(matches!(manager.state().verification, VerificationState::Idle));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -6561,7 +6559,7 @@ mod tests {
         manager.do_enable_cloud_backup().await.unwrap();
 
         let pending = manager.take_pending_enable_session().await.unwrap();
-        let (pending_master_key, pending_passkey) = pending.into_parts();
+        let (pending_master_key, pending_passkey) = pending.into_ready_parts();
         assert_eq!(pending_master_key.namespace_id(), expected_namespace);
         assert_eq!(pending_passkey.credential_id, expected_credential_id);
     }
@@ -6596,7 +6594,7 @@ mod tests {
         manager.do_enable_cloud_backup_create_new().await.unwrap();
 
         let pending = manager.take_pending_enable_session().await.unwrap();
-        let (pending_master_key, pending_passkey) = pending.into_parts();
+        let (pending_master_key, pending_passkey) = pending.into_ready_parts();
         assert_eq!(pending_master_key.namespace_id(), expected_namespace);
         assert_eq!(pending_passkey.credential_id, expected_credential_id);
     }
@@ -6642,7 +6640,7 @@ mod tests {
         }
 
         let pending = manager.take_pending_enable_session().await.unwrap();
-        let (pending_master_key, pending_passkey) = pending.into_parts();
+        let (pending_master_key, pending_passkey) = pending.into_ready_parts();
         assert_eq!(pending_master_key.namespace_id(), expected_namespace);
         assert_eq!(pending_passkey.credential_id, expected_credential_id);
     }

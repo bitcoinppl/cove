@@ -18,6 +18,12 @@ pub(crate) struct CloudBackupVerificationEffect {
 pub(crate) struct CloudBackupVerificationCoordinator;
 
 impl CloudBackupVerificationCoordinator {
+    fn hidden(
+        source: Option<CloudBackupVerificationSource>,
+    ) -> CloudBackupVerificationPresentation {
+        CloudBackupVerificationPresentation::Hidden { source }
+    }
+
     pub(crate) fn begin_manual(
         source: CloudBackupVerificationSource,
     ) -> CloudBackupVerificationEffect {
@@ -68,6 +74,7 @@ impl CloudBackupVerificationCoordinator {
     ) -> CloudBackupVerificationEffect {
         match pending {
             PendingUploadVerificationState::Idle => CloudBackupVerificationEffect {
+                presentation: Some(Self::hidden(Some(source))),
                 pending_upload_verification: Some(PendingUploadVerificationState::Idle),
                 ..CloudBackupVerificationEffect::default()
             },
@@ -104,6 +111,7 @@ impl CloudBackupVerificationCoordinator {
                 message: failure.message(),
             }),
             verification: Some(VerificationState::Failed(failure.clone())),
+            recovery: Some(RecoveryState::Idle),
             detail: failure.detail().cloned(),
             refresh_sync_health: true,
             ..CloudBackupVerificationEffect::default()
@@ -112,16 +120,22 @@ impl CloudBackupVerificationCoordinator {
 
     pub(crate) fn needs_decision(
         reason: CloudBackupVerificationReason,
+        source: CloudBackupVerificationSource,
     ) -> CloudBackupVerificationEffect {
         CloudBackupVerificationEffect {
-            presentation: Some(CloudBackupVerificationPresentation::NeedsDecision { reason }),
+            presentation: Some(CloudBackupVerificationPresentation::NeedsDecision {
+                reason,
+                source,
+            }),
             ..CloudBackupVerificationEffect::default()
         }
     }
 
-    pub(crate) fn dismiss_decision() -> CloudBackupVerificationEffect {
+    pub(crate) fn dismiss_decision(
+        source: CloudBackupVerificationSource,
+    ) -> CloudBackupVerificationEffect {
         CloudBackupVerificationEffect {
-            presentation: Some(CloudBackupVerificationPresentation::Hidden),
+            presentation: Some(Self::hidden(Some(source))),
             ..CloudBackupVerificationEffect::default()
         }
     }
@@ -137,10 +151,10 @@ impl CloudBackupVerificationCoordinator {
             | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization(source) => {
                 *source
             }
-            CloudBackupVerificationPresentation::Hidden
-            | CloudBackupVerificationPresentation::NeedsDecision { .. } => {
-                CloudBackupVerificationSource::Settings
+            CloudBackupVerificationPresentation::Hidden { source } => {
+                source.unwrap_or(CloudBackupVerificationSource::Settings)
             }
+            CloudBackupVerificationPresentation::NeedsDecision { source, .. } => *source,
         }
     }
 }
@@ -245,6 +259,50 @@ mod tests {
             })
         );
         assert!(matches!(effect.verification, Some(VerificationState::Failed(_))));
+        assert_eq!(effect.recovery, Some(RecoveryState::Idle));
+    }
+
+    #[test]
+    fn idle_pending_upload_hides_presentation() {
+        let effect = CloudBackupVerificationCoordinator::pending_upload_state(
+            PendingUploadVerificationState::Idle,
+            CloudBackupVerificationSource::Onboarding,
+        );
+
+        assert_eq!(effect.pending_upload_verification, Some(PendingUploadVerificationState::Idle));
+        assert_eq!(
+            effect.presentation,
+            Some(CloudBackupVerificationPresentation::Hidden {
+                source: Some(CloudBackupVerificationSource::Onboarding),
+            })
+        );
+    }
+
+    #[test]
+    fn decision_transitions_preserve_source() {
+        let decision = CloudBackupVerificationCoordinator::needs_decision(
+            CloudBackupVerificationReason::BackupChanged,
+            CloudBackupVerificationSource::RootPrompt,
+        );
+
+        assert_eq!(
+            decision.presentation,
+            Some(CloudBackupVerificationPresentation::NeedsDecision {
+                reason: CloudBackupVerificationReason::BackupChanged,
+                source: CloudBackupVerificationSource::RootPrompt,
+            })
+        );
+
+        let hidden = CloudBackupVerificationCoordinator::dismiss_decision(
+            CloudBackupVerificationSource::RootPrompt,
+        );
+
+        assert_eq!(
+            hidden.presentation,
+            Some(CloudBackupVerificationPresentation::Hidden {
+                source: Some(CloudBackupVerificationSource::RootPrompt),
+            })
+        );
     }
 
     #[test]
@@ -254,6 +312,33 @@ mod tests {
                 &CloudBackupVerificationPresentation::BackgroundConfirming(
                     CloudBackupVerificationSource::Onboarding,
                 ),
+            ),
+            CloudBackupVerificationSource::Onboarding
+        );
+    }
+
+    #[test]
+    fn current_source_uses_embedded_or_default_source() {
+        assert_eq!(
+            CloudBackupVerificationCoordinator::current_source(
+                &CloudBackupVerificationPresentation::Hidden {
+                    source: Some(CloudBackupVerificationSource::CloudBackupDetail),
+                },
+            ),
+            CloudBackupVerificationSource::CloudBackupDetail
+        );
+        assert_eq!(
+            CloudBackupVerificationCoordinator::current_source(
+                &CloudBackupVerificationPresentation::Hidden { source: None },
+            ),
+            CloudBackupVerificationSource::Settings
+        );
+        assert_eq!(
+            CloudBackupVerificationCoordinator::current_source(
+                &CloudBackupVerificationPresentation::NeedsDecision {
+                    reason: CloudBackupVerificationReason::BackupChanged,
+                    source: CloudBackupVerificationSource::Onboarding,
+                },
             ),
             CloudBackupVerificationSource::Onboarding
         );

@@ -14,7 +14,7 @@ use cove_tokio::unblock;
 use rand::RngExt as _;
 use tracing::{debug, info, warn};
 
-use super::UnpersistedPrfKey;
+use super::{StagedPrfKey, UnpersistedPrfKey};
 use crate::manager::cloud_backup_manager::{CloudBackupError, PASSKEY_RP_ID};
 
 const PASSKEY_DISPLAY_NAME: &str = "Cove Cloud Backup";
@@ -51,7 +51,7 @@ pub enum PasskeyMaterialPurpose {
 
 pub enum PasskeyMaterialOutcome {
     Authenticated(UnpersistedPrfKey),
-    RegisteredForConfirmation(UnpersistedPrfKey),
+    RegisteredForConfirmation(StagedPrfKey),
 }
 
 impl PasskeyMaterialPurpose {
@@ -122,13 +122,12 @@ impl PasskeyMaterialAcquirer {
     }
 
     /// Registers an enable passkey without immediately authenticating it
-    pub async fn register_for_enable(&self) -> Result<UnpersistedPrfKey, CloudBackupError> {
+    pub async fn register_for_enable(&self) -> Result<StagedPrfKey, CloudBackupError> {
         info!("Registering new passkey for cloud backup enable");
         let prf_salt: [u8; 32] = rand::rng().random();
         let registration = self.create_passkey_registration(map_enable_passkey_error).await?;
 
-        Ok(UnpersistedPrfKey {
-            prf_key: [0; 32],
+        Ok(StagedPrfKey {
             prf_salt,
             credential_id: registration.credential_id.clone(),
             provider_hint: Some(passkey_provider_hint(registration)),
@@ -138,7 +137,7 @@ impl PasskeyMaterialAcquirer {
     /// Confirms a registered enable passkey by acquiring PRF material with targeted auth
     pub async fn confirm_registered_for_enable(
         &self,
-        staged: &UnpersistedPrfKey,
+        staged: &StagedPrfKey,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
         let prf_output = self
             .authenticate_registered(

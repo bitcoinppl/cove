@@ -19867,11 +19867,12 @@ public func FfiConverterTypeCloudBackupVerificationMetadata_lower(_ value: Cloud
 
 public enum CloudBackupVerificationPresentation: Equatable, Hashable {
     
-    case hidden
+    case hidden(source: CloudBackupVerificationSource?
+    )
     /**
      * The verification sheet is only for an unanswered user decision
      */
-    case needsDecision(reason: CloudBackupVerificationReason
+    case needsDecision(reason: CloudBackupVerificationReason, source: CloudBackupVerificationSource
     )
     /**
      * Native passkey UI may appear while this state is active
@@ -19913,9 +19914,10 @@ public struct FfiConverterTypeCloudBackupVerificationPresentation: FfiConverterR
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .hidden
+        case 1: return .hidden(source: try FfiConverterOptionTypeCloudBackupVerificationSource.read(from: &buf)
+        )
         
-        case 2: return .needsDecision(reason: try FfiConverterTypeCloudBackupVerificationReason.read(from: &buf)
+        case 2: return .needsDecision(reason: try FfiConverterTypeCloudBackupVerificationReason.read(from: &buf), source: try FfiConverterTypeCloudBackupVerificationSource.read(from: &buf)
         )
         
         case 3: return .manualVerifying(source: try FfiConverterTypeCloudBackupVerificationSource.read(from: &buf)
@@ -19941,13 +19943,15 @@ public struct FfiConverterTypeCloudBackupVerificationPresentation: FfiConverterR
         switch value {
         
         
-        case .hidden:
+        case let .hidden(source):
             writeInt(&buf, Int32(1))
+            FfiConverterOptionTypeCloudBackupVerificationSource.write(source, into: &buf)
+            
         
-        
-        case let .needsDecision(reason):
+        case let .needsDecision(reason,source):
             writeInt(&buf, Int32(2))
             FfiConverterTypeCloudBackupVerificationReason.write(reason, into: &buf)
+            FfiConverterTypeCloudBackupVerificationSource.write(source, into: &buf)
             
         
         case let .manualVerifying(source):
@@ -35780,6 +35784,30 @@ fileprivate struct FfiConverterOptionTypeBlockSizeLast: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeBlockSizeLast.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeCloudBackupVerificationSource: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupVerificationSource?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCloudBackupVerificationSource.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCloudBackupVerificationSource.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
