@@ -1089,21 +1089,6 @@ impl RustCloudBackupManager {
 
         if let Some(pending) = self.take_pending_enable_session().await {
             let pending_context = pending.context();
-            if matches!(
-                pending,
-                PendingEnableSession::AwaitingForceNewSavedPasskeyConfirmation(_)
-            ) {
-                let (master_key, passkey) = pending.into_staged_parts();
-                info!("Enable: confirming pending saved passkey before force-new upload");
-                return self
-                    .stage_registered_passkey_for_confirmation(
-                        cove_cspp::master_key::MasterKey::from_bytes(*master_key.as_bytes()),
-                        passkey.copy_for_retry(),
-                        pending_context,
-                    )
-                    .await;
-            }
-
             let (master_key, passkey) = pending.into_ready_parts();
             info!("Enable: committing pending create-first cloud backup");
             return self
@@ -1177,6 +1162,16 @@ impl RustCloudBackupManager {
             })?
         };
 
+        if !existing_namespaces.is_empty() {
+            info!(
+                "Enable (no discovery): found {} existing namespace(s), waiting for confirmation before creating passkey",
+                existing_namespaces.len()
+            );
+            self.set_existing_backup_found_prompt(context);
+            self.clear_enable_progress(CloudBackupStatus::Disabled);
+            return Ok(());
+        }
+
         info!("Enable (no discovery): getting master key");
         let master_key = cspp
             .get_or_create_master_key()
@@ -1205,22 +1200,6 @@ impl RustCloudBackupManager {
                 return Ok(());
             }
         };
-
-        if !had_local_master_key && !existing_namespaces.is_empty() {
-            info!(
-                "Enable (no discovery): created passkey with {} existing namespace(s), waiting for confirmation",
-                existing_namespaces.len()
-            );
-            self.replace_pending_enable_session(
-                PendingEnableSession::awaiting_force_new_saved_passkey_confirmation(
-                    master_key, passkey, context,
-                ),
-            )
-            .await;
-            self.set_existing_backup_found_prompt(context);
-            self.clear_enable_progress(CloudBackupStatus::Disabled);
-            return Ok(());
-        }
 
         info!("Enable (no discovery): passkey registered, confirming availability");
         self.stage_registered_passkey_for_confirmation(master_key, passkey, context).await
@@ -6673,7 +6652,7 @@ mod tests {
 
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 
-        assert_eq!(globals.passkey.create_count(), 1);
+        assert_eq!(globals.passkey.create_count(), 0);
         assert_eq!(globals.passkey.authenticate_count(), 0);
         assert_eq!(globals.passkey.discover_count(), 0);
         assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
@@ -6683,12 +6662,14 @@ mod tests {
             }
             other => panic!("expected existing backup prompt, got {other:?}"),
         }
+        assert!(manager.take_pending_enable_session().await.is_none());
 
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 
-        assert_eq!(globals.passkey.create_count(), 1);
+        assert_eq!(globals.passkey.create_count(), 0);
         assert_eq!(globals.passkey.authenticate_count(), 0);
         assert_eq!(globals.passkey.discover_count(), 0);
+        assert!(manager.take_pending_enable_session().await.is_none());
 
         manager.do_enable_cloud_backup_force_new().await.unwrap();
         let pending = manager.take_pending_enable_session().await.unwrap();
@@ -6741,6 +6722,11 @@ mod tests {
         };
         manager.do_enable_cloud_backup_no_discovery_with_context(context).await.unwrap();
 
+        assert_eq!(globals.passkey.create_count(), 0);
+        assert_eq!(globals.passkey.authenticate_count(), 0);
+        assert_eq!(globals.passkey.discover_count(), 0);
+        assert!(manager.take_pending_enable_session().await.is_none());
+
         match manager.state().prompt_intent {
             CloudBackupPromptIntent::ExistingBackupFound(prompt_context) => {
                 assert_eq!(prompt_context, context);
@@ -6748,12 +6734,7 @@ mod tests {
             other => panic!("expected existing backup prompt, got {other:?}"),
         }
 
-        manager
-            .do_enable_cloud_backup_force_new_with_context(
-                CloudBackupEnableContext::settings_manual(),
-            )
-            .await
-            .unwrap();
+        manager.do_enable_cloud_backup_force_new_with_context(context).await.unwrap();
 
         assert_eq!(
             manager.state().enable_state,

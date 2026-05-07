@@ -565,8 +565,6 @@ pub(crate) struct PendingSavedPasskeySessionMaterial {
 pub(crate) enum PendingEnableSession {
     /// A new passkey and master key are staged while the user confirms Create New Backup
     AwaitingForceNewConfirmation(PendingEnableSessionMaterial),
-    /// A registered passkey is staged while the user confirms Create New Backup
-    AwaitingForceNewSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial),
     /// Upload already started and should retry with the same staged passkey material
     RetryUpload(PendingEnableSessionMaterial),
     /// A registered passkey is staged until targeted PRF auth confirms it can be used
@@ -691,8 +689,7 @@ impl PendingEnableSession {
             Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
                 material.into_parts()
             }
-            Self::AwaitingForceNewSavedPasskeyConfirmation(_)
-            | Self::AwaitingSavedPasskeyConfirmation(_) => {
+            Self::AwaitingSavedPasskeyConfirmation(_) => {
                 unreachable!("saved passkey sessions contain staged material")
             }
         }
@@ -702,8 +699,7 @@ impl PendingEnableSession {
         self,
     ) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<StagedPrfKey>) {
         match self {
-            Self::AwaitingForceNewSavedPasskeyConfirmation(material)
-            | Self::AwaitingSavedPasskeyConfirmation(material) => material.into_parts(),
+            Self::AwaitingSavedPasskeyConfirmation(material) => material.into_parts(),
             Self::AwaitingForceNewConfirmation(_) | Self::RetryUpload(_) => {
                 unreachable!("ready passkey sessions contain authenticated material")
             }
@@ -715,8 +711,7 @@ impl PendingEnableSession {
             Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
                 material.namespace_id()
             }
-            Self::AwaitingForceNewSavedPasskeyConfirmation(material)
-            | Self::AwaitingSavedPasskeyConfirmation(material) => material.namespace_id(),
+            Self::AwaitingSavedPasskeyConfirmation(material) => material.namespace_id(),
         }
     }
 
@@ -725,8 +720,7 @@ impl PendingEnableSession {
             Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
                 material.context()
             }
-            Self::AwaitingForceNewSavedPasskeyConfirmation(material)
-            | Self::AwaitingSavedPasskeyConfirmation(material) => material.context(),
+            Self::AwaitingSavedPasskeyConfirmation(material) => material.context(),
         }
     }
 
@@ -735,11 +729,7 @@ impl PendingEnableSession {
     }
 
     fn is_awaiting_force_new_confirmation(&self) -> bool {
-        matches!(
-            self,
-            Self::AwaitingForceNewConfirmation(_)
-                | Self::AwaitingForceNewSavedPasskeyConfirmation(_)
-        )
+        matches!(self, Self::AwaitingForceNewConfirmation(_))
     }
 
     fn is_awaiting_saved_passkey_confirmation(&self) -> bool {
@@ -752,17 +742,6 @@ impl PendingEnableSession {
         context: CloudBackupEnableContext,
     ) -> Self {
         Self::AwaitingSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial::new(
-            master_key, passkey, context,
-        ))
-    }
-
-    #[allow(dead_code)]
-    fn awaiting_force_new_saved_passkey_confirmation(
-        master_key: cove_cspp::master_key::MasterKey,
-        passkey: StagedPrfKey,
-        context: CloudBackupEnableContext,
-    ) -> Self {
-        Self::AwaitingForceNewSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial::new(
             master_key, passkey, context,
         ))
     }
