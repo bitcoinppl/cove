@@ -406,6 +406,11 @@ struct CloudBackupPresentationHost<Content: View>: View {
                     coordinator.dismissCurrentPresentation()
                     manager.dispatch(action: .enableCloudBackupForceNew(existingBackupContext))
                 }
+                Button("Try Existing Passkey") {
+                    guard let existingBackupContext else { return }
+                    coordinator.dismissCurrentPresentation()
+                    manager.dispatch(action: .enableCloudBackup(existingBackupContext))
+                }
                 Button("Cancel", role: .cancel) {
                     coordinator.dismissCurrentPresentation()
                     manager.dispatch(action: .discardPendingEnableCloudBackup)

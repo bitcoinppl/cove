@@ -325,9 +325,13 @@ struct CloudBackupEnableConfirmationView: View {
 
 struct CloudBackupEnableBusyOverlay: View {
     let enableState: CloudBackupEnableState
+    var titleOverride: String?
+    var subtitleOverride: String?
 
     private var title: String {
-        switch enableState {
+        if let titleOverride { return titleOverride }
+
+        return switch enableState {
         case .creatingPasskey:
             "Creating your passkey..."
         case .waitingForPasskeyAvailability:
@@ -344,7 +348,9 @@ struct CloudBackupEnableBusyOverlay: View {
     }
 
     private var subtitle: String {
-        switch enableState {
+        if let subtitleOverride { return subtitleOverride }
+
+        return switch enableState {
         case .waitingForPasskeyAvailability, .awaitingSavedPasskeyConfirmation:
             "This can take a few seconds after saving it in your passkey/password manager app"
         default:

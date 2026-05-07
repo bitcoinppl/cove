@@ -1138,6 +1138,12 @@ private struct SettingsCloudBackupEnableSheet: View {
                 existingBackupPasskeyHint = nil
                 manager.dispatch(action: .enableCloudBackupForceNew(context))
             }
+            Button("Try Existing Passkey") {
+                guard let context = existingBackupContext else { return }
+                existingBackupContext = nil
+                existingBackupPasskeyHint = nil
+                manager.dispatch(action: .enableCloudBackup(context))
+            }
             Button("Cancel", role: .cancel) {
                 existingBackupContext = nil
                 existingBackupPasskeyHint = nil

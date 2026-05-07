@@ -322,6 +322,29 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         savedPasskeyConfirmationMode == .manual
     }
 
+    private var isAutomaticPasskeyConfirmationPhase: Bool {
+        if needsAutomaticPasskeyConfirmation { return true }
+        if didAutoConfirmSavedPasskey,
+           case .confirmingSavedPasskey = backupManager.enableState
+        {
+            return true
+        }
+
+        return false
+    }
+
+    private var busyOverlayTitleOverride: String? {
+        guard isAutomaticPasskeyConfirmationPhase else { return nil }
+
+        return "Finishing passkey setup..."
+    }
+
+    private var busyOverlaySubtitleOverride: String? {
+        guard isAutomaticPasskeyConfirmationPhase else { return nil }
+
+        return "Cloud Backup will continue automatically"
+    }
+
     private var primaryButtonTitle: String {
         if case .failed = backupManager.verification { return "Try Again" }
         return needsManualPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
@@ -369,7 +392,11 @@ private struct OnboardingCloudBackupDetailsStepView: View {
             )
 
             if isBusy {
-                CloudBackupEnableBusyOverlay(enableState: backupManager.enableState)
+                CloudBackupEnableBusyOverlay(
+                    enableState: backupManager.enableState,
+                    titleOverride: busyOverlayTitleOverride,
+                    subtitleOverride: busyOverlaySubtitleOverride
+                )
             }
         }
         .task {
