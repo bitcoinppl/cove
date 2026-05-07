@@ -1,6 +1,7 @@
 use act_zero::send;
 use tracing::error;
 
+use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
     CLOUD_BACKUP_MANAGER, CloudBackupError, CloudBackupManagerAction, CloudBackupPasskeyChoiceFlow,
     CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
@@ -43,15 +44,24 @@ pub enum CloudBackupVerificationSource {
 pub enum CloudBackupVerificationPresentation {
     Hidden,
     /// The verification sheet is only for an unanswered user decision
-    NeedsDecision { reason: CloudBackupVerificationReason },
+    NeedsDecision {
+        reason: CloudBackupVerificationReason,
+    },
     /// Native passkey UI may appear while this state is active
-    ManualVerifying { source: CloudBackupVerificationSource },
+    ManualVerifying {
+        source: CloudBackupVerificationSource,
+    },
     BackgroundConfirming,
     BackgroundBlockedOnAuthorization,
     /// Completion feedback should match the source instead of reopening the sheet
-    Completed { source: CloudBackupVerificationSource },
+    Completed {
+        source: CloudBackupVerificationSource,
+    },
     /// Failure is a result, not another request to show the decision sheet
-    Failed { source: CloudBackupVerificationSource, message: String },
+    Failed {
+        source: CloudBackupVerificationSource,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -166,9 +176,9 @@ impl RustCloudBackupManager {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
 
-        self.set_verification_presentation(CloudBackupVerificationPresentation::ManualVerifying {
-            source,
-        });
+        self.apply_verification_effect(
+            CloudBackupVerificationCoordinator::begin_manual_presentation(source),
+        );
         send!(self.supervisor.start_verification(false));
     }
 
@@ -176,9 +186,9 @@ impl RustCloudBackupManager {
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
-        self.set_verification_presentation(CloudBackupVerificationPresentation::ManualVerifying {
-            source,
-        });
+        self.apply_verification_effect(
+            CloudBackupVerificationCoordinator::begin_manual_presentation(source),
+        );
         send!(self.supervisor.start_verification(true));
     }
 
@@ -186,7 +196,7 @@ impl RustCloudBackupManager {
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt: {error}");
         }
-        self.set_verification_presentation(CloudBackupVerificationPresentation::Hidden);
+        self.apply_verification_effect(CloudBackupVerificationCoordinator::dismiss_decision());
     }
 
     fn spawn_recovery(self: std::sync::Arc<Self>, action: RecoveryAction) {
@@ -263,10 +273,10 @@ impl RustCloudBackupManager {
             self.state.read().verification_presentation,
             CloudBackupVerificationPresentation::ManualVerifying { .. }
         ) {
-            self.set_verification_presentation(
-                CloudBackupVerificationPresentation::ManualVerifying {
-                    source: CloudBackupVerificationSource::Settings,
-                },
+            self.apply_verification_effect(
+                CloudBackupVerificationCoordinator::begin_manual_presentation(
+                    CloudBackupVerificationSource::Settings,
+                ),
             );
         }
         self.set_verification(VerificationState::Verifying);
@@ -288,8 +298,9 @@ impl RustCloudBackupManager {
                 if let Some(detail) = report.detail.clone() {
                     self.set_detail(Some(detail));
                 }
-                self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
-                self.set_verification(VerificationState::Idle);
+                self.apply_verification_effect(
+                    CloudBackupVerificationCoordinator::begin_background_confirmation(),
+                );
             }
             DeepVerificationResult::PasskeyConfirmed(detail) => {
                 if let Some(detail) = detail {

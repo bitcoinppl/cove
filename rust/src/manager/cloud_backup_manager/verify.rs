@@ -1,3 +1,4 @@
+pub(crate) mod coordinator;
 mod integrity;
 mod passkey_auth;
 mod pending_completion;
@@ -21,8 +22,7 @@ use super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
     CloudBackupRetryAction, CloudBackupRetryContext, CloudBackupStatus, DeepVerificationFailure,
     DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
-    PendingVerificationUpload, RecoveryState, RustCloudBackupManager, VerificationState,
-    is_connectivity_related_issue,
+    PendingVerificationUpload, RustCloudBackupManager, is_connectivity_related_issue,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};

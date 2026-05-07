@@ -77,7 +77,8 @@ struct OnboardingBackupWalletView: View {
 
     private var subtitle: String {
         if branch == .exchange {
-            return "You’ll fund this wallet next. Save your recovery words or enable Cloud Backup first."
+            return
+                "You’ll fund this wallet next. Save your recovery words or enable Cloud Backup first."
         }
 
         return "Choose at least one backup method before continuing."
@@ -142,10 +143,12 @@ struct OnboardingSecretWordsView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        Text("Write these down exactly in order and keep them offline. Anyone with these words can control your Bitcoin.")
-                            .font(.footnote)
-                            .foregroundStyle(.coveLightGray.opacity(0.74))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(
+                            "Write these down exactly in order and keep them offline. Anyone with these words can control your Bitcoin."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.74))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     LazyVGrid(columns: columns, spacing: 12) {
@@ -306,24 +309,16 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private var primaryButtonTitle: String {
-        if case .failed = backupManager.verification {
-            return "Try Again"
-        }
-
+        if case .failed = backupManager.verification { return "Try Again" }
         return needsPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
     }
 
     private func handleEnableTap() {
         guard !isBusy, !isPromptingForEnableChoice else { return }
 
-        if needsPasskeyConfirmation {
-            backupManager.dispatch(action: .confirmSavedPasskey)
-            return
-        }
-
+        if needsPasskeyConfirmation { return backupManager.dispatch(action: .confirmSavedPasskey) }
         if case .failed = backupManager.verification {
-            backupManager.dispatch(action: .startVerification)
-            return
+            return backupManager.dispatch(action: .startVerification)
         }
 
         onEnable()
@@ -338,7 +333,10 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private func autoConfirmSavedPasskeyIfNeeded() {
-        guard needsPasskeyConfirmation, !didAutoConfirmSavedPasskey, !didReportEnabled else { return }
+        guard needsPasskeyConfirmation, !didAutoConfirmSavedPasskey, !didReportEnabled else {
+            return
+        }
+
         didAutoConfirmSavedPasskey = true
         backupManager.dispatch(action: .confirmSavedPasskey)
     }
@@ -379,11 +377,13 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     private func completeIfEnabled(status: CloudBackupStatus? = nil) {
         guard !didReportEnabled else { return }
         let currentStatus = status ?? backupManager.status
-        guard shouldCompleteOnboardingCloudBackup(
-            status: currentStatus,
-            pendingUploadVerification: backupManager.pendingUploadVerification,
-            verification: backupManager.verification
-        ) else { return }
+        guard
+            shouldCompleteOnboardingCloudBackup(
+                status: currentStatus,
+                pendingUploadVerification: backupManager.pendingUploadVerification,
+                verification: backupManager.verification
+            )
+        else { return }
         didReportEnabled = true
         onEnabled()
     }
@@ -453,10 +453,12 @@ private struct OnboardingSoftwareImportCloudBackupChoiceView: View {
         ) {
             VStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Your wallet backup is end-to-end encrypted before it leaves your device, stored in iCloud, and locked with a passkey only you control.")
-                        .font(.footnote)
-                        .foregroundStyle(.coveLightGray.opacity(0.78))
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        "Your wallet backup is end-to-end encrypted before it leaves your device, stored in iCloud, and locked with a passkey only you control."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.coveLightGray.opacity(0.78))
+                    .fixedSize(horizontal: false, vertical: true)
 
                     Text("You can skip this now and enable it later from Settings.")
                         .font(.footnote)
@@ -492,19 +494,24 @@ struct OnboardingHardwareImportCloudBackupChoiceView: View {
         OnboardingPromptScreen(
             icon: "icloud.and.arrow.up",
             title: "Protect this hardware wallet with Cloud Backup?",
-            subtitle: "Cloud Backup makes it easier to restore this wallet's configuration and labels if you lose this device."
+            subtitle:
+            "Cloud Backup makes it easier to restore this wallet's configuration and labels if you lose this device."
         ) {
             VStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("This backs up the imported hardware wallet configuration and labels stored in Cove so you can restore this wallet view later.")
-                        .font(.footnote)
-                        .foregroundStyle(.coveLightGray.opacity(0.78))
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        "This backs up the imported hardware wallet configuration and labels stored in Cove so you can restore this wallet view later."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.coveLightGray.opacity(0.78))
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Enabling this also turns on Cloud Backup for Cove more broadly, so compatible wallets you create later, as well as wallet labels, will be backed up.")
-                        .font(.footnote)
-                        .foregroundStyle(.coveLightGray.opacity(0.72))
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        "Enabling this also turns on Cloud Backup for Cove more broadly, so compatible wallets you create later, as well as wallet labels, will be backed up."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.coveLightGray.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
 
                     Text("This does not back up your hardware wallet seed or private keys.")
                         .font(.footnote.weight(.semibold))
@@ -560,10 +567,12 @@ struct OnboardingExchangeFundingView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        Text("Move your Bitcoin off the exchange and into the wallet you now control.")
-                            .font(.footnote)
-                            .foregroundStyle(.coveLightGray.opacity(0.74))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(
+                            "Move your Bitcoin off the exchange and into the wallet you now control."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.74))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     if let errorMessage {

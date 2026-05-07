@@ -7,14 +7,13 @@ use zeroize::Zeroizing;
 
 use super::{
     CloudBackupDetailResult, CloudBackupError, DeepVerificationFailure, DeepVerificationReport,
-    DeepVerificationResult, PendingVerificationCompletion, RecoveryState, RustCloudBackupManager,
-    VerificationState,
+    DeepVerificationResult, PendingVerificationCompletion, RustCloudBackupManager,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
+use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, CloudBackupVerificationPresentation, PendingVerificationUpload,
-    master_key_wrapper_revision_hash,
+    CloudBackupDetail, PendingVerificationUpload, master_key_wrapper_revision_hash,
     wallets::{WalletBackupLookup, WalletBackupReader},
 };
 
@@ -310,29 +309,15 @@ impl RustCloudBackupManager {
 
     pub(crate) fn apply_verified_report(&self, report: DeepVerificationReport) {
         self.persist_verification_result(&DeepVerificationResult::Verified(report.clone()));
-        if let Some(detail) = &report.detail {
-            self.set_detail(Some(detail.clone()));
-        }
         let source = self.current_verification_source();
-        self.set_verification_presentation(CloudBackupVerificationPresentation::Completed {
-            source,
-        });
-        self.set_verification(VerificationState::Verified(report));
-        self.set_recovery(RecoveryState::Idle);
-        self.refresh_sync_health();
+        self.apply_verification_effect(CloudBackupVerificationCoordinator::complete(
+            source, report,
+        ));
     }
 
     pub(crate) fn apply_failed_verification(&self, failure: DeepVerificationFailure) {
         self.persist_verification_result(&DeepVerificationResult::Failed(failure.clone()));
-        if let Some(detail) = failure.detail().cloned() {
-            self.set_detail(Some(detail));
-        }
         let source = self.current_verification_source();
-        self.set_verification_presentation(CloudBackupVerificationPresentation::Failed {
-            source,
-            message: failure.message(),
-        });
-        self.set_verification(VerificationState::Failed(failure));
-        self.refresh_sync_health();
+        self.apply_verification_effect(CloudBackupVerificationCoordinator::fail(source, failure));
     }
 }

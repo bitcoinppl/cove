@@ -52,6 +52,9 @@ pub use self::detail::{
 pub(crate) use self::keychain::CloudBackupKeychain;
 use self::prompt::CloudBackupPromptState;
 pub(crate) use self::store::CloudBackupStore;
+use self::verify::coordinator::{
+    CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
+};
 use self::wallets::wallet_metadata_change_requires_upload;
 use self::wallets::{UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader};
 use self::workers::{
@@ -1184,16 +1187,34 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn current_verification_source(&self) -> CloudBackupVerificationSource {
-        match &self.state.read().verification_presentation {
-            CloudBackupVerificationPresentation::ManualVerifying { source }
-            | CloudBackupVerificationPresentation::Completed { source }
-            | CloudBackupVerificationPresentation::Failed { source, .. } => *source,
-            CloudBackupVerificationPresentation::Hidden
-            | CloudBackupVerificationPresentation::NeedsDecision { .. }
-            | CloudBackupVerificationPresentation::BackgroundConfirming
-            | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization => {
-                CloudBackupVerificationSource::Settings
-            }
+        CloudBackupVerificationCoordinator::current_source(
+            &self.state.read().verification_presentation,
+        )
+    }
+
+    pub(crate) fn apply_verification_effect(&self, effect: CloudBackupVerificationEffect) {
+        if let Some(detail) = effect.detail {
+            self.set_detail(Some(detail));
+        }
+
+        if let Some(pending_upload_verification) = effect.pending_upload_verification {
+            self.set_pending_upload_verification_value(pending_upload_verification);
+        }
+
+        if let Some(presentation) = effect.presentation {
+            self.set_verification_presentation(presentation);
+        }
+
+        if let Some(verification) = effect.verification {
+            self.set_verification(verification);
+        }
+
+        if let Some(recovery) = effect.recovery {
+            self.set_recovery(recovery);
+        }
+
+        if effect.refresh_sync_health {
+            self.refresh_sync_health();
         }
     }
 
@@ -1278,20 +1299,23 @@ impl RustCloudBackupManager {
                 verification_metadata,
                 CloudBackupVerificationMetadata::NeedsVerification
             ) && should_prompt_verification
+                && matches!(state.pending_upload_verification, PendingUploadVerificationState::Idle)
                 && matches!(
-                    state.pending_upload_verification,
-                    PendingUploadVerificationState::Idle
+                    state.verification,
+                    VerificationState::Idle | VerificationState::Cancelled
+                ) {
+                CloudBackupVerificationCoordinator::needs_decision(
+                    CloudBackupVerificationReason::BackupChanged,
                 )
-                && matches!(state.verification, VerificationState::Idle | VerificationState::Cancelled)
-            {
-                CloudBackupVerificationPresentation::NeedsDecision {
-                    reason: CloudBackupVerificationReason::BackupChanged,
-                }
+                .presentation
+                .expect("needs decision effect should include presentation")
             } else if matches!(
                 state.verification_presentation,
                 CloudBackupVerificationPresentation::NeedsDecision { .. }
             ) {
-                CloudBackupVerificationPresentation::Hidden
+                CloudBackupVerificationCoordinator::dismiss_decision()
+                    .presentation
+                    .expect("dismiss decision effect should include presentation")
             } else {
                 state.verification_presentation.clone()
             };
@@ -1319,26 +1343,19 @@ impl RustCloudBackupManager {
         self.refresh_prompt_intent();
     }
 
-    pub(crate) fn set_pending_upload_verification(&self, pending: PendingUploadVerificationState) {
+    fn set_pending_upload_verification_value(&self, pending: PendingUploadVerificationState) {
         self.set_and_notify_field(
             pending,
             |state| &mut state.pending_upload_verification,
             Message::PendingUploadVerification,
         );
-        match pending {
-            PendingUploadVerificationState::Idle => {}
-            PendingUploadVerificationState::Confirming => {
-                self.set_verification_presentation(
-                    CloudBackupVerificationPresentation::BackgroundConfirming,
-                );
-            }
-            PendingUploadVerificationState::BlockedOnAuthorization => {
-                self.set_verification_presentation(
-                    CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization,
-                );
-            }
-        }
         self.refresh_prompt_intent();
+    }
+
+    pub(crate) fn set_pending_upload_verification(&self, pending: PendingUploadVerificationState) {
+        self.apply_verification_effect(CloudBackupVerificationCoordinator::pending_upload_state(
+            pending,
+        ));
     }
 
     pub(crate) fn refresh_pending_upload_verification_state(&self) {
@@ -2175,19 +2192,16 @@ impl RustCloudBackupManager {
         {
             state.pending_upload_verification = self.current_pending_upload_verification_state();
         }
-        if matches!(
-            state.verification_metadata,
-            CloudBackupVerificationMetadata::NeedsVerification
-        ) && state.should_prompt_verification
-            && matches!(
-                state.pending_upload_verification,
-                PendingUploadVerificationState::Idle
-            )
+        if matches!(state.verification_metadata, CloudBackupVerificationMetadata::NeedsVerification)
+            && state.should_prompt_verification
+            && matches!(state.pending_upload_verification, PendingUploadVerificationState::Idle)
             && matches!(state.verification, VerificationState::Idle | VerificationState::Cancelled)
         {
-            state.verification_presentation = CloudBackupVerificationPresentation::NeedsDecision {
-                reason: CloudBackupVerificationReason::BackupChanged,
-            };
+            state.verification_presentation = CloudBackupVerificationCoordinator::needs_decision(
+                CloudBackupVerificationReason::BackupChanged,
+            )
+            .presentation
+            .expect("needs decision effect should include presentation");
         }
         state.prompt_intent = self.prompt_state.lock().resolve(&state);
         state

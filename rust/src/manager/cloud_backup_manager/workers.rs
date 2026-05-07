@@ -20,9 +20,9 @@ pub(crate) use self::restore::{RestoreOperation, RestoredPasskeyMaterial};
 use self::sync_health::CloudBackupSyncHealthWorker;
 use self::uploads::CloudBackupUploadWorker;
 use super::keychain::CloudBackupKeychain;
+use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
-    CloudBackupDetailResult, CloudBackupEnableState, CloudBackupStatus,
-    CloudBackupVerificationPresentation, CloudBackupVerificationSource, DeepVerificationResult,
+    CloudBackupDetailResult, CloudBackupEnableState, CloudBackupStatus, DeepVerificationResult,
     OtherBackupsOperation, PendingEnableSession, PendingVerificationCompletion, RecoveryAction,
     RustCloudBackupManager, VerificationState, WalletId,
 };
@@ -381,17 +381,16 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         self.pending_verification_completion = None;
-        if !matches!(
+        if matches!(
             manager.state.read().verification_presentation,
-            CloudBackupVerificationPresentation::ManualVerifying { .. }
+            super::CloudBackupVerificationPresentation::ManualVerifying { .. }
         ) {
-            manager.set_verification_presentation(
-                CloudBackupVerificationPresentation::ManualVerifying {
-                    source: CloudBackupVerificationSource::Settings,
-                },
-            );
+            manager.set_verification(VerificationState::Verifying);
+        } else {
+            manager.apply_verification_effect(CloudBackupVerificationCoordinator::begin_manual(
+                super::CloudBackupVerificationSource::Settings,
+            ));
         }
-        manager.set_verification(VerificationState::Verifying);
         self.schedule_verification(manager, force_discoverable, attempt);
 
         Produces::ok(())

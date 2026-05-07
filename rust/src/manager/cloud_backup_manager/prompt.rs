@@ -71,9 +71,11 @@ impl CloudBackupPromptState {
 mod tests {
     use super::{
         CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupPromptState,
-        CloudBackupState, CloudBackupStatus, CloudBackupVerificationPresentation,
-        CloudBackupVerificationReason, CloudBackupVerificationSource, RecoveryAction,
+        CloudBackupState, CloudBackupStatus, CloudBackupVerificationPresentation, RecoveryAction,
         RecoveryState,
+    };
+    use crate::manager::cloud_backup_manager::{
+        CloudBackupVerificationReason, CloudBackupVerificationSource,
     };
 
     #[test]
