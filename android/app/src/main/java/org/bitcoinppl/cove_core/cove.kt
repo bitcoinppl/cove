@@ -27860,6 +27860,8 @@ data class CloudBackupOtherBackupsSummary (
     var `namespaceCount`: kotlin.UInt
     , 
     var `walletCount`: kotlin.UInt
+    , 
+    var `passkeyHints`: List<CloudBackupPasskeyHint>
     
 ){
     
@@ -27878,17 +27880,63 @@ public object FfiConverterTypeCloudBackupOtherBackupsSummary: FfiConverterRustBu
         return CloudBackupOtherBackupsSummary(
             FfiConverterUInt.read(buf),
             FfiConverterUInt.read(buf),
+            FfiConverterSequenceTypeCloudBackupPasskeyHint.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudBackupOtherBackupsSummary) = (
             FfiConverterUInt.allocationSize(value.`namespaceCount`) +
-            FfiConverterUInt.allocationSize(value.`walletCount`)
+            FfiConverterUInt.allocationSize(value.`walletCount`) +
+            FfiConverterSequenceTypeCloudBackupPasskeyHint.allocationSize(value.`passkeyHints`)
     )
 
     override fun write(value: CloudBackupOtherBackupsSummary, buf: ByteBuffer) {
             FfiConverterUInt.write(value.`namespaceCount`, buf)
             FfiConverterUInt.write(value.`walletCount`, buf)
+            FfiConverterSequenceTypeCloudBackupPasskeyHint.write(value.`passkeyHints`, buf)
+    }
+}
+
+
+
+data class CloudBackupPasskeyHint (
+    var `providerName`: kotlin.String?
+    , 
+    var `nameSuffix`: kotlin.String
+    , 
+    var `registeredAt`: kotlin.ULong
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupPasskeyHint: FfiConverterRustBuffer<CloudBackupPasskeyHint> {
+    override fun read(buf: ByteBuffer): CloudBackupPasskeyHint {
+        return CloudBackupPasskeyHint(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupPasskeyHint) = (
+            FfiConverterOptionalString.allocationSize(value.`providerName`) +
+            FfiConverterString.allocationSize(value.`nameSuffix`) +
+            FfiConverterULong.allocationSize(value.`registeredAt`)
+    )
+
+    override fun write(value: CloudBackupPasskeyHint, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`providerName`, buf)
+            FfiConverterString.write(value.`nameSuffix`, buf)
+            FfiConverterULong.write(value.`registeredAt`, buf)
     }
 }
 
@@ -28269,6 +28317,8 @@ data class CloudRestoreProviderHint (
     var `providerName`: kotlin.String?
     , 
     var `registeredAt`: kotlin.ULong
+    , 
+    var `nameSuffix`: kotlin.String
     
 ){
     
@@ -28287,17 +28337,20 @@ public object FfiConverterTypeCloudRestoreProviderHint: FfiConverterRustBuffer<C
         return CloudRestoreProviderHint(
             FfiConverterOptionalString.read(buf),
             FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudRestoreProviderHint) = (
             FfiConverterOptionalString.allocationSize(value.`providerName`) +
-            FfiConverterULong.allocationSize(value.`registeredAt`)
+            FfiConverterULong.allocationSize(value.`registeredAt`) +
+            FfiConverterString.allocationSize(value.`nameSuffix`)
     )
 
     override fun write(value: CloudRestoreProviderHint, buf: ByteBuffer) {
             FfiConverterOptionalString.write(value.`providerName`, buf)
             FfiConverterULong.write(value.`registeredAt`, buf)
+            FfiConverterString.write(value.`nameSuffix`, buf)
     }
 }
 
@@ -34645,7 +34698,8 @@ public object FfiConverterTypeCloudBackupOtherBackupsState : FfiConverterRustBuf
 sealed class CloudBackupPasskeyChoiceIntent {
     
     data class Enable(
-        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupPasskeyChoiceIntent()
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext, 
+        val v2: org.bitcoinppl.cove_core.CloudBackupPasskeyHint?) : CloudBackupPasskeyChoiceIntent()
         
     {
         
@@ -34674,6 +34728,7 @@ public object FfiConverterTypeCloudBackupPasskeyChoiceIntent : FfiConverterRustB
         return when(buf.getInt()) {
             1 -> CloudBackupPasskeyChoiceIntent.Enable(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.read(buf),
                 )
             2 -> CloudBackupPasskeyChoiceIntent.RepairPasskey
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -34686,6 +34741,7 @@ public object FfiConverterTypeCloudBackupPasskeyChoiceIntent : FfiConverterRustB
             (
                 4UL
                 + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+                + FfiConverterOptionalTypeCloudBackupPasskeyHint.allocationSize(value.v2)
             )
         }
         is CloudBackupPasskeyChoiceIntent.RepairPasskey -> {
@@ -34701,6 +34757,7 @@ public object FfiConverterTypeCloudBackupPasskeyChoiceIntent : FfiConverterRustB
             is CloudBackupPasskeyChoiceIntent.Enable -> {
                 buf.putInt(1)
                 FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.write(value.v2, buf)
                 Unit
             }
             is CloudBackupPasskeyChoiceIntent.RepairPasskey -> {
@@ -34721,7 +34778,8 @@ sealed class CloudBackupPromptIntent {
     
     
     data class ExistingBackupFound(
-        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupPromptIntent()
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext, 
+        val v2: org.bitcoinppl.cove_core.CloudBackupPasskeyHint?) : CloudBackupPromptIntent()
         
     {
         
@@ -34763,6 +34821,7 @@ public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<C
             1 -> CloudBackupPromptIntent.None
             2 -> CloudBackupPromptIntent.ExistingBackupFound(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.read(buf),
                 )
             3 -> CloudBackupPromptIntent.PasskeyChoice(
                 FfiConverterTypeCloudBackupPasskeyChoiceIntent.read(buf),
@@ -34785,6 +34844,7 @@ public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<C
             (
                 4UL
                 + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+                + FfiConverterOptionalTypeCloudBackupPasskeyHint.allocationSize(value.v2)
             )
         }
         is CloudBackupPromptIntent.PasskeyChoice -> {
@@ -34817,6 +34877,7 @@ public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<C
             is CloudBackupPromptIntent.ExistingBackupFound -> {
                 buf.putInt(2)
                 FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.write(value.v2, buf)
                 Unit
             }
             is CloudBackupPromptIntent.PasskeyChoice -> {
@@ -54717,6 +54778,38 @@ public object FfiConverterOptionalTypeCloudBackupDetail: FfiConverterRustBuffer<
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeCloudBackupPasskeyHint: FfiConverterRustBuffer<CloudBackupPasskeyHint?> {
+    override fun read(buf: ByteBuffer): CloudBackupPasskeyHint? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudBackupPasskeyHint.read(buf)
+    }
+
+    override fun allocationSize(value: CloudBackupPasskeyHint?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudBackupPasskeyHint.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudBackupPasskeyHint?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudBackupPasskeyHint.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeCloudBackupProgress: FfiConverterRustBuffer<CloudBackupProgress?> {
     override fun read(buf: ByteBuffer): CloudBackupProgress? {
         if (buf.get().toInt() == 0) {
@@ -55675,6 +55768,34 @@ public object FfiConverterSequenceTypeBackupWalletSummary: FfiConverterRustBuffe
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeBackupWalletSummary.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCloudBackupPasskeyHint: FfiConverterRustBuffer<List<CloudBackupPasskeyHint>> {
+    override fun read(buf: ByteBuffer): List<CloudBackupPasskeyHint> {
+        val len = buf.getInt()
+        return List<CloudBackupPasskeyHint>(len) {
+            FfiConverterTypeCloudBackupPasskeyHint.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CloudBackupPasskeyHint>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCloudBackupPasskeyHint.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CloudBackupPasskeyHint>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCloudBackupPasskeyHint.write(it, buf)
         }
     }
 }

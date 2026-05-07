@@ -13163,12 +13163,14 @@ public func FfiConverterTypeCloudBackupEnableContext_lower(_ value: CloudBackupE
 public struct CloudBackupOtherBackupsSummary: Equatable, Hashable {
     public var namespaceCount: UInt32
     public var walletCount: UInt32
+    public var passkeyHints: [CloudBackupPasskeyHint]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(namespaceCount: UInt32, walletCount: UInt32) {
+    public init(namespaceCount: UInt32, walletCount: UInt32, passkeyHints: [CloudBackupPasskeyHint]) {
         self.namespaceCount = namespaceCount
         self.walletCount = walletCount
+        self.passkeyHints = passkeyHints
     }
 
     
@@ -13188,13 +13190,15 @@ public struct FfiConverterTypeCloudBackupOtherBackupsSummary: FfiConverterRustBu
         return
             try CloudBackupOtherBackupsSummary(
                 namespaceCount: FfiConverterUInt32.read(from: &buf), 
-                walletCount: FfiConverterUInt32.read(from: &buf)
+                walletCount: FfiConverterUInt32.read(from: &buf), 
+                passkeyHints: FfiConverterSequenceTypeCloudBackupPasskeyHint.read(from: &buf)
         )
     }
 
     public static func write(_ value: CloudBackupOtherBackupsSummary, into buf: inout [UInt8]) {
         FfiConverterUInt32.write(value.namespaceCount, into: &buf)
         FfiConverterUInt32.write(value.walletCount, into: &buf)
+        FfiConverterSequenceTypeCloudBackupPasskeyHint.write(value.passkeyHints, into: &buf)
     }
 }
 
@@ -13211,6 +13215,64 @@ public func FfiConverterTypeCloudBackupOtherBackupsSummary_lift(_ buf: RustBuffe
 #endif
 public func FfiConverterTypeCloudBackupOtherBackupsSummary_lower(_ value: CloudBackupOtherBackupsSummary) -> RustBuffer {
     return FfiConverterTypeCloudBackupOtherBackupsSummary.lower(value)
+}
+
+
+public struct CloudBackupPasskeyHint: Equatable, Hashable {
+    public var providerName: String?
+    public var nameSuffix: String
+    public var registeredAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(providerName: String?, nameSuffix: String, registeredAt: UInt64) {
+        self.providerName = providerName
+        self.nameSuffix = nameSuffix
+        self.registeredAt = registeredAt
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CloudBackupPasskeyHint: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupPasskeyHint: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupPasskeyHint {
+        return
+            try CloudBackupPasskeyHint(
+                providerName: FfiConverterOptionString.read(from: &buf), 
+                nameSuffix: FfiConverterString.read(from: &buf), 
+                registeredAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudBackupPasskeyHint, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.providerName, into: &buf)
+        FfiConverterString.write(value.nameSuffix, into: &buf)
+        FfiConverterUInt64.write(value.registeredAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupPasskeyHint_lift(_ buf: RustBuffer) throws -> CloudBackupPasskeyHint {
+    return try FfiConverterTypeCloudBackupPasskeyHint.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupPasskeyHint_lower(_ value: CloudBackupPasskeyHint) -> RustBuffer {
+    return FfiConverterTypeCloudBackupPasskeyHint.lower(value)
 }
 
 
@@ -13659,12 +13721,14 @@ public func FfiConverterTypeCloudBackupWalletItem_lower(_ value: CloudBackupWall
 public struct CloudRestoreProviderHint: Equatable, Hashable {
     public var providerName: String?
     public var registeredAt: UInt64
+    public var nameSuffix: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(providerName: String?, registeredAt: UInt64) {
+    public init(providerName: String?, registeredAt: UInt64, nameSuffix: String) {
         self.providerName = providerName
         self.registeredAt = registeredAt
+        self.nameSuffix = nameSuffix
     }
 
     
@@ -13684,13 +13748,15 @@ public struct FfiConverterTypeCloudRestoreProviderHint: FfiConverterRustBuffer {
         return
             try CloudRestoreProviderHint(
                 providerName: FfiConverterOptionString.read(from: &buf), 
-                registeredAt: FfiConverterUInt64.read(from: &buf)
+                registeredAt: FfiConverterUInt64.read(from: &buf), 
+                nameSuffix: FfiConverterString.read(from: &buf)
         )
     }
 
     public static func write(_ value: CloudRestoreProviderHint, into buf: inout [UInt8]) {
         FfiConverterOptionString.write(value.providerName, into: &buf)
         FfiConverterUInt64.write(value.registeredAt, into: &buf)
+        FfiConverterString.write(value.nameSuffix, into: &buf)
     }
 }
 
@@ -19078,7 +19144,7 @@ public func FfiConverterTypeCloudBackupOtherBackupsState_lower(_ value: CloudBac
 
 public enum CloudBackupPasskeyChoiceIntent: Equatable, Hashable {
     
-    case enable(CloudBackupEnableContext
+    case enable(CloudBackupEnableContext,CloudBackupPasskeyHint?
     )
     case repairPasskey
 
@@ -19102,7 +19168,7 @@ public struct FfiConverterTypeCloudBackupPasskeyChoiceIntent: FfiConverterRustBu
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .enable(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
+        case 1: return .enable(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf), try FfiConverterOptionTypeCloudBackupPasskeyHint.read(from: &buf)
         )
         
         case 2: return .repairPasskey
@@ -19115,9 +19181,10 @@ public struct FfiConverterTypeCloudBackupPasskeyChoiceIntent: FfiConverterRustBu
         switch value {
         
         
-        case let .enable(v1):
+        case let .enable(v1,v2):
             writeInt(&buf, Int32(1))
             FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
+            FfiConverterOptionTypeCloudBackupPasskeyHint.write(v2, into: &buf)
             
         
         case .repairPasskey:
@@ -19148,7 +19215,7 @@ public func FfiConverterTypeCloudBackupPasskeyChoiceIntent_lower(_ value: CloudB
 public enum CloudBackupPromptIntent: Equatable, Hashable {
     
     case none
-    case existingBackupFound(CloudBackupEnableContext
+    case existingBackupFound(CloudBackupEnableContext,CloudBackupPasskeyHint?
     )
     case passkeyChoice(CloudBackupPasskeyChoiceIntent
     )
@@ -19177,7 +19244,7 @@ public struct FfiConverterTypeCloudBackupPromptIntent: FfiConverterRustBuffer {
         
         case 1: return .none
         
-        case 2: return .existingBackupFound(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
+        case 2: return .existingBackupFound(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf), try FfiConverterOptionTypeCloudBackupPasskeyHint.read(from: &buf)
         )
         
         case 3: return .passkeyChoice(try FfiConverterTypeCloudBackupPasskeyChoiceIntent.read(from: &buf)
@@ -19199,9 +19266,10 @@ public struct FfiConverterTypeCloudBackupPromptIntent: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
         
         
-        case let .existingBackupFound(v1):
+        case let .existingBackupFound(v1,v2):
             writeInt(&buf, Int32(2))
             FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
+            FfiConverterOptionTypeCloudBackupPasskeyHint.write(v2, into: &buf)
             
         
         case let .passkeyChoice(v1):
@@ -35528,6 +35596,30 @@ fileprivate struct FfiConverterOptionTypeCloudBackupDetail: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeCloudBackupPasskeyHint: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupPasskeyHint?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCloudBackupPasskeyHint.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCloudBackupPasskeyHint.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeCloudBackupProgress: FfiConverterRustBuffer {
     typealias SwiftType = CloudBackupProgress?
 
@@ -36270,6 +36362,31 @@ fileprivate struct FfiConverterSequenceTypeBackupWalletSummary: FfiConverterRust
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeBackupWalletSummary.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCloudBackupPasskeyHint: FfiConverterRustBuffer {
+    typealias SwiftType = [CloudBackupPasskeyHint]
+
+    public static func write(_ value: [CloudBackupPasskeyHint], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCloudBackupPasskeyHint.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CloudBackupPasskeyHint] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CloudBackupPasskeyHint]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCloudBackupPasskeyHint.read(from: &buf))
         }
         return seq
     }
