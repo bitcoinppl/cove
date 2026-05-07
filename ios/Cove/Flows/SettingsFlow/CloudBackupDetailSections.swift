@@ -539,7 +539,7 @@ private struct CloudOnlyActionDialogs: ViewModifier {
                 )
             ) {
                 if let item = walletToDelete {
-                    Button("Delete", role: .destructive) {
+                    Button("Delete Forever", role: .destructive) {
                         manager.dispatch(action: .deleteCloudWallet(item.recordId))
                     }
                 }

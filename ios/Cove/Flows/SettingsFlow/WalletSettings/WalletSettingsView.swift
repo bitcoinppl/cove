@@ -34,6 +34,10 @@ struct WalletSettingsView: View {
         return "This wallet is not backed up and contains funds. You will lose access to these funds forever."
     }
 
+    var finalDeleteButtonTitle: String {
+        cloudBackupManager.isCloudBackupEnabled ? "Delete" : "Delete Forever"
+    }
+
     let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 5)
 
     private func deleteWallet() {
@@ -216,7 +220,7 @@ struct WalletSettingsView: View {
                     Text("Are you sure you want to delete '\(metadata.name)'?")
                 }
                 .alert("Final Warning", isPresented: $showingFinalDeleteConfirmation) {
-                    Button("Delete Forever", role: .destructive) {
+                    Button(finalDeleteButtonTitle, role: .destructive) {
                         deleteWallet()
                     }
                     Button("Cancel", role: .cancel) {}
