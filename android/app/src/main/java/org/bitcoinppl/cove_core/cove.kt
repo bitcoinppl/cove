@@ -28051,6 +28051,8 @@ data class CloudBackupState (
     , 
     var `verificationMetadata`: CloudBackupVerificationMetadata
     , 
+    var `verificationPresentation`: CloudBackupVerificationPresentation
+    , 
     var `detail`: CloudBackupDetail?
     , 
     var `verification`: VerificationState
@@ -28091,6 +28093,7 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterTypePendingUploadVerificationState.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterTypeCloudBackupVerificationMetadata.read(buf),
+            FfiConverterTypeCloudBackupVerificationPresentation.read(buf),
             FfiConverterOptionalTypeCloudBackupDetail.read(buf),
             FfiConverterTypeVerificationState.read(buf),
             FfiConverterTypeSyncState.read(buf),
@@ -28113,6 +28116,7 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterTypePendingUploadVerificationState.allocationSize(value.`pendingUploadVerification`) +
             FfiConverterBoolean.allocationSize(value.`shouldPromptVerification`) +
             FfiConverterTypeCloudBackupVerificationMetadata.allocationSize(value.`verificationMetadata`) +
+            FfiConverterTypeCloudBackupVerificationPresentation.allocationSize(value.`verificationPresentation`) +
             FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`) +
             FfiConverterTypeVerificationState.allocationSize(value.`verification`) +
             FfiConverterTypeSyncState.allocationSize(value.`sync`) +
@@ -28134,6 +28138,7 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterTypePendingUploadVerificationState.write(value.`pendingUploadVerification`, buf)
             FfiConverterBoolean.write(value.`shouldPromptVerification`, buf)
             FfiConverterTypeCloudBackupVerificationMetadata.write(value.`verificationMetadata`, buf)
+            FfiConverterTypeCloudBackupVerificationPresentation.write(value.`verificationPresentation`, buf)
             FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
             FfiConverterTypeVerificationState.write(value.`verification`, buf)
             FfiConverterTypeSyncState.write(value.`sync`, buf)
@@ -34012,11 +34017,23 @@ sealed class CloudBackupManagerAction {
     object CancelRestore : CloudBackupManagerAction()
     
     
-    object StartVerification : CloudBackupManagerAction()
+    data class StartVerification(
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupManagerAction()
+        
+    {
+        
+
+        companion object
+    }
     
-    
-    object StartVerificationDiscoverable : CloudBackupManagerAction()
-    
+    data class StartVerificationDiscoverable(
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupManagerAction()
+        
+    {
+        
+
+        companion object
+    }
     
     object DismissVerificationPrompt : CloudBackupManagerAction()
     
@@ -34094,8 +34111,12 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             7 -> CloudBackupManagerAction.DismissMissingPasskeyReminder
             8 -> CloudBackupManagerAction.RestoreFromCloudBackup
             9 -> CloudBackupManagerAction.CancelRestore
-            10 -> CloudBackupManagerAction.StartVerification
-            11 -> CloudBackupManagerAction.StartVerificationDiscoverable
+            10 -> CloudBackupManagerAction.StartVerification(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
+            11 -> CloudBackupManagerAction.StartVerificationDiscoverable(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
             12 -> CloudBackupManagerAction.DismissVerificationPrompt
             13 -> CloudBackupManagerAction.RecreateManifest
             14 -> CloudBackupManagerAction.ReinitializeBackup
@@ -34176,12 +34197,14 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
             )
         }
         is CloudBackupManagerAction.StartVerificationDiscoverable -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
             )
         }
         is CloudBackupManagerAction.DismissVerificationPrompt -> {
@@ -34306,10 +34329,12 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             }
             is CloudBackupManagerAction.StartVerification -> {
                 buf.putInt(10)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
                 Unit
             }
             is CloudBackupManagerAction.StartVerificationDiscoverable -> {
                 buf.putInt(11)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
                 Unit
             }
             is CloudBackupManagerAction.DismissVerificationPrompt -> {
@@ -34689,6 +34714,15 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
+    data class VerificationPresentation(
+        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationPresentation) : CloudBackupReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class PendingUploadVerification(
         val v1: org.bitcoinppl.cove_core.PendingUploadVerificationState) : CloudBackupReconcileMessage()
         
@@ -34813,31 +34847,34 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             9 -> CloudBackupReconcileMessage.VerificationMetadata(
                 FfiConverterTypeCloudBackupVerificationMetadata.read(buf),
                 )
-            10 -> CloudBackupReconcileMessage.PendingUploadVerification(
+            10 -> CloudBackupReconcileMessage.VerificationPresentation(
+                FfiConverterTypeCloudBackupVerificationPresentation.read(buf),
+                )
+            11 -> CloudBackupReconcileMessage.PendingUploadVerification(
                 FfiConverterTypePendingUploadVerificationState.read(buf),
                 )
-            11 -> CloudBackupReconcileMessage.Detail(
+            12 -> CloudBackupReconcileMessage.Detail(
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
                 )
-            12 -> CloudBackupReconcileMessage.Verification(
+            13 -> CloudBackupReconcileMessage.Verification(
                 FfiConverterTypeVerificationState.read(buf),
                 )
-            13 -> CloudBackupReconcileMessage.Sync(
+            14 -> CloudBackupReconcileMessage.Sync(
                 FfiConverterTypeSyncState.read(buf),
                 )
-            14 -> CloudBackupReconcileMessage.Recovery(
+            15 -> CloudBackupReconcileMessage.Recovery(
                 FfiConverterTypeRecoveryState.read(buf),
                 )
-            15 -> CloudBackupReconcileMessage.CloudOnly(
+            16 -> CloudBackupReconcileMessage.CloudOnly(
                 FfiConverterTypeCloudOnlyState.read(buf),
                 )
-            16 -> CloudBackupReconcileMessage.CloudOnlyOperation(
+            17 -> CloudBackupReconcileMessage.CloudOnlyOperation(
                 FfiConverterTypeCloudOnlyOperation.read(buf),
                 )
-            17 -> CloudBackupReconcileMessage.OtherBackupsOperation(
+            18 -> CloudBackupReconcileMessage.OtherBackupsOperation(
                 FfiConverterTypeOtherBackupsOperation.read(buf),
                 )
-            18 -> CloudBackupReconcileMessage.PromptIntent(
+            19 -> CloudBackupReconcileMessage.PromptIntent(
                 FfiConverterTypeCloudBackupPromptIntent.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -34906,6 +34943,13 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             (
                 4UL
                 + FfiConverterTypeCloudBackupVerificationMetadata.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupReconcileMessage.VerificationPresentation -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationPresentation.allocationSize(value.v1)
             )
         }
         is CloudBackupReconcileMessage.PendingUploadVerification -> {
@@ -35020,48 +35064,53 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 FfiConverterTypeCloudBackupVerificationMetadata.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.PendingUploadVerification -> {
+            is CloudBackupReconcileMessage.VerificationPresentation -> {
                 buf.putInt(10)
+                FfiConverterTypeCloudBackupVerificationPresentation.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.PendingUploadVerification -> {
+                buf.putInt(11)
                 FfiConverterTypePendingUploadVerificationState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Detail -> {
-                buf.putInt(11)
+                buf.putInt(12)
                 FfiConverterOptionalTypeCloudBackupDetail.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Verification -> {
-                buf.putInt(12)
+                buf.putInt(13)
                 FfiConverterTypeVerificationState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Sync -> {
-                buf.putInt(13)
+                buf.putInt(14)
                 FfiConverterTypeSyncState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Recovery -> {
-                buf.putInt(14)
+                buf.putInt(15)
                 FfiConverterTypeRecoveryState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.CloudOnly -> {
-                buf.putInt(15)
+                buf.putInt(16)
                 FfiConverterTypeCloudOnlyState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.CloudOnlyOperation -> {
-                buf.putInt(16)
+                buf.putInt(17)
                 FfiConverterTypeCloudOnlyOperation.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.OtherBackupsOperation -> {
-                buf.putInt(17)
+                buf.putInt(18)
                 FfiConverterTypeOtherBackupsOperation.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.PromptIntent -> {
-                buf.putInt(18)
+                buf.putInt(19)
                 FfiConverterTypeCloudBackupPromptIntent.write(value.v1, buf)
                 Unit
             }
@@ -35412,6 +35461,264 @@ public object FfiConverterTypeCloudBackupVerificationMetadata : FfiConverterRust
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+sealed class CloudBackupVerificationPresentation {
+    
+    object Hidden : CloudBackupVerificationPresentation()
+    
+    
+    /**
+     * The verification sheet is only for an unanswered user decision
+     */
+    data class NeedsDecision(
+        val `reason`: org.bitcoinppl.cove_core.CloudBackupVerificationReason) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Native passkey UI may appear while this state is active
+     */
+    data class ManualVerifying(
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object BackgroundConfirming : CloudBackupVerificationPresentation()
+    
+    
+    object BackgroundBlockedOnAuthorization : CloudBackupVerificationPresentation()
+    
+    
+    /**
+     * Completion feedback should match the source instead of reopening the sheet
+     */
+    data class Completed(
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Failure is a result, not another request to show the decision sheet
+     */
+    data class Failed(
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource, 
+        val `message`: kotlin.String) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupVerificationPresentation : FfiConverterRustBuffer<CloudBackupVerificationPresentation>{
+    override fun read(buf: ByteBuffer): CloudBackupVerificationPresentation {
+        return when(buf.getInt()) {
+            1 -> CloudBackupVerificationPresentation.Hidden
+            2 -> CloudBackupVerificationPresentation.NeedsDecision(
+                FfiConverterTypeCloudBackupVerificationReason.read(buf),
+                )
+            3 -> CloudBackupVerificationPresentation.ManualVerifying(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
+            4 -> CloudBackupVerificationPresentation.BackgroundConfirming
+            5 -> CloudBackupVerificationPresentation.BackgroundBlockedOnAuthorization
+            6 -> CloudBackupVerificationPresentation.Completed(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
+            7 -> CloudBackupVerificationPresentation.Failed(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupVerificationPresentation): ULong = when(value) {
+        is CloudBackupVerificationPresentation.Hidden -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupVerificationPresentation.NeedsDecision -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationReason.allocationSize(value.`reason`)
+            )
+        }
+        is CloudBackupVerificationPresentation.ManualVerifying -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
+            )
+        }
+        is CloudBackupVerificationPresentation.BackgroundConfirming -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupVerificationPresentation.BackgroundBlockedOnAuthorization -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupVerificationPresentation.Completed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
+            )
+        }
+        is CloudBackupVerificationPresentation.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupVerificationPresentation, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupVerificationPresentation.Hidden -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.NeedsDecision -> {
+                buf.putInt(2)
+                FfiConverterTypeCloudBackupVerificationReason.write(value.`reason`, buf)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.ManualVerifying -> {
+                buf.putInt(3)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.BackgroundConfirming -> {
+                buf.putInt(4)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.BackgroundBlockedOnAuthorization -> {
+                buf.putInt(5)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.Completed -> {
+                buf.putInt(6)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.Failed -> {
+                buf.putInt(7)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class CloudBackupVerificationReason {
+    
+    BACKUP_CHANGED;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupVerificationReason: FfiConverterRustBuffer<CloudBackupVerificationReason> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupVerificationReason.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupVerificationReason) = 4UL
+
+    override fun write(value: CloudBackupVerificationReason, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class CloudBackupVerificationSource {
+    
+    ROOT_PROMPT,
+    SETTINGS,
+    CLOUD_BACKUP_DETAIL,
+    ONBOARDING;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupVerificationSource: FfiConverterRustBuffer<CloudBackupVerificationSource> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupVerificationSource.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupVerificationSource) = 4UL
+
+    override fun write(value: CloudBackupVerificationSource, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
