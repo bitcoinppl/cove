@@ -857,7 +857,12 @@ impl PendingVerificationCompletion {
         PersistedPendingVerificationCompletion {
             report: PersistedDeepVerificationReport::from(&self.report),
             namespace_id: self.namespace_id.clone(),
-            uploads: self.uploads.iter().map(PersistedPendingVerificationUpload::from).collect(),
+            uploads: self
+                .uploads
+                .iter()
+                .cloned()
+                .map(PersistedPendingVerificationUpload::from)
+                .collect(),
         }
     }
 
@@ -971,14 +976,13 @@ impl From<&DeepVerificationReport> for PersistedDeepVerificationReport {
     }
 }
 
-impl From<&PendingVerificationUpload> for PersistedPendingVerificationUpload {
-    fn from(upload: &PendingVerificationUpload) -> Self {
+impl From<PendingVerificationUpload> for PersistedPendingVerificationUpload {
+    fn from(upload: PendingVerificationUpload) -> Self {
         match upload {
             PendingVerificationUpload::MasterKeyWrapper => Self::MasterKeyWrapper,
-            PendingVerificationUpload::Wallet { record_id, expected_revision } => Self::Wallet {
-                record_id: record_id.clone(),
-                expected_revision: expected_revision.clone(),
-            },
+            PendingVerificationUpload::Wallet { record_id, expected_revision } => {
+                Self::Wallet { record_id, expected_revision }
+            }
         }
     }
 }
@@ -1819,7 +1823,7 @@ impl RustCloudBackupManager {
         }
 
         let mut hints = hints_by_suffix.into_values().collect::<Vec<_>>();
-        hints.sort_by(|lhs, rhs| rhs.registered_at.cmp(&lhs.registered_at));
+        hints.sort_by_key(|hint| std::cmp::Reverse(hint.registered_at));
         hints
     }
 

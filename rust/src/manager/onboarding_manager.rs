@@ -109,12 +109,12 @@ pub struct CloudRestoreProviderHint {
     pub name_suffix: String,
 }
 
-impl From<&CloudRestoreProviderHint> for CloudBackupPasskeyHint {
-    fn from(value: &CloudRestoreProviderHint) -> Self {
+impl From<CloudRestoreProviderHint> for CloudBackupPasskeyHint {
+    fn from(value: CloudRestoreProviderHint) -> Self {
         Self {
-            provider_name: value.provider_name.clone(),
+            provider_name: value.provider_name,
             registered_at: value.registered_at,
-            name_suffix: value.name_suffix.clone(),
+            name_suffix: value.name_suffix,
         }
     }
 }
@@ -605,7 +605,7 @@ impl RustOnboardingManager {
                             saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
                             verification_source: CloudBackupVerificationSource::Onboarding,
                         },
-                        hint.as_ref().map(CloudBackupPasskeyHint::from),
+                        hint.map(CloudBackupPasskeyHint::from),
                     ),
                 );
             }
@@ -1034,7 +1034,7 @@ impl FlowState {
                                 wallet_id: flow.wallet_id.clone(),
                                 post_onboarding,
                             },
-                            Some(OnboardingProgress::from(&flow)),
+                            Some(OnboardingProgress::from(flow)),
                         ),
                         TransitionCommand::None,
                     )
@@ -1053,7 +1053,7 @@ impl FlowState {
                             wallet_id: flow.wallet_id.clone(),
                             post_onboarding,
                         },
-                        Some(OnboardingProgress::from(&flow)),
+                        Some(OnboardingProgress::from(flow)),
                     ),
                     TransitionCommand::None,
                 )
@@ -1499,7 +1499,7 @@ impl FlowState {
             | Self::CloudBackup(CloudBackupFlow::CreatedWallet(flow))
             | Self::CloudBackupSuccess(CloudBackupFlow::CreatedWallet(flow))
             | Self::SecretWords(flow)
-            | Self::ExchangeFunding(flow) => Some(OnboardingProgress::from(flow)),
+            | Self::ExchangeFunding(flow) => Some(OnboardingProgress::from(flow.clone())),
             Self::Terms { context: TermsContext::SelectWallet { .. }, progress, .. } => {
                 progress.clone()
             }
@@ -1557,10 +1557,10 @@ impl TermsContext {
     }
 }
 
-impl From<&CreatedWalletFlow> for OnboardingProgress {
-    fn from(flow: &CreatedWalletFlow) -> Self {
+impl From<CreatedWalletFlow> for OnboardingProgress {
+    fn from(flow: CreatedWalletFlow) -> Self {
         Self::CreatedWallet {
-            wallet_id: flow.wallet_id.clone(),
+            wallet_id: flow.wallet_id,
             branch: flow.branch,
             network: flow.network,
             wallet_mode: flow.wallet_mode,
