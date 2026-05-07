@@ -53,6 +53,34 @@ enum EnablePasskeyAcquisition {
     Cancelled,
 }
 
+enum EnablePasskeyRegistrationFlow {
+    ForceNew,
+    NoDiscovery,
+}
+
+impl EnablePasskeyRegistrationFlow {
+    fn log_context(&self) -> &'static str {
+        match self {
+            Self::ForceNew => "Enable force new",
+            Self::NoDiscovery => "Enable (no discovery)",
+        }
+    }
+
+    fn cancelled_context(&self) -> &'static str {
+        match self {
+            Self::ForceNew => "Enable force new cancelled before passkey setup finished",
+            Self::NoDiscovery => "Enable (no discovery) cancelled before passkey setup finished",
+        }
+    }
+
+    fn failed_context(&self) -> &'static str {
+        match self {
+            Self::ForceNew => "Enable force new failed before passkey setup finished",
+            Self::NoDiscovery => "Enable (no discovery) failed before passkey setup finished",
+        }
+    }
+}
+
 struct RestorableNamespace {
     namespace_id: String,
     master_key: cove_cspp::master_key::MasterKey,
@@ -1107,7 +1135,11 @@ impl RustCloudBackupManager {
                 .await;
         }
 
-        self.do_enable_cloud_backup_create_new_with_context(context).await
+        self.register_new_enable_passkey_with_context(
+            context,
+            EnablePasskeyRegistrationFlow::ForceNew,
+        )
+        .await
     }
 
     /// Same as `do_enable_cloud_backup_create_new` but skips passkey discovery,
@@ -1145,16 +1177,15 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
-        let passkey_access = PasskeyAccess::global();
         let keychain = Keychain::global();
         let cloud = CloudStorage::global_explicit_client();
 
         let cspp = cove_cspp::Cspp::new(keychain.clone());
-        let had_local_master_key = cspp
+        let has_local_master_key = cspp
             .load_master_key_from_store()
             .map_err_prefix("load local master key", CloudBackupError::Internal)?
             .is_some();
-        let existing_namespaces = if had_local_master_key {
+        let existing_namespaces = if has_local_master_key {
             Vec::new()
         } else {
             cloud.list_namespaces().await.map_err(|error| {
@@ -1180,20 +1211,44 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
-        info!("Enable (no discovery): getting master key");
+        self.register_new_enable_passkey_with_context(
+            context,
+            EnablePasskeyRegistrationFlow::NoDiscovery,
+        )
+        .await
+    }
+
+    async fn register_new_enable_passkey_with_context(
+        &self,
+        context: CloudBackupEnableContext,
+        flow: EnablePasskeyRegistrationFlow,
+    ) -> Result<(), CloudBackupError> {
+        let log_context = flow.log_context();
+        let cancelled_context = flow.cancelled_context();
+        let failed_context = flow.failed_context();
+
+        let passkey_access = PasskeyAccess::global();
+        let keychain = Keychain::global();
+        let cspp = cove_cspp::Cspp::new(keychain.clone());
+        let had_local_master_key = cspp
+            .load_master_key_from_store()
+            .map_err_prefix("load local master key", CloudBackupError::Internal)?
+            .is_some();
+
+        info!("{log_context}: getting master key");
         let master_key = cspp
             .get_or_create_master_key()
             .map_err_prefix("master key", CloudBackupError::Internal)?;
 
         let namespace_id = master_key.namespace_id();
-        info!("Enable (no discovery): namespace_id={namespace_id}, creating passkey");
+        info!("{log_context}: namespace_id={namespace_id}, creating passkey");
         self.set_enable_state(CloudBackupEnableState::CreatingPasskey);
         let passkey = match self
             .acquire_enable_passkey(
                 &cspp,
                 had_local_master_key,
-                "Enable (no discovery) cancelled before passkey setup finished",
-                "Enable (no discovery) failed before passkey setup finished",
+                cancelled_context,
+                failed_context,
                 || {
                     let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
                     async move { acquirer.register_for_enable().await }
@@ -1211,7 +1266,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        info!("Enable (no discovery): passkey registered, confirming availability");
+        info!("{log_context}: passkey registered, confirming availability");
         self.stage_registered_passkey_for_confirmation(master_key, passkey, context).await
     }
 
@@ -6714,6 +6769,53 @@ mod tests {
         assert_eq!(globals.passkey.create_count(), create_count);
         assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
         assert_eq!(globals.passkey.discover_count(), discover_count);
+    }
+
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn force_new_after_existing_backup_prompt_registers_without_discovery() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+
+        reset_cloud_backup_test_state(&manager, globals);
+        CONNECTIVITY_MANAGER.set_connection_state(true);
+
+        let existing_master_key = cove_cspp::master_key::MasterKey::generate();
+        let existing_namespace = existing_master_key.namespace_id();
+        let encrypted_existing_master = cove_cspp::master_key_crypto::encrypt_master_key(
+            &existing_master_key,
+            &[7; 32],
+            &[9; 32],
+        )
+        .unwrap();
+        globals.cloud.set_wallet_files(existing_namespace.clone(), vec!["wallet-1.json".into()]);
+        globals.cloud.set_master_key_backup(
+            existing_namespace,
+            serde_json::to_vec(&encrypted_existing_master).unwrap(),
+        );
+        globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+        globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+
+        manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+
+        assert_eq!(globals.passkey.create_count(), 0);
+        assert_eq!(globals.passkey.discover_count(), 0);
+        assert!(matches!(
+            manager.state().prompt_intent,
+            CloudBackupPromptIntent::ExistingBackupFound(_, _)
+        ));
+
+        manager.do_enable_cloud_backup_force_new().await.unwrap();
+
+        assert_eq!(globals.passkey.create_count(), 1);
+        assert_eq!(globals.passkey.discover_count(), 0);
+        assert_eq!(
+            manager.state().enable_state,
+            CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+                SavedPasskeyConfirmationMode::Manual,
+            )
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
