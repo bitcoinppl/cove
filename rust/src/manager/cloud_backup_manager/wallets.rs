@@ -61,8 +61,8 @@ pub(crate) struct PreparedWalletBackup {
 }
 
 pub(crate) use passkey::{
-    EnablePasskeyMaterial, NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher,
-    PasskeyMaterialAcquirer,
+    NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
+    PasskeyMaterialOutcome,
 };
 #[cfg(test)]
 pub(crate) use payload::convert_cloud_secret;

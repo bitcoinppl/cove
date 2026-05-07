@@ -43,19 +43,65 @@ pub enum NamespaceMatchOutcome {
     UnsupportedVersions,
 }
 
-pub enum EnablePasskeyMaterial {
-    Authenticated(UnpersistedPrfKey),
-    Registered(UnpersistedPrfKey),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasskeyMaterialPurpose {
+    EnableCloudBackup,
+    RepairWrapper,
 }
 
-struct PasskeyMaterialDiscoveryContext {
-    fallback_context: &'static str,
-    attempt_message: &'static str,
-    discovered_message: &'static str,
-    cancelled_message: &'static str,
-    missing_message: &'static str,
-    failed_message: &'static str,
-    create_for_enable: bool,
+pub enum PasskeyMaterialOutcome {
+    Authenticated(UnpersistedPrfKey),
+    RegisteredForConfirmation(UnpersistedPrfKey),
+}
+
+impl PasskeyMaterialPurpose {
+    fn attempt_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => {
+                "Attempting passkey discovery before registering new cloud backup enable passkey"
+            }
+            Self::RepairWrapper => {
+                "Attempting passkey discovery before creating new wrapper-repair passkey"
+            }
+        }
+    }
+
+    fn discovered_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => "Discovered existing passkey for cloud backup enable",
+            Self::RepairWrapper => "Discovered existing passkey for wrapper repair",
+        }
+    }
+
+    fn cancelled_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => "User cancelled passkey discovery for cloud backup enable",
+            Self::RepairWrapper => "User cancelled passkey discovery for wrapper repair",
+        }
+    }
+
+    fn missing_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => {
+                "No existing passkey found for cloud backup enable, registering new"
+            }
+            Self::RepairWrapper => "No existing passkey found for wrapper repair, creating new",
+        }
+    }
+
+    fn failed_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => "Cloud backup enable discovery failed",
+            Self::RepairWrapper => "Wrapper-repair discovery failed",
+        }
+    }
+
+    fn fallback_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => "registering new passkey",
+            Self::RepairWrapper => "falling back to create for wrapper repair",
+        }
+    }
 }
 
 /// Acquires passkey PRF material without persisting it to the keychain
@@ -73,12 +119,6 @@ impl PasskeyMaterialAcquirer {
     pub async fn create_for_wrapper_repair(&self) -> Result<UnpersistedPrfKey, CloudBackupError> {
         info!("Creating new passkey for wrapper repair");
         self.create_new_prf_key_with_mapper(map_wrapper_repair_passkey_error).await
-    }
-
-    /// Creates a passkey for enabling cloud backup without persisting keychain state
-    pub async fn create_for_enable(&self) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        info!("Creating new passkey for cloud backup enable");
-        self.create_new_prf_key_with_mapper(map_enable_passkey_error).await
     }
 
     /// Registers an enable passkey without immediately authenticating it
@@ -120,31 +160,36 @@ impl PasskeyMaterialAcquirer {
     pub async fn discover_or_create_for_wrapper_repair(
         &self,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        self.discover_or_create(PasskeyMaterialDiscoveryContext {
-            fallback_context: "wrapper repair",
-            attempt_message: "Attempting passkey discovery before creating new wrapper-repair passkey",
-            discovered_message: "Discovered existing passkey for wrapper repair",
-            cancelled_message: "User cancelled passkey discovery for wrapper repair",
-            missing_message: "No existing passkey found for wrapper repair, creating new",
-            failed_message: "Wrapper-repair discovery failed",
-            create_for_enable: false,
-        })
-        .await
+        match self.acquire(PasskeyMaterialPurpose::RepairWrapper).await? {
+            PasskeyMaterialOutcome::Authenticated(passkey) => Ok(passkey),
+            PasskeyMaterialOutcome::RegisteredForConfirmation(_) => {
+                Err(CloudBackupError::Internal(
+                    "wrapper repair passkey acquisition returned unconfirmed material".into(),
+                ))
+            }
+        }
     }
 
     /// Discovers an existing enable passkey or registers a new passkey for later confirmation
     pub async fn discover_or_register_for_enable(
         &self,
-    ) -> Result<EnablePasskeyMaterial, CloudBackupError> {
-        info!("Attempting passkey discovery before registering new cloud backup enable passkey");
+    ) -> Result<PasskeyMaterialOutcome, CloudBackupError> {
+        self.acquire(PasskeyMaterialPurpose::EnableCloudBackup).await
+    }
+
+    async fn acquire(
+        &self,
+        purpose: PasskeyMaterialPurpose,
+    ) -> Result<PasskeyMaterialOutcome, CloudBackupError> {
+        info!("{}", purpose.attempt_message());
         let prf_salt: [u8; 32] = rand::rng().random();
 
         match self.discover_with_platform_authorization_retry(prf_salt).await {
             Ok(discovered) => {
                 let prf_key = prf_output_to_key(discovered.prf_output)?;
-                info!("Discovered existing passkey for cloud backup enable");
+                info!("{}", purpose.discovered_message());
 
-                Ok(EnablePasskeyMaterial::Authenticated(UnpersistedPrfKey {
+                Ok(PasskeyMaterialOutcome::Authenticated(UnpersistedPrfKey {
                     prf_key,
                     prf_salt,
                     credential_id: discovered.credential_id,
@@ -152,73 +197,36 @@ impl PasskeyMaterialAcquirer {
                 }))
             }
             Err(PasskeyError::UserCancelled) => {
-                info!("User cancelled passkey discovery for cloud backup enable");
+                info!("{}", purpose.cancelled_message());
                 Err(CloudBackupError::PasskeyDiscoveryCancelled)
             }
             Err(PasskeyError::NoCredentialFound) => {
-                info!("No existing passkey found for cloud backup enable, registering new");
-                self.register_for_enable().await.map(EnablePasskeyMaterial::Registered)
+                info!("{}", purpose.missing_message());
+                self.create_or_register_for_purpose(purpose).await
             }
             Err(PasskeyError::PrfUnsupportedProvider) => {
                 Err(CloudBackupError::UnsupportedPasskeyProvider)
             }
             Err(error) => {
-                warn!("Cloud backup enable discovery failed ({error}), registering new passkey");
-                self.register_for_enable().await.map(EnablePasskeyMaterial::Registered)
+                warn!("{} ({error}), {}", purpose.failed_message(), purpose.fallback_message());
+                self.create_or_register_for_purpose(purpose).await
             }
         }
     }
 
-    async fn discover_or_create(
+    async fn create_or_register_for_purpose(
         &self,
-        context: PasskeyMaterialDiscoveryContext,
-    ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        info!("{}", context.attempt_message);
-        let prf_salt: [u8; 32] = rand::rng().random();
-
-        let discovery = self.discover_with_platform_authorization_retry(prf_salt).await;
-
-        match discovery {
-            Ok(discovered) => {
-                let prf_key = prf_output_to_key(discovered.prf_output)?;
-                info!("{}", context.discovered_message);
-
-                Ok(UnpersistedPrfKey {
-                    prf_key,
-                    prf_salt,
-                    credential_id: discovered.credential_id,
-                    provider_hint: None,
-                })
-            }
-            Err(PasskeyError::UserCancelled) => {
-                info!("{}", context.cancelled_message);
-                Err(CloudBackupError::PasskeyDiscoveryCancelled)
-            }
-            Err(PasskeyError::NoCredentialFound) => {
-                info!("{}", context.missing_message);
-                self.create_for_context(context.create_for_enable).await
-            }
-            Err(PasskeyError::PrfUnsupportedProvider) => {
-                Err(CloudBackupError::UnsupportedPasskeyProvider)
-            }
-            Err(error) => {
-                let failed_message = context.failed_message;
-                let fallback_context = context.fallback_context;
-                warn!("{failed_message} ({error}), falling back to create for {fallback_context}");
-                self.create_for_context(context.create_for_enable).await
+        purpose: PasskeyMaterialPurpose,
+    ) -> Result<PasskeyMaterialOutcome, CloudBackupError> {
+        match purpose {
+            PasskeyMaterialPurpose::EnableCloudBackup => self
+                .register_for_enable()
+                .await
+                .map(PasskeyMaterialOutcome::RegisteredForConfirmation),
+            PasskeyMaterialPurpose::RepairWrapper => {
+                self.create_for_wrapper_repair().await.map(PasskeyMaterialOutcome::Authenticated)
             }
         }
-    }
-
-    async fn create_for_context(
-        &self,
-        create_for_enable: bool,
-    ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        if create_for_enable {
-            return self.create_for_enable().await;
-        }
-
-        self.create_for_wrapper_repair().await
     }
 
     async fn discover_with_platform_authorization_retry(

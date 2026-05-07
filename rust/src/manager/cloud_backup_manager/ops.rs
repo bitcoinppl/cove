@@ -12,8 +12,8 @@ use zeroize::Zeroizing;
 
 use super::cloud_inventory::CloudWalletInventory;
 use super::wallets::{
-    DownloadedWalletBackup, EnablePasskeyMaterial, NamespaceMatch, NamespaceMatchOutcome,
-    NamespacePasskeyMatcher, PasskeyMaterialAcquirer, UnpersistedPrfKey, WalletBackupLookup,
+    DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher,
+    PasskeyMaterialAcquirer, PasskeyMaterialOutcome, UnpersistedPrfKey, WalletBackupLookup,
     WalletBackupReader, WalletRestoreSession,
 };
 
@@ -1040,8 +1040,8 @@ impl RustCloudBackupManager {
         self.set_enable_state(CloudBackupEnableState::CreatingPasskey);
         let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
         let passkey = match acquirer.discover_or_register_for_enable().await {
-            Ok(EnablePasskeyMaterial::Authenticated(passkey)) => passkey,
-            Ok(EnablePasskeyMaterial::Registered(passkey)) => {
+            Ok(PasskeyMaterialOutcome::Authenticated(passkey)) => passkey,
+            Ok(PasskeyMaterialOutcome::RegisteredForConfirmation(passkey)) => {
                 info!("Enable: passkey registered, confirming availability");
                 return self
                     .stage_registered_passkey_for_confirmation(master_key, passkey, context)
@@ -2846,16 +2846,14 @@ mod tests {
         }));
 
         let manager = init_manager();
-        let error = manager.do_enable_cloud_backup_no_discovery().await.unwrap_err();
-
-        assert!(matches!(
-            error,
-            CloudBackupError::Passkey(message) if message.contains("boom")
-        ));
+        manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+        let pending = manager.take_pending_enable_session().await.unwrap();
+        manager.handle_confirm_saved_passkey_session(pending).await;
 
         let keychain = Keychain::global();
         let cspp = cove_cspp::Cspp::new(keychain.clone());
-        assert!(cspp.load_master_key_from_store().unwrap().is_none());
+        assert!(cspp.load_master_key_from_store().unwrap().is_some());
+        assert!(manager.take_pending_enable_session().await.is_some());
         assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_none());
         assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_none());
         assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_none());
@@ -2874,6 +2872,8 @@ mod tests {
         globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
         manager.do_enable_cloud_backup_create_new().await.unwrap();
+        let pending = manager.take_pending_enable_session().await.unwrap();
+        manager.handle_confirm_saved_passkey_session(pending).await;
 
         assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
         let state = manager.state();
@@ -2907,6 +2907,9 @@ mod tests {
         globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+        let pending = manager.take_pending_enable_session().await.unwrap();
+        manager.handle_confirm_saved_passkey_session(pending).await;
+
         manager.clear_runtime_passkey_authorization();
         manager.clear_pending_verification_completion();
         manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
@@ -3002,6 +3005,8 @@ mod tests {
         globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+        let pending = manager.take_pending_enable_session().await.unwrap();
+        manager.handle_confirm_saved_passkey_session(pending).await;
 
         assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
     }
@@ -4963,6 +4968,8 @@ mod tests {
 
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
         manager.do_enable_cloud_backup_force_new().await.unwrap();
+        let pending = manager.take_pending_enable_session().await.unwrap();
+        manager.handle_confirm_saved_passkey_session(pending).await;
 
         let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
         CloudStorage::global_silent_client()
@@ -6674,7 +6681,7 @@ mod tests {
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 
         assert_eq!(globals.passkey.create_count(), 1);
-        assert_eq!(globals.passkey.authenticate_count(), 1);
+        assert_eq!(globals.passkey.authenticate_count(), 0);
         assert_eq!(globals.passkey.discover_count(), 0);
         assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
         assert!(matches!(
@@ -6685,10 +6692,12 @@ mod tests {
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
 
         assert_eq!(globals.passkey.create_count(), 1);
-        assert_eq!(globals.passkey.authenticate_count(), 1);
+        assert_eq!(globals.passkey.authenticate_count(), 0);
         assert_eq!(globals.passkey.discover_count(), 0);
 
         manager.do_enable_cloud_backup_force_new().await.unwrap();
+        let pending = manager.take_pending_enable_session().await.unwrap();
+        manager.handle_confirm_saved_passkey_session(pending).await;
 
         assert!(manager.take_pending_enable_session().await.is_none());
         assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
@@ -6719,6 +6728,9 @@ mod tests {
         globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
         manager.do_enable_cloud_backup_no_discovery().await.unwrap();
+        let pending = manager.take_pending_enable_session().await.unwrap();
+        manager.handle_confirm_saved_passkey_session(pending).await;
+
         assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
 
         let restarted_manager = init_manager();
