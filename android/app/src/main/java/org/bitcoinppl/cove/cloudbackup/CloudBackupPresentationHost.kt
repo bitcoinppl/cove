@@ -54,6 +54,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
+import org.bitcoinppl.cove_core.CloudBackupPasskeyHint
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupPromptIntent
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
@@ -68,6 +69,7 @@ val LocalCloudBackupPresentationCoordinator =
 internal sealed class CloudBackupRootPresentation {
     data class ExistingBackupFound(
         val context: CloudBackupEnableContext,
+        val passkeyHint: CloudBackupPasskeyHint?,
     ) : CloudBackupRootPresentation()
 
     data class PasskeyChoice(
@@ -282,11 +284,19 @@ class CloudBackupPresentationCoordinator {
 private fun CloudBackupPromptIntent.toRootPresentation(): CloudBackupRootPresentation? =
     when (this) {
         is CloudBackupPromptIntent.None -> null
-        is CloudBackupPromptIntent.ExistingBackupFound -> CloudBackupRootPresentation.ExistingBackupFound(v1)
+        is CloudBackupPromptIntent.ExistingBackupFound -> CloudBackupRootPresentation.ExistingBackupFound(v1, v2)
         is CloudBackupPromptIntent.PasskeyChoice -> CloudBackupRootPresentation.PasskeyChoice(v1)
         is CloudBackupPromptIntent.MissingPasskeyReminder -> CloudBackupRootPresentation.MissingPasskeyReminder
         is CloudBackupPromptIntent.VerificationPrompt -> CloudBackupRootPresentation.VerificationPrompt
     }
+
+private fun existingPasskeyButtonTitle(hint: CloudBackupPasskeyHint?): String =
+    hint?.let { "Use Existing Passkey (${it.nameSuffix})" } ?: "Use Existing Passkey"
+
+private fun existingBackupMessage(hint: CloudBackupPasskeyHint?): String =
+    hint?.let {
+        "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey named Cove Cloud Backup (${it.nameSuffix}), use that passkey instead."
+    } ?: "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead."
 
 @Composable
 fun CloudBackupPresentationHost(
@@ -359,9 +369,7 @@ fun CloudBackupPresentationHost(
                 },
                 title = { Text("Existing Cloud Backup Found") },
                 text = {
-                    Text(
-                        "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead.",
-                    )
+                    Text(existingBackupMessage(presentation.passkeyHint))
                 },
                 confirmButton = {
                     TextButton(
@@ -409,7 +417,13 @@ fun CloudBackupPresentationHost(
                                         manager.dispatch(CloudBackupManagerAction.RepairPasskey)
                                 }
                             },
-                        ) { Text("Use Existing Passkey") }
+                        ) {
+                            Text(
+                                existingPasskeyButtonTitle(
+                                    (presentation.intent as? CloudBackupPasskeyChoiceIntent.Enable)?.v2,
+                                ),
+                            )
+                        }
                         TextButton(
                             onClick = {
                                 coordinator.dismissCurrentPresentation()

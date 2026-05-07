@@ -479,7 +479,7 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
                 )
                 Spacer(modifier = Modifier.size(4.dp))
                 Text(
-                    text = providerHint?.providerName ?: "Secured with your passkey provider",
+                    text = providerHint?.passkeyDisplayName() ?: "Secured with your passkey provider",
                     color = CoveColor.coveLightGray.copy(alpha = 0.58f),
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -495,6 +495,13 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
                     color = CoveColor.coveLightGray.copy(alpha = 0.72f),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
+                )
+
+                ProviderDetailItem(
+                    icon = Icons.Default.Person,
+                    label = "LOOK FOR",
+                    value = providerHint.passkeyDisplayName(),
+                    modifier = Modifier.fillMaxWidth(),
                 )
 
                 val providerName = providerHint.providerName
@@ -552,6 +559,9 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
         }
     }
 }
+
+private fun CloudRestoreProviderHint.passkeyDisplayName(): String =
+    "Cove Cloud Backup ($nameSuffix)"
 
 @Composable
 private fun OnboardingCloudSearchHero() {
@@ -662,6 +672,7 @@ private fun OnboardingRestoreOfferWithProviderHintPreview() {
             CloudRestoreProviderHint(
                 providerName = "Google Password Manager",
                 registeredAt = 1_777_612_800u,
+                nameSuffix = "09IX",
             ),
         onRestore = {},
         onSkip = {},
@@ -678,6 +689,7 @@ private fun OnboardingRestoreOfferWithProviderDatePreview() {
             CloudRestoreProviderHint(
                 providerName = null,
                 registeredAt = 1_777_612_800u,
+                nameSuffix = "09IY",
             ),
         onRestore = {},
         onSkip = {},

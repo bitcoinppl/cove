@@ -769,6 +769,7 @@ package org.bitcoinppl.cove.cloudbackup
                  OtherBackupsSection(
                      namespaceCount = summary.namespaceCount.toInt(),
                      walletCount = summary.walletCount.toInt(),
+                     passkeySuffixes = summary.passkeyHints.map { it.nameSuffix },
                      manager = manager,
                  )
              }
@@ -956,11 +957,12 @@ package org.bitcoinppl.cove.cloudbackup
  }
 
  @Composable
- private fun OtherBackupsSection(
-     namespaceCount: Int,
-     walletCount: Int,
-     manager: CloudBackupManager,
- ) {
+private fun OtherBackupsSection(
+    namespaceCount: Int,
+    walletCount: Int,
+    passkeySuffixes: List<String>,
+    manager: CloudBackupManager,
+) {
      var showRecoverConfirmation by remember { mutableStateOf(false) }
      var showDeleteConfirmation by remember { mutableStateOf(false) }
      var showFinalDeleteConfirmation by remember { mutableStateOf(false) }
@@ -998,7 +1000,7 @@ package org.bitcoinppl.cove.cloudbackup
      MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
          Column {
              Text(
-                 text = "${pluralize(namespaceCount, "backup set", "backup sets")} protected by a different passkey, containing ${pluralize(walletCount, "wallet", "wallets")}",
+                 text = "${pluralize(namespaceCount, "backup set", "backup sets")} protected by ${otherPasskeyLabel(passkeySuffixes)}, containing ${pluralize(walletCount, "wallet", "wallets")}",
                  style = MaterialTheme.typography.bodySmall,
                  color = MaterialTheme.colorScheme.onSurfaceVariant,
                  modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -1143,6 +1145,13 @@ package org.bitcoinppl.cove.cloudbackup
                  failedWalletErrors.firstOrNull()?.let(::add)
              }.joinToString(" ")
  }
+
+ private fun otherPasskeyLabel(suffixes: List<String>): String =
+     when (suffixes.size) {
+         0 -> "a different passkey"
+         1 -> "Cove Cloud Backup (${suffixes.first()})"
+         else -> "passkeys ${suffixes.joinToString(", ") { "($it)" }}"
+     }
 
  private fun pluralize(
      count: Int,
