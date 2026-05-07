@@ -380,6 +380,14 @@ fun CloudBackupPresentationHost(
                             )
                         },
                     ) { Text("Create New Backup") }
+                    TextButton(
+                        onClick = {
+                            coordinator.dismissCurrentPresentation()
+                            manager.dispatch(
+                                CloudBackupManagerAction.EnableCloudBackup(presentation.context),
+                            )
+                        },
+                    ) { Text("Try Existing Passkey") }
                 },
                 dismissButton = {
                     TextButton(
