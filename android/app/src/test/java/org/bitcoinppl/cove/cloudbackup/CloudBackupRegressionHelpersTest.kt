@@ -1,10 +1,13 @@
 package org.bitcoinppl.cove.cloudbackup
 
-import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceFlow
+import org.bitcoinppl.cove_core.CloudBackupEnableContext
+import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupStatus
+import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.PendingUploadVerificationState
+import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 import org.bitcoinppl.cove_core.VerificationState
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.junit.Assert.assertEquals
@@ -227,8 +230,10 @@ class CloudBackupRegressionHelpersTest {
 
         val presentations =
             listOf(
-                CloudBackupRootPresentation.ExistingBackupFound,
-                CloudBackupRootPresentation.PasskeyChoice(CloudBackupPasskeyChoiceFlow.ENABLE),
+                CloudBackupRootPresentation.ExistingBackupFound(manualEnableContext()),
+                CloudBackupRootPresentation.PasskeyChoice(
+                    CloudBackupPasskeyChoiceIntent.Enable(manualEnableContext()),
+                ),
                 CloudBackupRootPresentation.MissingPasskeyReminder,
                 CloudBackupRootPresentation.VerificationPrompt,
             )
@@ -244,7 +249,7 @@ class CloudBackupRegressionHelpersTest {
         }
         assertTrue(
             isCloudBackupPresentationPresentable(
-                presentation = CloudBackupRootPresentation.ExistingBackupFound,
+                presentation = CloudBackupRootPresentation.ExistingBackupFound(manualEnableContext()),
                 context = context.copy(isInDecoyMode = false),
                 hasBlockers = false,
             ),
@@ -283,14 +288,17 @@ class CloudBackupRegressionHelpersTest {
 
         assertTrue(
             isCloudBackupPresentationPresentable(
-                presentation = CloudBackupRootPresentation.ExistingBackupFound,
+                presentation = CloudBackupRootPresentation.ExistingBackupFound(manualEnableContext()),
                 context = context,
                 hasBlockers = false,
             ),
         )
         assertTrue(
             isCloudBackupPresentationPresentable(
-                presentation = CloudBackupRootPresentation.PasskeyChoice(CloudBackupPasskeyChoiceFlow.ENABLE),
+                presentation =
+                    CloudBackupRootPresentation.PasskeyChoice(
+                        CloudBackupPasskeyChoiceIntent.Enable(manualEnableContext()),
+                    ),
                 context = context,
                 hasBlockers = false,
             ),
@@ -322,5 +330,11 @@ class CloudBackupRegressionHelpersTest {
             appHasSheet = false,
             isViewingCloudBackup = false,
             presentationPolicy = presentationPolicy,
+        )
+
+    private fun manualEnableContext(): CloudBackupEnableContext =
+        CloudBackupEnableContext(
+            savedPasskeyConfirmation = SavedPasskeyConfirmationMode.MANUAL,
+            verificationSource = CloudBackupVerificationSource.SETTINGS,
         )
 }

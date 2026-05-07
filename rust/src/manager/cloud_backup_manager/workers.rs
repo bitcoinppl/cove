@@ -524,11 +524,14 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn has_awaiting_force_new_pending_enable_session(&self) -> ActorResult<bool> {
+    pub async fn awaiting_force_new_enable_context(
+        &self,
+    ) -> ActorResult<Option<CloudBackupEnableContext>> {
         Produces::ok(
             self.pending_enable_session
                 .as_ref()
-                .is_some_and(PendingEnableSession::is_awaiting_force_new_confirmation),
+                .filter(|session| session.is_awaiting_force_new_confirmation())
+                .map(PendingEnableSession::context),
         )
     }
 

@@ -53,7 +53,8 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceFlow
+import org.bitcoinppl.cove_core.CloudBackupEnableContext
+import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupPromptIntent
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.DeepVerificationFailure
@@ -65,10 +66,12 @@ val LocalCloudBackupPresentationCoordinator =
     compositionLocalOf<CloudBackupPresentationCoordinator?> { null }
 
 internal sealed class CloudBackupRootPresentation {
-    data object ExistingBackupFound : CloudBackupRootPresentation()
+    data class ExistingBackupFound(
+        val context: CloudBackupEnableContext,
+    ) : CloudBackupRootPresentation()
 
     data class PasskeyChoice(
-        val flow: CloudBackupPasskeyChoiceFlow,
+        val intent: CloudBackupPasskeyChoiceIntent,
     ) : CloudBackupRootPresentation()
 
     data object MissingPasskeyReminder : CloudBackupRootPresentation()
@@ -279,7 +282,7 @@ class CloudBackupPresentationCoordinator {
 private fun CloudBackupPromptIntent.toRootPresentation(): CloudBackupRootPresentation? =
     when (this) {
         is CloudBackupPromptIntent.None -> null
-        is CloudBackupPromptIntent.ExistingBackupFound -> CloudBackupRootPresentation.ExistingBackupFound
+        is CloudBackupPromptIntent.ExistingBackupFound -> CloudBackupRootPresentation.ExistingBackupFound(v1)
         is CloudBackupPromptIntent.PasskeyChoice -> CloudBackupRootPresentation.PasskeyChoice(v1)
         is CloudBackupPromptIntent.MissingPasskeyReminder -> CloudBackupRootPresentation.MissingPasskeyReminder
         is CloudBackupPromptIntent.VerificationPrompt -> CloudBackupRootPresentation.VerificationPrompt
@@ -347,7 +350,7 @@ fun CloudBackupPresentationHost(
     }
 
     when (val presentation = coordinator.currentPresentation) {
-        CloudBackupRootPresentation.ExistingBackupFound -> {
+        is CloudBackupRootPresentation.ExistingBackupFound -> {
             AlertDialog(
                 onDismissRequest = {
                     if (!coordinator.consumeDismissEvent()) {
@@ -356,16 +359,16 @@ fun CloudBackupPresentationHost(
                 },
                 title = { Text("Existing Cloud Backup Found") },
                 text = {
-                    Text("Creating a new backup will not include wallets from the previous one.")
+                    Text(
+                        "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead.",
+                    )
                 },
                 confirmButton = {
                     TextButton(
                         onClick = {
                             coordinator.dismissCurrentPresentation()
                             manager.dispatch(
-                                manualEnableCloudBackupForceNew(
-                                    CloudBackupVerificationSource.ROOT_PROMPT,
-                                ),
+                                enableCloudBackupForceNew(presentation.context),
                             )
                         },
                     ) { Text("Create New Backup") }
@@ -397,14 +400,12 @@ fun CloudBackupPresentationHost(
                         TextButton(
                             onClick = {
                                 coordinator.dismissCurrentPresentation()
-                                when (presentation.flow) {
-                                    CloudBackupPasskeyChoiceFlow.ENABLE ->
+                                when (val intent = presentation.intent) {
+                                    is CloudBackupPasskeyChoiceIntent.Enable ->
                                         manager.dispatch(
-                                            manualEnableCloudBackup(
-                                                CloudBackupVerificationSource.ROOT_PROMPT,
-                                            ),
+                                            CloudBackupManagerAction.EnableCloudBackup(intent.v1),
                                         )
-                                    CloudBackupPasskeyChoiceFlow.REPAIR_PASSKEY ->
+                                    is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
                                         manager.dispatch(CloudBackupManagerAction.RepairPasskey)
                                 }
                             },
@@ -412,14 +413,12 @@ fun CloudBackupPresentationHost(
                         TextButton(
                             onClick = {
                                 coordinator.dismissCurrentPresentation()
-                                when (presentation.flow) {
-                                    CloudBackupPasskeyChoiceFlow.ENABLE ->
+                                when (val intent = presentation.intent) {
+                                    is CloudBackupPasskeyChoiceIntent.Enable ->
                                         manager.dispatch(
-                                            manualEnableCloudBackupNoDiscovery(
-                                                CloudBackupVerificationSource.ROOT_PROMPT,
-                                            ),
+                                            CloudBackupManagerAction.EnableCloudBackupNoDiscovery(intent.v1),
                                         )
-                                    CloudBackupPasskeyChoiceFlow.REPAIR_PASSKEY ->
+                                    is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
                                         manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery)
                                 }
                             },

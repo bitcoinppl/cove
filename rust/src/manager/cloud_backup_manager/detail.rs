@@ -3,9 +3,10 @@ use tracing::error;
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
-    CLOUD_BACKUP_MANAGER, CloudBackupError, CloudBackupManagerAction, CloudBackupPasskeyChoiceFlow,
-    CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    OtherBackupsOperation, RustCloudBackupManager, workers::CloudBackupOperation,
+    CLOUD_BACKUP_MANAGER, CloudBackupError, CloudBackupManagerAction,
+    CloudBackupPasskeyChoiceIntent, CloudBackupWalletItem, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RustCloudBackupManager,
+    workers::CloudBackupOperation,
 };
 
 type Action = CloudBackupManagerAction;
@@ -32,7 +33,7 @@ pub enum CloudBackupVerificationReason {
     BackupChanged,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupVerificationSource {
     RootPrompt,
     Settings,
@@ -391,7 +392,7 @@ impl RustCloudBackupManager {
             }
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
                 self.set_recovery(RecoveryState::Idle);
-                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceFlow::RepairPasskey);
+                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::RepairPasskey);
             }
             Err(CloudBackupError::UnsupportedPasskeyProvider) => {
                 self.set_recovery(RecoveryState::Idle);

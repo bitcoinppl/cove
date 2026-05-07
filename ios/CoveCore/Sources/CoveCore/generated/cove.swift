@@ -19076,9 +19076,10 @@ public func FfiConverterTypeCloudBackupOtherBackupsState_lower(_ value: CloudBac
 
 
 
-public enum CloudBackupPasskeyChoiceFlow: Equatable, Hashable {
+public enum CloudBackupPasskeyChoiceIntent: Equatable, Hashable {
     
-    case enable
+    case enable(CloudBackupEnableContext
+    )
     case repairPasskey
 
 
@@ -19088,20 +19089,21 @@ public enum CloudBackupPasskeyChoiceFlow: Equatable, Hashable {
 }
 
 #if compiler(>=6)
-extension CloudBackupPasskeyChoiceFlow: Sendable {}
+extension CloudBackupPasskeyChoiceIntent: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeCloudBackupPasskeyChoiceFlow: FfiConverterRustBuffer {
-    typealias SwiftType = CloudBackupPasskeyChoiceFlow
+public struct FfiConverterTypeCloudBackupPasskeyChoiceIntent: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupPasskeyChoiceIntent
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupPasskeyChoiceFlow {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupPasskeyChoiceIntent {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .enable
+        case 1: return .enable(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
+        )
         
         case 2: return .repairPasskey
         
@@ -19109,13 +19111,14 @@ public struct FfiConverterTypeCloudBackupPasskeyChoiceFlow: FfiConverterRustBuff
         }
     }
 
-    public static func write(_ value: CloudBackupPasskeyChoiceFlow, into buf: inout [UInt8]) {
+    public static func write(_ value: CloudBackupPasskeyChoiceIntent, into buf: inout [UInt8]) {
         switch value {
         
         
-        case .enable:
+        case let .enable(v1):
             writeInt(&buf, Int32(1))
-        
+            FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
+            
         
         case .repairPasskey:
             writeInt(&buf, Int32(2))
@@ -19128,15 +19131,15 @@ public struct FfiConverterTypeCloudBackupPasskeyChoiceFlow: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCloudBackupPasskeyChoiceFlow_lift(_ buf: RustBuffer) throws -> CloudBackupPasskeyChoiceFlow {
-    return try FfiConverterTypeCloudBackupPasskeyChoiceFlow.lift(buf)
+public func FfiConverterTypeCloudBackupPasskeyChoiceIntent_lift(_ buf: RustBuffer) throws -> CloudBackupPasskeyChoiceIntent {
+    return try FfiConverterTypeCloudBackupPasskeyChoiceIntent.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCloudBackupPasskeyChoiceFlow_lower(_ value: CloudBackupPasskeyChoiceFlow) -> RustBuffer {
-    return FfiConverterTypeCloudBackupPasskeyChoiceFlow.lower(value)
+public func FfiConverterTypeCloudBackupPasskeyChoiceIntent_lower(_ value: CloudBackupPasskeyChoiceIntent) -> RustBuffer {
+    return FfiConverterTypeCloudBackupPasskeyChoiceIntent.lower(value)
 }
 
 
@@ -19145,8 +19148,9 @@ public func FfiConverterTypeCloudBackupPasskeyChoiceFlow_lower(_ value: CloudBac
 public enum CloudBackupPromptIntent: Equatable, Hashable {
     
     case none
-    case existingBackupFound
-    case passkeyChoice(CloudBackupPasskeyChoiceFlow
+    case existingBackupFound(CloudBackupEnableContext
+    )
+    case passkeyChoice(CloudBackupPasskeyChoiceIntent
     )
     case missingPasskeyReminder
     case verificationPrompt
@@ -19173,9 +19177,10 @@ public struct FfiConverterTypeCloudBackupPromptIntent: FfiConverterRustBuffer {
         
         case 1: return .none
         
-        case 2: return .existingBackupFound
+        case 2: return .existingBackupFound(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
+        )
         
-        case 3: return .passkeyChoice(try FfiConverterTypeCloudBackupPasskeyChoiceFlow.read(from: &buf)
+        case 3: return .passkeyChoice(try FfiConverterTypeCloudBackupPasskeyChoiceIntent.read(from: &buf)
         )
         
         case 4: return .missingPasskeyReminder
@@ -19194,13 +19199,14 @@ public struct FfiConverterTypeCloudBackupPromptIntent: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
         
         
-        case .existingBackupFound:
+        case let .existingBackupFound(v1):
             writeInt(&buf, Int32(2))
-        
+            FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
+            
         
         case let .passkeyChoice(v1):
             writeInt(&buf, Int32(3))
-            FfiConverterTypeCloudBackupPasskeyChoiceFlow.write(v1, into: &buf)
+            FfiConverterTypeCloudBackupPasskeyChoiceIntent.write(v1, into: &buf)
             
         
         case .missingPasskeyReminder:

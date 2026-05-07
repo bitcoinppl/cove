@@ -3,8 +3,8 @@ import SwiftUI
 @_exported import CoveCore
 
 enum CloudBackupRootPresentation: Equatable {
-    case existingBackupFound
-    case passkeyChoice(CloudBackupPasskeyChoiceFlow)
+    case existingBackupFound(CloudBackupEnableContext)
+    case passkeyChoice(CloudBackupPasskeyChoiceIntent)
     case missingPasskeyReminder
     case verificationPrompt
 
@@ -12,10 +12,10 @@ enum CloudBackupRootPresentation: Equatable {
         switch promptIntent {
         case .none:
             return nil
-        case .existingBackupFound:
-            self = .existingBackupFound
-        case let .passkeyChoice(flow):
-            self = .passkeyChoice(flow)
+        case let .existingBackupFound(context):
+            self = .existingBackupFound(context)
+        case let .passkeyChoice(intent):
+            self = .passkeyChoice(intent)
         case .missingPasskeyReminder:
             self = .missingPasskeyReminder
         case .verificationPrompt:
@@ -252,7 +252,10 @@ struct CloudBackupPresentationHost<Content: View>: View {
 
     private var showingExistingBackupPrompt: Binding<Bool> {
         Binding(
-            get: { coordinator.currentPresentation == .existingBackupFound },
+            get: {
+                if case .existingBackupFound = coordinator.currentPresentation { return true }
+                return false
+            },
             set: { isPresented in
                 guard !isPresented else { return }
                 if coordinator.consumeDismissEvent() { return }
@@ -297,9 +300,17 @@ struct CloudBackupPresentationHost<Content: View>: View {
         )
     }
 
-    private var passkeyChoiceFlow: CloudBackupPasskeyChoiceFlow? {
-        if case let .passkeyChoice(flow) = coordinator.currentPresentation {
-            return flow
+    private var existingBackupContext: CloudBackupEnableContext? {
+        if case let .existingBackupFound(context) = coordinator.currentPresentation {
+            return context
+        }
+
+        return nil
+    }
+
+    private var passkeyChoiceIntent: CloudBackupPasskeyChoiceIntent? {
+        if case let .passkeyChoice(intent) = coordinator.currentPresentation {
+            return intent
         }
 
         return nil
@@ -318,20 +329,14 @@ struct CloudBackupPresentationHost<Content: View>: View {
     }
 
     private func handlePasskeyChoice(existing: Bool) {
-        guard let flow = passkeyChoiceFlow else { return }
+        guard let intent = passkeyChoiceIntent else { return }
         coordinator.dismissCurrentPresentation()
 
-        switch (flow, existing) {
-        case (.enable, true):
-            manager.dispatch(action: .enableCloudBackup(.init(
-                savedPasskeyConfirmation: .manual,
-                verificationSource: .rootPrompt
-            )))
-        case (.enable, false):
-            manager.dispatch(action: .enableCloudBackupNoDiscovery(.init(
-                savedPasskeyConfirmation: .manual,
-                verificationSource: .rootPrompt
-            )))
+        switch (intent, existing) {
+        case let (.enable(context), true):
+            manager.dispatch(action: .enableCloudBackup(context))
+        case let (.enable(context), false):
+            manager.dispatch(action: .enableCloudBackupNoDiscovery(context))
         case (.repairPasskey, true):
             manager.dispatch(action: .repairPasskey)
         case (.repairPasskey, false):
@@ -362,23 +367,23 @@ struct CloudBackupPresentationHost<Content: View>: View {
             .onChange(of: manager.verification) { _, _ in
                 coordinator.reconcile()
             }
-            .confirmationDialog(
+            .alert(
                 "Existing Cloud Backup Found",
                 isPresented: showingExistingBackupPrompt
             ) {
                 Button("Create New Backup", role: .destructive) {
+                    guard let existingBackupContext else { return }
                     coordinator.dismissCurrentPresentation()
-                    manager.dispatch(action: .enableCloudBackupForceNew(.init(
-                        savedPasskeyConfirmation: .manual,
-                        verificationSource: .rootPrompt
-                    )))
+                    manager.dispatch(action: .enableCloudBackupForceNew(existingBackupContext))
                 }
                 Button("Cancel", role: .cancel) {
                     coordinator.dismissCurrentPresentation()
                     manager.dispatch(action: .discardPendingEnableCloudBackup)
                 }
             } message: {
-                Text("Creating a new backup will not include wallets from the previous one.")
+                Text(
+                    "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead."
+                )
             }
             .alert(
                 "Passkey Options",

@@ -1,30 +1,31 @@
 use super::{
-    CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupState, CloudBackupStatus,
-    CloudBackupVerificationPresentation, RecoveryAction, RecoveryState,
+    CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent, CloudBackupPromptIntent,
+    CloudBackupState, CloudBackupStatus, CloudBackupVerificationPresentation, RecoveryAction,
+    RecoveryState,
 };
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct CloudBackupPromptState {
-    existing_backup_found: bool,
-    passkey_choice_flow: Option<CloudBackupPasskeyChoiceFlow>,
+    existing_backup_found: Option<CloudBackupEnableContext>,
+    passkey_choice: Option<CloudBackupPasskeyChoiceIntent>,
     missing_passkey_dismissed: bool,
 }
 
 impl CloudBackupPromptState {
     pub(crate) fn clear_existing_backup_found(&mut self) {
-        self.existing_backup_found = false;
+        self.existing_backup_found = None;
     }
 
-    pub(crate) fn set_existing_backup_found(&mut self) {
-        self.existing_backup_found = true;
+    pub(crate) fn set_existing_backup_found(&mut self, context: CloudBackupEnableContext) {
+        self.existing_backup_found = Some(context);
     }
 
     pub(crate) fn clear_passkey_choice(&mut self) {
-        self.passkey_choice_flow = None;
+        self.passkey_choice = None;
     }
 
-    pub(crate) fn set_passkey_choice(&mut self, flow: CloudBackupPasskeyChoiceFlow) {
-        self.passkey_choice_flow = Some(flow);
+    pub(crate) fn set_passkey_choice(&mut self, intent: CloudBackupPasskeyChoiceIntent) {
+        self.passkey_choice = Some(intent);
     }
 
     pub(crate) fn dismiss_missing_passkey(&mut self) {
@@ -36,12 +37,12 @@ impl CloudBackupPromptState {
     }
 
     pub(crate) fn resolve(&self, state: &CloudBackupState) -> CloudBackupPromptIntent {
-        if self.existing_backup_found {
-            return CloudBackupPromptIntent::ExistingBackupFound;
+        if let Some(context) = self.existing_backup_found {
+            return CloudBackupPromptIntent::ExistingBackupFound(context);
         }
 
-        if let Some(flow) = &self.passkey_choice_flow {
-            return CloudBackupPromptIntent::PasskeyChoice(flow.clone());
+        if let Some(intent) = &self.passkey_choice {
+            return CloudBackupPromptIntent::PasskeyChoice(intent.clone());
         }
 
         // show a reminder while cloud backup needs a passkey, unless repair is already underway
@@ -70,13 +71,20 @@ impl CloudBackupPromptState {
 #[cfg(test)]
 mod tests {
     use super::{
-        CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupPromptState,
-        CloudBackupState, CloudBackupStatus, CloudBackupVerificationPresentation, RecoveryAction,
-        RecoveryState,
+        CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent, CloudBackupPromptIntent,
+        CloudBackupPromptState, CloudBackupState, CloudBackupStatus,
+        CloudBackupVerificationPresentation, RecoveryAction, RecoveryState,
     };
     use crate::manager::cloud_backup_manager::{
-        CloudBackupVerificationReason, CloudBackupVerificationSource,
+        CloudBackupVerificationReason, CloudBackupVerificationSource, SavedPasskeyConfirmationMode,
     };
+
+    fn onboarding_context() -> CloudBackupEnableContext {
+        CloudBackupEnableContext {
+            saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
+            verification_source: CloudBackupVerificationSource::Onboarding,
+        }
+    }
 
     #[test]
     fn existing_backup_prompt_has_highest_priority() {
@@ -87,9 +95,13 @@ mod tests {
             ..CloudBackupState::default()
         };
 
-        prompt_state.set_existing_backup_found();
+        let context = onboarding_context();
+        prompt_state.set_existing_backup_found(context);
 
-        assert_eq!(prompt_state.resolve(&state), CloudBackupPromptIntent::ExistingBackupFound,);
+        assert_eq!(
+            prompt_state.resolve(&state),
+            CloudBackupPromptIntent::ExistingBackupFound(context),
+        );
     }
 
     #[test]
@@ -101,11 +113,26 @@ mod tests {
             ..CloudBackupState::default()
         };
 
-        prompt_state.set_passkey_choice(CloudBackupPasskeyChoiceFlow::RepairPasskey);
+        prompt_state.set_passkey_choice(CloudBackupPasskeyChoiceIntent::RepairPasskey);
 
         assert_eq!(
             prompt_state.resolve(&state),
-            CloudBackupPromptIntent::PasskeyChoice(CloudBackupPasskeyChoiceFlow::RepairPasskey,),
+            CloudBackupPromptIntent::PasskeyChoice(CloudBackupPasskeyChoiceIntent::RepairPasskey,),
+        );
+    }
+
+    #[test]
+    fn enable_passkey_choice_carries_context() {
+        let mut prompt_state = CloudBackupPromptState::default();
+        let context = onboarding_context();
+
+        prompt_state.set_passkey_choice(CloudBackupPasskeyChoiceIntent::Enable(context));
+
+        assert_eq!(
+            prompt_state.resolve(&CloudBackupState::default()),
+            CloudBackupPromptIntent::PasskeyChoice(
+                CloudBackupPasskeyChoiceIntent::Enable(context,)
+            ),
         );
     }
 

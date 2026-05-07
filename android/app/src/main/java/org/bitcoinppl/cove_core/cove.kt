@@ -34642,33 +34642,72 @@ public object FfiConverterTypeCloudBackupOtherBackupsState : FfiConverterRustBuf
 
 
 
-
-enum class CloudBackupPasskeyChoiceFlow {
+sealed class CloudBackupPasskeyChoiceIntent {
     
-    ENABLE,
-    REPAIR_PASSKEY;
+    data class Enable(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupPasskeyChoiceIntent()
+        
+    {
+        
 
+        companion object
+    }
+    
+    object RepairPasskey : CloudBackupPasskeyChoiceIntent()
+    
+    
+
+    
+
+    
     
 
 
     companion object
 }
 
-
 /**
  * @suppress
  */
-public object FfiConverterTypeCloudBackupPasskeyChoiceFlow: FfiConverterRustBuffer<CloudBackupPasskeyChoiceFlow> {
-    override fun read(buf: ByteBuffer) = try {
-        CloudBackupPasskeyChoiceFlow.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+public object FfiConverterTypeCloudBackupPasskeyChoiceIntent : FfiConverterRustBuffer<CloudBackupPasskeyChoiceIntent>{
+    override fun read(buf: ByteBuffer): CloudBackupPasskeyChoiceIntent {
+        return when(buf.getInt()) {
+            1 -> CloudBackupPasskeyChoiceIntent.Enable(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                )
+            2 -> CloudBackupPasskeyChoiceIntent.RepairPasskey
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
     }
 
-    override fun allocationSize(value: CloudBackupPasskeyChoiceFlow) = 4UL
+    override fun allocationSize(value: CloudBackupPasskeyChoiceIntent): ULong = when(value) {
+        is CloudBackupPasskeyChoiceIntent.Enable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupPasskeyChoiceIntent.RepairPasskey -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
 
-    override fun write(value: CloudBackupPasskeyChoiceFlow, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
+    override fun write(value: CloudBackupPasskeyChoiceIntent, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupPasskeyChoiceIntent.Enable -> {
+                buf.putInt(1)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupPasskeyChoiceIntent.RepairPasskey -> {
+                buf.putInt(2)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 
@@ -34681,11 +34720,17 @@ sealed class CloudBackupPromptIntent {
     object None : CloudBackupPromptIntent()
     
     
-    object ExistingBackupFound : CloudBackupPromptIntent()
-    
+    data class ExistingBackupFound(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupPromptIntent()
+        
+    {
+        
+
+        companion object
+    }
     
     data class PasskeyChoice(
-        val v1: org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceFlow) : CloudBackupPromptIntent()
+        val v1: org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent) : CloudBackupPromptIntent()
         
     {
         
@@ -34716,9 +34761,11 @@ public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<C
     override fun read(buf: ByteBuffer): CloudBackupPromptIntent {
         return when(buf.getInt()) {
             1 -> CloudBackupPromptIntent.None
-            2 -> CloudBackupPromptIntent.ExistingBackupFound
+            2 -> CloudBackupPromptIntent.ExistingBackupFound(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                )
             3 -> CloudBackupPromptIntent.PasskeyChoice(
-                FfiConverterTypeCloudBackupPasskeyChoiceFlow.read(buf),
+                FfiConverterTypeCloudBackupPasskeyChoiceIntent.read(buf),
                 )
             4 -> CloudBackupPromptIntent.MissingPasskeyReminder
             5 -> CloudBackupPromptIntent.VerificationPrompt
@@ -34737,13 +34784,14 @@ public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<C
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
             )
         }
         is CloudBackupPromptIntent.PasskeyChoice -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeCloudBackupPasskeyChoiceFlow.allocationSize(value.v1)
+                + FfiConverterTypeCloudBackupPasskeyChoiceIntent.allocationSize(value.v1)
             )
         }
         is CloudBackupPromptIntent.MissingPasskeyReminder -> {
@@ -34768,11 +34816,12 @@ public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<C
             }
             is CloudBackupPromptIntent.ExistingBackupFound -> {
                 buf.putInt(2)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
             is CloudBackupPromptIntent.PasskeyChoice -> {
                 buf.putInt(3)
-                FfiConverterTypeCloudBackupPasskeyChoiceFlow.write(value.v1, buf)
+                FfiConverterTypeCloudBackupPasskeyChoiceIntent.write(value.v1, buf)
                 Unit
             }
             is CloudBackupPromptIntent.MissingPasskeyReminder -> {

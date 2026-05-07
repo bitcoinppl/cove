@@ -966,6 +966,7 @@ private struct SettingsCloudBackupEnableSheet: View {
     @State private var manager = CloudBackupManager.shared
     @State private var isStartingEnable = false
     @State private var passkeyEnableFlow = PasskeyEnableFlow.idle
+    @State private var existingBackupContext: CloudBackupEnableContext?
 
     let onComplete: () -> Void
     let onDismiss: () -> Void
@@ -992,16 +993,22 @@ private struct SettingsCloudBackupEnableSheet: View {
     }
 
     private func shouldDismiss(for promptIntent: CloudBackupPromptIntent) -> Bool {
+        if case .existingBackupFound = promptIntent { return false }
         if case .none = promptIntent { return false }
         return true
+    }
+
+    private func isEnablePasskeyChoice(_ promptIntent: CloudBackupPromptIntent) -> Bool {
+        guard case let .passkeyChoice(intent) = promptIntent else { return false }
+        if case .enable = intent { return true }
+        return false
     }
 
     private func shouldSuppressEnablePasskeyChoicePrompt(
         _ promptIntent: CloudBackupPromptIntent
     ) -> Bool {
         guard case .startedEnable = passkeyEnableFlow else { return false }
-        if case .passkeyChoice(.enable) = promptIntent { return true }
-        return false
+        return isEnablePasskeyChoice(promptIntent)
     }
 
     private func startEnable(action: CloudBackupManagerAction) {
@@ -1012,6 +1019,13 @@ private struct SettingsCloudBackupEnableSheet: View {
     }
 
     private func handlePromptIntent(_ promptIntent: CloudBackupPromptIntent) {
+        if case let .existingBackupFound(context) = promptIntent {
+            existingBackupContext = context
+            passkeyEnableFlow = .idle
+            isStartingEnable = false
+            return
+        }
+
         if shouldSuppressEnablePasskeyChoicePrompt(promptIntent) {
             passkeyEnableFlow = .idle
             isStartingEnable = false
@@ -1093,6 +1107,33 @@ private struct SettingsCloudBackupEnableSheet: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Would you like to use an existing passkey or create a new one?")
+        }
+        .alert(
+            "Existing Cloud Backup Found",
+            isPresented: Binding(
+                get: { existingBackupContext != nil },
+                set: { isPresented in
+                    guard !isPresented else { return }
+                    if existingBackupContext != nil {
+                        manager.dispatch(action: .discardPendingEnableCloudBackup)
+                    }
+                    existingBackupContext = nil
+                }
+            )
+        ) {
+            Button("Create New Backup", role: .destructive) {
+                guard let context = existingBackupContext else { return }
+                existingBackupContext = nil
+                manager.dispatch(action: .enableCloudBackupForceNew(context))
+            }
+            Button("Cancel", role: .cancel) {
+                existingBackupContext = nil
+                manager.dispatch(action: .discardPendingEnableCloudBackup)
+            }
+        } message: {
+            Text(
+                "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead."
+            )
         }
     }
 }
