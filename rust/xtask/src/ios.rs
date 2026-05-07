@@ -393,6 +393,35 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
+    let sh = Shell::new()?;
+    let project_snapshot = crate::version::snapshot_ios_project(&sh)?;
+
+    let result = (|| {
+        crate::version::bump_ios_build_number(&sh)?;
+        build_ios(IosBuildType::Custom("release-speed"), true, false, verbose)?;
+        upload_testflight(options, verbose)
+    })();
+
+    if let Err(error) = result {
+        if let Some(snapshot) = project_snapshot {
+            if let Err(restore_error) = crate::version::restore_ios_project(&sh, &snapshot) {
+                return Err(error).wrap_err(format!(
+                    "Failed to restore iOS build number after TestFlight failure: {restore_error:#}"
+                ));
+            }
+
+            print_error("TestFlight failed; restored iOS build number");
+        } else {
+            print_error("TestFlight failed");
+        }
+
+        return Err(error);
+    }
+
+    Ok(())
+}
+
 pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
 

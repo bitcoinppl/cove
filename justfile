@@ -110,9 +110,7 @@ alias bir := build-ios-release
 # Bump iOS build, build release bindings, then upload to TestFlight
 [group('build')]
 testflight:
-    just bump build ios
-    just bir
-    just xtask upload-testflight
+    just xtask testflight
 
 # Build iOS debug for device
 [group('build')]
