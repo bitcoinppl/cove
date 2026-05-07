@@ -1297,6 +1297,31 @@ impl RustCloudBackupManager {
         )
     }
 
+    fn verification_decision_presentation_for_state(
+        state: &CloudBackupState,
+    ) -> Option<CloudBackupVerificationPresentation> {
+        if !matches!(
+            state.verification_metadata,
+            CloudBackupVerificationMetadata::NeedsVerification
+        ) {
+            return None;
+        }
+
+        if !state.should_prompt_verification {
+            return None;
+        }
+
+        if !matches!(state.verification, VerificationState::Idle | VerificationState::Cancelled) {
+            return None;
+        }
+
+        CloudBackupVerificationCoordinator::needs_decision(
+            CloudBackupVerificationReason::BackupChanged,
+            CloudBackupVerificationCoordinator::current_source(&state.verification_presentation),
+        )
+        .presentation
+    }
+
     pub(crate) fn apply_verification_effect(&self, effect: CloudBackupVerificationEffect) {
         if let Some(detail) = effect.detail {
             self.set_detail(Some(detail));
@@ -1404,23 +1429,10 @@ impl RustCloudBackupManager {
                 state.should_prompt_verification = should_prompt_verification;
             }
 
-            let presentation = if matches!(
-                verification_metadata,
-                CloudBackupVerificationMetadata::NeedsVerification
-            ) && should_prompt_verification
-                && matches!(state.pending_upload_verification, PendingUploadVerificationState::Idle)
-                && matches!(
-                    state.verification,
-                    VerificationState::Idle | VerificationState::Cancelled
-                ) {
-                CloudBackupVerificationCoordinator::needs_decision(
-                    CloudBackupVerificationReason::BackupChanged,
-                    CloudBackupVerificationCoordinator::current_source(
-                        &state.verification_presentation,
-                    ),
-                )
-                .presentation
-                .expect("needs decision effect should include presentation")
+            let presentation = if let Some(presentation) =
+                Self::verification_decision_presentation_for_state(&state)
+            {
+                presentation
             } else if matches!(
                 state.verification_presentation,
                 CloudBackupVerificationPresentation::NeedsDecision { .. }
@@ -1480,6 +1492,39 @@ impl RustCloudBackupManager {
         pending: PendingUploadVerificationState,
         source: CloudBackupVerificationSource,
     ) {
+        let (verification_metadata, should_prompt_verification) = Self::load_persisted_flags();
+        let (pending_changed, presentation) = {
+            let mut state = self.state.write();
+            let pending_changed = state.pending_upload_verification != pending;
+            if pending_changed {
+                state.pending_upload_verification = pending;
+            }
+
+            state.verification_metadata = verification_metadata.clone();
+            state.should_prompt_verification = should_prompt_verification;
+
+            let presentation = Self::verification_decision_presentation_for_state(&state);
+            if let Some(presentation) = &presentation {
+                if state.verification_presentation != *presentation {
+                    state.verification_presentation = presentation.clone();
+                } else {
+                    return (pending_changed, None);
+                }
+            }
+
+            (pending_changed, presentation)
+        };
+
+        if pending_changed {
+            self.send(Message::PendingUploadVerification(pending));
+        }
+
+        if let Some(presentation) = presentation {
+            self.send(Message::VerificationPresentation(presentation));
+            self.refresh_prompt_intent();
+            return;
+        }
+
         self.apply_verification_effect(CloudBackupVerificationCoordinator::pending_upload_state(
             pending, source,
         ));
@@ -2393,19 +2438,8 @@ impl RustCloudBackupManager {
         {
             state.pending_upload_verification = self.current_pending_upload_verification_state();
         }
-        if matches!(state.verification_metadata, CloudBackupVerificationMetadata::NeedsVerification)
-            && state.should_prompt_verification
-            && matches!(state.pending_upload_verification, PendingUploadVerificationState::Idle)
-            && matches!(state.verification, VerificationState::Idle | VerificationState::Cancelled)
-        {
-            state.verification_presentation = CloudBackupVerificationCoordinator::needs_decision(
-                CloudBackupVerificationReason::BackupChanged,
-                CloudBackupVerificationCoordinator::current_source(
-                    &state.verification_presentation,
-                ),
-            )
-            .presentation
-            .expect("needs decision effect should include presentation");
+        if let Some(presentation) = Self::verification_decision_presentation_for_state(&state) {
+            state.verification_presentation = presentation;
         }
         state.prompt_intent = self.prompt_state.lock().resolve(&state);
         state

@@ -1937,6 +1937,7 @@ mod tests {
     use crate::manager::cloud_backup_manager::{
         CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupKeychain,
         CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPromptIntent,
+        CloudBackupVerificationPresentation, CloudBackupVerificationReason,
         CloudBackupVerificationSource, DeepVerificationFailure, DeepVerificationReport,
         DeepVerificationResult, PendingVerificationCompletion, PendingVerificationUpload,
         VerificationState,
@@ -2383,6 +2384,172 @@ mod tests {
         let state = Database::global().cloud_backup_state.get().unwrap();
         assert_eq!(state.status, PersistedCloudBackupStatus::Unverified);
         assert!(state.last_verification_requested_at.is_some());
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
+    async fn verification_prompt_shows_while_pending_upload_confirmation_is_confirming() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 3);
+
+        manager.backup_new_wallet(xpub_only_wallet_metadata());
+        manager.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
+
+        let state = manager.state();
+        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert!(matches!(
+            state.verification_presentation,
+            CloudBackupVerificationPresentation::NeedsDecision {
+                reason: CloudBackupVerificationReason::BackupChanged,
+                ..
+            }
+        ));
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
+    async fn verification_prompt_shows_while_pending_upload_confirmation_needs_authorization() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 3);
+
+        manager.backup_new_wallet(xpub_only_wallet_metadata());
+        manager.set_pending_upload_verification(
+            PendingUploadVerificationState::BlockedOnAuthorization,
+        );
+
+        let state = manager.state();
+        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert!(matches!(
+            state.verification_presentation,
+            CloudBackupVerificationPresentation::NeedsDecision {
+                reason: CloudBackupVerificationReason::BackupChanged,
+                ..
+            }
+        ));
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
+    async fn pending_upload_state_changes_do_not_dismiss_verification_prompt() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 3);
+
+        manager.backup_new_wallet(xpub_only_wallet_metadata());
+        assert_eq!(manager.state().prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+
+        manager.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
+        assert_eq!(manager.state().prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+
+        manager.set_pending_upload_verification(
+            PendingUploadVerificationState::BlockedOnAuthorization,
+        );
+        assert_eq!(manager.state().prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+
+        manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
+        let state = manager.state();
+        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert!(matches!(
+            state.verification_presentation,
+            CloudBackupVerificationPresentation::NeedsDecision {
+                reason: CloudBackupVerificationReason::BackupChanged,
+                ..
+            }
+        ));
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
+    async fn dismiss_verification_prompt_hides_pending_decision() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 3);
+
+        manager.backup_new_wallet(xpub_only_wallet_metadata());
+        assert_eq!(manager.state().prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+
+        manager.dispatch(CloudBackupManagerAction::DismissVerificationPrompt);
+
+        let state = manager.state();
+        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::None);
+        assert!(matches!(
+            state.verification_presentation,
+            CloudBackupVerificationPresentation::Hidden { .. }
+        ));
+
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "tests serialize shared cloud backup globals across awaits"
+    )]
+    #[tokio::test(flavor = "current_thread")]
+    async fn start_verification_with_pending_upload_consumes_prompt_decision() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 3);
+
+        let metadata = xpub_only_wallet_metadata();
+        let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+        let record_id = wallet_record_id(metadata.id.as_ref());
+        manager.backup_new_wallet(metadata.clone());
+        manager
+            .mark_blob_uploaded_pending_confirmation(
+                &namespace_id,
+                Some(metadata.id),
+                record_id,
+                "pending-revision".into(),
+                jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+            )
+            .unwrap();
+        assert_eq!(manager.state().prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+
+        manager.dispatch(CloudBackupManagerAction::StartVerification(
+            CloudBackupVerificationSource::RootPrompt,
+        ));
+
+        let state = manager.state();
+        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::None);
+        assert!(matches!(
+            state.verification_presentation,
+            CloudBackupVerificationPresentation::BackgroundConfirming(
+                CloudBackupVerificationSource::RootPrompt
+            )
+        ));
+        assert_eq!(state.pending_upload_verification, PendingUploadVerificationState::Confirming);
 
         clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
