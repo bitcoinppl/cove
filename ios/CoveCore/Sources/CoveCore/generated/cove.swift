@@ -9814,6 +9814,387 @@ public func FfiConverterTypeRustWalletManager_lower(_ value: RustWalletManager) 
 
 
 
+public protocol SatsCardReaderProtocol: AnyObject, Sendable {
+    
+    func run() async throws  -> SatsCardResponse
+    
+    /**
+     * Get the current status of the SatsCard.
+     *
+     * `address` on the returned status is the **card-reported, unverified**
+     * string. Call [`Self::verified_address`] before showing balance or
+     * allowing a sweep.
+     */
+    func status() async throws  -> SatsCardStatus
+    
+    /**
+     * Verify that the active slot's address really belongs to the slot
+     * pubkey reported via the `read` APDU, and that the URL suffix scanned
+     * (when present) matches the card-reported address.
+     *
+     * `read()` performs an internal signature check against the card's
+     * master pubkey. We re-derive the P2WPKH address from the verified
+     * slot pubkey and require it to match `reader.addr`. The optional
+     * 8-character URL suffix is then a cheap second-source sanity check.
+     *
+     * The UI must call this and observe `Ok` before displaying balance
+     * or enabling the sweep CTA.
+     */
+    func verifiedAddress() async throws  -> String
+    
+}
+open class SatsCardReader: SatsCardReaderProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_satscardreader(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_satscardreader(handle, $0) }
+    }
+
+    
+
+    
+open func run()async throws  -> SatsCardResponse  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_satscardreader_run(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSatsCardResponse_lift,
+            errorHandler: FfiConverterTypeSatsCardReaderError_lift
+        )
+}
+    
+    /**
+     * Get the current status of the SatsCard.
+     *
+     * `address` on the returned status is the **card-reported, unverified**
+     * string. Call [`Self::verified_address`] before showing balance or
+     * allowing a sweep.
+     */
+open func status()async throws  -> SatsCardStatus  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_satscardreader_status(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSatsCardStatus_lift,
+            errorHandler: FfiConverterTypeSatsCardReaderError_lift
+        )
+}
+    
+    /**
+     * Verify that the active slot's address really belongs to the slot
+     * pubkey reported via the `read` APDU, and that the URL suffix scanned
+     * (when present) matches the card-reported address.
+     *
+     * `read()` performs an internal signature check against the card's
+     * master pubkey. We re-derive the P2WPKH address from the verified
+     * slot pubkey and require it to match `reader.addr`. The optional
+     * 8-character URL suffix is then a cheap second-source sanity check.
+     *
+     * The UI must call this and observe `Ok` before displaying balance
+     * or enabling the sweep CTA.
+     */
+open func verifiedAddress()async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_satscardreader_verified_address(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeSatsCardReaderError_lift
+        )
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSatsCardReader: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = SatsCardReader
+
+    public static func lift(_ handle: UInt64) throws -> SatsCardReader {
+        return SatsCardReader(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: SatsCardReader) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsCardReader {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: SatsCardReader, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardReader_lift(_ handle: UInt64) throws -> SatsCardReader {
+    return try FfiConverterTypeSatsCardReader.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardReader_lower(_ value: SatsCardReader) -> UInt64 {
+    return FfiConverterTypeSatsCardReader.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Owns the unsealed slot's key material for the duration of one sweep.
+ *
+ * `privkey`, `master_pk`, and `chain_code` are wrapped in
+ * [`Zeroizing`], so the underlying buffers are scrubbed when the
+ * session drops. The FFI surface only exposes non-sensitive accessors
+ * (`slot`, `address`). Phase 3 will add `balance()` and
+ * `build_and_broadcast()` on this type — both consuming the session so
+ * it can never be reused.
+ */
+public protocol SatsCardSweepSessionProtocol: AnyObject, Sendable {
+    
+    /**
+     * The verified P2WPKH address for the unsealed slot.
+     */
+    func address()  -> String
+    
+    func network()  -> Network
+    
+    /**
+     * 33-byte compressed slot pubkey (safe to expose).
+     */
+    func pubkeyBytes()  -> Data
+    
+    func slot()  -> UInt8
+    
+}
+/**
+ * Owns the unsealed slot's key material for the duration of one sweep.
+ *
+ * `privkey`, `master_pk`, and `chain_code` are wrapped in
+ * [`Zeroizing`], so the underlying buffers are scrubbed when the
+ * session drops. The FFI surface only exposes non-sensitive accessors
+ * (`slot`, `address`). Phase 3 will add `balance()` and
+ * `build_and_broadcast()` on this type — both consuming the session so
+ * it can never be reused.
+ */
+open class SatsCardSweepSession: SatsCardSweepSessionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_satscardsweepsession(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_satscardsweepsession(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * The verified P2WPKH address for the unsealed slot.
+     */
+open func address() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_satscardsweepsession_address(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func network() -> Network  {
+    return try!  FfiConverterTypeNetwork_lift(try! rustCall() {
+    uniffi_cove_fn_method_satscardsweepsession_network(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * 33-byte compressed slot pubkey (safe to expose).
+     */
+open func pubkeyBytes() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_cove_fn_method_satscardsweepsession_pubkey_bytes(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func slot() -> UInt8  {
+    return try!  FfiConverterUInt8.lift(try! rustCall() {
+    uniffi_cove_fn_method_satscardsweepsession_slot(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSatsCardSweepSession: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = SatsCardSweepSession
+
+    public static func lift(_ handle: UInt64) throws -> SatsCardSweepSession {
+        return SatsCardSweepSession(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: SatsCardSweepSession) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsCardSweepSession {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: SatsCardSweepSession, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardSweepSession_lift(_ handle: UInt64) throws -> SatsCardSweepSession {
+    return try FfiConverterTypeSatsCardSweepSession.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardSweepSession_lower(_ value: SatsCardSweepSession) -> UInt64 {
+    return FfiConverterTypeSatsCardSweepSession.lower(value)
+}
+
+
+
+
+
+
 public protocol SeedQrProtocol: AnyObject, Sendable {
     
     func getWords()  -> [String]
@@ -14934,6 +15315,202 @@ public func FfiConverterTypeRouter_lift(_ buf: RustBuffer) throws -> Router {
 #endif
 public func FfiConverterTypeRouter_lower(_ value: Router) -> RustBuffer {
     return FfiConverterTypeRouter.lower(value)
+}
+
+
+public struct SatsCardSlotDump: Equatable, Hashable {
+    public var slot: UInt8
+    /**
+     * 33-byte compressed slot pubkey (safe to expose).
+     */
+    public var pubkey: Data
+    public var used: Bool?
+    public var sealed: Bool?
+    public var address: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(slot: UInt8, 
+        /**
+         * 33-byte compressed slot pubkey (safe to expose).
+         */pubkey: Data, used: Bool?, sealed: Bool?, address: String?) {
+        self.slot = slot
+        self.pubkey = pubkey
+        self.used = used
+        self.sealed = sealed
+        self.address = address
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SatsCardSlotDump: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSatsCardSlotDump: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsCardSlotDump {
+        return
+            try SatsCardSlotDump(
+                slot: FfiConverterUInt8.read(from: &buf), 
+                pubkey: FfiConverterData.read(from: &buf), 
+                used: FfiConverterOptionBool.read(from: &buf), 
+                sealed: FfiConverterOptionBool.read(from: &buf), 
+                address: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SatsCardSlotDump, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.slot, into: &buf)
+        FfiConverterData.write(value.pubkey, into: &buf)
+        FfiConverterOptionBool.write(value.used, into: &buf)
+        FfiConverterOptionBool.write(value.sealed, into: &buf)
+        FfiConverterOptionString.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardSlotDump_lift(_ buf: RustBuffer) throws -> SatsCardSlotDump {
+    return try FfiConverterTypeSatsCardSlotDump.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardSlotDump_lower(_ value: SatsCardSlotDump) -> RustBuffer {
+    return FfiConverterTypeSatsCardSlotDump.lower(value)
+}
+
+
+public struct SatsCardStatus: Equatable, Hashable {
+    /**
+     * Active slot number (0-indexed)
+     */
+    public var activeSlot: UInt8
+    /**
+     * Total number of slots on the card
+     */
+    public var numSlots: UInt8
+    /**
+     * Card-reported address for the active slot — UNVERIFIED.
+     *
+     * Treat this as a display hint only. Call
+     * [`SatsCardReader::verified_address`] before showing balance or
+     * allowing a sweep.
+     */
+    public var address: String?
+    /**
+     * Protocol version
+     */
+    public var proto: UInt32
+    /**
+     * Firmware version
+     */
+    public var ver: String
+    /**
+     * Auth delay remaining (rate limit after bad CVC)
+     */
+    public var authDelay: UInt32?
+    /**
+     * The network the card is on
+     */
+    public var network: Network
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Active slot number (0-indexed)
+         */activeSlot: UInt8, 
+        /**
+         * Total number of slots on the card
+         */numSlots: UInt8, 
+        /**
+         * Card-reported address for the active slot — UNVERIFIED.
+         *
+         * Treat this as a display hint only. Call
+         * [`SatsCardReader::verified_address`] before showing balance or
+         * allowing a sweep.
+         */address: String?, 
+        /**
+         * Protocol version
+         */proto: UInt32, 
+        /**
+         * Firmware version
+         */ver: String, 
+        /**
+         * Auth delay remaining (rate limit after bad CVC)
+         */authDelay: UInt32?, 
+        /**
+         * The network the card is on
+         */network: Network) {
+        self.activeSlot = activeSlot
+        self.numSlots = numSlots
+        self.address = address
+        self.proto = proto
+        self.ver = ver
+        self.authDelay = authDelay
+        self.network = network
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SatsCardStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSatsCardStatus: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsCardStatus {
+        return
+            try SatsCardStatus(
+                activeSlot: FfiConverterUInt8.read(from: &buf), 
+                numSlots: FfiConverterUInt8.read(from: &buf), 
+                address: FfiConverterOptionString.read(from: &buf), 
+                proto: FfiConverterUInt32.read(from: &buf), 
+                ver: FfiConverterString.read(from: &buf), 
+                authDelay: FfiConverterOptionUInt32.read(from: &buf), 
+                network: FfiConverterTypeNetwork.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SatsCardStatus, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.activeSlot, into: &buf)
+        FfiConverterUInt8.write(value.numSlots, into: &buf)
+        FfiConverterOptionString.write(value.address, into: &buf)
+        FfiConverterUInt32.write(value.proto, into: &buf)
+        FfiConverterString.write(value.ver, into: &buf)
+        FfiConverterOptionUInt32.write(value.authDelay, into: &buf)
+        FfiConverterTypeNetwork.write(value.network, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardStatus_lift(_ buf: RustBuffer) throws -> SatsCardStatus {
+    return try FfiConverterTypeSatsCardStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardStatus_lower(_ value: SatsCardStatus) -> RustBuffer {
+    return FfiConverterTypeSatsCardStatus.lower(value)
 }
 
 
@@ -23569,6 +24146,11 @@ public enum MultiFormat: Equatable {
     case tapSignerUnused(TapSigner
     )
     /**
+     * SATSCARD detected via NFC/QR
+     */
+    case satsCard(SatsCard
+    )
+    /**
      * A signed but un-finalized PSBT
      */
     case signedPsbt(Psbt
@@ -23626,7 +24208,10 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         case 7: return .tapSignerUnused(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
-        case 8: return .signedPsbt(try FfiConverterTypePsbt.read(from: &buf)
+        case 8: return .satsCard(try FfiConverterTypeSatsCard.read(from: &buf)
+        )
+        
+        case 9: return .signedPsbt(try FfiConverterTypePsbt.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23672,8 +24257,13 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             
         
-        case let .signedPsbt(v1):
+        case let .satsCard(v1):
             writeInt(&buf, Int32(8))
+            FfiConverterTypeSatsCard.write(v1, into: &buf)
+            
+        
+        case let .signedPsbt(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterTypePsbt.write(v1, into: &buf)
             
         }
@@ -23707,6 +24297,8 @@ enum MultiFormatError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     case UnsupportedNetworkAddress
     case UnrecognizedFormat
     case InvalidTapSigner(TapCardParseError
+    )
+    case InvalidSatsCard(TapCardParseError
     )
     case TaprootNotSupported
     case PsbtNotSigned
@@ -23757,8 +24349,11 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
         case 4: return .InvalidTapSigner(
             try FfiConverterTypeTapCardParseError.read(from: &buf)
             )
-        case 5: return .TaprootNotSupported
-        case 6: return .PsbtNotSigned
+        case 5: return .InvalidSatsCard(
+            try FfiConverterTypeTapCardParseError.read(from: &buf)
+            )
+        case 6: return .TaprootNotSupported
+        case 7: return .PsbtNotSigned
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -23789,12 +24384,17 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
             FfiConverterTypeTapCardParseError.write(v1, into: &buf)
             
         
-        case .TaprootNotSupported:
+        case let .InvalidSatsCard(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterTypeTapCardParseError.write(v1, into: &buf)
+            
+        
+        case .TaprootNotSupported:
+            writeInt(&buf, Int32(6))
         
         
         case .PsbtNotSigned:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
         
         }
     }
@@ -25727,6 +26327,498 @@ public func FfiConverterTypeRoute_lift(_ buf: RustBuffer) throws -> Route {
 #endif
 public func FfiConverterTypeRoute_lower(_ value: Route) -> RustBuffer {
     return FfiConverterTypeRoute.lower(value)
+}
+
+
+
+
+public enum SatsCardCmd: Equatable, Hashable {
+    
+    /**
+     * Get the current status of the card (no CVC needed)
+     */
+    case status
+    /**
+     * Unseal the active slot to reveal the private key.
+     *
+     * On success the FFI caller receives only an opaque
+     * [`SatsCardSweepSession`] handle — raw key bytes never cross the
+     * boundary.
+     */
+    case unseal(cvc: String
+    )
+    /**
+     * Get info about a specific slot (status only — never returns key material
+     * across FFI even when a CVC is supplied internally).
+     */
+    case dump(slot: UInt8
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SatsCardCmd: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSatsCardCmd: FfiConverterRustBuffer {
+    typealias SwiftType = SatsCardCmd
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsCardCmd {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .status
+        
+        case 2: return .unseal(cvc: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .dump(slot: try FfiConverterUInt8.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SatsCardCmd, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .status:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .unseal(cvc):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(cvc, into: &buf)
+            
+        
+        case let .dump(slot):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt8.write(slot, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardCmd_lift(_ buf: RustBuffer) throws -> SatsCardCmd {
+    return try FfiConverterTypeSatsCardCmd.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardCmd_lower(_ value: SatsCardCmd) -> RustBuffer {
+    return FfiConverterTypeSatsCardCmd.lower(value)
+}
+
+
+
+public 
+enum SatsCardReaderError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    case SatsCardError(TransportError
+    )
+    case UnknownCardType(String
+    )
+    case NoCommand
+    case InvalidCvcLength(UInt8
+    )
+    case NonNumericCvc
+    case SlotOutOfRange(slot: UInt8, numSlots: UInt8
+    )
+    case NoAddress
+    case InvalidPubkey
+    case AddressMismatch(cardReported: String, derived: String
+    )
+    case SuffixMismatch(cardReported: String, expectedSuffix: String
+    )
+    case Unknown(String
+    )
+
+    
+public func isAuthError() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_satscardreadererror_isautherror(
+            FfiConverterTypeSatsCardReaderError_lower(self),$0
+    )
+})
+}
+    
+public func isRateLimited() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_satscardreadererror_isratelimited(
+            FfiConverterTypeSatsCardReaderError_lower(self),$0
+    )
+})
+}
+    
+
+    
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+    uniffi_cove_fn_method_satscardreadererror_uniffi_trait_display(
+            FfiConverterTypeSatsCardReaderError_lower(self),$0
+    )
+}
+    )
+}
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension SatsCardReaderError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSatsCardReaderError: FfiConverterRustBuffer {
+    typealias SwiftType = SatsCardReaderError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsCardReaderError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .SatsCardError(
+            try FfiConverterTypeTransportError.read(from: &buf)
+            )
+        case 2: return .UnknownCardType(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .NoCommand
+        case 4: return .InvalidCvcLength(
+            try FfiConverterUInt8.read(from: &buf)
+            )
+        case 5: return .NonNumericCvc
+        case 6: return .SlotOutOfRange(
+            slot: try FfiConverterUInt8.read(from: &buf), 
+            numSlots: try FfiConverterUInt8.read(from: &buf)
+            )
+        case 7: return .NoAddress
+        case 8: return .InvalidPubkey
+        case 9: return .AddressMismatch(
+            cardReported: try FfiConverterString.read(from: &buf), 
+            derived: try FfiConverterString.read(from: &buf)
+            )
+        case 10: return .SuffixMismatch(
+            cardReported: try FfiConverterString.read(from: &buf), 
+            expectedSuffix: try FfiConverterString.read(from: &buf)
+            )
+        case 11: return .Unknown(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SatsCardReaderError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .SatsCardError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeTransportError.write(v1, into: &buf)
+            
+        
+        case let .UnknownCardType(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case .NoCommand:
+            writeInt(&buf, Int32(3))
+        
+        
+        case let .InvalidCvcLength(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt8.write(v1, into: &buf)
+            
+        
+        case .NonNumericCvc:
+            writeInt(&buf, Int32(5))
+        
+        
+        case let .SlotOutOfRange(slot,numSlots):
+            writeInt(&buf, Int32(6))
+            FfiConverterUInt8.write(slot, into: &buf)
+            FfiConverterUInt8.write(numSlots, into: &buf)
+            
+        
+        case .NoAddress:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .InvalidPubkey:
+            writeInt(&buf, Int32(8))
+        
+        
+        case let .AddressMismatch(cardReported,derived):
+            writeInt(&buf, Int32(9))
+            FfiConverterString.write(cardReported, into: &buf)
+            FfiConverterString.write(derived, into: &buf)
+            
+        
+        case let .SuffixMismatch(cardReported,expectedSuffix):
+            writeInt(&buf, Int32(10))
+            FfiConverterString.write(cardReported, into: &buf)
+            FfiConverterString.write(expectedSuffix, into: &buf)
+            
+        
+        case let .Unknown(v1):
+            writeInt(&buf, Int32(11))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardReaderError_lift(_ buf: RustBuffer) throws -> SatsCardReaderError {
+    return try FfiConverterTypeSatsCardReaderError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardReaderError_lower(_ value: SatsCardReaderError) -> RustBuffer {
+    return FfiConverterTypeSatsCardReaderError.lower(value)
+}
+
+
+
+public enum SatsCardResponse {
+    
+    case status(SatsCardStatus
+    )
+    /**
+     * Opaque handle. The unsealed key material is owned Rust-side and
+     * zeroised on drop (see [`SatsCardSweepSession`]).
+     */
+    case unseal(SatsCardSweepSession
+    )
+    case dump(SatsCardSlotDump
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SatsCardResponse: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSatsCardResponse: FfiConverterRustBuffer {
+    typealias SwiftType = SatsCardResponse
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsCardResponse {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .status(try FfiConverterTypeSatsCardStatus.read(from: &buf)
+        )
+        
+        case 2: return .unseal(try FfiConverterTypeSatsCardSweepSession.read(from: &buf)
+        )
+        
+        case 3: return .dump(try FfiConverterTypeSatsCardSlotDump.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SatsCardResponse, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .status(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeSatsCardStatus.write(v1, into: &buf)
+            
+        
+        case let .unseal(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeSatsCardSweepSession.write(v1, into: &buf)
+            
+        
+        case let .dump(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeSatsCardSlotDump.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardResponse_lift(_ buf: RustBuffer) throws -> SatsCardResponse {
+    return try FfiConverterTypeSatsCardResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardResponse_lower(_ value: SatsCardResponse) -> RustBuffer {
+    return FfiConverterTypeSatsCardResponse.lower(value)
+}
+
+
+
+
+public enum SatsCardRoute: Equatable, Hashable {
+    
+    /**
+     * Initial scan screen — prompt user to tap the card
+     */
+    case scan(SatsCard
+    )
+    /**
+     * Show current slot status (slot N of M, sealed/unsealed, address, balance)
+     */
+    case slotStatus(SatsCardStatus
+    )
+    /**
+     * Confirm unseal — warn user this reveals the private key
+     */
+    case unsealConfirm(SatsCardStatus
+    )
+    /**
+     * Display-safe payload only.
+     *
+     * The unsealed key material lives inside a short-lived Rust-side
+     * `SatsCardSweepSession` (held by the manager) — never the route.
+     */
+    case unsealSuccess(slot: UInt8, address: String
+    )
+    /**
+     * Something went wrong — let user retry
+     */
+    case error(message: String, status: SatsCardStatus?
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SatsCardRoute: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSatsCardRoute: FfiConverterRustBuffer {
+    typealias SwiftType = SatsCardRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsCardRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .scan(try FfiConverterTypeSatsCard.read(from: &buf)
+        )
+        
+        case 2: return .slotStatus(try FfiConverterTypeSatsCardStatus.read(from: &buf)
+        )
+        
+        case 3: return .unsealConfirm(try FfiConverterTypeSatsCardStatus.read(from: &buf)
+        )
+        
+        case 4: return .unsealSuccess(slot: try FfiConverterUInt8.read(from: &buf), address: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 5: return .error(message: try FfiConverterString.read(from: &buf), status: try FfiConverterOptionTypeSatsCardStatus.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SatsCardRoute, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .scan(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeSatsCard.write(v1, into: &buf)
+            
+        
+        case let .slotStatus(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeSatsCardStatus.write(v1, into: &buf)
+            
+        
+        case let .unsealConfirm(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeSatsCardStatus.write(v1, into: &buf)
+            
+        
+        case let .unsealSuccess(slot,address):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt8.write(slot, into: &buf)
+            FfiConverterString.write(address, into: &buf)
+            
+        
+        case let .error(message,status):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(message, into: &buf)
+            FfiConverterOptionTypeSatsCardStatus.write(status, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardRoute_lift(_ buf: RustBuffer) throws -> SatsCardRoute {
+    return try FfiConverterTypeSatsCardRoute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSatsCardRoute_lower(_ value: SatsCardRoute) -> RustBuffer {
+    return FfiConverterTypeSatsCardRoute.lower(value)
 }
 
 
@@ -34259,6 +35351,30 @@ fileprivate struct FfiConverterOptionDouble: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionBool: FfiConverterRustBuffer {
+    typealias SwiftType = Bool?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterBool.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterBool.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -34395,6 +35511,30 @@ fileprivate struct FfiConverterOptionTypeMigration: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeMigration.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeSatsCardSweepSession: FfiConverterRustBuffer {
+    typealias SwiftType = SatsCardSweepSession?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSatsCardSweepSession.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSatsCardSweepSession.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -34715,6 +35855,54 @@ fileprivate struct FfiConverterOptionTypeFiatAmount: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeSatsCardSlotDump: FfiConverterRustBuffer {
+    typealias SwiftType = SatsCardSlotDump?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSatsCardSlotDump.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSatsCardSlotDump.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeSatsCardStatus: FfiConverterRustBuffer {
+    typealias SwiftType = SatsCardStatus?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSatsCardStatus.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSatsCardStatus.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeWalletMetadata: FfiConverterRustBuffer {
     typealias SwiftType = WalletMetadata?
 
@@ -34851,6 +36039,30 @@ fileprivate struct FfiConverterOptionTypeOnboardingBranch: FfiConverterRustBuffe
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeOnboardingBranch.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeSatsCardCmd: FfiConverterRustBuffer {
+    typealias SwiftType = SatsCardCmd?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSatsCardCmd.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSatsCardCmd.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -36129,6 +37341,51 @@ public func isValidChainCode(chainCode: String) -> Bool  {
 })
 }
 /**
+ * Create a SatsCardReader instance for FFI callers.
+ *
+ * `expected_url_suffix` should be the 8-character `r=…` value parsed
+ * from the scanned `getsatscard.com/start#…` URL when available.
+ * [`SatsCardReader::verified_address`] cross-checks against it.
+ *
+ * UniFFI's Kotlin bindings do not support async primary constructors,
+ * hence the free function.
+ */
+public func createSatsCardReader(transport: TapcardTransportProtocol, cmd: SatsCardCmd?, expectedUrlSuffix: String?)async throws  -> SatsCardReader  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_func_create_sats_card_reader(FfiConverterCallbackInterfaceTapcardTransportProtocol_lower(transport),FfiConverterOptionTypeSatsCardCmd.lower(cmd),FfiConverterOptionString.lower(expectedUrlSuffix)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_u64,
+            completeFunc: ffi_cove_rust_future_complete_u64,
+            freeFunc: ffi_cove_rust_future_free_u64,
+            liftFunc: FfiConverterTypeSatsCardReader_lift,
+            errorHandler: FfiConverterTypeSatsCardReaderError_lift
+        )
+}
+public func satsCardResponseDumpData(response: SatsCardResponse) -> SatsCardSlotDump?  {
+    return try!  FfiConverterOptionTypeSatsCardSlotDump.lift(try! rustCall() {
+    uniffi_cove_fn_func_satscardresponsedumpdata(
+        FfiConverterTypeSatsCardResponse_lower(response),$0
+    )
+})
+}
+public func satsCardResponseStatusData(response: SatsCardResponse) -> SatsCardStatus?  {
+    return try!  FfiConverterOptionTypeSatsCardStatus.lift(try! rustCall() {
+    uniffi_cove_fn_func_satscardresponsestatusdata(
+        FfiConverterTypeSatsCardResponse_lower(response),$0
+    )
+})
+}
+public func satsCardResponseUnsealSession(response: SatsCardResponse) -> SatsCardSweepSession?  {
+    return try!  FfiConverterOptionTypeSatsCardSweepSession.lift(try! rustCall() {
+    uniffi_cove_fn_func_satscardresponseunsealsession(
+        FfiConverterTypeSatsCardResponse_lower(response),$0
+    )
+})
+}
+/**
  * Create a TapSignerReader instance for FFI callers
  * UniFFI's Kotlin bindings do not support async primary constructors
  */
@@ -36358,6 +37615,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_is_valid_chain_code() != 38380) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_create_sats_card_reader() != 34660) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_satscardresponsedumpdata() != 240) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_satscardresponsestatusdata() != 17903) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_satscardresponseunsealsession() != 3295) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_create_tap_signer_reader() != 37635) {
@@ -37279,6 +38548,27 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_headericonpresenter_ring_color() != 38756) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_satscardreader_run() != 30335) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_satscardreader_status() != 58264) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_satscardreader_verified_address() != 26883) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_satscardsweepsession_address() != 27077) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_satscardsweepsession_network() != 50397) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_satscardsweepsession_pubkey_bytes() != 34999) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_satscardsweepsession_slot() != 46812) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_tapsignerreader_continue_setup() != 49046) {

@@ -8,7 +8,10 @@ use crate::{
     database::Database,
     mnemonic::NumberOfBip39Words,
     psbt::Psbt,
-    tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
+    tap_card::{
+        sats_card_reader::SatsCardStatus,
+        tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
+    },
     transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
     wallet::Address,
 };
@@ -147,6 +150,27 @@ pub enum TapSignerRoute {
 
     // shared routes
     EnterPin { tap_signer: Arc<cove_tap_card::TapSigner>, action: AfterPinAction },
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SatsCardRoute {
+    /// Initial scan screen — prompt user to tap the card
+    Scan(cove_tap_card::SatsCard),
+
+    /// Show current slot status (slot N of M, sealed/unsealed, address, balance)
+    SlotStatus(SatsCardStatus),
+
+    /// Confirm unseal — warn user this reveals the private key
+    UnsealConfirm(SatsCardStatus),
+
+    /// Display-safe payload only.
+    ///
+    /// The unsealed key material lives inside a short-lived Rust-side
+    /// `SatsCardSweepSession` (held by the manager) — never the route.
+    UnsealSuccess { slot: u8, address: String },
+
+    /// Something went wrong — let user retry
+    Error { message: String, status: Option<SatsCardStatus> },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]

@@ -1,3 +1,4 @@
+pub mod sats_card_reader;
 pub mod tap_signer_reader;
 
 use rust_cktap::{apdu::Error as ApduError, commands::CkTransport};

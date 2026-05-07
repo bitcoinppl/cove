@@ -308,6 +308,45 @@ mod tests {
     }
 
     #[test]
+    fn test_parses_sats_card_unsealed() {
+        let card = "https://getsatscard.com/start#u=U&o=3&r=95kesdwq&n=ab78fd50637f8f5a&s=26d1a0684f99fe43b223dca75081bb05bd0233b901139cdd33a4d0a2e61666ed1470d7c53d90f6ae4c60a6cbc7a0f4ded5f13461092b24604ad476bbcf1dd913";
+        let TapCard::SatsCard(sats_card) = TapCard::parse(card).unwrap() else {
+            panic!("not a sats card")
+        };
+
+        assert_eq!(sats_card.state, SatsCardState::Unsealed);
+        assert_eq!(sats_card.slot_number, 3);
+        assert_eq!(sats_card.address_suffix, "95kesdwq");
+    }
+
+    #[test]
+    fn test_parses_sats_card_error_state() {
+        let card = "https://getsatscard.com/start#u=E&o=0&r=95kesdwq&n=ab78fd50637f8f5a&s=26d1a0684f99fe43b223dca75081bb05bd0233b901139cdd33a4d0a2e61666ed1470d7c53d90f6ae4c60a6cbc7a0f4ded5f13461092b24604ad476bbcf1dd913";
+        let TapCard::SatsCard(sats_card) = TapCard::parse(card).unwrap() else {
+            panic!("not a sats card")
+        };
+
+        assert_eq!(sats_card.state, SatsCardState::Error);
+    }
+
+    #[test]
+    fn test_sats_card_not_misidentified_as_tap_signer() {
+        let card = "https://getsatscard.com/start#u=S&o=0&r=95kesdwq&n=ab78fd50637f8f5a&s=26d1a0684f99fe43b223dca75081bb05bd0233b901139cdd33a4d0a2e61666ed1470d7c53d90f6ae4c60a6cbc7a0f4ded5f13461092b24604ad476bbcf1dd913";
+        let tap_card = TapCard::parse(card).unwrap();
+        assert!(
+            matches!(tap_card, TapCard::SatsCard(_)),
+            "getsatscard.com URL should never parse as TapSigner"
+        );
+    }
+
+    #[test]
+    fn test_invalid_url_domain_errors() {
+        let url = "https://example.com/start#u=S&o=0&r=95kesdwq&n=abc&s=def";
+        let err = TapCard::parse(url).unwrap_err();
+        assert!(matches!(err, Error::InvalidUrl(_)));
+    }
+
+    #[test]
     fn test_tap_signer_readable_ident_string() {
         let url = "https://tapsigner.com/start#t=1&u=S&c=04d74fb1dfee7a4d&n=8940dc9808088820&s=6bda376546b7074b5a52f3264fe118d38889f49501b591b0b9e90a2ff2e07d26572898aaeb0f963a52cf707e7483203520ce40bdf5071e8f80262d587b41b99f";
         let tap_card = TapCard::parse(url);

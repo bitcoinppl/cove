@@ -55,6 +55,16 @@ class ScanManager private constructor() {
                     }
                 }
 
+                is MultiFormat.SatsCard -> {
+                    Log.d(tag, "SATSCARD detected: slot ${multiFormat.v1.slotNumber} state ${multiFormat.v1.state}")
+                    app.alertState = TaggedItem(
+                        AppAlertState.General(
+                            title = "SATSCARD Detected",
+                            message = "SATSCARD support is coming soon. Slot ${multiFormat.v1.slotNumber} was scanned.",
+                        ),
+                    )
+                }
+
                 is MultiFormat.Bip329Labels -> {
                     val selectedWallet = Database().globalConfig().selectedWallet()
                     if (selectedWallet == null) {

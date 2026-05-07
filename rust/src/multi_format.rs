@@ -40,6 +40,8 @@ pub enum MultiFormat {
     TapSignerReady(Arc<cove_tap_card::TapSigner>),
     /// TAPSIGNER has not been initialized yet
     TapSignerUnused(Arc<cove_tap_card::TapSigner>),
+    /// SATSCARD detected via NFC/QR
+    SatsCard(cove_tap_card::SatsCard),
     /// A signed but un-finalized PSBT
     SignedPsbt(Arc<Psbt>),
 }
@@ -60,6 +62,9 @@ pub enum MultiFormatError {
 
     #[error("Invalid TapSigner {0}")]
     InvalidTapSigner(cove_tap_card::TapCardParseError),
+
+    #[error("Invalid SatsCard {0}")]
+    InvalidSatsCard(cove_tap_card::TapCardParseError),
 
     #[error("Taproot wallets are not supported yet")]
     TaprootNotSupported,
@@ -156,8 +161,27 @@ impl MultiFormat {
                     return Ok(Self::from(card));
                 }
 
-                cove_tap_card::TapCard::SatsCard(_) => {
-                    return Err(MultiFormatError::UnrecognizedFormat);
+                cove_tap_card::TapCard::SatsCard(_card) => {
+                    return Err(MultiFormatError::InvalidTapSigner(
+                        cove_tap_card::TapCardParseError::InvalidUrl(string.to_string()),
+                    ));
+                }
+            }
+        }
+
+        if string.contains("getsatscard.com/start") {
+            let tap_card = cove_tap_card::TapCard::parse(string)
+                .map_err(|e| MultiFormatError::InvalidSatsCard(e.into()))?;
+
+            match tap_card {
+                cove_tap_card::TapCard::SatsCard(card) => {
+                    return Ok(Self::SatsCard(card));
+                }
+
+                cove_tap_card::TapCard::TapSigner(_card) => {
+                    return Err(MultiFormatError::InvalidSatsCard(
+                        cove_tap_card::TapCardParseError::InvalidUrl(string.to_string()),
+                    ));
                 }
             }
         }
