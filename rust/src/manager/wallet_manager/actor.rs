@@ -207,7 +207,7 @@ impl WalletActor {
 
         tx_builder.drain_wallet().drain_to(script_pubkey).fee_rate(fee.into());
         let psbt = tx_builder.finish().map_err_str(Error::BuildTxError)?;
-        self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
+        self.wallet.unreserve_tx_change_addresses(&psbt.unsigned_tx);
 
         Ok(psbt)
     }
@@ -245,7 +245,7 @@ impl WalletActor {
     ) -> Result<Psbt, Error> {
         debug!("build_ephemeral_tx");
         let psbt = self.do_build_tx(amount, address, fee).await?;
-        self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
+        self.wallet.unreserve_tx_change_addresses(&psbt.unsigned_tx);
         Ok(psbt)
     }
 
@@ -285,13 +285,13 @@ impl WalletActor {
     ) -> Result<Psbt, Error> {
         debug!("build_manual_ephemeral_tx");
         let psbt = self.do_build_manual_tx(utxos, amount, address, fee).await?;
-        self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
+        self.wallet.unreserve_tx_change_addresses(&psbt.unsigned_tx);
         Ok(psbt)
     }
 
-    // cancel a transaction, reset the address & change address index
+    // release reserved change addresses for a discarded unsigned transaction
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
-        self.wallet.bdk.cancel_tx(&txn);
+        self.wallet.unreserve_tx_change_addresses(&txn);
     }
 
     pub async fn list_unspent(&mut self) -> ActorResult<Vec<LocalOutput>> {
@@ -1089,7 +1089,7 @@ impl WalletActor {
             }
 
             let fee_psbt = fee_psbt.expect("unwrapped in while");
-            self.wallet.bdk.cancel_tx(&fee_psbt.unsigned_tx);
+            self.wallet.unreserve_tx_change_addresses(&fee_psbt.unsigned_tx);
             fee_psbt.fee().map_err_str(Error::BuildTxError)?
         };
 

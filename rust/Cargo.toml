@@ -54,15 +54,15 @@ ruzstd = "0.8"
 
 # bdk / bitcoin
 bitcoin = { version = "0.32" }
-bdk_wallet = { version = "2.3", features = ["keys-bip39", "file_store", "rusqlite"] }
+bdk_wallet = { version = "3.0.0", features = ["keys-bip39", "file_store", "rusqlite"] }
 bip39 = { version = "2.2", features = ["zeroize"] }
 bip329 = { version = "0.4" }
 payjoin = { version = "0.25", default-features = false, features = ["v1"] }
 pubport = { version = "0.5" }
 
 # bitcoin nodes
-bdk_esplora = { version = "0.22", features = ["async-https-rustls", "tokio"], default-features = false }
-bdk_electrum = { version = "0.23", features = ["use-rustls-ring"], default-features = false }
+bdk_esplora = { version = "0.22.2", features = ["async-https-rustls", "tokio"], default-features = false }
+bdk_electrum = { version = "0.24.0", features = ["use-rustls-ring"], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
 # fast hashmap
@@ -133,10 +133,10 @@ cove-http = { path = "./crates/cove-http" }
 bitcoin = { workspace = true }
 bdk_wallet = { workspace = true }
 bip39 = { workspace = true }
-bdk_file_store = { version = "0.21.0" }
+bdk_file_store = { version = "0.22.0" }
 
-bdk_esplora = { version = "0.22", features = ["async-https-rustls", "tokio"], default-features = false }
-bdk_electrum = { version = "0.23", features = ["use-rustls-ring"], default-features = false }
+bdk_esplora = { version = "0.22.2", features = ["async-https-rustls", "tokio"], default-features = false }
+bdk_electrum = { version = "0.24.0", features = ["use-rustls-ring"], default-features = false }
 
 # import / export hardware wallet public keys
 pubport = { workspace = true }
@@ -283,6 +283,7 @@ libc = "0.2"
 uniffi = { workspace = true, features = ["build"] }
 
 [dev-dependencies]
+bdk_wallet = { workspace = true, features = ["test-utils"] }
 tempfile = "3.19"
 pretty_assertions = "1.4.1"
 minicbor = { workspace = true }

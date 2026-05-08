@@ -11,7 +11,7 @@ xshell = "0.2"
 colored = "2.0"
 
 # for util sign-psbt
-bdk_wallet = { version = "2.0", features = ["keys-bip39"] }
+bdk_wallet = { version = "3.0.0", features = ["keys-bip39"] }
 bitcoin = "0.32"
 bip39 = "2.2"
 base64 = "0.22"
