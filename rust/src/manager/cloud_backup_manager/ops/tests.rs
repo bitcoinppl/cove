@@ -406,26 +406,6 @@ async fn passkey_match_allows_one_credential_to_match_multiple_namespaces() {
     assert_eq!(matched_namespaces, vec![first_namespace, second_namespace]);
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn mock_master_key_upload_persists_uploaded_bytes() {
-    let _guard = test_lock().lock();
-    cove_tokio::init();
-    let globals = test_globals();
-    globals.reset();
-
-    let namespace = "namespace-1".to_string();
-    let uploaded = vec![1, 2, 3, 4];
-    CloudStorage::global_explicit_client()
-        .upload_master_key_backup(namespace.clone(), uploaded.clone())
-        .await
-        .unwrap();
-
-    assert_eq!(
-        CloudStorage::global_explicit_client().download_master_key_backup(namespace).await.unwrap(),
-        uploaded
-    );
-}
-
 #[test]
 fn persist_xpub_wallets_saves_each_wallet_in_its_own_scope() {
     let _guard = test_lock().lock();

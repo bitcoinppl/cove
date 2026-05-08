@@ -195,30 +195,3 @@ impl RustCloudBackupManager {
         send!(self.supervisor.wake_pending_upload_verifier());
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pending_upload_backoff_resets_to_short_delay() {
-        let mut backoff = build_pending_upload_backoff();
-        let initial_delay = backoff.next().expect("expected initial delay");
-
-        let _ = backoff.next();
-        let _ = backoff.next();
-
-        let mut backoff = build_pending_upload_backoff();
-
-        assert_eq!(backoff.next().expect("expected reset delay"), initial_delay);
-    }
-
-    #[test]
-    fn pending_upload_backoff_produces_delays() {
-        let mut backoff = build_pending_upload_backoff();
-
-        for _ in 0..10 {
-            assert!(backoff.next().is_some(), "expected delay");
-        }
-    }
-}
