@@ -229,7 +229,7 @@ private struct TermsCheckboxCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .center, spacing: 14) {
             Button {
                 isOn.toggle()
             } label: {
@@ -238,7 +238,6 @@ private struct TermsCheckboxCard<Content: View>: View {
                     .foregroundStyle(isOn ? Color.btnGradientLight : Color.btnGradientLight.opacity(0.92))
             }
             .buttonStyle(.plain)
-            .padding(.top, 1)
 
             content()
                 .font(OnboardingRecoveryTypography.footnote)
