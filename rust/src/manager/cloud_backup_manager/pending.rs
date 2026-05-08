@@ -117,7 +117,7 @@ impl RustCloudBackupManager {
             return Ok(false);
         }
 
-        if current_state.wallet_id.is_none() {
+        if current_state.is_master_key_wrapper() {
             send!(
                 self.supervisor
                     .start_master_key_upload_confirmation_grace(current_state.namespace_id.clone())

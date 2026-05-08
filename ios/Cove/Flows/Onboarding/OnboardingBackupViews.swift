@@ -299,7 +299,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private var isPromptingForEnableChoice: Bool {
-        if case .passkeyChoice(.enable) = backupManager.promptIntent {
+        if case .passkeyChoice(.enable) = backupManager.rootPrompt {
             return true
         }
 

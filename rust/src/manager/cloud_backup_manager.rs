@@ -1,6 +1,7 @@
 mod cloud_inventory;
 mod detail;
 mod keychain;
+mod model;
 mod ops;
 mod pending;
 mod prompt;
@@ -50,6 +51,7 @@ pub use self::detail::{
     PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
 };
 pub(crate) use self::keychain::CloudBackupKeychain;
+use self::model::{CloudBackupLifecycle, CloudBackupModel};
 use self::prompt::CloudBackupPromptState;
 pub(crate) use self::store::CloudBackupStore;
 use self::verify::coordinator::{
@@ -122,12 +124,12 @@ pub enum CloudBackupPasskeyChoiceIntent {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum CloudBackupPromptIntent {
+pub enum CloudBackupRootPrompt {
     None,
     ExistingBackupFound(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
     PasskeyChoice(CloudBackupPasskeyChoiceIntent),
     MissingPasskeyReminder,
-    VerificationPrompt,
+    Verification,
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -158,8 +160,11 @@ pub enum CloudBackupManagerAction {
     EnterDetail,
 }
 
+#[expect(clippy::large_enum_variant, reason = "exported UniFFI enum keeps payloads inline")]
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
+    Lifecycle(CloudBackupLifecycle),
+    RootPrompt(CloudBackupRootPrompt),
     Status(CloudBackupStatus),
     SyncHealth(CloudSyncHealth),
     Progress(Option<CloudBackupProgress>),
@@ -178,7 +183,6 @@ pub enum CloudBackupReconcileMessage {
     CloudOnly(CloudOnlyState),
     CloudOnlyOperation(CloudOnlyOperation),
     OtherBackupsOperation(OtherBackupsOperation),
-    PromptIntent(CloudBackupPromptIntent),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -367,9 +371,10 @@ pub struct CloudBackupRetryContext {
 
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CloudBackupState {
+    pub lifecycle: CloudBackupLifecycle,
+    pub root_prompt: CloudBackupRootPrompt,
     pub status: CloudBackupStatus,
     pub sync_health: CloudSyncHealth,
-    pub prompt_intent: CloudBackupPromptIntent,
     pub progress: Option<CloudBackupProgress>,
     pub restore_progress: Option<CloudBackupRestoreProgress>,
     pub restore_report: Option<CloudBackupRestoreReport>,
@@ -391,9 +396,10 @@ pub struct CloudBackupState {
 impl Default for CloudBackupState {
     fn default() -> Self {
         Self {
+            lifecycle: CloudBackupLifecycle::Disabled,
+            root_prompt: CloudBackupRootPrompt::None,
             status: CloudBackupStatus::Disabled,
             sync_health: CloudSyncHealth::Unknown,
-            prompt_intent: CloudBackupPromptIntent::None,
             progress: None,
             restore_progress: None,
             restore_report: None,
@@ -1050,7 +1056,7 @@ pub trait CloudBackupManagerReconciler: Send + Sync + std::fmt::Debug + 'static 
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustCloudBackupManager {
-    pub state: Arc<RwLock<CloudBackupState>>,
+    pub state: Arc<RwLock<CloudBackupModel>>,
     pub reconciler: Sender<Message>,
     pub reconcile_receiver: Arc<Receiver<Message>>,
     prompt_state: Arc<parking_lot::Mutex<CloudBackupPromptState>>,
@@ -1127,7 +1133,7 @@ impl RustCloudBackupManager {
         let (sender, receiver) = flume::bounded(1000);
 
         let manager = Arc::new_cyclic(|manager| Self {
-            state: Arc::new(RwLock::new(CloudBackupState::default())),
+            state: Arc::new(RwLock::new(CloudBackupModel::default())),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
             prompt_state: Arc::new(parking_lot::Mutex::new(CloudBackupPromptState::default())),
@@ -1158,14 +1164,22 @@ impl RustCloudBackupManager {
     ) where
         T: PartialEq + Clone,
     {
-        {
+        let lifecycle = {
             let mut state = self.state.write();
+            let previous_lifecycle = state.lifecycle.clone();
             let slot = field(&mut state);
             if *slot == value {
                 return;
             }
 
             *slot = value.clone();
+            state.refresh_domain_projection();
+
+            (state.lifecycle != previous_lifecycle).then(|| state.lifecycle.clone())
+        };
+
+        if let Some(lifecycle) = lifecycle {
+            self.send(Message::Lifecycle(lifecycle));
         }
 
         self.send(notify(value));
@@ -1176,13 +1190,15 @@ impl RustCloudBackupManager {
             self.clear_runtime_passkey_authorization();
         }
 
-        let status_changed = {
+        let (status_changed, lifecycle) = {
             let mut state = self.state.write();
+            let previous_lifecycle = state.lifecycle.clone();
             if state.status == status {
-                false
+                (false, None)
             } else {
                 state.status = status.clone();
-                true
+                state.refresh_domain_projection();
+                (true, (state.lifecycle != previous_lifecycle).then(|| state.lifecycle.clone()))
             }
         };
 
@@ -1192,8 +1208,11 @@ impl RustCloudBackupManager {
 
         self.prompt_state.lock().clear_missing_passkey_dismissal();
 
+        if let Some(lifecycle) = lifecycle {
+            self.send(Message::Lifecycle(lifecycle));
+        }
         self.send(Message::Status(status));
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 
     fn start_connectivity_listener(self: &Arc<Self>) {
@@ -1249,22 +1268,30 @@ impl RustCloudBackupManager {
         self.set_and_notify_field(sync_health, |state| &mut state.sync_health, Message::SyncHealth);
     }
 
-    pub(crate) fn set_prompt_intent(&self, prompt_intent: CloudBackupPromptIntent) {
-        self.set_and_notify_field(
-            prompt_intent,
-            |state| &mut state.prompt_intent,
-            Message::PromptIntent,
-        );
+    pub(crate) fn set_root_prompt(&self, root_prompt: CloudBackupRootPrompt) {
+        let changed = {
+            let mut state = self.state.write();
+            let changed = state.root_prompt != root_prompt;
+            if changed {
+                state.root_prompt = root_prompt.clone();
+            }
+
+            changed
+        };
+
+        if changed {
+            self.send(Message::RootPrompt(root_prompt));
+        }
     }
 
-    pub(crate) fn refresh_prompt_intent(&self) {
-        let prompt_intent = {
+    pub(crate) fn refresh_root_prompt(&self) {
+        let root_prompt = {
             let prompt_state = self.prompt_state.lock().clone();
             let state = self.state.read().clone();
             prompt_state.resolve(&state)
         };
 
-        self.set_prompt_intent(prompt_intent);
+        self.set_root_prompt(root_prompt);
     }
 
     pub(crate) fn set_verification_presentation(
@@ -1276,7 +1303,7 @@ impl RustCloudBackupManager {
             |state| &mut state.verification_presentation,
             Message::VerificationPresentation,
         );
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 
     pub(crate) fn current_verification_source(&self) -> CloudBackupVerificationSource {
@@ -1342,27 +1369,27 @@ impl RustCloudBackupManager {
         passkey_hint: Option<CloudBackupPasskeyHint>,
     ) {
         self.prompt_state.lock().set_existing_backup_found(context, passkey_hint);
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 
     pub(crate) fn clear_existing_backup_found_prompt(&self) {
         self.prompt_state.lock().clear_existing_backup_found();
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 
     pub(crate) fn set_passkey_choice_prompt(&self, intent: CloudBackupPasskeyChoiceIntent) {
         self.prompt_state.lock().set_passkey_choice(intent);
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 
     pub(crate) fn clear_passkey_choice_prompt(&self) {
         self.prompt_state.lock().clear_passkey_choice();
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 
     pub(crate) fn dismiss_missing_passkey_prompt(&self) {
         self.prompt_state.lock().dismiss_missing_passkey();
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 
     pub(crate) fn set_progress(&self, progress: Option<CloudBackupProgress>) {
@@ -1404,8 +1431,9 @@ impl RustCloudBackupManager {
     pub(crate) fn refresh_persisted_flags(&self) {
         let (verification_metadata, should_prompt_verification) = Self::load_persisted_flags();
 
-        let (metadata_changed, prompt_changed, presentation) = {
+        let (metadata_changed, prompt_changed, presentation, lifecycle) = {
             let mut state = self.state.write();
+            let previous_lifecycle = state.lifecycle.clone();
 
             let metadata_changed = state.verification_metadata != verification_metadata;
             if metadata_changed {
@@ -1441,8 +1469,21 @@ impl RustCloudBackupManager {
                 state.verification_presentation = presentation.clone();
             }
 
-            (metadata_changed, prompt_changed, presentation_changed.then_some(presentation))
+            state.refresh_domain_projection();
+            let lifecycle =
+                (state.lifecycle != previous_lifecycle).then(|| state.lifecycle.clone());
+
+            (
+                metadata_changed,
+                prompt_changed,
+                presentation_changed.then_some(presentation),
+                lifecycle,
+            )
         };
+
+        if let Some(lifecycle) = lifecycle {
+            self.send(Message::Lifecycle(lifecycle));
+        }
 
         if metadata_changed {
             self.send(Message::VerificationMetadata(verification_metadata));
@@ -1456,7 +1497,7 @@ impl RustCloudBackupManager {
             self.send(Message::VerificationPresentation(presentation));
         }
 
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 
     fn set_pending_upload_verification_value(&self, pending: PendingUploadVerificationState) {
@@ -1465,7 +1506,7 @@ impl RustCloudBackupManager {
             |state| &mut state.pending_upload_verification,
             Message::PendingUploadVerification,
         );
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 
     pub(crate) fn set_pending_upload_verification(&self, pending: PendingUploadVerificationState) {
@@ -1481,8 +1522,9 @@ impl RustCloudBackupManager {
         source: CloudBackupVerificationSource,
     ) {
         let (verification_metadata, should_prompt_verification) = Self::load_persisted_flags();
-        let (pending_changed, decision_pending, presentation) = {
+        let (pending_changed, decision_pending, presentation, lifecycle) = {
             let mut state = self.state.write();
+            let previous_lifecycle = state.lifecycle.clone();
             let pending_changed = state.pending_upload_verification != pending;
             if pending_changed {
                 state.pending_upload_verification = pending;
@@ -1504,8 +1546,16 @@ impl RustCloudBackupManager {
                 None
             };
 
-            (pending_changed, decision_pending, presentation)
+            state.refresh_domain_projection();
+            let lifecycle =
+                (state.lifecycle != previous_lifecycle).then(|| state.lifecycle.clone());
+
+            (pending_changed, decision_pending, presentation, lifecycle)
         };
+
+        if let Some(lifecycle) = lifecycle {
+            self.send(Message::Lifecycle(lifecycle));
+        }
 
         if pending_changed {
             self.send(Message::PendingUploadVerification(pending));
@@ -1513,12 +1563,12 @@ impl RustCloudBackupManager {
 
         if let Some(presentation) = presentation {
             self.send(Message::VerificationPresentation(presentation));
-            self.refresh_prompt_intent();
+            self.refresh_root_prompt();
             return;
         }
 
         if decision_pending {
-            self.refresh_prompt_intent();
+            self.refresh_root_prompt();
             return;
         }
 
@@ -1547,8 +1597,9 @@ impl RustCloudBackupManager {
 
     pub(crate) fn set_detail(&self, detail: Option<CloudBackupDetail>) {
         let detail_snapshot = self.cloud_only_detail_snapshot.read().clone();
-        let (detail_changed, reset_cloud_only) = {
+        let (detail_changed, reset_cloud_only, lifecycle) = {
             let mut state = self.state.write();
+            let previous_lifecycle = state.lifecycle.clone();
 
             let detail_changed = state.detail != detail;
             if detail_changed {
@@ -1563,8 +1614,16 @@ impl RustCloudBackupManager {
                 state.cloud_only = CloudOnlyState::NotFetched;
             }
 
-            (detail_changed, reset_cloud_only)
+            state.refresh_domain_projection();
+            let lifecycle =
+                (state.lifecycle != previous_lifecycle).then(|| state.lifecycle.clone());
+
+            (detail_changed, reset_cloud_only, lifecycle)
         };
+
+        if let Some(lifecycle) = lifecycle {
+            self.send(Message::Lifecycle(lifecycle));
+        }
 
         if reset_cloud_only {
             *self.cloud_only_detail_snapshot.write() = None;
@@ -1589,7 +1648,7 @@ impl RustCloudBackupManager {
             |state| &mut state.verification,
             Message::Verification,
         );
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 
     pub(crate) fn set_sync(&self, sync: SyncState) {
@@ -1602,7 +1661,7 @@ impl RustCloudBackupManager {
         }
 
         self.set_and_notify_field(recovery, |state| &mut state.recovery, Message::Recovery);
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 
     pub(crate) async fn record_runtime_passkey_authorization(
@@ -2061,7 +2120,7 @@ impl RustCloudBackupManager {
 
     fn sync_health_has_pending_wallet_upload(sync_states: &[PersistedCloudBlobSyncState]) -> bool {
         sync_states.iter().any(|sync_state| {
-            sync_state.wallet_id.is_some()
+            sync_state.is_wallet_record()
                 && matches!(
                     sync_state.state,
                     PersistedCloudBlobState::Dirty(_)
@@ -2075,7 +2134,7 @@ impl RustCloudBackupManager {
         sync_states: &[PersistedCloudBlobSyncState],
     ) -> bool {
         sync_states.iter().any(|sync_state| {
-            sync_state.wallet_id.is_none()
+            sync_state.is_master_key_wrapper()
                 && sync_state.record_id == MASTER_KEY_RECORD_ID
                 && matches!(
                     sync_state.state,
@@ -2347,8 +2406,10 @@ impl RustCloudBackupManager {
                 restore_progress_changed,
                 restore_report_changed,
                 status_changed,
+                lifecycle,
             ) = {
                 let mut state = self.state.write();
+                let previous_lifecycle = state.lifecycle.clone();
                 let current_status = state.status.clone();
                 if matches!(
                     current_status,
@@ -2368,9 +2429,22 @@ impl RustCloudBackupManager {
                     state.status = status.clone();
                 }
 
-                (progress_changed, restore_progress_changed, restore_report_changed, status_changed)
+                state.refresh_domain_projection();
+                let lifecycle =
+                    (state.lifecycle != previous_lifecycle).then(|| state.lifecycle.clone());
+
+                (
+                    progress_changed,
+                    restore_progress_changed,
+                    restore_report_changed,
+                    status_changed,
+                    lifecycle,
+                )
             };
 
+            if let Some(lifecycle) = lifecycle {
+                self.send(Message::Lifecycle(lifecycle));
+            }
             if progress_changed {
                 self.send(Message::Progress(None));
             }
@@ -2391,7 +2465,7 @@ impl RustCloudBackupManager {
             }
         }
 
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
         true
     }
 
@@ -2426,7 +2500,7 @@ impl RustCloudBackupManager {
 
     pub fn state(&self) -> CloudBackupState {
         let db_state = Self::load_persisted_state();
-        let mut state = self.state.read().clone();
+        let mut state = self.state.read().snapshot();
         state.status = Self::runtime_status_for(&db_state);
         state.verification_metadata = CloudBackupVerificationMetadata::from(&db_state);
         state.should_prompt_verification = db_state.should_prompt_verification();
@@ -2438,8 +2512,8 @@ impl RustCloudBackupManager {
         if let Some(presentation) = Self::verification_decision_presentation_for_state(&state) {
             state.verification_presentation = presentation;
         }
-        state.prompt_intent = self.prompt_state.lock().resolve(&state);
-        state
+        state.root_prompt = self.prompt_state.lock().resolve(&state);
+        state.projected_with_fresh_domain()
     }
 
     /// Number of wallets in the cloud backup
@@ -2624,7 +2698,7 @@ impl RustCloudBackupManager {
             prompt_state.clear_missing_passkey_dismissal();
         }
 
-        self.refresh_prompt_intent();
+        self.refresh_root_prompt();
     }
 }
 

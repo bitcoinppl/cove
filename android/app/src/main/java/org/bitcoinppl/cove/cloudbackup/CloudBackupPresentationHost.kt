@@ -57,7 +57,7 @@ import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupPasskeyHint
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
-import org.bitcoinppl.cove_core.CloudBackupPromptIntent
+import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.Route
@@ -182,7 +182,7 @@ class CloudBackupPresentationCoordinator {
         }
 
     fun reconcile() {
-        val desired = CloudBackupManager.getInstance().promptIntent.toRootPresentation()
+        val desired = CloudBackupManager.getInstance().rootPrompt.toRootPresentation()
 
         if (desired == null) {
             requiresPresentationDelay = false
@@ -249,7 +249,7 @@ class CloudBackupPresentationCoordinator {
                 delay(PRESENTATION_DELAY_MS)
                 transitionJob = null
                 val queued = queuedPresentation ?: return@launch
-                if (CloudBackupManager.getInstance().promptIntent.toRootPresentation() != queued) {
+                if (CloudBackupManager.getInstance().rootPrompt.toRootPresentation() != queued) {
                     queuedPresentation = null
                     return@launch
                 }
@@ -282,13 +282,13 @@ class CloudBackupPresentationCoordinator {
     }
 }
 
-private fun CloudBackupPromptIntent.toRootPresentation(): CloudBackupRootPresentation? =
+private fun CloudBackupRootPrompt.toRootPresentation(): CloudBackupRootPresentation? =
     when (this) {
-        is CloudBackupPromptIntent.None -> null
-        is CloudBackupPromptIntent.ExistingBackupFound -> CloudBackupRootPresentation.ExistingBackupFound(v1, v2)
-        is CloudBackupPromptIntent.PasskeyChoice -> CloudBackupRootPresentation.PasskeyChoice(v1)
-        is CloudBackupPromptIntent.MissingPasskeyReminder -> CloudBackupRootPresentation.MissingPasskeyReminder
-        is CloudBackupPromptIntent.VerificationPrompt -> CloudBackupRootPresentation.VerificationPrompt
+        is CloudBackupRootPrompt.None -> null
+        is CloudBackupRootPrompt.ExistingBackupFound -> CloudBackupRootPresentation.ExistingBackupFound(v1, v2)
+        is CloudBackupRootPrompt.PasskeyChoice -> CloudBackupRootPresentation.PasskeyChoice(v1)
+        is CloudBackupRootPrompt.MissingPasskeyReminder -> CloudBackupRootPresentation.MissingPasskeyReminder
+        is CloudBackupRootPrompt.Verification -> CloudBackupRootPresentation.VerificationPrompt
     }
 
 private fun existingPasskeyButtonTitle(hint: CloudBackupPasskeyHint?): String =
@@ -350,7 +350,7 @@ fun CloudBackupPresentationHost(
         coordinator.update(context)
     }
 
-    LaunchedEffect(manager.promptIntent) {
+    LaunchedEffect(manager.rootPrompt) {
         coordinator.reconcile()
     }
 

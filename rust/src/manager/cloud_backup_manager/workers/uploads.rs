@@ -8,7 +8,7 @@ use tokio::sync::Notify;
 use tracing::{error, info, warn};
 
 use crate::database::cloud_backup::{
-    CloudBlobFailedState, CloudBlobFailureIssue, PersistedCloudBlobState,
+    CloudBackupRecordKey, CloudBlobFailedState, CloudBlobFailureIssue, PersistedCloudBlobState,
 };
 use crate::manager::cloud_backup_manager::pending::{
     MAX_PENDING_UPLOAD_VERIFICATION_DELAY, PendingUploadVerificationStatus,
@@ -291,8 +291,14 @@ impl CloudBackupUploadWorker {
         let manager = self.manager();
 
         for sync_state in states {
-            let Some(wallet_id) = sync_state.wallet_id.clone() else {
-                continue;
+            let wallet_id = match sync_state.record_key() {
+                CloudBackupRecordKey::Wallet { wallet_id: Some(wallet_id), .. } => wallet_id,
+                CloudBackupRecordKey::Wallet { wallet_id: None, .. } => {
+                    continue;
+                }
+                CloudBackupRecordKey::MasterKeyWrapper => {
+                    continue;
+                }
             };
 
             match &sync_state.state {

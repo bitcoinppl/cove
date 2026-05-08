@@ -993,23 +993,23 @@ private struct SettingsCloudBackupEnableSheet: View {
         }()
     }
 
-    private func shouldDismiss(for promptIntent: CloudBackupPromptIntent) -> Bool {
-        if case .existingBackupFound = promptIntent { return false }
-        if case .none = promptIntent { return false }
+    private func shouldDismiss(for rootPrompt: CloudBackupRootPrompt) -> Bool {
+        if case .existingBackupFound = rootPrompt { return false }
+        if case .none = rootPrompt { return false }
         return true
     }
 
-    private func isEnablePasskeyChoice(_ promptIntent: CloudBackupPromptIntent) -> Bool {
-        guard case let .passkeyChoice(intent) = promptIntent else { return false }
+    private func isEnablePasskeyChoice(_ rootPrompt: CloudBackupRootPrompt) -> Bool {
+        guard case let .passkeyChoice(intent) = rootPrompt else { return false }
         if case .enable = intent { return true }
         return false
     }
 
     private func shouldSuppressEnablePasskeyChoicePrompt(
-        _ promptIntent: CloudBackupPromptIntent
+        _ rootPrompt: CloudBackupRootPrompt
     ) -> Bool {
         guard case .startedEnable = passkeyEnableFlow else { return false }
-        return isEnablePasskeyChoice(promptIntent)
+        return isEnablePasskeyChoice(rootPrompt)
     }
 
     private func startEnable(action: CloudBackupManagerAction) {
@@ -1019,8 +1019,8 @@ private struct SettingsCloudBackupEnableSheet: View {
         manager.dispatch(action: action)
     }
 
-    private func handlePromptIntent(_ promptIntent: CloudBackupPromptIntent) {
-        if case let .existingBackupFound(context, passkeyHint) = promptIntent {
+    private func handleRootPrompt(_ rootPrompt: CloudBackupRootPrompt) {
+        if case let .existingBackupFound(context, passkeyHint) = rootPrompt {
             existingBackupContext = context
             existingBackupPasskeyHint = passkeyHint
             passkeyEnableFlow = .idle
@@ -1028,14 +1028,14 @@ private struct SettingsCloudBackupEnableSheet: View {
             return
         }
 
-        if shouldSuppressEnablePasskeyChoicePrompt(promptIntent) {
+        if shouldSuppressEnablePasskeyChoicePrompt(rootPrompt) {
             passkeyEnableFlow = .idle
             isStartingEnable = false
             manager.dispatch(action: .dismissPasskeyChoicePrompt)
             return
         }
 
-        if shouldDismiss(for: promptIntent) {
+        if shouldDismiss(for: rootPrompt) {
             onDismiss()
         }
     }
@@ -1095,8 +1095,8 @@ private struct SettingsCloudBackupEnableSheet: View {
                 onComplete()
             }
         }
-        .onChange(of: manager.promptIntent, initial: true) { _, promptIntent in
-            handlePromptIntent(promptIntent)
+        .onChange(of: manager.rootPrompt, initial: true) { _, rootPrompt in
+            handleRootPrompt(rootPrompt)
         }
         .alert(
             "Passkey Options",

@@ -28056,6 +28056,79 @@ public object FfiConverterTypeBackupWalletSummary: FfiConverterRustBuffer<Backup
 
 
 
+data class CloudBackupConfiguredState (
+    var `passkey`: CloudBackupPasskeyState
+    , 
+    var `verification`: VerificationState
+    , 
+    var `pendingUploadVerification`: PendingUploadVerificationState
+    , 
+    var `sync`: SyncState
+    , 
+    var `detail`: CloudBackupDetail?
+    , 
+    var `cloudOnly`: CloudOnlyState
+    , 
+    var `cloudOnlyOperation`: CloudOnlyOperation
+    , 
+    var `otherBackupsOperation`: OtherBackupsOperation
+    , 
+    var `lastRestoreReport`: CloudBackupRestoreReport?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer<CloudBackupConfiguredState> {
+    override fun read(buf: ByteBuffer): CloudBackupConfiguredState {
+        return CloudBackupConfiguredState(
+            FfiConverterTypeCloudBackupPasskeyState.read(buf),
+            FfiConverterTypeVerificationState.read(buf),
+            FfiConverterTypePendingUploadVerificationState.read(buf),
+            FfiConverterTypeSyncState.read(buf),
+            FfiConverterOptionalTypeCloudBackupDetail.read(buf),
+            FfiConverterTypeCloudOnlyState.read(buf),
+            FfiConverterTypeCloudOnlyOperation.read(buf),
+            FfiConverterTypeOtherBackupsOperation.read(buf),
+            FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupConfiguredState) = (
+            FfiConverterTypeCloudBackupPasskeyState.allocationSize(value.`passkey`) +
+            FfiConverterTypeVerificationState.allocationSize(value.`verification`) +
+            FfiConverterTypePendingUploadVerificationState.allocationSize(value.`pendingUploadVerification`) +
+            FfiConverterTypeSyncState.allocationSize(value.`sync`) +
+            FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`) +
+            FfiConverterTypeCloudOnlyState.allocationSize(value.`cloudOnly`) +
+            FfiConverterTypeCloudOnlyOperation.allocationSize(value.`cloudOnlyOperation`) +
+            FfiConverterTypeOtherBackupsOperation.allocationSize(value.`otherBackupsOperation`) +
+            FfiConverterOptionalTypeCloudBackupRestoreReport.allocationSize(value.`lastRestoreReport`)
+    )
+
+    override fun write(value: CloudBackupConfiguredState, buf: ByteBuffer) {
+            FfiConverterTypeCloudBackupPasskeyState.write(value.`passkey`, buf)
+            FfiConverterTypeVerificationState.write(value.`verification`, buf)
+            FfiConverterTypePendingUploadVerificationState.write(value.`pendingUploadVerification`, buf)
+            FfiConverterTypeSyncState.write(value.`sync`, buf)
+            FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
+            FfiConverterTypeCloudOnlyState.write(value.`cloudOnly`, buf)
+            FfiConverterTypeCloudOnlyOperation.write(value.`cloudOnlyOperation`, buf)
+            FfiConverterTypeOtherBackupsOperation.write(value.`otherBackupsOperation`, buf)
+            FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.`lastRestoreReport`, buf)
+    }
+}
+
+
+
 data class CloudBackupDetail (
     var `lastSync`: kotlin.ULong?
     , 
@@ -28409,11 +28482,13 @@ public object FfiConverterTypeCloudBackupRetryContext: FfiConverterRustBuffer<Cl
 
 
 data class CloudBackupState (
+    var `lifecycle`: CloudBackupLifecycle
+    , 
+    var `rootPrompt`: CloudBackupRootPrompt
+    , 
     var `status`: CloudBackupStatus
     , 
     var `syncHealth`: CloudSyncHealth
-    , 
-    var `promptIntent`: CloudBackupPromptIntent
     , 
     var `progress`: CloudBackupProgress?
     , 
@@ -28462,9 +28537,10 @@ data class CloudBackupState (
 public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBackupState> {
     override fun read(buf: ByteBuffer): CloudBackupState {
         return CloudBackupState(
+            FfiConverterTypeCloudBackupLifecycle.read(buf),
+            FfiConverterTypeCloudBackupRootPrompt.read(buf),
             FfiConverterTypeCloudBackupStatus.read(buf),
             FfiConverterTypeCloudSyncHealth.read(buf),
-            FfiConverterTypeCloudBackupPromptIntent.read(buf),
             FfiConverterOptionalTypeCloudBackupProgress.read(buf),
             FfiConverterOptionalTypeCloudBackupRestoreProgress.read(buf),
             FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
@@ -28485,9 +28561,10 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
     }
 
     override fun allocationSize(value: CloudBackupState) = (
+            FfiConverterTypeCloudBackupLifecycle.allocationSize(value.`lifecycle`) +
+            FfiConverterTypeCloudBackupRootPrompt.allocationSize(value.`rootPrompt`) +
             FfiConverterTypeCloudBackupStatus.allocationSize(value.`status`) +
             FfiConverterTypeCloudSyncHealth.allocationSize(value.`syncHealth`) +
-            FfiConverterTypeCloudBackupPromptIntent.allocationSize(value.`promptIntent`) +
             FfiConverterOptionalTypeCloudBackupProgress.allocationSize(value.`progress`) +
             FfiConverterOptionalTypeCloudBackupRestoreProgress.allocationSize(value.`restoreProgress`) +
             FfiConverterOptionalTypeCloudBackupRestoreReport.allocationSize(value.`restoreReport`) +
@@ -28507,9 +28584,10 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
     )
 
     override fun write(value: CloudBackupState, buf: ByteBuffer) {
+            FfiConverterTypeCloudBackupLifecycle.write(value.`lifecycle`, buf)
+            FfiConverterTypeCloudBackupRootPrompt.write(value.`rootPrompt`, buf)
             FfiConverterTypeCloudBackupStatus.write(value.`status`, buf)
             FfiConverterTypeCloudSyncHealth.write(value.`syncHealth`, buf)
-            FfiConverterTypeCloudBackupPromptIntent.write(value.`promptIntent`, buf)
             FfiConverterOptionalTypeCloudBackupProgress.write(value.`progress`, buf)
             FfiConverterOptionalTypeCloudBackupRestoreProgress.write(value.`restoreProgress`, buf)
             FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.`restoreReport`, buf)
@@ -34468,6 +34546,155 @@ public object FfiConverterTypeCloudBackupEnableState : FfiConverterRustBuffer<Cl
 
 
 
+sealed class CloudBackupLifecycle {
+    
+    object Disabled : CloudBackupLifecycle()
+    
+    
+    data class Enabling(
+        val `enableState`: org.bitcoinppl.cove_core.CloudBackupEnableState, 
+        val `progress`: org.bitcoinppl.cove_core.CloudBackupProgress?) : CloudBackupLifecycle()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Restoring(
+        val `progress`: org.bitcoinppl.cove_core.CloudBackupRestoreProgress?) : CloudBackupLifecycle()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Configured(
+        val `state`: org.bitcoinppl.cove_core.CloudBackupConfiguredState) : CloudBackupLifecycle()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Failed(
+        val `message`: kotlin.String) : CloudBackupLifecycle()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupLifecycle : FfiConverterRustBuffer<CloudBackupLifecycle>{
+    override fun read(buf: ByteBuffer): CloudBackupLifecycle {
+        return when(buf.getInt()) {
+            1 -> CloudBackupLifecycle.Disabled
+            2 -> CloudBackupLifecycle.Enabling(
+                FfiConverterTypeCloudBackupEnableState.read(buf),
+                FfiConverterOptionalTypeCloudBackupProgress.read(buf),
+                )
+            3 -> CloudBackupLifecycle.Restoring(
+                FfiConverterOptionalTypeCloudBackupRestoreProgress.read(buf),
+                )
+            4 -> CloudBackupLifecycle.Configured(
+                FfiConverterTypeCloudBackupConfiguredState.read(buf),
+                )
+            5 -> CloudBackupLifecycle.Failed(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupLifecycle): ULong = when(value) {
+        is CloudBackupLifecycle.Disabled -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupLifecycle.Enabling -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupEnableState.allocationSize(value.`enableState`)
+                + FfiConverterOptionalTypeCloudBackupProgress.allocationSize(value.`progress`)
+            )
+        }
+        is CloudBackupLifecycle.Restoring -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterOptionalTypeCloudBackupRestoreProgress.allocationSize(value.`progress`)
+            )
+        }
+        is CloudBackupLifecycle.Configured -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupConfiguredState.allocationSize(value.`state`)
+            )
+        }
+        is CloudBackupLifecycle.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupLifecycle, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupLifecycle.Disabled -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupLifecycle.Enabling -> {
+                buf.putInt(2)
+                FfiConverterTypeCloudBackupEnableState.write(value.`enableState`, buf)
+                FfiConverterOptionalTypeCloudBackupProgress.write(value.`progress`, buf)
+                Unit
+            }
+            is CloudBackupLifecycle.Restoring -> {
+                buf.putInt(3)
+                FfiConverterOptionalTypeCloudBackupRestoreProgress.write(value.`progress`, buf)
+                Unit
+            }
+            is CloudBackupLifecycle.Configured -> {
+                buf.putInt(4)
+                FfiConverterTypeCloudBackupConfiguredState.write(value.`state`, buf)
+                Unit
+            }
+            is CloudBackupLifecycle.Failed -> {
+                buf.putInt(5)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 sealed class CloudBackupManagerAction {
     
     data class EnableCloudBackup(
@@ -35069,35 +35296,28 @@ public object FfiConverterTypeCloudBackupPasskeyChoiceIntent : FfiConverterRustB
 
 
 
-sealed class CloudBackupPromptIntent {
+sealed class CloudBackupPasskeyState {
     
-    object None : CloudBackupPromptIntent()
+    object Available : CloudBackupPasskeyState()
     
     
-    data class ExistingBackupFound(
-        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext, 
-        val v2: org.bitcoinppl.cove_core.CloudBackupPasskeyHint?) : CloudBackupPromptIntent()
+    object Missing : CloudBackupPasskeyState()
+    
+    
+    object UnsupportedProvider : CloudBackupPasskeyState()
+    
+    
+    object Repairing : CloudBackupPasskeyState()
+    
+    
+    data class RepairFailed(
+        val v1: kotlin.String) : CloudBackupPasskeyState()
         
     {
         
 
         companion object
     }
-    
-    data class PasskeyChoice(
-        val v1: org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent) : CloudBackupPromptIntent()
-        
-    {
-        
-
-        companion object
-    }
-    
-    object MissingPasskeyReminder : CloudBackupPromptIntent()
-    
-    
-    object VerificationPrompt : CloudBackupPromptIntent()
-    
     
 
     
@@ -35112,82 +35332,75 @@ sealed class CloudBackupPromptIntent {
 /**
  * @suppress
  */
-public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<CloudBackupPromptIntent>{
-    override fun read(buf: ByteBuffer): CloudBackupPromptIntent {
+public object FfiConverterTypeCloudBackupPasskeyState : FfiConverterRustBuffer<CloudBackupPasskeyState>{
+    override fun read(buf: ByteBuffer): CloudBackupPasskeyState {
         return when(buf.getInt()) {
-            1 -> CloudBackupPromptIntent.None
-            2 -> CloudBackupPromptIntent.ExistingBackupFound(
-                FfiConverterTypeCloudBackupEnableContext.read(buf),
-                FfiConverterOptionalTypeCloudBackupPasskeyHint.read(buf),
+            1 -> CloudBackupPasskeyState.Available
+            2 -> CloudBackupPasskeyState.Missing
+            3 -> CloudBackupPasskeyState.UnsupportedProvider
+            4 -> CloudBackupPasskeyState.Repairing
+            5 -> CloudBackupPasskeyState.RepairFailed(
+                FfiConverterString.read(buf),
                 )
-            3 -> CloudBackupPromptIntent.PasskeyChoice(
-                FfiConverterTypeCloudBackupPasskeyChoiceIntent.read(buf),
-                )
-            4 -> CloudBackupPromptIntent.MissingPasskeyReminder
-            5 -> CloudBackupPromptIntent.VerificationPrompt
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
 
-    override fun allocationSize(value: CloudBackupPromptIntent): ULong = when(value) {
-        is CloudBackupPromptIntent.None -> {
+    override fun allocationSize(value: CloudBackupPasskeyState): ULong = when(value) {
+        is CloudBackupPasskeyState.Available -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
             )
         }
-        is CloudBackupPromptIntent.ExistingBackupFound -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
-                + FfiConverterOptionalTypeCloudBackupPasskeyHint.allocationSize(value.v2)
-            )
-        }
-        is CloudBackupPromptIntent.PasskeyChoice -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeCloudBackupPasskeyChoiceIntent.allocationSize(value.v1)
-            )
-        }
-        is CloudBackupPromptIntent.MissingPasskeyReminder -> {
+        is CloudBackupPasskeyState.Missing -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
             )
         }
-        is CloudBackupPromptIntent.VerificationPrompt -> {
+        is CloudBackupPasskeyState.UnsupportedProvider -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+            )
+        }
+        is CloudBackupPasskeyState.Repairing -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupPasskeyState.RepairFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
             )
         }
     }
 
-    override fun write(value: CloudBackupPromptIntent, buf: ByteBuffer) {
+    override fun write(value: CloudBackupPasskeyState, buf: ByteBuffer) {
         when(value) {
-            is CloudBackupPromptIntent.None -> {
+            is CloudBackupPasskeyState.Available -> {
                 buf.putInt(1)
                 Unit
             }
-            is CloudBackupPromptIntent.ExistingBackupFound -> {
+            is CloudBackupPasskeyState.Missing -> {
                 buf.putInt(2)
-                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
-                FfiConverterOptionalTypeCloudBackupPasskeyHint.write(value.v2, buf)
                 Unit
             }
-            is CloudBackupPromptIntent.PasskeyChoice -> {
+            is CloudBackupPasskeyState.UnsupportedProvider -> {
                 buf.putInt(3)
-                FfiConverterTypeCloudBackupPasskeyChoiceIntent.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupPromptIntent.MissingPasskeyReminder -> {
+            is CloudBackupPasskeyState.Repairing -> {
                 buf.putInt(4)
                 Unit
             }
-            is CloudBackupPromptIntent.VerificationPrompt -> {
+            is CloudBackupPasskeyState.RepairFailed -> {
                 buf.putInt(5)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -35199,6 +35412,24 @@ public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<C
 
 
 sealed class CloudBackupReconcileMessage {
+    
+    data class Lifecycle(
+        val v1: org.bitcoinppl.cove_core.CloudBackupLifecycle) : CloudBackupReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class RootPrompt(
+        val v1: org.bitcoinppl.cove_core.CloudBackupRootPrompt) : CloudBackupReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
     
     data class Status(
         val v1: org.bitcoinppl.cove_core.CloudBackupStatus) : CloudBackupReconcileMessage()
@@ -35362,15 +35593,6 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class PromptIntent(
-        val v1: org.bitcoinppl.cove_core.CloudBackupPromptIntent) : CloudBackupReconcileMessage()
-        
-    {
-        
-
-        companion object
-    }
-    
 
     
 
@@ -35387,68 +35609,85 @@ sealed class CloudBackupReconcileMessage {
 public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuffer<CloudBackupReconcileMessage>{
     override fun read(buf: ByteBuffer): CloudBackupReconcileMessage {
         return when(buf.getInt()) {
-            1 -> CloudBackupReconcileMessage.Status(
+            1 -> CloudBackupReconcileMessage.Lifecycle(
+                FfiConverterTypeCloudBackupLifecycle.read(buf),
+                )
+            2 -> CloudBackupReconcileMessage.RootPrompt(
+                FfiConverterTypeCloudBackupRootPrompt.read(buf),
+                )
+            3 -> CloudBackupReconcileMessage.Status(
                 FfiConverterTypeCloudBackupStatus.read(buf),
                 )
-            2 -> CloudBackupReconcileMessage.SyncHealth(
+            4 -> CloudBackupReconcileMessage.SyncHealth(
                 FfiConverterTypeCloudSyncHealth.read(buf),
                 )
-            3 -> CloudBackupReconcileMessage.Progress(
+            5 -> CloudBackupReconcileMessage.Progress(
                 FfiConverterOptionalTypeCloudBackupProgress.read(buf),
                 )
-            4 -> CloudBackupReconcileMessage.RestoreProgress(
+            6 -> CloudBackupReconcileMessage.RestoreProgress(
                 FfiConverterOptionalTypeCloudBackupRestoreProgress.read(buf),
                 )
-            5 -> CloudBackupReconcileMessage.RestoreReport(
+            7 -> CloudBackupReconcileMessage.RestoreReport(
                 FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
                 )
-            6 -> CloudBackupReconcileMessage.SyncError(
+            8 -> CloudBackupReconcileMessage.SyncError(
                 FfiConverterOptionalString.read(buf),
                 )
-            7 -> CloudBackupReconcileMessage.EnableState(
+            9 -> CloudBackupReconcileMessage.EnableState(
                 FfiConverterTypeCloudBackupEnableState.read(buf),
                 )
-            8 -> CloudBackupReconcileMessage.VerificationPrompt(
+            10 -> CloudBackupReconcileMessage.VerificationPrompt(
                 FfiConverterBoolean.read(buf),
                 )
-            9 -> CloudBackupReconcileMessage.VerificationMetadata(
+            11 -> CloudBackupReconcileMessage.VerificationMetadata(
                 FfiConverterTypeCloudBackupVerificationMetadata.read(buf),
                 )
-            10 -> CloudBackupReconcileMessage.VerificationPresentation(
+            12 -> CloudBackupReconcileMessage.VerificationPresentation(
                 FfiConverterTypeCloudBackupVerificationPresentation.read(buf),
                 )
-            11 -> CloudBackupReconcileMessage.PendingUploadVerification(
+            13 -> CloudBackupReconcileMessage.PendingUploadVerification(
                 FfiConverterTypePendingUploadVerificationState.read(buf),
                 )
-            12 -> CloudBackupReconcileMessage.Detail(
+            14 -> CloudBackupReconcileMessage.Detail(
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
                 )
-            13 -> CloudBackupReconcileMessage.Verification(
+            15 -> CloudBackupReconcileMessage.Verification(
                 FfiConverterTypeVerificationState.read(buf),
                 )
-            14 -> CloudBackupReconcileMessage.Sync(
+            16 -> CloudBackupReconcileMessage.Sync(
                 FfiConverterTypeSyncState.read(buf),
                 )
-            15 -> CloudBackupReconcileMessage.Recovery(
+            17 -> CloudBackupReconcileMessage.Recovery(
                 FfiConverterTypeRecoveryState.read(buf),
                 )
-            16 -> CloudBackupReconcileMessage.CloudOnly(
+            18 -> CloudBackupReconcileMessage.CloudOnly(
                 FfiConverterTypeCloudOnlyState.read(buf),
                 )
-            17 -> CloudBackupReconcileMessage.CloudOnlyOperation(
+            19 -> CloudBackupReconcileMessage.CloudOnlyOperation(
                 FfiConverterTypeCloudOnlyOperation.read(buf),
                 )
-            18 -> CloudBackupReconcileMessage.OtherBackupsOperation(
+            20 -> CloudBackupReconcileMessage.OtherBackupsOperation(
                 FfiConverterTypeOtherBackupsOperation.read(buf),
-                )
-            19 -> CloudBackupReconcileMessage.PromptIntent(
-                FfiConverterTypeCloudBackupPromptIntent.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
 
     override fun allocationSize(value: CloudBackupReconcileMessage): ULong = when(value) {
+        is CloudBackupReconcileMessage.Lifecycle -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupLifecycle.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupReconcileMessage.RootPrompt -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupRootPrompt.allocationSize(value.v1)
+            )
+        }
         is CloudBackupReconcileMessage.Status -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -35575,110 +35814,108 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 + FfiConverterTypeOtherBackupsOperation.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.PromptIntent -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeCloudBackupPromptIntent.allocationSize(value.v1)
-            )
-        }
     }
 
     override fun write(value: CloudBackupReconcileMessage, buf: ByteBuffer) {
         when(value) {
-            is CloudBackupReconcileMessage.Status -> {
+            is CloudBackupReconcileMessage.Lifecycle -> {
                 buf.putInt(1)
+                FfiConverterTypeCloudBackupLifecycle.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.RootPrompt -> {
+                buf.putInt(2)
+                FfiConverterTypeCloudBackupRootPrompt.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.Status -> {
+                buf.putInt(3)
                 FfiConverterTypeCloudBackupStatus.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.SyncHealth -> {
-                buf.putInt(2)
+                buf.putInt(4)
                 FfiConverterTypeCloudSyncHealth.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Progress -> {
-                buf.putInt(3)
+                buf.putInt(5)
                 FfiConverterOptionalTypeCloudBackupProgress.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.RestoreProgress -> {
-                buf.putInt(4)
+                buf.putInt(6)
                 FfiConverterOptionalTypeCloudBackupRestoreProgress.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.RestoreReport -> {
-                buf.putInt(5)
+                buf.putInt(7)
                 FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.SyncError -> {
-                buf.putInt(6)
+                buf.putInt(8)
                 FfiConverterOptionalString.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.EnableState -> {
-                buf.putInt(7)
+                buf.putInt(9)
                 FfiConverterTypeCloudBackupEnableState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.VerificationPrompt -> {
-                buf.putInt(8)
+                buf.putInt(10)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.VerificationMetadata -> {
-                buf.putInt(9)
+                buf.putInt(11)
                 FfiConverterTypeCloudBackupVerificationMetadata.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.VerificationPresentation -> {
-                buf.putInt(10)
+                buf.putInt(12)
                 FfiConverterTypeCloudBackupVerificationPresentation.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.PendingUploadVerification -> {
-                buf.putInt(11)
+                buf.putInt(13)
                 FfiConverterTypePendingUploadVerificationState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Detail -> {
-                buf.putInt(12)
+                buf.putInt(14)
                 FfiConverterOptionalTypeCloudBackupDetail.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Verification -> {
-                buf.putInt(13)
+                buf.putInt(15)
                 FfiConverterTypeVerificationState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Sync -> {
-                buf.putInt(14)
+                buf.putInt(16)
                 FfiConverterTypeSyncState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Recovery -> {
-                buf.putInt(15)
+                buf.putInt(17)
                 FfiConverterTypeRecoveryState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.CloudOnly -> {
-                buf.putInt(16)
+                buf.putInt(18)
                 FfiConverterTypeCloudOnlyState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.CloudOnlyOperation -> {
-                buf.putInt(17)
+                buf.putInt(19)
                 FfiConverterTypeCloudOnlyOperation.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.OtherBackupsOperation -> {
-                buf.putInt(18)
+                buf.putInt(20)
                 FfiConverterTypeOtherBackupsOperation.write(value.v1, buf)
-                Unit
-            }
-            is CloudBackupReconcileMessage.PromptIntent -> {
-                buf.putInt(19)
-                FfiConverterTypeCloudBackupPromptIntent.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -35784,6 +36021,135 @@ public object FfiConverterTypeCloudBackupRetryIssue: FfiConverterRustBuffer<Clou
 
     override fun write(value: CloudBackupRetryIssue, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+sealed class CloudBackupRootPrompt {
+    
+    object None : CloudBackupRootPrompt()
+    
+    
+    data class ExistingBackupFound(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext, 
+        val v2: org.bitcoinppl.cove_core.CloudBackupPasskeyHint?) : CloudBackupRootPrompt()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class PasskeyChoice(
+        val v1: org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent) : CloudBackupRootPrompt()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object MissingPasskeyReminder : CloudBackupRootPrompt()
+    
+    
+    object Verification : CloudBackupRootPrompt()
+    
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRootPrompt : FfiConverterRustBuffer<CloudBackupRootPrompt>{
+    override fun read(buf: ByteBuffer): CloudBackupRootPrompt {
+        return when(buf.getInt()) {
+            1 -> CloudBackupRootPrompt.None
+            2 -> CloudBackupRootPrompt.ExistingBackupFound(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.read(buf),
+                )
+            3 -> CloudBackupRootPrompt.PasskeyChoice(
+                FfiConverterTypeCloudBackupPasskeyChoiceIntent.read(buf),
+                )
+            4 -> CloudBackupRootPrompt.MissingPasskeyReminder
+            5 -> CloudBackupRootPrompt.Verification
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupRootPrompt): ULong = when(value) {
+        is CloudBackupRootPrompt.None -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupRootPrompt.ExistingBackupFound -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+                + FfiConverterOptionalTypeCloudBackupPasskeyHint.allocationSize(value.v2)
+            )
+        }
+        is CloudBackupRootPrompt.PasskeyChoice -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupPasskeyChoiceIntent.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupRootPrompt.MissingPasskeyReminder -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupRootPrompt.Verification -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupRootPrompt, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupRootPrompt.None -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupRootPrompt.ExistingBackupFound -> {
+                buf.putInt(2)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.write(value.v2, buf)
+                Unit
+            }
+            is CloudBackupRootPrompt.PasskeyChoice -> {
+                buf.putInt(3)
+                FfiConverterTypeCloudBackupPasskeyChoiceIntent.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupRootPrompt.MissingPasskeyReminder -> {
+                buf.putInt(4)
+                Unit
+            }
+            is CloudBackupRootPrompt.Verification -> {
+                buf.putInt(5)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 

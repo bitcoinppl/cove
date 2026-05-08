@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use redb::{ReadableTable as _, TableDefinition};
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -165,7 +166,32 @@ pub struct PersistedCloudBlobSyncState {
     pub state: PersistedCloudBlobState,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CloudBackupRecordKey {
+    MasterKeyWrapper,
+    Wallet { wallet_id: Option<WalletId>, record_id: String },
+}
+
 impl PersistedCloudBlobSyncState {
+    pub fn record_key(&self) -> CloudBackupRecordKey {
+        if self.wallet_id.is_none() && self.record_id == MASTER_KEY_RECORD_ID {
+            return CloudBackupRecordKey::MasterKeyWrapper;
+        }
+
+        CloudBackupRecordKey::Wallet {
+            wallet_id: self.wallet_id.clone(),
+            record_id: self.record_id.clone(),
+        }
+    }
+
+    pub fn is_master_key_wrapper(&self) -> bool {
+        matches!(self.record_key(), CloudBackupRecordKey::MasterKeyWrapper)
+    }
+
+    pub fn is_wallet_record(&self) -> bool {
+        matches!(self.record_key(), CloudBackupRecordKey::Wallet { .. })
+    }
+
     pub fn is_dirty(&self) -> bool {
         matches!(self.state, PersistedCloudBlobState::Dirty(_))
     }

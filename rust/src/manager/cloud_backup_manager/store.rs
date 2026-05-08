@@ -186,9 +186,10 @@ mod tests {
     use super::*;
     use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
 
-    fn setup_database_test() -> &'static parking_lot::Mutex<()> {
+    fn setup_database_test() -> parking_lot::MutexGuard<'static, ()> {
+        let guard = test_lock().lock();
         test_globals().reset();
-        test_lock()
+        guard
     }
 
     #[test]
@@ -211,7 +212,7 @@ mod tests {
 
     #[test]
     fn reset_verification_does_not_preserve_passkey_missing() {
-        let _guard = setup_database_test().lock();
+        let _guard = setup_database_test();
         let db = Database::global();
         let _ = db.cloud_backup_state.delete();
         db.cloud_backup_state
@@ -240,7 +241,7 @@ mod tests {
 
     #[test]
     fn persist_enabled_state_clears_passkey_missing() {
-        let _guard = setup_database_test().lock();
+        let _guard = setup_database_test();
         let db = Database::global();
         let _ = db.cloud_backup_state.delete();
         db.cloud_backup_state

@@ -1,6 +1,6 @@
 use super::{
     CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint,
-    CloudBackupPromptIntent, CloudBackupState, CloudBackupStatus,
+    CloudBackupRootPrompt, CloudBackupState, CloudBackupStatus,
     CloudBackupVerificationPresentation, RecoveryAction, RecoveryState,
 };
 
@@ -46,16 +46,16 @@ impl CloudBackupPromptState {
         self.missing_passkey_dismissed = false;
     }
 
-    pub(crate) fn resolve(&self, state: &CloudBackupState) -> CloudBackupPromptIntent {
+    pub(crate) fn resolve(&self, state: &CloudBackupState) -> CloudBackupRootPrompt {
         if let Some(prompt) = &self.existing_backup_found {
-            return CloudBackupPromptIntent::ExistingBackupFound(
+            return CloudBackupRootPrompt::ExistingBackupFound(
                 prompt.context,
                 prompt.passkey_hint.clone(),
             );
         }
 
         if let Some(intent) = &self.passkey_choice {
-            return CloudBackupPromptIntent::PasskeyChoice(intent.clone());
+            return CloudBackupRootPrompt::PasskeyChoice(intent.clone());
         }
 
         // show a reminder while cloud backup needs a passkey, unless repair is already underway
@@ -63,20 +63,20 @@ impl CloudBackupPromptState {
             && !self.missing_passkey_dismissed
             && !matches!(state.recovery, RecoveryState::Recovering(RecoveryAction::RepairPasskey))
         {
-            return CloudBackupPromptIntent::MissingPasskeyReminder;
+            return CloudBackupRootPrompt::MissingPasskeyReminder;
         }
 
         // the verification sheet is an unanswered decision, not a status surface
         match state.verification_presentation {
             CloudBackupVerificationPresentation::NeedsDecision { .. } => {
-                CloudBackupPromptIntent::VerificationPrompt
+                CloudBackupRootPrompt::Verification
             }
             CloudBackupVerificationPresentation::Hidden { .. }
             | CloudBackupVerificationPresentation::ManualVerifying { .. }
             | CloudBackupVerificationPresentation::BackgroundConfirming(_)
             | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization(_)
             | CloudBackupVerificationPresentation::Completed { .. }
-            | CloudBackupVerificationPresentation::Failed { .. } => CloudBackupPromptIntent::None,
+            | CloudBackupVerificationPresentation::Failed { .. } => CloudBackupRootPrompt::None,
         }
     }
 }
@@ -84,8 +84,8 @@ impl CloudBackupPromptState {
 #[cfg(test)]
 mod tests {
     use super::{
-        CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent, CloudBackupPromptIntent,
-        CloudBackupPromptState, CloudBackupState, CloudBackupStatus,
+        CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent, CloudBackupPromptState,
+        CloudBackupRootPrompt, CloudBackupState, CloudBackupStatus,
         CloudBackupVerificationPresentation, RecoveryAction, RecoveryState,
     };
     use crate::manager::cloud_backup_manager::{
@@ -113,7 +113,7 @@ mod tests {
 
         assert_eq!(
             prompt_state.resolve(&state),
-            CloudBackupPromptIntent::ExistingBackupFound(context, None),
+            CloudBackupRootPrompt::ExistingBackupFound(context, None),
         );
     }
 
@@ -130,7 +130,7 @@ mod tests {
 
         assert_eq!(
             prompt_state.resolve(&state),
-            CloudBackupPromptIntent::PasskeyChoice(CloudBackupPasskeyChoiceIntent::RepairPasskey,),
+            CloudBackupRootPrompt::PasskeyChoice(CloudBackupPasskeyChoiceIntent::RepairPasskey,),
         );
     }
 
@@ -143,7 +143,7 @@ mod tests {
 
         assert_eq!(
             prompt_state.resolve(&CloudBackupState::default()),
-            CloudBackupPromptIntent::PasskeyChoice(CloudBackupPasskeyChoiceIntent::Enable(
+            CloudBackupRootPrompt::PasskeyChoice(CloudBackupPasskeyChoiceIntent::Enable(
                 context, None,
             )),
         );
@@ -158,10 +158,10 @@ mod tests {
         };
 
         prompt_state.dismiss_missing_passkey();
-        assert_eq!(prompt_state.resolve(&state), CloudBackupPromptIntent::None);
+        assert_eq!(prompt_state.resolve(&state), CloudBackupRootPrompt::None);
 
         prompt_state.clear_missing_passkey_dismissal();
-        assert_eq!(prompt_state.resolve(&state), CloudBackupPromptIntent::MissingPasskeyReminder,);
+        assert_eq!(prompt_state.resolve(&state), CloudBackupRootPrompt::MissingPasskeyReminder,);
     }
 
     #[test]
@@ -173,7 +173,7 @@ mod tests {
             ..CloudBackupState::default()
         };
 
-        assert_eq!(prompt_state.resolve(&state), CloudBackupPromptIntent::None);
+        assert_eq!(prompt_state.resolve(&state), CloudBackupRootPrompt::None);
     }
 
     #[test]
@@ -186,7 +186,7 @@ mod tests {
             ..CloudBackupState::default()
         };
 
-        assert_eq!(prompt_state.resolve(&state), CloudBackupPromptIntent::None);
+        assert_eq!(prompt_state.resolve(&state), CloudBackupRootPrompt::None);
     }
 
     #[test]
@@ -200,7 +200,7 @@ mod tests {
             ..CloudBackupState::default()
         };
 
-        assert_eq!(prompt_state.resolve(&state), CloudBackupPromptIntent::None);
+        assert_eq!(prompt_state.resolve(&state), CloudBackupRootPrompt::None);
     }
 
     #[test]
@@ -214,6 +214,6 @@ mod tests {
             ..CloudBackupState::default()
         };
 
-        assert_eq!(prompt_state.resolve(&state), CloudBackupPromptIntent::VerificationPrompt,);
+        assert_eq!(prompt_state.resolve(&state), CloudBackupRootPrompt::Verification,);
     }
 }

@@ -13,10 +13,11 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupEnableState
+import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupManagerReconciler
-import org.bitcoinppl.cove_core.CloudBackupPromptIntent
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
+import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupState
 import org.bitcoinppl.cove_core.CloudBackupStatus
 import org.bitcoinppl.cove_core.CloudBackupVerificationMetadata
@@ -74,8 +75,11 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
     val status: CloudBackupStatus
         get() = state.status
 
-    val promptIntent: CloudBackupPromptIntent
-        get() = state.promptIntent
+    val lifecycle: CloudBackupLifecycle
+        get() = state.lifecycle
+
+    val rootPrompt: CloudBackupRootPrompt
+        get() = state.rootPrompt
 
     val syncHealth: CloudSyncHealth
         get() = state.syncHealth
@@ -198,6 +202,8 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
 
     private fun apply(message: CloudBackupReconcileMessage) {
         when (message) {
+            is CloudBackupReconcileMessage.Lifecycle -> state = state.copy(lifecycle = message.v1)
+            is CloudBackupReconcileMessage.RootPrompt -> state = state.copy(rootPrompt = message.v1)
             is CloudBackupReconcileMessage.Status -> {
                 state = state.copy(status = message.v1)
                 refreshPersistedEnabledState(message.v1)
@@ -219,7 +225,6 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
             is CloudBackupReconcileMessage.CloudOnly -> state = state.copy(cloudOnly = message.v1)
             is CloudBackupReconcileMessage.CloudOnlyOperation -> state = state.copy(cloudOnlyOperation = message.v1)
             is CloudBackupReconcileMessage.OtherBackupsOperation -> state = state.copy(otherBackupsOperation = message.v1)
-            is CloudBackupReconcileMessage.PromptIntent -> state = state.copy(promptIntent = message.v1)
         }
     }
 

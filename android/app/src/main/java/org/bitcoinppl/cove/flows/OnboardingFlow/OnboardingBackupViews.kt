@@ -77,10 +77,10 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.CloudBackupEnableState
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
-import org.bitcoinppl.cove_core.CloudBackupPromptIntent
 import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
+import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupStatus
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.PendingUploadVerificationState
@@ -633,10 +633,10 @@ private fun OnboardingCloudBackupDetailsStepView(
             else -> null
         }
             ?: "Enable Cloud Backup"
-    val promptIntent = backupManager.promptIntent
+    val rootPrompt = backupManager.rootPrompt
     val isPromptingForEnableChoice =
-        promptIntent is CloudBackupPromptIntent.PasskeyChoice &&
-            promptIntent.v1 is CloudBackupPasskeyChoiceIntent.Enable
+        rootPrompt is CloudBackupRootPrompt.PasskeyChoice &&
+            rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.Enable
 
     fun completeIfEnabled() {
         if (didReportEnabled) return

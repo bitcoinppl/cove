@@ -7,8 +7,8 @@ use zeroize::Zeroizing;
 use super::{MASTER_KEY_UPLOAD_CONFIRMATION_GRACE, PendingUploadVerificationStatus};
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
-    CloudBlobUploadedPendingConfirmationState, PersistedCloudBlobState,
+    CloudBackupRecordKey, CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
+    CloudBlobFailureIssue, CloudBlobUploadedPendingConfirmationState, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
 use crate::manager::cloud_backup_manager::wallets::WalletBackupReader;
@@ -182,7 +182,7 @@ impl PendingUploadVerifier {
         sync_state: &PersistedCloudBlobSyncState,
         current: &CloudBlobUploadedPendingConfirmationState,
     ) -> BlobCheckResult {
-        if sync_state.wallet_id.is_none() {
+        if sync_state.is_master_key_wrapper() {
             return self.check_master_key_wrapper(&sync_state.namespace_id, current).await;
         }
 
@@ -338,8 +338,14 @@ impl PendingUploadVerifier {
     }
 
     fn schedule_retry_if_needed(&self, sync_state: &PersistedCloudBlobSyncState) {
-        let Some(wallet_id) = sync_state.wallet_id.clone() else {
-            return;
+        let wallet_id = match sync_state.record_key() {
+            CloudBackupRecordKey::Wallet { wallet_id: Some(wallet_id), .. } => wallet_id,
+            CloudBackupRecordKey::Wallet { wallet_id: None, .. } => {
+                return;
+            }
+            CloudBackupRecordKey::MasterKeyWrapper => {
+                return;
+            }
         };
 
         if !matches!(sync_state.state, PersistedCloudBlobState::Dirty(_)) {
@@ -446,7 +452,7 @@ impl PendingUploadVerifier {
         sync_state: &PersistedCloudBlobSyncState,
         next_attempt_count: u32,
     ) -> bool {
-        sync_state.wallet_id.is_some()
+        sync_state.is_wallet_record()
             && next_attempt_count >= MAX_PENDING_WALLET_UPLOAD_CONFIRMATION_ATTEMPTS
     }
 
@@ -455,7 +461,7 @@ impl PendingUploadVerifier {
         current: &CloudBlobUploadedPendingConfirmationState,
         checked_at: u64,
     ) -> bool {
-        sync_state.wallet_id.is_none()
+        sync_state.is_master_key_wrapper()
             && checked_at.saturating_sub(current.uploaded_at)
                 >= MASTER_KEY_UPLOAD_CONFIRMATION_GRACE.as_secs()
     }
@@ -536,7 +542,7 @@ mod tests {
         let blob = PersistedCloudBlobSyncState {
             namespace_id: "ns-1".into(),
             wallet_id: None,
-            record_id: "master-key".into(),
+            record_id: cove_cspp::backup_data::MASTER_KEY_RECORD_ID.into(),
             state: PersistedCloudBlobState::UploadedPendingConfirmation(
                 CloudBlobUploadedPendingConfirmationState {
                     revision_hash: "master-key-wrapper".into(),

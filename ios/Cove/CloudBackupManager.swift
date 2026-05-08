@@ -36,8 +36,12 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.status
     }
 
-    var promptIntent: CloudBackupPromptIntent {
-        state.promptIntent
+    var lifecycle: CloudBackupLifecycle {
+        state.lifecycle
+    }
+
+    var rootPrompt: CloudBackupRootPrompt {
+        state.rootPrompt
     }
 
     var syncHealth: CloudSyncHealth {
@@ -156,12 +160,14 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
 
     private func apply(_ message: Message) {
         switch message {
+        case let .lifecycle(lifecycle):
+            state.lifecycle = lifecycle
+        case let .rootPrompt(rootPrompt):
+            state.rootPrompt = rootPrompt
         case let .status(status):
             state.status = status
         case let .syncHealth(syncHealth):
             state.syncHealth = syncHealth
-        case let .promptIntent(promptIntent):
-            state.promptIntent = promptIntent
         case let .progress(progress):
             state.progress = progress
         case let .restoreProgress(progress):

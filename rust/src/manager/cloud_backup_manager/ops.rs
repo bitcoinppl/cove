@@ -1917,7 +1917,7 @@ mod tests {
     use crate::label_manager::LabelManager;
     use crate::manager::cloud_backup_manager::{
         CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupKeychain,
-        CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPromptIntent,
+        CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupRootPrompt,
         CloudBackupVerificationPresentation, CloudBackupVerificationReason,
         CloudBackupVerificationSource, DeepVerificationFailure, DeepVerificationReport,
         DeepVerificationResult, PendingVerificationCompletion, PendingVerificationUpload,
@@ -2406,7 +2406,7 @@ mod tests {
         manager.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
 
         let state = manager.state();
-        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert_eq!(state.root_prompt, CloudBackupRootPrompt::Verification);
         assert!(matches!(
             state.verification_presentation,
             CloudBackupVerificationPresentation::NeedsDecision {
@@ -2436,7 +2436,7 @@ mod tests {
         );
 
         let state = manager.state();
-        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert_eq!(state.root_prompt, CloudBackupRootPrompt::Verification);
         assert!(matches!(
             state.verification_presentation,
             CloudBackupVerificationPresentation::NeedsDecision {
@@ -2461,19 +2461,19 @@ mod tests {
         configure_enabled_cloud_backup(&manager, globals, 3);
 
         manager.backup_new_wallet(xpub_only_wallet_metadata());
-        assert_eq!(manager.state().prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert_eq!(manager.state().root_prompt, CloudBackupRootPrompt::Verification);
 
         manager.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
-        assert_eq!(manager.state().prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert_eq!(manager.state().root_prompt, CloudBackupRootPrompt::Verification);
 
         manager.set_pending_upload_verification(
             PendingUploadVerificationState::BlockedOnAuthorization,
         );
-        assert_eq!(manager.state().prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert_eq!(manager.state().root_prompt, CloudBackupRootPrompt::Verification);
 
         manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
         let state = manager.state();
-        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert_eq!(state.root_prompt, CloudBackupRootPrompt::Verification);
         assert!(matches!(
             state.verification_presentation,
             CloudBackupVerificationPresentation::NeedsDecision {
@@ -2501,12 +2501,12 @@ mod tests {
         manager.set_verification_presentation(CloudBackupVerificationPresentation::Hidden {
             source: Some(CloudBackupVerificationSource::Settings),
         });
-        assert_eq!(manager.state.read().prompt_intent, CloudBackupPromptIntent::None);
+        assert_eq!(manager.state.read().root_prompt, CloudBackupRootPrompt::None);
 
         manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
 
         let state = manager.state();
-        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert_eq!(state.root_prompt, CloudBackupRootPrompt::Verification);
         assert!(matches!(
             state.verification_presentation,
             CloudBackupVerificationPresentation::NeedsDecision {
@@ -2531,12 +2531,12 @@ mod tests {
         configure_enabled_cloud_backup(&manager, globals, 3);
 
         manager.backup_new_wallet(xpub_only_wallet_metadata());
-        assert_eq!(manager.state().prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert_eq!(manager.state().root_prompt, CloudBackupRootPrompt::Verification);
 
         manager.dispatch(CloudBackupManagerAction::DismissVerificationPrompt);
 
         let state = manager.state();
-        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::None);
+        assert_eq!(state.root_prompt, CloudBackupRootPrompt::None);
         assert!(matches!(
             state.verification_presentation,
             CloudBackupVerificationPresentation::Hidden { .. }
@@ -2570,14 +2570,14 @@ mod tests {
                 jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
             )
             .unwrap();
-        assert_eq!(manager.state().prompt_intent, CloudBackupPromptIntent::VerificationPrompt);
+        assert_eq!(manager.state().root_prompt, CloudBackupRootPrompt::Verification);
 
         manager.dispatch(CloudBackupManagerAction::StartVerification(
             CloudBackupVerificationSource::RootPrompt,
         ));
 
         let state = manager.state();
-        assert_eq!(state.prompt_intent, CloudBackupPromptIntent::None);
+        assert_eq!(state.root_prompt, CloudBackupRootPrompt::None);
         assert!(matches!(
             state.verification_presentation,
             CloudBackupVerificationPresentation::BackgroundConfirming(
@@ -3123,7 +3123,7 @@ mod tests {
         let state = manager.state();
         assert!(matches!(state.verification, VerificationState::Idle));
         assert_eq!(state.pending_upload_verification, PendingUploadVerificationState::Confirming);
-        assert!(matches!(state.prompt_intent, CloudBackupPromptIntent::None));
+        assert!(matches!(state.root_prompt, CloudBackupRootPrompt::None));
         assert!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).is_some());
         assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_some());
         assert!(globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).is_some());
@@ -4526,11 +4526,15 @@ mod tests {
 
         let error = manager.do_backup_wallets(&[metadata]).await.unwrap_err();
 
-        assert!(matches!(
-            error,
-            CloudBackupError::RecoveryRequired(message)
-                if message == "Cloud backup needs verification before wallets can be uploaded"
-        ));
+        match error {
+            CloudBackupError::RecoveryRequired(message) => {
+                assert_eq!(
+                    message,
+                    "Cloud backup needs verification before wallets can be uploaded"
+                );
+            }
+            error => panic!("expected recovery-required upload error, got {error:?}"),
+        }
 
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         assert!(cspp.load_master_key_from_store().unwrap().is_none());
@@ -4569,11 +4573,15 @@ mod tests {
 
         let error = manager.do_upload_wallet_if_dirty(&metadata.id).await.unwrap_err();
 
-        assert!(matches!(
-            error,
-            CloudBackupError::RecoveryRequired(message)
-                if message == "Cloud backup needs verification before wallets can be uploaded"
-        ));
+        match error {
+            CloudBackupError::RecoveryRequired(message) => {
+                assert_eq!(
+                    message,
+                    "Cloud backup needs verification before wallets can be uploaded"
+                );
+            }
+            error => panic!("expected recovery-required upload error, got {error:?}"),
+        }
 
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         assert!(cspp.load_master_key_from_store().unwrap().is_none());
@@ -6893,8 +6901,8 @@ mod tests {
 
         assert_eq!(globals.passkey.create_count(), create_count);
         assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
-        match manager.state().prompt_intent {
-            CloudBackupPromptIntent::ExistingBackupFound(context, _) => {
+        match manager.state().root_prompt {
+            CloudBackupRootPrompt::ExistingBackupFound(context, _) => {
                 assert_eq!(context, CloudBackupEnableContext::settings_manual());
             }
             other => panic!("expected existing backup prompt, got {other:?}"),
@@ -6938,8 +6946,8 @@ mod tests {
         assert_eq!(globals.passkey.authenticate_count(), 0);
         assert_eq!(globals.passkey.discover_count(), 0);
         assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
-        match manager.state().prompt_intent {
-            CloudBackupPromptIntent::ExistingBackupFound(context, _) => {
+        match manager.state().root_prompt {
+            CloudBackupRootPrompt::ExistingBackupFound(context, _) => {
                 assert_eq!(context, CloudBackupEnableContext::settings_manual());
             }
             other => panic!("expected existing backup prompt, got {other:?}"),
@@ -7004,8 +7012,8 @@ mod tests {
         assert_eq!(globals.passkey.create_count(), 0);
         assert_eq!(globals.passkey.discover_count(), 0);
         assert!(matches!(
-            manager.state().prompt_intent,
-            CloudBackupPromptIntent::ExistingBackupFound(_, _)
+            manager.state().root_prompt,
+            CloudBackupRootPrompt::ExistingBackupFound(_, _)
         ));
 
         manager.do_enable_cloud_backup_force_new().await.unwrap();
@@ -7056,8 +7064,8 @@ mod tests {
         assert_eq!(globals.passkey.discover_count(), 0);
         assert!(manager.take_pending_enable_session().await.is_none());
 
-        match manager.state().prompt_intent {
-            CloudBackupPromptIntent::ExistingBackupFound(prompt_context, _) => {
+        match manager.state().root_prompt {
+            CloudBackupRootPrompt::ExistingBackupFound(prompt_context, _) => {
                 assert_eq!(prompt_context, context);
             }
             other => panic!("expected existing backup prompt, got {other:?}"),
