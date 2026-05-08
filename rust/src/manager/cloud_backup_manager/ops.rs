@@ -28,7 +28,7 @@ use super::{
     CloudBackupEnableState, CloudBackupError, CloudBackupKeychain, CloudBackupPasskeyChoiceIntent,
     CloudBackupRestoreProgress, CloudBackupRestoreReport, CloudBackupRestoreStage,
     CloudBackupStatus, CloudBackupStore, CloudBackupVerificationSource, CloudBackupWalletItem,
-    CloudBackupWalletStatus, CloudStorageIssue, DeepVerificationReport, PendingEnableSession,
+    CloudBackupWalletStatus, DeepVerificationReport, PendingEnableSession,
     PendingVerificationCompletion, PendingVerificationUpload, RestoreOperation,
     RustCloudBackupManager, SavedPasskeyConfirmationMode, VerificationState, blocking_cloud_error,
     current_namespace_wallet_record_ids, is_connectivity_related_issue,
@@ -482,7 +482,7 @@ impl RustCloudBackupManager {
                     continue;
                 }
                 Err(error) => {
-                    if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
+                    if is_connectivity_related_issue(&error) {
                         return Err(blocking_cloud_error(BlockingCloudStep::FetchCloudOnly, error));
                     }
                     warn!("Failed to load cloud-only wallet {record_id}: {error}");
@@ -1509,7 +1509,7 @@ impl RustCloudBackupManager {
                     report.failed_wallet_errors.push(error);
                 }
                 Err(error) => {
-                    if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
+                    if is_connectivity_related_issue(&error) {
                         return Err(blocking_cloud_error(BlockingCloudStep::Restore, error));
                     }
                     warn!("Failed to download wallet {record_name}: {error}");
@@ -1981,12 +1981,12 @@ mod tests {
 
     mod cove_tokio {
         pub(super) fn init() {
-            super::init_test_runtime();
+            super::ensure_cloud_backup_test_tokio_runtime();
         }
     }
 
     fn init_manager() -> Arc<RustCloudBackupManager> {
-        init_test_runtime();
+        ensure_cloud_backup_test_tokio_runtime();
         RustCloudBackupManager::init()
     }
 
@@ -2015,7 +2015,7 @@ mod tests {
     }
 
     fn global_manager() -> Arc<RustCloudBackupManager> {
-        init_test_runtime();
+        ensure_cloud_backup_test_tokio_runtime();
         CLOUD_BACKUP_MANAGER.clone()
     }
 
