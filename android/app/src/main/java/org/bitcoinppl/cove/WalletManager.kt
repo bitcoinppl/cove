@@ -13,6 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.utils.toComposeColor
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.tapcard.TapSigner
@@ -88,7 +89,7 @@ class WalletManager :
         get() = walletMetadata?.verified ?: false
 
     val accentColor: Color
-        get() = walletMetadata?.color?.toComposeColor() ?: Color.Blue
+        get() = walletMetadata?.color?.toComposeColor() ?: CoveColor.pastelBlue
 
     // private constructor - use companion factory methods
     private constructor(

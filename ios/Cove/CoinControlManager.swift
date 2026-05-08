@@ -9,7 +9,7 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     private let logger = Log(id: "CoinControlManager")
     var rust: RustCoinControlManager
 
-    private var sort: CoinControlListSort? = .some(.date(.descending))
+    private(set) var sort: CoinControlListSort? = .some(.date(.descending))
 
     var search: String = ""
     var totalSelected = Amount.fromSat(sats: 0)
@@ -48,26 +48,6 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         self.unit = rust.unit()
 
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
-    }
-
-    public func buttonColor(_ key: CoinControlListSortKey) -> Color {
-        let _ = self.sort
-        return switch self.rust.buttonPresentation(button: key) {
-        case .notSelected:
-            .systemGray5
-        case .selected:
-            .blue
-        }
-    }
-
-    public func buttonTextColor(_ key: CoinControlListSortKey) -> Color {
-        let _ = self.sort
-        return switch self.rust.buttonPresentation(button: key) {
-        case .notSelected:
-            .secondary.opacity(0.60)
-        case .selected:
-            .white
-        }
     }
 
     public func buttonArrow(_ key: CoinControlListSortKey) -> String? {

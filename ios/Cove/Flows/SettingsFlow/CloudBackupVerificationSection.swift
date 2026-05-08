@@ -74,7 +74,7 @@ struct VerificationSection: View {
     private var passkeyConfirmedSection: some View {
         Section {
             Label("Passkey verified", systemImage: "checkmark.shield.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.statusSuccess)
 
             Text("Your stored passkey is valid. Run a full verification to confirm wallet backups can be decrypted.")
                 .font(.caption)
@@ -95,7 +95,7 @@ struct VerificationSection: View {
                 "Verification was cancelled",
                 systemImage: "exclamationmark.shield.fill"
             )
-            .foregroundStyle(.orange)
+            .foregroundStyle(Color.statusWarning)
 
             Text(
                 "If your passkey was deleted, tap \"Create New Passkey\" to restore cloud backup protection. Otherwise tap \"Verify Now\" to try again."
@@ -118,7 +118,7 @@ struct VerificationSection: View {
     private func verifiedSection(_ report: DeepVerificationReport) -> some View {
         Section {
             Label("Backup verified", systemImage: "checkmark.shield.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.statusSuccess)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
 
             if report.masterKeyWrapperRepaired {
@@ -126,7 +126,7 @@ struct VerificationSection: View {
                     "Cloud master key protection was repaired",
                     systemImage: "wrench.and.screwdriver.fill"
                 )
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.statusInfo)
                 .font(.caption)
             }
 
@@ -135,7 +135,7 @@ struct VerificationSection: View {
                     "Local backup credentials were repaired from cloud",
                     systemImage: "wrench.and.screwdriver.fill"
                 )
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.statusInfo)
                 .font(.caption)
             }
 
@@ -144,7 +144,7 @@ struct VerificationSection: View {
                     "\(report.walletsFailed) wallet backup(s) could not be decrypted",
                     systemImage: "exclamationmark.triangle.fill"
                 )
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.statusError)
                 .font(.caption)
             }
 
@@ -153,7 +153,7 @@ struct VerificationSection: View {
                     "\(report.walletsUnsupported) wallet(s) use a newer backup format",
                     systemImage: "info.circle.fill"
                 )
-                .foregroundStyle(.orange)
+                .foregroundStyle(Color.statusWarning)
                 .font(.caption)
             }
 
@@ -185,7 +185,7 @@ struct VerificationSection: View {
         if case let .failed(action: _, error) = manager.recovery {
             Section {
                 Label(error, systemImage: "xmark.circle.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.statusError)
                     .font(.caption)
             }
         }
@@ -194,7 +194,7 @@ struct VerificationSection: View {
     @ViewBuilder
     private func retryFailureContent(_ message: String) -> some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
-            .foregroundStyle(.orange)
+            .foregroundStyle(Color.statusWarning)
 
         retryButton
         repairPasskeyButton
@@ -203,7 +203,7 @@ struct VerificationSection: View {
     @ViewBuilder
     private func recreateManifestContent(message: String, warning: String) -> some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
-            .foregroundStyle(.red)
+            .foregroundStyle(Color.statusError)
 
         Text(warning)
             .font(.caption)
@@ -220,7 +220,7 @@ struct VerificationSection: View {
     @ViewBuilder
     private func reinitializeBackupContent(message: String, warning: String) -> some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
-            .foregroundStyle(.red)
+            .foregroundStyle(Color.statusError)
 
         Text(warning)
             .font(.caption)
@@ -237,7 +237,7 @@ struct VerificationSection: View {
     @ViewBuilder
     private func unsupportedVersionContent(_ message: String) -> some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
-            .foregroundStyle(.orange)
+            .foregroundStyle(Color.statusWarning)
 
         Text("Please update the app to the latest version")
             .font(.caption)
@@ -302,7 +302,7 @@ struct VerificationSection: View {
             if case let .failed(error) = manager.sync {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.statusError)
             }
         }
     }

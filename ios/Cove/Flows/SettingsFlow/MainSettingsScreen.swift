@@ -209,7 +209,7 @@ struct MainSettingsScreen: View {
                 SettingsRow(title: "Change PIN", symbol: "lock.open.rotation") {
                     sheetState = .init(.changePin)
                 }
-                .foregroundStyle(.blue)
+                .foregroundStyle(.link)
 
                 SettingsToggle(
                     title: "Enable Wipe Data PIN",
@@ -237,7 +237,7 @@ struct MainSettingsScreen: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(.orange, in: Capsule())
+                    .background(Color.statusWarning, in: Capsule())
             }) {
                 SettingsRow(title: "Export All", symbol: "square.and.arrow.up") {
                     if auth.type != .none {
@@ -313,18 +313,18 @@ struct MainSettingsScreen: View {
     private func cloudBackupEnabledStatus(manager: CloudBackupManager) -> some View {
         if manager.isUnverified {
             Image(systemName: "exclamationmark.icloud")
-                .foregroundStyle(.orange)
+                .foregroundStyle(Color.statusWarning)
             Text("Cloud Backup Unverified")
         } else if manager.hasPendingUploadVerification {
             Image(systemName: "arrow.clockwise.icloud")
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.statusInfo)
             Text("Cloud Backup Confirming")
         } else {
             Image(
                 systemName: manager.isVerificationStale
                     ? "exclamationmark.icloud" : "checkmark.icloud"
             )
-            .foregroundStyle(manager.isVerificationStale ? .orange : .green)
+            .foregroundStyle(manager.isVerificationStale ? Color.statusWarning : Color.statusSuccess)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Cloud Backup Enabled")
@@ -332,7 +332,7 @@ struct MainSettingsScreen: View {
                 if manager.isVerificationStale {
                     Text("Verification recommended")
                         .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.statusWarning)
                 }
             }
         }
@@ -357,17 +357,17 @@ struct MainSettingsScreen: View {
     private func cloudBackupActionRow(icon: String, title: String, message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.statusError)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.statusError)
                     .fontWeight(.semibold)
                     .lineLimit(1)
 
                 Text(message)
                     .font(.caption2)
-                    .foregroundStyle(.red.opacity(0.5))
+                    .foregroundStyle(Color.statusError.opacity(0.5))
                     .lineLimit(1)
             }
 
@@ -393,7 +393,7 @@ struct MainSettingsScreen: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Image(systemName: "exclamationmark.icloud")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.statusError)
                     Text("Cloud Backup Error")
                 }
                 Text(message)

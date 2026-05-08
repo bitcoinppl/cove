@@ -37,7 +37,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 
 @Preview
@@ -55,13 +54,7 @@ fun ThemedSwitch(
     Switch(
         checked = isChecked,
         onCheckedChange = onCheckChanged,
-        colors =
-            SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = CoveColor.LinkBlue,
-                uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = Color.LightGray,
-            ),
+        colors = SwitchDefaults.colors(),
     )
 }
 
@@ -94,7 +87,7 @@ fun CustomSpacer(
                     .height(1.dp)
                     .fillMaxWidth()
                     .padding(paddingValues)
-                    .background(Color.LightGray)
+                    .background(MaterialTheme.colorScheme.outlineVariant)
                     .align(Alignment.CenterEnd),
         )
     }

@@ -220,6 +220,13 @@ extension Color {
     static let systemTeal = Color(UIColor.systemTeal)
     static let systemIndigo = Color(UIColor.systemIndigo)
 
+    // MARK: - Semantic Status Colors
+
+    static let statusSuccess = Color(UIColor.systemGreen)
+    static let statusWarning = Color(UIColor.systemOrange)
+    static let statusInfo = Color(UIColor.systemBlue)
+    static let statusError = Color(UIColor.systemRed)
+
     static let allColors: [(Self, String)] = [
         // MARK: CustomColors
 
