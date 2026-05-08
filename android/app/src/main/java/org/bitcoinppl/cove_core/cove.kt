@@ -1178,10 +1178,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup(
     ): Short
-    external fun uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet(
-    ): Short
-    external fun uniffi_cove_checksum_method_ffiapp_select_wallet(
-    ): Short
     external fun uniffi_cove_checksum_method_ffiapp_state(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids(
@@ -1382,8 +1378,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_validate_security_action(
     ): Short
-    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch(
-    ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count(
@@ -1416,6 +1410,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_verify_backup_integrity(
     ): Short
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch(
+    ): Short
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation(
     ): Short
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_dispatch(
@@ -1435,6 +1431,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustconnectivitymanager_is_connected(
     ): Short
     external fun uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_state(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_status(
     ): Short
     external fun uniffi_cove_checksum_method_rustconnectivitymanager_state(
     ): Short
@@ -1544,9 +1542,13 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_display_amount(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_display_amount_pending_fmt(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_pending_fmt(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_with_direction(
     ): Short
@@ -1692,6 +1694,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_routefactory_send_confirm(
     ): Short
+    external fun uniffi_cove_checksum_method_routefactory_send_confirm_signed_psbt(
+    ): Short
+    external fun uniffi_cove_checksum_method_routefactory_send_confirm_signed_transaction(
+    ): Short
     external fun uniffi_cove_checksum_method_routefactory_send_hardware_export(
     ): Short
     external fun uniffi_cove_checksum_method_routefactory_send_set_amount(
@@ -1827,6 +1833,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_wallet_id(
     ): Short
     external fun uniffi_cove_checksum_method_balance_spendable(
+    ): Short
+    external fun uniffi_cove_checksum_method_balance_untrusted_pending(
     ): Short
     external fun uniffi_cove_checksum_method_fingerprint_as_lowercase(
     ): Short
@@ -2082,10 +2090,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(`ptr`: Long,`tapSigner`: Long,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
-    external fun uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
-    external fun uniffi_cove_fn_method_ffiapp_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`nextRoute`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
     external fun uniffi_cove_fn_method_ffiapp_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_ffiapp_unverified_wallet_ids(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2414,8 +2418,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_constructor_rustcloudbackupmanager_new(uniffi_out_err: UniffiRustCallStatus, 
     ): Long
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_backup_new_wallet(`ptr`: Long,`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_backup_wallet_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2448,6 +2450,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_verify_backup_integrity(`ptr`: Long,
     ): Long
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_cove_fn_clone_rustcoincontrolmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_free_rustcoincontrolmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2489,6 +2493,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustconnectivitymanager_is_connected(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_cove_fn_method_rustconnectivitymanager_set_connection_state(`ptr`: Long,`isConnected`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_fn_method_rustconnectivitymanager_set_connection_status(`ptr`: Long,`status`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_cove_fn_method_rustconnectivitymanager_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -2606,7 +2612,7 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet_with_metadata(`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
-    external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(`tapSigner`: Long,`deriveInfo`: RustBuffer.ByValue,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(`tapSigner`: Long,`deriveInfo`: RustBuffer.ByValue,`backup`: RustBuffer.ByValue,`birthday`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(`xpub`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
@@ -2638,9 +2644,13 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustwalletmanager_display_amount(`ptr`: Long,`amount`: Long,`showUnit`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustwalletmanager_display_amount_pending_fmt(`ptr`: Long,`amount`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_display_amount_with_direction(`ptr`: Long,`amount`: Long,`direction`: RustBufferTransactionDirection.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(`ptr`: Long,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount_pending_fmt(`ptr`: Long,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount_with_direction(`ptr`: Long,`amount`: Double,`direction`: RustBufferTransactionDirection.ByValue,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -2828,7 +2838,11 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_send(`ptr`: Long,`send`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_routefactory_send_confirm(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`signedTransaction`: RustBuffer.ByValue,`signedPsbt`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_fn_method_routefactory_send_confirm(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_routefactory_send_confirm_signed_psbt(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`psbt`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_routefactory_send_confirm_signed_transaction(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`transaction`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_send_hardware_export(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -3054,6 +3068,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_balance_spendable(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
+    external fun uniffi_cove_fn_method_balance_untrusted_pending(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
     external fun uniffi_cove_fn_method_balance_uniffi_trait_eq_eq(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_cove_fn_method_balance_uniffi_trait_eq_ne(`ptr`: Long,`other`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -3189,6 +3205,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_authmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_catastrophicrecoveryerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_deepverificationfailure_message(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_coincontrollistsortkey_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -3670,7 +3688,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet() != 27181.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_dispatch() != 37137.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_dispatch() != 7288.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_email_mailto() != 41824.toShort()) {
@@ -3728,12 +3746,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 24217.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_ffiapp_select_latest_or_new_wallet() != 31849.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_ffiapp_select_wallet() != 51673.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_state() != 49253.toShort()) {
@@ -4036,9 +4048,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 4302.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch() != 54131.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 25342.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4087,6 +4096,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_verify_backup_integrity() != 35162.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch() != 23570.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 24764.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4115,6 +4127,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_state() != 17798.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_status() != 59768.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_state() != 43225.toShort()) {
@@ -4165,7 +4180,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_number_of_words_count() != 7796.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet() != 54348.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet() != 9073.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount() != 50946.toShort()) {
@@ -4279,10 +4294,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount() != 41368.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount_pending_fmt() != 5678.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction() != 60498.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount() != 60595.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_pending_fmt() != 55764.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_with_direction() != 5406.toShort()) {
@@ -4498,7 +4519,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_routefactory_send() != 47898.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm() != 50845.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm() != 22813.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm_signed_psbt() != 57735.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm_signed_transaction() != 58855.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_send_hardware_export() != 49069.toShort()) {
@@ -4705,6 +4732,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_balance_spendable() != 31487.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_balance_untrusted_pending() != 30274.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_fingerprint_as_lowercase() != 43161.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4813,7 +4843,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 41631.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 14372.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 10884.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub() != 15129.toShort()) {
@@ -6930,6 +6960,8 @@ public interface BalanceInterface {
     
     fun `spendable`(): Amount
     
+    fun `untrustedPending`(): Amount
+    
     companion object
 }
 
@@ -7039,6 +7071,19 @@ open class Balance: Disposable, AutoCloseable, BalanceInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_balance_spendable(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `untrustedPending`(): Amount {
+            return FfiConverterTypeAmount.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_balance_untrusted_pending(
         it,
         _status)
 }
@@ -10008,17 +10053,6 @@ public interface FfiAppInterface {
      */
     fun `saveTapSignerBackup`(`tapSigner`: TapSigner, `backup`: kotlin.ByteArray): kotlin.Boolean
     
-    /**
-     * Select the latest (most recently used) wallet or navigate to new wallet flow
-     * This selects the wallet with the most recent scan activity
-     */
-    fun `selectLatestOrNewWallet`()
-    
-    /**
-     * Select a wallet
-     */
-    fun `selectWallet`(`id`: WalletId, `nextRoute`: Route? = null)
-    
     fun `state`(): AppState
     
     /**
@@ -10224,10 +10258,11 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     
     /**
      * Frontend calls this method to send events to the rust application logic
-     */override fun `dispatch`(`action`: AppAction)
+     */
+    @Throws(AppException::class)override fun `dispatch`(`action`: AppAction)
         = 
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(AppException) { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_dispatch(
         it,
         FfiConverterTypeAppAction.lower(`action`),_status)
@@ -10527,38 +10562,6 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     }
     )
     }
-    
-
-    
-    /**
-     * Select the latest (most recently used) wallet or navigate to new wallet flow
-     * This selects the wallet with the most recent scan activity
-     */override fun `selectLatestOrNewWallet`()
-        = 
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_ffiapp_select_latest_or_new_wallet(
-        it,
-        _status)
-}
-    }
-    
-    
-
-    
-    /**
-     * Select a wallet
-     */
-    @Throws(DatabaseException::class)override fun `selectWallet`(`id`: WalletId, `nextRoute`: Route?)
-        = 
-    callWithHandle {
-    uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_ffiapp_select_wallet(
-        it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterOptionalTypeRoute.lower(`nextRoute`),_status)
-}
-    }
-    
     
 
     override fun `state`(): AppState {
@@ -16586,7 +16589,11 @@ public interface RouteFactoryInterface {
     
     fun `send`(`send`: SendRoute): Route
     
-    fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails, `signedTransaction`: BitcoinTransaction? = null, `signedPsbt`: Psbt? = null): Route
+    fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails): Route
+    
+    fun `sendConfirmSignedPsbt`(`id`: WalletId, `details`: ConfirmDetails, `psbt`: Psbt): Route
+    
+    fun `sendConfirmSignedTransaction`(`id`: WalletId, `details`: ConfirmDetails, `transaction`: BitcoinTransaction): Route
     
     fun `sendHardwareExport`(`id`: WalletId, `details`: ConfirmDetails): Route
     
@@ -16914,13 +16921,39 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     }
     
 
-    override fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails, `signedTransaction`: BitcoinTransaction?, `signedPsbt`: Psbt?): Route {
+    override fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails): Route {
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_send_confirm(
         it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),FfiConverterOptionalTypeBitcoinTransaction.lower(`signedTransaction`),FfiConverterOptionalTypePsbt.lower(`signedPsbt`),_status)
+        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),_status)
+}
+    }
+    )
+    }
+    
+
+    override fun `sendConfirmSignedPsbt`(`id`: WalletId, `details`: ConfirmDetails, `psbt`: Psbt): Route {
+            return FfiConverterTypeRoute.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_routefactory_send_confirm_signed_psbt(
+        it,
+        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),FfiConverterTypePsbt.lower(`psbt`),_status)
+}
+    }
+    )
+    }
+    
+
+    override fun `sendConfirmSignedTransaction`(`id`: WalletId, `details`: ConfirmDetails, `transaction`: BitcoinTransaction): Route {
+            return FfiConverterTypeRoute.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_routefactory_send_confirm_signed_transaction(
+        it,
+        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),FfiConverterTypeBitcoinTransaction.lower(`transaction`),_status)
 }
     }
     )
@@ -17753,8 +17786,6 @@ public object FfiConverterTypeRustAuthManager: FfiConverter<RustAuthManager, Lon
 
 public interface RustCloudBackupManagerInterface {
     
-    fun `dispatch`(`action`: CloudBackupManagerAction)
-    
     /**
      * Back up a newly created wallet, fire-and-forget
      *
@@ -17817,6 +17848,8 @@ public interface RustCloudBackupManagerInterface {
      * Background startup health check for cloud backup integrity
      */
     suspend fun `verifyBackupIntegrity`(): kotlin.String?
+    
+    fun `dispatch`(`action`: CloudBackupManagerAction)
     
     companion object
 }
@@ -17929,18 +17962,6 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
             UniffiLib.uniffi_cove_fn_clone_rustcloudbackupmanager(handle, status)
         }
     }
-
-    override fun `dispatch`(`action`: CloudBackupManagerAction)
-        = 
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_dispatch(
-        it,
-        FfiConverterTypeCloudBackupManagerAction.lower(`action`),_status)
-}
-    }
-    
-    
 
     
     /**
@@ -18180,6 +18201,18 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
         UniffiNullRustCallStatusErrorHandler,
     )
     }
+
+    override fun `dispatch`(`action`: CloudBackupManagerAction)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_dispatch(
+        it,
+        FfiConverterTypeCloudBackupManagerAction.lower(`action`),_status)
+}
+    }
+    
+    
 
     
 
@@ -18702,6 +18735,8 @@ public interface RustConnectivityManagerInterface {
     
     fun `setConnectionState`(`isConnected`: kotlin.Boolean)
     
+    fun `setConnectionStatus`(`status`: ConnectivityStatus)
+    
     fun `state`(): ConnectivityState
     
     companion object
@@ -18836,6 +18871,18 @@ open class RustConnectivityManager: Disposable, AutoCloseable, RustConnectivityM
     UniffiLib.uniffi_cove_fn_method_rustconnectivitymanager_set_connection_state(
         it,
         FfiConverterBoolean.lower(`isConnected`),_status)
+}
+    }
+    
+    
+
+    override fun `setConnectionStatus`(`status`: ConnectivityStatus)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustconnectivitymanager_set_connection_status(
+        it,
+        FfiConverterTypeConnectivityStatus.lower(`status`),_status)
 }
     }
     
@@ -19632,7 +19679,7 @@ public interface RustPendingWalletManagerInterface {
     
     fun `numberOfWordsCount`(): kotlin.UByte
     
-    fun `saveWallet`(): WalletMetadata
+    fun `saveWallet`(): PendingWalletSaveResult
     
     companion object
 }
@@ -19839,8 +19886,8 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
     
 
     
-    @Throws(PendingWalletManagerException::class)override fun `saveWallet`(): WalletMetadata {
-            return FfiConverterTypeWalletMetadata.lift(
+    @Throws(PendingWalletManagerException::class)override fun `saveWallet`(): PendingWalletSaveResult {
+            return FfiConverterTypePendingWalletSaveResult.lift(
     callWithHandle {
     uniffiRustCallWithError(PendingWalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_save_wallet(
@@ -20658,6 +20705,12 @@ public interface RustWalletManagerInterface {
     fun `displayAmount`(`amount`: Amount, `showUnit`: kotlin.Boolean = true): kotlin.String
     
     /**
+     * Formats a pending BTC amount (e.g. "+ 0.00050000 BTC pending")
+     * Returns None if the amount is zero.
+     */
+    fun `displayAmountPendingFmt`(`amount`: Amount): kotlin.String?
+    
+    /**
      * Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
      *
      * Includes "-" prefix for outgoing transactions, no prefix for incoming.
@@ -20666,6 +20719,12 @@ public interface RustWalletManagerInterface {
     fun `displayAmountWithDirection`(`amount`: Amount, `direction`: TransactionDirection): kotlin.String
     
     fun `displayFiatAmount`(`amount`: kotlin.Double, `withSuffix`: kotlin.Boolean = true): kotlin.String
+    
+    /**
+     * Formats a pending fiat amount (e.g. "+ $50.00 pending")
+     * Returns None if the amount is zero.
+     */
+    fun `displayFiatAmountPendingFmt`(`amount`: kotlin.Double, `withSuffix`: kotlin.Boolean = true): kotlin.String?
     
     /**
      * Formats a fiat amount with direction prefix (e.g., "-$50.00")
@@ -21148,6 +21207,23 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
     
     /**
+     * Formats a pending BTC amount (e.g. "+ 0.00050000 BTC pending")
+     * Returns None if the amount is zero.
+     */override fun `displayAmountPendingFmt`(`amount`: Amount): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_amount_pending_fmt(
+        it,
+        FfiConverterTypeAmount.lower(`amount`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
      *
      * Includes "-" prefix for outgoing transactions, no prefix for incoming.
@@ -21170,6 +21246,23 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(
+        it,
+        FfiConverterDouble.lower(`amount`),FfiConverterBoolean.lower(`withSuffix`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Formats a pending fiat amount (e.g. "+ $50.00 pending")
+     * Returns None if the amount is zero.
+     */override fun `displayFiatAmountPendingFmt`(`amount`: kotlin.Double, `withSuffix`: kotlin.Boolean): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount_pending_fmt(
         it,
         FfiConverterDouble.lower(`amount`),FfiConverterBoolean.lower(`withSuffix`),_status)
 }
@@ -22011,12 +22104,12 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     
 
         
-    @Throws(WalletManagerException::class) fun `tryNewFromTapSigner`(`tapSigner`: TapSigner, `deriveInfo`: DeriveInfo, `backup`: kotlin.ByteArray? = null): RustWalletManager {
+    @Throws(WalletManagerException::class) fun `tryNewFromTapSigner`(`tapSigner`: TapSigner, `deriveInfo`: DeriveInfo, `backup`: kotlin.ByteArray? = null, `birthday`: WalletBirthday? = null): RustWalletManager {
             return FfiConverterTypeRustWalletManager.lift(
     uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(
     
-        FfiConverterTypeTapSigner.lower(`tapSigner`),FfiConverterTypeDeriveInfo.lower(`deriveInfo`),FfiConverterOptionalByteArray.lower(`backup`),_status)
+        FfiConverterTypeTapSigner.lower(`tapSigner`),FfiConverterTypeDeriveInfo.lower(`deriveInfo`),FfiConverterOptionalByteArray.lower(`backup`),FfiConverterOptionalTypeWalletBirthday.lower(`birthday`),_status)
 }
     )
     }
@@ -27741,6 +27834,8 @@ data class CloudBackupDetail (
      * Number of wallets in the cloud that aren't on this device
      */
     var `cloudOnlyCount`: kotlin.UInt
+    , 
+    var `otherBackups`: CloudBackupOtherBackupsState
     
 ){
     
@@ -27761,6 +27856,7 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterSequenceTypeCloudBackupWalletItem.read(buf),
             FfiConverterSequenceTypeCloudBackupWalletItem.read(buf),
             FfiConverterUInt.read(buf),
+            FfiConverterTypeCloudBackupOtherBackupsState.read(buf),
         )
     }
 
@@ -27768,7 +27864,8 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterOptionalULong.allocationSize(value.`lastSync`) +
             FfiConverterSequenceTypeCloudBackupWalletItem.allocationSize(value.`upToDate`) +
             FfiConverterSequenceTypeCloudBackupWalletItem.allocationSize(value.`needsSync`) +
-            FfiConverterUInt.allocationSize(value.`cloudOnlyCount`)
+            FfiConverterUInt.allocationSize(value.`cloudOnlyCount`) +
+            FfiConverterTypeCloudBackupOtherBackupsState.allocationSize(value.`otherBackups`)
     )
 
     override fun write(value: CloudBackupDetail, buf: ByteBuffer) {
@@ -27776,6 +27873,131 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterSequenceTypeCloudBackupWalletItem.write(value.`upToDate`, buf)
             FfiConverterSequenceTypeCloudBackupWalletItem.write(value.`needsSync`, buf)
             FfiConverterUInt.write(value.`cloudOnlyCount`, buf)
+            FfiConverterTypeCloudBackupOtherBackupsState.write(value.`otherBackups`, buf)
+    }
+}
+
+
+
+data class CloudBackupEnableContext (
+    var `savedPasskeyConfirmation`: SavedPasskeyConfirmationMode
+    , 
+    var `verificationSource`: CloudBackupVerificationSource
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupEnableContext: FfiConverterRustBuffer<CloudBackupEnableContext> {
+    override fun read(buf: ByteBuffer): CloudBackupEnableContext {
+        return CloudBackupEnableContext(
+            FfiConverterTypeSavedPasskeyConfirmationMode.read(buf),
+            FfiConverterTypeCloudBackupVerificationSource.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupEnableContext) = (
+            FfiConverterTypeSavedPasskeyConfirmationMode.allocationSize(value.`savedPasskeyConfirmation`) +
+            FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`verificationSource`)
+    )
+
+    override fun write(value: CloudBackupEnableContext, buf: ByteBuffer) {
+            FfiConverterTypeSavedPasskeyConfirmationMode.write(value.`savedPasskeyConfirmation`, buf)
+            FfiConverterTypeCloudBackupVerificationSource.write(value.`verificationSource`, buf)
+    }
+}
+
+
+
+data class CloudBackupOtherBackupsSummary (
+    var `namespaceCount`: kotlin.UInt
+    , 
+    var `walletCount`: kotlin.UInt
+    , 
+    var `passkeyHints`: List<CloudBackupPasskeyHint>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupOtherBackupsSummary: FfiConverterRustBuffer<CloudBackupOtherBackupsSummary> {
+    override fun read(buf: ByteBuffer): CloudBackupOtherBackupsSummary {
+        return CloudBackupOtherBackupsSummary(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceTypeCloudBackupPasskeyHint.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupOtherBackupsSummary) = (
+            FfiConverterUInt.allocationSize(value.`namespaceCount`) +
+            FfiConverterUInt.allocationSize(value.`walletCount`) +
+            FfiConverterSequenceTypeCloudBackupPasskeyHint.allocationSize(value.`passkeyHints`)
+    )
+
+    override fun write(value: CloudBackupOtherBackupsSummary, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`namespaceCount`, buf)
+            FfiConverterUInt.write(value.`walletCount`, buf)
+            FfiConverterSequenceTypeCloudBackupPasskeyHint.write(value.`passkeyHints`, buf)
+    }
+}
+
+
+
+data class CloudBackupPasskeyHint (
+    var `providerName`: kotlin.String?
+    , 
+    var `nameSuffix`: kotlin.String
+    , 
+    var `registeredAt`: kotlin.ULong
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupPasskeyHint: FfiConverterRustBuffer<CloudBackupPasskeyHint> {
+    override fun read(buf: ByteBuffer): CloudBackupPasskeyHint {
+        return CloudBackupPasskeyHint(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupPasskeyHint) = (
+            FfiConverterOptionalString.allocationSize(value.`providerName`) +
+            FfiConverterString.allocationSize(value.`nameSuffix`) +
+            FfiConverterULong.allocationSize(value.`registeredAt`)
+    )
+
+    override fun write(value: CloudBackupPasskeyHint, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`providerName`, buf)
+            FfiConverterString.write(value.`nameSuffix`, buf)
+            FfiConverterULong.write(value.`registeredAt`, buf)
     }
 }
 
@@ -27915,6 +28137,44 @@ public object FfiConverterTypeCloudBackupRestoreReport: FfiConverterRustBuffer<C
 
 
 
+data class CloudBackupRetryContext (
+    var `issue`: CloudBackupRetryIssue
+    , 
+    var `action`: CloudBackupRetryAction
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRetryContext: FfiConverterRustBuffer<CloudBackupRetryContext> {
+    override fun read(buf: ByteBuffer): CloudBackupRetryContext {
+        return CloudBackupRetryContext(
+            FfiConverterTypeCloudBackupRetryIssue.read(buf),
+            FfiConverterTypeCloudBackupRetryAction.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupRetryContext) = (
+            FfiConverterTypeCloudBackupRetryIssue.allocationSize(value.`issue`) +
+            FfiConverterTypeCloudBackupRetryAction.allocationSize(value.`action`)
+    )
+
+    override fun write(value: CloudBackupRetryContext, buf: ByteBuffer) {
+            FfiConverterTypeCloudBackupRetryIssue.write(value.`issue`, buf)
+            FfiConverterTypeCloudBackupRetryAction.write(value.`action`, buf)
+    }
+}
+
+
+
 data class CloudBackupState (
     var `status`: CloudBackupStatus
     , 
@@ -27930,11 +28190,15 @@ data class CloudBackupState (
     , 
     var `syncError`: kotlin.String?
     , 
-    var `hasPendingUploadVerification`: kotlin.Boolean
+    var `enableState`: CloudBackupEnableState
+    , 
+    var `pendingUploadVerification`: PendingUploadVerificationState
     , 
     var `shouldPromptVerification`: kotlin.Boolean
     , 
     var `verificationMetadata`: CloudBackupVerificationMetadata
+    , 
+    var `verificationPresentation`: CloudBackupVerificationPresentation
     , 
     var `detail`: CloudBackupDetail?
     , 
@@ -27947,6 +28211,8 @@ data class CloudBackupState (
     var `cloudOnly`: CloudOnlyState
     , 
     var `cloudOnlyOperation`: CloudOnlyOperation
+    , 
+    var `otherBackupsOperation`: OtherBackupsOperation
     
 ){
     
@@ -27970,15 +28236,18 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterOptionalTypeCloudBackupRestoreProgress.read(buf),
             FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
             FfiConverterOptionalString.read(buf),
-            FfiConverterBoolean.read(buf),
+            FfiConverterTypeCloudBackupEnableState.read(buf),
+            FfiConverterTypePendingUploadVerificationState.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterTypeCloudBackupVerificationMetadata.read(buf),
+            FfiConverterTypeCloudBackupVerificationPresentation.read(buf),
             FfiConverterOptionalTypeCloudBackupDetail.read(buf),
             FfiConverterTypeVerificationState.read(buf),
             FfiConverterTypeSyncState.read(buf),
             FfiConverterTypeRecoveryState.read(buf),
             FfiConverterTypeCloudOnlyState.read(buf),
             FfiConverterTypeCloudOnlyOperation.read(buf),
+            FfiConverterTypeOtherBackupsOperation.read(buf),
         )
     }
 
@@ -27990,15 +28259,18 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterOptionalTypeCloudBackupRestoreProgress.allocationSize(value.`restoreProgress`) +
             FfiConverterOptionalTypeCloudBackupRestoreReport.allocationSize(value.`restoreReport`) +
             FfiConverterOptionalString.allocationSize(value.`syncError`) +
-            FfiConverterBoolean.allocationSize(value.`hasPendingUploadVerification`) +
+            FfiConverterTypeCloudBackupEnableState.allocationSize(value.`enableState`) +
+            FfiConverterTypePendingUploadVerificationState.allocationSize(value.`pendingUploadVerification`) +
             FfiConverterBoolean.allocationSize(value.`shouldPromptVerification`) +
             FfiConverterTypeCloudBackupVerificationMetadata.allocationSize(value.`verificationMetadata`) +
+            FfiConverterTypeCloudBackupVerificationPresentation.allocationSize(value.`verificationPresentation`) +
             FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`) +
             FfiConverterTypeVerificationState.allocationSize(value.`verification`) +
             FfiConverterTypeSyncState.allocationSize(value.`sync`) +
             FfiConverterTypeRecoveryState.allocationSize(value.`recovery`) +
             FfiConverterTypeCloudOnlyState.allocationSize(value.`cloudOnly`) +
-            FfiConverterTypeCloudOnlyOperation.allocationSize(value.`cloudOnlyOperation`)
+            FfiConverterTypeCloudOnlyOperation.allocationSize(value.`cloudOnlyOperation`) +
+            FfiConverterTypeOtherBackupsOperation.allocationSize(value.`otherBackupsOperation`)
     )
 
     override fun write(value: CloudBackupState, buf: ByteBuffer) {
@@ -28009,15 +28281,18 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
             FfiConverterOptionalTypeCloudBackupRestoreProgress.write(value.`restoreProgress`, buf)
             FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.`restoreReport`, buf)
             FfiConverterOptionalString.write(value.`syncError`, buf)
-            FfiConverterBoolean.write(value.`hasPendingUploadVerification`, buf)
+            FfiConverterTypeCloudBackupEnableState.write(value.`enableState`, buf)
+            FfiConverterTypePendingUploadVerificationState.write(value.`pendingUploadVerification`, buf)
             FfiConverterBoolean.write(value.`shouldPromptVerification`, buf)
             FfiConverterTypeCloudBackupVerificationMetadata.write(value.`verificationMetadata`, buf)
+            FfiConverterTypeCloudBackupVerificationPresentation.write(value.`verificationPresentation`, buf)
             FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
             FfiConverterTypeVerificationState.write(value.`verification`, buf)
             FfiConverterTypeSyncState.write(value.`sync`, buf)
             FfiConverterTypeRecoveryState.write(value.`recovery`, buf)
             FfiConverterTypeCloudOnlyState.write(value.`cloudOnly`, buf)
             FfiConverterTypeCloudOnlyOperation.write(value.`cloudOnlyOperation`, buf)
+            FfiConverterTypeOtherBackupsOperation.write(value.`otherBackupsOperation`, buf)
     }
 }
 
@@ -28094,6 +28369,49 @@ public object FfiConverterTypeCloudBackupWalletItem: FfiConverterRustBuffer<Clou
             FfiConverterOptionalULong.write(value.`backupUpdatedAt`, buf)
             FfiConverterTypeCloudBackupWalletStatus.write(value.`syncStatus`, buf)
             FfiConverterString.write(value.`recordId`, buf)
+    }
+}
+
+
+
+data class CloudRestoreProviderHint (
+    var `providerName`: kotlin.String?
+    , 
+    var `registeredAt`: kotlin.ULong
+    , 
+    var `nameSuffix`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudRestoreProviderHint: FfiConverterRustBuffer<CloudRestoreProviderHint> {
+    override fun read(buf: ByteBuffer): CloudRestoreProviderHint {
+        return CloudRestoreProviderHint(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudRestoreProviderHint) = (
+            FfiConverterOptionalString.allocationSize(value.`providerName`) +
+            FfiConverterULong.allocationSize(value.`registeredAt`) +
+            FfiConverterString.allocationSize(value.`nameSuffix`)
+    )
+
+    override fun write(value: CloudRestoreProviderHint, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`providerName`, buf)
+            FfiConverterULong.write(value.`registeredAt`, buf)
+            FfiConverterString.write(value.`nameSuffix`, buf)
     }
 }
 
@@ -28329,49 +28647,6 @@ public object FfiConverterTypeContinueFromInit: FfiConverterRustBuffer<ContinueF
 
 
 
-data class DeepVerificationFailure (
-    var `kind`: VerificationFailureKind
-    , 
-    var `message`: kotlin.String
-    , 
-    var `detail`: CloudBackupDetail?
-    
-){
-    
-
-    
-
-    
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeDeepVerificationFailure: FfiConverterRustBuffer<DeepVerificationFailure> {
-    override fun read(buf: ByteBuffer): DeepVerificationFailure {
-        return DeepVerificationFailure(
-            FfiConverterTypeVerificationFailureKind.read(buf),
-            FfiConverterString.read(buf),
-            FfiConverterOptionalTypeCloudBackupDetail.read(buf),
-        )
-    }
-
-    override fun allocationSize(value: DeepVerificationFailure) = (
-            FfiConverterTypeVerificationFailureKind.allocationSize(value.`kind`) +
-            FfiConverterString.allocationSize(value.`message`) +
-            FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
-    )
-
-    override fun write(value: DeepVerificationFailure, buf: ByteBuffer) {
-            FfiConverterTypeVerificationFailureKind.write(value.`kind`, buf)
-            FfiConverterString.write(value.`message`, buf)
-            FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
-    }
-}
-
-
-
 data class DeepVerificationReport (
     /**
      * Cloud master key PRF wrapping was repaired
@@ -28460,6 +28735,8 @@ data class DeriveInfo (
     var `path`: List<kotlin.UInt>
     , 
     var `network`: Network
+    , 
+    var `birthHeight`: kotlin.ULong?
     
 ){
     
@@ -28481,6 +28758,7 @@ public object FfiConverterTypeDeriveInfo: FfiConverterRustBuffer<DeriveInfo> {
             FfiConverterByteArray.read(buf),
             FfiConverterSequenceUInt.read(buf),
             FfiConverterTypeNetwork.read(buf),
+            FfiConverterOptionalULong.read(buf),
         )
     }
 
@@ -28489,7 +28767,8 @@ public object FfiConverterTypeDeriveInfo: FfiConverterRustBuffer<DeriveInfo> {
             FfiConverterByteArray.allocationSize(value.`pubkey`) +
             FfiConverterByteArray.allocationSize(value.`chainCode`) +
             FfiConverterSequenceUInt.allocationSize(value.`path`) +
-            FfiConverterTypeNetwork.allocationSize(value.`network`)
+            FfiConverterTypeNetwork.allocationSize(value.`network`) +
+            FfiConverterOptionalULong.allocationSize(value.`birthHeight`)
     )
 
     override fun write(value: DeriveInfo, buf: ByteBuffer) {
@@ -28498,6 +28777,7 @@ public object FfiConverterTypeDeriveInfo: FfiConverterRustBuffer<DeriveInfo> {
             FfiConverterByteArray.write(value.`chainCode`, buf)
             FfiConverterSequenceUInt.write(value.`path`, buf)
             FfiConverterTypeNetwork.write(value.`network`, buf)
+            FfiConverterOptionalULong.write(value.`birthHeight`, buf)
     }
 }
 
@@ -28551,6 +28831,53 @@ public object FfiConverterTypeFeeResponse: FfiConverterRustBuffer<FeeResponse> {
             FfiConverterFloat.write(value.`hourFee`, buf)
             FfiConverterFloat.write(value.`economyFee`, buf)
             FfiConverterFloat.write(value.`minimumFee`, buf)
+    }
+}
+
+
+
+data class FeeSelection (
+    var `options`: FeeRateOptionsWithTotalFee
+    , 
+    var `selected`: FeeRateOptionWithTotalFee
+    
+): Disposable{
+    
+
+    
+
+    
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        
+    Disposable.destroy(
+        this.`options`,
+        this.`selected`
+    )
+    }
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFeeSelection: FfiConverterRustBuffer<FeeSelection> {
+    override fun read(buf: ByteBuffer): FeeSelection {
+        return FeeSelection(
+            FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
+            FfiConverterTypeFeeRateOptionWithTotalFee.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FeeSelection) = (
+            FfiConverterTypeFeeRateOptionsWithTotalFee.allocationSize(value.`options`) +
+            FfiConverterTypeFeeRateOptionWithTotalFee.allocationSize(value.`selected`)
+    )
+
+    override fun write(value: FeeSelection, buf: ByteBuffer) {
+            FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.`options`, buf)
+            FfiConverterTypeFeeRateOptionWithTotalFee.write(value.`selected`, buf)
     }
 }
 
@@ -28968,7 +29295,11 @@ data class OnboardingState (
     , 
     var `cloudRestoreMessage`: kotlin.String?
     , 
+    var `cloudRestoreProviderHint`: CloudRestoreProviderHint?
+    , 
     var `shouldOfferCloudRestore`: kotlin.Boolean
+    , 
+    var `cloudRestoreAlertVisible`: kotlin.Boolean
     , 
     var `errorMessage`: kotlin.String?
     
@@ -28994,6 +29325,8 @@ public object FfiConverterTypeOnboardingState: FfiConverterRustBuffer<Onboarding
             FfiConverterBoolean.read(buf),
             FfiConverterTypeOnboardingCloudRestoreState.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeCloudRestoreProviderHint.read(buf),
+            FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterOptionalString.read(buf),
         )
@@ -29007,7 +29340,9 @@ public object FfiConverterTypeOnboardingState: FfiConverterRustBuffer<Onboarding
             FfiConverterBoolean.allocationSize(value.`secretWordsSaved`) +
             FfiConverterTypeOnboardingCloudRestoreState.allocationSize(value.`cloudRestoreState`) +
             FfiConverterOptionalString.allocationSize(value.`cloudRestoreMessage`) +
+            FfiConverterOptionalTypeCloudRestoreProviderHint.allocationSize(value.`cloudRestoreProviderHint`) +
             FfiConverterBoolean.allocationSize(value.`shouldOfferCloudRestore`) +
+            FfiConverterBoolean.allocationSize(value.`cloudRestoreAlertVisible`) +
             FfiConverterOptionalString.allocationSize(value.`errorMessage`)
     )
 
@@ -29019,7 +29354,9 @@ public object FfiConverterTypeOnboardingState: FfiConverterRustBuffer<Onboarding
             FfiConverterBoolean.write(value.`secretWordsSaved`, buf)
             FfiConverterTypeOnboardingCloudRestoreState.write(value.`cloudRestoreState`, buf)
             FfiConverterOptionalString.write(value.`cloudRestoreMessage`, buf)
+            FfiConverterOptionalTypeCloudRestoreProviderHint.write(value.`cloudRestoreProviderHint`, buf)
             FfiConverterBoolean.write(value.`shouldOfferCloudRestore`, buf)
+            FfiConverterBoolean.write(value.`cloudRestoreAlertVisible`, buf)
             FfiConverterOptionalString.write(value.`errorMessage`, buf)
     }
 }
@@ -29101,6 +29438,53 @@ public object FfiConverterTypePendingWalletManagerState: FfiConverterRustBuffer<
     override fun write(value: PendingWalletManagerState, buf: ByteBuffer) {
             FfiConverterTypeNumberOfBip39Words.write(value.`numberOfWords`, buf)
             FfiConverterTypePendingWallet.write(value.`wallet`, buf)
+    }
+}
+
+
+
+data class PendingWalletSaveResult (
+    var `metadata`: WalletMetadata
+    , 
+    var `routes`: List<Route>
+    
+): Disposable{
+    
+
+    
+
+    
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        
+    Disposable.destroy(
+        this.`metadata`,
+        this.`routes`
+    )
+    }
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePendingWalletSaveResult: FfiConverterRustBuffer<PendingWalletSaveResult> {
+    override fun read(buf: ByteBuffer): PendingWalletSaveResult {
+        return PendingWalletSaveResult(
+            FfiConverterTypeWalletMetadata.read(buf),
+            FfiConverterSequenceTypeRoute.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PendingWalletSaveResult) = (
+            FfiConverterTypeWalletMetadata.allocationSize(value.`metadata`) +
+            FfiConverterSequenceTypeRoute.allocationSize(value.`routes`)
+    )
+
+    override fun write(value: PendingWalletSaveResult, buf: ByteBuffer) {
+            FfiConverterTypeWalletMetadata.write(value.`metadata`, buf)
+            FfiConverterSequenceTypeRoute.write(value.`routes`, buf)
     }
 }
 
@@ -29249,9 +29633,7 @@ data class SendRouteConfirmArgs (
     , 
     var `details`: ConfirmDetails
     , 
-    var `signedTransaction`: BitcoinTransaction?
-    , 
-    var `signedPsbt`: Psbt?
+    var `input`: SendConfirmationInput
     
 ): Disposable{
     
@@ -29265,8 +29647,7 @@ data class SendRouteConfirmArgs (
     Disposable.destroy(
         this.`id`,
         this.`details`,
-        this.`signedTransaction`,
-        this.`signedPsbt`
+        this.`input`
     )
     }
     
@@ -29281,23 +29662,20 @@ public object FfiConverterTypeSendRouteConfirmArgs: FfiConverterRustBuffer<SendR
         return SendRouteConfirmArgs(
             FfiConverterTypeWalletId.read(buf),
             FfiConverterTypeConfirmDetails.read(buf),
-            FfiConverterOptionalTypeBitcoinTransaction.read(buf),
-            FfiConverterOptionalTypePsbt.read(buf),
+            FfiConverterTypeSendConfirmationInput.read(buf),
         )
     }
 
     override fun allocationSize(value: SendRouteConfirmArgs) = (
             FfiConverterTypeWalletId.allocationSize(value.`id`) +
             FfiConverterTypeConfirmDetails.allocationSize(value.`details`) +
-            FfiConverterOptionalTypeBitcoinTransaction.allocationSize(value.`signedTransaction`) +
-            FfiConverterOptionalTypePsbt.allocationSize(value.`signedPsbt`)
+            FfiConverterTypeSendConfirmationInput.allocationSize(value.`input`)
     )
 
     override fun write(value: SendRouteConfirmArgs, buf: ByteBuffer) {
             FfiConverterTypeWalletId.write(value.`id`, buf)
             FfiConverterTypeConfirmDetails.write(value.`details`, buf)
-            FfiConverterOptionalTypeBitcoinTransaction.write(value.`signedTransaction`, buf)
-            FfiConverterOptionalTypePsbt.write(value.`signedPsbt`, buf)
+            FfiConverterTypeSendConfirmationInput.write(value.`input`, buf)
     }
 }
 
@@ -29486,6 +29864,8 @@ data class TapSignerSetupComplete (
     var `backup`: kotlin.ByteArray
     , 
     var `deriveInfo`: DeriveInfo
+    , 
+    var `birthday`: WalletBirthday
     
 ){
     
@@ -29504,17 +29884,20 @@ public object FfiConverterTypeTapSignerSetupComplete: FfiConverterRustBuffer<Tap
         return TapSignerSetupComplete(
             FfiConverterByteArray.read(buf),
             FfiConverterTypeDeriveInfo.read(buf),
+            FfiConverterTypeWalletBirthday.read(buf),
         )
     }
 
     override fun allocationSize(value: TapSignerSetupComplete) = (
             FfiConverterByteArray.allocationSize(value.`backup`) +
-            FfiConverterTypeDeriveInfo.allocationSize(value.`deriveInfo`)
+            FfiConverterTypeDeriveInfo.allocationSize(value.`deriveInfo`) +
+            FfiConverterTypeWalletBirthday.allocationSize(value.`birthday`)
     )
 
     override fun write(value: TapSignerSetupComplete, buf: ByteBuffer) {
             FfiConverterByteArray.write(value.`backup`, buf)
             FfiConverterTypeDeriveInfo.write(value.`deriveInfo`, buf)
+            FfiConverterTypeWalletBirthday.write(value.`birthday`, buf)
     }
 }
 
@@ -29627,6 +30010,8 @@ data class WalletMetadata (
     , 
     var `origin`: kotlin.String?
     , 
+    var `birthday`: WalletBirthday?
+    , 
     /**
      * Metadata data specific to different hardware wallets
      */
@@ -29704,6 +30089,7 @@ data class WalletMetadata (
         this.`addressType`,
         this.`fiatOrBtc`,
         this.`origin`,
+        this.`birthday`,
         this.`hardwareMetadata`,
         this.`showLabels`,
         this.`internal`
@@ -29734,6 +30120,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterTypeWalletAddressType.read(buf),
             FfiConverterTypeFiatOrBtc.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeWalletBirthday.read(buf),
             FfiConverterOptionalTypeHardwareWalletMetadata.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterTypeInternalOnlyMetadata.read(buf),
@@ -29756,6 +30143,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterTypeWalletAddressType.allocationSize(value.`addressType`) +
             FfiConverterTypeFiatOrBtc.allocationSize(value.`fiatOrBtc`) +
             FfiConverterOptionalString.allocationSize(value.`origin`) +
+            FfiConverterOptionalTypeWalletBirthday.allocationSize(value.`birthday`) +
             FfiConverterOptionalTypeHardwareWalletMetadata.allocationSize(value.`hardwareMetadata`) +
             FfiConverterBoolean.allocationSize(value.`showLabels`) +
             FfiConverterTypeInternalOnlyMetadata.allocationSize(value.`internal`)
@@ -29777,6 +30165,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterTypeWalletAddressType.write(value.`addressType`, buf)
             FfiConverterTypeFiatOrBtc.write(value.`fiatOrBtc`, buf)
             FfiConverterOptionalString.write(value.`origin`, buf)
+            FfiConverterOptionalTypeWalletBirthday.write(value.`birthday`, buf)
             FfiConverterOptionalTypeHardwareWalletMetadata.write(value.`hardwareMetadata`, buf)
             FfiConverterBoolean.write(value.`showLabels`, buf)
             FfiConverterTypeInternalOnlyMetadata.write(value.`internal`, buf)
@@ -30196,6 +30585,18 @@ sealed class AppAction: Disposable  {
     object PopRoute : AppAction()
     
     
+    data class SelectWallet(
+        val `id`: org.bitcoinppl.cove_core.types.WalletId) : AppAction()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object SelectLatestOrNewWallet : AppAction()
+    
+    
     data class ChangeNetwork(
         val `network`: org.bitcoinppl.cove_core.types.Network) : AppAction()
         
@@ -30265,6 +30666,15 @@ sealed class AppAction: Disposable  {
             }
             is AppAction.PopRoute -> {// Nothing to destroy
             }
+            is AppAction.SelectWallet -> {
+                
+    Disposable.destroy(
+        this.`id`
+    )
+                
+            }
+            is AppAction.SelectLatestOrNewWallet -> {// Nothing to destroy
+            }
             is AppAction.ChangeNetwork -> {
                 
     Disposable.destroy(
@@ -30325,22 +30735,26 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
                 FfiConverterTypeRoute.read(buf),
                 )
             3 -> AppAction.PopRoute
-            4 -> AppAction.ChangeNetwork(
+            4 -> AppAction.SelectWallet(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            5 -> AppAction.SelectLatestOrNewWallet
+            6 -> AppAction.ChangeNetwork(
                 FfiConverterTypeNetwork.read(buf),
                 )
-            5 -> AppAction.ChangeColorScheme(
+            7 -> AppAction.ChangeColorScheme(
                 FfiConverterTypeColorSchemeSelection.read(buf),
                 )
-            6 -> AppAction.ChangeFiatCurrency(
+            8 -> AppAction.ChangeFiatCurrency(
                 FfiConverterTypeFiatCurrency.read(buf),
                 )
-            7 -> AppAction.SetSelectedNode(
+            9 -> AppAction.SetSelectedNode(
                 FfiConverterTypeNode.read(buf),
                 )
-            8 -> AppAction.UpdateFiatPrices
-            9 -> AppAction.UpdateFees
-            10 -> AppAction.AcceptTerms
-            11 -> AppAction.RefreshAfterImport
+            10 -> AppAction.UpdateFiatPrices
+            11 -> AppAction.UpdateFees
+            12 -> AppAction.AcceptTerms
+            13 -> AppAction.RefreshAfterImport
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -30361,6 +30775,19 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
             )
         }
         is AppAction.PopRoute -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is AppAction.SelectWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`id`)
+            )
+        }
+        is AppAction.SelectLatestOrNewWallet -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -30436,40 +30863,49 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
                 buf.putInt(3)
                 Unit
             }
-            is AppAction.ChangeNetwork -> {
+            is AppAction.SelectWallet -> {
                 buf.putInt(4)
+                FfiConverterTypeWalletId.write(value.`id`, buf)
+                Unit
+            }
+            is AppAction.SelectLatestOrNewWallet -> {
+                buf.putInt(5)
+                Unit
+            }
+            is AppAction.ChangeNetwork -> {
+                buf.putInt(6)
                 FfiConverterTypeNetwork.write(value.`network`, buf)
                 Unit
             }
             is AppAction.ChangeColorScheme -> {
-                buf.putInt(5)
+                buf.putInt(7)
                 FfiConverterTypeColorSchemeSelection.write(value.v1, buf)
                 Unit
             }
             is AppAction.ChangeFiatCurrency -> {
-                buf.putInt(6)
+                buf.putInt(8)
                 FfiConverterTypeFiatCurrency.write(value.v1, buf)
                 Unit
             }
             is AppAction.SetSelectedNode -> {
-                buf.putInt(7)
+                buf.putInt(9)
                 FfiConverterTypeNode.write(value.v1, buf)
                 Unit
             }
             is AppAction.UpdateFiatPrices -> {
-                buf.putInt(8)
-                Unit
-            }
-            is AppAction.UpdateFees -> {
-                buf.putInt(9)
-                Unit
-            }
-            is AppAction.AcceptTerms -> {
                 buf.putInt(10)
                 Unit
             }
-            is AppAction.RefreshAfterImport -> {
+            is AppAction.UpdateFees -> {
                 buf.putInt(11)
+                Unit
+            }
+            is AppAction.AcceptTerms -> {
+                buf.putInt(12)
+                Unit
+            }
+            is AppAction.RefreshAfterImport -> {
+                buf.putInt(13)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -31438,6 +31874,14 @@ sealed class AppException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class WalletSelection(
+        
+        val v1: kotlin.String
+        ) : AppException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
 
     
 
@@ -31472,6 +31916,9 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
             2 -> AppException.FeesException(
                 FfiConverterString.read(buf),
                 )
+            3 -> AppException.WalletSelection(
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -31488,6 +31935,11 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is AppException.WalletSelection -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
         }
     }
 
@@ -31500,6 +31952,11 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
             }
             is AppException.FeesException -> {
                 buf.putInt(2)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is AppException.WalletSelection -> {
+                buf.putInt(3)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -33646,10 +34103,19 @@ public object FfiConverterTypeCkTapError : FfiConverterRustBuffer<CkTapException
 
 
 
-sealed class CloudBackupDetailResult {
+sealed class CloudBackupEnableState {
     
-    data class Success(
-        val v1: org.bitcoinppl.cove_core.CloudBackupDetail) : CloudBackupDetailResult()
+    object Idle : CloudBackupEnableState()
+    
+    
+    object CreatingPasskey : CloudBackupEnableState()
+    
+    
+    object WaitingForPasskeyAvailability : CloudBackupEnableState()
+    
+    
+    data class AwaitingSavedPasskeyConfirmation(
+        val v1: org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode) : CloudBackupEnableState()
         
     {
         
@@ -33657,14 +34123,11 @@ sealed class CloudBackupDetailResult {
         companion object
     }
     
-    data class AccessError(
-        val v1: kotlin.String) : CloudBackupDetailResult()
-        
-    {
-        
-
-        companion object
-    }
+    object ConfirmingSavedPasskey : CloudBackupEnableState()
+    
+    
+    object UploadingBackup : CloudBackupEnableState()
+    
     
 
     
@@ -33679,46 +34142,86 @@ sealed class CloudBackupDetailResult {
 /**
  * @suppress
  */
-public object FfiConverterTypeCloudBackupDetailResult : FfiConverterRustBuffer<CloudBackupDetailResult>{
-    override fun read(buf: ByteBuffer): CloudBackupDetailResult {
+public object FfiConverterTypeCloudBackupEnableState : FfiConverterRustBuffer<CloudBackupEnableState>{
+    override fun read(buf: ByteBuffer): CloudBackupEnableState {
         return when(buf.getInt()) {
-            1 -> CloudBackupDetailResult.Success(
-                FfiConverterTypeCloudBackupDetail.read(buf),
+            1 -> CloudBackupEnableState.Idle
+            2 -> CloudBackupEnableState.CreatingPasskey
+            3 -> CloudBackupEnableState.WaitingForPasskeyAvailability
+            4 -> CloudBackupEnableState.AwaitingSavedPasskeyConfirmation(
+                FfiConverterTypeSavedPasskeyConfirmationMode.read(buf),
                 )
-            2 -> CloudBackupDetailResult.AccessError(
-                FfiConverterString.read(buf),
-                )
+            5 -> CloudBackupEnableState.ConfirmingSavedPasskey
+            6 -> CloudBackupEnableState.UploadingBackup
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
 
-    override fun allocationSize(value: CloudBackupDetailResult): ULong = when(value) {
-        is CloudBackupDetailResult.Success -> {
+    override fun allocationSize(value: CloudBackupEnableState): ULong = when(value) {
+        is CloudBackupEnableState.Idle -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeCloudBackupDetail.allocationSize(value.v1)
             )
         }
-        is CloudBackupDetailResult.AccessError -> {
+        is CloudBackupEnableState.CreatingPasskey -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupEnableState.WaitingForPasskeyAvailability -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupEnableState.AwaitingSavedPasskeyConfirmation -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSavedPasskeyConfirmationMode.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupEnableState.ConfirmingSavedPasskey -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupEnableState.UploadingBackup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
             )
         }
     }
 
-    override fun write(value: CloudBackupDetailResult, buf: ByteBuffer) {
+    override fun write(value: CloudBackupEnableState, buf: ByteBuffer) {
         when(value) {
-            is CloudBackupDetailResult.Success -> {
+            is CloudBackupEnableState.Idle -> {
                 buf.putInt(1)
-                FfiConverterTypeCloudBackupDetail.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupDetailResult.AccessError -> {
+            is CloudBackupEnableState.CreatingPasskey -> {
                 buf.putInt(2)
-                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupEnableState.WaitingForPasskeyAvailability -> {
+                buf.putInt(3)
+                Unit
+            }
+            is CloudBackupEnableState.AwaitingSavedPasskeyConfirmation -> {
+                buf.putInt(4)
+                FfiConverterTypeSavedPasskeyConfirmationMode.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupEnableState.ConfirmingSavedPasskey -> {
+                buf.putInt(5)
+                Unit
+            }
+            is CloudBackupEnableState.UploadingBackup -> {
+                buf.putInt(6)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -33731,13 +34234,34 @@ public object FfiConverterTypeCloudBackupDetailResult : FfiConverterRustBuffer<C
 
 sealed class CloudBackupManagerAction {
     
-    object EnableCloudBackup : CloudBackupManagerAction()
+    data class EnableCloudBackup(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupManagerAction()
+        
+    {
+        
+
+        companion object
+    }
     
+    data class EnableCloudBackupForceNew(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupManagerAction()
+        
+    {
+        
+
+        companion object
+    }
     
-    object EnableCloudBackupForceNew : CloudBackupManagerAction()
+    data class EnableCloudBackupNoDiscovery(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupManagerAction()
+        
+    {
+        
+
+        companion object
+    }
     
-    
-    object EnableCloudBackupNoDiscovery : CloudBackupManagerAction()
+    object ConfirmSavedPasskey : CloudBackupManagerAction()
     
     
     object DiscardPendingEnableCloudBackup : CloudBackupManagerAction()
@@ -33755,11 +34279,23 @@ sealed class CloudBackupManagerAction {
     object CancelRestore : CloudBackupManagerAction()
     
     
-    object StartVerification : CloudBackupManagerAction()
+    data class StartVerification(
+        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupManagerAction()
+        
+    {
+        
+
+        companion object
+    }
     
-    
-    object StartVerificationDiscoverable : CloudBackupManagerAction()
-    
+    data class StartVerificationDiscoverable(
+        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupManagerAction()
+        
+    {
+        
+
+        companion object
+    }
     
     object DismissVerificationPrompt : CloudBackupManagerAction()
     
@@ -33783,7 +34319,7 @@ sealed class CloudBackupManagerAction {
     
     
     data class RestoreCloudWallet(
-        val `recordId`: kotlin.String) : CloudBackupManagerAction()
+        val v1: org.bitcoinppl.cove_core.RecordId) : CloudBackupManagerAction()
         
     {
         
@@ -33792,7 +34328,7 @@ sealed class CloudBackupManagerAction {
     }
     
     data class DeleteCloudWallet(
-        val `recordId`: kotlin.String) : CloudBackupManagerAction()
+        val v1: org.bitcoinppl.cove_core.RecordId) : CloudBackupManagerAction()
         
     {
         
@@ -33800,7 +34336,16 @@ sealed class CloudBackupManagerAction {
         companion object
     }
     
+    object RecoverOtherBackups : CloudBackupManagerAction()
+    
+    
+    object DeleteOtherBackups : CloudBackupManagerAction()
+    
+    
     object RefreshDetail : CloudBackupManagerAction()
+    
+    
+    object EnterDetail : CloudBackupManagerAction()
     
     
 
@@ -33819,30 +34364,44 @@ sealed class CloudBackupManagerAction {
 public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<CloudBackupManagerAction>{
     override fun read(buf: ByteBuffer): CloudBackupManagerAction {
         return when(buf.getInt()) {
-            1 -> CloudBackupManagerAction.EnableCloudBackup
-            2 -> CloudBackupManagerAction.EnableCloudBackupForceNew
-            3 -> CloudBackupManagerAction.EnableCloudBackupNoDiscovery
-            4 -> CloudBackupManagerAction.DiscardPendingEnableCloudBackup
-            5 -> CloudBackupManagerAction.DismissPasskeyChoicePrompt
-            6 -> CloudBackupManagerAction.DismissMissingPasskeyReminder
-            7 -> CloudBackupManagerAction.RestoreFromCloudBackup
-            8 -> CloudBackupManagerAction.CancelRestore
-            9 -> CloudBackupManagerAction.StartVerification
-            10 -> CloudBackupManagerAction.StartVerificationDiscoverable
-            11 -> CloudBackupManagerAction.DismissVerificationPrompt
-            12 -> CloudBackupManagerAction.RecreateManifest
-            13 -> CloudBackupManagerAction.ReinitializeBackup
-            14 -> CloudBackupManagerAction.RepairPasskey
-            15 -> CloudBackupManagerAction.RepairPasskeyNoDiscovery
-            16 -> CloudBackupManagerAction.SyncUnsynced
-            17 -> CloudBackupManagerAction.FetchCloudOnly
-            18 -> CloudBackupManagerAction.RestoreCloudWallet(
-                FfiConverterString.read(buf),
+            1 -> CloudBackupManagerAction.EnableCloudBackup(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
                 )
-            19 -> CloudBackupManagerAction.DeleteCloudWallet(
-                FfiConverterString.read(buf),
+            2 -> CloudBackupManagerAction.EnableCloudBackupForceNew(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
                 )
-            20 -> CloudBackupManagerAction.RefreshDetail
+            3 -> CloudBackupManagerAction.EnableCloudBackupNoDiscovery(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                )
+            4 -> CloudBackupManagerAction.ConfirmSavedPasskey
+            5 -> CloudBackupManagerAction.DiscardPendingEnableCloudBackup
+            6 -> CloudBackupManagerAction.DismissPasskeyChoicePrompt
+            7 -> CloudBackupManagerAction.DismissMissingPasskeyReminder
+            8 -> CloudBackupManagerAction.RestoreFromCloudBackup
+            9 -> CloudBackupManagerAction.CancelRestore
+            10 -> CloudBackupManagerAction.StartVerification(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
+            11 -> CloudBackupManagerAction.StartVerificationDiscoverable(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
+            12 -> CloudBackupManagerAction.DismissVerificationPrompt
+            13 -> CloudBackupManagerAction.RecreateManifest
+            14 -> CloudBackupManagerAction.ReinitializeBackup
+            15 -> CloudBackupManagerAction.RepairPasskey
+            16 -> CloudBackupManagerAction.RepairPasskeyNoDiscovery
+            17 -> CloudBackupManagerAction.SyncUnsynced
+            18 -> CloudBackupManagerAction.FetchCloudOnly
+            19 -> CloudBackupManagerAction.RestoreCloudWallet(
+                FfiConverterTypeRecordId.read(buf),
+                )
+            20 -> CloudBackupManagerAction.DeleteCloudWallet(
+                FfiConverterTypeRecordId.read(buf),
+                )
+            21 -> CloudBackupManagerAction.RecoverOtherBackups
+            22 -> CloudBackupManagerAction.DeleteOtherBackups
+            23 -> CloudBackupManagerAction.RefreshDetail
+            24 -> CloudBackupManagerAction.EnterDetail
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -33852,15 +34411,24 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.EnableCloudBackupForceNew -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.EnableCloudBackupNoDiscovery -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupManagerAction.ConfirmSavedPasskey -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -33900,12 +34468,14 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.StartVerificationDiscoverable -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.DismissVerificationPrompt -> {
@@ -33954,17 +34524,35 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.`recordId`)
+                + FfiConverterTypeRecordId.allocationSize(value.v1)
             )
         }
         is CloudBackupManagerAction.DeleteCloudWallet -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.`recordId`)
+                + FfiConverterTypeRecordId.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupManagerAction.RecoverOtherBackups -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupManagerAction.DeleteOtherBackups -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
             )
         }
         is CloudBackupManagerAction.RefreshDetail -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupManagerAction.EnterDetail -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -33976,84 +34564,105 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
         when(value) {
             is CloudBackupManagerAction.EnableCloudBackup -> {
                 buf.putInt(1)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.EnableCloudBackupForceNew -> {
                 buf.putInt(2)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.EnableCloudBackupNoDiscovery -> {
                 buf.putInt(3)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupManagerAction.DiscardPendingEnableCloudBackup -> {
+            is CloudBackupManagerAction.ConfirmSavedPasskey -> {
                 buf.putInt(4)
                 Unit
             }
-            is CloudBackupManagerAction.DismissPasskeyChoicePrompt -> {
+            is CloudBackupManagerAction.DiscardPendingEnableCloudBackup -> {
                 buf.putInt(5)
                 Unit
             }
-            is CloudBackupManagerAction.DismissMissingPasskeyReminder -> {
+            is CloudBackupManagerAction.DismissPasskeyChoicePrompt -> {
                 buf.putInt(6)
                 Unit
             }
-            is CloudBackupManagerAction.RestoreFromCloudBackup -> {
+            is CloudBackupManagerAction.DismissMissingPasskeyReminder -> {
                 buf.putInt(7)
                 Unit
             }
-            is CloudBackupManagerAction.CancelRestore -> {
+            is CloudBackupManagerAction.RestoreFromCloudBackup -> {
                 buf.putInt(8)
                 Unit
             }
-            is CloudBackupManagerAction.StartVerification -> {
+            is CloudBackupManagerAction.CancelRestore -> {
                 buf.putInt(9)
                 Unit
             }
-            is CloudBackupManagerAction.StartVerificationDiscoverable -> {
+            is CloudBackupManagerAction.StartVerification -> {
                 buf.putInt(10)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupManagerAction.StartVerificationDiscoverable -> {
+                buf.putInt(11)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.DismissVerificationPrompt -> {
-                buf.putInt(11)
-                Unit
-            }
-            is CloudBackupManagerAction.RecreateManifest -> {
                 buf.putInt(12)
                 Unit
             }
-            is CloudBackupManagerAction.ReinitializeBackup -> {
+            is CloudBackupManagerAction.RecreateManifest -> {
                 buf.putInt(13)
                 Unit
             }
-            is CloudBackupManagerAction.RepairPasskey -> {
+            is CloudBackupManagerAction.ReinitializeBackup -> {
                 buf.putInt(14)
                 Unit
             }
-            is CloudBackupManagerAction.RepairPasskeyNoDiscovery -> {
+            is CloudBackupManagerAction.RepairPasskey -> {
                 buf.putInt(15)
                 Unit
             }
-            is CloudBackupManagerAction.SyncUnsynced -> {
+            is CloudBackupManagerAction.RepairPasskeyNoDiscovery -> {
                 buf.putInt(16)
                 Unit
             }
-            is CloudBackupManagerAction.FetchCloudOnly -> {
+            is CloudBackupManagerAction.SyncUnsynced -> {
                 buf.putInt(17)
                 Unit
             }
-            is CloudBackupManagerAction.RestoreCloudWallet -> {
+            is CloudBackupManagerAction.FetchCloudOnly -> {
                 buf.putInt(18)
-                FfiConverterString.write(value.`recordId`, buf)
+                Unit
+            }
+            is CloudBackupManagerAction.RestoreCloudWallet -> {
+                buf.putInt(19)
+                FfiConverterTypeRecordId.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.DeleteCloudWallet -> {
-                buf.putInt(19)
-                FfiConverterString.write(value.`recordId`, buf)
+                buf.putInt(20)
+                FfiConverterTypeRecordId.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupManagerAction.RecoverOtherBackups -> {
+                buf.putInt(21)
+                Unit
+            }
+            is CloudBackupManagerAction.DeleteOtherBackups -> {
+                buf.putInt(22)
                 Unit
             }
             is CloudBackupManagerAction.RefreshDetail -> {
-                buf.putInt(20)
+                buf.putInt(23)
+                Unit
+            }
+            is CloudBackupManagerAction.EnterDetail -> {
+                buf.putInt(24)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -34064,33 +34673,159 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
 
 
 
-
-enum class CloudBackupPasskeyChoiceFlow {
+sealed class CloudBackupOtherBackupsState {
     
-    ENABLE,
-    REPAIR_PASSKEY;
+    data class Loaded(
+        val `summary`: org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary) : CloudBackupOtherBackupsState()
+        
+    {
+        
 
+        companion object
+    }
+    
+    data class LoadFailed(
+        val `error`: kotlin.String) : CloudBackupOtherBackupsState()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
     
 
 
     companion object
 }
 
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupOtherBackupsState : FfiConverterRustBuffer<CloudBackupOtherBackupsState>{
+    override fun read(buf: ByteBuffer): CloudBackupOtherBackupsState {
+        return when(buf.getInt()) {
+            1 -> CloudBackupOtherBackupsState.Loaded(
+                FfiConverterTypeCloudBackupOtherBackupsSummary.read(buf),
+                )
+            2 -> CloudBackupOtherBackupsState.LoadFailed(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupOtherBackupsState): ULong = when(value) {
+        is CloudBackupOtherBackupsState.Loaded -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupOtherBackupsSummary.allocationSize(value.`summary`)
+            )
+        }
+        is CloudBackupOtherBackupsState.LoadFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`error`)
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupOtherBackupsState, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupOtherBackupsState.Loaded -> {
+                buf.putInt(1)
+                FfiConverterTypeCloudBackupOtherBackupsSummary.write(value.`summary`, buf)
+                Unit
+            }
+            is CloudBackupOtherBackupsState.LoadFailed -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`error`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+sealed class CloudBackupPasskeyChoiceIntent {
+    
+    data class Enable(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext, 
+        val v2: org.bitcoinppl.cove_core.CloudBackupPasskeyHint?) : CloudBackupPasskeyChoiceIntent()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object RepairPasskey : CloudBackupPasskeyChoiceIntent()
+    
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
 
 /**
  * @suppress
  */
-public object FfiConverterTypeCloudBackupPasskeyChoiceFlow: FfiConverterRustBuffer<CloudBackupPasskeyChoiceFlow> {
-    override fun read(buf: ByteBuffer) = try {
-        CloudBackupPasskeyChoiceFlow.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+public object FfiConverterTypeCloudBackupPasskeyChoiceIntent : FfiConverterRustBuffer<CloudBackupPasskeyChoiceIntent>{
+    override fun read(buf: ByteBuffer): CloudBackupPasskeyChoiceIntent {
+        return when(buf.getInt()) {
+            1 -> CloudBackupPasskeyChoiceIntent.Enable(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.read(buf),
+                )
+            2 -> CloudBackupPasskeyChoiceIntent.RepairPasskey
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
     }
 
-    override fun allocationSize(value: CloudBackupPasskeyChoiceFlow) = 4UL
+    override fun allocationSize(value: CloudBackupPasskeyChoiceIntent): ULong = when(value) {
+        is CloudBackupPasskeyChoiceIntent.Enable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+                + FfiConverterOptionalTypeCloudBackupPasskeyHint.allocationSize(value.v2)
+            )
+        }
+        is CloudBackupPasskeyChoiceIntent.RepairPasskey -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
 
-    override fun write(value: CloudBackupPasskeyChoiceFlow, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
+    override fun write(value: CloudBackupPasskeyChoiceIntent, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupPasskeyChoiceIntent.Enable -> {
+                buf.putInt(1)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.write(value.v2, buf)
+                Unit
+            }
+            is CloudBackupPasskeyChoiceIntent.RepairPasskey -> {
+                buf.putInt(2)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 
@@ -34103,11 +34838,18 @@ sealed class CloudBackupPromptIntent {
     object None : CloudBackupPromptIntent()
     
     
-    object ExistingBackupFound : CloudBackupPromptIntent()
-    
+    data class ExistingBackupFound(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext, 
+        val v2: org.bitcoinppl.cove_core.CloudBackupPasskeyHint?) : CloudBackupPromptIntent()
+        
+    {
+        
+
+        companion object
+    }
     
     data class PasskeyChoice(
-        val v1: org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceFlow) : CloudBackupPromptIntent()
+        val v1: org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent) : CloudBackupPromptIntent()
         
     {
         
@@ -34138,9 +34880,12 @@ public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<C
     override fun read(buf: ByteBuffer): CloudBackupPromptIntent {
         return when(buf.getInt()) {
             1 -> CloudBackupPromptIntent.None
-            2 -> CloudBackupPromptIntent.ExistingBackupFound
+            2 -> CloudBackupPromptIntent.ExistingBackupFound(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.read(buf),
+                )
             3 -> CloudBackupPromptIntent.PasskeyChoice(
-                FfiConverterTypeCloudBackupPasskeyChoiceFlow.read(buf),
+                FfiConverterTypeCloudBackupPasskeyChoiceIntent.read(buf),
                 )
             4 -> CloudBackupPromptIntent.MissingPasskeyReminder
             5 -> CloudBackupPromptIntent.VerificationPrompt
@@ -34159,13 +34904,15 @@ public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<C
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+                + FfiConverterOptionalTypeCloudBackupPasskeyHint.allocationSize(value.v2)
             )
         }
         is CloudBackupPromptIntent.PasskeyChoice -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeCloudBackupPasskeyChoiceFlow.allocationSize(value.v1)
+                + FfiConverterTypeCloudBackupPasskeyChoiceIntent.allocationSize(value.v1)
             )
         }
         is CloudBackupPromptIntent.MissingPasskeyReminder -> {
@@ -34190,11 +34937,13 @@ public object FfiConverterTypeCloudBackupPromptIntent : FfiConverterRustBuffer<C
             }
             is CloudBackupPromptIntent.ExistingBackupFound -> {
                 buf.putInt(2)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.write(value.v2, buf)
                 Unit
             }
             is CloudBackupPromptIntent.PasskeyChoice -> {
                 buf.putInt(3)
-                FfiConverterTypeCloudBackupPasskeyChoiceFlow.write(value.v1, buf)
+                FfiConverterTypeCloudBackupPasskeyChoiceIntent.write(value.v1, buf)
                 Unit
             }
             is CloudBackupPromptIntent.MissingPasskeyReminder -> {
@@ -34269,6 +35018,15 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
+    data class EnableState(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableState) : CloudBackupReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class VerificationPrompt(
         val v1: kotlin.Boolean) : CloudBackupReconcileMessage()
         
@@ -34287,8 +35045,17 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
+    data class VerificationPresentation(
+        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationPresentation) : CloudBackupReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class PendingUploadVerification(
-        val v1: kotlin.Boolean) : CloudBackupReconcileMessage()
+        val v1: org.bitcoinppl.cove_core.PendingUploadVerificationState) : CloudBackupReconcileMessage()
         
     {
         
@@ -34350,6 +35117,15 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
+    data class OtherBackupsOperation(
+        val v1: org.bitcoinppl.cove_core.OtherBackupsOperation) : CloudBackupReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class PromptIntent(
         val v1: org.bitcoinppl.cove_core.CloudBackupPromptIntent) : CloudBackupReconcileMessage()
         
@@ -34393,34 +35169,43 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             6 -> CloudBackupReconcileMessage.SyncError(
                 FfiConverterOptionalString.read(buf),
                 )
-            7 -> CloudBackupReconcileMessage.VerificationPrompt(
+            7 -> CloudBackupReconcileMessage.EnableState(
+                FfiConverterTypeCloudBackupEnableState.read(buf),
+                )
+            8 -> CloudBackupReconcileMessage.VerificationPrompt(
                 FfiConverterBoolean.read(buf),
                 )
-            8 -> CloudBackupReconcileMessage.VerificationMetadata(
+            9 -> CloudBackupReconcileMessage.VerificationMetadata(
                 FfiConverterTypeCloudBackupVerificationMetadata.read(buf),
                 )
-            9 -> CloudBackupReconcileMessage.PendingUploadVerification(
-                FfiConverterBoolean.read(buf),
+            10 -> CloudBackupReconcileMessage.VerificationPresentation(
+                FfiConverterTypeCloudBackupVerificationPresentation.read(buf),
                 )
-            10 -> CloudBackupReconcileMessage.Detail(
+            11 -> CloudBackupReconcileMessage.PendingUploadVerification(
+                FfiConverterTypePendingUploadVerificationState.read(buf),
+                )
+            12 -> CloudBackupReconcileMessage.Detail(
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
                 )
-            11 -> CloudBackupReconcileMessage.Verification(
+            13 -> CloudBackupReconcileMessage.Verification(
                 FfiConverterTypeVerificationState.read(buf),
                 )
-            12 -> CloudBackupReconcileMessage.Sync(
+            14 -> CloudBackupReconcileMessage.Sync(
                 FfiConverterTypeSyncState.read(buf),
                 )
-            13 -> CloudBackupReconcileMessage.Recovery(
+            15 -> CloudBackupReconcileMessage.Recovery(
                 FfiConverterTypeRecoveryState.read(buf),
                 )
-            14 -> CloudBackupReconcileMessage.CloudOnly(
+            16 -> CloudBackupReconcileMessage.CloudOnly(
                 FfiConverterTypeCloudOnlyState.read(buf),
                 )
-            15 -> CloudBackupReconcileMessage.CloudOnlyOperation(
+            17 -> CloudBackupReconcileMessage.CloudOnlyOperation(
                 FfiConverterTypeCloudOnlyOperation.read(buf),
                 )
-            16 -> CloudBackupReconcileMessage.PromptIntent(
+            18 -> CloudBackupReconcileMessage.OtherBackupsOperation(
+                FfiConverterTypeOtherBackupsOperation.read(buf),
+                )
+            19 -> CloudBackupReconcileMessage.PromptIntent(
                 FfiConverterTypeCloudBackupPromptIntent.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -34470,6 +35255,13 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 + FfiConverterOptionalString.allocationSize(value.v1)
             )
         }
+        is CloudBackupReconcileMessage.EnableState -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupEnableState.allocationSize(value.v1)
+            )
+        }
         is CloudBackupReconcileMessage.VerificationPrompt -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -34484,11 +35276,18 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 + FfiConverterTypeCloudBackupVerificationMetadata.allocationSize(value.v1)
             )
         }
+        is CloudBackupReconcileMessage.VerificationPresentation -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationPresentation.allocationSize(value.v1)
+            )
+        }
         is CloudBackupReconcileMessage.PendingUploadVerification -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterBoolean.allocationSize(value.v1)
+                + FfiConverterTypePendingUploadVerificationState.allocationSize(value.v1)
             )
         }
         is CloudBackupReconcileMessage.Detail -> {
@@ -34533,6 +35332,13 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 + FfiConverterTypeCloudOnlyOperation.allocationSize(value.v1)
             )
         }
+        is CloudBackupReconcileMessage.OtherBackupsOperation -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeOtherBackupsOperation.allocationSize(value.v1)
+            )
+        }
         is CloudBackupReconcileMessage.PromptIntent -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -34574,53 +35380,68 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 FfiConverterOptionalString.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupReconcileMessage.VerificationPrompt -> {
+            is CloudBackupReconcileMessage.EnableState -> {
                 buf.putInt(7)
+                FfiConverterTypeCloudBackupEnableState.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.VerificationPrompt -> {
+                buf.putInt(8)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.VerificationMetadata -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 FfiConverterTypeCloudBackupVerificationMetadata.write(value.v1, buf)
                 Unit
             }
+            is CloudBackupReconcileMessage.VerificationPresentation -> {
+                buf.putInt(10)
+                FfiConverterTypeCloudBackupVerificationPresentation.write(value.v1, buf)
+                Unit
+            }
             is CloudBackupReconcileMessage.PendingUploadVerification -> {
-                buf.putInt(9)
-                FfiConverterBoolean.write(value.v1, buf)
+                buf.putInt(11)
+                FfiConverterTypePendingUploadVerificationState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Detail -> {
-                buf.putInt(10)
+                buf.putInt(12)
                 FfiConverterOptionalTypeCloudBackupDetail.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Verification -> {
-                buf.putInt(11)
+                buf.putInt(13)
                 FfiConverterTypeVerificationState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Sync -> {
-                buf.putInt(12)
+                buf.putInt(14)
                 FfiConverterTypeSyncState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.Recovery -> {
-                buf.putInt(13)
+                buf.putInt(15)
                 FfiConverterTypeRecoveryState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.CloudOnly -> {
-                buf.putInt(14)
+                buf.putInt(16)
                 FfiConverterTypeCloudOnlyState.write(value.v1, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.CloudOnlyOperation -> {
-                buf.putInt(15)
+                buf.putInt(17)
                 FfiConverterTypeCloudOnlyOperation.write(value.v1, buf)
                 Unit
             }
+            is CloudBackupReconcileMessage.OtherBackupsOperation -> {
+                buf.putInt(18)
+                FfiConverterTypeOtherBackupsOperation.write(value.v1, buf)
+                Unit
+            }
             is CloudBackupReconcileMessage.PromptIntent -> {
-                buf.putInt(16)
+                buf.putInt(19)
                 FfiConverterTypeCloudBackupPromptIntent.write(value.v1, buf)
                 Unit
             }
@@ -34659,6 +35480,73 @@ public object FfiConverterTypeCloudBackupRestoreStage: FfiConverterRustBuffer<Cl
     override fun allocationSize(value: CloudBackupRestoreStage) = 4UL
 
     override fun write(value: CloudBackupRestoreStage, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class CloudBackupRetryAction {
+    
+    VERIFY,
+    VERIFY_DISCOVERABLE;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRetryAction: FfiConverterRustBuffer<CloudBackupRetryAction> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupRetryAction.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupRetryAction) = 4UL
+
+    override fun write(value: CloudBackupRetryAction, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class CloudBackupRetryIssue {
+    
+    CONNECTIVITY;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupRetryIssue: FfiConverterRustBuffer<CloudBackupRetryIssue> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupRetryIssue.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupRetryIssue) = 4UL
+
+    override fun write(value: CloudBackupRetryIssue, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }
@@ -34904,6 +35792,298 @@ public object FfiConverterTypeCloudBackupVerificationMetadata : FfiConverterRust
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+sealed class CloudBackupVerificationPresentation {
+    
+    data class Hidden(
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource?) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * The verification sheet is only for an unanswered user decision
+     */
+    data class NeedsDecision(
+        val `reason`: org.bitcoinppl.cove_core.CloudBackupVerificationReason, 
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Native passkey UI may appear while this state is active
+     */
+    data class ManualVerifying(
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class BackgroundConfirming(
+        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class BackgroundBlockedOnAuthorization(
+        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Completion feedback should match the source instead of reopening the sheet
+     */
+    data class Completed(
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Failure is a result, not another request to show the decision sheet
+     */
+    data class Failed(
+        val `source`: org.bitcoinppl.cove_core.CloudBackupVerificationSource, 
+        val `message`: kotlin.String) : CloudBackupVerificationPresentation()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupVerificationPresentation : FfiConverterRustBuffer<CloudBackupVerificationPresentation>{
+    override fun read(buf: ByteBuffer): CloudBackupVerificationPresentation {
+        return when(buf.getInt()) {
+            1 -> CloudBackupVerificationPresentation.Hidden(
+                FfiConverterOptionalTypeCloudBackupVerificationSource.read(buf),
+                )
+            2 -> CloudBackupVerificationPresentation.NeedsDecision(
+                FfiConverterTypeCloudBackupVerificationReason.read(buf),
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
+            3 -> CloudBackupVerificationPresentation.ManualVerifying(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
+            4 -> CloudBackupVerificationPresentation.BackgroundConfirming(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
+            5 -> CloudBackupVerificationPresentation.BackgroundBlockedOnAuthorization(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
+            6 -> CloudBackupVerificationPresentation.Completed(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                )
+            7 -> CloudBackupVerificationPresentation.Failed(
+                FfiConverterTypeCloudBackupVerificationSource.read(buf),
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupVerificationPresentation): ULong = when(value) {
+        is CloudBackupVerificationPresentation.Hidden -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterOptionalTypeCloudBackupVerificationSource.allocationSize(value.`source`)
+            )
+        }
+        is CloudBackupVerificationPresentation.NeedsDecision -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationReason.allocationSize(value.`reason`)
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
+            )
+        }
+        is CloudBackupVerificationPresentation.ManualVerifying -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
+            )
+        }
+        is CloudBackupVerificationPresentation.BackgroundConfirming -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupVerificationPresentation.BackgroundBlockedOnAuthorization -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupVerificationPresentation.Completed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
+            )
+        }
+        is CloudBackupVerificationPresentation.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value.`source`)
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupVerificationPresentation, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupVerificationPresentation.Hidden -> {
+                buf.putInt(1)
+                FfiConverterOptionalTypeCloudBackupVerificationSource.write(value.`source`, buf)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.NeedsDecision -> {
+                buf.putInt(2)
+                FfiConverterTypeCloudBackupVerificationReason.write(value.`reason`, buf)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.ManualVerifying -> {
+                buf.putInt(3)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.BackgroundConfirming -> {
+                buf.putInt(4)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.BackgroundBlockedOnAuthorization -> {
+                buf.putInt(5)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.Completed -> {
+                buf.putInt(6)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
+                Unit
+            }
+            is CloudBackupVerificationPresentation.Failed -> {
+                buf.putInt(7)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.`source`, buf)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class CloudBackupVerificationReason {
+    
+    BACKUP_CHANGED;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupVerificationReason: FfiConverterRustBuffer<CloudBackupVerificationReason> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupVerificationReason.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupVerificationReason) = 4UL
+
+    override fun write(value: CloudBackupVerificationReason, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class CloudBackupVerificationSource {
+    
+    ROOT_PROMPT,
+    SETTINGS,
+    CLOUD_BACKUP_DETAIL,
+    ONBOARDING;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupVerificationSource: FfiConverterRustBuffer<CloudBackupVerificationSource> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupVerificationSource.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupVerificationSource) = 4UL
+
+    override fun write(value: CloudBackupVerificationSource, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -35971,6 +37151,7 @@ public object FfiConverterTypeColdWalletRoute: FfiConverterRustBuffer<ColdWallet
 
 enum class ConnectivityStatus {
     
+    UNKNOWN,
     CONNECTED,
     DISCONNECTED;
 
@@ -36495,6 +37676,187 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
     }
 
 }
+
+
+
+sealed class DeepVerificationFailure {
+    
+    /**
+     * Transient iCloud/network/passkey error — safe to retry
+     */
+    data class Retry(
+        val `message`: kotlin.String, 
+        val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?, 
+        val `retryContext`: org.bitcoinppl.cove_core.CloudBackupRetryContext?) : DeepVerificationFailure()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Manifest missing, master key verified intact — recreate from local wallets
+     */
+    data class RecreateManifest(
+        val `message`: kotlin.String, 
+        val `warning`: kotlin.String, 
+        val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?) : DeepVerificationFailure()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * No verified cloud or local master key available — full re-enable needed
+     */
+    data class ReinitializeBackup(
+        val `message`: kotlin.String, 
+        val `warning`: kotlin.String, 
+        val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?) : DeepVerificationFailure()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Backup uses a newer format — do not overwrite
+     */
+    data class UnsupportedVersion(
+        val `message`: kotlin.String, 
+        val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?) : DeepVerificationFailure()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+     fun `message`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_deepverificationfailure_message(FfiConverterTypeDeepVerificationFailure.lower(this),
+        _status)
+}
+    )
+    }
+    
+
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<DeepVerificationFailure>{
+    override fun read(buf: ByteBuffer): DeepVerificationFailure {
+        return when(buf.getInt()) {
+            1 -> DeepVerificationFailure.Retry(
+                FfiConverterString.read(buf),
+                FfiConverterOptionalTypeCloudBackupDetail.read(buf),
+                FfiConverterOptionalTypeCloudBackupRetryContext.read(buf),
+                )
+            2 -> DeepVerificationFailure.RecreateManifest(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterOptionalTypeCloudBackupDetail.read(buf),
+                )
+            3 -> DeepVerificationFailure.ReinitializeBackup(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterOptionalTypeCloudBackupDetail.read(buf),
+                )
+            4 -> DeepVerificationFailure.UnsupportedVersion(
+                FfiConverterString.read(buf),
+                FfiConverterOptionalTypeCloudBackupDetail.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: DeepVerificationFailure): ULong = when(value) {
+        is DeepVerificationFailure.Retry -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+                + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
+                + FfiConverterOptionalTypeCloudBackupRetryContext.allocationSize(value.`retryContext`)
+            )
+        }
+        is DeepVerificationFailure.RecreateManifest -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+                + FfiConverterString.allocationSize(value.`warning`)
+                + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
+            )
+        }
+        is DeepVerificationFailure.ReinitializeBackup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+                + FfiConverterString.allocationSize(value.`warning`)
+                + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
+            )
+        }
+        is DeepVerificationFailure.UnsupportedVersion -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+                + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
+            )
+        }
+    }
+
+    override fun write(value: DeepVerificationFailure, buf: ByteBuffer) {
+        when(value) {
+            is DeepVerificationFailure.Retry -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.`message`, buf)
+                FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
+                FfiConverterOptionalTypeCloudBackupRetryContext.write(value.`retryContext`, buf)
+                Unit
+            }
+            is DeepVerificationFailure.RecreateManifest -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`message`, buf)
+                FfiConverterString.write(value.`warning`, buf)
+                FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
+                Unit
+            }
+            is DeepVerificationFailure.ReinitializeBackup -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.`message`, buf)
+                FfiConverterString.write(value.`warning`, buf)
+                FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
+                Unit
+            }
+            is DeepVerificationFailure.UnsupportedVersion -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`message`, buf)
+                FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
 
 
 
@@ -40713,15 +42075,6 @@ sealed class OnboardingAction {
         companion object
     }
     
-    data class SelectReturningUserFlow(
-        val `selection`: org.bitcoinppl.cove_core.OnboardingReturningUserSelection) : OnboardingAction()
-        
-    {
-        
-
-        companion object
-    }
-    
     data class SelectStorage(
         val `selection`: org.bitcoinppl.cove_core.OnboardingStorageSelection) : OnboardingAction()
         
@@ -40731,14 +42084,8 @@ sealed class OnboardingAction {
         companion object
     }
     
-    data class SelectSoftwareAction(
-        val `selection`: org.bitcoinppl.cove_core.OnboardingSoftwareSelection) : OnboardingAction()
-        
-    {
-        
-
-        companion object
-    }
+    object CreateSoftwareWallet : OnboardingAction()
+    
     
     object ContinueWalletCreation : OnboardingAction()
     
@@ -40785,6 +42132,9 @@ sealed class OnboardingAction {
     object OpenCloudRestore : OnboardingAction()
     
     
+    object DismissCloudRestoreAlert : OnboardingAction()
+    
+    
     object StartRestore : OnboardingAction()
     
     
@@ -40812,6 +42162,12 @@ sealed class OnboardingAction {
     object Back : OnboardingAction()
     
     
+    object BeginCloudBackupEnable : OnboardingAction()
+    
+    
+    object ContinueFromCloudBackupSuccess : OnboardingAction()
+    
+    
 
     
 
@@ -40832,30 +42188,26 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
             2 -> OnboardingAction.SelectHasBitcoin(
                 FfiConverterBoolean.read(buf),
                 )
-            3 -> OnboardingAction.SelectReturningUserFlow(
-                FfiConverterTypeOnboardingReturningUserSelection.read(buf),
-                )
-            4 -> OnboardingAction.SelectStorage(
+            3 -> OnboardingAction.SelectStorage(
                 FfiConverterTypeOnboardingStorageSelection.read(buf),
                 )
-            5 -> OnboardingAction.SelectSoftwareAction(
-                FfiConverterTypeOnboardingSoftwareSelection.read(buf),
-                )
-            6 -> OnboardingAction.ContinueWalletCreation
-            7 -> OnboardingAction.ShowSecretWords
-            8 -> OnboardingAction.SecretWordsSaved
-            9 -> OnboardingAction.OpenCloudBackup
-            10 -> OnboardingAction.CloudBackupEnabled
-            11 -> OnboardingAction.SkipCloudBackup
-            12 -> OnboardingAction.ContinueFromBackup
-            13 -> OnboardingAction.ContinueFromExchangeFunding
-            14 -> OnboardingAction.SoftwareImportCompleted(
+            4 -> OnboardingAction.CreateSoftwareWallet
+            5 -> OnboardingAction.ContinueWalletCreation
+            6 -> OnboardingAction.ShowSecretWords
+            7 -> OnboardingAction.SecretWordsSaved
+            8 -> OnboardingAction.OpenCloudBackup
+            9 -> OnboardingAction.CloudBackupEnabled
+            10 -> OnboardingAction.SkipCloudBackup
+            11 -> OnboardingAction.ContinueFromBackup
+            12 -> OnboardingAction.ContinueFromExchangeFunding
+            13 -> OnboardingAction.SoftwareImportCompleted(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            15 -> OnboardingAction.HardwareImportCompleted(
+            14 -> OnboardingAction.HardwareImportCompleted(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            16 -> OnboardingAction.OpenCloudRestore
+            15 -> OnboardingAction.OpenCloudRestore
+            16 -> OnboardingAction.DismissCloudRestoreAlert
             17 -> OnboardingAction.StartRestore
             18 -> OnboardingAction.SkipRestore
             19 -> OnboardingAction.ContinueWithoutCloudRestore
@@ -40865,6 +42217,8 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 )
             22 -> OnboardingAction.AcceptTerms
             23 -> OnboardingAction.Back
+            24 -> OnboardingAction.BeginCloudBackupEnable
+            25 -> OnboardingAction.ContinueFromCloudBackupSuccess
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -40883,13 +42237,6 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 + FfiConverterBoolean.allocationSize(value.`hasBitcoin`)
             )
         }
-        is OnboardingAction.SelectReturningUserFlow -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeOnboardingReturningUserSelection.allocationSize(value.`selection`)
-            )
-        }
         is OnboardingAction.SelectStorage -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -40897,11 +42244,10 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 + FfiConverterTypeOnboardingStorageSelection.allocationSize(value.`selection`)
             )
         }
-        is OnboardingAction.SelectSoftwareAction -> {
+        is OnboardingAction.CreateSoftwareWallet -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeOnboardingSoftwareSelection.allocationSize(value.`selection`)
             )
         }
         is OnboardingAction.ContinueWalletCreation -> {
@@ -40972,6 +42318,12 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 4UL
             )
         }
+        is OnboardingAction.DismissCloudRestoreAlert -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is OnboardingAction.StartRestore -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -41015,6 +42367,18 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 4UL
             )
         }
+        is OnboardingAction.BeginCloudBackupEnable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OnboardingAction.ContinueFromCloudBackupSuccess -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: OnboardingAction, buf: ByteBuffer) {
@@ -41028,64 +42392,62 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 FfiConverterBoolean.write(value.`hasBitcoin`, buf)
                 Unit
             }
-            is OnboardingAction.SelectReturningUserFlow -> {
-                buf.putInt(3)
-                FfiConverterTypeOnboardingReturningUserSelection.write(value.`selection`, buf)
-                Unit
-            }
             is OnboardingAction.SelectStorage -> {
-                buf.putInt(4)
+                buf.putInt(3)
                 FfiConverterTypeOnboardingStorageSelection.write(value.`selection`, buf)
                 Unit
             }
-            is OnboardingAction.SelectSoftwareAction -> {
-                buf.putInt(5)
-                FfiConverterTypeOnboardingSoftwareSelection.write(value.`selection`, buf)
+            is OnboardingAction.CreateSoftwareWallet -> {
+                buf.putInt(4)
                 Unit
             }
             is OnboardingAction.ContinueWalletCreation -> {
-                buf.putInt(6)
+                buf.putInt(5)
                 Unit
             }
             is OnboardingAction.ShowSecretWords -> {
-                buf.putInt(7)
+                buf.putInt(6)
                 Unit
             }
             is OnboardingAction.SecretWordsSaved -> {
-                buf.putInt(8)
+                buf.putInt(7)
                 Unit
             }
             is OnboardingAction.OpenCloudBackup -> {
-                buf.putInt(9)
+                buf.putInt(8)
                 Unit
             }
             is OnboardingAction.CloudBackupEnabled -> {
-                buf.putInt(10)
+                buf.putInt(9)
                 Unit
             }
             is OnboardingAction.SkipCloudBackup -> {
-                buf.putInt(11)
+                buf.putInt(10)
                 Unit
             }
             is OnboardingAction.ContinueFromBackup -> {
-                buf.putInt(12)
+                buf.putInt(11)
                 Unit
             }
             is OnboardingAction.ContinueFromExchangeFunding -> {
-                buf.putInt(13)
+                buf.putInt(12)
                 Unit
             }
             is OnboardingAction.SoftwareImportCompleted -> {
-                buf.putInt(14)
+                buf.putInt(13)
                 FfiConverterTypeWalletId.write(value.`walletId`, buf)
                 Unit
             }
             is OnboardingAction.HardwareImportCompleted -> {
-                buf.putInt(15)
+                buf.putInt(14)
                 FfiConverterTypeWalletId.write(value.`walletId`, buf)
                 Unit
             }
             is OnboardingAction.OpenCloudRestore -> {
+                buf.putInt(15)
+                Unit
+            }
+            is OnboardingAction.DismissCloudRestoreAlert -> {
                 buf.putInt(16)
                 Unit
             }
@@ -41116,6 +42478,14 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
             }
             is OnboardingAction.Back -> {
                 buf.putInt(23)
+                Unit
+            }
+            is OnboardingAction.BeginCloudBackupEnable -> {
+                buf.putInt(24)
+                Unit
+            }
+            is OnboardingAction.ContinueFromCloudBackupSuccess -> {
+                buf.putInt(25)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -41264,7 +42634,25 @@ sealed class OnboardingReconcileMessage {
         companion object
     }
     
+    data class CloudRestoreProviderHintChanged(
+        val v1: org.bitcoinppl.cove_core.CloudRestoreProviderHint?) : OnboardingReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class ShouldOfferCloudRestore(
+        val v1: kotlin.Boolean) : OnboardingReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class CloudRestoreAlertVisible(
         val v1: kotlin.Boolean) : OnboardingReconcileMessage()
         
     {
@@ -41322,13 +42710,19 @@ public object FfiConverterTypeOnboardingReconcileMessage : FfiConverterRustBuffe
             7 -> OnboardingReconcileMessage.CloudRestoreMessageChanged(
                 FfiConverterOptionalString.read(buf),
                 )
-            8 -> OnboardingReconcileMessage.ShouldOfferCloudRestore(
+            8 -> OnboardingReconcileMessage.CloudRestoreProviderHintChanged(
+                FfiConverterOptionalTypeCloudRestoreProviderHint.read(buf),
+                )
+            9 -> OnboardingReconcileMessage.ShouldOfferCloudRestore(
                 FfiConverterBoolean.read(buf),
                 )
-            9 -> OnboardingReconcileMessage.ErrorMessageChanged(
+            10 -> OnboardingReconcileMessage.CloudRestoreAlertVisible(
+                FfiConverterBoolean.read(buf),
+                )
+            11 -> OnboardingReconcileMessage.ErrorMessageChanged(
                 FfiConverterOptionalString.read(buf),
                 )
-            10 -> OnboardingReconcileMessage.Complete
+            12 -> OnboardingReconcileMessage.Complete
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -41383,7 +42777,21 @@ public object FfiConverterTypeOnboardingReconcileMessage : FfiConverterRustBuffe
                 + FfiConverterOptionalString.allocationSize(value.v1)
             )
         }
+        is OnboardingReconcileMessage.CloudRestoreProviderHintChanged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterOptionalTypeCloudRestoreProviderHint.allocationSize(value.v1)
+            )
+        }
         is OnboardingReconcileMessage.ShouldOfferCloudRestore -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.v1)
+            )
+        }
+        is OnboardingReconcileMessage.CloudRestoreAlertVisible -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -41442,89 +42850,31 @@ public object FfiConverterTypeOnboardingReconcileMessage : FfiConverterRustBuffe
                 FfiConverterOptionalString.write(value.v1, buf)
                 Unit
             }
-            is OnboardingReconcileMessage.ShouldOfferCloudRestore -> {
+            is OnboardingReconcileMessage.CloudRestoreProviderHintChanged -> {
                 buf.putInt(8)
+                FfiConverterOptionalTypeCloudRestoreProviderHint.write(value.v1, buf)
+                Unit
+            }
+            is OnboardingReconcileMessage.ShouldOfferCloudRestore -> {
+                buf.putInt(9)
+                FfiConverterBoolean.write(value.v1, buf)
+                Unit
+            }
+            is OnboardingReconcileMessage.CloudRestoreAlertVisible -> {
+                buf.putInt(10)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is OnboardingReconcileMessage.ErrorMessageChanged -> {
-                buf.putInt(9)
+                buf.putInt(11)
                 FfiConverterOptionalString.write(value.v1, buf)
                 Unit
             }
             is OnboardingReconcileMessage.Complete -> {
-                buf.putInt(10)
+                buf.putInt(12)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-}
-
-
-
-
-
-
-enum class OnboardingReturningUserSelection {
-    
-    RESTORE_FROM_COVE_BACKUP,
-    USE_ANOTHER_WALLET;
-
-    
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeOnboardingReturningUserSelection: FfiConverterRustBuffer<OnboardingReturningUserSelection> {
-    override fun read(buf: ByteBuffer) = try {
-        OnboardingReturningUserSelection.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: OnboardingReturningUserSelection) = 4UL
-
-    override fun write(value: OnboardingReturningUserSelection, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
-
-enum class OnboardingSoftwareSelection {
-    
-    CREATE_NEW_WALLET,
-    IMPORT_EXISTING_WALLET;
-
-    
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeOnboardingSoftwareSelection: FfiConverterRustBuffer<OnboardingSoftwareSelection> {
-    override fun read(buf: ByteBuffer) = try {
-        OnboardingSoftwareSelection.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: OnboardingSoftwareSelection) = 4UL
-
-    override fun write(value: OnboardingSoftwareSelection, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -41542,9 +42892,7 @@ enum class OnboardingStep {
     RESTORING,
     WELCOME,
     BITCOIN_CHOICE,
-    RETURNING_USER_CHOICE,
     STORAGE_CHOICE,
-    SOFTWARE_CHOICE,
     CREATING_WALLET,
     BACKUP_WALLET,
     CLOUD_BACKUP,
@@ -41552,7 +42900,8 @@ enum class OnboardingStep {
     EXCHANGE_FUNDING,
     HARDWARE_IMPORT,
     SOFTWARE_IMPORT,
-    TERMS;
+    TERMS,
+    CLOUD_BACKUP_SUCCESS;
 
     
 
@@ -41610,6 +42959,153 @@ public object FfiConverterTypeOnboardingStorageSelection: FfiConverterRustBuffer
 
     override fun write(value: OnboardingStorageSelection, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+sealed class OtherBackupsOperation {
+    
+    object Idle : OtherBackupsOperation()
+    
+    
+    object Recovering : OtherBackupsOperation()
+    
+    
+    data class Recovered(
+        val `walletsRestored`: kotlin.UInt, 
+        val `walletsFailed`: kotlin.UInt, 
+        val `failedWalletErrors`: List<kotlin.String>) : OtherBackupsOperation()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object Deleting : OtherBackupsOperation()
+    
+    
+    object Deleted : OtherBackupsOperation()
+    
+    
+    data class Failed(
+        val `error`: kotlin.String) : OtherBackupsOperation()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeOtherBackupsOperation : FfiConverterRustBuffer<OtherBackupsOperation>{
+    override fun read(buf: ByteBuffer): OtherBackupsOperation {
+        return when(buf.getInt()) {
+            1 -> OtherBackupsOperation.Idle
+            2 -> OtherBackupsOperation.Recovering
+            3 -> OtherBackupsOperation.Recovered(
+                FfiConverterUInt.read(buf),
+                FfiConverterUInt.read(buf),
+                FfiConverterSequenceString.read(buf),
+                )
+            4 -> OtherBackupsOperation.Deleting
+            5 -> OtherBackupsOperation.Deleted
+            6 -> OtherBackupsOperation.Failed(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: OtherBackupsOperation): ULong = when(value) {
+        is OtherBackupsOperation.Idle -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OtherBackupsOperation.Recovering -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OtherBackupsOperation.Recovered -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`walletsRestored`)
+                + FfiConverterUInt.allocationSize(value.`walletsFailed`)
+                + FfiConverterSequenceString.allocationSize(value.`failedWalletErrors`)
+            )
+        }
+        is OtherBackupsOperation.Deleting -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OtherBackupsOperation.Deleted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OtherBackupsOperation.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`error`)
+            )
+        }
+    }
+
+    override fun write(value: OtherBackupsOperation, buf: ByteBuffer) {
+        when(value) {
+            is OtherBackupsOperation.Idle -> {
+                buf.putInt(1)
+                Unit
+            }
+            is OtherBackupsOperation.Recovering -> {
+                buf.putInt(2)
+                Unit
+            }
+            is OtherBackupsOperation.Recovered -> {
+                buf.putInt(3)
+                FfiConverterUInt.write(value.`walletsRestored`, buf)
+                FfiConverterUInt.write(value.`walletsFailed`, buf)
+                FfiConverterSequenceString.write(value.`failedWalletErrors`, buf)
+                Unit
+            }
+            is OtherBackupsOperation.Deleting -> {
+                buf.putInt(4)
+                Unit
+            }
+            is OtherBackupsOperation.Deleted -> {
+                buf.putInt(5)
+                Unit
+            }
+            is OtherBackupsOperation.Failed -> {
+                buf.putInt(6)
+                FfiConverterString.write(value.`error`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 
@@ -41693,6 +43189,41 @@ public object FfiConverterTypePendingOrConfirmed : FfiConverterRustBuffer<Pendin
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class PendingUploadVerificationState {
+    
+    IDLE,
+    CONFIRMING,
+    BLOCKED_ON_AUTHORIZATION;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePendingUploadVerificationState: FfiConverterRustBuffer<PendingUploadVerificationState> {
+    override fun read(buf: ByteBuffer) = try {
+        PendingUploadVerificationState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: PendingUploadVerificationState) = 4UL
+
+    override fun write(value: PendingUploadVerificationState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -42358,6 +43889,40 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class SavedPasskeyConfirmationMode {
+    
+    AUTOMATIC,
+    MANUAL;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSavedPasskeyConfirmationMode: FfiConverterRustBuffer<SavedPasskeyConfirmationMode> {
+    override fun read(buf: ByteBuffer) = try {
+        SavedPasskeyConfirmationMode.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SavedPasskeyConfirmationMode) = 4UL
+
+    override fun write(value: SavedPasskeyConfirmationMode, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -43415,6 +44980,125 @@ public object FfiConverterTypeSeedQrError : FfiConverterRustBuffer<SeedQrExcepti
     }
 
 }
+
+
+
+sealed class SendConfirmationInput: Disposable  {
+    
+    object Unsigned : SendConfirmationInput()
+    
+    
+    data class SignedTransaction(
+        val v1: org.bitcoinppl.cove_core.BitcoinTransaction) : SendConfirmationInput()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class SignedPsbt(
+        val v1: org.bitcoinppl.cove_core.types.Psbt) : SendConfirmationInput()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is SendConfirmationInput.Unsigned -> {// Nothing to destroy
+            }
+            is SendConfirmationInput.SignedTransaction -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+            is SendConfirmationInput.SignedPsbt -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSendConfirmationInput : FfiConverterRustBuffer<SendConfirmationInput>{
+    override fun read(buf: ByteBuffer): SendConfirmationInput {
+        return when(buf.getInt()) {
+            1 -> SendConfirmationInput.Unsigned
+            2 -> SendConfirmationInput.SignedTransaction(
+                FfiConverterTypeBitcoinTransaction.read(buf),
+                )
+            3 -> SendConfirmationInput.SignedPsbt(
+                FfiConverterTypePsbt.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SendConfirmationInput): ULong = when(value) {
+        is SendConfirmationInput.Unsigned -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SendConfirmationInput.SignedTransaction -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeBitcoinTransaction.allocationSize(value.v1)
+            )
+        }
+        is SendConfirmationInput.SignedPsbt -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypePsbt.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: SendConfirmationInput, buf: ByteBuffer) {
+        when(value) {
+            is SendConfirmationInput.Unsigned -> {
+                buf.putInt(1)
+                Unit
+            }
+            is SendConfirmationInput.SignedTransaction -> {
+                buf.putInt(2)
+                FfiConverterTypeBitcoinTransaction.write(value.v1, buf)
+                Unit
+            }
+            is SendConfirmationInput.SignedPsbt -> {
+                buf.putInt(3)
+                FfiConverterTypePsbt.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
 
 
 
@@ -44835,17 +46519,8 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
         companion object
     }
     
-    data class UpdateSelectedFeeRate(
-        val v1: org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee) : SendFlowManagerReconcileMessage()
-        
-    {
-        
-
-        companion object
-    }
-    
-    data class UpdateFeeRateOptions(
-        val v1: org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee) : SendFlowManagerReconcileMessage()
+    data class UpdateFeeSelection(
+        val v1: org.bitcoinppl.cove_core.FeeSelection) : SendFlowManagerReconcileMessage()
         
     {
         
@@ -44931,14 +46606,7 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     )
                 
             }
-            is SendFlowManagerReconcileMessage.UpdateSelectedFeeRate -> {
-                
-    Disposable.destroy(
-        this.v1
-    )
-                
-            }
-            is SendFlowManagerReconcileMessage.UpdateFeeRateOptions -> {
+            is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
                 
     Disposable.destroy(
         this.v1
@@ -44998,17 +46666,14 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
             9 -> SendFlowManagerReconcileMessage.UpdateFocusField(
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 )
-            10 -> SendFlowManagerReconcileMessage.UpdateSelectedFeeRate(
-                FfiConverterTypeFeeRateOptionWithTotalFee.read(buf),
+            10 -> SendFlowManagerReconcileMessage.UpdateFeeSelection(
+                FfiConverterTypeFeeSelection.read(buf),
                 )
-            11 -> SendFlowManagerReconcileMessage.UpdateFeeRateOptions(
-                FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
-                )
-            12 -> SendFlowManagerReconcileMessage.RefreshPresenters
-            13 -> SendFlowManagerReconcileMessage.SetAlert(
+            11 -> SendFlowManagerReconcileMessage.RefreshPresenters
+            12 -> SendFlowManagerReconcileMessage.SetAlert(
                 FfiConverterTypeSendFlowAlertState.read(buf),
                 )
-            14 -> SendFlowManagerReconcileMessage.ClearAlert
+            13 -> SendFlowManagerReconcileMessage.ClearAlert
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -45076,18 +46741,11 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 + FfiConverterOptionalTypeSetAmountFocusField.allocationSize(value.v1)
             )
         }
-        is SendFlowManagerReconcileMessage.UpdateSelectedFeeRate -> {
+        is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeFeeRateOptionWithTotalFee.allocationSize(value.v1)
-            )
-        }
-        is SendFlowManagerReconcileMessage.UpdateFeeRateOptions -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeFeeRateOptionsWithTotalFee.allocationSize(value.v1)
+                + FfiConverterTypeFeeSelection.allocationSize(value.v1)
             )
         }
         is SendFlowManagerReconcileMessage.RefreshPresenters -> {
@@ -45157,27 +46815,22 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.v1, buf)
                 Unit
             }
-            is SendFlowManagerReconcileMessage.UpdateSelectedFeeRate -> {
+            is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
                 buf.putInt(10)
-                FfiConverterTypeFeeRateOptionWithTotalFee.write(value.v1, buf)
-                Unit
-            }
-            is SendFlowManagerReconcileMessage.UpdateFeeRateOptions -> {
-                buf.putInt(11)
-                FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.v1, buf)
+                FfiConverterTypeFeeSelection.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.RefreshPresenters -> {
-                buf.putInt(12)
+                buf.putInt(11)
                 Unit
             }
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                buf.putInt(13)
+                buf.putInt(12)
                 FfiConverterTypeSendFlowAlertState.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.ClearAlert -> {
-                buf.putInt(14)
+                buf.putInt(13)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -48354,129 +50007,6 @@ public object FfiConverterTypeUrType : FfiConverterRustBuffer<UrType>{
 
 
 
-sealed class VerificationFailureKind {
-    
-    /**
-     * Transient iCloud/network/passkey error — safe to retry
-     */
-    object Retry : VerificationFailureKind()
-    
-    
-    /**
-     * Manifest missing, master key verified intact — recreate from local wallets
-     */
-    data class RecreateManifest(
-        val `warning`: kotlin.String) : VerificationFailureKind()
-        
-    {
-        
-
-        companion object
-    }
-    
-    /**
-     * No verified cloud or local master key available — full re-enable needed
-     */
-    data class ReinitializeBackup(
-        val `warning`: kotlin.String) : VerificationFailureKind()
-        
-    {
-        
-
-        companion object
-    }
-    
-    /**
-     * Backup uses a newer format — do not overwrite
-     */
-    object UnsupportedVersion : VerificationFailureKind()
-    
-    
-
-    
-
-    
-    
-
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeVerificationFailureKind : FfiConverterRustBuffer<VerificationFailureKind>{
-    override fun read(buf: ByteBuffer): VerificationFailureKind {
-        return when(buf.getInt()) {
-            1 -> VerificationFailureKind.Retry
-            2 -> VerificationFailureKind.RecreateManifest(
-                FfiConverterString.read(buf),
-                )
-            3 -> VerificationFailureKind.ReinitializeBackup(
-                FfiConverterString.read(buf),
-                )
-            4 -> VerificationFailureKind.UnsupportedVersion
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
-    }
-
-    override fun allocationSize(value: VerificationFailureKind): ULong = when(value) {
-        is VerificationFailureKind.Retry -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is VerificationFailureKind.RecreateManifest -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.`warning`)
-            )
-        }
-        is VerificationFailureKind.ReinitializeBackup -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.`warning`)
-            )
-        }
-        is VerificationFailureKind.UnsupportedVersion -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-    }
-
-    override fun write(value: VerificationFailureKind, buf: ByteBuffer) {
-        when(value) {
-            is VerificationFailureKind.Retry -> {
-                buf.putInt(1)
-                Unit
-            }
-            is VerificationFailureKind.RecreateManifest -> {
-                buf.putInt(2)
-                FfiConverterString.write(value.`warning`, buf)
-                Unit
-            }
-            is VerificationFailureKind.ReinitializeBackup -> {
-                buf.putInt(3)
-                FfiConverterString.write(value.`warning`, buf)
-                Unit
-            }
-            is VerificationFailureKind.UnsupportedVersion -> {
-                buf.putInt(4)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-}
-
-
-
-
-
 sealed class VerificationState {
     
     object Idle : VerificationState()
@@ -48663,6 +50193,89 @@ public object FfiConverterTypeWalletAddressType: FfiConverterRustBuffer<WalletAd
 
     override fun write(value: WalletAddressType, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+sealed class WalletBirthday {
+    
+    data class BlockHeight(
+        val v1: kotlin.ULong) : WalletBirthday()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Timestamp(
+        val v1: kotlin.ULong) : WalletBirthday()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWalletBirthday : FfiConverterRustBuffer<WalletBirthday>{
+    override fun read(buf: ByteBuffer): WalletBirthday {
+        return when(buf.getInt()) {
+            1 -> WalletBirthday.BlockHeight(
+                FfiConverterULong.read(buf),
+                )
+            2 -> WalletBirthday.Timestamp(
+                FfiConverterULong.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: WalletBirthday): ULong = when(value) {
+        is WalletBirthday.BlockHeight -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is WalletBirthday.Timestamp -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: WalletBirthday, buf: ByteBuffer) {
+        when(value) {
+            is WalletBirthday.BlockHeight -> {
+                buf.putInt(1)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is WalletBirthday.Timestamp -> {
+                buf.putInt(2)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 
@@ -49033,6 +50646,14 @@ sealed class WalletCreationException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class Unexpected(
+        
+        val v1: kotlin.String
+        ) : WalletCreationException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
     class MultiFormat(
         
         val v1: MultiFormatException
@@ -49084,7 +50705,10 @@ public object FfiConverterTypeWalletCreationError : FfiConverterRustBuffer<Walle
             5 -> WalletCreationException.Import(
                 FfiConverterString.read(buf),
                 )
-            6 -> WalletCreationException.MultiFormat(
+            6 -> WalletCreationException.Unexpected(
+                FfiConverterString.read(buf),
+                )
+            7 -> WalletCreationException.MultiFormat(
                 FfiConverterTypeMultiFormatError.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -49114,6 +50738,11 @@ public object FfiConverterTypeWalletCreationError : FfiConverterRustBuffer<Walle
                 + FfiConverterString.allocationSize(value.v1)
             )
             is WalletCreationException.Import -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is WalletCreationException.Unexpected -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -49153,8 +50782,13 @@ public object FfiConverterTypeWalletCreationError : FfiConverterRustBuffer<Walle
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletCreationException.MultiFormat -> {
+            is WalletCreationException.Unexpected -> {
                 buf.putInt(6)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletCreationException.MultiFormat -> {
+                buf.putInt(7)
                 FfiConverterTypeMultiFormatError.write(value.v1, buf)
                 Unit
             }
@@ -53241,6 +54875,38 @@ public object FfiConverterOptionalTypeCloudBackupDetail: FfiConverterRustBuffer<
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeCloudBackupPasskeyHint: FfiConverterRustBuffer<CloudBackupPasskeyHint?> {
+    override fun read(buf: ByteBuffer): CloudBackupPasskeyHint? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudBackupPasskeyHint.read(buf)
+    }
+
+    override fun allocationSize(value: CloudBackupPasskeyHint?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudBackupPasskeyHint.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudBackupPasskeyHint?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudBackupPasskeyHint.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeCloudBackupProgress: FfiConverterRustBuffer<CloudBackupProgress?> {
     override fun read(buf: ByteBuffer): CloudBackupProgress? {
         if (buf.get().toInt() == 0) {
@@ -53327,6 +54993,70 @@ public object FfiConverterOptionalTypeCloudBackupRestoreReport: FfiConverterRust
         } else {
             buf.put(1)
             FfiConverterTypeCloudBackupRestoreReport.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeCloudBackupRetryContext: FfiConverterRustBuffer<CloudBackupRetryContext?> {
+    override fun read(buf: ByteBuffer): CloudBackupRetryContext? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudBackupRetryContext.read(buf)
+    }
+
+    override fun allocationSize(value: CloudBackupRetryContext?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudBackupRetryContext.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudBackupRetryContext?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudBackupRetryContext.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeCloudRestoreProviderHint: FfiConverterRustBuffer<CloudRestoreProviderHint?> {
+    override fun read(buf: ByteBuffer): CloudRestoreProviderHint? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudRestoreProviderHint.read(buf)
+    }
+
+    override fun allocationSize(value: CloudRestoreProviderHint?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudRestoreProviderHint.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudRestoreProviderHint?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudRestoreProviderHint.write(value, buf)
         }
     }
 }
@@ -53529,6 +55259,38 @@ public object FfiConverterOptionalTypeBlockSizeLast: FfiConverterRustBuffer<Bloc
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeCloudBackupVerificationSource: FfiConverterRustBuffer<CloudBackupVerificationSource?> {
+    override fun read(buf: ByteBuffer): CloudBackupVerificationSource? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudBackupVerificationSource.read(buf)
+    }
+
+    override fun allocationSize(value: CloudBackupVerificationSource?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudBackupVerificationSource.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudBackupVerificationSource?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudBackupVerificationSource.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeHardwareWalletMetadata: FfiConverterRustBuffer<HardwareWalletMetadata?> {
     override fun read(buf: ByteBuffer): HardwareWalletMetadata? {
         if (buf.get().toInt() == 0) {
@@ -53615,38 +55377,6 @@ public object FfiConverterOptionalTypeOnboardingBranch: FfiConverterRustBuffer<O
         } else {
             buf.put(1)
             FfiConverterTypeOnboardingBranch.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
-public object FfiConverterOptionalTypeRoute: FfiConverterRustBuffer<Route?> {
-    override fun read(buf: ByteBuffer): Route? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterTypeRoute.read(buf)
-    }
-
-    override fun allocationSize(value: Route?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterTypeRoute.allocationSize(value)
-        }
-    }
-
-    override fun write(value: Route?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterTypeRoute.write(value, buf)
         }
     }
 }
@@ -53775,6 +55505,38 @@ public object FfiConverterOptionalTypeTapSignerResponse: FfiConverterRustBuffer<
         } else {
             buf.put(1)
             FfiConverterTypeTapSignerResponse.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeWalletBirthday: FfiConverterRustBuffer<WalletBirthday?> {
+    override fun read(buf: ByteBuffer): WalletBirthday? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeWalletBirthday.read(buf)
+    }
+
+    override fun allocationSize(value: WalletBirthday?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeWalletBirthday.allocationSize(value)
+        }
+    }
+
+    override fun write(value: WalletBirthday?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeWalletBirthday.write(value, buf)
         }
     }
 }
@@ -54103,6 +55865,34 @@ public object FfiConverterSequenceTypeBackupWalletSummary: FfiConverterRustBuffe
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeBackupWalletSummary.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCloudBackupPasskeyHint: FfiConverterRustBuffer<List<CloudBackupPasskeyHint>> {
+    override fun read(buf: ByteBuffer): List<CloudBackupPasskeyHint> {
+        val len = buf.getInt()
+        return List<CloudBackupPasskeyHint>(len) {
+            FfiConverterTypeCloudBackupPasskeyHint.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CloudBackupPasskeyHint>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCloudBackupPasskeyHint.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CloudBackupPasskeyHint>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCloudBackupPasskeyHint.write(it, buf)
         }
     }
 }
@@ -54582,6 +56372,16 @@ public object FfiConverterSequenceTypeWalletId: FfiConverterRustBuffer<List<Wall
         }
     }
 }
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ * It's also what we have an external type that references a custom type.
+ */
+public typealias RecordId = kotlin.String
+public typealias FfiConverterTypeRecordId = FfiConverterString
 
 
 

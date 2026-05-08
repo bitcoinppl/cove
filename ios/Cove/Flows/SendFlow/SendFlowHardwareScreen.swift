@@ -258,13 +258,10 @@ struct SendFlowHardwareScreen: View {
 
             let (txnRecord, parsed) = try parseSignedImport(fileContents)
 
-            let route = RouteFactory()
-                .sendConfirm(
-                    id: txnRecord.walletId(),
-                    details: txnRecord.confirmDetails(),
-                    signedTransaction: parsed.transaction(),
-                    signedPsbt: parsed.psbt()
-                )
+            let route = parsed.sendConfirmRoute(
+                id: txnRecord.walletId(),
+                details: txnRecord.confirmDetails()
+            )
 
             app.pushRoute(route)
         } catch {
@@ -281,13 +278,10 @@ struct SendFlowHardwareScreen: View {
             let db = Database().unsignedTransactions()
             let txnRecord = try db.getTxThrow(txId: parsed.txId())
 
-            let route = RouteFactory()
-                .sendConfirm(
-                    id: txnRecord.walletId(),
-                    details: txnRecord.confirmDetails(),
-                    signedTransaction: parsed.transaction(),
-                    signedPsbt: parsed.psbt()
-                )
+            let route = parsed.sendConfirmRoute(
+                id: txnRecord.walletId(),
+                details: txnRecord.confirmDetails()
+            )
 
             app.pushRoute(route)
         } catch {
@@ -465,13 +459,10 @@ struct SendFlowHardwareScreen: View {
 
             do {
                 let (txnRecord, parsed) = try parseSignedImport(code)
-                let route = RouteFactory()
-                    .sendConfirm(
-                        id: txnRecord.walletId(),
-                        details: txnRecord.confirmDetails(),
-                        signedTransaction: parsed.transaction(),
-                        signedPsbt: parsed.psbt()
-                    )
+                let route = parsed.sendConfirmRoute(
+                    id: txnRecord.walletId(),
+                    details: txnRecord.confirmDetails()
+                )
                 app.pushRoute(route)
             } catch {
                 alertState = .init(.pasteError(error.localizedDescription))

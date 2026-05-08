@@ -8,71 +8,76 @@ struct CloudRestoreOfferView: View {
     let onSkip: () -> Void
     var warningMessage: String? = nil
     var errorMessage: String? = nil
+    var providerHint: CloudRestoreProviderHint? = nil
 
     var body: some View {
-        VStack(spacing: 0) {
-            OnboardingStepIndicator(selected: 1)
-                .padding(.top, 8)
+        ScrollView {
+            VStack(spacing: 0) {
+                OnboardingStepIndicator(selected: 1)
+                    .padding(.top, 48)
 
-            Spacer()
-                .frame(height: 42)
+                Spacer()
+                    .frame(height: 5)
 
-            heroIcon
+                heroIcon
 
-            Spacer()
-                .frame(height: 44)
+                Spacer()
+                    .frame(height: 16)
 
-            VStack(spacing: 16) {
-                Text(warningMessage == nil ? "iCloud Backup Found" : "Restore from iCloud")
-                    .font(OnboardingRecoveryTypography.heroTitle)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 16) {
+                    Text(warningMessage == nil ? "iCloud Backup Found" : "Restore from iCloud")
+                        .font(OnboardingRecoveryTypography.heroTitle)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
 
-                Text(messageBody)
-                    .font(OnboardingRecoveryTypography.body)
-                    .foregroundStyle(.coveLightGray.opacity(0.76))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 8)
-
-            Spacer()
-                .frame(height: 32)
-
-            passkeyCard
-
-            if let warningMessage {
-                warningCard(message: warningMessage)
-                    .padding(.top, 14)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            if let errorMessage {
-                errorCard(message: errorMessage)
-                    .padding(.top, 14)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            Spacer(minLength: 26)
-
-            VStack(spacing: 16) {
-                Button(action: onRestore) {
-                    Text("Restore with Passkey")
+                    Text(messageBody)
+                        .font(OnboardingRecoveryTypography.body)
+                        .foregroundStyle(.coveLightGray.opacity(0.76))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(OnboardingPrimaryButtonStyle())
+                .padding(.horizontal, 8)
 
-                Button(action: onSkip) {
-                    Text("Set Up as New")
-                        .font(OnboardingRecoveryTypography.bodySemibold)
-                        .foregroundStyle(Color.btnGradientLight.opacity(0.95))
+                Spacer()
+                    .frame(height: 28)
+
+                passkeyCard
+
+                if let warningMessage {
+                    warningCard(message: warningMessage)
+                        .padding(.top, 14)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                .buttonStyle(.plain)
+
+                if let errorMessage {
+                    errorCard(message: errorMessage)
+                        .padding(.top, 14)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                Spacer(minLength: 26)
+
+                VStack(spacing: 16) {
+                    Button(action: onRestore) {
+                        Text("Restore with Passkey")
+                    }
+                    .buttonStyle(OnboardingPrimaryButtonStyle())
+
+                    Button(action: onSkip) {
+                        Text("Set Up as New")
+                            .font(OnboardingRecoveryTypography.bodySemibold)
+                            .foregroundStyle(Color.btnGradientLight.opacity(0.95))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
+            .padding(.horizontal, 28)
+            .padding(.top, 12)
+            .padding(.bottom, 26)
+            .frame(maxWidth: .infinity)
+            .containerRelativeFrame(.vertical, alignment: .center)
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 12)
-        .padding(.bottom, 26)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
         .animation(.easeInOut(duration: 0.3), value: warningMessage)
         .animation(.easeInOut(duration: 0.3), value: errorMessage)
@@ -89,34 +94,19 @@ struct CloudRestoreOfferView: View {
     private var heroIcon: some View {
         ZStack {
             Circle()
-                .stroke(Color.btnGradientLight.opacity(0.12), lineWidth: 1)
+                .stroke(Color.btnGradientLight.opacity(0.16), lineWidth: 1)
                 .frame(width: 118, height: 118)
 
             Circle()
-                .stroke(Color.btnGradientLight.opacity(0.18), lineWidth: 1)
+                .stroke(Color.btnGradientLight.opacity(0.26), lineWidth: 1)
                 .frame(width: 86, height: 86)
 
             Circle()
-                .stroke(Color.btnGradientLight.opacity(0.24), lineWidth: 1)
-                .frame(width: 58, height: 58)
+                .stroke(Color.btnGradientLight.opacity(0.88), lineWidth: 1.5)
+                .frame(width: 64, height: 64)
 
-            Circle()
-                .fill(Color.duskBlue.opacity(0.4))
-                .frame(width: 58, height: 58)
-
-            Circle()
-                .stroke(
-                    LinearGradient(
-                        colors: [.btnGradientLight, .btnGradientDark],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.5
-                )
-                .frame(width: 58, height: 58)
-
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 22, weight: .semibold))
+            Image(systemName: "cloud")
+                .font(.system(size: 32, weight: .semibold))
                 .foregroundStyle(Color.btnGradientLight)
         }
     }
@@ -126,30 +116,30 @@ struct CloudRestoreOfferView: View {
             Text("Recommended")
                 .font(OnboardingRecoveryTypography.captionSemibold)
                 .foregroundStyle(Color.btnGradientLight.opacity(0.92))
-                .frame(minWidth: 76)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .frame(minWidth: 92)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
                 .background(
                     Capsule()
                         .fill(Color.btnGradientLight.opacity(0.12))
                 )
 
-            HStack(spacing: 14) {
+            HStack(spacing: 16) {
                 Image(systemName: "person.badge.key")
-                    .font(.system(size: 19, weight: .medium))
+                    .font(.system(size: 24, weight: .medium))
                     .foregroundStyle(Color.btnGradientLight)
-                    .frame(width: 42, height: 42)
+                    .frame(width: 48, height: 48)
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
                             .fill(Color.btnGradientLight.opacity(0.12))
                     )
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Passkey Restore")
                         .font(OnboardingRecoveryTypography.bodySemibold)
                         .foregroundStyle(.white)
 
-                    Text("Secured with iCloud Keychain")
+                    Text(providerHint.map(passkeyDisplayName) ?? "Secured with your passkey provider")
                         .font(OnboardingRecoveryTypography.footnote)
                         .foregroundStyle(.coveLightGray.opacity(0.58))
                 }
@@ -157,21 +147,106 @@ struct CloudRestoreOfferView: View {
                 Spacer()
             }
 
-            Text("Your passkey is stored securely in iCloud Keychain and syncs across all your Apple devices.")
-                .font(OnboardingRecoveryTypography.subheadline)
-                .foregroundStyle(.coveLightGray.opacity(0.74))
-                .fixedSize(horizontal: false, vertical: true)
+            if let providerHint {
+                Divider()
+                    .overlay(Color.coveLightGray.opacity(0.16))
+
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Provider Details")
+                        .font(OnboardingRecoveryTypography.subheadline.weight(.semibold))
+                        .foregroundStyle(.coveLightGray.opacity(0.72))
+
+                    if let providerName = providerHint.providerName {
+                        HStack(alignment: .center, spacing: 14) {
+                            providerDetailItem(
+                                icon: "key",
+                                label: "STORED IN",
+                                value: providerName
+                            )
+
+                            Rectangle()
+                                .fill(Color.coveLightGray.opacity(0.14))
+                                .frame(width: 1, height: 46)
+
+                            providerDetailItem(
+                                icon: "calendar",
+                                label: "CREATED",
+                                value: formattedProviderDate(providerHint.registeredAt)
+                            )
+                        }
+                    } else {
+                        providerDetailItem(
+                            icon: "calendar",
+                            label: "CREATED",
+                            value: formattedProviderDate(providerHint.registeredAt)
+                        )
+                    }
+                }
+
+                Divider()
+                    .overlay(Color.coveLightGray.opacity(0.16))
+            }
+
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: "lock")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(Color.btnGradientLight)
+                    .frame(width: 28)
+
+                Text(passkeyStorageDescription)
+                    .font(OnboardingRecoveryTypography.subheadline)
+                    .foregroundStyle(.coveLightGray.opacity(0.74))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 18)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 20)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(Color.duskBlue.opacity(0.48))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.coveLightGray.opacity(0.14), lineWidth: 1)
+                .stroke(Color.coveLightGray.opacity(0.18), lineWidth: 1)
         )
+    }
+
+    private func providerDetailItem(icon: String, label: String, value: String) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(Color.btnGradientLight)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(label)
+                    .font(OnboardingRecoveryTypography.captionSemibold)
+                    .foregroundStyle(.coveLightGray.opacity(0.64))
+
+                Text(value)
+                    .font(OnboardingRecoveryTypography.footnote)
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var passkeyStorageDescription: String {
+        if let providerName = providerHint?.providerName {
+            return "Your passkey is stored securely by \(providerName), and your encrypted backup is stored in iCloud."
+        }
+
+        return "Your passkey is stored securely by your passkey provider, and your encrypted backup is stored in iCloud."
+    }
+
+    private func passkeyDisplayName(_ providerHint: CloudRestoreProviderHint) -> String {
+        "Cove Cloud Backup (\(providerHint.nameSuffix))"
+    }
+
+    private func formattedProviderDate(_ registeredAt: UInt64) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(registeredAt))
+        return date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 
     private func errorCard(message: String) -> some View {
@@ -227,6 +302,30 @@ struct CloudRestoreOfferView: View {
 
 #Preview("Backup Found") {
     CloudRestoreOfferView(onRestore: {}, onSkip: {})
+}
+
+#Preview("Backup Found Provider Hint") {
+    CloudRestoreOfferView(
+        onRestore: {},
+        onSkip: {},
+        providerHint: CloudRestoreProviderHint(
+            providerName: "Apple Passwords",
+            registeredAt: 1_777_612_800,
+            nameSuffix: "09IX"
+        )
+    )
+}
+
+#Preview("Backup Found Provider Date") {
+    CloudRestoreOfferView(
+        onRestore: {},
+        onSkip: {},
+        providerHint: CloudRestoreProviderHint(
+            providerName: nil,
+            registeredAt: 1_777_612_800,
+            nameSuffix: "09IY"
+        )
+    )
 }
 
 #Preview("Backup Unconfirmed") {

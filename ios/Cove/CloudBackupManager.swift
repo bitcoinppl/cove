@@ -60,14 +60,20 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.syncError
     }
 
+    var enableState: CloudBackupEnableState {
+        state.enableState
+    }
+
+    var pendingUploadVerification: PendingUploadVerificationState {
+        state.pendingUploadVerification
+    }
+
     var hasPendingUploadVerification: Bool {
-        state.hasPendingUploadVerification
+        pendingUploadVerification != .idle
     }
 
     var isBackgroundVerifying: Bool {
-        guard hasPendingUploadVerification else { return false }
-        if case .verifying = verification { return true }
-        return false
+        hasPendingUploadVerification
     }
 
     var shouldPromptVerification: Bool {
@@ -112,6 +118,10 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.verification
     }
 
+    var verificationPresentation: CloudBackupVerificationPresentation {
+        state.verificationPresentation
+    }
+
     var sync: SyncState {
         state.sync
     }
@@ -128,12 +138,20 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.cloudOnlyOperation
     }
 
+    var otherBackupsOperation: OtherBackupsOperation {
+        state.otherBackupsOperation
+    }
+
     func dispatch(action: Action) {
         dispatch(action)
     }
 
     func dispatch(_ action: Action) {
         rustBridge.async { self.rust.dispatch(action: action) }
+    }
+
+    func startVerification(source: CloudBackupVerificationSource = .settings) {
+        dispatch(.startVerification(source))
     }
 
     private func apply(_ message: Message) {
@@ -152,12 +170,16 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
             state.restoreReport = report
         case let .syncError(syncError):
             state.syncError = syncError
+        case let .enableState(enableState):
+            state.enableState = enableState
         case let .verificationPrompt(pending):
             state.shouldPromptVerification = pending
         case let .verificationMetadata(verificationMetadata):
             state.verificationMetadata = verificationMetadata
+        case let .verificationPresentation(presentation):
+            state.verificationPresentation = presentation
         case let .pendingUploadVerification(pending):
-            state.hasPendingUploadVerification = pending
+            state.pendingUploadVerification = pending
         case let .detail(detail):
             state.detail = detail
         case let .verification(verification):
@@ -170,6 +192,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
             state.cloudOnly = cloudOnly
         case let .cloudOnlyOperation(cloudOnlyOperation):
             state.cloudOnlyOperation = cloudOnlyOperation
+        case let .otherBackupsOperation(otherBackupsOperation):
+            state.otherBackupsOperation = otherBackupsOperation
         }
     }
 

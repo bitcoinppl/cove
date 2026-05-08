@@ -334,7 +334,7 @@ fun TransactionDetailsScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 colors =
-                    TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         titleContentColor = fg,
                         actionIconContentColor = fg,

@@ -91,7 +91,7 @@ fun SelectedWalletContainer(
                 val otherWallet = wallets.firstOrNull { it.id != id }
 
                 if (otherWallet != null) {
-                    app.rust.selectWallet(otherWallet.id)
+                    app.selectWalletOrThrow(otherWallet.id)
                 } else {
                     app.loadAndReset(RouteFactory().newWalletSelect())
                 }
@@ -103,14 +103,13 @@ fun SelectedWalletContainer(
 
     // start wallet scan after loading (matches iOS .task)
     LaunchedEffect(manager) {
-        manager?.let { wm ->
-            try {
-                wm.rust.startWalletScan()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.e(tag, "wallet scan failed: ${e.message}", e)
-            }
+        val wm = manager ?: return@LaunchedEffect
+        try {
+            wm.rust.startWalletScan()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "wallet scan failed: ${e.message}", e)
         }
     }
 
@@ -122,10 +121,11 @@ fun SelectedWalletContainer(
     }
 
     // update app wallet manager when loaded
-    LaunchedEffect(manager?.loadState) {
-        val loadState = manager?.loadState
-        if (loadState is WalletLoadState.LOADED) {
-            manager?.let { app.setWalletManager(it) }
+    val loadedManager = manager
+    val loadState = loadedManager?.loadState
+    LaunchedEffect(loadedManager, loadState) {
+        if (loadedManager != null && loadState is WalletLoadState.LOADED) {
+            app.setWalletManager(loadedManager)
         }
     }
 

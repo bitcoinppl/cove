@@ -626,17 +626,16 @@ impl redb::StorageBackend for EncryptedBackend {
 }
 
 #[cfg(test)]
-pub fn set_test_encryption_key() {
-    ENCRYPTION_KEY.store(Some(Arc::new([0xAB; 32])));
-}
-
-#[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::path::PathBuf;
 
     use redb::{ReadableTableMetadata as _, StorageBackend as _};
     use tempfile::TempDir;
+
+    pub(crate) fn set_test_encryption_key() {
+        ENCRYPTION_KEY.store(Some(Arc::new([0xAB; 32])));
+    }
 
     fn test_key() -> [u8; 32] {
         [0xAB; 32]

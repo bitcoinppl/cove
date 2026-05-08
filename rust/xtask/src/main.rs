@@ -84,6 +84,54 @@ enum Commands {
         udid: Option<String>,
     },
 
+    /// Run manual iOS full-launch UI tests
+    #[command(name = "ios-ui")]
+    IosUi {
+        /// iOS simulator device name
+        #[arg(long, default_value = "iPhone 17")]
+        device: String,
+
+        /// Test class or method to run
+        #[arg(long, default_value = "CoveUITests/OnboardingFullLaunchUITests")]
+        test: String,
+
+        /// Open Simulator before running tests
+        #[arg(long)]
+        foreground: bool,
+    },
+
+    /// Bump iOS build, build release artifacts, and upload to TestFlight
+    #[command(name = "testflight")]
+    Testflight {
+        /// App Store Connect API key file path
+        #[arg(long, env = "ASC_API_KEY_PATH")]
+        api_key_path: Option<String>,
+
+        /// App Store Connect API key ID
+        #[arg(long, env = "ASC_API_KEY_ID")]
+        api_key_id: Option<String>,
+
+        /// App Store Connect API issuer ID
+        #[arg(long, env = "ASC_API_ISSUER_ID")]
+        api_issuer_id: Option<String>,
+    },
+
+    /// Archive and upload the iOS app to TestFlight
+    #[command(name = "upload-testflight")]
+    UploadTestflight {
+        /// App Store Connect API key file path
+        #[arg(long, env = "ASC_API_KEY_PATH")]
+        api_key_path: Option<String>,
+
+        /// App Store Connect API key ID
+        #[arg(long, env = "ASC_API_KEY_ID")]
+        api_key_id: Option<String>,
+
+        /// App Store Connect API issuer ID
+        #[arg(long, env = "ASC_API_ISSUER_ID")]
+        api_issuer_id: Option<String>,
+    },
+
     /// Install required build dependencies (cargo-ndk, etc.)
     #[command(name = "install-deps")]
     InstallDeps,
@@ -176,6 +224,23 @@ fn main() -> Result<()> {
         Commands::RunIos { simulator, device_name, udid } => {
             let options = ios::IosRunOptions::new(simulator, device_name, udid);
             ios::run_ios(options, cli.verbose)
+        }
+
+        Commands::IosUi { device, test, foreground } => {
+            let options = ios::IosUiOptions::new(device, test, foreground);
+            ios::run_ios_ui_tests(options, cli.verbose)
+        }
+
+        Commands::Testflight { api_key_path, api_key_id, api_issuer_id } => {
+            let options =
+                ios::TestflightUploadOptions::new(api_key_path, api_key_id, api_issuer_id);
+            ios::testflight(options, cli.verbose)
+        }
+
+        Commands::UploadTestflight { api_key_path, api_key_id, api_issuer_id } => {
+            let options =
+                ios::TestflightUploadOptions::new(api_key_path, api_key_id, api_issuer_id);
+            ios::upload_testflight(options, cli.verbose)
         }
 
         Commands::InstallDeps => install_deps(cli.verbose),

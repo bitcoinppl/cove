@@ -4,20 +4,48 @@ use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
-use super::super::RustCloudBackupManager;
-use super::super::wallets::WalletBackupReader;
+use super::{MASTER_KEY_UPLOAD_CONFIRMATION_GRACE, PendingUploadVerificationStatus};
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
+    CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
     CloudBlobUploadedPendingConfirmationState, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
+};
+use crate::manager::cloud_backup_manager::wallets::WalletBackupReader;
+use crate::manager::cloud_backup_manager::{
+    PendingUploadVerificationState, RustCloudBackupManager, SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
+    master_key_wrapper_revision_hash,
 };
 
 enum BlobCheckResult {
     Confirmed,
     NotYetUploaded,
     Stale(String),
-    Failed { error: String, retryable: bool },
+    AuthorizationRequired { error: String },
+    Failed { error: String, retryable: bool, issue: Option<CloudBlobFailureIssue> },
+}
+
+impl BlobCheckResult {
+    fn terminal_failure(error: String) -> Self {
+        Self::Failed { error, retryable: false, issue: None }
+    }
+
+    fn cloud_storage_failure(error: CloudStorageError) -> Self {
+        if matches!(error, CloudStorageError::AuthorizationRequired(_)) {
+            return Self::AuthorizationRequired { error: error.to_string() };
+        }
+
+        let retryable = matches!(
+            error,
+            CloudStorageError::Offline(_)
+                | CloudStorageError::NotAvailable(_)
+                | CloudStorageError::DownloadFailed(_)
+        );
+
+        let issue = RustCloudBackupManager::cloud_blob_failure_issue(error.clone().into());
+
+        Self::Failed { error: error.to_string(), retryable, issue }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,42 +54,55 @@ enum PendingUploadRunOutcome {
     StillPending,
     Confirmed,
     Failed,
+    BlockedOnAuthorization,
 }
-
-pub(super) struct PendingUploadVerifier(pub(super) RustCloudBackupManager);
 
 const MAX_PENDING_WALLET_UPLOAD_CONFIRMATION_ATTEMPTS: u32 = 3;
 
+pub(super) struct PendingUploadVerifier(pub(super) RustCloudBackupManager);
+
 impl PendingUploadVerifier {
-    pub(super) async fn run_once(&self) -> bool {
+    pub(super) async fn run_once(&self) -> PendingUploadVerificationStatus {
         let table = &Database::global().cloud_blob_sync_states;
         let states = match table.list() {
             Ok(states) => states,
             Err(error) => {
                 error!("Pending upload verification: failed to read sync states: {error}");
-                return true;
+                return PendingUploadVerificationStatus::Pending;
             }
         };
 
         let mut had_pending = false;
         let mut any_failed = false;
+        let mut blocked_on_authorization = false;
+
         for sync_state in &states {
-            let PersistedCloudBlobState::UploadedPendingConfirmation(state) = &sync_state.state
-            else {
-                continue;
+            let current_state = match &sync_state.state {
+                PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
+                _ => continue,
             };
-            let current_state = state.clone();
 
             had_pending = true;
             let result = self.check_blob(sync_state, &current_state).await;
+
+            if let BlobCheckResult::AuthorizationRequired { error } = &result {
+                warn!(
+                    "Pending upload verification: paused until cloud authorization is restored record_id={} error={error}",
+                    sync_state.record_id
+                );
+                blocked_on_authorization = true;
+                break;
+            }
+
             let next_state = Self::apply_blob_result(sync_state, &current_state, &result);
             let persisted = match table.set_if_current(sync_state, &next_state) {
                 Ok(persisted) => persisted,
                 Err(error) => {
                     error!("Pending upload verification: failed to persist state: {error}");
-                    return true;
+                    return PendingUploadVerificationStatus::Pending;
                 }
             };
+
             if !persisted {
                 continue;
             }
@@ -74,11 +115,17 @@ impl PendingUploadVerifier {
             self.schedule_retry_if_needed(&next_state);
         }
 
-        self.0.finalize_pending_verification_if_ready().await;
+        if !blocked_on_authorization {
+            self.0.finalize_pending_verification_if_ready().await;
+        }
+
         let has_pending = self.0.has_pending_cloud_upload_verification();
-        self.send_pending_state(has_pending);
+        self.send_pending_state(blocked_on_authorization, has_pending);
         self.0.refresh_sync_health();
-        match Self::run_outcome(had_pending, has_pending, any_failed) {
+
+        let outcome =
+            Self::run_outcome(blocked_on_authorization, had_pending, has_pending, any_failed);
+        match outcome {
             PendingUploadRunOutcome::Idle => {
                 info!("Pending upload verification: no pending blobs");
             }
@@ -91,25 +138,43 @@ impl PendingUploadVerifier {
             PendingUploadRunOutcome::Failed => {
                 warn!("Pending upload verification: completed with failures");
             }
+            PendingUploadRunOutcome::BlockedOnAuthorization => {}
         }
 
-        has_pending
+        match outcome {
+            PendingUploadRunOutcome::BlockedOnAuthorization => {
+                PendingUploadVerificationStatus::BlockedOnAuthorization
+            }
+            PendingUploadRunOutcome::StillPending => PendingUploadVerificationStatus::Pending,
+            PendingUploadRunOutcome::Idle
+            | PendingUploadRunOutcome::Confirmed
+            | PendingUploadRunOutcome::Failed => PendingUploadVerificationStatus::Idle,
+        }
     }
 
     fn run_outcome(
+        blocked_on_authorization: bool,
         had_pending: bool,
         has_pending: bool,
         any_failed: bool,
     ) -> PendingUploadRunOutcome {
-        if has_pending {
-            PendingUploadRunOutcome::StillPending
-        } else if any_failed {
-            PendingUploadRunOutcome::Failed
-        } else if had_pending {
-            PendingUploadRunOutcome::Confirmed
-        } else {
-            PendingUploadRunOutcome::Idle
+        if blocked_on_authorization {
+            return PendingUploadRunOutcome::BlockedOnAuthorization;
         }
+
+        if has_pending {
+            return PendingUploadRunOutcome::StillPending;
+        }
+
+        if any_failed {
+            return PendingUploadRunOutcome::Failed;
+        }
+
+        if had_pending {
+            return PendingUploadRunOutcome::Confirmed;
+        }
+
+        PendingUploadRunOutcome::Idle
     }
 
     async fn check_blob(
@@ -118,18 +183,33 @@ impl PendingUploadVerifier {
         current: &CloudBlobUploadedPendingConfirmationState,
     ) -> BlobCheckResult {
         if sync_state.wallet_id.is_none() {
-            return self.check_master_key_wrapper(&sync_state.namespace_id).await;
+            return self.check_master_key_wrapper(&sync_state.namespace_id, current).await;
         }
 
         self.check_wallet_blob(sync_state, current).await
     }
 
-    async fn check_master_key_wrapper(&self, namespace_id: &str) -> BlobCheckResult {
-        let cloud = CloudStorage::global();
+    async fn check_master_key_wrapper(
+        &self,
+        namespace_id: &str,
+        current: &CloudBlobUploadedPendingConfirmationState,
+    ) -> BlobCheckResult {
+        let cloud = CloudStorage::global_silent_client();
         match cloud.download_master_key_backup(namespace_id.to_string()).await {
-            Ok(_) => BlobCheckResult::Confirmed,
+            Ok(bytes) => {
+                let remote_revision = master_key_wrapper_revision_hash(&bytes);
+                if remote_revision == current.revision_hash {
+                    BlobCheckResult::Confirmed
+                } else {
+                    warn!(
+                        "master key wrapper hash mismatch expected_revision={} actual_revision={remote_revision}",
+                        current.revision_hash
+                    );
+                    BlobCheckResult::NotYetUploaded
+                }
+            }
             Err(CloudStorageError::NotFound(_)) => BlobCheckResult::NotYetUploaded,
-            Err(error) => cloud_storage_failure_result(error),
+            Err(error) => BlobCheckResult::cloud_storage_failure(error),
         }
     }
 
@@ -141,34 +221,42 @@ impl PendingUploadVerifier {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         let master_key = match cspp.load_master_key_from_store() {
             Ok(Some(master_key)) => master_key,
-            Ok(None) => return terminal_failure("no local master key available".into()),
+            Ok(None) => {
+                return BlobCheckResult::terminal_failure("no local master key available".into());
+            }
             Err(error) => {
-                return terminal_failure(format!("load local master key: {error}"));
+                return BlobCheckResult::terminal_failure(format!(
+                    "load local master key: {error}"
+                ));
             }
         };
 
         let reader = WalletBackupReader::new(
-            CloudStorage::global().clone(),
+            CloudStorage::global_silent_client(),
             sync_state.namespace_id.clone(),
             Zeroizing::new(master_key.critical_data_key()),
         );
-        let wallet_json = match CloudStorage::global()
+
+        let wallt_download_result = CloudStorage::global_silent_client()
             .download_wallet_backup(sync_state.namespace_id.clone(), sync_state.record_id.clone())
-            .await
-        {
+            .await;
+
+        let wallet_json = match wallt_download_result {
             Ok(wallet_json) => wallet_json,
             Err(CloudStorageError::NotFound(_)) => return BlobCheckResult::NotYetUploaded,
-            Err(error) => return cloud_storage_failure_result(error),
+            Err(error) => return BlobCheckResult::cloud_storage_failure(error),
         };
 
         let encrypted: EncryptedWalletBackup = match serde_json::from_slice(&wallet_json) {
             Ok(encrypted) => encrypted,
             Err(error) => {
-                return terminal_failure(format!("deserialize wallet backup: {error}"));
+                return BlobCheckResult::terminal_failure(format!(
+                    "deserialize wallet backup: {error}"
+                ));
             }
         };
         if encrypted.version != 1 {
-            return terminal_failure(format!(
+            return BlobCheckResult::terminal_failure(format!(
                 "unsupported wallet backup version {}",
                 encrypted.version
             ));
@@ -182,7 +270,9 @@ impl PendingUploadVerifier {
                     BlobCheckResult::Stale(entry.content_revision_hash.clone())
                 }
             }
-            Err(error) => terminal_failure(format!("decrypt wallet backup: {error}")),
+            Err(error) => {
+                BlobCheckResult::terminal_failure(format!("decrypt wallet backup: {error}"))
+            }
         }
     }
 
@@ -203,9 +293,20 @@ impl PendingUploadVerifier {
                     })
                 }
                 BlobCheckResult::NotYetUploaded | BlobCheckResult::Stale(_)
-                    if should_retry_wallet_upload(sync_state, next_attempt_count) =>
+                    if Self::should_retry_wallet_upload(sync_state, next_attempt_count) =>
                 {
                     PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at: checked_at })
+                }
+                BlobCheckResult::NotYetUploaded
+                    if Self::master_key_confirmation_expired(sync_state, current, checked_at) =>
+                {
+                    PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                        revision_hash: Some(current.revision_hash.clone()),
+                        retryable: false,
+                        error: SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into(),
+                        issue: None,
+                        failed_at: checked_at,
+                    })
                 }
                 BlobCheckResult::NotYetUploaded
                 | BlobCheckResult::Stale(_)
@@ -219,14 +320,18 @@ impl PendingUploadVerifier {
                         },
                     )
                 }
-                BlobCheckResult::Failed { error, retryable: false } => {
+                BlobCheckResult::Failed { error, retryable: false, issue } => {
                     PersistedCloudBlobState::Failed(CloudBlobFailedState {
                         revision_hash: Some(current.revision_hash.clone()),
                         retryable: false,
                         error: error.clone(),
+                        issue: *issue,
                         failed_at: checked_at,
                     })
                 }
+                BlobCheckResult::AuthorizationRequired { .. } => unreachable!(
+                    "authorization-required results should pause verification without persisting a new state"
+                ),
             },
             ..sync_state.clone()
         }
@@ -301,47 +406,69 @@ impl PendingUploadVerifier {
                     sync_state.record_id,
                 );
             }
+            (
+                PersistedCloudBlobState::UploadedPendingConfirmation(state),
+                BlobCheckResult::AuthorizationRequired { error },
+            ) => {
+                warn!(
+                    "Pending upload verification: authorization required record_id={} attempts={} checked_at={} error={error}",
+                    sync_state.record_id,
+                    state.attempt_count,
+                    state.last_checked_at.unwrap_or_default()
+                );
+            }
             _ => {}
         }
     }
 
-    fn send_pending_state(&self, pending: bool) {
-        self.0.set_pending_upload_verification(pending);
+    fn send_pending_state(&self, blocked_on_authorization: bool, pending: bool) {
+        if blocked_on_authorization {
+            let state = PendingUploadVerificationState::BlockedOnAuthorization;
+            self.0.set_pending_upload_verification(state);
+            return;
+        }
+
+        if pending {
+            let state = PendingUploadVerificationState::Confirming;
+            self.0.set_pending_upload_verification(state);
+            return;
+        }
+
+        let state = match self.0.pending_verification_completion() {
+            Some(_) => PendingUploadVerificationState::Confirming,
+            None => PendingUploadVerificationState::Idle,
+        };
+
+        self.0.set_pending_upload_verification(state);
     }
-}
 
-fn should_retry_wallet_upload(
-    sync_state: &PersistedCloudBlobSyncState,
-    next_attempt_count: u32,
-) -> bool {
-    sync_state.wallet_id.is_some()
-        && next_attempt_count >= MAX_PENDING_WALLET_UPLOAD_CONFIRMATION_ATTEMPTS
-}
+    fn should_retry_wallet_upload(
+        sync_state: &PersistedCloudBlobSyncState,
+        next_attempt_count: u32,
+    ) -> bool {
+        sync_state.wallet_id.is_some()
+            && next_attempt_count >= MAX_PENDING_WALLET_UPLOAD_CONFIRMATION_ATTEMPTS
+    }
 
-fn terminal_failure(error: String) -> BlobCheckResult {
-    BlobCheckResult::Failed { error, retryable: false }
-}
-
-fn cloud_storage_failure_result(error: CloudStorageError) -> BlobCheckResult {
-    let retryable = matches!(
-        error,
-        CloudStorageError::Offline(_)
-            | CloudStorageError::NotAvailable(_)
-            | CloudStorageError::DownloadFailed(_)
-    );
-
-    BlobCheckResult::Failed { error: error.to_string(), retryable }
+    fn master_key_confirmation_expired(
+        sync_state: &PersistedCloudBlobSyncState,
+        current: &CloudBlobUploadedPendingConfirmationState,
+        checked_at: u64,
+    ) -> bool {
+        sync_state.wallet_id.is_none()
+            && checked_at.saturating_sub(current.uploaded_at)
+                >= MASTER_KEY_UPLOAD_CONFIRMATION_GRACE.as_secs()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::cloud_backup::{CloudUploadKind, PersistedCloudBlobSyncState};
+    use crate::database::cloud_backup::PersistedCloudBlobSyncState;
 
     #[test]
     fn apply_blob_result_confirms_blob() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: None,
             record_id: "wallet-a".into(),
@@ -357,7 +484,7 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob =
@@ -369,9 +496,8 @@ mod tests {
     #[test]
     fn apply_blob_result_tracks_pending_blob() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
-            wallet_id: None,
+            wallet_id: Some("wallet-a".into()),
             record_id: "wallet-a".into(),
             state: PersistedCloudBlobState::UploadedPendingConfirmation(
                 CloudBlobUploadedPendingConfirmationState {
@@ -385,7 +511,7 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob = PendingUploadVerifier::apply_blob_result(
@@ -403,9 +529,44 @@ mod tests {
     }
 
     #[test]
+    fn apply_blob_result_fails_expired_master_key_confirmation() {
+        let checked_at = u64::try_from(jiff::Timestamp::now().as_second()).unwrap_or(0);
+        let uploaded_at =
+            checked_at.saturating_sub(super::super::MASTER_KEY_UPLOAD_CONFIRMATION_GRACE.as_secs());
+        let blob = PersistedCloudBlobSyncState {
+            namespace_id: "ns-1".into(),
+            wallet_id: None,
+            record_id: "master-key".into(),
+            state: PersistedCloudBlobState::UploadedPendingConfirmation(
+                CloudBlobUploadedPendingConfirmationState {
+                    revision_hash: "master-key-wrapper".into(),
+                    uploaded_at,
+                    attempt_count: 0,
+                    last_checked_at: None,
+                },
+            ),
+        };
+
+        let current = match &blob.state {
+            PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
+            _ => panic!("expected uploaded pending confirmation state"),
+        };
+
+        let blob = PendingUploadVerifier::apply_blob_result(
+            &blob,
+            &current,
+            &BlobCheckResult::NotYetUploaded,
+        );
+
+        assert!(matches!(
+            blob.state,
+            PersistedCloudBlobState::Failed(CloudBlobFailedState { retryable: false, .. })
+        ));
+    }
+
+    #[test]
     fn apply_blob_result_keeps_pending_blob_when_remote_revision_is_stale() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: Some("wallet-a".into()),
             record_id: "wallet-a".into(),
@@ -421,7 +582,7 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob = PendingUploadVerifier::apply_blob_result(
@@ -442,7 +603,6 @@ mod tests {
     #[test]
     fn apply_blob_result_retries_wallet_upload_after_threshold() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: Some("wallet-a".into()),
             record_id: "wallet-a".into(),
@@ -458,7 +618,7 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob = PendingUploadVerifier::apply_blob_result(
@@ -473,7 +633,6 @@ mod tests {
     #[test]
     fn apply_blob_result_keeps_retryable_failures_pending() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: Some("wallet-a".into()),
             record_id: "wallet-a".into(),
@@ -489,13 +648,13 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob = PendingUploadVerifier::apply_blob_result(
             &blob,
             &current,
-            &BlobCheckResult::Failed { error: "offline".into(), retryable: true },
+            &BlobCheckResult::Failed { error: "offline".into(), retryable: true, issue: None },
         );
 
         assert!(matches!(blob.state, PersistedCloudBlobState::UploadedPendingConfirmation(_)));
@@ -504,7 +663,6 @@ mod tests {
     #[test]
     fn apply_blob_result_marks_terminal_failures_failed() {
         let blob = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: Some("wallet-a".into()),
             record_id: "wallet-a".into(),
@@ -520,13 +678,13 @@ mod tests {
 
         let current = match &blob.state {
             PersistedCloudBlobState::UploadedPendingConfirmation(state) => state.clone(),
-            _ => unreachable!(),
+            _ => panic!("expected uploaded pending confirmation state"),
         };
 
         let blob = PendingUploadVerifier::apply_blob_result(
             &blob,
             &current,
-            &BlobCheckResult::Failed { error: "bad data".into(), retryable: false },
+            &BlobCheckResult::Failed { error: "bad data".into(), retryable: false, issue: None },
         );
 
         assert!(matches!(blob.state, PersistedCloudBlobState::Failed(_)));
@@ -534,7 +692,8 @@ mod tests {
 
     #[test]
     fn cloud_storage_failure_result_retries_offline_errors() {
-        let result = cloud_storage_failure_result(CloudStorageError::Offline("offline".into()));
+        let result =
+            BlobCheckResult::cloud_storage_failure(CloudStorageError::Offline("offline".into()));
 
         assert!(matches!(result, BlobCheckResult::Failed { retryable: true, .. }));
     }
@@ -542,16 +701,20 @@ mod tests {
     #[test]
     fn run_outcome_treats_failures_as_distinct_from_confirmed() {
         assert_eq!(
-            PendingUploadVerifier::run_outcome(true, false, true),
+            PendingUploadVerifier::run_outcome(false, true, false, true),
             PendingUploadRunOutcome::Failed
         );
         assert_eq!(
-            PendingUploadVerifier::run_outcome(true, false, false),
+            PendingUploadVerifier::run_outcome(false, true, false, false),
             PendingUploadRunOutcome::Confirmed
         );
         assert_eq!(
-            PendingUploadVerifier::run_outcome(false, false, false),
+            PendingUploadVerifier::run_outcome(false, false, false, false),
             PendingUploadRunOutcome::Idle
+        );
+        assert_eq!(
+            PendingUploadVerifier::run_outcome(true, true, true, true),
+            PendingUploadRunOutcome::BlockedOnAuthorization
         );
     }
 }

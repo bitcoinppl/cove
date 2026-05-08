@@ -57,7 +57,7 @@ pub(super) fn rename_auxiliary_files(source_path: &Path, destination_path: &Path
         }
 
         let destination_aux_path = sqlite_auxiliary_path(destination_path, suffix);
-        super::super::log_remove_file(&destination_aux_path);
+        crate::database::migration::log_remove_file(&destination_aux_path);
         std::fs::rename(&source_aux_path, &destination_aux_path).context(format!(
             "failed to rename {} to {}",
             source_aux_path.display(),
@@ -155,7 +155,7 @@ pub(super) fn recover_at_path(db_path: &Path) -> Result<()> {
     }
 
     if tmp_path.exists() {
-        super::super::log_remove_file(&tmp_path);
+        crate::database::migration::log_remove_file(&tmp_path);
         clean_auxiliary_files(&tmp_path);
     }
 
@@ -163,14 +163,14 @@ pub(super) fn recover_at_path(db_path: &Path) -> Result<()> {
         match super::verify_encrypted_bdk_db(db_path) {
             Ok(true) => {
                 // encrypted DB confirmed working — safe to delete backup
-                super::super::log_remove_file(&bak_path);
+                crate::database::migration::log_remove_file(&bak_path);
                 clean_auxiliary_files(&bak_path);
             }
             Ok(false) => {
                 // encrypted DB is corrupt, restore from backup
                 let path = db_path.display();
                 warn!("Encrypted DB at {path} appears corrupt, restoring from backup");
-                super::super::log_remove_file(db_path);
+                crate::database::migration::log_remove_file(db_path);
                 clean_auxiliary_files(db_path);
                 finalize_sqlite_bundle_move(&bak_path, db_path)
                     .context("failed to restore from backup")?;
@@ -196,6 +196,6 @@ pub(super) fn recover_at_path(db_path: &Path) -> Result<()> {
 pub(super) fn clean_auxiliary_files(db_path: &Path) {
     for suffix in ["wal", "shm"] {
         let aux_path = sqlite_auxiliary_path(db_path, suffix);
-        super::super::log_remove_file(&aux_path);
+        crate::database::migration::log_remove_file(&aux_path);
     }
 }

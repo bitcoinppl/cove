@@ -228,6 +228,33 @@ enum RestoreSaveBehavior {
     SkipCloudBackup,
 }
 
+#[derive(Clone)]
+struct RestoredWalletMetadataStore(Database);
+
+impl RestoredWalletMetadataStore {
+    fn new(db: &Database) -> Self {
+        Self(db.clone())
+    }
+
+    fn save(
+        &self,
+        metadata: &WalletMetadata,
+        name: &str,
+        save_behavior: RestoreSaveBehavior,
+    ) -> Result<(), BackupError> {
+        let save = match save_behavior {
+            RestoreSaveBehavior::BackupAsNewWallet => {
+                self.0.wallets.save_new_wallet_metadata(metadata.clone())
+            }
+            RestoreSaveBehavior::SkipCloudBackup => {
+                self.0.wallets.save_restored_wallet_metadata(metadata.clone())
+            }
+        };
+
+        save.map_err(|e| BackupError::Database(format!("metadata for {name}: {e}")))
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum LabelRestoreBehavior {
     MarkCloudBackupDirty,
@@ -383,7 +410,7 @@ fn restore_mnemonic_wallet_inner(
         .save_public_descriptor(&metadata.id, ext_descriptor, int_descriptor)
         .map_err(|e| BackupError::Keychain(format!("descriptors for {name}: {e}")))?;
 
-    save_restored_wallet_metadata(&db, metadata, name, save_behavior)?;
+    RestoredWalletMetadataStore::new(&db).save(metadata, name, save_behavior)?;
 
     Ok(())
 }
@@ -462,27 +489,9 @@ fn restore_descriptor_wallet_inner(
             .map_err(|e| BackupError::Keychain(format!("tap signer backup for {name}: {e}")))?;
     }
 
-    save_restored_wallet_metadata(&db, metadata, name, save_behavior)?;
+    RestoredWalletMetadataStore::new(&db).save(metadata, name, save_behavior)?;
 
     Ok(())
-}
-
-fn save_restored_wallet_metadata(
-    db: &Database,
-    metadata: &WalletMetadata,
-    name: &str,
-    save_behavior: RestoreSaveBehavior,
-) -> Result<(), BackupError> {
-    let save = match save_behavior {
-        RestoreSaveBehavior::BackupAsNewWallet => {
-            db.wallets.save_new_wallet_metadata(metadata.clone())
-        }
-        RestoreSaveBehavior::SkipCloudBackup => {
-            db.wallets.save_restored_wallet_metadata(metadata.clone())
-        }
-    };
-
-    save.map_err(|e| BackupError::Database(format!("metadata for {name}: {e}")))
 }
 
 /// Clean up a partially-imported wallet on failure

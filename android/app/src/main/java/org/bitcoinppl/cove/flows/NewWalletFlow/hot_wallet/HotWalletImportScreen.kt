@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet
 
+import android.view.WindowManager
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
@@ -46,13 +48,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
-import android.view.WindowManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -65,8 +67,9 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ImportWalletManager
 import org.bitcoinppl.cove.Log
-import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.ScreenSecurity
+import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.DotMenuView
@@ -109,11 +112,15 @@ fun HotWalletImportScreen(
     numberOfWords: NumberOfBip39Words,
     importType: ImportType,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    onBackPressed: (() -> Unit)? = null,
+    onImported: ((WalletId) -> Unit)? = null,
+    showNfcAction: Boolean = true,
+    autoImportScannedWords: Boolean = false,
 ) {
     // block screenshots unconditionally — import screen contains seed words
     val context = LocalContext.current
     DisposableEffect(Unit) {
-        val window = (context as? android.app.Activity)?.window
+        val window = context.findActivity()?.window
         ScreenSecurity.enter()
         window?.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
@@ -191,7 +198,53 @@ fun HotWalletImportScreen(
         }
     }
 
-    fun setWords(words: List<List<String>>) {
+    fun isAllWordsValid(): Boolean =
+        enteredWords
+            .flatten()
+            .withIndex()
+            .all { (idx, word) ->
+                word.isNotEmpty() &&
+                    Bip39WordSpecificAutocomplete(
+                        wordNumber = (idx + 1).toUShort(),
+                        numberOfWords = currentNumberOfWords,
+                    ).use { it.isValidWord(word, enteredWords) }
+            }
+
+    val focusManager = LocalFocusManager.current
+
+    // dismiss keyboard when all words become valid
+    LaunchedEffect(enteredWords) {
+        if (isAllWordsValid()) {
+            focusManager.clearFocus()
+        }
+    }
+
+    fun importWallet(wordsToImport: List<List<String>> = enteredWords) {
+        try {
+            val walletMetadata = manager.importWallet(wordsToImport)
+            app.clearWalletManager()
+            onImported?.invoke(walletMetadata.id) ?: run {
+                app.selectWalletOrThrow(walletMetadata.id)
+                app.resetRoute(Route.SelectedWallet(walletMetadata.id))
+            }
+        } catch (e: ImportWalletException.InvalidWordGroup) {
+            Log.d("HotWalletImport", "Invalid word group while importing hot wallet")
+            alertState = AlertState.InvalidWords
+        } catch (e: ImportWalletException.WalletAlreadyExists) {
+            Log.w("HotWalletImport", "Attempted to import words for an existing hot wallet: ${e.v1}")
+            duplicateWalletId = e.v1
+            alertState = AlertState.DuplicateWallet
+        } catch (e: Exception) {
+            Log.e("HotWalletImport", "import error", e)
+            genericErrorMessage = e.message ?: "Unknown error occurred"
+            alertState = AlertState.GenericError
+        }
+    }
+
+    fun setWords(
+        words: List<List<String>>,
+        shouldAutoImport: Boolean = false,
+    ) {
         val flatWords = words.flatten()
         val totalWords = flatWords.size
 
@@ -212,6 +265,11 @@ fun HotWalletImportScreen(
         showQrScanner = false
         showNfcScanner = false
 
+        if (shouldAutoImport) {
+            importWallet(words)
+            return
+        }
+
         // update words
         enteredWords = words
 
@@ -219,18 +277,6 @@ fun HotWalletImportScreen(
         tabIndex = words.size - 1
         focusedField = totalWords - 1
     }
-
-    fun isAllWordsValid(): Boolean =
-        enteredWords
-            .flatten()
-            .withIndex()
-            .all { (idx, word) ->
-                word.isNotEmpty() &&
-                    Bip39WordSpecificAutocomplete(
-                        wordNumber = (idx + 1).toUShort(),
-                        numberOfWords = currentNumberOfWords,
-                    ).use { it.isValidWord(word, enteredWords) }
-            }
 
     fun handlePasteMnemonic(mnemonicString: String) {
         // extract word-like tokens, stripping numbers and punctuation
@@ -259,35 +305,6 @@ fun HotWalletImportScreen(
         }
     }
 
-    val focusManager = LocalFocusManager.current
-
-    // dismiss keyboard when all words become valid
-    LaunchedEffect(enteredWords) {
-        if (isAllWordsValid()) {
-            focusManager.clearFocus()
-        }
-    }
-
-    fun importWallet() {
-        try {
-            val walletMetadata = manager.importWallet(enteredWords)
-            app.rust.selectWallet(walletMetadata.id)
-            app.clearWalletManager()
-            app.resetRoute(Route.SelectedWallet(walletMetadata.id))
-        } catch (e: ImportWalletException.InvalidWordGroup) {
-            Log.d("HotWalletImport", "Invalid word group while importing hot wallet")
-            alertState = AlertState.InvalidWords
-        } catch (e: ImportWalletException.WalletAlreadyExists) {
-            Log.w("HotWalletImport", "Attempted to import words for an existing hot wallet: ${e.v1}")
-            duplicateWalletId = e.v1
-            alertState = AlertState.DuplicateWallet
-        } catch (e: Exception) {
-            Log.e("HotWalletImport", "import error", e)
-            genericErrorMessage = e.message ?: "Unknown error occurred"
-            alertState = AlertState.GenericError
-        }
-    }
-
     // force white status bar icons for midnight blue background
     ForceLightStatusBarIcons()
 
@@ -312,7 +329,7 @@ fun HotWalletImportScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { app.popRoute() }) {
+                    IconButton(onClick = { onBackPressed?.invoke() ?: app.popRoute() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Default.ArrowBack,
                             contentDescription = "Back",
@@ -321,12 +338,13 @@ fun HotWalletImportScreen(
                 },
                 actions = {
                     Row {
-                        // NFC button
-                        IconButton(onClick = { showNfcScanner = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Nfc,
-                                contentDescription = "NFC Import",
-                            )
+                        if (showNfcAction) {
+                            IconButton(onClick = { showNfcScanner = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Nfc,
+                                    contentDescription = "NFC Import",
+                                )
+                            }
                         }
 
                         // QR button
@@ -429,6 +447,7 @@ fun HotWalletImportScreen(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .imePadding()
                             .padding(horizontal = 20.dp),
                 ) {
                     Row(
@@ -478,7 +497,7 @@ fun HotWalletImportScreen(
                                 disabledContainerColor = CoveColor.btnPrimary.copy(alpha = 0.5f),
                                 disabledContentColor = CoveColor.midnightBlue.copy(alpha = 0.5f),
                             ),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("hotWalletImport.import"),
                     )
                 }
             }
@@ -508,8 +527,12 @@ fun HotWalletImportScreen(
                             onClick = {
                                 alertState = AlertState.None
                                 duplicateWalletId?.let { walletId ->
-                                    app.rust.selectWallet(walletId)
-                                    app.resetRoute(Route.SelectedWallet(walletId))
+                                    app.clearWalletManager()
+                                    manager.close()
+                                    onImported?.invoke(walletId) ?: run {
+                                        app.selectWalletOrThrow(walletId)
+                                        app.resetRoute(Route.SelectedWallet(walletId))
+                                    }
                                 }
                             },
                         ) {
@@ -541,7 +564,7 @@ fun HotWalletImportScreen(
                     showQrScanner = false
                 },
                 onWordsScanned = { words ->
-                    setWords(words)
+                    setWords(words, shouldAutoImport = autoImportScannedWords)
                 },
             )
         }

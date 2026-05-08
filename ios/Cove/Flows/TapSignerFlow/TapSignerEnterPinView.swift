@@ -103,10 +103,10 @@ struct TapSignerEnterPin: View {
                     let txId = psbt.txId()
                     let record = try db.getTxThrow(txId: txId)
                     let route = RouteFactory()
-                        .sendConfirm(
+                        .sendConfirmSignedPsbt(
                             id: record.walletId(),
                             details: record.confirmDetails(),
-                            signedPsbt: signedPsbt
+                            psbt: signedPsbt
                         )
 
                     await MainActor.run {

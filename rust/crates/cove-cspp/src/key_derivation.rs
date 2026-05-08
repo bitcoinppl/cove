@@ -27,7 +27,10 @@ pub fn derive_sensitive_data_key(master_key: &[u8; 32]) -> [u8; 32] {
     derive_key(master_key, SENSITIVE_DATA_INFO)
 }
 
-/// Derive a per-wallet encryption key from the critical data key and a random wallet salt
+/// Derive a wallet backup encryption key
+///
+/// Uses the wallet salt as the HKDF salt, the critical data key as input keying
+/// material, and `cspp:v1:wallet` as the info string
 pub fn derive_wallet_key(critical_data_key: &[u8; 32], wallet_salt: &[u8; 32]) -> [u8; 32] {
     let hkdf = Hkdf::<Sha256>::new(Some(wallet_salt), critical_data_key);
     let mut output = [0u8; 32];

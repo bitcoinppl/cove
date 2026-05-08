@@ -29,7 +29,7 @@ struct ListWalletsScreen: View {
                     return app.loadAndReset(to: Route.newWallet(.select))
                 }
 
-                do { return try app.rust.selectWallet(id: wallet.id)
+                do { return try app.selectWalletOrThrow(wallet.id)
                 } catch { app.loadAndReset(to: Route.newWallet(.select)) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

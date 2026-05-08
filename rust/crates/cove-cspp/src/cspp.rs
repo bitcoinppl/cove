@@ -100,10 +100,12 @@ impl<S: CsppStore> Cspp<S> {
     /// Deletes the master key and its encryption key from the store
     ///
     /// Used by debug reset to fully clear CSPP state
-    pub fn delete_master_key(&self) {
-        self.0.delete(MASTER_KEY_NAME.into());
-        self.0.delete(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into());
+    pub fn delete_master_key(&self) -> bool {
+        let master_key_deleted = self.delete_key_if_present(MASTER_KEY_NAME);
+        let encryption_key_deleted =
+            self.delete_key_if_present(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE);
         Self::clear_cached_master_key();
+        master_key_deleted && encryption_key_deleted
     }
 
     /// Checks whether the master key exists in the store without decrypting it
@@ -147,6 +149,10 @@ impl<S: CsppStore> Cspp<S> {
     fn update_cached_master_key(master_key: &MasterKey) {
         MASTER_KEY_CACHE.store(Some(Arc::new(Zeroizing::new(*master_key.as_bytes()))));
     }
+
+    fn delete_key_if_present(&self, key: &str) -> bool {
+        self.0.get(key.to_owned()).is_none() || self.0.delete(key.to_owned())
+    }
 }
 
 #[cfg(test)]
@@ -165,6 +171,15 @@ mod tests {
     impl MockStore {
         fn new() -> Self {
             Self(Mutex::new(HashMap::new()))
+        }
+
+        fn with_entries(entries: Vec<(&str, &str)>) -> Self {
+            Self(Mutex::new(
+                entries
+                    .into_iter()
+                    .map(|(key, value)| (key.to_owned(), value.to_owned()))
+                    .collect(),
+            ))
         }
     }
 
@@ -299,5 +314,40 @@ mod tests {
 
         let regenerated = cspp.get_or_create_master_key().unwrap();
         assert_ne!(regenerated.as_bytes(), original.as_bytes());
+    }
+
+    #[test]
+    fn delete_master_key_treats_empty_store_as_success() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<MockStore>::reset_cache();
+
+        let cspp = mock_cspp();
+
+        assert!(cspp.delete_master_key());
+    }
+
+    #[test]
+    fn delete_master_key_removes_partial_master_key_entry() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<MockStore>::reset_cache();
+
+        let cspp = Cspp::new(MockStore::with_entries(vec![(MASTER_KEY_NAME, "encrypted")]));
+
+        assert!(cspp.delete_master_key());
+        assert!(cspp.0.get(MASTER_KEY_NAME.into()).is_none());
+    }
+
+    #[test]
+    fn delete_master_key_removes_partial_encryption_key_entry() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<MockStore>::reset_cache();
+
+        let cspp = Cspp::new(MockStore::with_entries(vec![(
+            MASTER_KEY_ENCRYPTION_KEY_AND_NONCE,
+            "encryption-key",
+        )]));
+
+        assert!(cspp.delete_master_key());
+        assert!(cspp.0.get(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into()).is_none());
     }
 }

@@ -6,6 +6,8 @@ Cove is a simple, intuitive, but powerful Bitcoin wallet. The goal is to help ne
 
 That balance matters whenever adding new functionality. Every feature must earn its place by remaining simple and intuitive. If we cannot make a feature feel simple and intuitive, we probably should not add it.
 
+Prefer direct, structurally correct fixes over temporary workarounds. The right solution usually starts with the correct data model: represent the domain state, ownership, and invariants explicitly, then let the UI and orchestration code follow from that model. A larger diff is acceptable when it is needed to solve the requested change cleanly across the affected layers.
+
 ## Prerequisites
 
 - [Rust](https://rustup.rs)
@@ -35,10 +37,12 @@ The `COVE_KEYSTORE_*` variables in `.envrc.example` are only needed for signed A
 ### iOS
 
 ```bash
-just build-ios-release    # alias: just bir
+just testflight
 ```
 
-Then archive and distribute via Xcode (Product → Archive).
+This bumps the iOS build number, rebuilds the release iOS bindings, archives the app, and uploads it to App Store Connect for TestFlight processing using App Store Connect API key credentials.
+
+Set `ASC_API_KEY_PATH`, `ASC_API_KEY_ID`, and `ASC_API_ISSUER_ID`. The API key must have access to cloud-managed distribution certificates.
 
 ### Android
 
@@ -133,4 +137,6 @@ See [How to Write a Git Commit Message](https://cbea.ms/git-commit/) for the ful
 ## Further Reading
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System design, Rust core, UniFFI, mobile patterns
-- [docs/IOS_ANDROID_PARITY.md](docs/IOS_ANDROID_PARITY.md) - iOS/Android UI parity patterns
+- [docs/ios_android_parity.md](docs/ios_android_parity.md) - iOS/Android UI parity patterns
+- [docs/icloud_drive.md](docs/icloud_drive.md) - iCloud Drive behavior and file coordination notes
+- [docs/passkeys.md](docs/passkeys.md) - Passkey behavior and Cloud Backup confirmation notes

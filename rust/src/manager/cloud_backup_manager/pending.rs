@@ -8,17 +8,26 @@ use backon::{BackoffBuilder as _, FibonacciBuilder};
 use cove_util::ResultExt as _;
 
 use self::queue_processor::PendingUploadVerifier;
-use super::{CloudBackupError, RustCloudBackupManager};
+use super::{CloudBackupError, PendingUploadVerificationState, RustCloudBackupManager};
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobDirtyState, CloudBlobFailedState, CloudBlobUploadedPendingConfirmationState,
-    CloudUploadKind, PersistedCloudBlobState, PersistedCloudBlobSyncState,
+    CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
+    CloudBlobUploadedPendingConfirmationState, PersistedCloudBlobState,
+    PersistedCloudBlobSyncState,
 };
 use crate::wallet::metadata::WalletId;
 
 pub(crate) use detail::remote_wallet_revision_matches;
 
+pub(crate) const MASTER_KEY_UPLOAD_CONFIRMATION_GRACE: Duration = Duration::from_secs(60);
 pub(super) const MAX_PENDING_UPLOAD_VERIFICATION_DELAY: Duration = Duration::from_secs(10);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PendingUploadVerificationStatus {
+    Idle,
+    Pending,
+    BlockedOnAuthorization,
+}
 
 pub(super) fn build_pending_upload_backoff() -> backon::FibonacciBackoff {
     FibonacciBuilder::default()
@@ -51,8 +60,8 @@ impl RustCloudBackupManager {
         revision_hash: String,
         uploaded_at: u64,
     ) -> Result<(), CloudBackupError> {
+        let starts_master_key_grace = wallet_id.is_none();
         let sync_state = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: namespace_id.to_string(),
             wallet_id,
             record_id,
@@ -71,7 +80,14 @@ impl RustCloudBackupManager {
             .set(&sync_state)
             .map_err_prefix("persist uploaded cloud blob state", CloudBackupError::Internal)?;
 
-        self.set_pending_upload_verification(true);
+        if starts_master_key_grace {
+            send!(
+                self.supervisor
+                    .start_master_key_upload_confirmation_grace(namespace_id.to_string())
+            );
+        }
+
+        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
         self.wake_pending_upload_verifier();
         self.start_pending_upload_verification_loop();
 
@@ -101,7 +117,14 @@ impl RustCloudBackupManager {
             return Ok(false);
         }
 
-        self.set_pending_upload_verification(true);
+        if current_state.wallet_id.is_none() {
+            send!(
+                self.supervisor
+                    .start_master_key_upload_confirmation_grace(current_state.namespace_id.clone())
+            );
+        }
+
+        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
         self.wake_pending_upload_verifier();
         self.start_pending_upload_verification_loop();
 
@@ -113,6 +136,7 @@ impl RustCloudBackupManager {
         current_state: &PersistedCloudBlobSyncState,
         revision_hash: Option<String>,
         retryable: bool,
+        issue: Option<CloudBlobFailureIssue>,
         error: String,
     ) -> Result<bool, CloudBackupError> {
         let failed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
@@ -123,6 +147,7 @@ impl RustCloudBackupManager {
                 revision_hash,
                 retryable,
                 error,
+                issue,
                 failed_at,
             }),
             "persist failed cloud blob state",
@@ -157,22 +182,22 @@ impl RustCloudBackupManager {
                 .map_err_prefix("remove cloud blob sync state", CloudBackupError::Internal)?;
         }
 
-        self.set_pending_upload_verification(self.has_pending_cloud_upload_verification());
+        self.refresh_pending_upload_verification_state();
         self.wake_pending_upload_verifier();
 
         Ok(())
     }
 
     pub(super) fn start_pending_upload_verification_loop(&self) {
-        send!(self.runtime.ensure_pending_upload_verification_loop());
+        send!(self.supervisor.ensure_pending_upload_verification_loop());
     }
 
-    pub(crate) async fn verify_pending_uploads_once(&self) -> bool {
+    pub(crate) async fn verify_pending_uploads_once(&self) -> PendingUploadVerificationStatus {
         PendingUploadVerifier(self.clone()).run_once().await
     }
 
     pub(crate) fn wake_pending_upload_verifier(&self) {
-        send!(self.runtime.wake_pending_upload_verifier());
+        send!(self.supervisor.wake_pending_upload_verifier());
     }
 }
 

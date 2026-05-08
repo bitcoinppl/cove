@@ -9,18 +9,20 @@ use crate::{
     app::reconcile::{Update, Updater},
     fee_client::FeeResponse,
     fiat::client::PriceResponse,
+    network::Network,
 };
 
 use super::Error;
-use cove_types::redb::Json;
+use cove_types::{BlockSizeLast, redb::Json};
 
 pub const TABLE: TableDefinition<&'static str, Json<GlobalCacheData>> =
     TableDefinition::new("global_cache");
 
-#[derive(Debug, Clone, Copy, strum::IntoStaticStr)]
+#[derive(Debug, Clone, Copy)]
 pub enum GlobalCacheKey {
     Prices(PricesKey),
     Fees(FeesKey),
+    BlockHeight(Network),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -29,10 +31,21 @@ pub struct PricesKey;
 #[derive(Debug, Clone, Copy)]
 pub struct FeesKey;
 
+impl GlobalCacheKey {
+    fn key(self) -> String {
+        match self {
+            Self::Prices(_) => "Prices".to_string(),
+            Self::Fees(_) => "Fees".to_string(),
+            Self::BlockHeight(network) => format!("BlockHeight::{network:?}"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, derive_more::From, serde::Serialize, serde::Deserialize)]
 pub enum GlobalCacheData {
     Prices(PriceResponse),
     Fees(FeeResponse),
+    BlockHeight(BlockSizeLast),
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +100,24 @@ impl GlobalCacheTable {
         let key = GlobalCacheKey::Fees(FeesKey);
         self.set(key, fees.into())
     }
+
+    pub fn get_block_height(&self, network: Network) -> Result<Option<BlockSizeLast>, Error> {
+        let key = GlobalCacheKey::BlockHeight(network);
+        if let Some(GlobalCacheData::BlockHeight(block_height)) = self.get(key)? {
+            return Ok(Some(block_height));
+        }
+
+        Ok(None)
+    }
+
+    pub fn set_block_height(
+        &self,
+        network: Network,
+        block_height: BlockSizeLast,
+    ) -> Result<(), Error> {
+        let key = GlobalCacheKey::BlockHeight(network);
+        self.set(key, block_height.into())
+    }
 }
 
 impl GlobalCacheTable {
@@ -95,9 +126,11 @@ impl GlobalCacheTable {
 
         let table = read_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
-        let key: &'static str = key.into();
-        let value =
-            table.get(key).map_err_str(GlobalCacheTableError::Read)?.map(|value| value.value());
+        let key = key.key();
+        let value = table
+            .get(key.as_str())
+            .map_err_str(GlobalCacheTableError::Read)?
+            .map(|value| value.value());
 
         Ok(value)
     }
@@ -109,8 +142,8 @@ impl GlobalCacheTable {
         {
             let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
-            let key: &'static str = key.into();
-            table.insert(key, value).map_err_str(GlobalCacheTableError::Save)?;
+            let key = key.key();
+            table.insert(key.as_str(), value).map_err_str(GlobalCacheTableError::Save)?;
         }
 
         write_txn.commit().map_err_str(Error::DatabaseAccess)?;

@@ -1,0 +1,6 @@
+[test-groups]
+cloud-backup = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'package(cove) & test(manager::cloud_backup_manager::ops::tests::)'
+test-group = 'cloud-backup'

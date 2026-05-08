@@ -1,0 +1,340 @@
+package org.bitcoinppl.cove.cloudbackup
+
+import org.bitcoinppl.cove_core.CloudBackupEnableContext
+import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
+import org.bitcoinppl.cove_core.CloudBackupStatus
+import org.bitcoinppl.cove_core.CloudBackupVerificationSource
+import org.bitcoinppl.cove_core.CloudOnlyState
+import org.bitcoinppl.cove_core.DeepVerificationFailure
+import org.bitcoinppl.cove_core.PendingUploadVerificationState
+import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
+import org.bitcoinppl.cove_core.VerificationState
+import org.bitcoinppl.cove_core.device.CloudSyncHealth
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class CloudBackupRegressionHelpersTest {
+    @Test
+    fun transientStatusesDoNotForceCloudBackupEnabled() {
+        val transientStatuses =
+            listOf(
+                CloudBackupStatus.Enabling,
+                CloudBackupStatus.Error("failed"),
+                CloudBackupStatus.UnsupportedPasskeyProvider,
+            )
+
+        transientStatuses.forEach { status ->
+            val enabled =
+                cloudBackupEnabledForStatus(
+                    status = status,
+                    currentValue = false,
+                    readPersistedState = { false },
+                )
+            assertFalse(enabled)
+        }
+    }
+
+    @Test
+    fun persistedEnabledStateWinsForConfiguredStatuses() {
+        assertTrue(
+            cloudBackupEnabledForStatus(
+                status = CloudBackupStatus.Enabled,
+                currentValue = false,
+                readPersistedState = { true },
+            ),
+        )
+        assertFalse(
+            cloudBackupEnabledForStatus(
+                status = CloudBackupStatus.Disabled,
+                currentValue = true,
+                readPersistedState = { false },
+            ),
+        )
+    }
+
+    @Test
+    fun syncHealthRequiresUploadedBackupFiles() {
+        val masterKeyFileName = "master-key.json"
+        val isWalletFile: (String) -> Boolean = { fileName ->
+            fileName.startsWith("wallet-") && fileName.endsWith(".json")
+        }
+        val hasUploadedBackupFileNames: (List<String>) -> Boolean = { fileNames ->
+            hasUploadedBackupFiles(
+                fileNames = fileNames,
+                masterKeyFileName = masterKeyFileName,
+                isWalletFile = isWalletFile,
+            )
+        }
+        val hasMasterKeyBackupFile: (List<String>) -> Boolean = { fileNames ->
+            hasMasterKeyBackup(
+                fileNames = fileNames,
+                masterKeyFileName = masterKeyFileName,
+            )
+        }
+
+        assertEquals(
+            CloudSyncHealth.NoFiles,
+            syncHealthForNamespaceFiles(
+                namespaceFiles = emptyList(),
+                hasUploadedBackupFiles = hasUploadedBackupFileNames,
+                hasMasterKeyBackup = hasMasterKeyBackupFile,
+            ),
+        )
+        assertEquals(
+            CloudSyncHealth.NoFiles,
+            syncHealthForNamespaceFiles(
+                namespaceFiles =
+                    listOf(
+                        emptyList(),
+                        listOf("notes.txt", "placeholder"),
+                    ),
+                hasUploadedBackupFiles = hasUploadedBackupFileNames,
+                hasMasterKeyBackup = hasMasterKeyBackupFile,
+            ),
+        )
+        assertEquals(
+            CloudSyncHealth.AllUploaded,
+            syncHealthForNamespaceFiles(
+                namespaceFiles = listOf(listOf(masterKeyFileName)),
+                hasUploadedBackupFiles = hasUploadedBackupFileNames,
+                hasMasterKeyBackup = hasMasterKeyBackupFile,
+            ),
+        )
+        assertEquals(
+            CloudSyncHealth.Failed("cloud backup is incomplete"),
+            syncHealthForNamespaceFiles(
+                namespaceFiles = listOf(listOf("wallet-wallet-record.json")),
+                hasUploadedBackupFiles = hasUploadedBackupFileNames,
+                hasMasterKeyBackup = hasMasterKeyBackupFile,
+            ),
+        )
+    }
+
+    @Test
+    fun cancelledVerificationKeepsDetailAndFallbackRecoveryReachable() {
+        assertEquals(
+            CloudBackupDetailBodyState.DETAIL,
+            cloudBackupDetailBodyState(
+                status = CloudBackupStatus.Enabled,
+                verification = VerificationState.Cancelled,
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
+                hasDetail = true,
+            ),
+        )
+        assertEquals(
+            CloudBackupDetailBodyState.CANCELLED_RECOVERY,
+            cloudBackupDetailBodyState(
+                status = CloudBackupStatus.Enabled,
+                verification = VerificationState.Cancelled,
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
+                hasDetail = false,
+            ),
+        )
+    }
+
+    @Test
+    fun failedVerificationWithoutDetailShowsFallbackVerificationSection() {
+        val bodyState =
+            cloudBackupDetailBodyState(
+                status = CloudBackupStatus.Enabled,
+                verification =
+                    VerificationState.Failed(
+                        DeepVerificationFailure.Retry(
+                            message = "Drive unavailable",
+                            detail = null,
+                            retryContext = null,
+                        ),
+                    ),
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
+                hasDetail = false,
+            )
+
+        assertNull(bodyState)
+        assertTrue(shouldShowFallbackVerificationSection(bodyState))
+        assertFalse(shouldShowFallbackVerificationSection(CloudBackupDetailBodyState.DETAIL))
+    }
+
+    @Test
+    fun cloudOnlyAutoFetchOnlyRunsFromNotFetched() {
+        assertTrue(shouldFetchCloudOnly(CloudOnlyState.NotFetched))
+        assertFalse(shouldFetchCloudOnly(CloudOnlyState.Loading))
+    }
+
+    @Test
+    fun pendingUploadConfirmationDoesNotReplaceDetailContent() {
+        assertEquals(
+            CloudBackupDetailBodyState.DETAIL,
+            cloudBackupDetailBodyState(
+                status = CloudBackupStatus.Enabled,
+                verification = VerificationState.Idle,
+                pendingUploadVerification = PendingUploadVerificationState.CONFIRMING,
+                hasDetail = true,
+            ),
+        )
+        assertTrue(
+            shouldShowPendingUploadConfirmationStatus(PendingUploadVerificationState.CONFIRMING),
+        )
+    }
+
+    @Test
+    fun interactiveVerificationKeepsVerifyingBody() {
+        assertEquals(
+            CloudBackupDetailBodyState.VERIFYING,
+            cloudBackupDetailBodyState(
+                status = CloudBackupStatus.Enabled,
+                verification = VerificationState.Verifying,
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
+                hasDetail = true,
+            ),
+        )
+    }
+
+    @Test
+    fun pendingUploadConfirmationWithoutDetailKeepsBackgroundLoadingBody() {
+        assertEquals(
+            CloudBackupDetailBodyState.LOADING,
+            cloudBackupDetailBodyState(
+                status = CloudBackupStatus.Enabled,
+                verification = VerificationState.Idle,
+                pendingUploadVerification = PendingUploadVerificationState.CONFIRMING,
+                hasDetail = false,
+            ),
+        )
+    }
+
+    @Test
+    fun blockedPendingUploadAuthorizationWithoutDetailShowsAuthorizationBody() {
+        assertEquals(
+            CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED,
+            cloudBackupDetailBodyState(
+                status = CloudBackupStatus.Enabled,
+                verification = VerificationState.Idle,
+                pendingUploadVerification = PendingUploadVerificationState.BLOCKED_ON_AUTHORIZATION,
+                hasDetail = false,
+            ),
+        )
+    }
+
+    @Test
+    fun decoyModeBlocksAllCloudBackupRootPresentations() {
+        val context =
+            CloudBackupPresentationContext(
+                isActivityResumed = true,
+                isUnlocked = true,
+                isInDecoyMode = true,
+                isCoverPresented = false,
+            )
+
+        val presentations =
+            listOf(
+                CloudBackupRootPresentation.ExistingBackupFound(manualEnableContext()),
+                CloudBackupRootPresentation.PasskeyChoice(
+                    CloudBackupPasskeyChoiceIntent.Enable(manualEnableContext()),
+                ),
+                CloudBackupRootPresentation.MissingPasskeyReminder,
+                CloudBackupRootPresentation.VerificationPrompt,
+            )
+
+        presentations.forEach { presentation ->
+            assertFalse(
+                isCloudBackupPresentationPresentable(
+                    presentation = presentation,
+                    context = context,
+                    hasBlockers = false,
+                ),
+            )
+        }
+        assertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.ExistingBackupFound(manualEnableContext()),
+                context = context.copy(isInDecoyMode = false),
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    @Test
+    fun onboardingPolicySuppressesVerificationPrompt() {
+        val context = presentableCloudBackupContext(CloudBackupPresentationPolicy.ONBOARDING)
+
+        assertFalse(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.VerificationPrompt,
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    @Test
+    fun onboardingPolicySuppressesMissingPasskeyReminder() {
+        val context = presentableCloudBackupContext(CloudBackupPresentationPolicy.ONBOARDING)
+
+        assertFalse(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.MissingPasskeyReminder,
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    @Test
+    fun onboardingPolicyAllowsEnablePrompts() {
+        val context = presentableCloudBackupContext(CloudBackupPresentationPolicy.ONBOARDING)
+
+        assertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.ExistingBackupFound(manualEnableContext()),
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+        assertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation =
+                    CloudBackupRootPresentation.PasskeyChoice(
+                        CloudBackupPasskeyChoiceIntent.Enable(manualEnableContext()),
+                    ),
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    @Test
+    fun normalPolicyAllowsVerificationPromptWhenUnblocked() {
+        val context = presentableCloudBackupContext(CloudBackupPresentationPolicy.REQUIRES_UNLOCKED_AUTH)
+
+        assertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.VerificationPrompt,
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    private fun presentableCloudBackupContext(
+        presentationPolicy: CloudBackupPresentationPolicy,
+    ): CloudBackupPresentationContext =
+        CloudBackupPresentationContext(
+            isActivityResumed = true,
+            isUnlocked = true,
+            isInDecoyMode = false,
+            isCoverPresented = false,
+            appHasAlert = false,
+            appHasSheet = false,
+            isViewingCloudBackup = false,
+            presentationPolicy = presentationPolicy,
+        )
+
+    private fun manualEnableContext(): CloudBackupEnableContext =
+        CloudBackupEnableContext(
+            savedPasskeyConfirmation = SavedPasskeyConfirmationMode.MANUAL,
+            verificationSource = CloudBackupVerificationSource.SETTINGS,
+        )
+}
