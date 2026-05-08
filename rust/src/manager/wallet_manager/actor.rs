@@ -1162,6 +1162,8 @@ impl WalletActor {
         debug!("perform_initial_full_scan");
         static FULL_SCAN_TYPE: FullScanType = FullScanType::Initial;
 
+        self.scan_generation += 1;
+
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
 
         let addr = self.addr.clone();
@@ -1176,13 +1178,15 @@ impl WalletActor {
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
             debug!("[initial] done initial full scan in {}s", now - start);
 
-            // update wallet state
-            let _ =
+            // update wallet state, schedule expanded scan only if initial result was applied
+            let should_schedule_expanded =
                 call!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE, generation))
-                    .await;
+                    .await
+                    .unwrap_or(false);
 
-            // perform next scan
-            send!(addr.maybe_perform_expanded_full_scan());
+            if should_schedule_expanded {
+                send!(addr.maybe_perform_expanded_full_scan());
+            }
         });
         if let Some(old) = self.scan_task.replace(handle.abort_handle()) {
             old.abort();
@@ -1233,6 +1237,7 @@ impl WalletActor {
     async fn perform_incremental_scan(&mut self) -> ActorResult<()> {
         debug!("starting incremental scan");
 
+        self.scan_generation += 1;
         self.state = ActorState::PerformingIncrementalScan;
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
@@ -1265,10 +1270,13 @@ impl WalletActor {
         full_scan_result: Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
         full_scan_type: FullScanType,
         generation: u64,
-    ) -> ActorResult<()> {
+    ) -> ActorResult<bool> {
         if generation != self.scan_generation {
-            debug!("dropping stale full scan result (gen {generation} != {})", self.scan_generation);
-            return Produces::ok(());
+            debug!(
+                "dropping stale full scan result (gen {generation} != {})",
+                self.scan_generation
+            );
+            return Produces::ok(false);
         }
 
         debug!("applying full scan result for {full_scan_type:?}");
@@ -1298,7 +1306,7 @@ impl WalletActor {
         // update the state
         self.state = ActorState::FullScanComplete(full_scan_type);
 
-        Produces::ok(())
+        Produces::ok(matches!(full_scan_type, FullScanType::Initial))
     }
 
     async fn handle_incremental_scan_complete(
