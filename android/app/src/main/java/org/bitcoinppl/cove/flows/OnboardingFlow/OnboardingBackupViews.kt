@@ -10,16 +10,18 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
@@ -1091,112 +1093,119 @@ private fun OnboardingRestoreContent(
     onRetry: () -> Unit,
 ) {
     OnboardingBackground {
-        Column(
+        BoxWithConstraints(
             modifier =
                 Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 28.dp, vertical = 18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                    .fillMaxSize(),
         ) {
-            Spacer(modifier = Modifier.weight(1f, fill = true))
-
-            when (phase) {
-                OnboardingRestorePhase.Restoring -> OnboardingStatusHero(icon = Icons.Default.CloudDownload)
-                is OnboardingRestorePhase.Complete ->
-                    OnboardingStatusHero(
-                        icon = Icons.Default.Check,
-                        tint = OnboardingSuccess,
-                        fillColor = OnboardingSuccess.copy(alpha = 0.12f),
-                    )
-                is OnboardingRestorePhase.Error ->
-                    OnboardingStatusHero(
-                        icon = Icons.Default.Warning,
-                        tint = Color.Red,
-                        fillColor = Color.Red.copy(alpha = 0.12f),
-                    )
-            }
-
-            Spacer(modifier = Modifier.size(44.dp))
-
-            when (phase) {
-                OnboardingRestorePhase.Restoring -> {
-                    Text(
-                        text = "Restoring from Google Drive...",
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(modifier = Modifier.size(10.dp))
-                    Text(
-                        text = "This might take a few minutes",
-                        color = OnboardingTextSecondary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(modifier = Modifier.size(18.dp))
-                    OnboardingThinProgressBar(progress = combinedProgress)
-                }
-                is OnboardingRestorePhase.Complete -> {
-                    Text(
-                        text = "You're all set",
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(modifier = Modifier.size(10.dp))
-                    Text(
-                        text = "Your wallets have been restored.",
-                        color = OnboardingTextSecondary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-                is OnboardingRestorePhase.Error -> {
-                    Text(
-                        text = "Restore Failed",
-                        color = Color.White,
-                        fontSize = 34.sp,
-                        lineHeight = 38.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(modifier = Modifier.size(12.dp))
-                    Text(
-                        text = "Something went wrong while restoring your wallets",
-                        color = OnboardingTextSecondary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f, fill = true))
-
-            when (phase) {
-                OnboardingRestorePhase.Restoring -> Unit
-                is OnboardingRestorePhase.Complete -> {
-                    if (phase.report.walletsFailed.toInt() > 0) {
-                        OnboardingInlineMessage(text = "${phase.report.walletsFailed} wallet(s) could not be restored")
-                        Spacer(modifier = Modifier.size(16.dp))
-                    }
-                    if (phase.report.labelsFailedWalletNames.isNotEmpty()) {
-                        OnboardingInlineMessage(
-                            text = "${phase.report.labelsFailedWalletNames.size} restored wallet(s) had labels that could not be imported",
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = maxHeight)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 28.dp, vertical = 18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                when (phase) {
+                    OnboardingRestorePhase.Restoring -> OnboardingStatusHero(icon = Icons.Default.CloudDownload)
+                    is OnboardingRestorePhase.Complete ->
+                        OnboardingStatusHero(
+                            icon = Icons.Default.Check,
+                            tint = OnboardingSuccess,
+                            fillColor = OnboardingSuccess.copy(alpha = 0.12f),
                         )
-                        Spacer(modifier = Modifier.size(16.dp))
-                    }
-                    OnboardingPrimaryButton(text = "Done", onClick = onDone)
+                    is OnboardingRestorePhase.Error ->
+                        OnboardingStatusHero(
+                            icon = Icons.Default.Warning,
+                            tint = Color.Red,
+                            fillColor = Color.Red.copy(alpha = 0.12f),
+                        )
                 }
-                is OnboardingRestorePhase.Error -> {
-                    OnboardingInlineMessage(text = phase.message)
-                    Spacer(modifier = Modifier.size(18.dp))
-                    OnboardingPrimaryButton(text = "Retry", onClick = onRetry)
-                }
-            }
 
-            Spacer(modifier = Modifier.size(28.dp))
+                Spacer(modifier = Modifier.size(44.dp))
+
+                when (phase) {
+                    OnboardingRestorePhase.Restoring -> {
+                        Text(
+                            text = "Restoring from Google Drive...",
+                            color = Color.White,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.size(10.dp))
+                        Text(
+                            text = "This might take a few minutes",
+                            color = OnboardingTextSecondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.size(18.dp))
+                        OnboardingThinProgressBar(progress = combinedProgress)
+                    }
+                    is OnboardingRestorePhase.Complete -> {
+                        Text(
+                            text = "You're all set",
+                            color = Color.White,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.size(10.dp))
+                        Text(
+                            text = "Your wallets have been restored.",
+                            color = OnboardingTextSecondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    is OnboardingRestorePhase.Error -> {
+                        Text(
+                            text = "Restore Failed",
+                            color = Color.White,
+                            fontSize = 34.sp,
+                            lineHeight = 38.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.size(12.dp))
+                        Text(
+                            text = "Something went wrong while restoring your wallets",
+                            color = OnboardingTextSecondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.size(28.dp))
+
+                when (phase) {
+                    OnboardingRestorePhase.Restoring -> Unit
+                    is OnboardingRestorePhase.Complete -> {
+                        if (phase.report.walletsFailed.toInt() > 0) {
+                            OnboardingInlineMessage(text = "${phase.report.walletsFailed} wallet(s) could not be restored")
+                            Spacer(modifier = Modifier.size(16.dp))
+                        }
+                        if (phase.report.labelsFailedWalletNames.isNotEmpty()) {
+                            OnboardingInlineMessage(
+                                text = "${phase.report.labelsFailedWalletNames.size} restored wallet(s) had labels that could not be imported",
+                            )
+                            Spacer(modifier = Modifier.size(16.dp))
+                        }
+                        OnboardingPrimaryButton(text = "Done", onClick = onDone)
+                    }
+                    is OnboardingRestorePhase.Error -> {
+                        OnboardingInlineMessage(text = phase.message)
+                        Spacer(modifier = Modifier.size(18.dp))
+                        OnboardingPrimaryButton(text = "Retry", onClick = onRetry)
+                    }
+                }
+
+                Spacer(modifier = Modifier.size(28.dp))
+            }
         }
     }
 }

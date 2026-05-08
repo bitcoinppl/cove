@@ -127,31 +127,35 @@ private struct DeviceRestoreContent: View {
     let onRetry: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
+        ScrollView {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
 
-            heroIcon
+                heroIcon
 
-            Spacer()
-                .frame(height: 44)
-
-            titleContent
-
-            if case .restoring = phase {
                 Spacer()
-                    .frame(height: 18)
+                    .frame(height: 44)
 
-                OnboardingThinProgressBar(progress: combinedProgress)
+                titleContent
+
+                if case .restoring = phase {
+                    Spacer()
+                        .frame(height: 18)
+
+                    OnboardingThinProgressBar(progress: combinedProgress)
+                }
+
+                Spacer(minLength: 28)
+
+                bottomContent
             }
-
-            Spacer(minLength: 28)
-
-            bottomContent
+            .padding(.horizontal, 28)
+            .padding(.top, 18)
+            .padding(.bottom, 28)
+            .frame(maxWidth: .infinity)
+            .containerRelativeFrame(.vertical, alignment: .center)
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 18)
-        .padding(.bottom, 28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
     }
 

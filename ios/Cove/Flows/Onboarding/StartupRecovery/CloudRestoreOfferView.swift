@@ -11,69 +11,73 @@ struct CloudRestoreOfferView: View {
     var providerHint: CloudRestoreProviderHint? = nil
 
     var body: some View {
-        VStack(spacing: 0) {
-            OnboardingStepIndicator(selected: 1)
-                .padding(.top, 48)
+        ScrollView {
+            VStack(spacing: 0) {
+                OnboardingStepIndicator(selected: 1)
+                    .padding(.top, 48)
 
-            Spacer()
-                .frame(height: 5)
+                Spacer()
+                    .frame(height: 5)
 
-            heroIcon
+                heroIcon
 
-            Spacer()
-                .frame(height: 16)
+                Spacer()
+                    .frame(height: 16)
 
-            VStack(spacing: 16) {
-                Text(warningMessage == nil ? "iCloud Backup Found" : "Restore from iCloud")
-                    .font(OnboardingRecoveryTypography.heroTitle)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 16) {
+                    Text(warningMessage == nil ? "iCloud Backup Found" : "Restore from iCloud")
+                        .font(OnboardingRecoveryTypography.heroTitle)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
 
-                Text(messageBody)
-                    .font(OnboardingRecoveryTypography.body)
-                    .foregroundStyle(.coveLightGray.opacity(0.76))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 8)
-
-            Spacer()
-                .frame(height: 28)
-
-            passkeyCard
-
-            if let warningMessage {
-                warningCard(message: warningMessage)
-                    .padding(.top, 14)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            if let errorMessage {
-                errorCard(message: errorMessage)
-                    .padding(.top, 14)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            Spacer(minLength: 26)
-
-            VStack(spacing: 16) {
-                Button(action: onRestore) {
-                    Text("Restore with Passkey")
+                    Text(messageBody)
+                        .font(OnboardingRecoveryTypography.body)
+                        .foregroundStyle(.coveLightGray.opacity(0.76))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(OnboardingPrimaryButtonStyle())
+                .padding(.horizontal, 8)
 
-                Button(action: onSkip) {
-                    Text("Set Up as New")
-                        .font(OnboardingRecoveryTypography.bodySemibold)
-                        .foregroundStyle(Color.btnGradientLight.opacity(0.95))
+                Spacer()
+                    .frame(height: 28)
+
+                passkeyCard
+
+                if let warningMessage {
+                    warningCard(message: warningMessage)
+                        .padding(.top, 14)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                .buttonStyle(.plain)
+
+                if let errorMessage {
+                    errorCard(message: errorMessage)
+                        .padding(.top, 14)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                Spacer(minLength: 26)
+
+                VStack(spacing: 16) {
+                    Button(action: onRestore) {
+                        Text("Restore with Passkey")
+                    }
+                    .buttonStyle(OnboardingPrimaryButtonStyle())
+
+                    Button(action: onSkip) {
+                        Text("Set Up as New")
+                            .font(OnboardingRecoveryTypography.bodySemibold)
+                            .foregroundStyle(Color.btnGradientLight.opacity(0.95))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
+            .padding(.horizontal, 28)
+            .padding(.top, 12)
+            .padding(.bottom, 26)
+            .frame(maxWidth: .infinity)
+            .containerRelativeFrame(.vertical, alignment: .center)
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 12)
-        .padding(.bottom, 26)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
         .animation(.easeInOut(duration: 0.3), value: warningMessage)
         .animation(.easeInOut(duration: 0.3), value: errorMessage)
