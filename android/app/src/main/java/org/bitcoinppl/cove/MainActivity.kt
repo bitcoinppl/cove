@@ -107,13 +107,13 @@ import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.ImportType
 import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.NumberOfBip39Words
+import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletType
-import org.bitcoinppl.cove_core.CloudBackupStatus
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 
 internal enum class StartupMode {
@@ -148,11 +148,11 @@ internal fun hasPersistedOnboardingProgress(
 internal fun resolveStartupMode(
     termsAccepted: Boolean,
     hasWallets: Boolean,
-    cloudBackupStatus: CloudBackupStatus,
+    cloudBackupLifecycle: CloudBackupLifecycle,
     hasPersistedOnboardingProgress: Boolean,
 ): StartupMode {
     // mirror CoveApp.swift's app-shell onboarding decision while preserving Android auth and Drive constraints
-    val shouldStartStartupRestore = !hasWallets && cloudBackupStatus is CloudBackupStatus.Disabled
+    val shouldStartStartupRestore = !hasWallets && cloudBackupLifecycle is CloudBackupLifecycle.Disabled
     return if (!termsAccepted || hasPersistedOnboardingProgress || shouldStartStartupRestore) {
         StartupMode.ONBOARDING
     } else {
@@ -400,7 +400,7 @@ class MainActivity : FragmentActivity() {
             val app = remember { AppManager.getInstance() }
             val auth = remember { AuthManager.getInstance() }
             val snackbarHostState = remember { SnackbarHostState() }
-            val cloudBackupStatus = app.cloudBackupManager.state.status
+            val cloudBackupLifecycle = app.cloudBackupManager.lifecycle
             val hasWallets = app.wallets.isNotEmpty() || app.hasWallets
             val readPersistedOnboardingProgress = {
                 runCatching {
@@ -415,18 +415,18 @@ class MainActivity : FragmentActivity() {
                     resolveStartupMode(
                         termsAccepted = app.isTermsAccepted,
                         hasWallets = hasWallets,
-                        cloudBackupStatus = cloudBackupStatus,
+                        cloudBackupLifecycle = cloudBackupLifecycle,
                         hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
                     ),
                 )
             }
-            LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupStatus, persistedOnboardingProgress) {
+            LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupLifecycle, persistedOnboardingProgress) {
                 persistedOnboardingProgress = readPersistedOnboardingProgress()
                 startupMode =
                     resolveStartupMode(
                         termsAccepted = app.isTermsAccepted,
                         hasWallets = hasWallets,
-                        cloudBackupStatus = cloudBackupStatus,
+                        cloudBackupLifecycle = cloudBackupLifecycle,
                         hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
                     )
             }

@@ -74,18 +74,18 @@ import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
-import org.bitcoinppl.cove_core.CloudBackupEnableState
+import org.bitcoinppl.cove_core.CloudBackupConfiguredState
+import org.bitcoinppl.cove_core.CloudBackupEnableFlow
+import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
-import org.bitcoinppl.cove_core.CloudBackupStatus
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
-import org.bitcoinppl.cove_core.PendingUploadVerificationState
+import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
-import org.bitcoinppl.cove_core.VerificationState
 import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingBranch
 
@@ -128,19 +128,19 @@ internal fun combinedRestoreProgress(restoreProgress: CloudBackupRestoreProgress
 }
 
 internal fun resolveRestorePhase(
-    status: CloudBackupStatus,
+    lifecycle: CloudBackupLifecycle,
     restoreReport: CloudBackupRestoreReport?,
     currentPhase: OnboardingRestorePhase,
 ): OnboardingRestorePhase =
-    when (status) {
-        is CloudBackupStatus.Error -> {
+    when (lifecycle) {
+        is CloudBackupLifecycle.Failed -> {
             if (currentPhase is OnboardingRestorePhase.Restoring) {
-                OnboardingRestorePhase.Error(status.v1)
+                OnboardingRestorePhase.Error(lifecycle.v1.message)
             } else {
                 currentPhase
             }
         }
-        CloudBackupStatus.Enabled -> {
+        is CloudBackupLifecycle.Configured -> {
             restoreReport?.let { OnboardingRestorePhase.Complete(it) } ?: currentPhase
         }
         else -> currentPhase
@@ -152,13 +152,11 @@ internal fun shouldNotifyRestoreError(
 ): Boolean = currentPhase is OnboardingRestorePhase.Restoring && !hasDeliveredError
 
 internal fun shouldCompleteOnboardingCloudBackup(
-    status: CloudBackupStatus,
-    pendingUploadVerification: PendingUploadVerificationState,
-    verification: VerificationState,
+    configuredState: CloudBackupConfiguredState?,
+    hasPendingUploadVerification: Boolean,
 ): Boolean =
-    status is CloudBackupStatus.Enabled &&
-        pendingUploadVerification == PendingUploadVerificationState.IDLE &&
-        verification is VerificationState.Verified
+    configuredState?.verification is CloudBackupVerificationState.Verified &&
+        !hasPendingUploadVerification
 
 @Composable
 internal fun OnboardingCreatingWalletView(
@@ -601,29 +599,26 @@ private fun OnboardingCloudBackupDetailsStepView(
     var didAutoConfirmSavedPasskey by remember { mutableStateOf(false) }
 
     val onboardingMessage =
-        when (val status = backupManager.status) {
-            CloudBackupStatus.UnsupportedPasskeyProvider ->
+        when {
+            backupManager.isUnsupportedPasskeyProvider ->
                 "This passkey provider did not confirm support for Cloud Backup. Try another supported provider such as 1Password or Bitwarden."
-            is CloudBackupStatus.Error -> status.v1
-            else -> (backupManager.verification as? VerificationState.Failed)?.v1?.message()
+            backupManager.lifecycleFailureMessage != null -> backupManager.lifecycleFailureMessage
+            else -> (backupManager.verificationState as? CloudBackupVerificationState.Failed)?.v1?.message()
         }
-    val isVerifying = backupManager.verification is VerificationState.Verifying
-    val verificationFailed = backupManager.verification is VerificationState.Failed
-    val isConfirmingUpload =
-        backupManager.pendingUploadVerification == PendingUploadVerificationState.CONFIRMING
+    val isVerifying = backupManager.verificationState is CloudBackupVerificationState.Running
+    val verificationFailed = backupManager.verificationState is CloudBackupVerificationState.Failed
+    val isConfirmingUpload = backupManager.hasPendingUploadVerification
     val savedPasskeyConfirmationMode =
-        (backupManager.enableState as? CloudBackupEnableState.AwaitingSavedPasskeyConfirmation)?.v1
+        (backupManager.enableFlow as? CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation)?.v1
     val needsAutomaticPasskeyConfirmation =
         savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.AUTOMATIC
     val needsManualPasskeyConfirmation =
         savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.MANUAL
-    val isEnabling =
-        backupManager.status is CloudBackupStatus.Enabling &&
-            !needsManualPasskeyConfirmation
+    val isEnabling = backupManager.isLifecycleEnabling && !needsManualPasskeyConfirmation
     val isBusy =
         isVerifying ||
             isConfirmingUpload ||
-            backupManager.enableState == CloudBackupEnableState.ConfirmingSavedPasskey ||
+            backupManager.enableFlow == CloudBackupEnableFlow.ConfirmingSavedPasskey ||
             needsAutomaticPasskeyConfirmation ||
             isEnabling
     val primaryButtonTitle =
@@ -641,9 +636,8 @@ private fun OnboardingCloudBackupDetailsStepView(
     fun completeIfEnabled() {
         if (didReportEnabled) return
         if (!shouldCompleteOnboardingCloudBackup(
-                backupManager.status,
-                backupManager.pendingUploadVerification,
-                backupManager.verification,
+                backupManager.configuredState,
+                backupManager.hasPendingUploadVerification,
             )
         ) {
             return
@@ -654,14 +648,13 @@ private fun OnboardingCloudBackupDetailsStepView(
     }
 
     LaunchedEffect(
-        backupManager.status,
-        backupManager.pendingUploadVerification,
-        backupManager.verification,
+        backupManager.configuredState,
+        backupManager.hasPendingUploadVerification,
     ) {
         completeIfEnabled()
     }
 
-    LaunchedEffect(backupManager.enableState) {
+    LaunchedEffect(backupManager.enableFlow) {
         if (needsAutomaticPasskeyConfirmation && !didAutoConfirmSavedPasskey && !didReportEnabled) {
             didAutoConfirmSavedPasskey = true
             backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
@@ -723,7 +716,7 @@ private fun OnboardingCloudBackupDetailsStepView(
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         CircularProgressIndicator(color = Color.White)
-                        val (title, subtitle) = cloudBackupEnableBusyCopy(backupManager.enableState)
+                        val (title, subtitle) = cloudBackupEnableBusyCopy(backupManager.enableFlow)
                         Text(
                             text = title,
                             color = Color.White,
@@ -744,21 +737,26 @@ private fun OnboardingCloudBackupDetailsStepView(
     }
 }
 
-private fun cloudBackupEnableBusyCopy(enableState: CloudBackupEnableState): Pair<String, String> =
-    when (enableState) {
-        CloudBackupEnableState.CreatingPasskey ->
+private fun cloudBackupEnableBusyCopy(enableFlow: CloudBackupEnableFlow?): Pair<String, String> =
+    when (enableFlow) {
+        CloudBackupEnableFlow.CreatingPasskey ->
             "Creating your passkey..." to "Cloud Backup will continue automatically"
-        CloudBackupEnableState.WaitingForPasskeyAvailability ->
+        CloudBackupEnableFlow.WaitingForPasskeyAvailability ->
             "Checking that your passkey is available..." to
                 "This can take a few seconds after saving it in your passkey/password manager app"
-        is CloudBackupEnableState.AwaitingSavedPasskeyConfirmation ->
+        is CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation ->
             "Checking that your passkey is available..." to
                 "This can take a few seconds after saving it in your passkey/password manager app"
-        CloudBackupEnableState.ConfirmingSavedPasskey ->
+        CloudBackupEnableFlow.ConfirmingSavedPasskey ->
             "Confirming your passkey..." to "Cloud Backup will continue automatically"
-        CloudBackupEnableState.UploadingBackup ->
+        is CloudBackupEnableFlow.UploadingInitialBackup,
+        is CloudBackupEnableFlow.RetryingUploadWithStagedMaterial,
+        ->
             "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
-        CloudBackupEnableState.Idle,
+        CloudBackupEnableFlow.AwaitingForceNewConfirmation,
+        CloudBackupEnableFlow.AwaitingPasskeyChoice,
+        CloudBackupEnableFlow.DiscoveringExistingBackup,
+        null,
         -> "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
     }
 
@@ -1052,14 +1050,14 @@ internal fun OnboardingRestoreView(
 
     DisposableEffect(Unit) {
         onDispose {
-            if (backupManager.status is CloudBackupStatus.Restoring) {
+            if (backupManager.lifecycle is CloudBackupLifecycle.Restoring) {
                 backupManager.dispatch(CloudBackupManagerAction.CancelRestore)
             }
         }
     }
 
-    LaunchedEffect(backupManager.status, backupManager.state.restoreReport) {
-        val nextPhase = resolveRestorePhase(backupManager.status, backupManager.state.restoreReport, phase)
+    LaunchedEffect(backupManager.lifecycle, backupManager.restoreReport) {
+        val nextPhase = resolveRestorePhase(backupManager.lifecycle, backupManager.restoreReport, phase)
         if (nextPhase != phase) {
             if (nextPhase is OnboardingRestorePhase.Error) {
                 failRestore(nextPhase.message)
@@ -1079,7 +1077,7 @@ internal fun OnboardingRestoreView(
 
     OnboardingRestoreContent(
         phase = phase,
-        combinedProgress = combinedRestoreProgress(backupManager.state.restoreProgress),
+        combinedProgress = combinedRestoreProgress(backupManager.restoreProgress),
         onDone = ::finishRestore,
         onRetry = ::startRestore,
     )

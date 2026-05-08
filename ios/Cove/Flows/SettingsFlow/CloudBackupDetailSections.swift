@@ -48,12 +48,12 @@ struct MissingPasskeyContent: View {
     let manager: CloudBackupManager
 
     private var isRepairing: Bool {
-        if case .recovering(.repairPasskey) = manager.recovery { return true }
+        if case .running = manager.passkeyRepairState { return true }
         return false
     }
 
     private var repairError: String? {
-        if case let .failed(action: .repairPasskey, error: error) = manager.recovery {
+        if case let .failed(error) = manager.passkeyRepairState {
             return error
         }
         return nil

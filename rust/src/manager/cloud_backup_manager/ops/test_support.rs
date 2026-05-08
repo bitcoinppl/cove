@@ -25,11 +25,13 @@ use super::*;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue, CloudBlobUploadingState,
-    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState,
+    PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
+    PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
+    PersistedPasskeyState,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, pending::PendingUploadVerificationStatus, workers::RestoreOperation,
+    CloudBackupKeychain, CloudBackupStore, pending::PendingUploadVerificationStatus,
+    workers::RestoreOperation,
 };
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
@@ -783,12 +785,12 @@ pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
 
     Database::global()
         .cloud_blob_sync_states
-        .set(&PersistedCloudBlobSyncState {
+        .set(&PersistedCloudBlobSyncState::wallet(
             namespace_id,
-            wallet_id: Some(wallet_id),
+            wallet_id,
             record_id,
-            state: PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
-        })
+            PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
+        ))
         .unwrap();
 }
 
@@ -822,18 +824,18 @@ pub(crate) fn persist_failed_blob_state_with_issue(
 
     Database::global()
         .cloud_blob_sync_states
-        .set(&PersistedCloudBlobSyncState {
+        .set(&PersistedCloudBlobSyncState::wallet(
             namespace_id,
-            wallet_id: Some(wallet_id),
+            wallet_id,
             record_id,
-            state: PersistedCloudBlobState::Failed(CloudBlobFailedState {
+            PersistedCloudBlobState::Failed(CloudBlobFailedState {
                 revision_hash: Some("rev-1".into()),
                 retryable,
                 error: "failed".into(),
                 issue,
                 failed_at,
             }),
-        })
+        ))
         .unwrap();
 }
 
@@ -843,15 +845,15 @@ pub(crate) fn persist_uploading_blob_state(wallet_id: WalletId, started_at: u64)
 
     Database::global()
         .cloud_blob_sync_states
-        .set(&PersistedCloudBlobSyncState {
+        .set(&PersistedCloudBlobSyncState::wallet(
             namespace_id,
-            wallet_id: Some(wallet_id),
+            wallet_id,
             record_id,
-            state: PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
+            PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
                 revision_hash: "rev-1".into(),
                 started_at,
             }),
-        })
+        ))
         .unwrap();
 }
 
@@ -933,11 +935,7 @@ pub(crate) fn configure_enabled_cloud_backup(
 
     manager
         .persist_cloud_backup_state(
-            &PersistedCloudBackupState {
-                status: PersistedCloudBackupStatus::Enabled,
-                wallet_count: Some(wallet_count),
-                ..PersistedCloudBackupState::default()
-            },
+            &persisted_enabled_cloud_backup_state(Some(wallet_count)),
             "set cloud backup enabled for test",
         )
         .unwrap();
@@ -956,15 +954,39 @@ pub(crate) fn enable_cloud_backup_without_reset(
 
     manager
         .persist_cloud_backup_state(
-            &PersistedCloudBackupState {
-                status: PersistedCloudBackupStatus::Enabled,
-                wallet_count: Some(wallet_count),
-                ..PersistedCloudBackupState::default()
-            },
+            &persisted_enabled_cloud_backup_state(Some(wallet_count)),
             "set cloud backup enabled for test",
         )
         .unwrap();
     manager.sync_persisted_state();
+}
+
+pub(crate) fn persisted_enabled_cloud_backup_state(
+    wallet_count: Option<u32>,
+) -> PersistedCloudBackupState {
+    PersistedCloudBackupState::Configured(PersistedConfiguredCloudBackup {
+        passkey: PersistedPasskeyState::Available,
+        verification: PersistedBackupVerificationState::NotVerified {
+            requested_at: None,
+            dismissed_at: None,
+        },
+        sync: PersistedBackupSyncState { last_sync: None, wallet_count },
+        pending_verification_completion: None,
+    })
+}
+
+pub(crate) fn persisted_passkey_missing_cloud_backup_state(
+    wallet_count: Option<u32>,
+) -> PersistedCloudBackupState {
+    PersistedCloudBackupState::Configured(PersistedConfiguredCloudBackup {
+        passkey: PersistedPasskeyState::Missing,
+        verification: PersistedBackupVerificationState::NotVerified {
+            requested_at: None,
+            dismissed_at: None,
+        },
+        sync: PersistedBackupSyncState { last_sync: None, wallet_count },
+        pending_verification_completion: None,
+    })
 }
 
 pub(crate) fn xpub_only_wallet_metadata() -> WalletMetadata {
@@ -1097,10 +1119,7 @@ pub(crate) fn prepare_deep_verify_with_unsynced_wallet(
 
     manager
         .persist_cloud_backup_state(
-            &PersistedCloudBackupState {
-                status: PersistedCloudBackupStatus::Enabled,
-                ..PersistedCloudBackupState::default()
-            },
+            &persisted_enabled_cloud_backup_state(None),
             "set cloud backup enabled for test",
         )
         .unwrap();

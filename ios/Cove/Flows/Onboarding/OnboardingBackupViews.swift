@@ -267,35 +267,28 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     let context: CloudBackupEnableOnboardingContext
 
     private var onboardingMessage: String? {
-        switch backupManager.status {
-        case .unsupportedPasskeyProvider:
+        if backupManager.isUnsupportedPasskeyProvider {
             "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
-        case let .error(message):
+        } else if let message = backupManager.lifecycleFailureMessage {
             message
-        default:
-            if case let .failed(failure) = backupManager.verification {
-                failure.message()
-            } else {
-                nil
-            }
+        } else if case let .failed(failure) = backupManager.verificationState {
+            failure.message()
+        } else {
+            nil
         }
     }
 
     private var isBusy: Bool {
-        if case .verifying = backupManager.verification { return true }
-        if case .confirming = backupManager.pendingUploadVerification { return true }
-        if case .confirmingSavedPasskey = backupManager.enableState { return true }
+        if case .running = backupManager.verificationState { return true }
+        if backupManager.hasPendingUploadVerification { return true }
+        if case .confirmingSavedPasskey = backupManager.enableFlow { return true }
         if needsAutomaticPasskeyConfirmation { return true }
 
         return isEnablingCloudBackup && !needsManualPasskeyConfirmation
     }
 
     private var isEnablingCloudBackup: Bool {
-        if case .enabling = backupManager.status {
-            return true
-        }
-
-        return false
+        backupManager.isLifecycleEnabling
     }
 
     private var isPromptingForEnableChoice: Bool {
@@ -307,7 +300,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private var savedPasskeyConfirmationMode: SavedPasskeyConfirmationMode? {
-        guard case let .awaitingSavedPasskeyConfirmation(mode) = backupManager.enableState else {
+        guard case let .awaitingSavedPasskeyConfirmation(mode) = backupManager.enableFlow else {
             return nil
         }
 
@@ -325,7 +318,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     private var isAutomaticPasskeyConfirmationPhase: Bool {
         if needsAutomaticPasskeyConfirmation { return true }
         if didAutoConfirmSavedPasskey,
-           case .confirmingSavedPasskey = backupManager.enableState
+           case .confirmingSavedPasskey = backupManager.enableFlow
         {
             return true
         }
@@ -346,7 +339,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private var primaryButtonTitle: String {
-        if case .failed = backupManager.verification { return "Try Again" }
+        if case .failed = backupManager.verificationState { return "Try Again" }
         return needsManualPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
     }
 
@@ -356,7 +349,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         if needsManualPasskeyConfirmation {
             return backupManager.dispatch(action: .confirmSavedPasskey)
         }
-        if case .failed = backupManager.verification {
+        if case .failed = backupManager.verificationState {
             return backupManager.dispatch(action: .startVerification(.onboarding))
         }
 
@@ -393,7 +386,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
 
             if isBusy {
                 CloudBackupEnableBusyOverlay(
-                    enableState: backupManager.enableState,
+                    enableFlow: backupManager.enableFlow,
                     titleOverride: busyOverlayTitleOverride,
                     subtitleOverride: busyOverlaySubtitleOverride
                 )
@@ -403,28 +396,26 @@ private struct OnboardingCloudBackupDetailsStepView: View {
             completeIfEnabled()
             autoConfirmSavedPasskeyIfNeeded()
         }
-        .onChange(of: backupManager.status, initial: true) { _, status in
-            completeIfEnabled(status: status)
-        }
-        .onChange(of: backupManager.pendingUploadVerification) { _, _ in
+        .onChange(of: backupManager.lifecycle, initial: true) { _, _ in
             completeIfEnabled()
         }
-        .onChange(of: backupManager.verification) { _, _ in
+        .onChange(of: backupManager.hasPendingUploadVerification) { _, _ in
             completeIfEnabled()
         }
-        .onChange(of: backupManager.enableState, initial: true) { _, _ in
+        .onChange(of: backupManager.verificationState) { _, _ in
+            completeIfEnabled()
+        }
+        .onChange(of: backupManager.enableFlow, initial: true) { _, _ in
             autoConfirmSavedPasskeyIfNeeded()
         }
     }
 
-    private func completeIfEnabled(status: CloudBackupStatus? = nil) {
+    private func completeIfEnabled() {
         guard !didReportEnabled else { return }
-        let currentStatus = status ?? backupManager.status
         guard
             shouldCompleteOnboardingCloudBackup(
-                status: currentStatus,
-                pendingUploadVerification: backupManager.pendingUploadVerification,
-                verification: backupManager.verification
+                configuredState: backupManager.configuredState,
+                hasPendingUploadVerification: backupManager.hasPendingUploadVerification
             )
         else { return }
         didReportEnabled = true
@@ -433,13 +424,15 @@ private struct OnboardingCloudBackupDetailsStepView: View {
 }
 
 private func shouldCompleteOnboardingCloudBackup(
-    status: CloudBackupStatus,
-    pendingUploadVerification: PendingUploadVerificationState,
-    verification: VerificationState
+    configuredState: CloudBackupConfiguredState?,
+    hasPendingUploadVerification: Bool
 ) -> Bool {
-    guard case .enabled = status else { return false }
-    guard case .idle = pendingUploadVerification else { return false }
-    guard case .verified = verification else { return false }
+    guard let configuredState else { return false }
+    guard case .available = configuredState.passkey else { return false }
+    guard !hasPendingUploadVerification else { return false }
+    guard case let .verified(report: report, lastVerifiedAt: _) = configuredState.verification,
+          report != nil
+    else { return false }
 
     return true
 }

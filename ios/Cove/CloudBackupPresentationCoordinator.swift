@@ -509,7 +509,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
             .onChange(of: manager.rootPrompt) { _, _ in
                 coordinator.reconcile()
             }
-            .onChange(of: manager.verification) { _, _ in
+            .onChange(of: manager.verificationState) { _, _ in
                 coordinator.reconcile()
             }
             .onChange(of: manager.verificationPresentation) { _, presentation in
@@ -595,13 +595,13 @@ private struct CloudBackupVerificationPromptView: View {
     let onVerify: () -> Void
 
     private var isVerifying: Bool {
-        if case .verifying = manager.verification { return true }
+        if case .running = manager.verificationState { return true }
         return false
     }
 
     private var failure: DeepVerificationFailure? {
         guard !manager.shouldPromptVerification else { return nil }
-        if case let .failed(failure) = manager.verification { return failure }
+        if case let .failed(failure) = manager.verificationState { return failure }
         return nil
     }
 

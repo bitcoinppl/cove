@@ -59,10 +59,10 @@ import org.bitcoinppl.cove_core.CloudBackupPasskeyHint
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
+import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
-import org.bitcoinppl.cove_core.VerificationState
 
 val LocalCloudBackupPresentationCoordinator =
     compositionLocalOf<CloudBackupPresentationCoordinator?> { null }
@@ -518,12 +518,12 @@ private fun CloudBackupVerificationPrompt(
     onDismiss: () -> Unit,
     onVerify: () -> Unit,
 ) {
-    val isVerifying = manager.verification is VerificationState.Verifying
+    val isVerifying = manager.verificationState is CloudBackupVerificationState.Running
     val failure =
         if (manager.shouldPromptVerification) {
             null
         } else {
-            (manager.verification as? VerificationState.Failed)?.v1
+            (manager.verificationState as? CloudBackupVerificationState.Failed)?.v1
         }
 
     val title =

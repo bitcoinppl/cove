@@ -12,16 +12,16 @@ const UPLOAD_WALLET_RECOVERY_MESSAGE: &str =
     "Cloud backup needs verification before wallets can be uploaded";
 const MAX_CLOUD_LABELS_SIZE: usize = 10 * 1024 * 1024;
 #[derive(Zeroize, ZeroizeOnDrop)]
-pub(super) struct UnpersistedPrfKey {
-    pub(super) prf_key: [u8; 32],
-    pub(super) prf_salt: [u8; 32],
-    pub(super) credential_id: Vec<u8>,
+pub(crate) struct UnpersistedPrfKey {
+    pub(crate) prf_key: [u8; 32],
+    pub(crate) prf_salt: [u8; 32],
+    pub(crate) credential_id: Vec<u8>,
     #[zeroize(skip)]
-    pub(super) provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
+    pub(crate) provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
 }
 
 impl UnpersistedPrfKey {
-    pub(super) fn copy_for_retry(&self) -> Self {
+    pub(crate) fn copy_for_retry(&self) -> Self {
         Self {
             prf_key: self.prf_key,
             prf_salt: self.prf_salt,
@@ -38,15 +38,15 @@ impl UnpersistedPrfKey {
 }
 
 #[derive(Zeroize, ZeroizeOnDrop)]
-pub(super) struct StagedPrfKey {
-    pub(super) prf_salt: [u8; 32],
-    pub(super) credential_id: Vec<u8>,
+pub(crate) struct StagedPrfKey {
+    pub(crate) prf_salt: [u8; 32],
+    pub(crate) credential_id: Vec<u8>,
     #[zeroize(skip)]
-    pub(super) provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
+    pub(crate) provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
 }
 
 impl StagedPrfKey {
-    pub(super) fn copy_for_retry(&self) -> Self {
+    pub(crate) fn copy_for_retry(&self) -> Self {
         Self {
             prf_salt: self.prf_salt,
             credential_id: self.credential_id.clone(),
@@ -55,9 +55,9 @@ impl StagedPrfKey {
     }
 }
 
-pub(super) struct DownloadedWalletBackup {
-    pub(super) metadata: WalletMetadata,
-    pub(super) entry: WalletEntry,
+pub(crate) struct DownloadedWalletBackup {
+    pub(crate) metadata: WalletMetadata,
+    pub(crate) entry: WalletEntry,
 }
 
 #[derive(Debug, Clone)]

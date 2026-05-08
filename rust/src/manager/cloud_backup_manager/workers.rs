@@ -261,7 +261,7 @@ impl CloudBackupSupervisor {
         operation: OtherBackupsOperation,
     ) -> bool {
         if !matches!(
-            &manager.state.read().other_backups_operation,
+            manager.state.read().other_backups_operation(),
             OtherBackupsOperation::Idle
                 | OtherBackupsOperation::Recovered { .. }
                 | OtherBackupsOperation::Deleted
@@ -387,7 +387,7 @@ impl CloudBackupSupervisor {
 
         self.pending_verification_completion = None;
         if matches!(
-            manager.state.read().verification_presentation,
+            manager.state.read().verification_presentation(),
             super::CloudBackupVerificationPresentation::ManualVerifying { .. }
         ) {
             manager.set_verification(VerificationState::Verifying);
@@ -435,7 +435,7 @@ impl CloudBackupSupervisor {
     }
 
     fn detail_entry_plan(&self, manager: &RustCloudBackupManager) -> DetailEntryPlan {
-        let state = manager.state.read().clone();
+        let state = manager.state.read().snapshot();
         if !matches!(state.status, CloudBackupStatus::Enabled) {
             return DetailEntryPlan::RefreshOnly;
         }

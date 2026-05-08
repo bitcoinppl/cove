@@ -2,28 +2,23 @@ import SwiftUI
 
 @_exported import CoveCore
 
-private extension VerificationState {
+private extension CloudBackupVerificationState? {
     var isVerifying: Bool {
-        if case .verifying = self { return true }
+        if case .running = self { return true }
         return false
     }
 
     var hasResult: Bool {
         switch self {
-        case .verified, .passkeyConfirmed, .failed, .cancelled: true
+        case .verified, .awaitingUploadConfirmation, .failed: true
         default: false
         }
     }
-
-    var isCancelled: Bool {
-        if case .cancelled = self { return true }
-        return false
-    }
 }
 
-private extension RecoveryState {
+private extension CloudBackupPasskeyRepairState? {
     var isRecovering: Bool {
-        if case .recovering = self { return true }
+        if case .running = self { return true }
         return false
     }
 }
@@ -34,12 +29,12 @@ struct VerificationSection: View {
     let onReinitialize: () -> Void
 
     private var isBusy: Bool {
-        manager.verification.isVerifying || manager.recovery.isRecovering
+        manager.verificationState.isVerifying || manager.passkeyRepairState.isRecovering
     }
 
     var body: some View {
-        switch manager.verification {
-        case .idle:
+        switch manager.verificationState {
+        case nil, .notVerified, .required:
             Section {
                 Text("Run verification to confirm your cloud backup can be decrypted and restored")
                     .font(.caption)
@@ -52,7 +47,7 @@ struct VerificationSection: View {
                 }
                 .disabled(isBusy)
             }
-        case .verifying:
+        case .running:
             Section {
                 HStack {
                     ProgressView()
@@ -60,14 +55,16 @@ struct VerificationSection: View {
                     Text("Verifying backup integrity...")
                 }
             }
-        case let .verified(report):
-            verifiedSection(report)
-        case .passkeyConfirmed:
+        case let .verified(report: report, lastVerifiedAt: _):
+            if let report {
+                verifiedSection(report)
+            } else {
+                passkeyConfirmedSection
+            }
+        case .awaitingUploadConfirmation:
             passkeyConfirmedSection
         case let .failed(failure):
             failureSection(failure)
-        case .cancelled:
-            cancelledSection
         }
     }
 
@@ -182,7 +179,7 @@ struct VerificationSection: View {
             }
         }
 
-        if case let .failed(action: _, error) = manager.recovery {
+        if case let .failed(error) = manager.passkeyRepairState {
             Section {
                 Label(error, systemImage: "xmark.circle.fill")
                     .foregroundStyle(Color.statusError)
@@ -253,7 +250,7 @@ struct VerificationSection: View {
         Button(role: .destructive) {
             action()
         } label: {
-            if manager.recovery.isRecovering {
+            if manager.passkeyRepairState.isRecovering {
                 HStack {
                     ProgressView()
                         .padding(.trailing, 4)
@@ -287,7 +284,7 @@ struct VerificationSection: View {
                 manager.dispatch(action: .syncUnsynced)
             } label: {
                 HStack {
-                    if case .syncing = manager.sync {
+                    if case .syncing = manager.syncState {
                         ProgressView()
                             .padding(.trailing, 8)
                         Text("Syncing...")
@@ -297,9 +294,9 @@ struct VerificationSection: View {
                     }
                 }
             }
-            .disabled(manager.sync == .syncing)
+            .disabled(manager.syncState == .syncing)
 
-            if case let .failed(error) = manager.sync {
+            if case let .failed(error) = manager.syncState {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(Color.statusError)
@@ -320,7 +317,7 @@ struct VerificationSection: View {
         Button {
             manager.dispatch(action: .repairPasskey)
         } label: {
-            if manager.recovery.isRecovering {
+            if manager.passkeyRepairState.isRecovering {
                 HStack {
                     ProgressView()
                         .padding(.trailing, 4)

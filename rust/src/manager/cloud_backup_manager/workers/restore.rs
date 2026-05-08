@@ -148,7 +148,7 @@ impl CloudBackupRestoreWorker {
 
     pub(crate) async fn start_restore_from_cloud_backup(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        let status = manager.state.read().status.clone();
+        let status = manager.state.read().status().clone();
         if matches!(status, CloudBackupStatus::Enabling | CloudBackupStatus::Restoring) {
             warn!("restore_from_cloud_backup called while {status:?}, ignoring");
             return Produces::ok(());
@@ -174,7 +174,7 @@ impl CloudBackupRestoreWorker {
 
     pub(crate) async fn cancel_restore(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        let status = manager.state.read().status.clone();
+        let status = manager.state.read().status().clone();
         if !matches!(status, CloudBackupStatus::Restoring) {
             return Produces::ok(());
         }

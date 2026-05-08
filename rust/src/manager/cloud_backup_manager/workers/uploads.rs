@@ -292,10 +292,7 @@ impl CloudBackupUploadWorker {
 
         for sync_state in states {
             let wallet_id = match sync_state.record_key() {
-                CloudBackupRecordKey::Wallet { wallet_id: Some(wallet_id), .. } => wallet_id,
-                CloudBackupRecordKey::Wallet { wallet_id: None, .. } => {
-                    continue;
-                }
+                CloudBackupRecordKey::Wallet(wallet_id, _) => wallet_id.clone(),
                 CloudBackupRecordKey::MasterKeyWrapper => {
                     continue;
                 }

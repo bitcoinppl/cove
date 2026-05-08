@@ -8,12 +8,13 @@ use rand::RngExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
+use crate::database::cloud_backup::CloudBackupRecordKey;
 use crate::manager::cloud_backup_manager::wallets::{
     PasskeyMaterialAcquirer, WalletBackupLookup, WalletBackupReader,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID, RustCloudBackupManager,
-    cspp_master_key_record_id, master_key_wrapper_revision_hash,
+    master_key_wrapper_revision_hash,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,8 +182,7 @@ impl WrapperRepairOperation {
 
         self.manager.mark_blob_uploaded_pending_confirmation(
             self.namespace.as_str(),
-            None,
-            cspp_master_key_record_id(),
+            CloudBackupRecordKey::MasterKeyWrapper,
             master_key_wrapper_revision,
             jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
         )?;

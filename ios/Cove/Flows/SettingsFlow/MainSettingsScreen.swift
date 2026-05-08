@@ -264,23 +264,26 @@ struct MainSettingsScreen: View {
             let manager = CloudBackupManager.shared
 
             Section(header: Text("Cloud Backup")) {
-                switch manager.status {
+                switch manager.lifecycle {
                 case .disabled:
                     SettingsRow(title: "Enable Cloud Backup", symbol: "icloud.and.arrow.up") {
                         sheetState = .init(.cloudBackupOnboarding)
                     }
                 case .enabling:
                     cloudBackupEnablingRow
-                case .enabled:
-                    cloudBackupEnabledRow(manager: manager)
-                case .passkeyMissing:
-                    cloudBackupPasskeyMissingRow
-                case .unsupportedPasskeyProvider:
-                    cloudBackupUnsupportedProviderRow
                 case .restoring:
                     cloudBackupRestoringRow
-                case let .error(message):
-                    cloudBackupErrorContent(message: message, manager: manager)
+                case let .failed(failure):
+                    cloudBackupErrorContent(message: failure.message, manager: manager)
+                case let .configured(configured):
+                    switch configured.passkey {
+                    case .available:
+                        cloudBackupEnabledRow(manager: manager)
+                    case .missing, .needsRepair:
+                        cloudBackupPasskeyMissingRow
+                    case .unsupportedProvider:
+                        cloudBackupUnsupportedProviderRow
+                    }
                 }
             }
         }
@@ -973,24 +976,19 @@ private struct SettingsCloudBackupEnableSheet: View {
     let onDismiss: () -> Void
 
     private var message: String? {
-        switch manager.status {
-        case .unsupportedPasskeyProvider:
+        if manager.isUnsupportedPasskeyProvider {
             "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
-        case let .error(message):
-            message
-        default:
-            nil
+        } else {
+            manager.lifecycleFailureMessage
         }
     }
 
     private var isBusy: Bool {
-        if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableState {
+        if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableFlow {
             return false
         }
 
-        return isStartingEnable || {
-            if case .enabling = manager.status { true } else { false }
-        }()
+        return isStartingEnable || manager.isLifecycleEnabling
     }
 
     private func shouldDismiss(for rootPrompt: CloudBackupRootPrompt) -> Bool {
@@ -1058,7 +1056,7 @@ private struct SettingsCloudBackupEnableSheet: View {
         )
 
         ZStack {
-            if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableState {
+            if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableFlow {
                 CloudBackupEnableConfirmationView(
                     onContinue: {
                         manager.dispatch(action: .confirmSavedPasskey)
@@ -1081,17 +1079,17 @@ private struct SettingsCloudBackupEnableSheet: View {
             }
 
             if isBusy {
-                CloudBackupEnableBusyOverlay(enableState: manager.enableState)
+                CloudBackupEnableBusyOverlay(enableFlow: manager.enableFlow)
             }
         }
-        .onChange(of: manager.status, initial: true) { _, status in
-            if case .enabling = status {
+        .onChange(of: manager.lifecycle, initial: true) { _, lifecycle in
+            if case .enabling = lifecycle {
                 isStartingEnable = false
             } else if isStartingEnable {
                 isStartingEnable = false
             }
 
-            if case .enabled = status {
+            if manager.isCloudBackupAvailable {
                 onComplete()
             }
         }

@@ -8,30 +8,27 @@ struct CloudBackupDetailScreen: View {
     @State private var showReinitializeConfirmation = false
 
     private var isVerifying: Bool {
-        if case .verifying = manager.verification { return true }
+        if case .running = manager.verificationState { return true }
         return false
     }
 
     private var hasVerificationResult: Bool {
-        switch manager.verification {
-        case .verified, .passkeyConfirmed, .failed, .cancelled: true
+        switch manager.verificationState {
+        case .verified, .awaitingUploadConfirmation, .failed: true
         default: false
         }
     }
 
     private var isCancelled: Bool {
-        if case .cancelled = manager.verification { return true }
-        return false
+        false
     }
 
     private var isPasskeyMissing: Bool {
-        if case .passkeyMissing = manager.status { return true }
-        return false
+        manager.isPasskeyMissing
     }
 
     private var isUnsupportedPasskeyProvider: Bool {
-        if case .unsupportedPasskeyProvider = manager.status { return true }
-        return false
+        manager.isUnsupportedPasskeyProvider
     }
 
     private var shouldShowLoadingState: Bool {
@@ -139,23 +136,25 @@ struct CloudBackupDetailScreen: View {
 
     @ViewBuilder
     private var pendingUploadConfirmationSection: some View {
-        switch manager.pendingUploadVerification {
-        case .idle:
-            EmptyView()
-        case .confirming:
-            Section {
-                HStack {
-                    ProgressView()
-                        .padding(.trailing, 8)
+        switch manager.verificationState {
+        case .awaitingUploadConfirmation:
+            if case .blocked = manager.syncState {
+                Section {
+                    Label("Waiting for iCloud authorization", systemImage: "icloud.slash")
+                        .foregroundStyle(.orange)
+                }
+            } else {
+                Section {
+                    HStack {
+                        ProgressView()
+                            .padding(.trailing, 8)
 
-                    Text("Confirming latest cloud upload")
+                        Text("Confirming latest cloud upload")
+                    }
                 }
             }
-        case .blockedOnAuthorization:
-            Section {
-                Label("Waiting for iCloud authorization", systemImage: "icloud.slash")
-                    .foregroundStyle(.orange)
-            }
+        default:
+            EmptyView()
         }
     }
 }

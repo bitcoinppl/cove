@@ -11,14 +11,14 @@ use super::{
 
 type Action = CloudBackupManagerAction;
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecoveryAction {
     RecreateManifest,
     ReinitializeBackup,
     RepairPasskey,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VerificationState {
     Idle,
     Verifying,
@@ -68,21 +68,21 @@ pub enum CloudBackupVerificationPresentation {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PendingUploadVerificationState {
     Idle,
     Confirming,
     BlockedOnAuthorization,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SyncState {
     Idle,
     Syncing,
     Failed(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecoveryState {
     Idle,
     Recovering(RecoveryAction),
@@ -238,7 +238,7 @@ impl RustCloudBackupManager {
 
     fn spawn_recover_other_backups(self: std::sync::Arc<Self>) {
         if !matches!(
-            &self.state.read().other_backups_operation,
+            self.state.read().other_backups_operation(),
             OtherBackupsOperation::Idle
                 | OtherBackupsOperation::Recovered { .. }
                 | OtherBackupsOperation::Deleted
@@ -252,7 +252,7 @@ impl RustCloudBackupManager {
 
     fn spawn_delete_other_backups(self: std::sync::Arc<Self>) {
         if !matches!(
-            &self.state.read().other_backups_operation,
+            self.state.read().other_backups_operation(),
             OtherBackupsOperation::Idle
                 | OtherBackupsOperation::Recovered { .. }
                 | OtherBackupsOperation::Deleted
@@ -279,7 +279,7 @@ impl RustCloudBackupManager {
     pub(crate) async fn handle_start_verification(&self, force_discoverable: bool) {
         self.clear_pending_verification_completion();
         if !matches!(
-            self.state.read().verification_presentation,
+            self.state.read().verification_presentation(),
             CloudBackupVerificationPresentation::ManualVerifying { .. }
         ) {
             self.apply_verification_effect(
@@ -487,7 +487,7 @@ impl RustCloudBackupManager {
                     self.set_cloud_only_operation(CloudOnlyOperation::Idle);
                 }
 
-                let mut cloud_only = self.state.read().cloud_only.clone();
+                let mut cloud_only = self.state.read().cloud_only().clone();
                 if let CloudOnlyState::Loaded { wallets } = &mut cloud_only {
                     wallets.retain(|wallet| wallet.record_id != record_id);
                 }
@@ -511,7 +511,7 @@ impl RustCloudBackupManager {
             Ok(()) => {
                 self.set_cloud_only_operation(CloudOnlyOperation::Idle);
 
-                let mut cloud_only = self.state.read().cloud_only.clone();
+                let mut cloud_only = self.state.read().cloud_only().clone();
                 if let CloudOnlyState::Loaded { wallets } = &mut cloud_only {
                     wallets.retain(|wallet| wallet.record_id != record_id);
                 }

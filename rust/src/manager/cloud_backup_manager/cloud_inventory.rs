@@ -291,12 +291,12 @@ mod tests {
     };
 
     fn sync_state(state: PersistedCloudBlobState) -> PersistedCloudBlobSyncState {
-        PersistedCloudBlobSyncState {
-            namespace_id: "ns-1".into(),
-            wallet_id: None,
-            record_id: "record-1".into(),
+        PersistedCloudBlobSyncState::wallet(
+            "ns-1".into(),
+            "wallet-1".into(),
+            "record-1".into(),
             state,
-        }
+        )
     }
 
     #[test]
@@ -519,23 +519,23 @@ mod tests {
             sync_states_by_record_id: HashMap::from([
                 (
                     uploading_wallet.record_id.clone(),
-                    PersistedCloudBlobSyncState {
-                        namespace_id: "ns-1".into(),
-                        wallet_id: None,
-                        record_id: uploading_wallet.record_id.clone(),
-                        state: PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
+                    PersistedCloudBlobSyncState::wallet(
+                        "ns-1".into(),
+                        uploading_wallet.metadata.id.clone(),
+                        uploading_wallet.record_id.clone(),
+                        PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
                             revision_hash: "rev-uploading".into(),
                             started_at: 10,
                         }),
-                    },
+                    ),
                 ),
                 (
                     pending_wallet.record_id.clone(),
-                    PersistedCloudBlobSyncState {
-                        namespace_id: "ns-1".into(),
-                        wallet_id: None,
-                        record_id: pending_wallet.record_id.clone(),
-                        state: PersistedCloudBlobState::UploadedPendingConfirmation(
+                    PersistedCloudBlobSyncState::wallet(
+                        "ns-1".into(),
+                        pending_wallet.metadata.id.clone(),
+                        pending_wallet.record_id.clone(),
+                        PersistedCloudBlobState::UploadedPendingConfirmation(
                             CloudBlobUploadedPendingConfirmationState {
                                 revision_hash: "rev-pending".into(),
                                 uploaded_at: 20,
@@ -543,7 +543,7 @@ mod tests {
                                 last_checked_at: None,
                             },
                         ),
-                    },
+                    ),
                 ),
             ]),
             remote_wallet_truth: RemoteWalletTruth {

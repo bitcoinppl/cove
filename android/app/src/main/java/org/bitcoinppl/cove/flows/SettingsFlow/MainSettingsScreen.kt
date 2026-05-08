@@ -82,7 +82,8 @@ import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthManagerException
 import org.bitcoinppl.cove_core.AuthType
-import org.bitcoinppl.cove_core.CloudBackupStatus
+import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.GlobalFlagKey
 import org.bitcoinppl.cove_core.Route
@@ -99,16 +100,17 @@ internal fun shouldShowCloudBackupSettings(
 ): Boolean = !isInDecoyMode
 
 @Composable
-private fun cloudBackupSettingsSubtitle(status: CloudBackupStatus): String =
-    when (status) {
-        is CloudBackupStatus.Disabled -> stringResource(R.string.cloud_backup_status_off)
-        is CloudBackupStatus.Enabling -> stringResource(R.string.cloud_backup_status_setting_up)
-        is CloudBackupStatus.Restoring -> stringResource(R.string.cloud_backup_status_restoring)
-        is CloudBackupStatus.Enabled -> stringResource(R.string.cloud_backup_status_active)
-        is CloudBackupStatus.PasskeyMissing -> stringResource(R.string.cloud_backup_status_passkey_missing)
-        is CloudBackupStatus.UnsupportedPasskeyProvider ->
+private fun cloudBackupSettingsSubtitle(manager: CloudBackupManager): String =
+    when {
+        manager.isLifecycleDisabled -> stringResource(R.string.cloud_backup_status_off)
+        manager.lifecycle is CloudBackupLifecycle.Enabling -> stringResource(R.string.cloud_backup_status_setting_up)
+        manager.lifecycle is CloudBackupLifecycle.Restoring -> stringResource(R.string.cloud_backup_status_restoring)
+        manager.isPasskeyMissing -> stringResource(R.string.cloud_backup_status_passkey_missing)
+        manager.isUnsupportedPasskeyProvider ->
             stringResource(R.string.cloud_backup_status_passkey_provider_unsupported)
-        is CloudBackupStatus.Error -> stringResource(R.string.cloud_backup_status_error, status.v1)
+        manager.lifecycleFailureMessage != null ->
+            stringResource(R.string.cloud_backup_status_error, manager.lifecycleFailureMessage!!)
+        else -> stringResource(R.string.cloud_backup_status_active)
     }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -261,7 +263,7 @@ fun MainSettingsScreen(
                         Column {
                             MaterialSettingsItem(
                                 title = stringResource(R.string.title_cloud_backup),
-                                subtitle = cloudBackupSettingsSubtitle(cloudBackupManager.status),
+                                subtitle = cloudBackupSettingsSubtitle(cloudBackupManager),
                                 icon = Icons.Default.CloudUpload,
                                 onClick = {
                                     app.pushRoute(Route.Settings(SettingsRoute.CloudBackup))
