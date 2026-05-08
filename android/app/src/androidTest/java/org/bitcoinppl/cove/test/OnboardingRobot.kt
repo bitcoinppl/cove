@@ -57,8 +57,7 @@ class OnboardingRobot<A : ComponentActivity>(
 
     fun chooseExistingUser(): OnboardingRobot<A> {
         compose.onNodeWithTag("onboarding.bitcoinChoice.existing").performClick()
-        compose.waitUntilVisible(hasText("How would you like to continue?"))
-
+        compose.waitUntilVisible(hasText("How do you store your Bitcoin?"))
         return this
     }
 
@@ -66,13 +65,12 @@ class OnboardingRobot<A : ComponentActivity>(
         compose.onNodeWithTag("onboarding.bitcoinChoice.new").performClick()
         compose.waitUntilVisible(hasText("Creating your wallet"))
         compose.waitUntilVisible(hasText("Back up your wallet", substring = true), timeoutMillis = 10_000)
-
         return this
     }
 
     fun useAnotherWallet(): OnboardingRobot<A> {
-        compose.onNodeWithTag("onboarding.returningUser.anotherWallet").performClick()
         compose.waitUntilVisible(hasText("How do you store your Bitcoin?"))
+        compose.onNodeWithTag("onboarding.storage.software").performClick()
 
         return this
     }

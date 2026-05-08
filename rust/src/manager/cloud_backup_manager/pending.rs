@@ -8,17 +8,18 @@ use backon::{BackoffBuilder as _, FibonacciBuilder};
 use cove_util::ResultExt as _;
 
 use self::queue_processor::PendingUploadVerifier;
-use super::{CloudBackupError, RustCloudBackupManager};
+use super::{CloudBackupError, PendingUploadVerificationState, RustCloudBackupManager};
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
-    CloudBlobUploadedPendingConfirmationState, CloudUploadKind, PersistedCloudBlobState,
+    CloudBlobUploadedPendingConfirmationState, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
 use crate::wallet::metadata::WalletId;
 
 pub(crate) use detail::remote_wallet_revision_matches;
 
+pub(crate) const MASTER_KEY_UPLOAD_CONFIRMATION_GRACE: Duration = Duration::from_secs(60);
 pub(super) const MAX_PENDING_UPLOAD_VERIFICATION_DELAY: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,7 +62,6 @@ impl RustCloudBackupManager {
     ) -> Result<(), CloudBackupError> {
         let starts_master_key_grace = wallet_id.is_none();
         let sync_state = PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: namespace_id.to_string(),
             wallet_id,
             record_id,
@@ -87,7 +87,7 @@ impl RustCloudBackupManager {
             );
         }
 
-        self.set_pending_upload_verification(true);
+        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
         self.wake_pending_upload_verifier();
         self.start_pending_upload_verification_loop();
 
@@ -124,7 +124,7 @@ impl RustCloudBackupManager {
             );
         }
 
-        self.set_pending_upload_verification(true);
+        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
         self.wake_pending_upload_verifier();
         self.start_pending_upload_verification_loop();
 
@@ -182,7 +182,7 @@ impl RustCloudBackupManager {
                 .map_err_prefix("remove cloud blob sync state", CloudBackupError::Internal)?;
         }
 
-        self.set_pending_upload_verification(self.has_pending_cloud_upload_verification());
+        self.refresh_pending_upload_verification_state();
         self.wake_pending_upload_verifier();
 
         Ok(())

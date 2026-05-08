@@ -4,6 +4,7 @@ import SwiftUI
 
 private let walletModeChangeDelayMs = 250
 private let sidebarNavigationDelayMs = 250
+private let navigationSettleDelayMs = 800
 
 @Observable final class AppManager: FfiReconcile {
     static let shared = makeShared()
@@ -13,12 +14,15 @@ private let sidebarNavigationDelayMs = 250
     private let navigationGenerations = GenerationTracker()
     @ObservationIgnored
     private var pendingSidebarNavigationTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var navigationSettleTask: Task<Void, Never>?
 
     var rust: FfiApp
     var router: Router
     var database: Database
     var wallets: [WalletMetadata] = []
     var isSidebarVisible = false
+    var isNavigationSettled = true
     var asyncRuntimeReady = false
 
     var alertState: TaggedItem<AppAlertState>? = .none
@@ -154,6 +158,8 @@ private let sidebarNavigationDelayMs = 250
     public func reset() {
         pendingSidebarNavigationTask?.cancel()
         pendingSidebarNavigationTask = nil
+        navigationSettleTask?.cancel()
+        navigationSettleTask = nil
         advanceNavigationGeneration()
 
         database = Database()
@@ -301,7 +307,32 @@ private let sidebarNavigationDelayMs = 250
 
     @discardableResult
     private func advanceNavigationGeneration() -> GenerationToken {
-        navigationGenerations.advance()
+        let generation = navigationGenerations.advance()
+        scheduleNavigationSettled(for: generation)
+        return generation
+    }
+
+    private func scheduleNavigationSettledForCurrentGeneration() {
+        scheduleNavigationSettled(for: navigationGenerations.capture())
+    }
+
+    private func scheduleNavigationSettled(for generation: GenerationToken) {
+        navigationSettleTask?.cancel()
+        isNavigationSettled = false
+
+        navigationSettleTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(navigationSettleDelayMs))
+            } catch {
+                return
+            }
+
+            guard let self else { return }
+            guard self.isNavigationGenerationCurrent(generation) else { return }
+
+            self.isNavigationSettled = true
+            self.navigationSettleTask = nil
+        }
     }
 
     func closeSidebarAndSelectWallet(_ id: WalletId) {
@@ -390,10 +421,15 @@ private let sidebarNavigationDelayMs = 250
 
             switch message {
             case let .routeUpdated(routes: routes):
+                let didChangeRoute = router.routes != routes
                 router.routes = routes
+                if didChangeRoute {
+                    scheduleNavigationSettledForCurrentGeneration()
+                }
 
             case let .pushedRoute(route):
                 router.routes.append(route)
+                scheduleNavigationSettledForCurrentGeneration()
 
             case .databaseUpdated:
                 database = Database()
@@ -412,6 +448,7 @@ private let sidebarNavigationDelayMs = 250
                 router.routes = nestedRoutes
                 router.default = route
                 routeId = UUID()
+                scheduleNavigationSettledForCurrentGeneration()
 
             case let .fiatPricesChanged(prices):
                 self.prices = prices

@@ -15,7 +15,7 @@ use cove_device::keychain::{Keychain, KeychainAccess};
 use cove_device::passkey::{
     DiscoveredPasskeyResult, PasskeyAccess, PasskeyCredentialPresence, PasskeyError,
     PasskeyFailureReason, PasskeyOperation, PasskeyProvider, PasskeyRegistrationPlatform,
-    PasskeyRegistrationResult,
+    PasskeyRegistrationResult, PasskeyRegistrationUser,
 };
 use parking_lot::Mutex;
 use sha2::Digest as _;
@@ -25,8 +25,8 @@ use super::*;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue, CloudBlobUploadingState,
-    CloudUploadKind, PersistedCloudBackupState, PersistedCloudBackupStatus,
-    PersistedCloudBlobState, PersistedCloudBlobSyncState,
+    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
+    PersistedCloudBlobSyncState,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupKeychain, cloud_backup_test_lock, ensure_cloud_backup_test_tokio_runtime,
@@ -67,6 +67,7 @@ impl cove_cspp::CsppStore for MockStoreHandle {
 type MockDiscoverResult = Result<(Vec<u8>, Vec<u8>), PasskeyError>;
 type MockPasskeyActionResult = Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>;
 type MockPasskeyCreateResult = Arc<Mutex<Option<Result<PasskeyRegistrationResult, PasskeyError>>>>;
+type MockPasskeyPresenceResults = Arc<Mutex<VecDeque<PasskeyCredentialPresence>>>;
 #[derive(Debug, Clone, Default)]
 pub(crate) struct MockKeychain {
     entries: Arc<Mutex<HashMap<String, String>>>,
@@ -136,15 +137,23 @@ impl KeychainAccess for MockKeychain {
 struct MockCloudState {
     wallet_files: HashMap<String, Vec<String>>,
     master_key_backups: HashMap<String, Vec<u8>>,
+    master_key_download_errors: HashMap<String, CloudStorageError>,
     wallet_backups: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_overrides: HashMap<(String, String), Vec<u8>>,
+    wallet_backup_download_errors: HashMap<(String, String), CloudStorageError>,
+    next_list_wallet_files_error: Option<CloudStorageError>,
     list_wallet_files_error: Option<CloudStorageError>,
+    list_wallet_files_namespace_errors: HashMap<String, CloudStorageError>,
     list_wallet_files_non_interactive_error: Option<CloudStorageError>,
     upload_master_key_error: Option<CloudStorageError>,
     next_upload_wallet_backup_error: Option<CloudStorageError>,
     upload_wallet_backup_error: Option<CloudStorageError>,
+    delete_namespace_error: Option<CloudStorageError>,
+    list_namespaces_error: Option<CloudStorageError>,
     reflect_uploaded_wallets_in_listing: bool,
     uploaded_wallet_backups: Vec<(String, String)>,
+    deleted_namespace_policies: Vec<CloudAccessPolicy>,
+    list_wallet_files_attempts: usize,
     wallet_backup_upload_attempts: usize,
     dirty_wallet_on_next_upload: Option<WalletId>,
     changed_wallet_on_next_upload: Option<WalletId>,
@@ -182,13 +191,43 @@ impl MockCloudStorage {
         self.state.lock().wallet_backup_download_overrides.insert((namespace, record_id), backup);
     }
 
+    pub(crate) fn fail_wallet_backup_download_offline(
+        &self,
+        namespace: String,
+        record_id: String,
+        message: &str,
+    ) {
+        self.state
+            .lock()
+            .wallet_backup_download_errors
+            .insert((namespace, record_id), CloudStorageError::Offline(message.into()));
+    }
+
     pub(crate) fn fail_list_wallet_files(&self, message: &str) {
         self.state.lock().list_wallet_files_error =
             Some(CloudStorageError::DownloadFailed(message.into()));
     }
 
+    pub(crate) fn fail_list_wallet_files_for_namespace(
+        &self,
+        namespace: String,
+        error: CloudStorageError,
+    ) {
+        self.state.lock().list_wallet_files_namespace_errors.insert(namespace, error);
+    }
+
+    pub(crate) fn fail_next_list_wallet_files_offline(&self, message: &str) {
+        self.state.lock().next_list_wallet_files_error =
+            Some(CloudStorageError::Offline(message.into()));
+    }
+
     pub(crate) fn fail_list_wallet_files_non_interactive(&self, message: &str) {
         self.state.lock().list_wallet_files_non_interactive_error =
+            Some(CloudStorageError::DownloadFailed(message.into()));
+    }
+
+    pub(crate) fn fail_list_namespaces(&self, message: &str) {
+        self.state.lock().list_namespaces_error =
             Some(CloudStorageError::DownloadFailed(message.into()));
     }
 
@@ -199,6 +238,24 @@ impl MockCloudStorage {
     pub(crate) fn fail_master_key_upload(&self, message: &str) {
         self.state.lock().upload_master_key_error =
             Some(CloudStorageError::UploadFailed(message.into()));
+    }
+
+    pub(crate) fn fail_master_key_download_offline(&self, namespace: String, message: &str) {
+        self.state
+            .lock()
+            .master_key_download_errors
+            .insert(namespace, CloudStorageError::Offline(message.into()));
+    }
+
+    pub(crate) fn fail_master_key_download_authorization_required(
+        &self,
+        namespace: String,
+        message: &str,
+    ) {
+        self.state
+            .lock()
+            .master_key_download_errors
+            .insert(namespace, CloudStorageError::AuthorizationRequired(message.into()));
     }
 
     pub(crate) fn fail_wallet_backup_upload(&self, message: &str) {
@@ -221,6 +278,11 @@ impl MockCloudStorage {
         state.upload_wallet_backup_error = None;
     }
 
+    pub(crate) fn fail_delete_namespace(&self, message: &str) {
+        self.state.lock().delete_namespace_error =
+            Some(CloudStorageError::DownloadFailed(message.into()));
+    }
+
     pub(crate) fn set_reflect_uploaded_wallets_in_listing(&self, enabled: bool) {
         self.state.lock().reflect_uploaded_wallets_in_listing = enabled;
     }
@@ -233,8 +295,26 @@ impl MockCloudStorage {
         self.state.lock().master_key_backups.contains_key(namespace)
     }
 
+    pub(crate) fn has_namespace(&self, namespace: &str) -> bool {
+        let state = self.state.lock();
+        state.master_key_backups.contains_key(namespace)
+            || state.wallet_files.contains_key(namespace)
+            || state
+                .wallet_backups
+                .keys()
+                .any(|(backup_namespace, _)| backup_namespace == namespace)
+    }
+
+    pub(crate) fn deleted_namespace_policies(&self) -> Vec<CloudAccessPolicy> {
+        self.state.lock().deleted_namespace_policies.clone()
+    }
+
     pub(crate) fn wallet_backup_upload_attempt_count(&self) -> usize {
         self.state.lock().wallet_backup_upload_attempts
+    }
+
+    pub(crate) fn list_wallet_files_attempt_count(&self) -> usize {
+        self.state.lock().list_wallet_files_attempts
     }
 
     pub(crate) fn dirty_wallet_on_next_upload(&self, wallet_id: WalletId) {
@@ -304,6 +384,10 @@ impl CloudStorageAccess for MockCloudStorage {
         namespace: String,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
+        if let Some(error) = self.state.lock().master_key_download_errors.get(&namespace).cloned() {
+            return Err(error);
+        }
+
         self.state
             .lock()
             .master_key_backups
@@ -324,6 +408,12 @@ impl CloudStorageAccess for MockCloudStorage {
         }
 
         let override_key = (namespace.clone(), record_id.clone());
+        if let Some(error) =
+            self.state.lock().wallet_backup_download_errors.get(&override_key).cloned()
+        {
+            return Err(error);
+        }
+
         if let Some(backup) =
             self.state.lock().wallet_backup_download_overrides.get(&override_key).cloned()
         {
@@ -357,11 +447,48 @@ impl CloudStorageAccess for MockCloudStorage {
         Ok(())
     }
 
+    async fn delete_namespace(
+        &self,
+        namespace: String,
+        policy: CloudAccessPolicy,
+    ) -> Result<(), CloudStorageError> {
+        let mut state = self.state.lock();
+        if let Some(error) = state.delete_namespace_error.clone() {
+            return Err(error);
+        }
+
+        state.deleted_namespace_policies.push(policy);
+        state.master_key_backups.remove(&namespace);
+        state.master_key_download_errors.remove(&namespace);
+        state.wallet_files.remove(&namespace);
+        state.wallet_backups.retain(|(backup_namespace, _), _| backup_namespace != &namespace);
+        state
+            .wallet_backup_download_overrides
+            .retain(|(backup_namespace, _), _| backup_namespace != &namespace);
+        state
+            .wallet_backup_download_errors
+            .retain(|(backup_namespace, _), _| backup_namespace != &namespace);
+        state
+            .uploaded_wallet_backups
+            .retain(|(uploaded_namespace, _)| uploaded_namespace != &namespace);
+        Ok(())
+    }
+
     async fn list_namespaces(
         &self,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        Ok(self.state.lock().wallet_files.keys().cloned().collect())
+        let state = self.state.lock();
+        if let Some(error) = state.list_namespaces_error.clone() {
+            return Err(error);
+        }
+
+        let mut namespaces: std::collections::HashSet<String> =
+            state.wallet_files.keys().cloned().collect();
+        namespaces.extend(state.master_key_backups.keys().cloned());
+        namespaces.extend(state.wallet_backups.keys().map(|(namespace, _)| namespace.clone()));
+
+        Ok(namespaces.into_iter().collect())
     }
 
     async fn list_wallet_files(
@@ -369,7 +496,12 @@ impl CloudStorageAccess for MockCloudStorage {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        let state = self.state.lock();
+        let mut state = self.state.lock();
+        state.list_wallet_files_attempts += 1;
+        if let Some(error) = state.next_list_wallet_files_error.take() {
+            return Err(error);
+        }
+
         let error = if policy == CloudAccessPolicy::Silent {
             state.list_wallet_files_non_interactive_error.clone()
         } else {
@@ -378,6 +510,10 @@ impl CloudStorageAccess for MockCloudStorage {
         if let Some(error) = error {
             return Err(error);
         }
+        if let Some(error) = state.list_wallet_files_namespace_errors.get(&namespace).cloned() {
+            return Err(error);
+        }
+
         let mut wallet_files = state.wallet_files.get(&namespace).cloned().unwrap_or_default();
 
         if state.reflect_uploaded_wallets_in_listing {
@@ -421,6 +557,8 @@ pub(crate) struct MockPasskeyProviderImpl {
     create_count: Arc<Mutex<usize>>,
     authenticate_count: Arc<Mutex<usize>>,
     discover_count: Arc<Mutex<usize>>,
+    presence_results: MockPasskeyPresenceResults,
+    authenticated_credential_ids: Arc<Mutex<Vec<Vec<u8>>>>,
 }
 
 impl Default for MockPasskeyProviderImpl {
@@ -432,6 +570,8 @@ impl Default for MockPasskeyProviderImpl {
             create_count: Arc::new(Mutex::new(0)),
             authenticate_count: Arc::new(Mutex::new(0)),
             discover_count: Arc::new(Mutex::new(0)),
+            presence_results: Arc::new(Mutex::new(VecDeque::new())),
+            authenticated_credential_ids: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -444,6 +584,8 @@ impl MockPasskeyProviderImpl {
         *self.create_count.lock() = 0;
         *self.authenticate_count.lock() = 0;
         *self.discover_count.lock() = 0;
+        self.presence_results.lock().clear();
+        self.authenticated_credential_ids.lock().clear();
     }
 
     pub(crate) fn set_discover_result(
@@ -487,14 +629,18 @@ impl MockPasskeyProviderImpl {
     pub(crate) fn discover_count(&self) -> usize {
         *self.discover_count.lock()
     }
+
+    pub(crate) fn authenticated_credential_ids(&self) -> Vec<Vec<u8>> {
+        self.authenticated_credential_ids.lock().clone()
+    }
 }
 
 impl PasskeyProvider for MockPasskeyProviderImpl {
     fn create_passkey(
         &self,
         _rp_id: String,
-        _user_id: Vec<u8>,
         _challenge: Vec<u8>,
+        _user: PasskeyRegistrationUser,
     ) -> Result<PasskeyRegistrationResult, PasskeyError> {
         *self.create_count.lock() += 1;
         self.create_result.lock().take().unwrap_or_else(|| {
@@ -510,11 +656,12 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
     fn authenticate_with_prf(
         &self,
         _rp_id: String,
-        _credential_id: Vec<u8>,
+        credential_id: Vec<u8>,
         _prf_salt: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
         *self.authenticate_count.lock() += 1;
+        self.authenticated_credential_ids.lock().push(credential_id);
         self.authenticate_result.lock().take().unwrap_or_else(|| {
             Err(PasskeyError::RequestFailed {
                 operation: PasskeyOperation::AuthenticateAssertion,
@@ -551,7 +698,7 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _rp_id: String,
         _credential_id: Vec<u8>,
     ) -> PasskeyCredentialPresence {
-        PasskeyCredentialPresence::Present
+        self.presence_results.lock().pop_front().unwrap_or(PasskeyCredentialPresence::Present)
     }
 }
 
@@ -614,7 +761,6 @@ pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
     Database::global()
         .cloud_blob_sync_states
         .set(&PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id,
             wallet_id: Some(wallet_id),
             record_id,
@@ -624,7 +770,8 @@ pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
 }
 
 fn mutate_wallet_and_persist_dirty(wallet_id: WalletId) {
-    let mut wallet = all_local_wallets(&Database::global())
+    let mut wallet = CloudBackupStore::global()
+        .all_wallets()
         .unwrap()
         .into_iter()
         .find(|wallet| wallet.id == wallet_id)
@@ -653,7 +800,6 @@ pub(crate) fn persist_failed_blob_state_with_issue(
     Database::global()
         .cloud_blob_sync_states
         .set(&PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id,
             wallet_id: Some(wallet_id),
             record_id,
@@ -675,7 +821,6 @@ pub(crate) fn persist_uploading_blob_state(wallet_id: WalletId, started_at: u64)
     Database::global()
         .cloud_blob_sync_states
         .set(&PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id,
             wallet_id: Some(wallet_id),
             record_id,
@@ -971,19 +1116,27 @@ pub(crate) async fn new_restore_operation_for_test(
 mod tests {
     use super::*;
 
+    fn test_passkey_user() -> PasskeyRegistrationUser {
+        PasskeyRegistrationUser {
+            id: vec![1],
+            name: "Cove Cloud Backup (test)".into(),
+            display_name: "Cove Cloud Backup".into(),
+        }
+    }
+
     #[test]
     fn passkey_create_result_is_consumed_after_first_use() {
         let provider = MockPasskeyProviderImpl::default();
         provider.set_create_result(Ok(vec![1, 2, 3]));
 
         let registration = provider
-            .create_passkey("rp".into(), vec![1], vec![2])
+            .create_passkey("rp".into(), vec![2], test_passkey_user())
             .expect("configured create result");
         assert_eq!(registration.credential_id, vec![1, 2, 3]);
         assert_eq!(registration.provider_aaguid, "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4");
         assert_eq!(registration.registered_platform, PasskeyRegistrationPlatform::Android);
         assert!(matches!(
-            provider.create_passkey("rp".into(), vec![1], vec![2]),
+            provider.create_passkey("rp".into(), vec![2], test_passkey_user()),
             Err(PasskeyError::RequestFailed {
                 operation: PasskeyOperation::Registration,
                 reason: PasskeyFailureReason::Unknown { diagnostic_message },

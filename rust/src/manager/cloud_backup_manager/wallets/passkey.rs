@@ -8,16 +8,21 @@ use cove_cspp::backup_data::{
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_device::passkey::{
     PasskeyAccess, PasskeyError, PasskeyFailureReason, PasskeyOperation,
-    PasskeyRegistrationPlatform, PasskeyRegistrationResult,
+    PasskeyRegistrationPlatform, PasskeyRegistrationResult, PasskeyRegistrationUser,
 };
 use cove_tokio::unblock;
 use rand::RngExt as _;
 use tracing::{debug, info, warn};
 
-use super::UnpersistedPrfKey;
+use super::{StagedPrfKey, UnpersistedPrfKey};
 use crate::manager::cloud_backup_manager::{CloudBackupError, PASSKEY_RP_ID};
 
-async fn delay_before_new_passkey_auth() {
+const PASSKEY_DISPLAY_NAME: &str = "Cove Cloud Backup";
+const PASSKEY_SUFFIX_ALPHABET: &[u8; 36] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const PASSKEY_SUFFIX_EPOCH_SECONDS: i64 = 1_767_225_600;
+const PASSKEY_SUFFIX_MIN_LENGTH: usize = 4;
+
+pub(crate) async fn delay_before_new_passkey_auth() {
     let delay = Duration::from_secs(3);
     info!("Waiting {delay:?} before authenticating new passkey");
     tokio::time::sleep(delay).await;
@@ -38,14 +43,65 @@ pub enum NamespaceMatchOutcome {
     UnsupportedVersions,
 }
 
-struct PasskeyMaterialDiscoveryContext {
-    fallback_context: &'static str,
-    attempt_message: &'static str,
-    discovered_message: &'static str,
-    cancelled_message: &'static str,
-    missing_message: &'static str,
-    failed_message: &'static str,
-    create_for_enable: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasskeyMaterialPurpose {
+    EnableCloudBackup,
+    RepairWrapper,
+}
+
+pub enum PasskeyMaterialOutcome {
+    Authenticated(UnpersistedPrfKey),
+    RegisteredForConfirmation(StagedPrfKey),
+}
+
+impl PasskeyMaterialPurpose {
+    fn attempt_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => {
+                "Attempting passkey discovery before registering new cloud backup enable passkey"
+            }
+            Self::RepairWrapper => {
+                "Attempting passkey discovery before creating new wrapper-repair passkey"
+            }
+        }
+    }
+
+    fn discovered_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => "Discovered existing passkey for cloud backup enable",
+            Self::RepairWrapper => "Discovered existing passkey for wrapper repair",
+        }
+    }
+
+    fn cancelled_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => "User cancelled passkey discovery for cloud backup enable",
+            Self::RepairWrapper => "User cancelled passkey discovery for wrapper repair",
+        }
+    }
+
+    fn missing_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => {
+                "No existing passkey found for cloud backup enable, registering new"
+            }
+            Self::RepairWrapper => "No existing passkey found for wrapper repair, creating new",
+        }
+    }
+
+    fn failed_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => "Cloud backup enable discovery failed",
+            Self::RepairWrapper => "Wrapper-repair discovery failed",
+        }
+    }
+
+    fn fallback_message(self) -> &'static str {
+        match self {
+            Self::EnableCloudBackup => "registering new passkey",
+            Self::RepairWrapper => "falling back to create for wrapper repair",
+        }
+    }
 }
 
 /// Acquires passkey PRF material without persisting it to the keychain
@@ -65,95 +121,112 @@ impl PasskeyMaterialAcquirer {
         self.create_new_prf_key_with_mapper(map_wrapper_repair_passkey_error).await
     }
 
-    /// Creates a passkey for enabling cloud backup without persisting keychain state
-    pub async fn create_for_enable(&self) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        info!("Creating new passkey for cloud backup enable");
-        self.create_new_prf_key_with_mapper(map_enable_passkey_error).await
+    /// Registers an enable passkey without immediately authenticating it
+    pub async fn register_for_enable(&self) -> Result<StagedPrfKey, CloudBackupError> {
+        info!("Registering new passkey for cloud backup enable");
+        let prf_salt: [u8; 32] = rand::rng().random();
+        let (registration, name_suffix) =
+            self.create_passkey_registration(map_enable_passkey_error).await?;
+
+        Ok(StagedPrfKey {
+            prf_salt,
+            credential_id: registration.credential_id.clone(),
+            provider_hint: Some(passkey_provider_hint(registration, name_suffix)),
+        })
+    }
+
+    /// Confirms a registered enable passkey by acquiring PRF material with targeted auth
+    pub async fn confirm_registered_for_enable(
+        &self,
+        staged: &StagedPrfKey,
+    ) -> Result<UnpersistedPrfKey, CloudBackupError> {
+        let prf_output = self
+            .authenticate_registered(
+                &staged.credential_id,
+                staged.prf_salt,
+                map_enable_passkey_error,
+            )
+            .await?;
+
+        Ok(UnpersistedPrfKey {
+            prf_key: prf_output_to_key(prf_output)?,
+            prf_salt: staged.prf_salt,
+            credential_id: staged.credential_id.clone(),
+            provider_hint: staged.provider_hint.clone(),
+        })
     }
 
     /// Discovers an existing passkey for wrapper repair or creates a new one
     pub async fn discover_or_create_for_wrapper_repair(
         &self,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        self.discover_or_create(PasskeyMaterialDiscoveryContext {
-            fallback_context: "wrapper repair",
-            attempt_message: "Attempting passkey discovery before creating new wrapper-repair passkey",
-            discovered_message: "Discovered existing passkey for wrapper repair",
-            cancelled_message: "User cancelled passkey discovery for wrapper repair",
-            missing_message: "No existing passkey found for wrapper repair, creating new",
-            failed_message: "Wrapper-repair discovery failed",
-            create_for_enable: false,
-        })
-        .await
+        match self.acquire(PasskeyMaterialPurpose::RepairWrapper).await? {
+            PasskeyMaterialOutcome::Authenticated(passkey) => Ok(passkey),
+            PasskeyMaterialOutcome::RegisteredForConfirmation(_) => {
+                Err(CloudBackupError::Internal(
+                    "wrapper repair passkey acquisition returned unconfirmed material".into(),
+                ))
+            }
+        }
     }
 
-    /// Discovers an existing passkey for enabling cloud backup or creates a new one
-    pub async fn discover_or_create_for_enable(
+    /// Discovers an existing enable passkey or registers a new passkey for later confirmation
+    pub async fn discover_or_register_for_enable(
         &self,
-    ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        self.discover_or_create(PasskeyMaterialDiscoveryContext {
-            fallback_context: "cloud backup enable",
-            attempt_message:
-                "Attempting passkey discovery before creating new cloud backup enable passkey",
-            discovered_message: "Discovered existing passkey for cloud backup enable",
-            cancelled_message: "User cancelled passkey discovery for cloud backup enable",
-            missing_message: "No existing passkey found for cloud backup enable, creating new",
-            failed_message: "Cloud backup enable discovery failed",
-            create_for_enable: true,
-        })
-        .await
+    ) -> Result<PasskeyMaterialOutcome, CloudBackupError> {
+        self.acquire(PasskeyMaterialPurpose::EnableCloudBackup).await
     }
 
-    async fn discover_or_create(
+    async fn acquire(
         &self,
-        context: PasskeyMaterialDiscoveryContext,
-    ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        info!("{}", context.attempt_message);
+        purpose: PasskeyMaterialPurpose,
+    ) -> Result<PasskeyMaterialOutcome, CloudBackupError> {
+        info!("{}", purpose.attempt_message());
         let prf_salt: [u8; 32] = rand::rng().random();
 
-        let discovery = self.discover_with_platform_authorization_retry(prf_salt).await;
-
-        match discovery {
+        match self.discover_with_platform_authorization_retry(prf_salt).await {
             Ok(discovered) => {
                 let prf_key = prf_output_to_key(discovered.prf_output)?;
-                info!("{}", context.discovered_message);
+                info!("{}", purpose.discovered_message());
 
-                Ok(UnpersistedPrfKey {
+                Ok(PasskeyMaterialOutcome::Authenticated(UnpersistedPrfKey {
                     prf_key,
                     prf_salt,
                     credential_id: discovered.credential_id,
                     provider_hint: None,
-                })
+                }))
             }
             Err(PasskeyError::UserCancelled) => {
-                info!("{}", context.cancelled_message);
+                info!("{}", purpose.cancelled_message());
                 Err(CloudBackupError::PasskeyDiscoveryCancelled)
             }
             Err(PasskeyError::NoCredentialFound) => {
-                info!("{}", context.missing_message);
-                self.create_for_context(context.create_for_enable).await
+                info!("{}", purpose.missing_message());
+                self.create_or_register_for_purpose(purpose).await
             }
             Err(PasskeyError::PrfUnsupportedProvider) => {
                 Err(CloudBackupError::UnsupportedPasskeyProvider)
             }
             Err(error) => {
-                let failed_message = context.failed_message;
-                let fallback_context = context.fallback_context;
-                warn!("{failed_message} ({error}), falling back to create for {fallback_context}");
-                self.create_for_context(context.create_for_enable).await
+                warn!("{} ({error}), {}", purpose.failed_message(), purpose.fallback_message());
+                self.create_or_register_for_purpose(purpose).await
             }
         }
     }
 
-    async fn create_for_context(
+    async fn create_or_register_for_purpose(
         &self,
-        create_for_enable: bool,
-    ) -> Result<UnpersistedPrfKey, CloudBackupError> {
-        if create_for_enable {
-            return self.create_for_enable().await;
+        purpose: PasskeyMaterialPurpose,
+    ) -> Result<PasskeyMaterialOutcome, CloudBackupError> {
+        match purpose {
+            PasskeyMaterialPurpose::EnableCloudBackup => self
+                .register_for_enable()
+                .await
+                .map(PasskeyMaterialOutcome::RegisteredForConfirmation),
+            PasskeyMaterialPurpose::RepairWrapper => {
+                self.create_for_wrapper_repair().await.map(PasskeyMaterialOutcome::Authenticated)
+            }
         }
-
-        self.create_for_wrapper_repair().await
     }
 
     async fn discover_with_platform_authorization_retry(
@@ -196,49 +269,106 @@ impl PasskeyMaterialAcquirer {
         map_passkey_error: fn(PasskeyError) -> CloudBackupError,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
         let prf_salt: [u8; 32] = rand::rng().random();
-        let registration = {
-            let passkey = self.passkey.clone();
-            unblock::run_blocking(move || {
-                passkey.create_passkey(
-                    PASSKEY_RP_ID.to_string(),
-                    rand::rng().random::<[u8; 16]>().to_vec(),
-                    random_challenge(),
-                )
-            })
-            .await
-            .map_err(map_passkey_error)?
-        };
+        let (registration, name_suffix) =
+            self.create_passkey_registration(map_passkey_error).await?;
         let credential_id = registration.credential_id.clone();
 
         // wait briefly before targeted auth so iOS can settle after registration
         // without probing for presence and flashing another native passkey sheet
         delay_before_new_passkey_auth().await;
 
-        let prf_output = {
-            let passkey = self.passkey.clone();
-            let credential_id = credential_id.clone();
-            unblock::run_blocking(move || {
-                passkey.authenticate_with_prf(
-                    PASSKEY_RP_ID.to_string(),
-                    credential_id,
-                    prf_salt.to_vec(),
-                    random_challenge(),
-                )
-            })
-            .await
-            .map_err(map_passkey_error)?
-        };
+        let prf_output =
+            self.authenticate_registered(&credential_id, prf_salt, map_passkey_error).await?;
 
         Ok(UnpersistedPrfKey {
             prf_key: prf_output_to_key(prf_output)?,
             prf_salt,
             credential_id,
-            provider_hint: Some(passkey_provider_hint(registration)),
+            provider_hint: Some(passkey_provider_hint(registration, name_suffix)),
         })
+    }
+
+    async fn create_passkey_registration(
+        &self,
+        map_passkey_error: fn(PasskeyError) -> CloudBackupError,
+    ) -> Result<(PasskeyRegistrationResult, String), CloudBackupError> {
+        let passkey = self.passkey.clone();
+        let (user, name_suffix) = passkey_registration_user();
+        let registration = unblock::run_blocking(move || {
+            passkey.create_passkey(PASSKEY_RP_ID.to_string(), random_challenge(), user)
+        })
+        .await
+        .map_err(map_passkey_error)?;
+
+        Ok((registration, name_suffix))
+    }
+
+    async fn authenticate_registered(
+        &self,
+        credential_id: &[u8],
+        prf_salt: [u8; 32],
+        map_passkey_error: fn(PasskeyError) -> CloudBackupError,
+    ) -> Result<Vec<u8>, CloudBackupError> {
+        let passkey = self.passkey.clone();
+        let credential_id = credential_id.to_vec();
+        unblock::run_blocking(move || {
+            passkey.authenticate_with_prf(
+                PASSKEY_RP_ID.to_string(),
+                credential_id,
+                prf_salt.to_vec(),
+                random_challenge(),
+            )
+        })
+        .await
+        .map_err(map_passkey_error)
     }
 }
 
-fn passkey_provider_hint(registration: PasskeyRegistrationResult) -> PasskeyProviderHint {
+fn passkey_registration_user() -> (PasskeyRegistrationUser, String) {
+    let id = rand::rng().random::<[u8; 16]>().to_vec();
+    let name_suffix = passkey_name_suffix();
+    let user = PasskeyRegistrationUser {
+        name: format!("{PASSKEY_DISPLAY_NAME} ({name_suffix})"),
+        display_name: PASSKEY_DISPLAY_NAME.into(),
+        id,
+    };
+
+    (user, name_suffix)
+}
+
+fn passkey_name_suffix() -> String {
+    passkey_name_suffix_for_timestamp(jiff::Timestamp::now())
+}
+
+fn passkey_name_suffix_for_timestamp(timestamp: jiff::Timestamp) -> String {
+    let seconds_since_epoch = timestamp.as_second().saturating_sub(PASSKEY_SUFFIX_EPOCH_SECONDS);
+
+    base36_passkey_suffix(u64::try_from(seconds_since_epoch).unwrap_or(0))
+}
+
+fn base36_passkey_suffix(mut value: u64) -> String {
+    let mut encoded = Vec::new();
+    loop {
+        let index = usize::try_from(value % 36).unwrap_or(0);
+        encoded.push(PASSKEY_SUFFIX_ALPHABET[index] as char);
+        value /= 36;
+
+        if value == 0 {
+            break;
+        }
+    }
+
+    while encoded.len() < PASSKEY_SUFFIX_MIN_LENGTH {
+        encoded.push('0');
+    }
+
+    encoded.into_iter().rev().collect()
+}
+
+fn passkey_provider_hint(
+    registration: PasskeyRegistrationResult,
+    name_suffix: String,
+) -> PasskeyProviderHint {
     let registered_platform = match registration.registered_platform {
         PasskeyRegistrationPlatform::Ios => BackupPasskeyRegistrationPlatform::Ios,
         PasskeyRegistrationPlatform::Android => BackupPasskeyRegistrationPlatform::Android,
@@ -246,11 +376,16 @@ fn passkey_provider_hint(registration: PasskeyRegistrationResult) -> PasskeyProv
     let registered_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
 
     debug!(
-        "Captured passkey provider hint aaguid={} registered_platform={registered_platform:?} registered_at={registered_at}",
+        "Captured passkey provider hint aaguid={} registered_platform={registered_platform:?} registered_at={registered_at} name_suffix={name_suffix}",
         registration.provider_aaguid
     );
 
-    PasskeyProviderHint { aaguid: registration.provider_aaguid, registered_platform, registered_at }
+    PasskeyProviderHint {
+        aaguid: registration.provider_aaguid,
+        registered_platform,
+        registered_at,
+        name_suffix,
+    }
 }
 
 /// Matches a discoverable passkey against candidate cloud backup namespaces
@@ -485,4 +620,48 @@ fn prf_output_to_key(prf_output: Vec<u8>) -> Result<[u8; 32], CloudBackupError> 
 
 fn random_challenge() -> Vec<u8> {
     rand::rng().random::<[u8; 32]>().to_vec()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn passkey_suffix_encodes_seconds_since_2026_utc_epoch() {
+        assert_eq!(base36_passkey_suffix(0), "0000");
+        assert_eq!(base36_passkey_suffix(1), "0001");
+        assert_eq!(base36_passkey_suffix(35), "000Z");
+        assert_eq!(base36_passkey_suffix(36), "0010");
+    }
+
+    #[test]
+    fn passkey_suffix_uses_january_2026_epoch() {
+        let epoch = jiff::Timestamp::from_second(PASSKEY_SUFFIX_EPOCH_SECONDS).unwrap();
+        let after_epoch = jiff::Timestamp::from_second(PASSKEY_SUFFIX_EPOCH_SECONDS + 1).unwrap();
+
+        assert_eq!(passkey_name_suffix_for_timestamp(epoch), "0000");
+        assert_eq!(passkey_name_suffix_for_timestamp(after_epoch), "0001");
+    }
+
+    #[test]
+    fn passkey_suffix_is_deterministic_for_later_timestamp() {
+        let timestamp =
+            jiff::Timestamp::from_second(PASSKEY_SUFFIX_EPOCH_SECONDS + 12_345).unwrap();
+
+        assert_eq!(passkey_name_suffix_for_timestamp(timestamp), "09IX");
+    }
+
+    #[test]
+    fn passkey_provider_hint_preserves_registration_suffix() {
+        let hint = passkey_provider_hint(
+            PasskeyRegistrationResult {
+                credential_id: vec![1, 2, 3],
+                provider_aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+                registered_platform: PasskeyRegistrationPlatform::Android,
+            },
+            "09IX".into(),
+        );
+
+        assert_eq!(hint.name_suffix, "09IX");
+    }
 }

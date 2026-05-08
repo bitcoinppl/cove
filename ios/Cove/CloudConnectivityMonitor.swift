@@ -26,10 +26,6 @@ final class CloudConnectivityMonitor: ConnectivityAccess, @unchecked Sendable {
         }
 
         monitor.start(queue: queue)
-
-        let initialConnected = monitor.currentPath.status == .satisfied
-        setConnected(initialConnected)
-        updateRustConnectivity(initialConnected)
     }
 
     func isConnected() -> Bool {
@@ -49,6 +45,7 @@ final class CloudConnectivityMonitor: ConnectivityAccess, @unchecked Sendable {
     }
 
     private func updateRustConnectivity(_ isConnected: Bool) {
-        RustConnectivityManager().setConnectionState(isConnected: isConnected)
+        let status: ConnectivityStatus = isConnected ? .connected : .disconnected
+        RustConnectivityManager().setConnectionStatus(status: status)
     }
 }

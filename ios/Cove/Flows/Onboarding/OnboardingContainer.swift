@@ -9,7 +9,8 @@ struct OnboardingContainer: View {
         CloudBackupPresentationHost(
             app: manager.app,
             auth: auth,
-            isCoverPresented: false
+            isCoverPresented: false,
+            presentationPolicy: .onboarding
         ) {
             stepView(for: manager.state.step)
                 .onChange(of: manager.isComplete) { _, complete in
@@ -91,19 +92,6 @@ struct OnboardingContainer: View {
                 onHasBitcoin: { manager.dispatch(.selectHasBitcoin(hasBitcoin: true)) }
             )
 
-        case .returningUserChoice:
-            OnboardingReturningUserChoiceScreen(
-                onRestoreFromCoveBackup: {
-                    manager.dispatch(
-                        .selectReturningUserFlow(selection: .restoreFromCoveBackup)
-                    )
-                },
-                onUseAnotherWallet: {
-                    manager.dispatch(.selectReturningUserFlow(selection: .useAnotherWallet))
-                },
-                onBack: { manager.dispatch(.back) }
-            )
-
         case .storageChoice:
             OnboardingStorageChoiceScreen(
                 errorMessage: manager.state.errorMessage,
@@ -133,9 +121,15 @@ struct OnboardingContainer: View {
         case .cloudBackup:
             OnboardingCloudBackupStepView(
                 branch: manager.state.branch,
+                onEnable: { manager.dispatch(.beginCloudBackupEnable) },
                 onEnabled: { manager.dispatch(.cloudBackupEnabled) },
                 onSkip: { manager.dispatch(.skipCloudBackup) }
             )
+
+        case .cloudBackupSuccess:
+            OnboardingCloudBackupSuccessView {
+                manager.dispatch(.continueFromCloudBackupSuccess)
+            }
 
         case .secretWords:
             OnboardingSecretWordsView(
@@ -152,21 +146,38 @@ struct OnboardingContainer: View {
 
         case .hardwareImport:
             OnboardingHardwareImportFlowView(
+                cloudRestoreAlertVisible: cloudRestoreAlertVisibleBinding,
                 onImported: { walletId in
                     manager.dispatch(.hardwareImportCompleted(walletId: walletId))
                 },
+                onRestoreFromCloudBackup: { manager.dispatch(.openCloudRestore) },
+                onDismissCloudRestoreAlert: { manager.dispatch(.dismissCloudRestoreAlert) },
                 onBack: { manager.dispatch(.back) }
             )
 
         case .softwareImport:
             OnboardingSoftwareImportFlowView(
                 errorMessage: manager.state.errorMessage,
+                cloudRestoreAlertVisible: cloudRestoreAlertVisibleBinding,
                 onImported: { walletId in
                     manager.dispatch(.softwareImportCompleted(walletId: walletId))
                 },
                 onCreateWallet: { manager.dispatch(.createSoftwareWallet) },
+                onRestoreFromCloudBackup: { manager.dispatch(.openCloudRestore) },
+                onDismissCloudRestoreAlert: { manager.dispatch(.dismissCloudRestoreAlert) },
                 onBack: { manager.dispatch(.back) }
             )
         }
+    }
+
+    private var cloudRestoreAlertVisibleBinding: Binding<Bool> {
+        Binding(
+            get: { manager.state.cloudRestoreAlertVisible },
+            set: { isPresented in
+                if !isPresented {
+                    manager.dispatch(.dismissCloudRestoreAlert)
+                }
+            }
+        )
     }
 }

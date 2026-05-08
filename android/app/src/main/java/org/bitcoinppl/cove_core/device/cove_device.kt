@@ -636,15 +636,18 @@ internal interface UniffiCallbackInterfaceCloudStorageAccessMethod4 : com.sun.jn
     fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod5 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod6 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+    fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod7 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteI8,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod8 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteI8,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceCloudStorageAccessMethod9 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceConnectivityAccessMethod0 : com.sun.jna.Callback {
@@ -663,7 +666,7 @@ internal interface UniffiCallbackInterfaceKeychainAccessMethod2 : com.sun.jna.Ca
     fun callback(`uniffiHandle`: Long,`key`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfacePasskeyProviderMethod0 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`userId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`user`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfacePasskeyProviderMethod1 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`credentialId`: RustBuffer.ByValue,`prfSalt`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
@@ -677,7 +680,7 @@ internal interface UniffiCallbackInterfacePasskeyProviderMethod3 : com.sun.jna.C
 internal interface UniffiCallbackInterfacePasskeyProviderMethod4 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`credentialId`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
-@Structure.FieldOrder("uniffiFree", "uniffiClone", "uploadMasterKeyBackup", "uploadWalletBackup", "downloadMasterKeyBackup", "downloadWalletBackup", "deleteWalletBackup", "listNamespaces", "listWalletFiles", "isBackupUploaded", "overallSyncHealth")
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "uploadMasterKeyBackup", "uploadWalletBackup", "downloadMasterKeyBackup", "downloadWalletBackup", "deleteWalletBackup", "deleteNamespace", "listNamespaces", "listWalletFiles", "isBackupUploaded", "overallSyncHealth")
 internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
     @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
@@ -686,10 +689,11 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
     @JvmField internal var `downloadMasterKeyBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod2? = null,
     @JvmField internal var `downloadWalletBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod3? = null,
     @JvmField internal var `deleteWalletBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod4? = null,
-    @JvmField internal var `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
-    @JvmField internal var `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
-    @JvmField internal var `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
-    @JvmField internal var `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
+    @JvmField internal var `deleteNamespace`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
+    @JvmField internal var `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
+    @JvmField internal var `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
+    @JvmField internal var `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
+    @JvmField internal var `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod9? = null,
 ) : Structure() {
     class UniffiByValue(
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
@@ -699,11 +703,12 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
         `downloadMasterKeyBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod2? = null,
         `downloadWalletBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod3? = null,
         `deleteWalletBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod4? = null,
-        `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
-        `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
-        `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
-        `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
-    ): UniffiVTableCallbackInterfaceCloudStorageAccess(`uniffiFree`,`uniffiClone`,`uploadMasterKeyBackup`,`uploadWalletBackup`,`downloadMasterKeyBackup`,`downloadWalletBackup`,`deleteWalletBackup`,`listNamespaces`,`listWalletFiles`,`isBackupUploaded`,`overallSyncHealth`,), Structure.ByValue
+        `deleteNamespace`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
+        `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
+        `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
+        `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
+        `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod9? = null,
+    ): UniffiVTableCallbackInterfaceCloudStorageAccess(`uniffiFree`,`uniffiClone`,`uploadMasterKeyBackup`,`uploadWalletBackup`,`downloadMasterKeyBackup`,`downloadWalletBackup`,`deleteWalletBackup`,`deleteNamespace`,`listNamespaces`,`listWalletFiles`,`isBackupUploaded`,`overallSyncHealth`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceCloudStorageAccess) {
         `uniffiFree` = other.`uniffiFree`
@@ -713,6 +718,7 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
         `downloadMasterKeyBackup` = other.`downloadMasterKeyBackup`
         `downloadWalletBackup` = other.`downloadWalletBackup`
         `deleteWalletBackup` = other.`deleteWalletBackup`
+        `deleteNamespace` = other.`deleteNamespace`
         `listNamespaces` = other.`listNamespaces`
         `listWalletFiles` = other.`listWalletFiles`
         `isBackupUploaded` = other.`isBackupUploaded`
@@ -862,6 +868,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_download_wallet_backup(
     ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup(
+    ): Short
+    external fun uniffi_cove_device_checksum_method_cloudstorageaccess_delete_namespace(
     ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces(
     ): Short
@@ -1128,16 +1136,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 27370.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 35406.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_delete_namespace() != 26766.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 56403.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 47835.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 55189.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 24091.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 21304.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 34175.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 13608.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918.toShort()) {
@@ -1155,7 +1166,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_keychainaccess_delete() != 1213.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 17856.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 48177.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_passkeyprovider_authenticate_with_prf() != 17002.toShort()) {
@@ -2976,6 +2987,49 @@ public object FfiConverterTypePasskeyRegistrationResult: FfiConverterRustBuffer<
 
 
 
+data class PasskeyRegistrationUser (
+    var `id`: kotlin.ByteArray
+    , 
+    var `name`: kotlin.String
+    , 
+    var `displayName`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyRegistrationUser: FfiConverterRustBuffer<PasskeyRegistrationUser> {
+    override fun read(buf: ByteBuffer): PasskeyRegistrationUser {
+        return PasskeyRegistrationUser(
+            FfiConverterByteArray.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PasskeyRegistrationUser) = (
+            FfiConverterByteArray.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterString.allocationSize(value.`displayName`)
+    )
+
+    override fun write(value: PasskeyRegistrationUser, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`id`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterString.write(value.`displayName`, buf)
+    }
+}
+
+
+
 
 enum class CloudAccessPolicy {
     
@@ -3997,6 +4051,8 @@ public interface CloudStorageAccess {
     
     suspend fun `deleteWalletBackup`(`namespace`: kotlin.String, `recordId`: kotlin.String, `policy`: CloudAccessPolicy)
     
+    suspend fun `deleteNamespace`(`namespace`: kotlin.String, `policy`: CloudAccessPolicy)
+    
     /**
      * List all namespace IDs (subdirectories of cspp-namespaces/)
      */
@@ -4195,7 +4251,40 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
             )
         }
     }
-    internal object `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod5 {
+    internal object `deleteNamespace`: UniffiCallbackInterfaceCloudStorageAccessMethod5 {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`deleteNamespace`(
+                    FfiConverterString.lift(`namespace`),
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
+                )
+            }
+            val uniffiHandleSuccess = { _: Unit ->
+                val uniffiResult = UniffiForeignFutureResultVoid.UniffiByValue(
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid.UniffiByValue(
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) },
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod6 {
         override fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -4229,7 +4318,7 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
             )
         }
     }
-    internal object `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod6 {
+    internal object `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod7 {
         override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -4264,7 +4353,7 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
             )
         }
     }
-    internal object `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod7 {
+    internal object `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod8 {
         override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteI8,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -4300,7 +4389,7 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
             )
         }
     }
-    internal object `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod8 {
+    internal object `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod9 {
         override fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -4354,6 +4443,7 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
         `downloadMasterKeyBackup`,
         `downloadWalletBackup`,
         `deleteWalletBackup`,
+        `deleteNamespace`,
         `listNamespaces`,
         `listWalletFiles`,
         `isBackupUploaded`,
@@ -4604,7 +4694,7 @@ public interface PasskeyProvider {
     /**
      * Create a new passkey credential
      */
-    fun `createPasskey`(`rpId`: kotlin.String, `userId`: kotlin.ByteArray, `challenge`: kotlin.ByteArray): PasskeyRegistrationResult
+    fun `createPasskey`(`rpId`: kotlin.String, `challenge`: kotlin.ByteArray, `user`: PasskeyRegistrationUser): PasskeyRegistrationResult
     
     /**
      * Authenticate with a known credential_id (enable flow, re-enable)
@@ -4639,13 +4729,13 @@ public interface PasskeyProvider {
 // Put the implementation in an object so we don't pollute the top-level namespace
 internal object uniffiCallbackInterfacePasskeyProvider {
     internal object `createPasskey`: UniffiCallbackInterfacePasskeyProviderMethod0 {
-        override fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`userId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+        override fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`user`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypePasskeyProvider.handleMap.get(uniffiHandle)
             val makeCall = { ->
                 uniffiObj.`createPasskey`(
                     FfiConverterString.lift(`rpId`),
-                    FfiConverterByteArray.lift(`userId`),
                     FfiConverterByteArray.lift(`challenge`),
+                    FfiConverterTypePasskeyRegistrationUser.lift(`user`),
                 )
             }
             val writeReturn = { value: PasskeyRegistrationResult -> uniffiOutReturn.setValue(FfiConverterTypePasskeyRegistrationResult.lower(value)) }

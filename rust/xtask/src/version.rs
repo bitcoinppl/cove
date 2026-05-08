@@ -5,7 +5,7 @@ use xshell::{cmd, Shell};
 
 // Version file paths
 const CARGO_TOML_PATH: &str = "Cargo.toml";
-const IOS_PROJECT_PATH: &str = "../ios/Cove.xcodeproj/project.pbxproj";
+pub(crate) const IOS_PROJECT_PATH: &str = "../ios/Cove.xcodeproj/project.pbxproj";
 const ANDROID_GRADLE_PATH: &str = "../android/app/build.gradle.kts";
 
 pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()> {
@@ -234,7 +234,19 @@ fn update_android(sh: &Shell, bump_type: &str) -> Result<()> {
     Ok(())
 }
 
-fn bump_ios_build_number(sh: &Shell) -> Result<()> {
+pub(crate) fn snapshot_ios_project(sh: &Shell) -> Result<Option<String>> {
+    if !sh.path_exists(IOS_PROJECT_PATH) {
+        return Ok(None);
+    }
+
+    Ok(sh.read_file(IOS_PROJECT_PATH).map(Some)?)
+}
+
+pub(crate) fn restore_ios_project(sh: &Shell, snapshot: &str) -> Result<()> {
+    Ok(sh.write_file(IOS_PROJECT_PATH, snapshot)?)
+}
+
+pub(crate) fn bump_ios_build_number(sh: &Shell) -> Result<()> {
     if !sh.path_exists(IOS_PROJECT_PATH) {
         print_warning(&format!("iOS project file not found at {}", IOS_PROJECT_PATH));
         return Ok(());
@@ -369,7 +381,11 @@ fn replace_u32_values(
 
 #[cfg(test)]
 mod tests {
-    use super::increment_and_replace_ios;
+    use super::{
+        bump_ios_build_number, increment_and_replace_ios, restore_ios_project,
+        snapshot_ios_project, IOS_PROJECT_PATH,
+    };
+    use xshell::Shell;
 
     #[test]
     fn bumps_all_ios_build_numbers_from_highest_value() {
@@ -391,5 +407,36 @@ CURRENT_PROJECT_VERSION = 76;
 CURRENT_PROJECT_VERSION = 76;
 "
         );
+    }
+
+    #[test]
+    fn restores_ios_project_snapshot_after_failed_testflight_flow() {
+        let unique_id =
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let temp_dir = std::env::temp_dir()
+            .join(format!("cove-xtask-version-test-{}-{unique_id}", std::process::id()));
+        let rust_dir = temp_dir.join("rust");
+        let ios_project_dir = temp_dir.join("ios/Cove.xcodeproj");
+        std::fs::create_dir_all(&rust_dir).unwrap();
+        std::fs::create_dir_all(&ios_project_dir).unwrap();
+
+        let project_path = temp_dir.join("ios/Cove.xcodeproj/project.pbxproj");
+        let original = "\
+CURRENT_PROJECT_VERSION = 89;
+CURRENT_PROJECT_VERSION = 89;
+";
+        std::fs::write(&project_path, original).unwrap();
+
+        let sh = Shell::new().unwrap();
+        sh.change_dir(&rust_dir);
+
+        let snapshot = snapshot_ios_project(&sh).unwrap().unwrap();
+        bump_ios_build_number(&sh).unwrap();
+        restore_ios_project(&sh, &snapshot).unwrap();
+
+        assert_eq!(std::fs::read_to_string(&project_path).unwrap(), original);
+        assert!(sh.path_exists(IOS_PROJECT_PATH));
+
+        std::fs::remove_dir_all(&temp_dir).unwrap();
     }
 }

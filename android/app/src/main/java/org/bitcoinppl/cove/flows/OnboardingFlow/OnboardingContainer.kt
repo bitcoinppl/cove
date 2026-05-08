@@ -5,7 +5,6 @@ import androidx.compose.runtime.LaunchedEffect
 import org.bitcoinppl.cove.OnboardingManager
 import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingCloudRestoreState
-import org.bitcoinppl.cove_core.OnboardingReturningUserSelection
 import org.bitcoinppl.cove_core.OnboardingStep
 
 @Composable
@@ -20,7 +19,7 @@ internal fun OnboardingContainer(
     }
 
     val onOpenCloudRestore =
-        if (manager.state.cloudRestoreState != OnboardingCloudRestoreState.NO_BACKUP_FOUND) {
+        if (manager.state.shouldOfferCloudRestore) {
             { manager.dispatch(OnboardingAction.OpenCloudRestore) }
         } else {
             null
@@ -87,25 +86,6 @@ internal fun OnboardingContainer(
                 onHasBitcoin = { manager.dispatch(OnboardingAction.SelectHasBitcoin(true)) },
             )
 
-        OnboardingStep.RETURNING_USER_CHOICE ->
-            OnboardingReturningUserChoiceScreen(
-                onRestoreFromCoveBackup = {
-                    manager.dispatch(
-                        OnboardingAction.SelectReturningUserFlow(
-                            OnboardingReturningUserSelection.RESTORE_FROM_COVE_BACKUP,
-                        ),
-                    )
-                },
-                onUseAnotherWallet = {
-                    manager.dispatch(
-                        OnboardingAction.SelectReturningUserFlow(
-                            OnboardingReturningUserSelection.USE_ANOTHER_WALLET,
-                        ),
-                    )
-                },
-                onBack = { manager.dispatch(OnboardingAction.Back) },
-            )
-
         OnboardingStep.STORAGE_CHOICE ->
             OnboardingStorageChoiceScreen(
                 errorMessage = manager.state.errorMessage,
@@ -135,8 +115,14 @@ internal fun OnboardingContainer(
         OnboardingStep.CLOUD_BACKUP ->
             OnboardingCloudBackupStepView(
                 branch = manager.state.branch,
+                onEnable = { manager.dispatch(OnboardingAction.BeginCloudBackupEnable) },
                 onEnabled = { manager.dispatch(OnboardingAction.CloudBackupEnabled) },
                 onSkip = { manager.dispatch(OnboardingAction.SkipCloudBackup) },
+            )
+
+        OnboardingStep.CLOUD_BACKUP_SUCCESS ->
+            OnboardingCloudBackupSuccessView(
+                onContinue = { manager.dispatch(OnboardingAction.ContinueFromCloudBackupSuccess) },
             )
 
         OnboardingStep.SECRET_WORDS ->
@@ -155,8 +141,13 @@ internal fun OnboardingContainer(
 
         OnboardingStep.HARDWARE_IMPORT ->
             OnboardingHardwareImportFlowView(
+                cloudRestoreAlertVisible = manager.state.cloudRestoreAlertVisible,
                 onImported = { walletId ->
                     manager.dispatch(OnboardingAction.HardwareImportCompleted(walletId))
+                },
+                onRestoreFromCloudBackup = { manager.dispatch(OnboardingAction.OpenCloudRestore) },
+                onDismissCloudRestoreAlert = {
+                    manager.dispatch(OnboardingAction.DismissCloudRestoreAlert)
                 },
                 onBack = { manager.dispatch(OnboardingAction.Back) },
             )
@@ -164,10 +155,15 @@ internal fun OnboardingContainer(
         OnboardingStep.SOFTWARE_IMPORT ->
             OnboardingSoftwareImportFlowView(
                 errorMessage = manager.state.errorMessage,
+                cloudRestoreAlertVisible = manager.state.cloudRestoreAlertVisible,
                 onImported = { walletId ->
                     manager.dispatch(OnboardingAction.SoftwareImportCompleted(walletId))
                 },
                 onCreateWallet = { manager.dispatch(OnboardingAction.CreateSoftwareWallet) },
+                onRestoreFromCloudBackup = { manager.dispatch(OnboardingAction.OpenCloudRestore) },
+                onDismissCloudRestoreAlert = {
+                    manager.dispatch(OnboardingAction.DismissCloudRestoreAlert)
+                },
                 onBack = { manager.dispatch(OnboardingAction.Back) },
             )
     }

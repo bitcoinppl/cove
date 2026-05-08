@@ -11,11 +11,24 @@ struct OnboardingSoftwareImportFlowView: View {
     @State private var mode: Mode = .chooser
 
     let errorMessage: String?
+    let cloudRestoreAlertVisible: Binding<Bool>
     let onImported: (WalletId) -> Void
     let onCreateWallet: () -> Void
+    let onRestoreFromCloudBackup: () -> Void
+    let onDismissCloudRestoreAlert: () -> Void
     let onBack: () -> Void
 
     var body: some View {
+        content
+            .cloudRestoreAlert(
+                isPresented: cloudRestoreAlertVisible,
+                onRestore: onRestoreFromCloudBackup,
+                onContinue: onDismissCloudRestoreAlert
+            )
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch mode {
         case .chooser:
             OnboardingPromptScreen(
@@ -115,12 +128,25 @@ struct OnboardingHardwareImportFlowView: View {
         case nfc
     }
 
-    let onImported: (WalletId) -> Void
-    let onBack: () -> Void
-
     @State private var mode: Mode = .chooser
 
+    let cloudRestoreAlertVisible: Binding<Bool>
+    let onImported: (WalletId) -> Void
+    let onRestoreFromCloudBackup: () -> Void
+    let onDismissCloudRestoreAlert: () -> Void
+    let onBack: () -> Void
+
     var body: some View {
+        content
+            .cloudRestoreAlert(
+                isPresented: cloudRestoreAlertVisible,
+                onRestore: onRestoreFromCloudBackup,
+                onContinue: onDismissCloudRestoreAlert
+            )
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch mode {
         case .chooser:
             OnboardingPromptScreen(
@@ -176,6 +202,21 @@ struct OnboardingHardwareImportFlowView: View {
                 onImported: onImported,
                 onBack: { mode = .chooser }
             )
+        }
+    }
+}
+
+private extension View {
+    func cloudRestoreAlert(
+        isPresented: Binding<Bool>,
+        onRestore: @escaping () -> Void,
+        onContinue: @escaping () -> Void
+    ) -> some View {
+        alert("Cove backup found", isPresented: isPresented) {
+            Button("Restore from Cove backup", action: onRestore)
+            Button("Continue setup", role: .cancel, action: onContinue)
+        } message: {
+            Text("We found a cloud backup for this account.")
         }
     }
 }

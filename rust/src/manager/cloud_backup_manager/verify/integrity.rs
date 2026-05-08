@@ -1,12 +1,13 @@
-use cove_device::cloud_storage::CloudStorage;
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 
 use super::{CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager};
 use crate::database::Database;
-use crate::manager::cloud_backup_manager::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
-use crate::manager::cloud_backup_manager::wallets::count_all_wallets;
+use crate::manager::cloud_backup_manager::{
+    CloudBackupKeychain, CloudBackupOtherBackupsState, CloudBackupStore,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BackupIntegrityIssue {
@@ -18,6 +19,14 @@ enum BackupIntegrityIssue {
     RemoteBackupFreshnessUnknown,
     LocalWalletInventoryUnreadable,
     WalletsNotBackedUp,
+}
+
+#[derive(Debug, Clone, Copy, derive_more::Display)]
+enum IntegrityDetailContext {
+    #[display("startup")]
+    Startup,
+    #[display("detail")]
+    Detail,
 }
 
 impl BackupIntegrityIssue {
@@ -130,7 +139,11 @@ impl RustCloudBackupManager {
             }
         };
 
-        self.set_detail(Some(inventory.build_detail()));
+        let cloud = CloudStorage::global_silent_client();
+        let other_backups = self
+            .other_backup_state_for_integrity_check(&cloud, IntegrityDetailContext::Startup)
+            .await;
+        self.set_detail(Some(inventory.build_detail(other_backups)));
 
         let unsynced = inventory.upload_candidate_wallets();
         let handled_unsynced = !unsynced.is_empty();
@@ -151,7 +164,7 @@ impl RustCloudBackupManager {
         }
 
         let db = Database::global();
-        let has_local_wallets = match count_all_wallets(&db) {
+        let has_local_wallets = match CloudBackupStore::new(&db).wallet_count() {
             Ok(local_count) => local_count > 0,
             Err(error) => {
                 warn!("Backup integrity: local wallet count failed: {error}");
@@ -206,7 +219,24 @@ impl RustCloudBackupManager {
             }
         };
 
-        self.set_detail(Some(inventory.build_detail()));
+        let other_backups = self
+            .other_backup_state_for_integrity_check(&cloud, IntegrityDetailContext::Detail)
+            .await;
+        self.set_detail(Some(inventory.build_detail(other_backups)));
+    }
+
+    async fn other_backup_state_for_integrity_check(
+        &self,
+        cloud: &CloudStorageClient,
+        context: IntegrityDetailContext,
+    ) -> CloudBackupOtherBackupsState {
+        match self.other_backup_summary(cloud).await {
+            Ok(summary) => CloudBackupOtherBackupsState::Loaded { summary },
+            Err(error) => {
+                warn!("Backup integrity: {context} other backup summary failed: {error}");
+                CloudBackupOtherBackupsState::LoadFailed { error: error.to_string() }
+            }
+        }
     }
 
     fn finish_backup_integrity_check(

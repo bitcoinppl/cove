@@ -60,7 +60,6 @@ import org.bitcoinppl.cove.PendingWalletManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
-import org.bitcoinppl.cove.utils.intoRoute
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.ColumnMajorGrid
 import org.bitcoinppl.cove.views.DotMenuView
@@ -129,13 +128,8 @@ fun HotWalletCreateScreen(
         isSaving = true
 
         try {
-            val walletId = manager.rust.saveWallet().id
-            app.resetRoute(
-                listOf(
-                    Route.SelectedWallet(walletId),
-                    HotWalletRoute.VerifyWords(walletId).intoRoute(),
-                ),
-            )
+            val result = manager.rust.saveWallet()
+            app.resetRoute(result.routes)
         } catch (e: Exception) {
             Log.e("HotWalletCreate", "error saving wallet", e)
             saveErrorMessage = e.message ?: "Unknown error occurred"

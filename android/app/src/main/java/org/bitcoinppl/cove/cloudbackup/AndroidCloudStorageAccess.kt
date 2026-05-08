@@ -338,6 +338,29 @@ class AndroidCloudStorageAccess internal constructor(
         }
     }
 
+    override suspend fun deleteNamespace(
+        namespace: String,
+        policy: CloudAccessPolicy,
+    ) {
+        runDriveOperation(
+            interactive = policy.allowsConsent(),
+            onError = { error -> mapDriveDeleteError(error, namespace) },
+        ) { token ->
+            val mutex = namespaceFolderMutexes.getOrPut(namespace) { Mutex() }
+            mutex.withLock {
+                val namespaceFolderId =
+                    findNamespaceFolderId(token, namespace)
+                        ?: throw DriveHttpException(404, "namespace not found")
+
+                driveRequest(
+                    token = token,
+                    method = "DELETE",
+                    url = "${DriveApi.FILES_ENDPOINT}/$namespaceFolderId",
+                )
+            }
+        }
+    }
+
     override suspend fun listNamespaces(policy: CloudAccessPolicy): List<String> =
         listNamespaces(interactive = policy.allowsConsent())
 

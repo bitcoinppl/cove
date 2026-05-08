@@ -99,6 +99,13 @@ pub struct PasskeyRegistrationResult {
     pub registered_platform: PasskeyRegistrationPlatform,
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct PasskeyRegistrationUser {
+    pub id: Vec<u8>,
+    pub name: String,
+    pub display_name: String,
+}
+
 /// Result from discovering a synced passkey during restore
 #[derive(Debug, uniffi::Record)]
 pub struct DiscoveredPasskeyResult {
@@ -114,8 +121,8 @@ pub trait PasskeyProvider: Send + Sync + std::fmt::Debug + 'static {
     fn create_passkey(
         &self,
         rp_id: String,
-        user_id: Vec<u8>,
         challenge: Vec<u8>,
+        user: PasskeyRegistrationUser,
     ) -> Result<PasskeyRegistrationResult, PasskeyError>;
 
     /// Authenticate with a known credential_id (enable flow, re-enable)
@@ -186,10 +193,10 @@ impl PasskeyAccess {
     pub fn create_passkey(
         &self,
         rp_id: String,
-        user_id: Vec<u8>,
         challenge: Vec<u8>,
+        user: PasskeyRegistrationUser,
     ) -> Result<PasskeyRegistrationResult, PasskeyError> {
-        self.0.create_passkey(rp_id, user_id, challenge)
+        self.0.create_passkey(rp_id, challenge, user)
     }
 
     pub fn authenticate_with_prf(

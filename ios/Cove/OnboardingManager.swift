@@ -51,6 +51,8 @@ final class OnboardingManager: AnyReconciler, OnboardingManagerReconciler, @unch
                 state.cloudRestoreProviderHint = cloudRestoreProviderHint
             case let .shouldOfferCloudRestore(shouldOfferCloudRestore):
                 state.shouldOfferCloudRestore = shouldOfferCloudRestore
+            case let .cloudRestoreAlertVisible(cloudRestoreAlertVisible):
+                state.cloudRestoreAlertVisible = cloudRestoreAlertVisible
             case let .errorMessageChanged(errorMessage):
                 state.errorMessage = errorMessage
             case .complete:

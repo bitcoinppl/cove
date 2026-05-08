@@ -72,11 +72,18 @@ import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove_core.CloudBackupEnableState
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
+import org.bitcoinppl.cove_core.CloudBackupPromptIntent
 import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
 import org.bitcoinppl.cove_core.CloudBackupStatus
+import org.bitcoinppl.cove_core.CloudBackupVerificationSource
+import org.bitcoinppl.cove_core.PendingUploadVerificationState
+import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
+import org.bitcoinppl.cove_core.VerificationState
 import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingBranch
 
@@ -144,13 +151,12 @@ internal fun shouldNotifyRestoreError(
 
 internal fun shouldCompleteOnboardingCloudBackup(
     status: CloudBackupStatus,
-    isCloudBackupEnabled: Boolean,
-    isConfigured: Boolean,
+    pendingUploadVerification: PendingUploadVerificationState,
+    verification: VerificationState,
 ): Boolean =
-    when (status) {
-        CloudBackupStatus.Enabled -> true
-        else -> isCloudBackupEnabled && isConfigured
-    }
+    status is CloudBackupStatus.Enabled &&
+        pendingUploadVerification == PendingUploadVerificationState.IDLE &&
+        verification is VerificationState.Verified
 
 @Composable
 internal fun OnboardingCreatingWalletView(
@@ -418,24 +424,28 @@ private fun OnboardingWordCard(
 @Composable
 internal fun OnboardingCloudBackupStepView(
     branch: OnboardingBranch?,
+    onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
 ) {
     when (branch) {
         OnboardingBranch.SOFTWARE_IMPORT -> {
             OnboardingSoftwareImportCloudBackupStepView(
+                onEnable = onEnable,
                 onEnabled = onEnabled,
                 onSkip = onSkip,
             )
         }
         OnboardingBranch.HARDWARE -> {
             OnboardingHardwareImportCloudBackupStepView(
+                onEnable = onEnable,
                 onEnabled = onEnabled,
                 onSkip = onSkip,
             )
         }
         else -> {
             OnboardingCloudBackupDetailsStepView(
+                onEnable = onEnable,
                 onEnabled = onEnabled,
                 onSkip = onSkip,
                 context = CloudBackupEnableOnboardingContext.STANDARD,
@@ -446,6 +456,7 @@ internal fun OnboardingCloudBackupStepView(
 
 @Composable
 private fun OnboardingSoftwareImportCloudBackupStepView(
+    onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -453,6 +464,7 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
 
     if (showingDetails) {
         OnboardingCloudBackupDetailsStepView(
+            onEnable = onEnable,
             onEnabled = onEnabled,
             onSkip = { showingDetails = false },
             context = CloudBackupEnableOnboardingContext.STANDARD,
@@ -505,6 +517,7 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
 
 @Composable
 private fun OnboardingHardwareImportCloudBackupStepView(
+    onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -512,6 +525,7 @@ private fun OnboardingHardwareImportCloudBackupStepView(
 
     if (showingDetails) {
         OnboardingCloudBackupDetailsStepView(
+            onEnable = onEnable,
             onEnabled = onEnabled,
             onSkip = { showingDetails = false },
             context = CloudBackupEnableOnboardingContext.HARDWARE_IMPORT,
@@ -575,52 +589,117 @@ private fun OnboardingHardwareImportCloudBackupStepView(
 
 @Composable
 private fun OnboardingCloudBackupDetailsStepView(
+    onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
     context: CloudBackupEnableOnboardingContext,
 ) {
     val backupManager = remember { CloudBackupManager.getInstance() }
-    var didComplete by remember { mutableStateOf(false) }
-    var isStartingEnable by remember { mutableStateOf(false) }
+    var didReportEnabled by remember { mutableStateOf(false) }
+    var didAutoConfirmSavedPasskey by remember { mutableStateOf(false) }
 
     val onboardingMessage =
         when (val status = backupManager.status) {
             CloudBackupStatus.UnsupportedPasskeyProvider ->
                 "This passkey provider did not confirm support for Cloud Backup. Try another supported provider such as 1Password or Bitwarden."
             is CloudBackupStatus.Error -> status.v1
+            else -> (backupManager.verification as? VerificationState.Failed)?.v1?.message()
+        }
+    val isVerifying = backupManager.verification is VerificationState.Verifying
+    val verificationFailed = backupManager.verification is VerificationState.Failed
+    val isConfirmingUpload =
+        backupManager.pendingUploadVerification == PendingUploadVerificationState.CONFIRMING
+    val savedPasskeyConfirmationMode =
+        (backupManager.enableState as? CloudBackupEnableState.AwaitingSavedPasskeyConfirmation)?.v1
+    val needsAutomaticPasskeyConfirmation =
+        savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.AUTOMATIC
+    val needsManualPasskeyConfirmation =
+        savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.MANUAL
+    val isEnabling =
+        backupManager.status is CloudBackupStatus.Enabling &&
+            !needsManualPasskeyConfirmation
+    val isBusy =
+        isVerifying ||
+            isConfirmingUpload ||
+            backupManager.enableState == CloudBackupEnableState.ConfirmingSavedPasskey ||
+            needsAutomaticPasskeyConfirmation ||
+            isEnabling
+    val primaryButtonTitle =
+        when {
+            verificationFailed -> "Try Again"
+            needsManualPasskeyConfirmation -> "Confirm Passkey"
             else -> null
         }
-    val isBusy = isStartingEnable || backupManager.status is CloudBackupStatus.Enabling
+            ?: "Enable Cloud Backup"
+    val promptIntent = backupManager.promptIntent
+    val isPromptingForEnableChoice =
+        promptIntent is CloudBackupPromptIntent.PasskeyChoice &&
+            promptIntent.v1 is CloudBackupPasskeyChoiceIntent.Enable
 
     fun completeIfEnabled() {
-        if (didComplete) return
-        if (!shouldCompleteOnboardingCloudBackup(backupManager.status, backupManager.isCloudBackupEnabled, backupManager.isConfigured)) {
+        if (didReportEnabled) return
+        if (!shouldCompleteOnboardingCloudBackup(
+                backupManager.status,
+                backupManager.pendingUploadVerification,
+                backupManager.verification,
+            )
+        ) {
             return
         }
 
-        didComplete = true
+        didReportEnabled = true
         onEnabled()
     }
 
-    LaunchedEffect(backupManager.status, backupManager.isCloudBackupEnabled, backupManager.isConfigured) {
-        if (backupManager.status !is CloudBackupStatus.Enabling) {
-            isStartingEnable = false
-        }
+    LaunchedEffect(
+        backupManager.status,
+        backupManager.pendingUploadVerification,
+        backupManager.verification,
+    ) {
         completeIfEnabled()
+    }
+
+    LaunchedEffect(backupManager.enableState) {
+        if (needsAutomaticPasskeyConfirmation && !didAutoConfirmSavedPasskey && !didReportEnabled) {
+            didAutoConfirmSavedPasskey = true
+            backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         CloudBackupEnableOnboardingView(
             onEnable = {
-                if (!isBusy) {
-                    isStartingEnable = true
-                    backupManager.dispatch(CloudBackupManagerAction.EnableCloudBackupNoDiscovery)
+                if (isBusy || isPromptingForEnableChoice) {
+                    return@CloudBackupEnableOnboardingView
                 }
+
+                if (needsManualPasskeyConfirmation) {
+                    backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
+                    return@CloudBackupEnableOnboardingView
+                }
+
+                if (verificationFailed) {
+                    backupManager.dispatch(
+                        CloudBackupManagerAction.StartVerification(
+                            CloudBackupVerificationSource.ONBOARDING,
+                        ),
+                    )
+                    return@CloudBackupEnableOnboardingView
+                }
+
+                onEnable()
             },
-            onCancel = onSkip,
+            onCancel = {
+                if (needsManualPasskeyConfirmation) {
+                    backupManager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
+                }
+
+                onSkip()
+            },
             message = onboardingMessage,
-            isBusy = isBusy,
+            isBusy = isBusy || isPromptingForEnableChoice,
             context = context,
+            primaryButtonTitle = primaryButtonTitle,
         )
 
         if (isBusy) {
@@ -642,15 +721,16 @@ private fun OnboardingCloudBackupDetailsStepView(
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         CircularProgressIndicator(color = Color.White)
+                        val (title, subtitle) = cloudBackupEnableBusyCopy(backupManager.enableState)
                         Text(
-                            text = "Waiting for your new passkey to become available...",
+                            text = title,
                             color = Color.White,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center,
                         )
                         Text(
-                            text = "Cloud Backup will continue automatically",
+                            text = subtitle,
                             color = OnboardingTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
@@ -662,6 +742,67 @@ private fun OnboardingCloudBackupDetailsStepView(
     }
 }
 
+private fun cloudBackupEnableBusyCopy(enableState: CloudBackupEnableState): Pair<String, String> =
+    when (enableState) {
+        CloudBackupEnableState.CreatingPasskey ->
+            "Creating your passkey..." to "Cloud Backup will continue automatically"
+        CloudBackupEnableState.WaitingForPasskeyAvailability ->
+            "Checking that your passkey is available..." to
+                "This can take a few seconds after saving it in your passkey/password manager app"
+        is CloudBackupEnableState.AwaitingSavedPasskeyConfirmation ->
+            "Checking that your passkey is available..." to
+                "This can take a few seconds after saving it in your passkey/password manager app"
+        CloudBackupEnableState.ConfirmingSavedPasskey ->
+            "Confirming your passkey..." to "Cloud Backup will continue automatically"
+        CloudBackupEnableState.UploadingBackup ->
+            "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+        CloudBackupEnableState.Idle,
+        -> "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+    }
+
+@Composable
+internal fun OnboardingCloudBackupSuccessView(
+    onContinue: () -> Unit,
+) {
+    OnboardingBackground {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Spacer(modifier = Modifier.weight(1f, fill = true))
+
+            OnboardingStatusHero(
+                icon = Icons.Default.Check,
+                tint = OnboardingSuccess,
+                fillColor = OnboardingSuccess.copy(alpha = 0.12f),
+            )
+
+            Spacer(modifier = Modifier.height(36.dp))
+
+            Text(
+                text = "Cloud Backup enabled successfully",
+                color = Color.White,
+                fontSize = 28.sp,
+                lineHeight = 34.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(modifier = Modifier.weight(1f, fill = true))
+
+            OnboardingPrimaryButton(
+                text = "Continue",
+                onClick = onContinue,
+                modifier = Modifier.testTag("onboarding.cloudBackup.success.continue"),
+            )
+        }
+    }
+}
+
 @Composable
 private fun CloudBackupEnableOnboardingView(
     onEnable: () -> Unit,
@@ -669,6 +810,7 @@ private fun CloudBackupEnableOnboardingView(
     message: String?,
     isBusy: Boolean,
     context: CloudBackupEnableOnboardingContext,
+    primaryButtonTitle: String,
 ) {
     var checks by remember { mutableStateOf(listOf(false, false, false)) }
     val allChecked = checks.all { it }
@@ -800,7 +942,7 @@ private fun CloudBackupEnableOnboardingView(
                 }
 
                 OnboardingPrimaryButton(
-                    text = "Enable Cloud Backup",
+                    text = primaryButtonTitle,
                     onClick = onEnable,
                     modifier = Modifier.testTag("onboarding.cloudBackup.enable"),
                     enabled = allChecked && !isBusy,

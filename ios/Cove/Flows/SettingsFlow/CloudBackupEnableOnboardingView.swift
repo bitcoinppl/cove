@@ -11,6 +11,7 @@ struct CloudBackupEnableOnboardingView: View {
     let message: String?
     let isBusy: Bool
     let context: CloudBackupEnableOnboardingContext
+    let primaryButtonTitle: String
 
     @State private var checks: [Bool] = Array(repeating: false, count: 3)
 
@@ -23,13 +24,15 @@ struct CloudBackupEnableOnboardingView: View {
         onCancel: @escaping () -> Void,
         message: String?,
         isBusy: Bool,
-        context: CloudBackupEnableOnboardingContext = .standard
+        context: CloudBackupEnableOnboardingContext = .standard,
+        primaryButtonTitle: String = "Enable Cloud Backup"
     ) {
         self.onEnable = onEnable
         self.onCancel = onCancel
         self.message = message
         self.isBusy = isBusy
         self.context = context
+        self.primaryButtonTitle = primaryButtonTitle
     }
 
     var body: some View {
@@ -209,7 +212,7 @@ struct CloudBackupEnableOnboardingView: View {
         Button {
             if allChecked { onEnable() }
         } label: {
-            Text("Enable Cloud Backup")
+            Text(primaryButtonTitle)
         }
         .buttonStyle(OnboardingPrimaryButtonStyle())
         .disabled(!allChecked || isBusy)
@@ -278,7 +281,83 @@ struct DarkCheckboxToggleStyle: ToggleStyle {
     }
 }
 
+struct CloudBackupEnableConfirmationView: View {
+    let onContinue: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 22) {
+            Spacer()
+
+            VStack(spacing: 14) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 42, weight: .semibold))
+                    .foregroundStyle(.yellow)
+
+                Text("Confirm your passkey")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+
+                Text("Your passkey was saved. Cove needs to confirm it once before enabling Cloud Backup. If it does not appear right away, use the option to search your passkey/password manager app.")
+                    .font(.body)
+                    .foregroundStyle(.coveLightGray)
+                    .multilineTextAlignment(.center)
+            }
+
+            VStack(spacing: 12) {
+                Button("Continue", action: onContinue)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+
+                Button("Cancel", role: .cancel, action: onCancel)
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+            }
+
+            Spacer()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.midnightBlue.ignoresSafeArea())
+    }
+}
+
 struct CloudBackupEnableBusyOverlay: View {
+    let enableState: CloudBackupEnableState
+    var titleOverride: String?
+    var subtitleOverride: String?
+
+    private var title: String {
+        if let titleOverride { return titleOverride }
+
+        return switch enableState {
+        case .creatingPasskey:
+            "Creating your passkey..."
+        case .waitingForPasskeyAvailability:
+            "Checking that your passkey is available..."
+        case .awaitingSavedPasskeyConfirmation:
+            "Checking that your passkey is available..."
+        case .confirmingSavedPasskey:
+            "Confirming your passkey..."
+        case .uploadingBackup:
+            "Creating your encrypted backup..."
+        case .idle:
+            "Creating your encrypted backup..."
+        }
+    }
+
+    private var subtitle: String {
+        if let subtitleOverride { return subtitleOverride }
+
+        return switch enableState {
+        case .waitingForPasskeyAvailability, .awaitingSavedPasskeyConfirmation:
+            "This can take a few seconds after saving it in your passkey/password manager app"
+        default:
+            "Cloud Backup will continue automatically"
+        }
+    }
+
     var body: some View {
         ZStack {
             Color.black.opacity(0.55)
@@ -287,11 +366,11 @@ struct CloudBackupEnableBusyOverlay: View {
             VStack(spacing: 14) {
                 ProgressView()
                     .tint(.white)
-                Text("Waiting for your new passkey to become available...")
+                Text(title)
                     .font(.headline)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
-                Text("Cloud Backup will continue automatically")
+                Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.coveLightGray)
                     .multilineTextAlignment(.center)

@@ -3,6 +3,7 @@
 ## TL;DR
 
 - The Rust crate in `rust/` is the single source of truth for wallet logic, networking, persistence, and hardware integrations. BDK is the main library powering all things bitcoin-related.
+- Model the domain correctly before optimizing for a small patch. Durable fixes should represent state, ownership, and invariants explicitly in Rust data structures and persisted records instead of compensating with temporary UI logic, string flags, or caller-specific conditionals.
 - SwiftUI (iOS) and Jetpack Compose (Android) UIs talk to the Rust core through “Managers”, lightweight view-models that own the generated FFI objects, subscribe to reconciliation callbacks, and expose platform-friendly state.
 - All cross-platform bindings are generated with UniFFI via custom scripts that live in `scripts/` and Just recipes; `just build-ios` and `just build-android` rebuild the Rust core, regenerate bindings, and drop artifacts into the mobile projects.
 
@@ -23,6 +24,8 @@
 ## Rust Core
 
 **Layout.** The top-level crate (`rust/src/lib.rs`) re-exports a collection of domain-focused modules (wallets, routing, hardware, fiat, etc.) plus internal crates under `rust/crates/`. Everything compiles into `libcove.{a,so}` and the `coveffi` cdylib specified in `rust/uniffi.toml`.
+
+**Data model first.** Make impossible states impossible. When a feature or bug reveals that the current types do not describe the real domain, fix the model instead of spreading compensating logic through managers or platform code. Prefer typed states, enums, records, and persisted schema that encode valid states directly instead of allowing invalid field combinations. If the model has to change, update the UniFFI API, generated bindings, migrations, and Swift/Kotlin call sites together so every layer shares the same contract.
 
 **Internal crates** (`rust/crates/`):
 
@@ -110,6 +113,7 @@ This pattern is used throughout the codebase for shared resources and is safe to
 - UniFFI automatically transforms Rust error types ending in `Error` to `Exception` when generating Kotlin bindings (e.g., `SendFlowError` becomes `SendFlowException`). This is standard Kotlin convention where exceptions extend `kotlin.Exception`.
 - Rust enum variants use **tuple-style** (unnamed fields), which UniFFI translates to generic `v1`, `v2`, `v3` field names in Kotlin (e.g., `RouteUpdated(Vec<Route>)` becomes `data class RouteUpdated(val v1: List<Route>)`). In contrast, struct-style variants with named fields preserve those names (e.g., `WrongNetwork { address: String, validFor: Network, current: Network }` becomes `data class WrongNetwork(val address: String, val validFor: Network, val current: Network)`).
 - **Kotlin enum variant name collisions:** Avoid naming an enum variant the same as a type that a method returns. In Kotlin, UniFFI generates enums as sealed classes where variants become nested data classes. If an enum has both a variant named `Foo` and a method `fn foo() -> Option<Foo>` (returning a different `Foo` type), Kotlin resolves `Foo` within the sealed class scope to the variant, not the external type, causing a compile error. Solution: use distinct variant names (e.g., `SignedPsbt` instead of `Psbt` when there's also a `Psbt` type).
+- Data structures, UniFFI-derived Rust types, and exported API shapes may change when that directly serves the requested work. Do not avoid those changes just to keep the diff small; when exported Rust APIs change, regenerate the bindings and update all affected Swift and Kotlin call sites.
 - When you change any exported API (new method, enum, record), rebuild bindings through the `just` recipes described below so the mobile projects pick up the new code.
 
 ---
@@ -164,7 +168,9 @@ This pattern is used throughout the codebase for shared resources and is safe to
 
 **Manager ownership and cleanup:** Managers obtained via `app.getWalletManager()` or `app.getSendFlowManager()` are owned by `AppManager`—components should NOT call `.close()` on them. Only close managers created locally (e.g., `CoinControlManager`, `ImportWalletManager`, `TapSignerManager`). For short-lived managers like `LabelManager`, use `.use { }` for single operations or `DisposableEffect` with `.close()` if stored in state. `Database()` returns an Arc clone of a global singleton and doesn't need closing.
 
-**iOS ↔ Android parity patterns:** For detailed guidance on matching behavior across platforms (opacity, text colors, button centering, NFC scanning UI, etc.), see [docs/IOS_ANDROID_PARITY.md](docs/IOS_ANDROID_PARITY.md).
+**iOS ↔ Android parity patterns:** For detailed guidance on matching behavior across platforms (opacity, text colors, button centering, NFC scanning UI, etc.), see [docs/ios_android_parity.md](docs/ios_android_parity.md).
+
+**iCloud Drive and passkey notes:** Before changing iCloud Drive discovery, file coordination, passkey registration, passkey presence checks, or Cloud Backup passkey confirmation, read [docs/icloud_drive.md](docs/icloud_drive.md) and [docs/passkeys.md](docs/passkeys.md).
 
 ### Manager Pattern (cross-platform)
 

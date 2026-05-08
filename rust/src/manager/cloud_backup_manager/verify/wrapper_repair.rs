@@ -13,7 +13,7 @@ use crate::manager::cloud_backup_manager::wallets::{
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID, RustCloudBackupManager,
-    cspp_master_key_record_id,
+    cspp_master_key_record_id, master_key_wrapper_revision_hash,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,30 +23,33 @@ enum LocalKeyProof {
     Inconclusive,
 }
 
-#[derive(Debug)]
-pub(super) enum WrapperRepairError {
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum WrapperRepairError {
+    #[error("local master key cannot decrypt existing cloud wallet backups")]
     WrongKey,
+
+    #[error("could not download any wallet to verify local key")]
     Inconclusive,
-    Operation(CloudBackupError),
+
+    #[error(transparent)]
+    Operation(#[from] CloudBackupError),
 }
 
-impl WrapperRepairError {
-    pub(super) fn into_cloud_backup_error(self) -> CloudBackupError {
-        match self {
-            Self::WrongKey => CloudBackupError::Crypto(
-                "local master key cannot decrypt existing cloud wallet backups".into(),
-            ),
-            Self::Inconclusive => {
-                CloudBackupError::Cloud("could not download any wallet to verify local key".into())
-            }
-            Self::Operation(error) => error,
+impl From<WrapperRepairError> for CloudBackupError {
+    fn from(error: WrapperRepairError) -> Self {
+        let msg = error.to_string();
+
+        match error {
+            WrapperRepairError::WrongKey => CloudBackupError::Crypto(msg),
+            WrapperRepairError::Inconclusive => CloudBackupError::Cloud(msg),
+            WrapperRepairError::Operation(error) => error,
         }
     }
 }
 
 /// Chooses how wrapper repair should acquire passkey material
 #[derive(Debug)]
-pub(super) enum WrapperRepairStrategy {
+pub(crate) enum WrapperRepairStrategy {
     CreateNew,
     DiscoverOrCreate,
     ReuseExisting(Vec<u8>),
@@ -54,7 +57,7 @@ pub(super) enum WrapperRepairStrategy {
 
 #[derive(Debug)]
 struct WrapperRepairCredentials {
-    prf_key: [u8; 32],
+    prf_key: Zeroizing<[u8; 32]>,
     prf_salt: [u8; 32],
     credential_id: Vec<u8>,
     provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
@@ -111,7 +114,7 @@ impl LocalKeyVerifier {
 }
 
 /// Repairs the cloud master-key wrapper after proving the local master key is valid
-pub(super) struct WrapperRepairOperation {
+pub(crate) struct WrapperRepairOperation {
     manager: RustCloudBackupManager,
     keychain: CloudBackupKeychain,
     cloud: CloudStorageClient,
@@ -120,7 +123,7 @@ pub(super) struct WrapperRepairOperation {
 }
 
 impl WrapperRepairOperation {
-    pub(super) fn new(
+    pub(crate) fn new(
         manager: &RustCloudBackupManager,
         keychain: &CloudBackupKeychain,
         cloud: &CloudStorageClient,
@@ -136,8 +139,8 @@ impl WrapperRepairOperation {
         }
     }
 
-    /// Verifies the local key, uploads a repaired wrapper, then persists the selected credential
-    pub(super) async fn run(
+    /// Verifies the local key, persists the selected credential, then uploads a repaired wrapper
+    pub(crate) async fn run(
         &self,
         local_master_key: &MasterKey,
         wallet_record_ids: &[String],
@@ -145,8 +148,7 @@ impl WrapperRepairOperation {
     ) -> Result<(), WrapperRepairError> {
         self.verify_local_key(wallet_record_ids, local_master_key).await?;
 
-        let credentials =
-            self.credentials(strategy).await.map_err(WrapperRepairError::Operation)?;
+        let credentials = self.credentials(strategy).await?;
 
         let encrypted_backup = master_key_crypto::encrypt_master_key_with_provider_hint(
             local_master_key,
@@ -154,33 +156,36 @@ impl WrapperRepairOperation {
             &credentials.prf_salt,
             credentials.provider_hint.clone(),
         )
-        .map_err_str(CloudBackupError::Crypto)
-        .map_err(WrapperRepairError::Operation)?;
+        .map_err_str(CloudBackupError::Crypto)?;
 
-        let backup_json = serde_json::to_vec(&encrypted_backup)
-            .map_err_str(CloudBackupError::Internal)
-            .map_err(WrapperRepairError::Operation)?;
+        let backup_json =
+            serde_json::to_vec(&encrypted_backup).map_err_str(CloudBackupError::Internal)?;
+        let master_key_wrapper_revision = master_key_wrapper_revision_hash(&backup_json);
+
+        self.keychain
+            .save_passkey(&credentials.credential_id, credentials.prf_salt)
+            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
+
+        self.manager
+            .record_runtime_passkey_authorization(
+                self.namespace.clone(),
+                credentials.credential_id.clone(),
+                credentials.prf_salt,
+            )
+            .await?;
 
         self.cloud
             .upload_master_key_backup(self.namespace.clone(), backup_json)
             .await
-            .map_err(CloudBackupError::CloudStorage)
-            .map_err(WrapperRepairError::Operation)?;
+            .map_err(CloudBackupError::from)?;
 
-        self.keychain
-            .save_passkey(&credentials.credential_id, credentials.prf_salt)
-            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)
-            .map_err(WrapperRepairError::Operation)?;
-
-        self.manager
-            .mark_blob_uploaded_pending_confirmation(
-                self.namespace.as_str(),
-                None,
-                cspp_master_key_record_id(),
-                "master-key-wrapper".into(),
-                jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
-            )
-            .map_err(WrapperRepairError::Operation)?;
+        self.manager.mark_blob_uploaded_pending_confirmation(
+            self.namespace.as_str(),
+            None,
+            cspp_master_key_record_id(),
+            master_key_wrapper_revision,
+            jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+        )?;
 
         Ok(())
     }
@@ -213,7 +218,12 @@ impl WrapperRepairOperation {
                 let provider_hint = new_prf.provider_hint.clone();
                 let (prf_key, prf_salt, credential_id) = new_prf.into_parts();
 
-                Ok(WrapperRepairCredentials { prf_key, prf_salt, credential_id, provider_hint })
+                Ok(WrapperRepairCredentials {
+                    prf_key: Zeroizing::new(prf_key),
+                    prf_salt,
+                    credential_id,
+                    provider_hint,
+                })
             }
 
             WrapperRepairStrategy::DiscoverOrCreate => {
@@ -224,7 +234,12 @@ impl WrapperRepairOperation {
                 let provider_hint = passkey.provider_hint.clone();
                 let (prf_key, prf_salt, credential_id) = passkey.into_parts();
 
-                Ok(WrapperRepairCredentials { prf_key, prf_salt, credential_id, provider_hint })
+                Ok(WrapperRepairCredentials {
+                    prf_key: Zeroizing::new(prf_key),
+                    prf_salt,
+                    credential_id,
+                    provider_hint,
+                })
             }
 
             WrapperRepairStrategy::ReuseExisting(credential_id) => {
@@ -249,7 +264,7 @@ impl WrapperRepairOperation {
                 info!("Reusing discovered passkey for wrapper repair");
 
                 Ok(WrapperRepairCredentials {
-                    prf_key,
+                    prf_key: Zeroizing::new(prf_key),
                     prf_salt,
                     credential_id,
                     provider_hint: None,

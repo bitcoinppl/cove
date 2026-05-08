@@ -100,6 +100,22 @@ enum Commands {
         foreground: bool,
     },
 
+    /// Bump iOS build, build release artifacts, and upload to TestFlight
+    #[command(name = "testflight")]
+    Testflight {
+        /// App Store Connect API key file path
+        #[arg(long, env = "ASC_API_KEY_PATH")]
+        api_key_path: Option<String>,
+
+        /// App Store Connect API key ID
+        #[arg(long, env = "ASC_API_KEY_ID")]
+        api_key_id: Option<String>,
+
+        /// App Store Connect API issuer ID
+        #[arg(long, env = "ASC_API_ISSUER_ID")]
+        api_issuer_id: Option<String>,
+    },
+
     /// Archive and upload the iOS app to TestFlight
     #[command(name = "upload-testflight")]
     UploadTestflight {
@@ -213,6 +229,12 @@ fn main() -> Result<()> {
         Commands::IosUi { device, test, foreground } => {
             let options = ios::IosUiOptions::new(device, test, foreground);
             ios::run_ios_ui_tests(options, cli.verbose)
+        }
+
+        Commands::Testflight { api_key_path, api_key_id, api_issuer_id } => {
+            let options =
+                ios::TestflightUploadOptions::new(api_key_path, api_key_id, api_issuer_id);
+            ios::testflight(options, cli.verbose)
         }
 
         Commands::UploadTestflight { api_key_path, api_key_id, api_issuer_id } => {

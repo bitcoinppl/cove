@@ -46,7 +46,7 @@ struct VerificationSection: View {
                     .foregroundStyle(.secondary)
 
                 Button {
-                    manager.dispatch(action: .startVerification)
+                    manager.startVerification()
                 } label: {
                     Label("Verify Now", systemImage: "checkmark.shield")
                 }
@@ -81,7 +81,7 @@ struct VerificationSection: View {
                 .foregroundStyle(.secondary)
 
             Button {
-                manager.dispatch(action: .startVerification)
+                manager.startVerification()
             } label: {
                 Label("Run Full Verification", systemImage: "checkmark.shield")
             }
@@ -104,7 +104,7 @@ struct VerificationSection: View {
             .foregroundStyle(.secondary)
 
             Button {
-                manager.dispatch(action: .startVerification)
+                manager.startVerification()
             } label: {
                 Label("Verify Now", systemImage: "checkmark.shield")
             }
@@ -170,15 +170,15 @@ struct VerificationSection: View {
     @ViewBuilder
     private func failureSection(_ failure: DeepVerificationFailure) -> some View {
         Section {
-            switch failure.kind {
-            case .retry:
-                retryFailureContent(failure.message)
-            case let .recreateManifest(warning):
-                recreateManifestContent(message: failure.message, warning: warning)
-            case let .reinitializeBackup(warning):
-                reinitializeBackupContent(message: failure.message, warning: warning)
-            case .unsupportedVersion:
-                unsupportedVersionContent(failure.message)
+            switch failure {
+            case let .retry(message, _, _):
+                retryFailureContent(message)
+            case let .recreateManifest(message, warning, _):
+                recreateManifestContent(message: message, warning: warning)
+            case let .reinitializeBackup(message, warning, _):
+                reinitializeBackupContent(message: message, warning: warning)
+            case let .unsupportedVersion(message, _):
+                unsupportedVersionContent(message)
             }
         }
 
@@ -273,7 +273,7 @@ struct VerificationSection: View {
             }
 
             Button {
-                manager.dispatch(action: .startVerification)
+                manager.startVerification()
             } label: {
                 Label("Verify Again", systemImage: "checkmark.shield")
             }
@@ -309,7 +309,7 @@ struct VerificationSection: View {
 
     private var retryButton: some View {
         Button {
-            manager.dispatch(action: .startVerification)
+            manager.startVerification()
         } label: {
             Label("Try Again", systemImage: "arrow.clockwise")
         }

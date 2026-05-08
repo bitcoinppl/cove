@@ -135,7 +135,7 @@ struct CloudRestoreOfferView: View {
                         .font(OnboardingRecoveryTypography.bodySemibold)
                         .foregroundStyle(.white)
 
-                    Text(providerHint?.providerName ?? "Secured with your passkey provider")
+                    Text(providerHint.map(passkeyDisplayName) ?? "Secured with your passkey provider")
                         .font(OnboardingRecoveryTypography.footnote)
                         .foregroundStyle(.coveLightGray.opacity(0.58))
                 }
@@ -236,6 +236,10 @@ struct CloudRestoreOfferView: View {
         return "Your passkey is stored securely by your passkey provider, and your encrypted backup is stored in iCloud."
     }
 
+    private func passkeyDisplayName(_ providerHint: CloudRestoreProviderHint) -> String {
+        "Cove Cloud Backup (\(providerHint.nameSuffix))"
+    }
+
     private func formattedProviderDate(_ registeredAt: UInt64) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(registeredAt))
         return date.formatted(.dateTime.month(.abbreviated).day().year())
@@ -300,7 +304,11 @@ struct CloudRestoreOfferView: View {
     CloudRestoreOfferView(
         onRestore: {},
         onSkip: {},
-        providerHint: CloudRestoreProviderHint(providerName: "Apple Passwords", registeredAt: 1_777_612_800)
+        providerHint: CloudRestoreProviderHint(
+            providerName: "Apple Passwords",
+            registeredAt: 1_777_612_800,
+            nameSuffix: "09IX"
+        )
     )
 }
 
@@ -308,7 +316,11 @@ struct CloudRestoreOfferView: View {
     CloudRestoreOfferView(
         onRestore: {},
         onSkip: {},
-        providerHint: CloudRestoreProviderHint(providerName: nil, registeredAt: 1_777_612_800)
+        providerHint: CloudRestoreProviderHint(
+            providerName: nil,
+            registeredAt: 1_777_612_800,
+            nameSuffix: "09IY"
+        )
     )
 }
 

@@ -38,6 +38,7 @@ import org.bitcoinppl.cove_core.device.PasskeyOperation
 import org.bitcoinppl.cove_core.device.PasskeyProvider
 import org.bitcoinppl.cove_core.device.PasskeyRegistrationPlatform
 import org.bitcoinppl.cove_core.device.PasskeyRegistrationResult
+import org.bitcoinppl.cove_core.device.PasskeyRegistrationUser
 import org.bitcoinppl.cove_core.device.passkeyAaguidFromAttestationObject
 import org.json.JSONArray
 import org.json.JSONObject
@@ -53,8 +54,8 @@ class AndroidPasskeyProvider(
 
     override fun createPasskey(
         rpId: String,
-        userId: ByteArray,
         challenge: ByteArray,
+        user: PasskeyRegistrationUser,
     ): PasskeyRegistrationResult {
         enforceBackgroundThread("createPasskey")
         return runBlocking {
@@ -64,7 +65,7 @@ class AndroidPasskeyProvider(
                     credentialManager.createCredential(
                         activity,
                         CreatePublicKeyCredentialRequest(
-                            requestJson = buildCreateRequestJson(rpId, userId, challenge),
+                            requestJson = buildCreateRequestJson(rpId, challenge, user),
                         ),
                     )
 
@@ -163,6 +164,7 @@ class AndroidPasskeyProvider(
         credentialId: ByteArray,
     ): PasskeyCredentialPresence {
         enforceBackgroundThread("checkPasskeyPresence")
+        // credentialManager.getCredential can present UI, so do not use this for background polling
         return runBlocking {
             try {
                 val activity = ForegroundUiBridge.requireActivity()
@@ -189,9 +191,9 @@ class AndroidPasskeyProvider(
 
     private fun buildCreateRequestJson(
         rpId: String,
-        userId: ByteArray,
         challenge: ByteArray,
-    ): String = buildPasskeyCreateRequestJson(rpId, userId, challenge)
+        user: PasskeyRegistrationUser,
+    ): String = buildPasskeyCreateRequestJson(rpId, challenge, user)
 
     private fun buildAssertionRequestJson(
         rpId: String,
@@ -449,8 +451,8 @@ private fun Throwable.passkeyMessage(fallback: String): String =
 
 internal fun buildPasskeyCreateRequestJson(
     rpId: String,
-    userId: ByteArray,
     challenge: ByteArray,
+    user: PasskeyRegistrationUser,
 ): String =
     JSONObject()
         .put("challenge", challenge.toBase64Url())
@@ -458,13 +460,13 @@ internal fun buildPasskeyCreateRequestJson(
             "rp",
             JSONObject()
                 .put("id", rpId)
-                .put("name", "Cove Wallet"),
+                .put("name", "Cove Cloud Backup"),
         ).put(
             "user",
             JSONObject()
-                .put("id", userId.toBase64Url())
-                .put("name", "cloud-backup@covebitcoinwallet.com")
-                .put("displayName", "Cove Wallet Backup"),
+                .put("id", user.id.toBase64Url())
+                .put("name", user.name)
+                .put("displayName", user.displayName),
         ).put(
             "pubKeyCredParams",
             JSONArray()

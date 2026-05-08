@@ -1252,6 +1252,64 @@ public func FfiConverterTypePasskeyRegistrationResult_lower(_ value: PasskeyRegi
 }
 
 
+public struct PasskeyRegistrationUser: Equatable, Hashable {
+    public var id: Data
+    public var name: String
+    public var displayName: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: Data, name: String, displayName: String) {
+        self.id = id
+        self.name = name
+        self.displayName = displayName
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PasskeyRegistrationUser: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyRegistrationUser: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyRegistrationUser {
+        return
+            try PasskeyRegistrationUser(
+                id: FfiConverterData.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PasskeyRegistrationUser, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyRegistrationUser_lift(_ buf: RustBuffer) throws -> PasskeyRegistrationUser {
+    return try FfiConverterTypePasskeyRegistrationUser.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyRegistrationUser_lower(_ value: PasskeyRegistrationUser) -> RustBuffer {
+    return FfiConverterTypePasskeyRegistrationUser.lower(value)
+}
+
+
 
 public enum CloudAccessPolicy: Equatable, Hashable {
     
@@ -2183,6 +2241,8 @@ public protocol CloudStorageAccess: AnyObject, Sendable {
     
     func deleteWalletBackup(namespace: String, recordId: String, policy: CloudAccessPolicy) async throws 
     
+    func deleteNamespace(namespace: String, policy: CloudAccessPolicy) async throws 
+    
     /**
      * List all namespace IDs (subdirectories of cspp-namespaces/)
      */
@@ -2426,6 +2486,49 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                 return try await uniffiObj.deleteWalletBackup(
                      namespace: try FfiConverterString.lift(namespace),
                      recordId: try FfiConverterString.lift(recordId),
+                     policy: try FfiConverterTypeCloudAccessPolicy_lift(policy)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: ()) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid(
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid(
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        deleteNamespace: { (
+            uniffiHandle: UInt64,
+            namespace: RustBuffer,
+            policy: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.deleteNamespace(
+                     namespace: try FfiConverterString.lift(namespace),
                      policy: try FfiConverterTypeCloudAccessPolicy_lift(policy)
                 )
             }
@@ -3165,7 +3268,7 @@ public protocol PasskeyProvider: AnyObject, Sendable {
     /**
      * Create a new passkey credential
      */
-    func createPasskey(rpId: String, userId: Data, challenge: Data) throws  -> PasskeyRegistrationResult
+    func createPasskey(rpId: String, challenge: Data, user: PasskeyRegistrationUser) throws  -> PasskeyRegistrationResult
     
     /**
      * Authenticate with a known credential_id (enable flow, re-enable)
@@ -3220,8 +3323,8 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
         createPasskey: { (
             uniffiHandle: UInt64,
             rpId: RustBuffer,
-            userId: RustBuffer,
             challenge: RustBuffer,
+            user: RustBuffer,
             uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
             uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
         ) in
@@ -3232,8 +3335,8 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 }
                 return try uniffiObj.createPasskey(
                      rpId: try FfiConverterString.lift(rpId),
-                     userId: try FfiConverterData.lift(userId),
-                     challenge: try FfiConverterData.lift(challenge)
+                     challenge: try FfiConverterData.lift(challenge),
+                     user: try FfiConverterTypePasskeyRegistrationUser_lift(user)
                 )
             }
 
@@ -3677,16 +3780,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 27370) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 35406) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_namespace() != 26766) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 56403) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 47835) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 55189) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 24091) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 21304) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 34175) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 13608) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918) {
@@ -3704,7 +3810,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_keychainaccess_delete() != 1213) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 17856) {
+    if (uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 48177) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_passkeyprovider_authenticate_with_prf() != 17002) {

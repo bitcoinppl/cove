@@ -1,3 +1,4 @@
+pub(crate) mod coordinator;
 mod integrity;
 mod passkey_auth;
 mod pending_completion;
@@ -16,12 +17,12 @@ use tracing::{error, info, warn};
 use self::passkey_auth::{PasskeyAuthOutcome, PasskeyAuthPolicy, PasskeyAuthenticator};
 use self::session::VerificationSession;
 use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
-use super::wallets::persist_enabled_cloud_backup_state;
+use super::CloudBackupStore;
 use super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
-    CloudBackupStatus, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    PendingVerificationCompletion, RecoveryState, RustCloudBackupManager, VerificationFailureKind,
-    VerificationState,
+    CloudBackupRetryAction, CloudBackupRetryContext, CloudBackupStatus, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
+    PendingVerificationUpload, RustCloudBackupManager, is_connectivity_related_issue,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
@@ -65,11 +66,21 @@ impl RustCloudBackupManager {
             Ok(result) => result,
             Err(error) => {
                 error!("Deep verification unexpected error: {error}");
-                DeepVerificationResult::Failed(DeepVerificationFailure {
-                    kind: VerificationFailureKind::Retry,
-                    message: error.to_string(),
-                    detail: None,
-                })
+                let retry_context = is_connectivity_related_issue(error.cloud_storage_issue())
+                    .then(|| {
+                        let action = if force_discoverable {
+                            CloudBackupRetryAction::VerifyDiscoverable
+                        } else {
+                            CloudBackupRetryAction::Verify
+                        };
+                        CloudBackupRetryContext::connectivity(action)
+                    });
+
+                DeepVerificationResult::Failed(DeepVerificationFailure::retry(
+                    error.to_string(),
+                    None,
+                    retry_context,
+                ))
             }
         };
 
@@ -173,7 +184,21 @@ impl RustCloudBackupManager {
         repair
             .run(&local_master_key, &wallet_record_ids, strategy)
             .await
-            .map_err(|error| error.into_cloud_backup_error())?;
+            .map_err(CloudBackupError::from)?;
+
+        self.replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: true,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace,
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        ));
 
         info!("Repaired cloud master key wrapper with repaired passkey association");
         Ok(())
@@ -196,7 +221,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        persist_enabled_cloud_backup_state(&Database::global(), wallet_count)?;
+        CloudBackupStore::global().persist_enabled(wallet_count)?;
         self.set_status(CloudBackupStatus::Enabled);
 
         match self.refresh_cloud_backup_detail().await {
@@ -209,6 +234,7 @@ impl RustCloudBackupManager {
             None => {}
         }
 
+        self.refresh_sync_health();
         Ok(())
     }
 

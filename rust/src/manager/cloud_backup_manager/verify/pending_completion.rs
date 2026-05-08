@@ -7,13 +7,13 @@ use zeroize::Zeroizing;
 
 use super::{
     CloudBackupDetailResult, CloudBackupError, DeepVerificationFailure, DeepVerificationReport,
-    DeepVerificationResult, PendingVerificationCompletion, RecoveryState, RustCloudBackupManager,
-    VerificationFailureKind, VerificationState,
+    DeepVerificationResult, PendingVerificationCompletion, RustCloudBackupManager,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
+use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, PendingVerificationUpload,
+    CloudBackupDetail, PendingVerificationUpload, master_key_wrapper_revision_hash,
     wallets::{WalletBackupLookup, WalletBackupReader},
 };
 
@@ -78,21 +78,26 @@ impl RustCloudBackupManager {
         upload: &PendingVerificationUpload,
         sync_state: Option<&PersistedCloudBlobState>,
     ) -> bool {
-        match sync_state {
-            Some(PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
-                revision_hash,
-                ..
-            })) => revision_hash.as_str() == upload.target_revision(sync_state),
-
-            Some(PersistedCloudBlobState::Failed(_)) => {
+        match upload {
+            PendingVerificationUpload::MasterKeyWrapper => {
                 Self::remote_pending_upload_exists_or_log(completion, upload).await
             }
+            PendingVerificationUpload::Wallet { .. } => match sync_state {
+                Some(PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+                    revision_hash,
+                    ..
+                })) => revision_hash.as_str() == upload.target_revision(sync_state),
 
-            Some(PersistedCloudBlobState::UploadedPendingConfirmation(_)) => {
-                Self::remote_pending_upload_exists_or_log(completion, upload).await
-            }
+                Some(PersistedCloudBlobState::Failed(_)) => {
+                    Self::remote_pending_upload_exists_or_log(completion, upload).await
+                }
 
-            _ => false,
+                Some(PersistedCloudBlobState::UploadedPendingConfirmation(_)) => {
+                    Self::remote_pending_upload_exists_or_log(completion, upload).await
+                }
+
+                _ => false,
+            },
         }
     }
 
@@ -118,17 +123,26 @@ impl RustCloudBackupManager {
         completion: &PendingVerificationCompletion,
         upload: &PendingVerificationUpload,
     ) -> Result<bool, CloudStorageError> {
-        CloudStorage::global_silent_client()
-            .download_wallet_backup(
-                completion.namespace_id().to_string(),
-                upload.record_id().to_string(),
-            )
-            .await
-            .map(|_| true)
-            .or_else(|error| match error {
-                CloudStorageError::NotFound(_) => Ok(false),
-                other => Err(other),
-            })
+        let cloud = CloudStorage::global_silent_client();
+        let result = match upload {
+            PendingVerificationUpload::MasterKeyWrapper => {
+                cloud.download_master_key_backup(completion.namespace_id().to_string()).await
+            }
+            PendingVerificationUpload::Wallet { record_id, .. } => {
+                cloud
+                    .download_wallet_backup(
+                        completion.namespace_id().to_string(),
+                        record_id.to_string(),
+                    )
+                    .await
+            }
+        };
+
+        match result {
+            Ok(_) => Ok(true),
+            Err(CloudStorageError::NotFound(_)) => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 
     async fn finalize_pending_verification(
@@ -161,26 +175,72 @@ impl RustCloudBackupManager {
             .collect();
 
         for upload in completion.uploads() {
-            match self
-                .verify_pending_wallet_backup(
-                    &completion,
-                    upload,
-                    sync_states_by_record_id.get(upload.record_id()),
-                    &critical_key,
-                )
-                .await?
-            {
-                PendingWalletVerificationOutcome::Pending => {
-                    return Ok(FinalizePendingVerificationResult::Pending);
+            match upload {
+                PendingVerificationUpload::MasterKeyWrapper => {
+                    if !self
+                        .verify_pending_master_key_wrapper(
+                            &completion,
+                            upload,
+                            sync_states_by_record_id.get(upload.record_id()),
+                        )
+                        .await?
+                    {
+                        return Ok(FinalizePendingVerificationResult::Pending);
+                    }
                 }
-                PendingWalletVerificationOutcome::Verified => report.wallets_verified += 1,
-                PendingWalletVerificationOutcome::Failed => report.wallets_failed += 1,
-                PendingWalletVerificationOutcome::Unsupported => report.wallets_unsupported += 1,
+                PendingVerificationUpload::Wallet { .. } => {
+                    match self
+                        .verify_pending_wallet_backup(
+                            &completion,
+                            upload,
+                            sync_states_by_record_id.get(upload.record_id()),
+                            &critical_key,
+                        )
+                        .await?
+                    {
+                        PendingWalletVerificationOutcome::Pending => {
+                            return Ok(FinalizePendingVerificationResult::Pending);
+                        }
+                        PendingWalletVerificationOutcome::Verified => report.wallets_verified += 1,
+                        PendingWalletVerificationOutcome::Failed => report.wallets_failed += 1,
+                        PendingWalletVerificationOutcome::Unsupported => {
+                            report.wallets_unsupported += 1;
+                        }
+                    }
+                }
             }
         }
 
         report.detail = self.pending_verification_detail(&completion).await;
         Ok(FinalizePendingVerificationResult::Completed(report))
+    }
+
+    async fn verify_pending_master_key_wrapper(
+        &self,
+        completion: &PendingVerificationCompletion,
+        upload: &PendingVerificationUpload,
+        sync_state: Option<&PersistedCloudBlobState>,
+    ) -> Result<bool, Box<DeepVerificationFailure>> {
+        let expected_revision = sync_state
+            .and_then(PersistedCloudBlobState::revision_hash)
+            .unwrap_or_else(|| upload.expected_revision());
+
+        let bytes = CloudStorage::global_silent_client()
+            .download_master_key_backup(completion.namespace_id().to_string())
+            .await
+            .map_err(|error| {
+                Box::new(self.pending_verification_failure(completion, error.to_string()))
+            })?;
+        let actual_revision = master_key_wrapper_revision_hash(&bytes);
+
+        if actual_revision == expected_revision {
+            return Ok(true);
+        }
+
+        warn!(
+            "Pending verification: master key wrapper is still stale expected_revision={expected_revision} actual_revision={actual_revision}"
+        );
+        Ok(false)
     }
 
     async fn verify_pending_wallet_backup(
@@ -246,27 +306,20 @@ impl RustCloudBackupManager {
         completion: &PendingVerificationCompletion,
         message: impl Into<String>,
     ) -> DeepVerificationFailure {
-        DeepVerificationFailure {
-            kind: VerificationFailureKind::Retry,
-            message: message.into(),
-            detail: completion.report().detail.clone(),
-        }
+        DeepVerificationFailure::retry(message, completion.report().detail.clone(), None)
     }
 
     pub(crate) fn apply_verified_report(&self, report: DeepVerificationReport) {
         self.persist_verification_result(&DeepVerificationResult::Verified(report.clone()));
-        if let Some(detail) = &report.detail {
-            self.set_detail(Some(detail.clone()));
-        }
-        self.set_verification(VerificationState::Verified(report));
-        self.set_recovery(RecoveryState::Idle);
+        let source = self.current_verification_source();
+        self.apply_verification_effect(CloudBackupVerificationCoordinator::complete(
+            source, report,
+        ));
     }
 
     pub(crate) fn apply_failed_verification(&self, failure: DeepVerificationFailure) {
         self.persist_verification_result(&DeepVerificationResult::Failed(failure.clone()));
-        if let Some(detail) = failure.detail.clone() {
-            self.set_detail(Some(detail));
-        }
-        self.set_verification(VerificationState::Failed(failure));
+        let source = self.current_verification_source();
+        self.apply_verification_effect(CloudBackupVerificationCoordinator::fail(source, failure));
     }
 }

@@ -5,7 +5,7 @@ use cove_device::cloud_storage::CloudSyncHealth;
 use cove_util::{GenerationToken, GenerationTracker};
 
 use crate::manager::cloud_backup_manager::RustCloudBackupManager;
-use crate::manager::cloud_backup_manager::pending::MAX_PENDING_UPLOAD_VERIFICATION_DELAY;
+use crate::manager::cloud_backup_manager::pending::MASTER_KEY_UPLOAD_CONFIRMATION_GRACE;
 
 #[derive(Debug)]
 pub(crate) struct CloudBackupSyncHealthWorker {
@@ -47,15 +47,6 @@ impl CloudBackupSyncHealthWorker {
         self.manager.upgrade()
     }
 
-    fn worker_state(&self) -> SyncHealthWorkerState {
-        SyncHealthWorkerState {
-            master_key_upload_grace_namespace: self
-                .master_key_upload_grace
-                .as_ref()
-                .map(|grace| grace.namespace_id.clone()),
-        }
-    }
-
     fn spawn_refresh_task(&mut self) {
         self.sync_health_refresh_state = SyncHealthRefreshState::Running;
         let Some(manager) = self.manager() else {
@@ -64,9 +55,15 @@ impl CloudBackupSyncHealthWorker {
         };
 
         let generation = self.sync_health_refresh_generations.advance();
-        let worker_state = self.worker_state();
+        let master_key_upload_grace_namespace =
+            self.master_key_upload_grace.as_ref().map(|grace| grace.namespace_id.clone());
         self.addr.send_fut_with(move |addr| async move {
-            let sync_health = manager.compute_sync_health(worker_state).await;
+            let sync_health = match master_key_upload_grace_namespace.as_deref() {
+                Some(namespace) => {
+                    manager.compute_sync_health_with_master_key_grace(Some(namespace)).await
+                }
+                None => manager.compute_sync_health().await,
+            };
             send!(addr.complete_sync_health_refresh(generation, sync_health));
         });
     }
@@ -80,7 +77,7 @@ impl CloudBackupSyncHealthWorker {
             Some(MasterKeyUploadGrace { namespace_id: namespace_id.clone(), generation });
 
         self.addr.send_fut_with(move |addr| async move {
-            tokio::time::sleep(MAX_PENDING_UPLOAD_VERIFICATION_DELAY).await;
+            tokio::time::sleep(MASTER_KEY_UPLOAD_CONFIRMATION_GRACE).await;
             send!(addr.expire_master_key_upload_confirmation_grace(namespace_id, generation));
         });
 
@@ -160,22 +157,6 @@ enum SyncHealthRefreshState {
     Idle,
     Running,
     RunningQueued,
-}
-
-#[derive(Clone, Debug, Default)]
-pub(crate) struct SyncHealthWorkerState {
-    master_key_upload_grace_namespace: Option<String>,
-}
-
-impl SyncHealthWorkerState {
-    pub(crate) fn master_key_upload_in_grace(&self, namespace_id: &str) -> bool {
-        self.master_key_upload_grace_namespace.as_deref() == Some(namespace_id)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_master_key_upload_grace(namespace_id: String) -> Self {
-        Self { master_key_upload_grace_namespace: Some(namespace_id) }
-    }
 }
 
 #[cfg(test)]

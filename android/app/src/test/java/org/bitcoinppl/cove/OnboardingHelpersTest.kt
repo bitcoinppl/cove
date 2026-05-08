@@ -10,11 +10,15 @@ import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
 import org.bitcoinppl.cove_core.CloudBackupStatus
+import org.bitcoinppl.cove_core.DeepVerificationFailure
+import org.bitcoinppl.cove_core.DeepVerificationReport
 import org.bitcoinppl.cove_core.OnboardingBranch
 import org.bitcoinppl.cove_core.OnboardingCloudRestoreState
 import org.bitcoinppl.cove_core.OnboardingReconcileMessage
 import org.bitcoinppl.cove_core.OnboardingState
 import org.bitcoinppl.cove_core.OnboardingStep
+import org.bitcoinppl.cove_core.PendingUploadVerificationState
+import org.bitcoinppl.cove_core.VerificationState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -204,29 +208,57 @@ class OnboardingHelpersTest {
     }
 
     @Test
-    fun shouldCompleteOnboardingCloudBackupAcceptsEnabledAndConfiguredFallback() {
+    fun shouldCompleteOnboardingCloudBackupRequiresCompletedVerification() {
         assertTrue(
             shouldCompleteOnboardingCloudBackup(
                 status = CloudBackupStatus.Enabled,
-                isCloudBackupEnabled = false,
-                isConfigured = false,
-            ),
-        )
-        assertTrue(
-            shouldCompleteOnboardingCloudBackup(
-                status = CloudBackupStatus.Enabling,
-                isCloudBackupEnabled = true,
-                isConfigured = true,
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
+                verification = VerificationState.Verified(defaultVerificationReport()),
             ),
         )
         assertFalse(
             shouldCompleteOnboardingCloudBackup(
-                status = CloudBackupStatus.Disabled,
-                isCloudBackupEnabled = true,
-                isConfigured = false,
+                status = CloudBackupStatus.Enabling,
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
+                verification = VerificationState.Verified(defaultVerificationReport()),
+            ),
+        )
+        assertFalse(
+            shouldCompleteOnboardingCloudBackup(
+                status = CloudBackupStatus.Enabled,
+                pendingUploadVerification = PendingUploadVerificationState.CONFIRMING,
+                verification = VerificationState.Verified(defaultVerificationReport()),
+            ),
+        )
+        assertFalse(
+            shouldCompleteOnboardingCloudBackup(
+                status = CloudBackupStatus.Enabled,
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
+                verification = VerificationState.Idle,
+            ),
+        )
+        assertFalse(
+            shouldCompleteOnboardingCloudBackup(
+                status = CloudBackupStatus.Enabled,
+                pendingUploadVerification = PendingUploadVerificationState.IDLE,
+                verification =
+                    VerificationState.Failed(
+                        DeepVerificationFailure.Retry("verification failed", null, null),
+                    ),
             ),
         )
     }
+
+    private fun defaultVerificationReport() =
+        DeepVerificationReport(
+            masterKeyWrapperRepaired = false,
+            localMasterKeyRepaired = false,
+            credentialRecovered = false,
+            walletsVerified = 0U,
+            walletsFailed = 0U,
+            walletsUnsupported = 0U,
+            detail = null,
+        )
 
     private fun defaultOnboardingState() =
         OnboardingState(
@@ -239,6 +271,7 @@ class OnboardingHelpersTest {
             cloudRestoreMessage = null,
             cloudRestoreProviderHint = null,
             shouldOfferCloudRestore = false,
+            cloudRestoreAlertVisible = false,
             errorMessage = null,
         )
 }

@@ -84,6 +84,12 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError>;
 
+    async fn delete_namespace(
+        &self,
+        namespace: String,
+        policy: CloudAccessPolicy,
+    ) -> Result<(), CloudStorageError>;
+
     /// List all namespace IDs (subdirectories of cspp-namespaces/)
     async fn list_namespaces(
         &self,
@@ -209,6 +215,10 @@ impl CloudStorageClient {
         self.0.0.delete_wallet_backup(namespace, record_id, self.1).await
     }
 
+    pub async fn delete_namespace(&self, namespace: String) -> Result<(), CloudStorageError> {
+        self.0.0.delete_namespace(namespace, self.1).await
+    }
+
     pub async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
         self.0.0.list_namespaces(self.1).await
     }
@@ -309,6 +319,14 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _policy: CloudAccessPolicy,
+        ) -> Result<(), CloudStorageError> {
+            panic!("unused in test")
+        }
+
+        async fn delete_namespace(
+            &self,
+            _namespace: String,
             _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
             panic!("unused in test")

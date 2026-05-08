@@ -8,18 +8,18 @@ use crate::database::cloud_backup::{
 use crate::wallet::metadata::WalletMetadata;
 use cove_cspp::backup_data::wallet_record_id;
 use cove_cspp::wallet_crypto;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_util::ResultExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
-use super::{
-    PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, all_local_wallets,
-    persist_enabled_cloud_backup_state, prepare_wallet_backup,
-};
+use super::{PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, prepare_wallet_backup};
 use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
-use crate::manager::cloud_backup_manager::{CloudBackupError, RustCloudBackupManager};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupError, CloudBackupStore, CloudStorageErrorIssueExt as _, RustCloudBackupManager,
+    is_connectivity_related_issue,
+};
 
 const STALE_UPLOADING_RETRY_THRESHOLD_SECS: u64 = 60;
 
@@ -95,8 +95,7 @@ impl RustCloudBackupManager {
 
             cloud
                 .upload_wallet_backup(namespace.clone(), prepared.record_id.clone(), wallet_json)
-                .await
-                .map_err(CloudBackupError::CloudStorage)?;
+                .await?;
 
             let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
             self.mark_wallet_uploaded_pending_confirmation_if_revision_current(
@@ -152,7 +151,7 @@ impl RustCloudBackupManager {
         .flatten()
         .max()
         .unwrap_or(previous_count);
-        persist_enabled_cloud_backup_state(&db, wallet_count)?;
+        CloudBackupStore::new(&db).persist_enabled(wallet_count)?;
 
         info!("Backed up {} wallet(s) to cloud", wallets.len());
         Ok(())
@@ -182,7 +181,8 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
-        let Some(metadata) = all_local_wallets(&Database::global())?
+        let Some(metadata) = CloudBackupStore::global()
+            .all_wallets()?
             .into_iter()
             .find(|wallet| wallet.id == *wallet_id)
         else {
@@ -190,7 +190,7 @@ impl RustCloudBackupManager {
             return Ok(());
         };
 
-        if self.is_offline() {
+        if self.is_known_offline() {
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
             ));
@@ -253,11 +253,11 @@ impl RustCloudBackupManager {
         revision_hash: Option<String>,
         error: CloudStorageError,
     ) -> Result<(), CloudBackupError> {
-        let issue = Self::cloud_storage_issue(&error);
+        let issue = error.cloud_storage_issue();
         let retryable = Self::is_upload_failure_retryable(&error);
         let persisted_issue = Self::cloud_blob_failure_issue(issue);
         let cloud_error = CloudBackupError::CloudStorage(error);
-        if Self::is_connectivity_related_issue(issue) {
+        if is_connectivity_related_issue(issue) {
             self.mark_blob_dirty_state(current_state)?;
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
@@ -280,8 +280,8 @@ impl RustCloudBackupManager {
         revision_hash: Option<String>,
         error: CloudBackupError,
     ) -> Result<(), CloudBackupError> {
-        let issue = self.cloud_backup_issue(&error);
-        if Self::is_connectivity_related_issue(issue) {
+        let issue = error.cloud_storage_issue();
+        if is_connectivity_related_issue(issue) {
             self.mark_blob_dirty_state(current_state)?;
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
@@ -369,7 +369,8 @@ impl RustCloudBackupManager {
         revision_hash: String,
         uploaded_at: u64,
     ) -> Result<(), CloudBackupError> {
-        let Some(current_metadata) = all_local_wallets(&Database::global())?
+        let Some(current_metadata) = CloudBackupStore::global()
+            .all_wallets()?
             .into_iter()
             .find(|wallet| wallet.id == wallet_id)
         else {
@@ -449,30 +450,4 @@ impl RustCloudBackupManager {
                 | CloudStorageError::DownloadFailed(_)
         )
     }
-}
-
-pub async fn upload_all_wallets(
-    cloud: &CloudStorageClient,
-    namespace: &str,
-    critical_key: &[u8; 32],
-    db: &Database,
-) -> Result<Vec<PreparedWalletBackup>, CloudBackupError> {
-    let mut uploaded_wallets = Vec::new();
-
-    for metadata in all_local_wallets(db)? {
-        let prepared = prepare_wallet_backup(&metadata, metadata.wallet_mode).await?;
-        let encrypted = wallet_crypto::encrypt_wallet_entry(&prepared.entry, critical_key)
-            .map_err_str(CloudBackupError::Crypto)?;
-
-        let wallet_json = serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
-
-        cloud
-            .upload_wallet_backup(namespace.to_string(), prepared.record_id.clone(), wallet_json)
-            .await
-            .map_err(CloudBackupError::CloudStorage)?;
-
-        uploaded_wallets.push(prepared);
-    }
-
-    Ok(uploaded_wallets)
 }

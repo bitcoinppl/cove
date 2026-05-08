@@ -1,10 +1,11 @@
+import MijickPopups
 import SwiftUI
 
 @_exported import CoveCore
 
-private enum CloudBackupRootPresentation: Equatable {
-    case existingBackupFound
-    case passkeyChoice(CloudBackupPasskeyChoiceFlow)
+enum CloudBackupRootPresentation: Equatable {
+    case existingBackupFound(CloudBackupEnableContext, CloudBackupPasskeyHint?)
+    case passkeyChoice(CloudBackupPasskeyChoiceIntent)
     case missingPasskeyReminder
     case verificationPrompt
 
@@ -12,10 +13,10 @@ private enum CloudBackupRootPresentation: Equatable {
         switch promptIntent {
         case .none:
             return nil
-        case .existingBackupFound:
-            self = .existingBackupFound
-        case let .passkeyChoice(flow):
-            self = .passkeyChoice(flow)
+        case let .existingBackupFound(context, passkeyHint):
+            self = .existingBackupFound(context, passkeyHint)
+        case let .passkeyChoice(intent):
+            self = .passkeyChoice(intent)
         case .missingPasskeyReminder:
             self = .missingPasskeyReminder
         case .verificationPrompt:
@@ -31,11 +32,74 @@ struct CloudBackupPresentationContext: Equatable {
     var appHasAlert = false
     var appHasSheet = false
     var isViewingCloudBackup = false
+    var isNavigationSettled = true
+    var presentationPolicy = CloudBackupPresentationPolicy.requiresUnlockedAuth
 }
 
 enum CloudBackupPresentationBlocker: Hashable {
     case settingsLocalModal
     case cloudBackupDetailDialog
+}
+
+enum CloudBackupPresentationPolicy: Equatable {
+    case requiresUnlockedAuth
+    case onboarding
+
+    var requiresUnlockedAuth: Bool {
+        self == .requiresUnlockedAuth
+    }
+
+    var suppressesGenericPrompts: Bool {
+        self == .onboarding
+    }
+}
+
+func isCloudBackupPresentationPresentable(
+    presentation: CloudBackupRootPresentation,
+    context: CloudBackupPresentationContext,
+    hasBlockers: Bool
+) -> Bool {
+    guard context.scenePhase == .active else { return false }
+    guard !context.presentationPolicy.requiresUnlockedAuth || context.isUnlocked else {
+        return false
+    }
+    guard !context.isCoverPresented else { return false }
+    guard !context.appHasAlert else { return false }
+    guard !context.appHasSheet else { return false }
+    guard !hasBlockers else { return false }
+    guard context.isNavigationSettled else { return false }
+
+    switch presentation {
+    case .existingBackupFound, .passkeyChoice:
+        return true
+    case .missingPasskeyReminder, .verificationPrompt:
+        guard !context.presentationPolicy.suppressesGenericPrompts else {
+            return false
+        }
+
+        return !context.isViewingCloudBackup
+    }
+}
+
+enum CloudBackupVerificationFeedback: Equatable {
+    case successFloater(String)
+    case failureAlert(title: String, message: String)
+}
+
+func cloudBackupVerificationFeedback(
+    for presentation: CloudBackupVerificationPresentation
+) -> CloudBackupVerificationFeedback? {
+    switch presentation {
+    case .completed(source: .rootPrompt):
+        .successFloater("Cloud Backup Verified")
+    case let .failed(source: .rootPrompt, message: message):
+        .failureAlert(
+            title: "Cloud Backup Verification Failed",
+            message: message
+        )
+    default:
+        nil
+    }
 }
 
 @MainActor
@@ -48,9 +112,14 @@ final class CloudBackupPresentationCoordinator {
     @ObservationIgnored private var requiresPresentationDelay = false
     @ObservationIgnored private var context = CloudBackupPresentationContext()
     @ObservationIgnored private var blockers: Set<CloudBackupPresentationBlocker> = []
+    @ObservationIgnored private let promptIntent: () -> CloudBackupPromptIntent
 
-    fileprivate var currentPresentation: CloudBackupRootPresentation?
-    private var queuedPresentation: CloudBackupRootPresentation?
+    private(set) var currentPresentation: CloudBackupRootPresentation?
+    private(set) var queuedPresentation: CloudBackupRootPresentation?
+
+    init(promptIntent: @escaping () -> CloudBackupPromptIntent = { CloudBackupManager.shared.promptIntent }) {
+        self.promptIntent = promptIntent
+    }
 
     func update(context: CloudBackupPresentationContext) {
         self.context = context
@@ -88,7 +157,7 @@ final class CloudBackupPresentationCoordinator {
 
     func reconcile() {
         let desiredPresentation = CloudBackupRootPresentation(
-            promptIntent: CloudBackupManager.shared.promptIntent
+            promptIntent: promptIntent()
         )
 
         guard let desiredPresentation else {
@@ -103,6 +172,12 @@ final class CloudBackupPresentationCoordinator {
             queuedPresentation = desiredPresentation
             if blockers.contains(.settingsLocalModal) {
                 requiresPresentationDelay = true
+            }
+            if
+                currentPresentation == desiredPresentation,
+                isPromptBlockedOnlyByNavigationSettling(desiredPresentation)
+            {
+                return
             }
             if currentPresentation != nil {
                 ignoreNextDismissEvent = true
@@ -158,19 +233,25 @@ final class CloudBackupPresentationCoordinator {
     }
 
     private func isPromptPresentable(_ presentation: CloudBackupRootPresentation) -> Bool {
-        guard context.scenePhase == .active else { return false }
-        guard context.isUnlocked else { return false }
-        guard !context.isCoverPresented else { return false }
-        guard !context.appHasAlert else { return false }
-        guard !context.appHasSheet else { return false }
-        guard blockers.isEmpty else { return false }
+        isCloudBackupPresentationPresentable(
+            presentation: presentation,
+            context: context,
+            hasBlockers: !blockers.isEmpty
+        )
+    }
 
-        switch presentation {
-        case .existingBackupFound, .passkeyChoice:
-            return true
-        case .missingPasskeyReminder, .verificationPrompt:
-            return !context.isViewingCloudBackup
-        }
+    private func isPromptBlockedOnlyByNavigationSettling(
+        _ presentation: CloudBackupRootPresentation
+    ) -> Bool {
+        guard !context.isNavigationSettled else { return false }
+
+        var settledContext = context
+        settledContext.isNavigationSettled = true
+        return isCloudBackupPresentationPresentable(
+            presentation: presentation,
+            context: settledContext,
+            hasBlockers: !blockers.isEmpty
+        )
     }
 
     private func resumeQueuedPresentation() {
@@ -178,7 +259,7 @@ final class CloudBackupPresentationCoordinator {
 
         guard let queuedPresentation else { return }
         guard
-            CloudBackupRootPresentation(promptIntent: CloudBackupManager.shared.promptIntent)
+            CloudBackupRootPresentation(promptIntent: promptIntent())
             == queuedPresentation
         else {
             self.queuedPresentation = nil
@@ -198,6 +279,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
     let app: AppManager
     let auth: AuthManager
     let isCoverPresented: Bool
+    let presentationPolicy: CloudBackupPresentationPolicy
     let content: Content
 
     @State private var manager = CloudBackupManager.shared
@@ -207,17 +289,22 @@ struct CloudBackupPresentationHost<Content: View>: View {
         app: AppManager,
         auth: AuthManager,
         isCoverPresented: Bool,
+        presentationPolicy: CloudBackupPresentationPolicy = .requiresUnlockedAuth,
         @ViewBuilder content: () -> Content
     ) {
         self.app = app
         self.auth = auth
         self.isCoverPresented = isCoverPresented
+        self.presentationPolicy = presentationPolicy
         self.content = content()
     }
 
     private var showingExistingBackupPrompt: Binding<Bool> {
         Binding(
-            get: { coordinator.currentPresentation == .existingBackupFound },
+            get: {
+                if case .existingBackupFound = coordinator.currentPresentation { return true }
+                return false
+            },
             set: { isPresented in
                 guard !isPresented else { return }
                 if coordinator.consumeDismissEvent() { return }
@@ -262,9 +349,34 @@ struct CloudBackupPresentationHost<Content: View>: View {
         )
     }
 
-    private var passkeyChoiceFlow: CloudBackupPasskeyChoiceFlow? {
-        if case let .passkeyChoice(flow) = coordinator.currentPresentation {
-            return flow
+    private var existingBackupContext: CloudBackupEnableContext? {
+        if case let .existingBackupFound(context, _) = coordinator.currentPresentation {
+            return context
+        }
+
+        return nil
+    }
+
+    private var existingBackupPasskeyHint: CloudBackupPasskeyHint? {
+        if case let .existingBackupFound(_, passkeyHint) = coordinator.currentPresentation {
+            return passkeyHint
+        }
+
+        return nil
+    }
+
+    private var passkeyChoiceIntent: CloudBackupPasskeyChoiceIntent? {
+        if case let .passkeyChoice(intent) = coordinator.currentPresentation {
+            return intent
+        }
+
+        return nil
+    }
+
+    private var passkeyChoiceHint: CloudBackupPasskeyHint? {
+        guard let passkeyChoiceIntent else { return nil }
+        if case let .enable(_, passkeyHint) = passkeyChoiceIntent {
+            return passkeyHint
         }
 
         return nil
@@ -277,19 +389,21 @@ struct CloudBackupPresentationHost<Content: View>: View {
             isCoverPresented: isCoverPresented,
             appHasAlert: app.alertState != nil,
             appHasSheet: app.sheetState != nil,
-            isViewingCloudBackup: app.currentRoute.isEqual(routeToCheck: .settings(.cloudBackup))
+            isViewingCloudBackup: app.currentRoute.isEqual(routeToCheck: .settings(.cloudBackup)),
+            isNavigationSettled: app.isNavigationSettled,
+            presentationPolicy: presentationPolicy
         )
     }
 
     private func handlePasskeyChoice(existing: Bool) {
-        guard let flow = passkeyChoiceFlow else { return }
+        guard let intent = passkeyChoiceIntent else { return }
         coordinator.dismissCurrentPresentation()
 
-        switch (flow, existing) {
-        case (.enable, true):
-            manager.dispatch(action: .enableCloudBackup)
-        case (.enable, false):
-            manager.dispatch(action: .enableCloudBackupNoDiscovery)
+        switch (intent, existing) {
+        case let (.enable(context, _), true):
+            manager.dispatch(action: .enableCloudBackup(context))
+        case let (.enable(context, _), false):
+            manager.dispatch(action: .enableCloudBackupNoDiscovery(context))
         case (.repairPasskey, true):
             manager.dispatch(action: .repairPasskey)
         case (.repairPasskey, false):
@@ -308,6 +422,32 @@ struct CloudBackupPresentationHost<Content: View>: View {
         app.pushRoute(route)
     }
 
+    private func existingPasskeyButtonTitle(for hint: CloudBackupPasskeyHint?) -> String {
+        guard let hint else { return "Use Existing Passkey" }
+        return "Use Existing Passkey (\(hint.nameSuffix))"
+    }
+
+    private func existingBackupMessage(for hint: CloudBackupPasskeyHint?) -> String {
+        guard let hint else {
+            return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead."
+        }
+
+        return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey named Cove Cloud Backup (\(hint.nameSuffix)), use that passkey instead."
+    }
+
+    private func handleVerificationPresentation(_ presentation: CloudBackupVerificationPresentation) {
+        guard let feedback = cloudBackupVerificationFeedback(for: presentation) else { return }
+
+        switch feedback {
+        case let .successFloater(text):
+            Task {
+                await FloaterPopup(text: text).dismissAfter(2).present()
+            }
+        case let .failureAlert(title, message):
+            app.alertState = .init(.general(title: title, message: message))
+        }
+    }
+
     var body: some View {
         content
             .environment(coordinator)
@@ -317,26 +457,38 @@ struct CloudBackupPresentationHost<Content: View>: View {
             .onChange(of: manager.promptIntent) { _, _ in
                 coordinator.reconcile()
             }
-            .confirmationDialog(
+            .onChange(of: manager.verification) { _, _ in
+                coordinator.reconcile()
+            }
+            .onChange(of: manager.verificationPresentation) { _, presentation in
+                handleVerificationPresentation(presentation)
+            }
+            .alert(
                 "Existing Cloud Backup Found",
                 isPresented: showingExistingBackupPrompt
             ) {
                 Button("Create New Backup", role: .destructive) {
+                    guard let existingBackupContext else { return }
                     coordinator.dismissCurrentPresentation()
-                    manager.dispatch(action: .enableCloudBackupForceNew)
+                    manager.dispatch(action: .enableCloudBackupForceNew(existingBackupContext))
+                }
+                Button("Try Existing Passkey") {
+                    guard let existingBackupContext else { return }
+                    coordinator.dismissCurrentPresentation()
+                    manager.dispatch(action: .enableCloudBackup(existingBackupContext))
                 }
                 Button("Cancel", role: .cancel) {
                     coordinator.dismissCurrentPresentation()
                     manager.dispatch(action: .discardPendingEnableCloudBackup)
                 }
             } message: {
-                Text("Creating a new backup will not include wallets from the previous one.")
+                Text(existingBackupMessage(for: existingBackupPasskeyHint))
             }
             .alert(
                 "Passkey Options",
                 isPresented: showingPasskeyChoicePrompt
             ) {
-                Button("Use Existing Passkey") {
+                Button(existingPasskeyButtonTitle(for: passkeyChoiceHint)) {
                     handlePasskeyChoice(existing: true)
                 }
                 Button("Create New Passkey") {
@@ -372,7 +524,8 @@ struct CloudBackupPresentationHost<Content: View>: View {
                         manager.dispatch(action: .dismissVerificationPrompt)
                     },
                     onVerify: {
-                        manager.dispatch(action: .startVerification)
+                        coordinator.dismissCurrentPresentation()
+                        manager.startVerification(source: .rootPrompt)
                     }
                 )
                 .interactiveDismissDisabled(true)
@@ -405,7 +558,7 @@ private struct CloudBackupVerificationPromptView: View {
     }
 
     private var message: String {
-        if let failure { return failure.message }
+        if let failure { return failure.message() }
         if isVerifying { return "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey." }
 
         return "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey."
@@ -433,13 +586,11 @@ private struct CloudBackupVerificationPromptView: View {
                 HStack {
                     Spacer()
 
-                    if !isVerifying {
-                        Button(action: onDismiss) {
-                            Image(systemName: "xmark")
-                                .font(.headline)
-                                .foregroundStyle(.white.opacity(0.85))
-                                .frame(width: 44, height: 44)
-                        }
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.headline)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 44, height: 44)
                     }
                 }
                 .padding(.top, 4)
@@ -490,10 +641,8 @@ private struct CloudBackupVerificationPromptView: View {
                     .buttonStyle(OnboardingPrimaryButtonStyle())
                     .disabled(isVerifying)
 
-                    if !isVerifying {
-                        Button("Not Now", action: onDismiss)
-                            .buttonStyle(OnboardingSecondaryButtonStyle())
-                    }
+                    Button(isVerifying ? "Hide" : "Not Now", action: onDismiss)
+                        .buttonStyle(OnboardingSecondaryButtonStyle())
                 }
 
                 Spacer()

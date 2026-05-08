@@ -75,7 +75,14 @@ class FullLaunchOnboardingRobot(
 
     fun chooseExistingUser(): FullLaunchOnboardingRobot {
         device.waitUntilVisible(tag("onboarding.bitcoinChoice.existing")).click()
-        device.waitUntilVisible(text("How would you like to continue?"))
+        device.waitUntilVisible(text("How do you store your Bitcoin?"))
+        return this
+    }
+
+    fun chooseNewUser(): FullLaunchOnboardingRobot {
+        device.waitUntilVisible(tag("onboarding.bitcoinChoice.new")).click()
+        device.waitUntilVisible(text("Creating your wallet"))
+        device.waitUntilVisible(textContains("Back up your wallet"), timeoutMillis = 10_000)
 
         return this
     }
@@ -89,16 +96,7 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
-    fun chooseNewUser(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.bitcoinChoice.new")).click()
-        device.waitUntilVisible(text("Creating your wallet"))
-        device.waitUntilVisible(textContains("Back up your wallet"), timeoutMillis = 10_000)
-
-        return this
-    }
-
     fun useAnotherWallet(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.returningUser.anotherWallet")).click()
         device.waitUntilVisible(text("How do you store your Bitcoin?"))
 
         return this

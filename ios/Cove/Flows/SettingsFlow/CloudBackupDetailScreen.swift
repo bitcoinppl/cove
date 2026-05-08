@@ -94,6 +94,8 @@ struct CloudBackupDetailScreen: View {
         } else if isPasskeyMissing {
             MissingPasskeyContent(manager: manager)
         } else {
+            pendingUploadConfirmationSection
+
             backupStatusContent
             VerificationSection(
                 manager: manager,
@@ -134,6 +136,28 @@ struct CloudBackupDetailScreen: View {
             }
         }
     }
+
+    @ViewBuilder
+    private var pendingUploadConfirmationSection: some View {
+        switch manager.pendingUploadVerification {
+        case .idle:
+            EmptyView()
+        case .confirming:
+            Section {
+                HStack {
+                    ProgressView()
+                        .padding(.trailing, 8)
+
+                    Text("Confirming latest cloud upload")
+                }
+            }
+        case .blockedOnAuthorization:
+            Section {
+                Label("Waiting for iCloud authorization", systemImage: "icloud.slash")
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
 }
 
 struct UnsupportedPasskeyProviderContent: View {
@@ -171,7 +195,10 @@ struct UnsupportedPasskeyProviderContent: View {
 
         Section {
             Button {
-                manager.dispatch(action: .enableCloudBackupNoDiscovery)
+                manager.dispatch(action: .enableCloudBackupNoDiscovery(.init(
+                    savedPasskeyConfirmation: .manual,
+                    verificationSource: .cloudBackupDetail
+                )))
             } label: {
                 Label("Try Again", systemImage: "arrow.clockwise")
             }

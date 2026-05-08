@@ -1,5 +1,5 @@
 package org.bitcoinppl.cove.cloudbackup
- 
+
  import androidx.compose.foundation.background
  import androidx.compose.foundation.clickable
  import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +25,7 @@ package org.bitcoinppl.cove.cloudbackup
  import androidx.compose.material.icons.filled.CloudDone
  import androidx.compose.material.icons.filled.CloudOff
  import androidx.compose.material.icons.filled.CloudUpload
+ import androidx.compose.material.icons.filled.Delete
  import androidx.compose.material.icons.filled.ErrorOutline
  import androidx.compose.material.icons.filled.Key
  import androidx.compose.material.icons.filled.Refresh
@@ -65,34 +66,40 @@ package org.bitcoinppl.cove.cloudbackup
  import org.bitcoinppl.cove.views.MaterialSettingsItem
  import org.bitcoinppl.cove.views.SectionHeader
  import org.bitcoinppl.cove_core.CloudBackupDetail
+ import org.bitcoinppl.cove_core.CloudBackupEnableState
  import org.bitcoinppl.cove_core.CloudBackupManagerAction
+ import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
  import org.bitcoinppl.cove_core.CloudBackupStatus
+ import org.bitcoinppl.cove_core.CloudBackupVerificationSource
  import org.bitcoinppl.cove_core.CloudBackupWalletItem
  import org.bitcoinppl.cove_core.CloudBackupWalletStatus
  import org.bitcoinppl.cove_core.CloudOnlyOperation
  import org.bitcoinppl.cove_core.CloudOnlyState
  import org.bitcoinppl.cove_core.DeepVerificationFailure
  import org.bitcoinppl.cove_core.DeepVerificationReport
+ import org.bitcoinppl.cove_core.OtherBackupsOperation
+ import org.bitcoinppl.cove_core.PendingUploadVerificationState
  import org.bitcoinppl.cove_core.RecoveryAction
  import org.bitcoinppl.cove_core.RecoveryState
  import org.bitcoinppl.cove_core.SyncState
- import org.bitcoinppl.cove_core.VerificationFailureKind
  import org.bitcoinppl.cove_core.VerificationState
  import org.bitcoinppl.cove_core.WalletMode
  import org.bitcoinppl.cove_core.device.CloudSyncHealth
- 
+
  internal enum class CloudBackupDetailBodyState {
      UNSUPPORTED_PASSKEY_PROVIDER,
      MISSING_PASSKEY,
      VERIFYING,
      DETAIL,
      CANCELLED_RECOVERY,
+     AUTHORIZATION_BLOCKED,
      LOADING,
  }
- 
+
  internal fun cloudBackupDetailBodyState(
      status: CloudBackupStatus,
      verification: VerificationState,
+     pendingUploadVerification: PendingUploadVerificationState,
      hasDetail: Boolean,
  ): CloudBackupDetailBodyState? =
      when {
@@ -101,13 +108,19 @@ package org.bitcoinppl.cove.cloudbackup
          verification is VerificationState.Verifying -> CloudBackupDetailBodyState.VERIFYING
          hasDetail -> CloudBackupDetailBodyState.DETAIL
          verification is VerificationState.Cancelled -> CloudBackupDetailBodyState.CANCELLED_RECOVERY
+         pendingUploadVerification == PendingUploadVerificationState.BLOCKED_ON_AUTHORIZATION ->
+             CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED
          verification !is VerificationState.Failed -> CloudBackupDetailBodyState.LOADING
          else -> null
      }
- 
+
+ internal fun shouldShowPendingUploadConfirmationStatus(
+     pendingUploadVerification: PendingUploadVerificationState,
+ ): Boolean = pendingUploadVerification != PendingUploadVerificationState.IDLE
+
  internal fun shouldFetchCloudOnly(cloudOnly: CloudOnlyState): Boolean =
      cloudOnly is CloudOnlyState.NotFetched
- 
+
  internal fun shouldShowFallbackVerificationSection(
      bodyState: CloudBackupDetailBodyState?,
  ): Boolean = bodyState == null
@@ -120,12 +133,12 @@ package org.bitcoinppl.cove.cloudbackup
  ) {
      val manager = remember { CloudBackupManager.getInstance() }
      val coordinator = LocalCloudBackupPresentationCoordinator.current
- 
+
      var showRecreateConfirmation by remember { mutableStateOf(false) }
      var showReinitializeConfirmation by remember { mutableStateOf(false) }
- 
+
      val detailDialogBlocker = showRecreateConfirmation || showReinitializeConfirmation
- 
+
      DisposableEffect(coordinator, detailDialogBlocker) {
          coordinator?.setBlocker(
              CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG,
@@ -135,11 +148,11 @@ package org.bitcoinppl.cove.cloudbackup
              coordinator?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, false)
          }
      }
- 
-     LaunchedEffect(Unit) {
+
+     LaunchedEffect(manager) {
          manager.dispatch(CloudBackupManagerAction.EnterDetail)
      }
- 
+
      Scaffold(
          modifier =
              modifier
@@ -168,24 +181,21 @@ package org.bitcoinppl.cove.cloudbackup
                          modifier = Modifier.fillMaxSize(),
                          message = null,
                          isBusy = false,
-                         onEnable = { manager.dispatch(CloudBackupManagerAction.EnableCloudBackup) },
+                         onEnable = { manager.dispatch(manualEnableCloudBackup(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
                      )
                  }
- 
+
                  is CloudBackupStatus.Enabling -> {
-                     CloudBackupProgressContent(
-                         title = "Setting up cloud backup",
-                         message = "Creating your encrypted backup and passkey",
-                     )
+                     CloudBackupEnableProgressOrConfirmation(manager)
                  }
- 
+
                  is CloudBackupStatus.Restoring -> {
                      CloudBackupProgressContent(
                          title = "Restoring from cloud backup",
                          message = "Downloading and restoring your encrypted backups",
                      )
                  }
- 
+
                  is CloudBackupStatus.Error -> {
                      if (manager.isCloudBackupEnabled) {
                          CloudBackupDetailContent(
@@ -199,11 +209,11 @@ package org.bitcoinppl.cove.cloudbackup
                              modifier = Modifier.fillMaxSize(),
                              message = status.v1,
                              isBusy = false,
-                             onEnable = { manager.dispatch(CloudBackupManagerAction.EnableCloudBackup) },
+                             onEnable = { manager.dispatch(manualEnableCloudBackup(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
                          )
                      }
                  }
- 
+
                  else -> {
                      CloudBackupDetailContent(
                          manager = manager,
@@ -215,7 +225,7 @@ package org.bitcoinppl.cove.cloudbackup
              }
          }
      }
- 
+
      if (showRecreateConfirmation) {
          AlertDialog(
              onDismissRequest = { showRecreateConfirmation = false },
@@ -238,7 +248,7 @@ package org.bitcoinppl.cove.cloudbackup
              },
          )
      }
- 
+
      if (showReinitializeConfirmation) {
          AlertDialog(
              onDismissRequest = { showReinitializeConfirmation = false },
@@ -262,7 +272,74 @@ package org.bitcoinppl.cove.cloudbackup
          )
      }
  }
- 
+
+ @Composable
+ private fun CloudBackupEnableProgressOrConfirmation(manager: CloudBackupManager) {
+     val enableState = manager.enableState
+     if (enableState is CloudBackupEnableState.AwaitingSavedPasskeyConfirmation &&
+         enableState.v1 == org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode.MANUAL
+     ) {
+         CloudBackupPasskeyConfirmationContent(
+             onContinue = { manager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey) },
+             onCancel = { manager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup) },
+         )
+         return
+     }
+
+     val (title, message) = cloudBackupEnableProgressCopy(enableState)
+     CloudBackupProgressContent(title = title, message = message)
+ }
+
+ private fun cloudBackupEnableProgressCopy(enableState: CloudBackupEnableState): Pair<String, String> =
+     when (enableState) {
+         CloudBackupEnableState.CreatingPasskey ->
+             "Creating your passkey..." to "Cloud Backup will continue automatically"
+         CloudBackupEnableState.WaitingForPasskeyAvailability ->
+             "Checking that your passkey is available..." to
+                 "This can take a few seconds after saving it in your passkey/password manager app"
+         is CloudBackupEnableState.AwaitingSavedPasskeyConfirmation ->
+             "Checking that your passkey is available..." to
+                 "This can take a few seconds after saving it in your passkey/password manager app"
+         CloudBackupEnableState.ConfirmingSavedPasskey ->
+             "Confirming your passkey..." to "Cloud Backup will continue automatically"
+         CloudBackupEnableState.UploadingBackup ->
+             "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+         CloudBackupEnableState.Idle,
+         -> "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+     }
+
+ @Composable
+ private fun CloudBackupPasskeyConfirmationContent(
+     onContinue: () -> Unit,
+     onCancel: () -> Unit,
+ ) {
+     Column(
+         modifier =
+             Modifier
+                 .fillMaxSize()
+                 .padding(24.dp),
+         horizontalAlignment = Alignment.CenterHorizontally,
+         verticalArrangement = Arrangement.Center,
+     ) {
+         Icon(Icons.Default.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+         Spacer(modifier = Modifier.height(16.dp))
+         Text("Confirm your passkey", style = MaterialTheme.typography.titleLarge)
+         Spacer(modifier = Modifier.height(12.dp))
+         Text(
+             "Your passkey was saved. Cove needs to confirm it once before enabling Cloud Backup. If it does not appear right away, use the option to search your passkey/password manager app.",
+             style = MaterialTheme.typography.bodyMedium,
+             color = MaterialTheme.colorScheme.onSurfaceVariant,
+         )
+         Spacer(modifier = Modifier.height(24.dp))
+         Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
+             Text("Continue")
+         }
+         TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+             Text("Cancel")
+         }
+     }
+ }
+
  @Composable
  private fun CloudBackupEnableContent(
      modifier: Modifier,
@@ -273,9 +350,9 @@ package org.bitcoinppl.cove.cloudbackup
      var understandPasskey by remember { mutableStateOf(false) }
      var understandAccount by remember { mutableStateOf(false) }
      var understandManualBackup by remember { mutableStateOf(false) }
- 
+
      val allChecked = understandPasskey && understandAccount && understandManualBackup
- 
+
      Column(
          modifier =
              modifier
@@ -284,7 +361,7 @@ package org.bitcoinppl.cove.cloudbackup
          verticalArrangement = Arrangement.spacedBy(20.dp),
      ) {
          Spacer(modifier = Modifier.height(8.dp))
- 
+
          Surface(
              color = Color(0x142197F3),
              shape = CircleShape,
@@ -297,23 +374,23 @@ package org.bitcoinppl.cove.cloudbackup
                  modifier = Modifier.padding(24.dp),
              )
          }
- 
+
          Text("Cloud Backup", style = MaterialTheme.typography.headlineMedium)
          Text(
              "Cloud Backup is end-to-end encrypted before it leaves your device and stored in Google Drive app data, secured by a passkey that only you control.",
              style = MaterialTheme.typography.bodyLarge,
              color = MaterialTheme.colorScheme.onSurfaceVariant,
          )
- 
+
          CloudBackupInfoCard(
              title = "How it works",
              body = "Your wallet backup is encrypted on-device, stored in your Google Drive app data, and protected by a passkey. Both your Google account and your passkey are required to restore it.",
          )
- 
+
          message?.let {
              ErrorInlineMessage(it)
          }
- 
+
          CloudBackupChecklistRow(
              checked = understandPasskey,
              title = "I understand that my passkey is required to access Cloud Backup and I should not delete it",
@@ -329,7 +406,7 @@ package org.bitcoinppl.cove.cloudbackup
              title = "I understand that I should still keep my 12 or 24 words backed up offline on paper",
              onCheckedChange = { understandManualBackup = it },
          )
- 
+
          Button(
              onClick = onEnable,
              enabled = allChecked && !isBusy,
@@ -339,7 +416,7 @@ package org.bitcoinppl.cove.cloudbackup
          }
      }
  }
- 
+
  @Composable
  private fun CloudBackupInfoCard(
      title: String,
@@ -360,7 +437,7 @@ package org.bitcoinppl.cove.cloudbackup
          }
      }
  }
- 
+
  @Composable
  private fun CloudBackupChecklistRow(
      checked: Boolean,
@@ -383,7 +460,7 @@ package org.bitcoinppl.cove.cloudbackup
          Text(title, style = MaterialTheme.typography.bodyMedium)
      }
  }
- 
+
  @Composable
  private fun CloudBackupProgressContent(
      title: String,
@@ -401,7 +478,7 @@ package org.bitcoinppl.cove.cloudbackup
          }
      }
  }
- 
+
  @Composable
  private fun CloudBackupDetailContent(
      manager: CloudBackupManager,
@@ -413,10 +490,11 @@ package org.bitcoinppl.cove.cloudbackup
          cloudBackupDetailBodyState(
              status = manager.status,
              verification = manager.verification,
+             pendingUploadVerification = manager.pendingUploadVerification,
              hasDetail = manager.detail != null,
          )
      val showFallbackVerificationSection = shouldShowFallbackVerificationSection(bodyState)
- 
+
      Column(
          modifier =
              Modifier
@@ -427,7 +505,7 @@ package org.bitcoinppl.cove.cloudbackup
          headerError?.let {
              ErrorInlineMessage(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
          }
- 
+
          when (bodyState) {
              CloudBackupDetailBodyState.UNSUPPORTED_PASSKEY_PROVIDER -> {
                  UnsupportedPasskeyProviderContent(manager = manager)
@@ -453,6 +531,9 @@ package org.bitcoinppl.cove.cloudbackup
              CloudBackupDetailBodyState.CANCELLED_RECOVERY -> {
                  CancelledVerificationRecoveryContent(manager = manager)
              }
+             CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED -> {
+                 PendingUploadConfirmationStatus(PendingUploadVerificationState.BLOCKED_ON_AUTHORIZATION)
+             }
              CloudBackupDetailBodyState.LOADING -> {
                  CloudBackupProgressCard(
                      title = "Loading cloud backup",
@@ -461,7 +542,14 @@ package org.bitcoinppl.cove.cloudbackup
              }
              null -> Unit
          }
- 
+
+         if (
+             bodyState != CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED &&
+                 shouldShowPendingUploadConfirmationStatus(manager.pendingUploadVerification)
+         ) {
+             PendingUploadConfirmationStatus(manager.pendingUploadVerification)
+         }
+
          if (showFallbackVerificationSection) {
              VerificationSection(
                  manager = manager,
@@ -471,7 +559,43 @@ package org.bitcoinppl.cove.cloudbackup
          }
      }
  }
- 
+
+ @Composable
+ private fun PendingUploadConfirmationStatus(
+     pendingUploadVerification: PendingUploadVerificationState,
+ ) {
+     when (pendingUploadVerification) {
+         PendingUploadVerificationState.IDLE -> Unit
+         PendingUploadVerificationState.CONFIRMING -> {
+             CloudBackupProgressCard(
+                 title = "Confirming latest cloud upload",
+                 message = "Cloud storage is finishing the newest backup update",
+             )
+         }
+         PendingUploadVerificationState.BLOCKED_ON_AUTHORIZATION -> {
+             Card(
+                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                 colors =
+                     CardDefaults.cardColors(
+                         containerColor = MaterialTheme.colorScheme.errorContainer,
+                     ),
+             ) {
+                 Row(
+                     modifier = Modifier.padding(16.dp),
+                     verticalAlignment = Alignment.CenterVertically,
+                 ) {
+                     Icon(Icons.Default.CloudOff, contentDescription = null)
+                     Spacer(modifier = Modifier.width(12.dp))
+                     Text(
+                         "Waiting for cloud authorization",
+                         style = MaterialTheme.typography.bodyMedium,
+                     )
+                 }
+             }
+         }
+     }
+ }
+
  @Composable
  private fun CloudBackupProgressCard(
      title: String,
@@ -497,7 +621,7 @@ package org.bitcoinppl.cove.cloudbackup
          }
      }
  }
- 
+
  @Composable
  private fun CancelledVerificationRecoveryContent(
      manager: CloudBackupManager,
@@ -508,7 +632,7 @@ package org.bitcoinppl.cove.cloudbackup
              title = "Verification was cancelled",
              body = "Try verification again or create a new passkey if your old one was deleted.",
          )
- 
+
          SectionHeader("Verification")
          MaterialSection {
              Column {
@@ -517,7 +641,7 @@ package org.bitcoinppl.cove.cloudbackup
          }
      }
  }
- 
+
  @Composable
  private fun UnsupportedPasskeyProviderContent(
      manager: CloudBackupManager,
@@ -528,16 +652,22 @@ package org.bitcoinppl.cove.cloudbackup
              title = "Passkey not supported for Cloud Backup",
              body = "This passkey provider can't create the secure passkey required for Cloud Backup. Try again with a supported password manager such as Google Password Manager, 1Password, or Bitwarden.",
          )
- 
+
          Button(
-             onClick = { manager.dispatch(CloudBackupManagerAction.EnableCloudBackupNoDiscovery) },
+             onClick = {
+                 manager.dispatch(
+                     manualEnableCloudBackupNoDiscovery(
+                         CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                     ),
+                 )
+             },
              modifier = Modifier.fillMaxWidth(),
          ) {
              Text("Try Again")
          }
      }
  }
- 
+
  @Composable
  private fun MissingPasskeyContent(
      manager: CloudBackupManager,
@@ -553,14 +683,14 @@ package org.bitcoinppl.cove.cloudbackup
          } else {
              null
          }
- 
+
      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
          ErrorStateCard(
              icon = Icons.Default.Key,
              title = "Cloud Backup passkey missing",
              body = "Your cloud backup is not accessible until you use an existing passkey or add a new one. Without it, your backups can't be restored.",
          )
- 
+
          Button(
              onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery) },
              enabled = !isRepairing,
@@ -572,13 +702,13 @@ package org.bitcoinppl.cove.cloudbackup
              }
              Text(if (isRepairing) "Opening Passkey Options" else "Add Passkey")
          }
- 
+
          repairError?.let {
              ErrorInlineMessage(it)
          }
      }
  }
- 
+
  @Composable
  private fun ErrorStateCard(
      icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -601,7 +731,7 @@ package org.bitcoinppl.cove.cloudbackup
          }
      }
  }
- 
+
  @Composable
  private fun DetailFormContent(
      detail: CloudBackupDetail,
@@ -611,15 +741,15 @@ package org.bitcoinppl.cove.cloudbackup
      onReinitialize: () -> Unit,
  ) {
      CloudBackupHeaderSection(lastSync = detail.lastSync, syncHealth = syncHealth)
- 
+
      if (detail.upToDate.isNotEmpty()) {
          WalletSections(title = "Up to Date", wallets = detail.upToDate)
      }
- 
+
      if (detail.needsSync.isNotEmpty()) {
          WalletSections(title = "Needs Sync", wallets = detail.needsSync)
      }
- 
+
      val showCloudOnlySection =
          when (val cloudOnly = manager.cloudOnly) {
              is CloudOnlyState.NotFetched -> detail.cloudOnlyCount.toInt() > 0
@@ -627,18 +757,35 @@ package org.bitcoinppl.cove.cloudbackup
              is CloudOnlyState.Loaded -> cloudOnly.wallets.isNotEmpty()
              is CloudOnlyState.Failed -> true
          }
- 
+
      if (showCloudOnlySection) {
          CloudOnlySection(manager = manager)
      }
- 
+
+     when (val otherBackups = detail.otherBackups) {
+         is CloudBackupOtherBackupsState.Loaded -> {
+             val summary = otherBackups.summary
+             if (summary.namespaceCount.toInt() > 0) {
+                 OtherBackupsSection(
+                     namespaceCount = summary.namespaceCount.toInt(),
+                     walletCount = summary.walletCount.toInt(),
+                     passkeySuffixes = summary.passkeyHints.map { it.nameSuffix },
+                     manager = manager,
+                 )
+             }
+         }
+         is CloudBackupOtherBackupsState.LoadFailed -> {
+             OtherBackupsLoadFailedSection(error = otherBackups.error)
+         }
+     }
+
      VerificationSection(
          manager = manager,
          onRecreate = onRecreate,
          onReinitialize = onReinitialize,
      )
  }
- 
+
  @Composable
  private fun CloudBackupHeaderSection(
      lastSync: ULong?,
@@ -654,7 +801,7 @@ package org.bitcoinppl.cove.cloudbackup
             is CloudSyncHealth.AuthorizationRequired -> Triple(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Google Drive access needs to be reconnected: ${syncHealth.v1}")
             is CloudSyncHealth.Unavailable -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Google Drive is unavailable")
         }
- 
+
      Card(
          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
          colors =
@@ -679,7 +826,7 @@ package org.bitcoinppl.cove.cloudbackup
          }
      }
  }
- 
+
  @Composable
  private fun WalletSections(
      title: String,
@@ -687,7 +834,7 @@ package org.bitcoinppl.cove.cloudbackup
  ) {
      val grouped = wallets.groupBy { GroupKey(it.network?.displayName() ?: "Unsupported", it.walletMode) }
          .toSortedMap()
- 
+
      SectionHeader(title, modifier = Modifier.padding(horizontal = 16.dp))
      MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
          Column {
@@ -713,7 +860,7 @@ package org.bitcoinppl.cove.cloudbackup
          }
      }
  }
- 
+
  private data class GroupKey(
      val network: String,
      val walletMode: WalletMode?,
@@ -725,11 +872,11 @@ package org.bitcoinppl.cove.cloudbackup
              } else {
                  network
              }
- 
+
      override fun compareTo(other: GroupKey): Int =
          compareValuesBy(this, other, GroupKey::network, { it.walletMode?.ordinal ?: Int.MAX_VALUE })
  }
- 
+
  @Composable
  private fun WalletItemRow(
      item: CloudBackupWalletItem,
@@ -754,7 +901,7 @@ package org.bitcoinppl.cove.cloudbackup
          },
      )
  }
- 
+
  @Composable
  private fun StatusBadge(
      status: CloudBackupWalletStatus,
@@ -771,7 +918,7 @@ package org.bitcoinppl.cove.cloudbackup
              CloudBackupWalletStatus.UNSUPPORTED_VERSION -> "Unsupported" to Color(0xFFED6C02)
              CloudBackupWalletStatus.REMOTE_STATE_UNKNOWN -> "Unknown" to MaterialTheme.colorScheme.onSurfaceVariant
          }
- 
+
      Surface(
          color = color.copy(alpha = 0.12f),
          shape = CircleShape,
@@ -786,7 +933,232 @@ package org.bitcoinppl.cove.cloudbackup
          )
      }
  }
- 
+
+ @Composable
+ private fun OtherBackupsLoadFailedSection(error: String) {
+     SectionHeader("Other Cloud Backups", modifier = Modifier.padding(horizontal = 16.dp))
+     MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
+         Column {
+             Text(
+                 text = "Could not load other cloud backups.",
+                 style = MaterialTheme.typography.bodySmall,
+                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+             )
+             MaterialDivider()
+             Text(
+                 text = error,
+                 style = MaterialTheme.typography.bodySmall,
+                 color = MaterialTheme.colorScheme.error,
+                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+             )
+         }
+     }
+ }
+
+ @Composable
+private fun OtherBackupsSection(
+    namespaceCount: Int,
+    walletCount: Int,
+    passkeySuffixes: List<String>,
+    manager: CloudBackupManager,
+) {
+     var showRecoverConfirmation by remember { mutableStateOf(false) }
+     var showDeleteConfirmation by remember { mutableStateOf(false) }
+     var showFinalDeleteConfirmation by remember { mutableStateOf(false) }
+     var recoveryResult by remember { mutableStateOf<OtherBackupsRecoveryResult?>(null) }
+     val operation = manager.otherBackupsOperation
+     val isRecovering = operation is OtherBackupsOperation.Recovering
+     val isDeleting = operation is OtherBackupsOperation.Deleting
+     val isOperating = isRecovering || isDeleting
+     val blocker = LocalCloudBackupPresentationCoordinator.current
+
+     LaunchedEffect(operation) {
+         if (operation is OtherBackupsOperation.Recovered) {
+             recoveryResult =
+                 OtherBackupsRecoveryResult(
+                     walletsRestored = operation.walletsRestored.toInt(),
+                     walletsFailed = operation.walletsFailed.toInt(),
+                     failedWalletErrors = operation.failedWalletErrors,
+                 )
+         }
+     }
+
+     DisposableEffect(blocker, showRecoverConfirmation, showDeleteConfirmation, showFinalDeleteConfirmation, recoveryResult) {
+         val isBlocked =
+             showRecoverConfirmation ||
+                 showDeleteConfirmation ||
+                 showFinalDeleteConfirmation ||
+                 recoveryResult != null
+         blocker?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, isBlocked)
+         onDispose {
+             blocker?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, false)
+         }
+     }
+
+     SectionHeader("Other Cloud Backups", modifier = Modifier.padding(horizontal = 16.dp))
+     MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
+         Column {
+             Text(
+                 text = "${pluralize(namespaceCount, "backup set", "backup sets")} protected by ${otherPasskeyLabel(passkeySuffixes)}, containing ${pluralize(walletCount, "wallet", "wallets")}",
+                 style = MaterialTheme.typography.bodySmall,
+                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+             )
+
+             MaterialDivider()
+             MaterialSettingsItem(
+                 title = if (isRecovering) "Trying Passkey..." else "Try Another Passkey",
+                 subtitle = "Decrypt these backups once without changing your current Cloud Backup passkey",
+                 onClick = if (isOperating) null else {
+                     { showRecoverConfirmation = true }
+                 },
+                 leadingContent = {
+                     if (isRecovering) {
+                         CircularProgressIndicator(modifier = Modifier.width(20.dp).height(20.dp))
+                     } else {
+                         Icon(Icons.Default.Key, contentDescription = null)
+                     }
+                 },
+             )
+
+             MaterialDivider()
+             MaterialSettingsItem(
+                 title = if (isDeleting) "Deleting..." else "Delete These Backups",
+                 subtitle = "Permanently remove the backups protected by the other passkey",
+                 onClick = if (isOperating) null else {
+                     { showDeleteConfirmation = true }
+                 },
+                 titleColor = MaterialTheme.colorScheme.error,
+                 leadingContent = {
+                     if (isDeleting) {
+                         CircularProgressIndicator(modifier = Modifier.width(20.dp).height(20.dp))
+                     } else {
+                         Icon(Icons.Default.Delete, contentDescription = null)
+                     }
+                 },
+             )
+
+             if (operation is OtherBackupsOperation.Failed) {
+                 MaterialDivider()
+                 ErrorInlineMessage(operation.error, modifier = Modifier.padding(16.dp))
+             }
+         }
+     }
+
+     if (showRecoverConfirmation) {
+         AlertDialog(
+             onDismissRequest = { showRecoverConfirmation = false },
+             title = { Text("Recover wallets from another passkey?") },
+             text = {
+                 Text("This will use the selected passkey once to decrypt these other backups. Your current Cloud Backup passkey will not change.")
+             },
+             confirmButton = {
+                 TextButton(
+                     onClick = {
+                         showRecoverConfirmation = false
+                         manager.dispatch(CloudBackupManagerAction.RecoverOtherBackups)
+                     },
+                 ) { Text("Try Passkey") }
+             },
+             dismissButton = {
+                 TextButton(onClick = { showRecoverConfirmation = false }) { Text("Cancel") }
+             },
+         )
+     }
+
+     recoveryResult?.let { result ->
+         AlertDialog(
+             onDismissRequest = { recoveryResult = null },
+             title = { Text("Wallets Recovered") },
+             text = { Text(result.message) },
+             confirmButton = {
+                 TextButton(
+                     onClick = {
+                         recoveryResult = null
+                         manager.dispatch(
+                             CloudBackupManagerAction.StartVerification(
+                                 CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                             ),
+                         )
+                     },
+                 ) { Text("Verify Current Passkey") }
+             },
+             dismissButton = {
+                 TextButton(onClick = { recoveryResult = null }) { Text("Done") }
+             },
+         )
+     }
+
+     if (showDeleteConfirmation) {
+         AlertDialog(
+             onDismissRequest = { showDeleteConfirmation = false },
+             title = { Text("Delete Other Cloud Backups?") },
+             text = { Text("This will permanently remove these other backups from Google Drive.") },
+             confirmButton = {
+                 TextButton(
+                     onClick = {
+                         showDeleteConfirmation = false
+                         showFinalDeleteConfirmation = true
+                     },
+                 ) { Text("Continue") }
+             },
+             dismissButton = {
+                 TextButton(onClick = { showDeleteConfirmation = false }) { Text("Cancel") }
+             },
+         )
+     }
+
+     if (showFinalDeleteConfirmation) {
+         AlertDialog(
+             onDismissRequest = { showFinalDeleteConfirmation = false },
+             title = { Text("This Cannot Be Undone") },
+             text = { Text("These backups cannot be recovered later, even if you find the passkey that currently protects them.") },
+             confirmButton = {
+                 TextButton(
+                     onClick = {
+                         showFinalDeleteConfirmation = false
+                         manager.dispatch(CloudBackupManagerAction.DeleteOtherBackups)
+                     },
+                 ) { Text("Delete") }
+             },
+             dismissButton = {
+                 TextButton(onClick = { showFinalDeleteConfirmation = false }) { Text("Cancel") }
+             },
+         )
+     }
+ }
+
+ private data class OtherBackupsRecoveryResult(
+     val walletsRestored: Int,
+     val walletsFailed: Int,
+     val failedWalletErrors: List<String>,
+ ) {
+     val message: String
+         get() =
+             buildList {
+                 add("Recovered ${pluralize(walletsRestored, "wallet", "wallets")}.")
+                 add("Your current Cloud Backup passkey is unchanged. Verify your current passkey to make sure it opens your active backup.")
+                 if (walletsFailed > 0) {
+                     add("${pluralize(walletsFailed, "wallet", "wallets")} could not be recovered.")
+                 }
+                 failedWalletErrors.firstOrNull()?.let(::add)
+             }.joinToString(" ")
+ }
+
+ private fun otherPasskeyLabel(suffixes: List<String>): String =
+     when (suffixes.size) {
+         0 -> "a different passkey"
+         1 -> "Cove Cloud Backup (${suffixes.first()})"
+         else -> "passkeys ${suffixes.joinToString(", ") { "($it)" }}"
+     }
+
+ private fun pluralize(
+     count: Int,
+     singular: String,
+     plural: String,
+ ): String = "$count ${if (count == 1) singular else plural}"
+
  @Composable
  private fun CloudOnlySection(
      manager: CloudBackupManager,
@@ -795,7 +1167,7 @@ package org.bitcoinppl.cove.cloudbackup
      var walletToDelete by remember { mutableStateOf<CloudBackupWalletItem?>(null) }
      var unsupportedRestoreWallet by remember { mutableStateOf<CloudBackupWalletItem?>(null) }
      val blocker = LocalCloudBackupPresentationCoordinator.current
- 
+
      DisposableEffect(blocker, selectedWallet, walletToDelete, unsupportedRestoreWallet) {
          val isBlocked = selectedWallet != null || walletToDelete != null || unsupportedRestoreWallet != null
          blocker?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, isBlocked)
@@ -803,7 +1175,7 @@ package org.bitcoinppl.cove.cloudbackup
              blocker?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, false)
          }
      }
- 
+
      SectionHeader("Not on This Device", modifier = Modifier.padding(horizontal = 16.dp))
      MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
          Column {
@@ -814,11 +1186,11 @@ package org.bitcoinppl.cove.cloudbackup
                      }
                      LoadingRow("Loading wallets not on this device")
                  }
- 
+
                  is CloudOnlyState.Loading -> {
                      LoadingRow("Loading wallets not on this device")
                  }
- 
+
                  is CloudOnlyState.Loaded -> {
                      cloudOnly.wallets.forEachIndexed { index, item ->
                          MaterialSettingsItem(
@@ -832,7 +1204,7 @@ package org.bitcoinppl.cove.cloudbackup
                              MaterialDivider()
                          }
                      }
- 
+
                      when (val operation = manager.cloudOnlyOperation) {
                          is CloudOnlyOperation.Failed -> {
                              ErrorInlineMessage(operation.error, modifier = Modifier.padding(16.dp))
@@ -843,14 +1215,14 @@ package org.bitcoinppl.cove.cloudbackup
                          else -> Unit
                      }
                  }
- 
+
                  is CloudOnlyState.Failed -> {
                      ErrorInlineMessage(cloudOnly.error, modifier = Modifier.padding(16.dp))
                  }
              }
          }
      }
- 
+
      selectedWallet?.let { wallet ->
          AlertDialog(
              onDismissRequest = { selectedWallet = null },
@@ -879,7 +1251,7 @@ package org.bitcoinppl.cove.cloudbackup
              },
          )
      }
- 
+
      walletToDelete?.let { wallet ->
          AlertDialog(
              onDismissRequest = { walletToDelete = null },
@@ -898,7 +1270,7 @@ package org.bitcoinppl.cove.cloudbackup
              },
          )
      }
- 
+
      unsupportedRestoreWallet?.let { wallet ->
          AlertDialog(
              onDismissRequest = { unsupportedRestoreWallet = null },
@@ -910,7 +1282,7 @@ package org.bitcoinppl.cove.cloudbackup
          )
      }
  }
- 
+
  @Composable
  private fun VerificationSection(
      manager: CloudBackupManager,
@@ -925,31 +1297,43 @@ package org.bitcoinppl.cove.cloudbackup
                      MaterialSettingsItem(
                          title = "Verify Now",
                          subtitle = "Run verification to confirm your cloud backup can be decrypted and restored",
-                         onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+                         onClick = {
+                             manager.dispatch(
+                                 CloudBackupManagerAction.StartVerification(
+                                     CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                                 ),
+                             )
+                         },
                          leadingContent = { Icon(Icons.Default.Security, contentDescription = null) },
                      )
                  }
- 
+
                  is VerificationState.Verifying -> {
                      LoadingRow("Verifying backup integrity")
                  }
- 
+
                  is VerificationState.Verified -> {
                      VerifiedSectionContent(
                          report = verification.v1,
                          manager = manager,
                      )
                  }
- 
+
                  is VerificationState.PasskeyConfirmed -> {
                      MaterialSettingsItem(
                          title = "Passkey verified",
                          subtitle = "Run a full verification to confirm wallet backups can be decrypted",
-                         onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+                         onClick = {
+                             manager.dispatch(
+                                 CloudBackupManagerAction.StartVerification(
+                                     CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                                 ),
+                             )
+                         },
                          leadingContent = { Icon(Icons.Default.Security, contentDescription = null, tint = Color(0xFF2E7D32)) },
                      )
                  }
- 
+
                  is VerificationState.Failed -> {
                      VerificationFailureContent(
                          failure = verification.v1,
@@ -958,26 +1342,26 @@ package org.bitcoinppl.cove.cloudbackup
                          onReinitialize = onReinitialize,
                      )
                  }
- 
+
                  is VerificationState.Cancelled -> {
                      CancelledVerificationActions(manager = manager)
                  }
              }
- 
+
              when (val sync = manager.sync) {
                  is SyncState.Syncing -> {
                      MaterialDivider()
                      LoadingRow("Syncing unsynced wallets")
                  }
- 
+
                  is SyncState.Failed -> {
                      MaterialDivider()
                      ErrorInlineMessage(sync.v1, modifier = Modifier.padding(16.dp))
                  }
- 
+
                  else -> Unit
              }
- 
+
              val needsSync = manager.detail?.needsSync?.isNotEmpty() == true
              if (needsSync) {
                  MaterialDivider()
@@ -988,19 +1372,25 @@ package org.bitcoinppl.cove.cloudbackup
                      leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
                  )
              }
- 
+
             if (manager.verification is VerificationState.Verified) {
                 MaterialDivider()
                 MaterialSettingsItem(
                     title = "Verify Again",
-                    onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+                    onClick = {
+                        manager.dispatch(
+                            CloudBackupManagerAction.StartVerification(
+                                CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                            ),
+                        )
+                    },
                     leadingContent = { Icon(Icons.Default.Security, contentDescription = null) },
                 )
             }
         }
     }
 }
- 
+
  @Composable
  private fun CancelledVerificationActions(
      manager: CloudBackupManager,
@@ -1008,7 +1398,13 @@ package org.bitcoinppl.cove.cloudbackup
      MaterialSettingsItem(
          title = "Verification was cancelled",
          subtitle = "Try verification again or create a new passkey if your old one was deleted",
-         onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+         onClick = {
+             manager.dispatch(
+                 CloudBackupManagerAction.StartVerification(
+                     CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                 ),
+             )
+         },
          leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null, tint = Color(0xFFED6C02)) },
      )
      MaterialDivider()
@@ -1018,7 +1414,7 @@ package org.bitcoinppl.cove.cloudbackup
          leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
      )
  }
- 
+
  @Composable
  private fun VerifiedSectionContent(
      report: DeepVerificationReport,
@@ -1029,7 +1425,7 @@ package org.bitcoinppl.cove.cloudbackup
          subtitle = buildVerifiedSummary(report),
          leadingContent = { Icon(Icons.Default.CloudDone, contentDescription = null, tint = Color(0xFF2E7D32)) },
      )
- 
+
      if (report.masterKeyWrapperRepaired) {
          MaterialDivider()
          MaterialSettingsItem(
@@ -1037,7 +1433,7 @@ package org.bitcoinppl.cove.cloudbackup
              leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null, tint = Color(0xFF1976D2)) },
          )
      }
- 
+
      if (report.localMasterKeyRepaired) {
          MaterialDivider()
          MaterialSettingsItem(
@@ -1045,18 +1441,18 @@ package org.bitcoinppl.cove.cloudbackup
              leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null, tint = Color(0xFF1976D2)) },
          )
      }
- 
+
      if (report.walletsFailed > 0u) {
          MaterialDivider()
          ErrorInlineMessage("${report.walletsFailed} wallet backup(s) could not be decrypted", modifier = Modifier.padding(16.dp))
      }
- 
+
      if (report.walletsUnsupported > 0u) {
          MaterialDivider()
          ErrorInlineMessage("${report.walletsUnsupported} wallet(s) use a newer backup format", modifier = Modifier.padding(16.dp))
      }
  }
- 
+
  private fun buildVerifiedSummary(report: DeepVerificationReport): String =
      buildList {
          if (report.credentialRecovered) {
@@ -1064,7 +1460,7 @@ package org.bitcoinppl.cove.cloudbackup
          }
          add("${report.walletsVerified} wallet(s) verified")
      }.joinToString(" • ")
- 
+
  @Composable
  private fun VerificationFailureContent(
      failure: DeepVerificationFailure,
@@ -1072,13 +1468,19 @@ package org.bitcoinppl.cove.cloudbackup
      onRecreate: () -> Unit,
      onReinitialize: () -> Unit,
  ) {
-     when (val kind = failure.kind) {
-         is VerificationFailureKind.Retry -> {
+     when (failure) {
+         is DeepVerificationFailure.Retry -> {
              ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
              MaterialDivider()
              MaterialSettingsItem(
                  title = "Try Again",
-                 onClick = { manager.dispatch(CloudBackupManagerAction.StartVerification) },
+                 onClick = {
+                     manager.dispatch(
+                         CloudBackupManagerAction.StartVerification(
+                             CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                         ),
+                     )
+                 },
                  leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
              )
              MaterialDivider()
@@ -1088,40 +1490,40 @@ package org.bitcoinppl.cove.cloudbackup
                  leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
              )
          }
- 
-         is VerificationFailureKind.RecreateManifest -> {
+
+         is DeepVerificationFailure.RecreateManifest -> {
              ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
              MaterialDivider()
              MaterialSettingsItem(
                  title = "Recreate Backup Index",
-                 subtitle = kind.warning,
+                 subtitle = failure.warning,
                  onClick = onRecreate,
                  leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
              )
          }
- 
-         is VerificationFailureKind.ReinitializeBackup -> {
+
+         is DeepVerificationFailure.ReinitializeBackup -> {
              ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
              MaterialDivider()
              MaterialSettingsItem(
                  title = "Reinitialize Cloud Backup",
-                 subtitle = kind.warning,
+                 subtitle = failure.warning,
                  onClick = onReinitialize,
                  leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
              )
          }
- 
-         is VerificationFailureKind.UnsupportedVersion -> {
+
+         is DeepVerificationFailure.UnsupportedVersion -> {
              ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
          }
      }
- 
+
      if (manager.recovery is RecoveryState.Failed) {
          MaterialDivider()
          ErrorInlineMessage((manager.recovery as RecoveryState.Failed).error, modifier = Modifier.padding(16.dp))
      }
  }
- 
+
  @Composable
  private fun LoadingRow(
      text: String,
@@ -1135,7 +1537,7 @@ package org.bitcoinppl.cove.cloudbackup
          Text(text)
      }
  }
- 
+
  @Composable
  private fun ErrorInlineMessage(
      message: String,

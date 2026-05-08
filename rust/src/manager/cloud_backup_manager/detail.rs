@@ -1,10 +1,12 @@
 use act_zero::send;
 use tracing::error;
 
+use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
-    CLOUD_BACKUP_MANAGER, CloudBackupError, CloudBackupManagerAction, CloudBackupPasskeyChoiceFlow,
-    CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    RustCloudBackupManager, workers::CloudBackupOperation,
+    CLOUD_BACKUP_MANAGER, CloudBackupError, CloudBackupManagerAction,
+    CloudBackupPasskeyChoiceIntent, CloudBackupWalletItem, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RustCloudBackupManager,
+    workers::CloudBackupOperation,
 };
 
 type Action = CloudBackupManagerAction;
@@ -24,6 +26,53 @@ pub enum VerificationState {
     PasskeyConfirmed,
     Failed(DeepVerificationFailure),
     Cancelled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupVerificationReason {
+    BackupChanged,
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupVerificationSource {
+    RootPrompt,
+    Settings,
+    CloudBackupDetail,
+    Onboarding,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupVerificationPresentation {
+    Hidden {
+        source: Option<CloudBackupVerificationSource>,
+    },
+    /// The verification sheet is only for an unanswered user decision
+    NeedsDecision {
+        reason: CloudBackupVerificationReason,
+        source: CloudBackupVerificationSource,
+    },
+    /// Native passkey UI may appear while this state is active
+    ManualVerifying {
+        source: CloudBackupVerificationSource,
+    },
+    BackgroundConfirming(CloudBackupVerificationSource),
+    BackgroundBlockedOnAuthorization(CloudBackupVerificationSource),
+    /// Completion feedback should match the source instead of reopening the sheet
+    Completed {
+        source: CloudBackupVerificationSource,
+    },
+    /// Failure is a result, not another request to show the decision sheet
+    Failed {
+        source: CloudBackupVerificationSource,
+        message: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PendingUploadVerificationState {
+    Idle,
+    Confirming,
+    BlockedOnAuthorization,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -62,18 +111,21 @@ impl RustCloudBackupManager {
     pub fn dispatch(&self, action: Action) {
         use Action as A;
         match action {
-            A::EnableCloudBackup => {
+            A::EnableCloudBackup(context) => {
                 self.clear_passkey_choice_prompt();
-                self.enable_cloud_backup();
+                self.enable_cloud_backup(context);
             }
-            A::EnableCloudBackupForceNew => {
+            A::EnableCloudBackupForceNew(context) => {
                 self.clear_existing_backup_found_prompt();
-                self.enable_cloud_backup_force_new();
+                self.enable_cloud_backup_force_new(context);
             }
-            A::EnableCloudBackupNoDiscovery => {
+            A::EnableCloudBackupNoDiscovery(context) => {
                 self.clear_existing_backup_found_prompt();
                 self.clear_passkey_choice_prompt();
-                self.enable_cloud_backup_no_discovery();
+                self.enable_cloud_backup_no_discovery(context);
+            }
+            A::ConfirmSavedPasskey => {
+                self.confirm_saved_passkey();
             }
             A::DiscardPendingEnableCloudBackup => {
                 self.discard_pending_enable_cloud_backup();
@@ -82,8 +134,10 @@ impl RustCloudBackupManager {
             A::DismissMissingPasskeyReminder => self.dismiss_missing_passkey_prompt(),
             A::RestoreFromCloudBackup => self.restore_from_cloud_backup(),
             A::CancelRestore => self.cancel_restore(),
-            A::StartVerification => self.start_verification(),
-            A::StartVerificationDiscoverable => self.start_verification_discoverable(),
+            A::StartVerification(source) => self.start_verification(source),
+            A::StartVerificationDiscoverable(source) => {
+                self.start_verification_discoverable(source);
+            }
             A::DismissVerificationPrompt => self.dismiss_verification_prompt(),
             A::RecreateManifest => {
                 CLOUD_BACKUP_MANAGER.clone().spawn_recovery(RecoveryAction::RecreateManifest);
@@ -101,12 +155,14 @@ impl RustCloudBackupManager {
             }
             A::SyncUnsynced => CLOUD_BACKUP_MANAGER.clone().spawn_sync(),
             A::FetchCloudOnly => CLOUD_BACKUP_MANAGER.clone().spawn_fetch_cloud_only(),
-            A::RestoreCloudWallet { record_id } => {
+            A::RestoreCloudWallet(record_id) => {
                 CLOUD_BACKUP_MANAGER.clone().spawn_restore_cloud_wallet(record_id);
             }
-            A::DeleteCloudWallet { record_id } => {
+            A::DeleteCloudWallet(record_id) => {
                 CLOUD_BACKUP_MANAGER.clone().spawn_delete_cloud_wallet(record_id);
             }
+            A::RecoverOtherBackups => CLOUD_BACKUP_MANAGER.clone().spawn_recover_other_backups(),
+            A::DeleteOtherBackups => CLOUD_BACKUP_MANAGER.clone().spawn_delete_other_backups(),
             A::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
             A::EnterDetail => CLOUD_BACKUP_MANAGER.clone().spawn_enter_detail(),
         }
@@ -114,17 +170,32 @@ impl RustCloudBackupManager {
 }
 
 impl RustCloudBackupManager {
-    fn start_verification(&self) {
+    fn start_verification(&self, source: CloudBackupVerificationSource) {
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
+
+        if self.has_pending_cloud_upload_verification() {
+            self.apply_verification_effect(
+                CloudBackupVerificationCoordinator::begin_background_confirmation(source),
+            );
+            self.resume_pending_cloud_upload_verification();
+            return;
+        }
+
+        self.apply_verification_effect(
+            CloudBackupVerificationCoordinator::begin_manual_presentation(source),
+        );
         send!(self.supervisor.start_verification(false));
     }
 
-    fn start_verification_discoverable(&self) {
+    fn start_verification_discoverable(&self, source: CloudBackupVerificationSource) {
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
+        self.apply_verification_effect(
+            CloudBackupVerificationCoordinator::begin_manual_presentation(source),
+        );
         send!(self.supervisor.start_verification(true));
     }
 
@@ -132,10 +203,13 @@ impl RustCloudBackupManager {
         if let Err(error) = self.dismiss_verification_prompt_impl() {
             error!("Failed to dismiss verification prompt: {error}");
         }
+        self.apply_verification_effect(CloudBackupVerificationCoordinator::dismiss_decision(
+            self.current_verification_source(),
+        ));
     }
 
     fn spawn_recovery(self: std::sync::Arc<Self>, action: RecoveryAction) {
-        let operation = CloudBackupOperation::Recovery { action };
+        let operation = CloudBackupOperation::Recovery(action);
         send!(self.supervisor.start_operation(operation, None));
     }
 
@@ -152,14 +226,42 @@ impl RustCloudBackupManager {
         send!(self.supervisor.start_operation(CloudBackupOperation::FetchCloudOnly, None));
     }
 
-    fn spawn_restore_cloud_wallet(self: std::sync::Arc<Self>, record_id: String) {
+    fn spawn_restore_cloud_wallet(self: std::sync::Arc<Self>, record_id: super::RecordId) {
         let operation = CloudBackupOperation::RestoreCloudWallet;
-        send!(self.supervisor.start_operation(operation, Some(record_id)));
+        send!(self.supervisor.start_operation(operation, Some(record_id.into())));
     }
 
-    fn spawn_delete_cloud_wallet(self: std::sync::Arc<Self>, record_id: String) {
+    fn spawn_delete_cloud_wallet(self: std::sync::Arc<Self>, record_id: super::RecordId) {
         let operation = CloudBackupOperation::DeleteCloudWallet;
-        send!(self.supervisor.start_operation(operation, Some(record_id)));
+        send!(self.supervisor.start_operation(operation, Some(record_id.into())));
+    }
+
+    fn spawn_recover_other_backups(self: std::sync::Arc<Self>) {
+        if !matches!(
+            &self.state.read().other_backups_operation,
+            OtherBackupsOperation::Idle
+                | OtherBackupsOperation::Recovered { .. }
+                | OtherBackupsOperation::Deleted
+                | OtherBackupsOperation::Failed { .. }
+        ) {
+            return;
+        }
+
+        send!(self.supervisor.start_operation(CloudBackupOperation::RecoverOtherBackups, None));
+    }
+
+    fn spawn_delete_other_backups(self: std::sync::Arc<Self>) {
+        if !matches!(
+            &self.state.read().other_backups_operation,
+            OtherBackupsOperation::Idle
+                | OtherBackupsOperation::Recovered { .. }
+                | OtherBackupsOperation::Deleted
+                | OtherBackupsOperation::Failed { .. }
+        ) {
+            return;
+        }
+
+        send!(self.supervisor.start_operation(CloudBackupOperation::DeleteOtherBackups, None));
     }
 
     fn spawn_refresh_detail(self: std::sync::Arc<Self>) {
@@ -170,11 +272,29 @@ impl RustCloudBackupManager {
         send!(self.supervisor.start_enter_detail());
     }
 
+    fn confirm_saved_passkey(&self) {
+        send!(self.supervisor.confirm_saved_passkey());
+    }
+
     pub(crate) async fn handle_start_verification(&self, force_discoverable: bool) {
         self.clear_pending_verification_completion();
+        if !matches!(
+            self.state.read().verification_presentation,
+            CloudBackupVerificationPresentation::ManualVerifying { .. }
+        ) {
+            self.apply_verification_effect(
+                CloudBackupVerificationCoordinator::begin_manual_presentation(
+                    CloudBackupVerificationSource::Settings,
+                ),
+            );
+        }
         self.set_verification(VerificationState::Verifying);
 
         let result = self.deep_verify_cloud_backup(force_discoverable).await;
+        self.handle_deep_verification_result(result);
+    }
+
+    pub(crate) fn handle_deep_verification_result(&self, result: DeepVerificationResult) {
         self.apply_deep_verification_result(result);
     }
 
@@ -184,9 +304,14 @@ impl RustCloudBackupManager {
                 self.apply_verified_report(report);
             }
             DeepVerificationResult::AwaitingUploadConfirmation(report) => {
-                if let Some(detail) = report.detail {
+                if let Some(detail) = report.detail.clone() {
                     self.set_detail(Some(detail));
                 }
+                self.apply_verification_effect(
+                    CloudBackupVerificationCoordinator::begin_background_confirmation(
+                        self.current_verification_source(),
+                    ),
+                );
             }
             DeepVerificationResult::PasskeyConfirmed(detail) => {
                 if let Some(detail) = detail {
@@ -275,7 +400,7 @@ impl RustCloudBackupManager {
             }
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
                 self.set_recovery(RecoveryState::Idle);
-                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceFlow::RepairPasskey);
+                self.set_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::RepairPasskey);
             }
             Err(CloudBackupError::UnsupportedPasskeyProvider) => {
                 self.set_recovery(RecoveryState::Idle);
@@ -395,6 +520,38 @@ impl RustCloudBackupManager {
             }
             Err(error) => {
                 self.set_cloud_only_operation(CloudOnlyOperation::Failed {
+                    error: error.to_string(),
+                });
+            }
+        }
+    }
+
+    pub(crate) async fn handle_recover_other_backups(&self) {
+        match self.do_recover_other_backups().await {
+            Ok(report) => {
+                self.set_other_backups_operation(OtherBackupsOperation::Recovered {
+                    wallets_restored: report.wallets_restored,
+                    wallets_failed: report.wallets_failed,
+                    failed_wallet_errors: report.failed_wallet_errors,
+                });
+                self.handle_sync().await;
+            }
+            Err(error) => {
+                self.set_other_backups_operation(OtherBackupsOperation::Failed {
+                    error: error.to_string(),
+                });
+            }
+        }
+    }
+
+    pub(crate) async fn handle_delete_other_backups(&self) {
+        match self.do_delete_other_backups().await {
+            Ok(()) => {
+                self.set_other_backups_operation(OtherBackupsOperation::Deleted);
+                self.handle_refresh_detail().await;
+            }
+            Err(error) => {
+                self.set_other_backups_operation(OtherBackupsOperation::Failed {
                     error: error.to_string(),
                 });
             }

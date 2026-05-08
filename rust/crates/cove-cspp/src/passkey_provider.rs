@@ -126,6 +126,7 @@ mod tests {
             aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
             registered_platform: PasskeyRegistrationPlatform::Android,
             registered_at: 1_777_661_234,
+            name_suffix: "09IX".into(),
         };
 
         assert_eq!(hint.known_provider(), Some(KnownPasskeyProvider::GooglePasswordManager));
@@ -137,6 +138,7 @@ mod tests {
             aaguid: "EA9B8D66-4D01-1D21-3CE4-B6B48CB575D4".into(),
             registered_platform: PasskeyRegistrationPlatform::Android,
             registered_at: 1_777_661_234,
+            name_suffix: "09IX".into(),
         };
 
         assert_eq!(hint.known_provider(), Some(KnownPasskeyProvider::GooglePasswordManager));
@@ -148,11 +150,13 @@ mod tests {
             aaguid: ZERO_AAGUID.into(),
             registered_platform: PasskeyRegistrationPlatform::Ios,
             registered_at: 1_777_661_234,
+            name_suffix: "09IX".into(),
         };
         let android_hint = PasskeyProviderHint {
             aaguid: ZERO_AAGUID.into(),
             registered_platform: PasskeyRegistrationPlatform::Android,
             registered_at: 1_777_661_236,
+            name_suffix: "09IY".into(),
         };
 
         assert_eq!(ios_hint.known_provider(), Some(KnownPasskeyProvider::ApplePasswords));
@@ -165,6 +169,7 @@ mod tests {
             aaguid: "00000000-0000-0000-0000-000000000000".to_ascii_uppercase(),
             registered_platform: PasskeyRegistrationPlatform::Ios,
             registered_at: 1_777_661_234,
+            name_suffix: "09IX".into(),
         };
 
         assert_eq!(hint.known_provider(), Some(KnownPasskeyProvider::ApplePasswords));
@@ -176,6 +181,7 @@ mod tests {
             aaguid: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".into(),
             registered_platform: PasskeyRegistrationPlatform::Android,
             registered_at: 1_777_661_236,
+            name_suffix: "09IY".into(),
         };
 
         assert_eq!(hint.known_provider(), None);

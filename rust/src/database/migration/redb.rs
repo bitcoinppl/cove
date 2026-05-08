@@ -633,7 +633,6 @@ mod tests {
             ..cloud_backup::PersistedCloudBackupState::default()
         };
         let sync_state = cloud_backup::PersistedCloudBlobSyncState {
-            kind: cloud_backup::CloudUploadKind::BackupBlob,
             namespace_id: "namespace".into(),
             wallet_id: None,
             record_id: "wallet-a".into(),

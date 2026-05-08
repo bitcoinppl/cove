@@ -1,33 +1,29 @@
 use std::collections::{HashMap, HashSet};
 
-use cove_util::ResultExt as _;
-use futures::stream::{self, StreamExt as _, TryStreamExt as _};
-
-use super::wallets::{RemoteWalletBackupSummary, all_local_wallets, prepare_wallet_backup};
+use super::wallets::RemoteWalletBackupSummary;
 use super::{
-    CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError, CloudBackupWalletItem,
-    CloudBackupWalletStatus,
+    CloudBackupDetail, CloudBackupError, CloudBackupOtherBackupsState, CloudBackupStore,
+    CloudBackupWalletItem, CloudBackupWalletStatus,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobFailedState, PersistedCloudBackupStatus, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState,
+    CloudBlobFailedState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
 };
 use crate::wallet::metadata::WalletMetadata;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct RemoteWalletTruth {
-    pub(super) summaries_by_record_id: HashMap<String, RemoteWalletBackupSummary>,
-    pub(super) unsupported_record_ids: HashSet<String>,
-    pub(super) unknown_record_ids: HashSet<String>,
+    pub(crate) summaries_by_record_id: HashMap<String, RemoteWalletBackupSummary>,
+    pub(crate) unsupported_record_ids: HashSet<String>,
+    pub(crate) unknown_record_ids: HashSet<String>,
 }
 
 #[derive(Debug, Clone)]
-struct LocalWalletSnapshot {
-    metadata: WalletMetadata,
-    record_id: String,
-    revision_hash: String,
-    local_label_count: u32,
+pub(crate) struct LocalWalletSnapshot {
+    pub(crate) metadata: WalletMetadata,
+    pub(crate) record_id: String,
+    pub(crate) revision_hash: String,
+    pub(crate) local_label_count: u32,
 }
 
 enum WalletItemBucket {
@@ -43,7 +39,7 @@ enum RemoteWalletState {
     Stale(RemoteWalletBackupSummary),
 }
 
-pub(super) struct CloudWalletInventory {
+pub(crate) struct CloudWalletInventory {
     last_sync: Option<u64>,
     local_wallets: Vec<LocalWalletSnapshot>,
     cloud_wallet_record_ids: HashSet<String>,
@@ -53,14 +49,15 @@ pub(super) struct CloudWalletInventory {
 }
 
 impl CloudWalletInventory {
-    pub(super) async fn load_with_remote_truth(
+    pub(crate) async fn load_with_remote_truth(
         wallet_record_ids: &[String],
         remote_wallet_truth: RemoteWalletTruth,
     ) -> Result<Self, CloudBackupError> {
         let db = Database::global();
-        let local_wallets = all_local_wallet_snapshots(&db).await?;
-        let last_sync = last_sync(&db);
-        let sync_states_by_record_id = sync_states_by_record_id(&db)?;
+        let store = CloudBackupStore::new(&db);
+        let local_wallets = store.local_inventory_snapshots().await?;
+        let last_sync = store.last_sync();
+        let sync_states_by_record_id = store.sync_states_by_record_id()?;
 
         Ok(Self {
             last_sync,
@@ -72,11 +69,11 @@ impl CloudWalletInventory {
         })
     }
 
-    pub(super) fn cloud_wallet_count(&self) -> usize {
+    pub(crate) fn cloud_wallet_count(&self) -> usize {
         self.cloud_wallet_record_ids.len()
     }
 
-    pub(super) fn upload_candidate_wallets(&self) -> Vec<WalletMetadata> {
+    pub(crate) fn upload_candidate_wallets(&self) -> Vec<WalletMetadata> {
         if self.strict_cloud_presence {
             return self
                 .local_wallets
@@ -93,7 +90,10 @@ impl CloudWalletInventory {
             .collect()
     }
 
-    pub(super) fn build_detail(&self) -> CloudBackupDetail {
+    pub(crate) fn build_detail(
+        &self,
+        other_backups: CloudBackupOtherBackupsState,
+    ) -> CloudBackupDetail {
         let local_record_ids: HashSet<_> =
             self.local_wallets.iter().map(|wallet| wallet.record_id.clone()).collect();
 
@@ -116,10 +116,16 @@ impl CloudWalletInventory {
             .filter(|record_id| !local_record_ids.contains(*record_id))
             .count() as u32;
 
-        CloudBackupDetail { last_sync: self.last_sync, up_to_date, needs_sync, cloud_only_count }
+        CloudBackupDetail {
+            last_sync: self.last_sync,
+            up_to_date,
+            needs_sync,
+            cloud_only_count,
+            other_backups,
+        }
     }
 
-    pub(super) fn has_unknown_remote_wallets(&self) -> bool {
+    pub(crate) fn has_unknown_remote_wallets(&self) -> bool {
         self.local_wallets.iter().any(|wallet| {
             matches!(
                 self.sync_status_for_wallet(wallet),
@@ -232,24 +238,6 @@ fn wallet_item_bucket(item: &CloudBackupWalletItem) -> Option<WalletItemBucket> 
     }
 }
 
-async fn all_local_wallet_snapshots(
-    db: &Database,
-) -> Result<Vec<LocalWalletSnapshot>, CloudBackupError> {
-    stream::iter(all_local_wallets(db)?)
-        .map(|wallet| async move {
-            let prepared = prepare_wallet_backup(&wallet, wallet.wallet_mode).await?;
-            Ok(LocalWalletSnapshot {
-                metadata: wallet,
-                record_id: prepared.record_id,
-                revision_hash: prepared.revision_hash,
-                local_label_count: prepared.entry.labels_count,
-            })
-        })
-        .buffered(CLOUD_BACKUP_IO_CONCURRENCY)
-        .try_collect()
-        .await
-}
-
 fn sync_status_from_state(
     sync_state: Option<&PersistedCloudBlobSyncState>,
     fallback_status: CloudBackupWalletStatus,
@@ -293,42 +281,17 @@ fn has_local_upload_candidate(sync_state: Option<&PersistedCloudBlobSyncState>) 
     }
 }
 
-fn last_sync(db: &Database) -> Option<u64> {
-    let state = db.cloud_backup_state.get().ok()?;
-    match state.status {
-        PersistedCloudBackupStatus::Disabled => None,
-        PersistedCloudBackupStatus::Enabled
-        | PersistedCloudBackupStatus::Unverified
-        | PersistedCloudBackupStatus::PasskeyMissing => state.last_sync,
-    }
-}
-
-fn sync_states_by_record_id(
-    db: &Database,
-) -> Result<HashMap<String, PersistedCloudBlobSyncState>, CloudBackupError> {
-    db.cloud_blob_sync_states
-        .list()
-        .map_err_prefix("list cloud blob sync states", CloudBackupError::Internal)
-        .map(|states| {
-            states
-                .into_iter()
-                .map(|state| (state.record_id.clone(), state))
-                .collect::<HashMap<_, _>>()
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::database::cloud_backup::{
         CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
-        CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, CloudUploadKind,
+        CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState,
         PersistedCloudBlobState,
     };
 
     fn sync_state(state: PersistedCloudBlobState) -> PersistedCloudBlobSyncState {
         PersistedCloudBlobSyncState {
-            kind: CloudUploadKind::BackupBlob,
             namespace_id: "ns-1".into(),
             wallet_id: None,
             record_id: "record-1".into(),
@@ -557,7 +520,6 @@ mod tests {
                 (
                     uploading_wallet.record_id.clone(),
                     PersistedCloudBlobSyncState {
-                        kind: CloudUploadKind::BackupBlob,
                         namespace_id: "ns-1".into(),
                         wallet_id: None,
                         record_id: uploading_wallet.record_id.clone(),
@@ -570,7 +532,6 @@ mod tests {
                 (
                     pending_wallet.record_id.clone(),
                     PersistedCloudBlobSyncState {
-                        kind: CloudUploadKind::BackupBlob,
                         namespace_id: "ns-1".into(),
                         wallet_id: None,
                         record_id: pending_wallet.record_id.clone(),
@@ -614,7 +575,8 @@ mod tests {
 
         assert!(upload_candidates.is_empty());
 
-        let detail = inventory.build_detail();
+        let detail = inventory
+            .build_detail(CloudBackupOtherBackupsState::Loaded { summary: Default::default() });
 
         assert_eq!(detail.needs_sync.len(), 2);
         assert!(detail.needs_sync.iter().any(|item| {
@@ -654,7 +616,8 @@ mod tests {
         );
         assert!(inventory.upload_candidate_wallets().is_empty());
 
-        let detail = inventory.build_detail();
+        let detail = inventory
+            .build_detail(CloudBackupOtherBackupsState::Loaded { summary: Default::default() });
 
         assert_eq!(detail.needs_sync.len(), 1);
         assert_eq!(detail.needs_sync[0].record_id, wallet.record_id);

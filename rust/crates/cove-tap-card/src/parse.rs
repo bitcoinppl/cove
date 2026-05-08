@@ -166,7 +166,7 @@ fn message_and_signature_to_pubkey(
     card_ident: &str,
     signature: &str,
 ) -> Result<PublicKey, SignatureParseError> {
-    let card_ident_bytes = hex::decode(card_ident).map_err(SignatureParseError::HexDecode)?;
+    let card_ident_bytes = hex::decode(card_ident)?;
     let pubkeys = message_and_signature_to_pubkeys(message, signature)?;
 
     for pubkey in pubkeys {
@@ -183,7 +183,7 @@ fn message_and_signature_to_pubkeys(
     message: Message,
     signature: &str,
 ) -> Result<Vec<PublicKey>, SignatureParseError> {
-    let signature = hex::decode(signature.as_bytes()).map_err(SignatureParseError::HexDecode)?;
+    let signature = hex::decode(signature.as_bytes())?;
 
     if signature.len() != 64 {
         return Err(SignatureParseError::InvalidSignatureLength(signature.len() as u32));

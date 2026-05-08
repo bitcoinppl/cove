@@ -98,6 +98,24 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         }
     }
 
+    func deleteNamespace(namespace: String, policy _: CloudAccessPolicy) async throws {
+        try await run {
+            let url = try self.helper.namespaceDirectoryReadURL(namespace: namespace)
+            if FileManager.default.fileExists(atPath: url.path) {
+                try self.helper.coordinatedDelete(at: url, missingItemID: namespace)
+                return
+            }
+
+            let resolvedURL = try self.helper.metadataItemIfPresent(
+                named: url.lastPathComponent,
+                parentDirectoryURL: url.deletingLastPathComponent()
+            )?.url
+            guard let resolvedURL else { throw CloudStorageError.NotFound(namespace) }
+
+            try self.helper.coordinatedDelete(at: resolvedURL, missingItemID: namespace)
+        }
+    }
+
     // MARK: - Discovery
 
     func listNamespaces(policy _: CloudAccessPolicy) async throws -> [String] {

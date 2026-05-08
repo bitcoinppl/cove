@@ -39,6 +39,7 @@ internal fun reduceOnboardingSnapshot(
         is OnboardingReconcileMessage.CloudRestoreMessageChanged -> snapshot.copy(state = snapshot.state.copy(cloudRestoreMessage = message.v1))
         is OnboardingReconcileMessage.CloudRestoreProviderHintChanged -> snapshot.copy(state = snapshot.state.copy(cloudRestoreProviderHint = message.v1))
         is OnboardingReconcileMessage.ShouldOfferCloudRestore -> snapshot.copy(state = snapshot.state.copy(shouldOfferCloudRestore = message.v1))
+        is OnboardingReconcileMessage.CloudRestoreAlertVisible -> snapshot.copy(state = snapshot.state.copy(cloudRestoreAlertVisible = message.v1))
         is OnboardingReconcileMessage.ErrorMessageChanged -> snapshot.copy(state = snapshot.state.copy(errorMessage = message.v1))
         is OnboardingReconcileMessage.Complete -> snapshot.copy(isComplete = true)
     }

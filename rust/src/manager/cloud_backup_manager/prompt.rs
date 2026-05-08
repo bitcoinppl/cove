@@ -1,30 +1,41 @@
 use super::{
-    CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupState, CloudBackupStatus,
-    RecoveryAction, RecoveryState, VerificationState,
+    CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint,
+    CloudBackupPromptIntent, CloudBackupState, CloudBackupStatus,
+    CloudBackupVerificationPresentation, RecoveryAction, RecoveryState,
 };
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct CloudBackupPromptState {
-    existing_backup_found: bool,
-    passkey_choice_flow: Option<CloudBackupPasskeyChoiceFlow>,
+    existing_backup_found: Option<ExistingBackupFoundPrompt>,
+    passkey_choice: Option<CloudBackupPasskeyChoiceIntent>,
     missing_passkey_dismissed: bool,
+}
+
+#[derive(Debug, Clone)]
+struct ExistingBackupFoundPrompt {
+    context: CloudBackupEnableContext,
+    passkey_hint: Option<CloudBackupPasskeyHint>,
 }
 
 impl CloudBackupPromptState {
     pub(crate) fn clear_existing_backup_found(&mut self) {
-        self.existing_backup_found = false;
+        self.existing_backup_found = None;
     }
 
-    pub(crate) fn set_existing_backup_found(&mut self) {
-        self.existing_backup_found = true;
+    pub(crate) fn set_existing_backup_found(
+        &mut self,
+        context: CloudBackupEnableContext,
+        passkey_hint: Option<CloudBackupPasskeyHint>,
+    ) {
+        self.existing_backup_found = Some(ExistingBackupFoundPrompt { context, passkey_hint });
     }
 
     pub(crate) fn clear_passkey_choice(&mut self) {
-        self.passkey_choice_flow = None;
+        self.passkey_choice = None;
     }
 
-    pub(crate) fn set_passkey_choice(&mut self, flow: CloudBackupPasskeyChoiceFlow) {
-        self.passkey_choice_flow = Some(flow);
+    pub(crate) fn set_passkey_choice(&mut self, intent: CloudBackupPasskeyChoiceIntent) {
+        self.passkey_choice = Some(intent);
     }
 
     pub(crate) fn dismiss_missing_passkey(&mut self) {
@@ -36,12 +47,15 @@ impl CloudBackupPromptState {
     }
 
     pub(crate) fn resolve(&self, state: &CloudBackupState) -> CloudBackupPromptIntent {
-        if self.existing_backup_found {
-            return CloudBackupPromptIntent::ExistingBackupFound;
+        if let Some(prompt) = &self.existing_backup_found {
+            return CloudBackupPromptIntent::ExistingBackupFound(
+                prompt.context,
+                prompt.passkey_hint.clone(),
+            );
         }
 
-        if let Some(flow) = &self.passkey_choice_flow {
-            return CloudBackupPromptIntent::PasskeyChoice(flow.clone());
+        if let Some(intent) = &self.passkey_choice {
+            return CloudBackupPromptIntent::PasskeyChoice(intent.clone());
         }
 
         // show a reminder while cloud backup needs a passkey, unless repair is already underway
@@ -52,19 +66,17 @@ impl CloudBackupPromptState {
             return CloudBackupPromptIntent::MissingPasskeyReminder;
         }
 
-        // decide whether verification needs user attention while accounting for background upload checks
-        use VerificationState as Vs;
-        match (&state.verification, state.should_prompt_verification) {
-            (Vs::Verifying, _) if state.has_pending_upload_verification => {
-                CloudBackupPromptIntent::None
-            }
-            (Vs::Verifying | Vs::Failed(_), _) => CloudBackupPromptIntent::VerificationPrompt,
-            (Vs::Idle | Vs::Verified(_) | Vs::PasskeyConfirmed | Vs::Cancelled, true) => {
+        // the verification sheet is an unanswered decision, not a status surface
+        match state.verification_presentation {
+            CloudBackupVerificationPresentation::NeedsDecision { .. } => {
                 CloudBackupPromptIntent::VerificationPrompt
             }
-            (Vs::Idle | Vs::Verified(_) | Vs::PasskeyConfirmed | Vs::Cancelled, false) => {
-                CloudBackupPromptIntent::None
-            }
+            CloudBackupVerificationPresentation::Hidden { .. }
+            | CloudBackupVerificationPresentation::ManualVerifying { .. }
+            | CloudBackupVerificationPresentation::BackgroundConfirming(_)
+            | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization(_)
+            | CloudBackupVerificationPresentation::Completed { .. }
+            | CloudBackupVerificationPresentation::Failed { .. } => CloudBackupPromptIntent::None,
         }
     }
 }
@@ -72,10 +84,20 @@ impl CloudBackupPromptState {
 #[cfg(test)]
 mod tests {
     use super::{
-        CloudBackupPasskeyChoiceFlow, CloudBackupPromptIntent, CloudBackupPromptState,
-        CloudBackupState, CloudBackupStatus, RecoveryAction, RecoveryState, VerificationState,
+        CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent, CloudBackupPromptIntent,
+        CloudBackupPromptState, CloudBackupState, CloudBackupStatus,
+        CloudBackupVerificationPresentation, RecoveryAction, RecoveryState,
     };
-    use crate::manager::cloud_backup_manager::{DeepVerificationFailure, VerificationFailureKind};
+    use crate::manager::cloud_backup_manager::{
+        CloudBackupVerificationReason, CloudBackupVerificationSource, SavedPasskeyConfirmationMode,
+    };
+
+    fn onboarding_context() -> CloudBackupEnableContext {
+        CloudBackupEnableContext {
+            saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
+            verification_source: CloudBackupVerificationSource::Onboarding,
+        }
+    }
 
     #[test]
     fn existing_backup_prompt_has_highest_priority() {
@@ -86,9 +108,13 @@ mod tests {
             ..CloudBackupState::default()
         };
 
-        prompt_state.set_existing_backup_found();
+        let context = onboarding_context();
+        prompt_state.set_existing_backup_found(context, None);
 
-        assert_eq!(prompt_state.resolve(&state), CloudBackupPromptIntent::ExistingBackupFound,);
+        assert_eq!(
+            prompt_state.resolve(&state),
+            CloudBackupPromptIntent::ExistingBackupFound(context, None),
+        );
     }
 
     #[test]
@@ -100,11 +126,26 @@ mod tests {
             ..CloudBackupState::default()
         };
 
-        prompt_state.set_passkey_choice(CloudBackupPasskeyChoiceFlow::RepairPasskey);
+        prompt_state.set_passkey_choice(CloudBackupPasskeyChoiceIntent::RepairPasskey);
 
         assert_eq!(
             prompt_state.resolve(&state),
-            CloudBackupPromptIntent::PasskeyChoice(CloudBackupPasskeyChoiceFlow::RepairPasskey,),
+            CloudBackupPromptIntent::PasskeyChoice(CloudBackupPasskeyChoiceIntent::RepairPasskey,),
+        );
+    }
+
+    #[test]
+    fn enable_passkey_choice_carries_context() {
+        let mut prompt_state = CloudBackupPromptState::default();
+        let context = onboarding_context();
+
+        prompt_state.set_passkey_choice(CloudBackupPasskeyChoiceIntent::Enable(context, None));
+
+        assert_eq!(
+            prompt_state.resolve(&CloudBackupState::default()),
+            CloudBackupPromptIntent::PasskeyChoice(CloudBackupPasskeyChoiceIntent::Enable(
+                context, None,
+            )),
         );
     }
 
@@ -139,9 +180,9 @@ mod tests {
     fn background_verification_suppresses_verification_prompt() {
         let prompt_state = CloudBackupPromptState::default();
         let state = CloudBackupState {
-            has_pending_upload_verification: true,
-            should_prompt_verification: true,
-            verification: VerificationState::Verifying,
+            verification_presentation: CloudBackupVerificationPresentation::BackgroundConfirming(
+                CloudBackupVerificationSource::Settings,
+            ),
             ..CloudBackupState::default()
         };
 
@@ -152,11 +193,24 @@ mod tests {
     fn failed_verification_keeps_prompt_active() {
         let prompt_state = CloudBackupPromptState::default();
         let state = CloudBackupState {
-            verification: VerificationState::Failed(DeepVerificationFailure {
-                kind: VerificationFailureKind::Retry,
+            verification_presentation: CloudBackupVerificationPresentation::Failed {
+                source: CloudBackupVerificationSource::RootPrompt,
                 message: "verification failed".into(),
-                detail: None,
-            }),
+            },
+            ..CloudBackupState::default()
+        };
+
+        assert_eq!(prompt_state.resolve(&state), CloudBackupPromptIntent::None);
+    }
+
+    #[test]
+    fn unanswered_verification_decision_shows_prompt() {
+        let prompt_state = CloudBackupPromptState::default();
+        let state = CloudBackupState {
+            verification_presentation: CloudBackupVerificationPresentation::NeedsDecision {
+                reason: CloudBackupVerificationReason::BackupChanged,
+                source: CloudBackupVerificationSource::Settings,
+            },
             ..CloudBackupState::default()
         };
 

@@ -77,7 +77,8 @@ struct OnboardingBackupWalletView: View {
 
     private var subtitle: String {
         if branch == .exchange {
-            return "You’ll fund this wallet next. Save your recovery words or enable Cloud Backup first."
+            return
+                "You’ll fund this wallet next. Save your recovery words or enable Cloud Backup first."
         }
 
         return "Choose at least one backup method before continuing."
@@ -142,10 +143,12 @@ struct OnboardingSecretWordsView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        Text("Write these down exactly in order and keep them offline. Anyone with these words can control your Bitcoin.")
-                            .font(.footnote)
-                            .foregroundStyle(.coveLightGray.opacity(0.74))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(
+                            "Write these down exactly in order and keep them offline. Anyone with these words can control your Bitcoin."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.74))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     LazyVGrid(columns: columns, spacing: 12) {
@@ -174,6 +177,7 @@ struct OnboardingSecretWordsView: View {
 
 struct OnboardingCloudBackupStepView: View {
     let branch: OnboardingBranch?
+    let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
 
@@ -181,18 +185,21 @@ struct OnboardingCloudBackupStepView: View {
         switch branch {
         case .softwareImport:
             OnboardingSoftwareImportCloudBackupStepView(
+                onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: onSkip
             )
 
         case .hardware:
             OnboardingHardwareImportCloudBackupStepView(
+                onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: onSkip
             )
 
         case .newUser, .exchange, .softwareCreate, nil:
             OnboardingCloudBackupDetailsStepView(
+                onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: onSkip,
                 context: .standard
@@ -204,12 +211,14 @@ struct OnboardingCloudBackupStepView: View {
 private struct OnboardingSoftwareImportCloudBackupStepView: View {
     @State private var showingDetails = false
 
+    let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
 
     var body: some View {
         if showingDetails {
             OnboardingCloudBackupDetailsStepView(
+                onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: { showingDetails = false },
                 context: .standard
@@ -226,12 +235,14 @@ private struct OnboardingSoftwareImportCloudBackupStepView: View {
 private struct OnboardingHardwareImportCloudBackupStepView: View {
     @State private var showingDetails = false
 
+    let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
 
     var body: some View {
         if showingDetails {
             OnboardingCloudBackupDetailsStepView(
+                onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: { showingDetails = false },
                 context: .hardwareImport
@@ -247,9 +258,10 @@ private struct OnboardingHardwareImportCloudBackupStepView: View {
 
 private struct OnboardingCloudBackupDetailsStepView: View {
     @State private var backupManager = CloudBackupManager.shared
-    @State private var didComplete = false
-    @State private var isStartingEnable = false
+    @State private var didReportEnabled = false
+    @State private var didAutoConfirmSavedPasskey = false
 
+    let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
     let context: CloudBackupEnableOnboardingContext
@@ -261,61 +273,214 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         case let .error(message):
             message
         default:
-            nil
+            if case let .failed(failure) = backupManager.verification {
+                failure.message()
+            } else {
+                nil
+            }
         }
     }
 
     private var isBusy: Bool {
-        isStartingEnable || {
-            if case .enabling = backupManager.status { true } else { false }
-        }()
+        if case .verifying = backupManager.verification { return true }
+        if case .confirming = backupManager.pendingUploadVerification { return true }
+        if case .confirmingSavedPasskey = backupManager.enableState { return true }
+        if needsAutomaticPasskeyConfirmation { return true }
+
+        return isEnablingCloudBackup && !needsManualPasskeyConfirmation
+    }
+
+    private var isEnablingCloudBackup: Bool {
+        if case .enabling = backupManager.status {
+            return true
+        }
+
+        return false
+    }
+
+    private var isPromptingForEnableChoice: Bool {
+        if case .passkeyChoice(.enable) = backupManager.promptIntent {
+            return true
+        }
+
+        return false
+    }
+
+    private var savedPasskeyConfirmationMode: SavedPasskeyConfirmationMode? {
+        guard case let .awaitingSavedPasskeyConfirmation(mode) = backupManager.enableState else {
+            return nil
+        }
+
+        return mode
+    }
+
+    private var needsAutomaticPasskeyConfirmation: Bool {
+        savedPasskeyConfirmationMode == .automatic
+    }
+
+    private var needsManualPasskeyConfirmation: Bool {
+        savedPasskeyConfirmationMode == .manual
+    }
+
+    private var isAutomaticPasskeyConfirmationPhase: Bool {
+        if needsAutomaticPasskeyConfirmation { return true }
+        if didAutoConfirmSavedPasskey,
+           case .confirmingSavedPasskey = backupManager.enableState
+        {
+            return true
+        }
+
+        return false
+    }
+
+    private var busyOverlayTitleOverride: String? {
+        guard isAutomaticPasskeyConfirmationPhase else { return nil }
+
+        return "Finishing passkey setup..."
+    }
+
+    private var busyOverlaySubtitleOverride: String? {
+        guard isAutomaticPasskeyConfirmationPhase else { return nil }
+
+        return "Cloud Backup will continue automatically"
+    }
+
+    private var primaryButtonTitle: String {
+        if case .failed = backupManager.verification { return "Try Again" }
+        return needsManualPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
+    }
+
+    private func handleEnableTap() {
+        guard !isBusy, !isPromptingForEnableChoice else { return }
+
+        if needsManualPasskeyConfirmation {
+            return backupManager.dispatch(action: .confirmSavedPasskey)
+        }
+        if case .failed = backupManager.verification {
+            return backupManager.dispatch(action: .startVerification(.onboarding))
+        }
+
+        onEnable()
+    }
+
+    private func handleSkipTap() {
+        if needsManualPasskeyConfirmation {
+            backupManager.dispatch(action: .discardPendingEnableCloudBackup)
+        }
+
+        onSkip()
+    }
+
+    private func autoConfirmSavedPasskeyIfNeeded() {
+        guard needsAutomaticPasskeyConfirmation, !didAutoConfirmSavedPasskey, !didReportEnabled else {
+            return
+        }
+
+        didAutoConfirmSavedPasskey = true
+        backupManager.dispatch(action: .confirmSavedPasskey)
     }
 
     var body: some View {
         ZStack {
             CloudBackupEnableOnboardingView(
-                onEnable: {
-                    guard !isBusy else { return }
-                    isStartingEnable = true
-                    backupManager.dispatch(action: .enableCloudBackupNoDiscovery)
-                },
-                onCancel: onSkip,
+                onEnable: handleEnableTap,
+                onCancel: handleSkipTap,
                 message: onboardingMessage,
-                isBusy: isBusy,
-                context: context
+                isBusy: isBusy || isPromptingForEnableChoice,
+                context: context,
+                primaryButtonTitle: primaryButtonTitle
             )
 
             if isBusy {
-                CloudBackupEnableBusyOverlay()
+                CloudBackupEnableBusyOverlay(
+                    enableState: backupManager.enableState,
+                    titleOverride: busyOverlayTitleOverride,
+                    subtitleOverride: busyOverlaySubtitleOverride
+                )
             }
         }
         .task {
             completeIfEnabled()
+            autoConfirmSavedPasskeyIfNeeded()
         }
         .onChange(of: backupManager.status, initial: true) { _, status in
-            if case .enabling = status {
-                isStartingEnable = false
-            } else if isStartingEnable {
-                isStartingEnable = false
-            }
             completeIfEnabled(status: status)
         }
-        .onChange(of: backupManager.isConfigured) { _, _ in
+        .onChange(of: backupManager.pendingUploadVerification) { _, _ in
             completeIfEnabled()
+        }
+        .onChange(of: backupManager.verification) { _, _ in
+            completeIfEnabled()
+        }
+        .onChange(of: backupManager.enableState, initial: true) { _, _ in
+            autoConfirmSavedPasskeyIfNeeded()
         }
     }
 
     private func completeIfEnabled(status: CloudBackupStatus? = nil) {
-        guard !didComplete else { return }
+        guard !didReportEnabled else { return }
         let currentStatus = status ?? backupManager.status
-        let isEnabled = if case .enabled = currentStatus {
-            true
-        } else {
-            backupManager.isCloudBackupEnabled
-        }
-        guard isEnabled else { return }
-        didComplete = true
+        guard
+            shouldCompleteOnboardingCloudBackup(
+                status: currentStatus,
+                pendingUploadVerification: backupManager.pendingUploadVerification,
+                verification: backupManager.verification
+            )
+        else { return }
+        didReportEnabled = true
         onEnabled()
+    }
+}
+
+private func shouldCompleteOnboardingCloudBackup(
+    status: CloudBackupStatus,
+    pendingUploadVerification: PendingUploadVerificationState,
+    verification: VerificationState
+) -> Bool {
+    guard case .enabled = status else { return false }
+    guard case .idle = pendingUploadVerification else { return false }
+    guard case .verified = verification else { return false }
+
+    return true
+}
+
+struct OnboardingCloudBackupSuccessView: View {
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            OnboardingStatusHero(
+                systemImage: "checkmark",
+                tint: .lightGreen,
+                fillColor: Color.lightGreen.opacity(0.12),
+                iconSize: 26
+            )
+
+            Spacer()
+                .frame(height: 36)
+
+            Text("Cloud Backup enabled successfully")
+                .font(OnboardingRecoveryTypography.compactTitle)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+
+            Spacer(minLength: 0)
+
+            Button(action: onContinue) {
+                Text("Continue")
+            }
+            .buttonStyle(OnboardingPrimaryButtonStyle())
+            .padding(.horizontal, 24)
+
+            Spacer()
+                .frame(height: 28)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onboardingRecoveryBackground()
     }
 }
 
@@ -331,10 +496,12 @@ private struct OnboardingSoftwareImportCloudBackupChoiceView: View {
         ) {
             VStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Your wallet backup is end-to-end encrypted before it leaves your device, stored in iCloud, and locked with a passkey only you control.")
-                        .font(.footnote)
-                        .foregroundStyle(.coveLightGray.opacity(0.78))
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        "Your wallet backup is end-to-end encrypted before it leaves your device, stored in iCloud, and locked with a passkey only you control."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.coveLightGray.opacity(0.78))
+                    .fixedSize(horizontal: false, vertical: true)
 
                     Text("You can skip this now and enable it later from Settings.")
                         .font(.footnote)
@@ -370,19 +537,24 @@ struct OnboardingHardwareImportCloudBackupChoiceView: View {
         OnboardingPromptScreen(
             icon: "icloud.and.arrow.up",
             title: "Protect this hardware wallet with Cloud Backup?",
-            subtitle: "Cloud Backup makes it easier to restore this wallet's configuration and labels if you lose this device."
+            subtitle:
+            "Cloud Backup makes it easier to restore this wallet's configuration and labels if you lose this device."
         ) {
             VStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("This backs up the imported hardware wallet configuration and labels stored in Cove so you can restore this wallet view later.")
-                        .font(.footnote)
-                        .foregroundStyle(.coveLightGray.opacity(0.78))
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        "This backs up the imported hardware wallet configuration and labels stored in Cove so you can restore this wallet view later."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.coveLightGray.opacity(0.78))
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Enabling this also turns on Cloud Backup for Cove more broadly, so compatible wallets you create later, as well as wallet labels, will be backed up.")
-                        .font(.footnote)
-                        .foregroundStyle(.coveLightGray.opacity(0.72))
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        "Enabling this also turns on Cloud Backup for Cove more broadly, so compatible wallets you create later, as well as wallet labels, will be backed up."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.coveLightGray.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
 
                     Text("This does not back up your hardware wallet seed or private keys.")
                         .font(.footnote.weight(.semibold))
@@ -438,10 +610,12 @@ struct OnboardingExchangeFundingView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        Text("Move your Bitcoin off the exchange and into the wallet you now control.")
-                            .font(.footnote)
-                            .foregroundStyle(.coveLightGray.opacity(0.74))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(
+                            "Move your Bitcoin off the exchange and into the wallet you now control."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.74))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     if let errorMessage {
