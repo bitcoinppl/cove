@@ -515,6 +515,9 @@ struct CloudBackupPresentationHost<Content: View>: View {
             .onChange(of: manager.verificationPresentation) { _, presentation in
                 handleVerificationPresentation(presentation)
             }
+            .onDisappear {
+                dismissSuccessFloater()
+            }
             .alert(
                 "Existing Cloud Backup Found",
                 isPresented: showingExistingBackupPrompt
