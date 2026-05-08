@@ -4,7 +4,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -81,24 +80,6 @@ class CoinControlManager(
         val outpoints = utxos.filter { value.contains(it.outpoint.hashToUint()) }.map { it.outpoint }
         dispatch(CoinControlManagerAction.NotifySelectedUtxosChanged(outpoints))
     }
-
-    /**
-     * get button color based on sort state
-     */
-    fun buttonColor(key: CoinControlListSortKey): Color =
-        when (rust.buttonPresentation(key)) {
-            is ButtonPresentation.NotSelected -> Color(0xFFD1D1D6) // systemGray5 equivalent
-            is ButtonPresentation.Selected -> Color(0xFF007AFF) // iOS blue
-        }
-
-    /**
-     * get button text color based on sort state
-     */
-    fun buttonTextColor(key: CoinControlListSortKey): Color =
-        when (rust.buttonPresentation(key)) {
-            is ButtonPresentation.NotSelected -> Color(0xFF8E8E93).copy(alpha = 0.6f) // secondary with opacity
-            is ButtonPresentation.Selected -> Color.White
-        }
 
     /**
      * get button arrow icon based on sort state

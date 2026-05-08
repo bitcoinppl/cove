@@ -36,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -52,6 +51,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
+import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupPasskeyHint
@@ -558,7 +559,7 @@ private fun CloudBackupVerificationPrompt(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .background(Color(0xE6000000)),
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.9f)),
         ) {
             Surface(
                 modifier =
@@ -590,7 +591,7 @@ private fun CloudBackupVerificationPrompt(
                     Icon(
                         imageVector = if (failure == null) Icons.Default.CheckCircle else Icons.Default.Warning,
                         contentDescription = null,
-                        tint = if (failure == null) Color(0xFF2E7D32) else Color(0xFFED6C02),
+                        tint = if (failure == null) MaterialTheme.coveColors.systemGreen else CoveColor.WarningOrange,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
 

@@ -154,7 +154,7 @@ struct UtxoListScreen: View {
                     }
                     .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.link)
                     .contentShape(
                         Rectangle().inset(
                             by:
@@ -277,7 +277,13 @@ struct UtxoListScreen: View {
     // MARK: - Helpers
 
     private func sortButton(for key: CoinControlListSortKey) -> some View {
-        Button {
+        let _ = manager.sort
+        let isSelected = {
+            if case .selected = manager.rust.buttonPresentation(button: key) { return true }
+            return false
+        }()
+
+        return Button {
             manager.dispatch(.changeSort(key))
         } label: {
             HStack {
@@ -292,8 +298,8 @@ struct UtxoListScreen: View {
             .fontWeight(.medium)
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
-            .background(manager.buttonColor(key))
-            .foregroundColor(manager.buttonTextColor(key))
+            .background(isSelected ? Color.statusInfo : Color.systemGray5)
+            .foregroundColor(isSelected ? .white : .secondary.opacity(0.60))
             .cornerRadius(100)
             .contentTransition(.interpolate)
             .lineLimit(1)
@@ -323,7 +329,7 @@ private struct UtxoRow: View {
                     if utxo.type == .change {
                         Image(systemName: "circlebadge.2")
                             .font(.caption)
-                            .foregroundColor(.orange.opacity(0.8))
+                            .foregroundColor(.statusWarning.opacity(0.8))
                     }
                 }
 

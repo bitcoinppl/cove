@@ -55,12 +55,13 @@ package org.bitcoinppl.cove.cloudbackup
  import androidx.compose.runtime.setValue
  import androidx.compose.ui.Alignment
  import androidx.compose.ui.Modifier
- import androidx.compose.ui.graphics.Color
  import androidx.compose.ui.text.font.FontWeight
  import androidx.compose.ui.text.style.TextOverflow
  import androidx.compose.ui.unit.dp
  import org.bitcoinppl.cove.AppManager
+ import org.bitcoinppl.cove.ui.theme.CoveColor
  import org.bitcoinppl.cove.ui.theme.MaterialSpacing
+ import org.bitcoinppl.cove.ui.theme.coveColors
  import org.bitcoinppl.cove.views.MaterialDivider
  import org.bitcoinppl.cove.views.MaterialSection
  import org.bitcoinppl.cove.views.MaterialSettingsItem
@@ -350,6 +351,7 @@ package org.bitcoinppl.cove.cloudbackup
      var understandPasskey by remember { mutableStateOf(false) }
      var understandAccount by remember { mutableStateOf(false) }
      var understandManualBackup by remember { mutableStateOf(false) }
+     val infoColor = MaterialTheme.colorScheme.primary
 
      val allChecked = understandPasskey && understandAccount && understandManualBackup
 
@@ -363,14 +365,14 @@ package org.bitcoinppl.cove.cloudbackup
          Spacer(modifier = Modifier.height(8.dp))
 
          Surface(
-             color = Color(0x142197F3),
+             color = infoColor.copy(alpha = 0.08f),
              shape = CircleShape,
              modifier = Modifier.align(Alignment.CenterHorizontally),
          ) {
              Icon(
                  imageVector = Icons.Default.CloudUpload,
                  contentDescription = null,
-                 tint = Color(0xFF1976D2),
+                 tint = infoColor,
                  modifier = Modifier.padding(24.dp),
              )
          }
@@ -444,6 +446,8 @@ package org.bitcoinppl.cove.cloudbackup
      title: String,
      onCheckedChange: (Boolean) -> Unit,
  ) {
+     val successColor = MaterialTheme.coveColors.systemGreen
+
      Row(
          modifier =
              Modifier
@@ -454,7 +458,7 @@ package org.bitcoinppl.cove.cloudbackup
          Icon(
              imageVector = if (checked) Icons.Default.CloudDone else Icons.Default.ErrorOutline,
              contentDescription = null,
-             tint = if (checked) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outline,
+             tint = if (checked) successColor else MaterialTheme.colorScheme.outline,
          )
          Spacer(modifier = Modifier.width(12.dp))
          Text(title, style = MaterialTheme.typography.bodyMedium)
@@ -791,11 +795,14 @@ package org.bitcoinppl.cove.cloudbackup
      lastSync: ULong?,
      syncHealth: CloudSyncHealth,
  ) {
+     val successColor = MaterialTheme.coveColors.systemGreen
+     val infoColor = MaterialTheme.colorScheme.primary
+
      val (icon, tint, label) =
          when (syncHealth) {
-             is CloudSyncHealth.Unknown -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Checking sync status")
-             is CloudSyncHealth.AllUploaded -> Triple(Icons.Default.CloudDone, Color(0xFF2E7D32), "All files synced to Google Drive")
-            is CloudSyncHealth.Uploading -> Triple(Icons.Default.CloudUpload, Color(0xFF1976D2), "Syncing to Google Drive")
+            is CloudSyncHealth.Unknown -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Checking sync status")
+            is CloudSyncHealth.AllUploaded -> Triple(Icons.Default.CloudDone, successColor, "All files synced to Google Drive")
+            is CloudSyncHealth.Uploading -> Triple(Icons.Default.CloudUpload, infoColor, "Syncing to Google Drive")
             is CloudSyncHealth.Failed -> Triple(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Sync error: ${syncHealth.v1}")
             is CloudSyncHealth.NoFiles -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "No cloud backup files uploaded yet")
             is CloudSyncHealth.AuthorizationRequired -> Triple(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Google Drive access needs to be reconnected: ${syncHealth.v1}")
@@ -896,7 +903,7 @@ package org.bitcoinppl.cove.cloudbackup
          },
          trailingContent = {
              if (item.syncStatus == CloudBackupWalletStatus.UNSUPPORTED_VERSION) {
-                 Icon(Icons.Default.WarningAmber, contentDescription = null, tint = Color(0xFFED6C02))
+                 Icon(Icons.Default.WarningAmber, contentDescription = null, tint = CoveColor.WarningOrange)
              }
          },
      )
@@ -906,16 +913,19 @@ package org.bitcoinppl.cove.cloudbackup
  private fun StatusBadge(
      status: CloudBackupWalletStatus,
  ) {
+     val successColor = MaterialTheme.coveColors.systemGreen
+     val infoColor = MaterialTheme.colorScheme.primary
+     val warningColor = CoveColor.WarningOrange
      val (label, color) =
          when (status) {
-             CloudBackupWalletStatus.DIRTY -> "Dirty" to Color(0xFFED6C02)
+             CloudBackupWalletStatus.DIRTY -> "Dirty" to warningColor
              CloudBackupWalletStatus.UPLOADING,
              CloudBackupWalletStatus.UPLOADED_PENDING_CONFIRMATION,
-             -> "Syncing" to Color(0xFF1976D2)
-             CloudBackupWalletStatus.CONFIRMED -> "Synced" to Color(0xFF2E7D32)
+             -> "Syncing" to infoColor
+             CloudBackupWalletStatus.CONFIRMED -> "Synced" to successColor
              CloudBackupWalletStatus.FAILED -> "Failed" to MaterialTheme.colorScheme.error
-             CloudBackupWalletStatus.DELETED_FROM_DEVICE -> "Not on device" to Color(0xFFED6C02)
-             CloudBackupWalletStatus.UNSUPPORTED_VERSION -> "Unsupported" to Color(0xFFED6C02)
+             CloudBackupWalletStatus.DELETED_FROM_DEVICE -> "Not on device" to warningColor
+             CloudBackupWalletStatus.UNSUPPORTED_VERSION -> "Unsupported" to warningColor
              CloudBackupWalletStatus.REMOTE_STATE_UNKNOWN -> "Unknown" to MaterialTheme.colorScheme.onSurfaceVariant
          }
 
@@ -1330,7 +1340,7 @@ private fun OtherBackupsSection(
                                  ),
                              )
                          },
-                         leadingContent = { Icon(Icons.Default.Security, contentDescription = null, tint = Color(0xFF2E7D32)) },
+                         leadingContent = { Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.coveColors.systemGreen) },
                      )
                  }
 
@@ -1405,7 +1415,7 @@ private fun OtherBackupsSection(
                  ),
              )
          },
-         leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null, tint = Color(0xFFED6C02)) },
+         leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null, tint = CoveColor.WarningOrange) },
      )
      MaterialDivider()
      MaterialSettingsItem(
@@ -1423,14 +1433,14 @@ private fun OtherBackupsSection(
      MaterialSettingsItem(
          title = "Backup verified",
          subtitle = buildVerifiedSummary(report),
-         leadingContent = { Icon(Icons.Default.CloudDone, contentDescription = null, tint = Color(0xFF2E7D32)) },
+         leadingContent = { Icon(Icons.Default.CloudDone, contentDescription = null, tint = MaterialTheme.coveColors.systemGreen) },
      )
 
      if (report.masterKeyWrapperRepaired) {
          MaterialDivider()
          MaterialSettingsItem(
              title = "Cloud master key protection was repaired",
-             leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null, tint = Color(0xFF1976D2)) },
+             leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
          )
      }
 
@@ -1438,7 +1448,7 @@ private fun OtherBackupsSection(
          MaterialDivider()
          MaterialSettingsItem(
              title = "Local backup credentials were repaired from cloud",
-             leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null, tint = Color(0xFF1976D2)) },
+             leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
          )
      }
 
