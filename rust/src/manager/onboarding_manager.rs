@@ -3577,6 +3577,8 @@ mod tests {
         flow: FlowState,
         cloud_restore_discovery: CloudRestoreDiscovery,
     ) -> Arc<RustOnboardingManager> {
+        crate::database::test_support::init_test_database();
+
         let (sender, receiver) = flume::bounded(16);
 
         Arc::new(RustOnboardingManager {

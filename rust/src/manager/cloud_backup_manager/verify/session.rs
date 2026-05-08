@@ -617,8 +617,8 @@ impl VerificationSession {
         let error = CloudBackupError::cloud_storage_context(context, error);
         let error = blocking_cloud_error(BlockingCloudStep::Verify, error);
 
-        let retry_context = is_connectivity_related_issue(error.cloud_storage_issue())
-            .then(|| self.connectivity_retry_context());
+        let retry_context =
+            is_connectivity_related_issue(&error).then(|| self.connectivity_retry_context());
 
         self.retry_result_with_context(error.to_string(), retry_context)
     }
@@ -628,7 +628,7 @@ impl VerificationSession {
         context: &'static str,
         error: &CloudBackupError,
     ) -> DeepVerificationResult {
-        if is_connectivity_related_issue(error.cloud_storage_issue()) {
+        if is_connectivity_related_issue(error) {
             return self.retry_result_with_context(
                 offline_error_for_step(BlockingCloudStep::Verify).to_string(),
                 Some(self.connectivity_retry_context()),

@@ -199,7 +199,7 @@ impl CloudBackupUploadWorker {
             );
             let authorization_required = upload_result.as_ref().err().is_some_and(|error| {
                 matches!(
-                    error.cloud_storage_issue(),
+                    crate::manager::cloud_backup_manager::CloudStorageIssue::from(error),
                     crate::manager::cloud_backup_manager::CloudStorageIssue::AuthorizationRequired
                 )
             });
@@ -230,43 +230,6 @@ impl CloudBackupUploadWorker {
             &manager,
             wallet_id,
             succeeded,
-            error_message,
-            deferred,
-            authorization_required,
-        );
-        Produces::ok(())
-    }
-
-    #[cfg(test)]
-    pub(crate) async fn run_wallet_upload_inline_for_test(
-        &mut self,
-        wallet_id: WalletId,
-    ) -> ActorResult<()> {
-        if !self.active_wallet_uploads.insert(wallet_id.clone()) {
-            return Produces::ok(());
-        }
-
-        let Some(manager) = self.manager() else {
-            self.active_wallet_uploads.remove(&wallet_id);
-            return Produces::ok(());
-        };
-
-        let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id).await;
-        let deferred = matches!(
-            upload_result,
-            Err(crate::manager::cloud_backup_manager::CloudBackupError::Deferred(_))
-        );
-        let authorization_required = upload_result.as_ref().err().is_some_and(|error| {
-            matches!(
-                error.cloud_storage_issue(),
-                crate::manager::cloud_backup_manager::CloudStorageIssue::AuthorizationRequired
-            )
-        });
-        let error_message = upload_result.err().map(|error| error.to_string());
-        self.finish_wallet_upload(
-            &manager,
-            wallet_id,
-            error_message.is_none(),
             error_message,
             deferred,
             authorization_required,
@@ -443,6 +406,44 @@ impl PendingUploadRetryBackoff {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl CloudBackupUploadWorker {
+        pub(crate) async fn run_wallet_upload_inline_for_test(
+            &mut self,
+            wallet_id: WalletId,
+        ) -> ActorResult<()> {
+            if !self.active_wallet_uploads.insert(wallet_id.clone()) {
+                return Produces::ok(());
+            }
+
+            let Some(manager) = self.manager() else {
+                self.active_wallet_uploads.remove(&wallet_id);
+                return Produces::ok(());
+            };
+
+            let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id).await;
+            let deferred = matches!(
+                upload_result,
+                Err(crate::manager::cloud_backup_manager::CloudBackupError::Deferred(_))
+            );
+            let authorization_required = upload_result.as_ref().err().is_some_and(|error| {
+                matches!(
+                    crate::manager::cloud_backup_manager::CloudStorageIssue::from(error),
+                    crate::manager::cloud_backup_manager::CloudStorageIssue::AuthorizationRequired
+                )
+            });
+            let error_message = upload_result.err().map(|error| error.to_string());
+            self.finish_wallet_upload(
+                &manager,
+                wallet_id,
+                error_message.is_none(),
+                error_message,
+                deferred,
+                authorization_required,
+            );
+            Produces::ok(())
+        }
+    }
 
     #[test]
     fn pending_upload_retry_backoff_caps_at_max_delay() {

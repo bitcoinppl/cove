@@ -146,17 +146,6 @@ impl CloudBackupRestoreWorker {
         Produces::ok(result)
     }
 
-    #[cfg(test)]
-    pub(crate) async fn new_restore_operation(&mut self) -> ActorResult<RestoreOperation> {
-        Produces::ok(RestoreOperation::new(self.restore_operations.clone(), self.addr()))
-    }
-
-    #[cfg(test)]
-    pub(crate) async fn invalidate_restore_operation(&mut self) -> ActorResult<()> {
-        self.restore_operations.invalidate();
-        Produces::ok(())
-    }
-
     pub(crate) async fn start_restore_from_cloud_backup(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         let status = manager.state.read().status.clone();
@@ -326,6 +315,17 @@ mod tests {
         CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY,
     };
     use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
+
+    impl CloudBackupRestoreWorker {
+        pub(crate) async fn new_restore_operation(&mut self) -> ActorResult<RestoreOperation> {
+            Produces::ok(RestoreOperation::new(self.restore_operations.clone(), self.addr()))
+        }
+
+        pub(crate) async fn invalidate_restore_operation(&mut self) -> ActorResult<()> {
+            self.restore_operations.invalidate();
+            Produces::ok(())
+        }
+    }
 
     #[test]
     fn restore_keychain_save_rolls_back_metadata_when_master_key_save_fails() {

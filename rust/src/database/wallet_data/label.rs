@@ -404,7 +404,9 @@ impl From<redb::StorageError> for Error {
 
 #[cfg(test)]
 mod tests {
-    use crate::{database::wallet_data::WalletDataDb, wallet::metadata::WalletId};
+    use crate::{
+        database::wallet_data::test_support::new_test_wallet_data_db, wallet::metadata::WalletId,
+    };
     use bip329::Labels;
 
     #[test]
@@ -418,7 +420,7 @@ mod tests {
         "#;
 
         let labels = Labels::try_from_str(jsonl).expect("failed to parse labels");
-        let (wallet_db, _tmp) = WalletDataDb::new_test(WalletId::preview_new());
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
         let db = &wallet_db.labels;
 
         db.insert_labels(labels).expect("failed to insert labels");

@@ -96,6 +96,8 @@ This pattern is used throughout the codebase for shared resources and is safe to
 
 **Wallet & hardware integrations.** BDK powers transaction management (`rust/src/wallet`, `rust/src/transaction`). TAPSIGNER/SATSCARD + NFC flows live in `rust/src/tap_card` and the dedicated crates under `rust/crates/`. The utilities crate (`cove-util`) concentrates helpers such as result extensions, formatting, and logging.
 
+**Error conversions.** Prefer `From` implementations for error conversions whenever possible, and avoid standalone conversion functions when `From` would do. This keeps conversion call sites idiomatic and lets `?` perform the conversion directly.
+
 ---
 
 ## UniFFI Bindings

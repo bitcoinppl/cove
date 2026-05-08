@@ -184,6 +184,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
+
+    fn setup_database_test() -> &'static parking_lot::Mutex<()> {
+        test_globals().reset();
+        test_lock()
+    }
 
     #[test]
     fn all_local_wallets_from_returns_error_when_any_bucket_fails() {
@@ -205,7 +211,7 @@ mod tests {
 
     #[test]
     fn reset_verification_does_not_preserve_passkey_missing() {
-        let _guard = crate::manager::cloud_backup_manager::cloud_backup_test_lock().lock();
+        let _guard = setup_database_test().lock();
         let db = Database::global();
         let _ = db.cloud_backup_state.delete();
         db.cloud_backup_state
@@ -234,7 +240,7 @@ mod tests {
 
     #[test]
     fn persist_enabled_state_clears_passkey_missing() {
-        let _guard = crate::manager::cloud_backup_manager::cloud_backup_test_lock().lock();
+        let _guard = setup_database_test().lock();
         let db = Database::global();
         let _ = db.cloud_backup_state.delete();
         db.cloud_backup_state

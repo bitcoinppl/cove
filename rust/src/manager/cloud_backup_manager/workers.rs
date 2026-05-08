@@ -634,15 +634,6 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    #[cfg(test)]
-    pub async fn run_wallet_upload_inline_for_test(
-        &mut self,
-        wallet_id: WalletId,
-    ) -> ActorResult<()> {
-        call!(self.uploads.run_wallet_upload_inline_for_test(wallet_id)).await?;
-        Produces::ok(())
-    }
-
     pub async fn resume_wallet_uploads_from_persisted_state(&mut self) -> ActorResult<()> {
         call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await?;
         Produces::ok(())
@@ -655,18 +646,6 @@ impl CloudBackupSupervisor {
 
     pub async fn wake_pending_upload_verifier(&mut self) -> ActorResult<()> {
         call!(self.uploads.wake_pending_upload_verifier()).await?;
-        Produces::ok(())
-    }
-
-    #[cfg(test)]
-    pub async fn new_restore_operation(&mut self) -> ActorResult<RestoreOperation> {
-        let operation = call!(self.restore.new_restore_operation()).await?;
-        Produces::ok(operation)
-    }
-
-    #[cfg(test)]
-    pub async fn invalidate_restore_operation(&mut self) -> ActorResult<()> {
-        call!(self.restore.invalidate_restore_operation()).await?;
         Produces::ok(())
     }
 
@@ -690,5 +669,30 @@ impl CloudBackupSupervisor {
     pub async fn enqueue_cleanup(&mut self, job: CloudBackupCleanupJob) -> ActorResult<()> {
         call!(self.cleanup.enqueue_cleanup(job)).await?;
         Produces::ok(())
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    impl CloudBackupSupervisor {
+        pub async fn run_wallet_upload_inline_for_test(
+            &mut self,
+            wallet_id: WalletId,
+        ) -> ActorResult<()> {
+            call!(self.uploads.run_wallet_upload_inline_for_test(wallet_id)).await?;
+            Produces::ok(())
+        }
+
+        pub async fn new_restore_operation(&mut self) -> ActorResult<RestoreOperation> {
+            let operation = call!(self.restore.new_restore_operation()).await?;
+            Produces::ok(operation)
+        }
+
+        pub async fn invalidate_restore_operation(&mut self) -> ActorResult<()> {
+            call!(self.restore.invalidate_restore_operation()).await?;
+            Produces::ok(())
+        }
     }
 }

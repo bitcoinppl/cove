@@ -78,11 +78,14 @@ pub(crate) use passkey::{
     NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
     PasskeyMaterialOutcome,
 };
-#[cfg(test)]
-pub(crate) use payload::convert_cloud_secret;
 pub(crate) use payload::{
     decode_cloud_labels_jsonl, prepare_wallet_backup, wallet_metadata_change_requires_upload,
 };
 pub(crate) use restore::{
     WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
+
+#[cfg(test)]
+pub(crate) mod tests {
+    pub(crate) use super::payload::convert_cloud_secret;
+}

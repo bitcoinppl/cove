@@ -376,14 +376,6 @@ fn map_database_key_verification_error(
     }
 }
 
-/// Pre-seed the bootstrap OnceLock with a test encryption key, skipping
-/// keychain access and migrations
-#[cfg(test)]
-pub fn set_test_bootstrapped() {
-    crate::database::encrypted_backend::set_test_encryption_key();
-    STORAGE_BOOTSTRAPPED.store(true, Ordering::Release);
-}
-
 fn set_step(step: BootstrapStep) {
     let mut current = BOOTSTRAP_STEP.lock();
 
@@ -402,9 +394,16 @@ pub fn bootstrap_progress() -> BootstrapStep {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::database::error::DatabaseError;
+
+    /// Pre-seed the bootstrap OnceLock with a test encryption key, skipping
+    /// keychain access and migrations
+    pub(crate) fn set_test_bootstrapped() {
+        crate::database::encrypted_backend::tests::set_test_encryption_key();
+        STORAGE_BOOTSTRAPPED.store(true, Ordering::Release);
+    }
 
     #[test]
     fn database_key_verification_maps_header_integrity_to_key_mismatch() {

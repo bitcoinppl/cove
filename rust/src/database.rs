@@ -36,6 +36,7 @@ use tracing::error;
 use cove_common::consts::ROOT_DATA_DIR;
 
 pub static DATABASE: OnceCell<ArcSwap<Database>> = OnceCell::new();
+static DATABASE_LOCATION_OVERRIDE: OnceCell<PathBuf> = OnceCell::new();
 
 pub type Error = error::DatabaseError;
 pub type Record<T> = record::Record<T>;
@@ -116,9 +117,6 @@ impl Database {
     }
 
     fn init() -> Result<Self, error::DatabaseError> {
-        #[cfg(test)]
-        crate::bootstrap::set_test_bootstrapped();
-
         crate::bootstrap::ensure_storage_bootstrapped()
             .map_err_str(error::DatabaseError::BootstrapFailed)?;
 
@@ -155,30 +153,41 @@ fn get_or_create_main_database() -> Result<redb::Database, error::DatabaseError>
     encrypted_backend::open_or_create_database(&database_location())
 }
 
-#[cfg(not(test))]
 fn database_location() -> PathBuf {
-    ROOT_DATA_DIR.join("cove.encrypted.db")
+    DATABASE_LOCATION_OVERRIDE
+        .get()
+        .cloned()
+        .unwrap_or_else(|| ROOT_DATA_DIR.join("cove.encrypted.db"))
 }
 
 #[cfg(test)]
-fn database_location() -> PathBuf {
-    use rand::distr::Alphanumeric;
-    use rand::prelude::*;
+pub(crate) mod test_support {
+    use rand::{distr::Alphanumeric, prelude::*};
 
-    let mut rng = rand::rng();
-    let random_string: String = (0..7).map(|_| rng.sample(Alphanumeric) as char).collect();
-    let cove_db = format!("cove_{random_string}.db");
+    use super::*;
 
-    let test_dir = ROOT_DATA_DIR.join("test");
-    std::fs::create_dir_all(&test_dir).expect("failed to create test dir");
+    pub(crate) fn init_test_database() {
+        crate::bootstrap::tests::set_test_bootstrapped();
+        crate::app::reconcile::test_support::init_noop_updater();
+        let _ = DATABASE_LOCATION_OVERRIDE.set(test_database_location());
+    }
 
-    ROOT_DATA_DIR.join(test_dir).join(cove_db)
-}
+    fn test_database_location() -> PathBuf {
+        let mut rng = rand::rng();
+        let random_string: String = (0..7).map(|_| rng.sample(Alphanumeric) as char).collect();
+        let cove_db = format!("cove_{random_string}.db");
 
-#[cfg(test)]
-pub fn delete_database() {
-    let _ = std::fs::remove_dir(ROOT_DATA_DIR.join("test"));
-    let _ = std::fs::remove_dir(ROOT_DATA_DIR.join("wallet_data"));
+        let test_dir = ROOT_DATA_DIR.join("test");
+        std::fs::create_dir_all(&test_dir).expect("failed to create test dir");
+
+        test_dir.join(cove_db)
+    }
+
+    pub(crate) fn delete_database() {
+        init_test_database();
+        let _ = std::fs::remove_dir(ROOT_DATA_DIR.join("test"));
+        let _ = std::fs::remove_dir(ROOT_DATA_DIR.join("wallet_data"));
+    }
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]

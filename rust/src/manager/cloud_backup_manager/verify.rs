@@ -66,15 +66,14 @@ impl RustCloudBackupManager {
             Ok(result) => result,
             Err(error) => {
                 error!("Deep verification unexpected error: {error}");
-                let retry_context = is_connectivity_related_issue(error.cloud_storage_issue())
-                    .then(|| {
-                        let action = if force_discoverable {
-                            CloudBackupRetryAction::VerifyDiscoverable
-                        } else {
-                            CloudBackupRetryAction::Verify
-                        };
-                        CloudBackupRetryContext::connectivity(action)
-                    });
+                let retry_context = is_connectivity_related_issue(&error).then(|| {
+                    let action = if force_discoverable {
+                        CloudBackupRetryAction::VerifyDiscoverable
+                    } else {
+                        CloudBackupRetryAction::Verify
+                    };
+                    CloudBackupRetryContext::connectivity(action)
+                });
 
                 DeepVerificationResult::Failed(DeepVerificationFailure::retry(
                     error.to_string(),

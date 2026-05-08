@@ -723,7 +723,7 @@ mod tests {
 
     #[test]
     fn test_fingerprint() {
-        crate::database::delete_database();
+        crate::database::test_support::delete_database();
 
         let mnemonic = Mnemonic::parse_normalized(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();

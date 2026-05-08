@@ -28,7 +28,7 @@ use super::{
     CloudBackupEnableState, CloudBackupError, CloudBackupKeychain, CloudBackupPasskeyChoiceIntent,
     CloudBackupRestoreProgress, CloudBackupRestoreReport, CloudBackupRestoreStage,
     CloudBackupStatus, CloudBackupStore, CloudBackupVerificationSource, CloudBackupWalletItem,
-    CloudBackupWalletStatus, DeepVerificationReport, PendingEnableSession,
+    CloudBackupWalletStatus, CloudStorageIssue, DeepVerificationReport, PendingEnableSession,
     PendingVerificationCompletion, PendingVerificationUpload, RestoreOperation,
     RustCloudBackupManager, SavedPasskeyConfirmationMode, VerificationState, blocking_cloud_error,
     current_namespace_wallet_record_ids, is_connectivity_related_issue,
@@ -482,7 +482,7 @@ impl RustCloudBackupManager {
                     continue;
                 }
                 Err(error) => {
-                    if is_connectivity_related_issue(error.cloud_storage_issue()) {
+                    if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
                         return Err(blocking_cloud_error(BlockingCloudStep::FetchCloudOnly, error));
                     }
                     warn!("Failed to load cloud-only wallet {record_id}: {error}");
@@ -949,7 +949,7 @@ impl RustCloudBackupManager {
                         match restore_session.restore_downloaded(&wallet) {
                             Ok(_) => restored_wallets.push(wallet.metadata),
                             Err(error) => {
-                                if is_connectivity_related_issue(error.cloud_storage_issue()) {
+                                if is_connectivity_related_issue(&error) {
                                     return Err(blocking_cloud_error(
                                         BlockingCloudStep::Enable,
                                         error,
@@ -983,7 +983,7 @@ impl RustCloudBackupManager {
                         );
                     }
                     Err(error) => {
-                        if is_connectivity_related_issue(error.cloud_storage_issue()) {
+                        if is_connectivity_related_issue(&error) {
                             return Err(blocking_cloud_error(BlockingCloudStep::Enable, error));
                         }
                         expected_wallets.push(CleanupExpectedWalletRecord {
@@ -1509,7 +1509,7 @@ impl RustCloudBackupManager {
                     report.failed_wallet_errors.push(error);
                 }
                 Err(error) => {
-                    if is_connectivity_related_issue(error.cloud_storage_issue()) {
+                    if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
                         return Err(blocking_cloud_error(BlockingCloudStep::Restore, error));
                     }
                     warn!("Failed to download wallet {record_name}: {error}");
@@ -1721,7 +1721,7 @@ impl RustCloudBackupManager {
                                 restored_wallets.push(wallet.metadata);
                             }
                             Err(error) => {
-                                if is_connectivity_related_issue(error.cloud_storage_issue()) {
+                                if is_connectivity_related_issue(&error) {
                                     return Err(blocking_cloud_error(
                                         BlockingCloudStep::RecoverOtherBackups,
                                         error,
@@ -1758,7 +1758,7 @@ impl RustCloudBackupManager {
                         ));
                     }
                     Err(error) => {
-                        if is_connectivity_related_issue(error.cloud_storage_issue()) {
+                        if is_connectivity_related_issue(&error) {
                             return Err(blocking_cloud_error(
                                 BlockingCloudStep::RecoverOtherBackups,
                                 error,
@@ -1863,25 +1863,6 @@ fn active_merge_namespace_index(namespaces: &[MergeNamespace]) -> Option<usize> 
         .map(|(index, _)| index)
 }
 
-#[cfg(test)]
-async fn restore_from_local_master_key_fallback<S>(
-    cloud: &CloudStorageClient,
-    store: &S,
-    cspp: &cove_cspp::Cspp<S>,
-) -> Result<(cove_cspp::master_key::MasterKey, String), CloudBackupError>
-where
-    S: cove_cspp::CsppStore,
-    S::Error: std::fmt::Display,
-{
-    let (master_key, namespace_id) = try_restore_from_local_master_key(cloud, cspp)
-        .await?
-        .ok_or(CloudBackupError::PasskeyMismatch)?;
-    store
-        .save(super::keychain::CSPP_NAMESPACE_ID_KEY.into(), namespace_id.to_owned())
-        .map_err_prefix("save namespace_id", CloudBackupError::Internal)?;
-    Ok((master_key, namespace_id))
-}
-
 pub(super) async fn load_master_key_for_cloud_action<S, F, Fut>(
     cspp: &cove_cspp::Cspp<S>,
     recover_missing: F,
@@ -1957,6 +1938,27 @@ mod tests {
         metadata::{WalletMetadata, WalletMode, WalletType},
     };
     use bip39::Mnemonic;
+
+    async fn restore_from_local_master_key_fallback<S>(
+        cloud: &CloudStorageClient,
+        store: &S,
+        cspp: &cove_cspp::Cspp<S>,
+    ) -> Result<(cove_cspp::master_key::MasterKey, String), CloudBackupError>
+    where
+        S: cove_cspp::CsppStore,
+        S::Error: std::fmt::Display,
+    {
+        let (master_key, namespace_id) = try_restore_from_local_master_key(cloud, cspp)
+            .await?
+            .ok_or(CloudBackupError::PasskeyMismatch)?;
+        store
+            .save(
+                crate::manager::cloud_backup_manager::keychain::CSPP_NAMESPACE_ID_KEY.into(),
+                namespace_id.to_owned(),
+            )
+            .map_err_prefix("save namespace_id", CloudBackupError::Internal)?;
+        Ok((master_key, namespace_id))
+    }
 
     fn platform_authorization_failed() -> PasskeyError {
         PasskeyError::RequestFailed {
@@ -2624,7 +2626,7 @@ mod tests {
             Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
         ));
 
-        manager.clear_wallet_upload_debouncers_for_test().await;
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2744,7 +2746,7 @@ mod tests {
         cspp.save_master_key(&expected).unwrap();
         globals.cloud.set_wallet_files(namespace_id.clone(), vec!["wallet-test.json".into()]);
 
-        let (restored, restored_namespace) = super::restore_from_local_master_key_fallback(
+        let (restored, restored_namespace) = restore_from_local_master_key_fallback(
             &CloudStorage::global_explicit_client(),
             &store_handle,
             &cspp,
@@ -3402,7 +3404,7 @@ mod tests {
         assert!(manager.take_pending_enable_session().await.is_none());
 
         let authenticate_count = globals.passkey.authenticate_count();
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(!has_more_pending);
         assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
@@ -5133,7 +5135,7 @@ mod tests {
 
         globals.cloud.set_master_key_backup(namespace_id, master_json);
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(!has_more_pending);
         assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::AllUploaded);
@@ -5166,7 +5168,7 @@ mod tests {
             "authorization required",
         );
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(has_more_pending);
         assert_eq!(
@@ -5403,7 +5405,7 @@ mod tests {
             Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
         ));
 
-        manager.clear_wallet_upload_debouncers_for_test().await;
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -5712,7 +5714,7 @@ mod tests {
         assert!(detail.needs_sync.is_empty());
         assert_eq!(detail.up_to_date[0].record_id, record_id);
         assert_eq!(detail.up_to_date[0].sync_status, CloudBackupWalletStatus::Confirmed);
-        manager.clear_wallet_upload_debouncers_for_test().await;
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -5738,7 +5740,7 @@ mod tests {
         assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
         let detail = manager.state().detail.expect("expected cloud backup detail");
         assert!(matches!(detail.other_backups, CloudBackupOtherBackupsState::LoadFailed { .. }));
-        manager.clear_wallet_upload_debouncers_for_test().await;
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -5851,7 +5853,7 @@ mod tests {
                 ..
             })
         ));
-        manager.clear_wallet_upload_debouncers_for_test().await;
+        clear_wallet_upload_runtime_for_test_async(&manager).await;
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -5961,7 +5963,7 @@ mod tests {
             .unwrap();
         globals.cloud.dirty_wallet_on_next_backup_check(metadata.id.clone());
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(!has_more_pending);
         assert!(matches!(
@@ -6111,7 +6113,7 @@ mod tests {
         assert!(manager.pending_verification_completion().is_some());
         assert!(manager.has_pending_cloud_upload_verification());
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(!has_more_pending);
         assert!(manager.pending_verification_completion().is_none());
@@ -6166,7 +6168,7 @@ mod tests {
             vec![PendingVerificationUpload::master_key_wrapper()],
         ));
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(has_more_pending);
         assert!(manager.pending_verification_completion().is_some());
@@ -6239,7 +6241,7 @@ mod tests {
 
         assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading,);
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(!has_more_pending);
         assert!(manager.pending_verification_completion().is_none());
@@ -6274,7 +6276,7 @@ mod tests {
 
         assert!(restarted_manager.pending_verification_completion().is_some());
         restarted_manager.sync_persisted_state();
-        let has_more_pending = restarted_manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&restarted_manager).await;
 
         assert!(!has_more_pending);
         assert!(restarted_manager.pending_verification_completion().is_none());
@@ -6327,7 +6329,7 @@ mod tests {
             encrypted_wallet_backup_bytes(&metadata, &master_key, "stale-revision", 1).await,
         );
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(has_more_pending);
         assert!(manager.pending_verification_completion().is_some());
@@ -6351,7 +6353,7 @@ mod tests {
             encrypted_wallet_backup_bytes(&metadata, &master_key, &current_revision, 1).await,
         );
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(!has_more_pending);
         assert!(manager.pending_verification_completion().is_none());
@@ -6392,7 +6394,7 @@ mod tests {
             })
         ));
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(!has_more_pending);
         assert!(manager.pending_verification_completion().is_none());
@@ -6433,7 +6435,7 @@ mod tests {
         assert!(matches!(result, DeepVerificationResult::AwaitingUploadConfirmation(_)));
         globals.cloud.set_wallet_backup(namespace, record_id.clone(), b"{".to_vec());
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(!has_more_pending);
         assert!(manager.pending_verification_completion().is_none());
@@ -6482,7 +6484,7 @@ mod tests {
             .unwrap();
         globals.cloud.set_wallet_backup(namespace_id, record_id.clone(), b"{".to_vec());
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(!has_more_pending);
         assert!(!manager.has_pending_cloud_upload_verification());
@@ -6533,7 +6535,7 @@ mod tests {
             })
             .unwrap();
 
-        let has_more_pending = manager.verify_pending_uploads_once_for_test().await;
+        let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
         assert!(has_more_pending);
         assert!(manager.pending_verification_completion().is_some());
