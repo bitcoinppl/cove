@@ -70,7 +70,10 @@ pub(crate) mod test_support {
 
     pub(crate) fn init_noop_updater() {
         let (sender, receiver) = flume::bounded(1000);
-        Box::leak(Box::new(receiver));
+        std::thread::Builder::new()
+            .name("noop-app-updater-drain".into())
+            .spawn(move || while receiver.recv().is_ok() {})
+            .expect("spawn noop app updater drain");
         Updater::init(sender);
     }
 }
