@@ -304,7 +304,7 @@ internal fun WalletSheetsHost(
                             manager.rust.getTransactions()
                             snackbarHostState.showSnackbar(skippedMsg)
                         } catch (e: Exception) {
-                            android.util.Log.e(tag, "Failed to refresh transactions after partial NFC label import")
+                            android.util.Log.e(tag, "Failed to refresh transactions after partial NFC label import", e)
                             snackbarHostState.showSnackbar("$skippedMsg. Transaction list may need manual refresh")
                         }
                     }
