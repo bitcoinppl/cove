@@ -2845,13 +2845,15 @@ pub(crate) async fn current_namespace_wallet_record_ids(
 
 #[cfg(test)]
 mod tests {
-    use super::ops::test_support::{init_test_runtime, test_globals, test_lock};
+    use super::ops::test_support::{
+        ensure_cloud_backup_test_tokio_runtime, test_globals, test_lock,
+    };
     use super::*;
     use act_zero::call;
     use tempfile::TempDir;
 
     fn init_manager() -> Arc<RustCloudBackupManager> {
-        init_test_runtime();
+        ensure_cloud_backup_test_tokio_runtime();
         test_globals().reset();
         RustCloudBackupManager::init()
     }
@@ -2909,7 +2911,7 @@ mod tests {
     fn run_on_cloud_backup_runtime<T: Send + 'static>(
         future: impl Future<Output = T> + Send + 'static,
     ) -> T {
-        init_test_runtime();
+        ensure_cloud_backup_test_tokio_runtime();
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
         let _task = cove_tokio::task::spawn(async move {
             sender.send(future.await).expect("send cloud backup runtime result");

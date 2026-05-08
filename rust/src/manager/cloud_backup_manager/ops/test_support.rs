@@ -729,10 +729,6 @@ impl TestGlobals {
     }
 }
 
-pub(crate) fn init_test_runtime() {
-    ensure_cloud_backup_test_tokio_runtime();
-}
-
 pub(crate) fn ensure_cloud_backup_test_tokio_runtime() {
     static INIT: OnceLock<()> = OnceLock::new();
     INIT.get_or_init(|| {
@@ -759,9 +755,11 @@ pub(crate) fn ensure_cloud_backup_test_tokio_runtime() {
 
 pub(crate) fn test_globals() -> &'static TestGlobals {
     static GLOBALS: OnceLock<TestGlobals> = OnceLock::new();
-    crate::database::test_support::init_test_database();
-    init_test_runtime();
-    GLOBALS.get_or_init(TestGlobals::init)
+    GLOBALS.get_or_init(|| {
+        crate::database::test_support::init_test_database();
+        ensure_cloud_backup_test_tokio_runtime();
+        TestGlobals::init()
+    })
 }
 
 pub(crate) fn test_lock() -> &'static parking_lot::Mutex<()> {
@@ -869,7 +867,7 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
     globals: &TestGlobals,
     before_reconnect: impl FnOnce(),
 ) {
-    init_test_runtime();
+    ensure_cloud_backup_test_tokio_runtime();
     globals.reset();
     clear_local_wallets();
     let reset_manager = manager.clone();
