@@ -1,15 +1,38 @@
 import SwiftUI
 
+enum CloudBackupEnableOnboardingContext {
+    case standard
+    case hardwareImport
+}
+
 struct CloudBackupEnableOnboardingView: View {
     let onEnable: () -> Void
     let onCancel: () -> Void
     let message: String?
     let isBusy: Bool
+    let context: CloudBackupEnableOnboardingContext
+    let primaryButtonTitle: String
 
     @State private var checks: [Bool] = Array(repeating: false, count: 3)
 
     private var allChecked: Bool {
         checks.allSatisfy(\.self)
+    }
+
+    init(
+        onEnable: @escaping () -> Void,
+        onCancel: @escaping () -> Void,
+        message: String?,
+        isBusy: Bool,
+        context: CloudBackupEnableOnboardingContext = .standard,
+        primaryButtonTitle: String = "Enable Cloud Backup"
+    ) {
+        self.onEnable = onEnable
+        self.onCancel = onCancel
+        self.message = message
+        self.isBusy = isBusy
+        self.context = context
+        self.primaryButtonTitle = primaryButtonTitle
     }
 
     var body: some View {
@@ -122,7 +145,7 @@ struct CloudBackupEnableOnboardingView: View {
                 Spacer()
             }
 
-            Text("Your wallet backup is end-to-end encrypted before upload and stored in iCloud Drive. Only your passkey can decrypt it, so both are needed to restore your wallets.")
+            Text(infoCardBody)
                 .font(.caption)
                 .foregroundStyle(.coveLightGray.opacity(0.60))
                 .fixedSize(horizontal: false, vertical: true)
@@ -141,19 +164,47 @@ struct CloudBackupEnableOnboardingView: View {
     private var checkboxSection: some View {
         VStack(spacing: 6) {
             Toggle(isOn: $checks[0]) {
-                Text("I understand that my passkey is required to access my Cloud Backup. I must not delete my passkey.")
+                Text(firstCheckboxText)
             }
             .toggleStyle(DarkCheckboxToggleStyle())
 
             Toggle(isOn: $checks[1]) {
-                Text("I understand that I need access to my iCloud account. If I lose access to my passkey or my iCloud account, my Cloud Backup won't be recoverable.")
+                Text(secondCheckboxText)
             }
             .toggleStyle(DarkCheckboxToggleStyle())
 
             Toggle(isOn: $checks[2]) {
-                Text("I understand that for maximum safety, I should still manually back up my 12 or 24 words offline on pen and paper.")
+                Text(thirdCheckboxText)
             }
             .toggleStyle(DarkCheckboxToggleStyle())
+        }
+    }
+
+    private var infoCardBody: String {
+        switch context {
+        case .standard:
+            "Your wallet backup is end-to-end encrypted before upload and stored in iCloud Drive. Only your passkey can decrypt it, so both are needed to restore your wallets."
+
+        case .hardwareImport:
+            "This backs up your imported hardware wallet configuration and labels in iCloud Drive, and it also enables backup for compatible wallets you create in Cove later. Your hardware wallet seed and private keys are not backed up by Cove."
+        }
+    }
+
+    private var firstCheckboxText: String {
+        "I understand that my passkey is required to access my Cloud Backup. I must not delete my passkey."
+    }
+
+    private var secondCheckboxText: String {
+        "I understand that I need access to my iCloud account. If I lose access to my passkey or my iCloud account, my Cloud Backup won't be recoverable."
+    }
+
+    private var thirdCheckboxText: String {
+        switch context {
+        case .standard:
+            "I understand that for maximum safety, I should still manually back up my 12 or 24 words offline on pen and paper."
+
+        case .hardwareImport:
+            "I understand that Cloud Backup does not replace the offline backup for my hardware wallet seed or recovery phrase."
         }
     }
 
@@ -161,7 +212,7 @@ struct CloudBackupEnableOnboardingView: View {
         Button {
             if allChecked { onEnable() }
         } label: {
-            Text("Enable Cloud Backup")
+            Text(primaryButtonTitle)
         }
         .buttonStyle(OnboardingPrimaryButtonStyle())
         .disabled(!allChecked || isBusy)
@@ -227,6 +278,116 @@ struct DarkCheckboxToggleStyle: ToggleStyle {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+struct CloudBackupEnableConfirmationView: View {
+    let onContinue: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 22) {
+            Spacer()
+
+            VStack(spacing: 14) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 42, weight: .semibold))
+                    .foregroundStyle(.yellow)
+
+                Text("Confirm your passkey")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+
+                Text("Your passkey was saved. Cove needs to confirm it once before enabling Cloud Backup. If it does not appear right away, use the option to search your passkey/password manager app.")
+                    .font(.body)
+                    .foregroundStyle(.coveLightGray)
+                    .multilineTextAlignment(.center)
+            }
+
+            VStack(spacing: 12) {
+                Button("Continue", action: onContinue)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+
+                Button("Cancel", role: .cancel, action: onCancel)
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+            }
+
+            Spacer()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.midnightBlue.ignoresSafeArea())
+    }
+}
+
+struct CloudBackupEnableBusyOverlay: View {
+    let enableState: CloudBackupEnableState
+    var titleOverride: String?
+    var subtitleOverride: String?
+
+    private var title: String {
+        if let titleOverride { return titleOverride }
+
+        return switch enableState {
+        case .creatingPasskey:
+            "Creating your passkey..."
+        case .waitingForPasskeyAvailability:
+            "Checking that your passkey is available..."
+        case .awaitingSavedPasskeyConfirmation:
+            "Checking that your passkey is available..."
+        case .confirmingSavedPasskey:
+            "Confirming your passkey..."
+        case .uploadingBackup:
+            "Creating your encrypted backup..."
+        case .idle:
+            "Creating your encrypted backup..."
+        }
+    }
+
+    private var subtitle: String {
+        if let subtitleOverride { return subtitleOverride }
+
+        return switch enableState {
+        case .waitingForPasskeyAvailability, .awaitingSavedPasskeyConfirmation:
+            "This can take a few seconds after saving it in your passkey/password manager app"
+        default:
+            "Cloud Backup will continue automatically"
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                ProgressView()
+                    .tint(.white)
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.coveLightGray)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+            .frame(maxWidth: 320)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.midnightBlue.opacity(0.96))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.35), radius: 20, y: 10)
+        }
     }
 }
 

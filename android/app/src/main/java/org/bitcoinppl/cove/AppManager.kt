@@ -6,8 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove_core.*
@@ -15,6 +17,8 @@ import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.device.KeychainException
 import org.bitcoinppl.cove_core.tapcard.*
 import org.bitcoinppl.cove_core.types.*
+import org.bitcoinppl.cove_core.util.GenerationToken
+import org.bitcoinppl.cove_core.util.GenerationTracker
 import java.util.UUID
 
 /**
@@ -28,6 +32,8 @@ class AppManager private constructor() : FfiReconcile {
 
     // Scope for UI-bound work; reconcile() hops to Main here
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val navigationGenerations = GenerationTracker()
+    private var pendingSidebarNavigationJob: Job? = null
 
     // rust bridge - not observable
     internal var rust: FfiApp = FfiApp()
@@ -88,6 +94,8 @@ class AppManager private constructor() : FfiReconcile {
 
     internal var sendFlowManager: SendFlowManager? = null
         private set
+
+    val cloudBackupManager: CloudBackupManager = CloudBackupManager.getInstance()
 
     init {
         Log.d(tag, "Initializing AppManager")
@@ -192,6 +200,10 @@ class AppManager private constructor() : FfiReconcile {
      * clears all cached data and reinitializes
      */
     fun reset() {
+        pendingSidebarNavigationJob?.cancel()
+        pendingSidebarNavigationJob = null
+        advanceNavigationGeneration()
+
         // close managers before clearing them
         walletManager?.close()
         sendFlowManager?.close()
@@ -218,11 +230,37 @@ class AppManager private constructor() : FfiReconcile {
      */
     fun selectWallet(id: WalletId) {
         try {
-            rust.selectWallet(id)
-            isSidebarVisible = false
+            selectWalletOrThrow(id)
         } catch (e: Exception) {
             Log.e(tag, "Unable to select wallet $id", e)
         }
+    }
+
+    @Throws(Exception::class)
+    fun selectWalletOrThrow(id: WalletId) {
+        advanceNavigationGeneration()
+        selectWalletWithoutNavigationGeneration(id)
+    }
+
+    @Throws(Exception::class)
+    private fun selectWalletWithoutNavigationGeneration(id: WalletId) {
+        rust.dispatch(AppAction.SelectWallet(id))
+        isSidebarVisible = false
+    }
+
+    fun trySelectLatestOrNewWallet() {
+        try {
+            selectLatestOrNewWallet()
+        } catch (e: Exception) {
+            Log.e(tag, "Unable to select latest wallet", e)
+        }
+    }
+
+    @Throws(Exception::class)
+    fun selectLatestOrNewWallet() {
+        advanceNavigationGeneration()
+        rust.dispatch(AppAction.SelectLatestOrNewWallet)
+        isSidebarVisible = false
     }
 
     fun toggleSidebar() {
@@ -233,15 +271,55 @@ class AppManager private constructor() : FfiReconcile {
         wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
     }
 
-    fun closeSidebarAndNavigate(action: suspend () -> Unit) {
+    fun closeSidebarAndSelectWallet(id: WalletId) {
+        closeSidebarThenNavigate {
+            try {
+                selectWalletWithoutNavigationGeneration(id)
+            } catch (e: Exception) {
+                Log.e(tag, "Unable to select wallet $id", e)
+            }
+        }
+    }
+
+    fun closeSidebarAndOpenNewWallet() {
+        closeSidebarThenNavigate {
+            if (wallets.isEmpty()) {
+                resetRouteWithoutNavigationGeneration(RouteFactory().newWalletSelect())
+            } else {
+                pushRouteWithoutNavigationGeneration(RouteFactory().newWalletSelect())
+            }
+        }
+    }
+
+    fun closeSidebarAndOpenSettings() {
+        closeSidebarThenNavigate {
+            pushRouteWithoutNavigationGeneration(Route.Settings(SettingsRoute.Main))
+        }
+    }
+
+    fun closeSidebarAndScanNfc() {
+        closeSidebarThenNavigate {
+            scanNfcWithoutNavigationGeneration()
+        }
+    }
+
+    private fun closeSidebarThenNavigate(action: suspend () -> Unit) {
+        pendingSidebarNavigationJob?.cancel()
+        val generation = advanceNavigationGeneration()
         isSidebarVisible = false
-        mainScope.launch {
+        pendingSidebarNavigationJob = mainScope.launch {
             kotlinx.coroutines.delay(SIDEBAR_NAVIGATION_DELAY_MS)
+            if (!isNavigationGenerationCurrent(generation)) return@launch
             action()
         }
     }
 
     fun pushRoute(route: Route) {
+        advanceNavigationGeneration()
+        pushRouteWithoutNavigationGeneration(route)
+    }
+
+    private fun pushRouteWithoutNavigationGeneration(route: Route) {
         Log.d(tag, "pushRoute: $route")
         isSidebarVisible = false
         val newRoutes = router.routes.toMutableList().apply { add(route) }
@@ -254,6 +332,11 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun pushRoutes(routes: List<Route>) {
+        advanceNavigationGeneration()
+        pushRoutesWithoutNavigationGeneration(routes)
+    }
+
+    private fun pushRoutesWithoutNavigationGeneration(routes: List<Route>) {
         Log.d(tag, "pushRoutes: ${routes.size} routes")
         isSidebarVisible = false
         val newRoutes = router.routes.toMutableList().apply { addAll(routes) }
@@ -266,6 +349,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun popRoute() {
+        advanceNavigationGeneration()
         Log.d(tag, "popRoute")
         if (rust.canGoBack()) {
             val newRoutes = router.routes.dropLast(1)
@@ -279,6 +363,7 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun setRoute(routes: List<Route>) {
+        advanceNavigationGeneration()
         Log.d(tag, "setRoute: ${routes.size} routes")
 
         // only dispatch if routes actually changed
@@ -289,253 +374,25 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun scanQr() {
+        advanceNavigationGeneration()
         sheetState = TaggedItem(AppSheetState.Qr)
     }
 
     fun scanNfc() {
+        advanceNavigationGeneration()
+        scanNfcWithoutNavigationGeneration()
+    }
+
+    private fun scanNfcWithoutNavigationGeneration() {
         sheetState = TaggedItem(AppSheetState.Nfc)
     }
 
-    /**
-     * Handle scanned QR code data by parsing and routing based on content type
-     * Matches iOS implementation in CoveApp.swift
-     */
-    fun handleMultiFormat(multiFormat: MultiFormat) {
-        try {
-            when (multiFormat) {
-                is MultiFormat.Mnemonic -> {
-                    multiFormat.v1.use { mnemonic ->
-                        importHotWallet(mnemonic.words())
-                    }
-                }
-
-                is MultiFormat.HardwareExport -> {
-                    importColdWallet(multiFormat.v1)
-                }
-
-                is MultiFormat.Address -> {
-                    handleAddress(multiFormat.v1)
-                }
-
-                is MultiFormat.Transaction -> {
-                    handleTransaction(multiFormat.v1)
-                }
-
-                is MultiFormat.SignedPsbt -> {
-                    handleSignedPsbt(multiFormat.v1)
-                }
-
-                is MultiFormat.TapSignerUnused -> {
-                    alertState = TaggedItem(AppAlertState.UninitializedTapSigner(multiFormat.v1))
-                }
-
-                is MultiFormat.TapSignerReady -> {
-                    val wallet = findTapSignerWallet(multiFormat.v1)
-                    if (wallet != null) {
-                        alertState = TaggedItem(AppAlertState.TapSignerWalletFound(wallet.id))
-                    } else {
-                        alertState = TaggedItem(AppAlertState.InitializedTapSigner(multiFormat.v1))
-                    }
-                }
-
-                is MultiFormat.Bip329Labels -> {
-                    val selectedWallet = database.globalConfig().selectedWallet()
-                    if (selectedWallet == null) {
-                        alertState =
-                            TaggedItem(
-                                AppAlertState.InvalidFileFormat(
-                                    "Currently BIP329 labels must be imported through the wallet actions",
-                                ),
-                            )
-                        return
-                    }
-
-                    // import the labels
-                    try {
-                        LabelManager(id = selectedWallet).use { it.importLabels(multiFormat.v1) }
-                        alertState = TaggedItem(AppAlertState.ImportedLabelsSuccessfully)
-
-                        // when labels are imported, refresh transactions with updated labels
-                        walletManager?.let { wm ->
-                            mainScope.launch {
-                                wm.rust.getTransactions()
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e(tag, "Failed to import labels", e)
-                        alertState =
-                            TaggedItem(
-                                AppAlertState.InvalidFileFormat(
-                                    e.message ?: "Failed to import labels",
-                                ),
-                            )
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(tag, "Unable to handle scanned code", e)
-            alertState =
-                TaggedItem(
-                    AppAlertState.InvalidFileFormat(e.message ?: "Unknown error"),
-                )
-        }
-    }
-
-    /**
-     * Import hot wallet from mnemonic words
-     */
-    private fun importHotWallet(words: List<String>) {
-        val manager = ImportWalletManager()
-        try {
-            val walletMetadata = manager.rust.importWallet(listOf(words))
-            rust.selectWallet(walletMetadata.id)
-        } catch (e: ImportWalletException.InvalidWordGroup) {
-            Log.d(tag, "Invalid word group detected")
-            alertState = TaggedItem(AppAlertState.InvalidWordGroup)
-        } catch (e: ImportWalletException.WalletAlreadyExists) {
-            Log.w(tag, "Attempted to import words for an existing hot wallet: ${e.v1}")
-            alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
-            try {
-                rust.selectWallet(e.v1)
-            } catch (selectError: Exception) {
-                Log.e(tag, "Unable to select existing wallet", selectError)
-            }
-        } catch (e: Exception) {
-            Log.e(tag, "Unable to import wallet", e)
-            alertState =
-                TaggedItem(
-                    AppAlertState.ErrorImportingHotWallet(e.message ?: "Unknown error"),
-                )
-        } finally {
-            manager.close()
-        }
-    }
-
-    /**
-     * Import cold wallet from hardware export
-     */
-    private fun importColdWallet(export: HardwareExport) {
-        try {
-            val wallet = Wallet.newFromExport(export)
-            try {
-                val id = wallet.id()
-                Log.d(tag, "Imported Wallet: $id")
-                alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
-
-                // if we're not already on this wallet, navigate to it
-                if (walletManager?.id != id) {
-                    rust.selectWallet(id)
-                }
-
-                // upgrade watch-only → cold in-place
-                if (walletManager?.id == id && walletManager?.walletMetadata?.walletType != WalletType.HOT) {
-                    try {
-                        walletManager?.rust?.setWalletType(WalletType.COLD)
-                    } catch (e: Exception) {
-                        Log.e(tag, "Failed to set wallet type to cold", e)
-                    }
-                }
-            } finally {
-                wallet.close()
-            }
-        } catch (e: WalletException.WalletAlreadyExists) {
-            alertState = TaggedItem(AppAlertState.DuplicateWallet(e.v1))
-            try {
-                rust.selectWallet(e.v1)
-            } catch (selectError: Exception) {
-                Log.e(tag, "Unable to select existing wallet", selectError)
-                alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
-            }
-        } catch (e: Exception) {
-            Log.e(tag, "Error importing hardware wallet", e)
-            alertState =
-                TaggedItem(
-                    AppAlertState.ErrorImportingHardwareWallet(e.message ?: "Unknown error"),
-                )
-        }
-    }
-
-    /**
-     * Handle scanned bitcoin address
-     */
-    private fun handleAddress(addressWithNetwork: AddressWithNetwork) {
-        val currentNetwork = database.globalConfig().selectedNetwork()
-        val address = addressWithNetwork.address()
-        val network = addressWithNetwork.network()
-        val selectedWallet = database.globalConfig().selectedWallet()
-
-        if (selectedWallet == null) {
-            alertState = TaggedItem(AppAlertState.NoWalletSelected(address))
-            return
-        }
-
-        if (!addressWithNetwork.isValidForNetwork(currentNetwork)) {
-            alertState =
-                TaggedItem(
-                    AppAlertState.AddressWrongNetwork(
-                        address = address,
-                        network = network,
-                        currentNetwork = currentNetwork,
-                    ),
-                )
-            return
-        }
-
-        val amount = addressWithNetwork.amount()
-        alertState = TaggedItem(AppAlertState.FoundAddress(address, amount))
-    }
-
-    /**
-     * Handle scanned signed transaction
-     */
-    private fun handleTransaction(transaction: BitcoinTransaction) {
-        Log.d(tag, "Received BitcoinTransaction: $transaction: ${transaction.txIdHash()}")
-
-        val db = database.unsignedTransactions()
-        val txnRecord = db.getTx(transaction.txId())
-
-        if (txnRecord == null) {
-            Log.e(tag, "No unsigned transaction found for ${transaction.txId()}")
-            alertState = TaggedItem(AppAlertState.NoUnsignedTransactionFound(transaction.txId()))
-            return
-        }
-
-        val route =
-            RouteFactory().sendConfirm(
-                id = txnRecord.walletId(),
-                details = txnRecord.confirmDetails(),
-                signedTransaction = transaction,
-            )
-
-        pushRoute(route)
-    }
-
-    /**
-     * Handle scanned signed PSBT
-     */
-    private fun handleSignedPsbt(psbt: Psbt) {
-        Log.d(tag, "Received signed PSBT: ${psbt.txId()}")
-
-        val db = database.unsignedTransactions()
-        val txnRecord = db.getTx(psbt.txId())
-
-        if (txnRecord == null) {
-            Log.e(tag, "No unsigned transaction found for PSBT ${psbt.txId()}")
-            alertState = TaggedItem(AppAlertState.NoUnsignedTransactionFound(psbt.txId()))
-            return
-        }
-
-        val route =
-            RouteFactory().sendConfirm(
-                id = txnRecord.walletId(),
-                details = txnRecord.confirmDetails(),
-                signedPsbt = psbt,
-            )
-
-        pushRoute(route)
-    }
-
     fun resetRoute(to: List<Route>) {
+        advanceNavigationGeneration()
+        resetRouteWithoutNavigationGeneration(to)
+    }
+
+    private fun resetRouteWithoutNavigationGeneration(to: List<Route>) {
         if (to.size > 1) {
             rust.resetNestedRoutesTo(to[0], to.drop(1))
         } else if (to.isNotEmpty()) {
@@ -544,12 +401,35 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun resetRoute(to: Route) {
+        advanceNavigationGeneration()
+        resetRouteWithoutNavigationGeneration(to)
+    }
+
+    private fun resetRouteWithoutNavigationGeneration(to: Route) {
         rust.resetDefaultRouteTo(to)
     }
 
     fun loadAndReset(to: Route) {
+        advanceNavigationGeneration()
         rust.loadAndResetDefaultRoute(to)
     }
+
+    fun captureLoadAndResetGeneration(): GenerationToken = navigationGenerations.capture()
+
+    fun resetAfterLoadingIfCurrent(
+        generation: GenerationToken,
+        route: Route.LoadAndReset,
+        nextRoutes: List<Route>,
+    ) {
+        if (!isNavigationGenerationCurrent(generation)) return
+        if (router.default != route) return
+        rust.resetAfterLoading(nextRoutes)
+    }
+
+    private fun advanceNavigationGeneration(): GenerationToken = navigationGenerations.advance()
+
+    private fun isNavigationGenerationCurrent(generation: GenerationToken): Boolean =
+        navigationGenerations.isCurrent(generation)
 
     fun agreeToTerms() {
         dispatch(AppAction.AcceptTerms)
@@ -649,7 +529,8 @@ class AppManager private constructor() : FfiReconcile {
 
     fun dispatch(action: AppAction) {
         Log.d(tag, "dispatch $action")
-        rust.dispatch(action)
+        runCatching { rust.dispatch(action) }
+            .onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
     }
 
     companion object {
@@ -661,7 +542,7 @@ class AppManager private constructor() : FfiReconcile {
          *
          * allows sidebar dismiss animation to complete to avoid visual jump
          */
-        private const val SIDEBAR_NAVIGATION_DELAY_MS = 300L
+        private const val SIDEBAR_NAVIGATION_DELAY_MS = 250L
 
         /**
          * minimum loading indicator visibility duration

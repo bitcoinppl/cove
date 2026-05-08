@@ -12,6 +12,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.zIndex
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.cloudbackup.CloudBackupScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 
@@ -101,7 +102,7 @@ fun SettingsContainer(
                     )
                 }
                 is SettingsRoute.CloudBackup -> {
-                    MainSettingsScreen(
+                    CloudBackupScreen(
                         app = app,
                         modifier = modifier,
                     )

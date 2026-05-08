@@ -192,6 +192,7 @@ fun LockView(
                     // show PIN screen
                     else -> {
                         NumberPadPinView(
+                            title = "Enter Cove PIN",
                             isPinCorrect = { pin ->
                                 when (auth.handleAndReturnUnlockMode(pin)) {
                                     UnlockMode.MAIN, UnlockMode.DECOY, UnlockMode.WIPE -> true
@@ -338,7 +339,7 @@ private fun BiometricView(
                 color = Color.White.copy(alpha = 0.1f),
             ) {
                 Text(
-                    text = "Enter Pin",
+                    text = "Enter Cove PIN",
                     color = Color.White,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                     fontWeight = FontWeight.Normal,

@@ -31,6 +31,13 @@ import java.nio.charset.CodingErrorAction
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.resume
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 // This is a helper for safely working with byte buffers returned from the Rust code.
 // A rust-owned buffer is represented by its capacity, its current length, and a
@@ -614,31 +621,37 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
     fun callback(`callbackData`: Long,`result`: UniffiForeignFutureResultVoid.UniffiByValue,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod0 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod1 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod2 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod3 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod4 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod5 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod6 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod7 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod8 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteI8,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceCloudStorageAccessMethod9 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceConnectivityAccessMethod0 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceDeviceAccessMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
@@ -653,7 +666,7 @@ internal interface UniffiCallbackInterfaceKeychainAccessMethod2 : com.sun.jna.Ca
     fun callback(`uniffiHandle`: Long,`key`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfacePasskeyProviderMethod0 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`userId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`user`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfacePasskeyProviderMethod1 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`credentialId`: RustBuffer.ByValue,`prfSalt`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
@@ -667,7 +680,7 @@ internal interface UniffiCallbackInterfacePasskeyProviderMethod3 : com.sun.jna.C
 internal interface UniffiCallbackInterfacePasskeyProviderMethod4 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`credentialId`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
-@Structure.FieldOrder("uniffiFree", "uniffiClone", "uploadMasterKeyBackup", "uploadWalletBackup", "downloadMasterKeyBackup", "downloadWalletBackup", "deleteWalletBackup", "listNamespaces", "listWalletFiles", "isBackupUploaded", "overallSyncHealth")
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "uploadMasterKeyBackup", "uploadWalletBackup", "downloadMasterKeyBackup", "downloadWalletBackup", "deleteWalletBackup", "deleteNamespace", "listNamespaces", "listWalletFiles", "isBackupUploaded", "overallSyncHealth")
 internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
     @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
@@ -676,10 +689,11 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
     @JvmField internal var `downloadMasterKeyBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod2? = null,
     @JvmField internal var `downloadWalletBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod3? = null,
     @JvmField internal var `deleteWalletBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod4? = null,
-    @JvmField internal var `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
-    @JvmField internal var `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
-    @JvmField internal var `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
-    @JvmField internal var `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
+    @JvmField internal var `deleteNamespace`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
+    @JvmField internal var `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
+    @JvmField internal var `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
+    @JvmField internal var `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
+    @JvmField internal var `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod9? = null,
 ) : Structure() {
     class UniffiByValue(
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
@@ -689,11 +703,12 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
         `downloadMasterKeyBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod2? = null,
         `downloadWalletBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod3? = null,
         `deleteWalletBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod4? = null,
-        `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
-        `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
-        `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
-        `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
-    ): UniffiVTableCallbackInterfaceCloudStorageAccess(`uniffiFree`,`uniffiClone`,`uploadMasterKeyBackup`,`uploadWalletBackup`,`downloadMasterKeyBackup`,`downloadWalletBackup`,`deleteWalletBackup`,`listNamespaces`,`listWalletFiles`,`isBackupUploaded`,`overallSyncHealth`,), Structure.ByValue
+        `deleteNamespace`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
+        `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
+        `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
+        `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
+        `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod9? = null,
+    ): UniffiVTableCallbackInterfaceCloudStorageAccess(`uniffiFree`,`uniffiClone`,`uploadMasterKeyBackup`,`uploadWalletBackup`,`downloadMasterKeyBackup`,`downloadWalletBackup`,`deleteWalletBackup`,`deleteNamespace`,`listNamespaces`,`listWalletFiles`,`isBackupUploaded`,`overallSyncHealth`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceCloudStorageAccess) {
         `uniffiFree` = other.`uniffiFree`
@@ -703,10 +718,30 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
         `downloadMasterKeyBackup` = other.`downloadMasterKeyBackup`
         `downloadWalletBackup` = other.`downloadWalletBackup`
         `deleteWalletBackup` = other.`deleteWalletBackup`
+        `deleteNamespace` = other.`deleteNamespace`
         `listNamespaces` = other.`listNamespaces`
         `listWalletFiles` = other.`listWalletFiles`
         `isBackupUploaded` = other.`isBackupUploaded`
         `overallSyncHealth` = other.`overallSyncHealth`
+    }
+
+}
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "isConnected")
+internal open class UniffiVTableCallbackInterfaceConnectivityAccess(
+    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+    @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+    @JvmField internal var `isConnected`: UniffiCallbackInterfaceConnectivityAccessMethod0? = null,
+) : Structure() {
+    class UniffiByValue(
+        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+        `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+        `isConnected`: UniffiCallbackInterfaceConnectivityAccessMethod0? = null,
+    ): UniffiVTableCallbackInterfaceConnectivityAccess(`uniffiFree`,`uniffiClone`,`isConnected`,), Structure.ByValue
+
+   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceConnectivityAccess) {
+        `uniffiFree` = other.`uniffiFree`
+        `uniffiClone` = other.`uniffiClone`
+        `isConnected` = other.`isConnected`
     }
 
 }
@@ -808,11 +843,15 @@ internal object IntegrityCheckingUniffiLib {
         uniffiCheckContractApiVersion(this)
         uniffiCheckApiChecksums(this)
     }
+    external fun uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object(
+    ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup(
     ): Short
     external fun uniffi_cove_device_checksum_method_passkeyaccess_is_prf_supported(
     ): Short
     external fun uniffi_cove_device_checksum_constructor_cloudstorage_new(
+    ): Short
+    external fun uniffi_cove_device_checksum_constructor_connectivity_new(
     ): Short
     external fun uniffi_cove_device_checksum_constructor_device_new(
     ): Short
@@ -830,6 +869,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup(
     ): Short
+    external fun uniffi_cove_device_checksum_method_cloudstorageaccess_delete_namespace(
+    ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces(
     ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files(
@@ -837,6 +878,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded(
     ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health(
+    ): Short
+    external fun uniffi_cove_device_checksum_method_connectivityaccess_is_connected(
     ): Short
     external fun uniffi_cove_device_checksum_method_deviceaccess_timezone(
     ): Short
@@ -873,6 +916,7 @@ internal object UniffiLib {
     init {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_device"))
         uniffiCallbackInterfaceCloudStorageAccess.register(this)
+        uniffiCallbackInterfaceConnectivityAccess.register(this)
         uniffiCallbackInterfaceDeviceAccess.register(this)
         uniffiCallbackInterfaceKeychainAccess.register(this)
         uniffiCallbackInterfacePasskeyProvider.register(this)
@@ -884,8 +928,14 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_device_fn_constructor_cloudstorage_new(`cloudStorage`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
-    external fun uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Byte
+    external fun uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(`ptr`: Long,`policy`: RustBuffer.ByValue,
+    ): Long
+    external fun uniffi_cove_device_fn_clone_connectivity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_device_fn_free_connectivity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_device_fn_constructor_connectivity_new(`connectivity`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
     external fun uniffi_cove_device_fn_clone_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_device_fn_free_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -908,6 +958,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_device_fn_init_callback_vtable_cloudstorageaccess(`vtable`: UniffiVTableCallbackInterfaceCloudStorageAccess,
     ): Unit
+    external fun uniffi_cove_device_fn_init_callback_vtable_connectivityaccess(`vtable`: UniffiVTableCallbackInterfaceConnectivityAccess,
+    ): Unit
     external fun uniffi_cove_device_fn_init_callback_vtable_deviceaccess(`vtable`: UniffiVTableCallbackInterfaceDeviceAccess,
     ): Unit
     external fun uniffi_cove_device_fn_init_callback_vtable_keychainaccess(`vtable`: UniffiVTableCallbackInterfaceKeychainAccess,
@@ -919,6 +971,12 @@ internal object UniffiLib {
     external fun uniffi_cove_device_fn_method_keychainerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_device_fn_method_passkeyerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_device_fn_method_passkeyfailurereason_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_device_fn_method_passkeyoperation_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_device_fn_func_passkey_aaguid_from_attestation_object(`attestationObject`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_cove_device_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1039,13 +1097,19 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 55372.toShort()) {
+    if (lib.uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object() != 43803.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 42755.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_passkeyaccess_is_prf_supported() != 31494.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_constructor_cloudstorage_new() != 17602.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_constructor_connectivity_new() != 64633.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_constructor_device_new() != 18892.toShort()) {
@@ -1057,31 +1121,37 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_constructor_passkeyaccess_new() != 32284.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_upload_master_key_backup() != 38493.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_upload_master_key_backup() != 7662.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_upload_wallet_backup() != 48039.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_upload_wallet_backup() != 40761.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_download_master_key_backup() != 17041.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_download_master_key_backup() != 36628.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_download_wallet_backup() != 58597.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_download_wallet_backup() != 57693.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 46277.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 27370.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 28959.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_delete_namespace() != 26766.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 18430.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 47835.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 28663.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 24091.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 51383.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 34175.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 13608.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194.toShort()) {
@@ -1096,7 +1166,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_keychainaccess_delete() != 1213.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 57897.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 48177.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_passkeyprovider_authenticate_with_prf() != 17002.toShort()) {
@@ -1124,6 +1194,135 @@ public fun uniffiEnsureInitialized() {
 }
 
 // Async support
+// Async return type handlers
+
+internal const val UNIFFI_RUST_FUTURE_POLL_READY = 0.toByte()
+internal const val UNIFFI_RUST_FUTURE_POLL_WAKE = 1.toByte()
+
+internal val uniffiContinuationHandleMap = UniffiHandleMap<CancellableContinuation<Byte>>()
+
+// FFI type for Rust future continuations
+internal object uniffiRustFutureContinuationCallbackImpl: UniffiRustFutureContinuationCallback {
+    override fun callback(data: Long, pollResult: Byte) {
+        uniffiContinuationHandleMap.remove(data).resume(pollResult)
+    }
+}
+
+internal suspend fun<T, F, E: kotlin.Exception> uniffiRustCallAsync(
+    rustFuture: Long,
+    pollFunc: (Long, UniffiRustFutureContinuationCallback, Long) -> Unit,
+    completeFunc: (Long, UniffiRustCallStatus) -> F,
+    freeFunc: (Long) -> Unit,
+    liftFunc: (F) -> T,
+    errorHandler: UniffiRustCallStatusErrorHandler<E>
+): T {
+    try {
+        do {
+            val pollResult = suspendCancellableCoroutine<Byte> { continuation ->
+                pollFunc(
+                    rustFuture,
+                    uniffiRustFutureContinuationCallbackImpl,
+                    uniffiContinuationHandleMap.insert(continuation)
+                )
+            }
+        } while (pollResult != UNIFFI_RUST_FUTURE_POLL_READY);
+
+        return liftFunc(
+            uniffiRustCallWithError(errorHandler, { status -> completeFunc(rustFuture, status) })
+        )
+    } finally {
+        freeFunc(rustFuture)
+    }
+}
+internal inline fun<T> uniffiTraitInterfaceCallAsync(
+    crossinline makeCall: suspend () -> T,
+    crossinline handleSuccess: (T) -> Unit,
+    crossinline handleError: (UniffiRustCallStatus.ByValue) -> Unit,
+    uniffiOutDroppedCallback: UniffiForeignFutureDroppedCallbackStruct,
+) {
+    // Using `GlobalScope` is labeled as a "delicate API" and generally discouraged in Kotlin programs, since it breaks structured concurrency.
+    // However, our parent task is a Rust future, so we're going to need to break structure concurrency in any case.
+    //
+    // Uniffi does its best to support structured concurrency across the FFI.
+    // If the Rust future is dropped, `uniffiForeignFutureDroppedCallbackImpl` is called, which will cancel the Kotlin coroutine if it's still running.
+    @OptIn(DelicateCoroutinesApi::class)
+    val job = GlobalScope.launch coroutineBlock@ {
+        // Note: it's important we call either `handleSuccess` or `handleError` exactly once.  Each
+        // call consumes an Arc reference, which means there should be no possibility of a double
+        // call.  The following code is structured so that will will never call both `handleSuccess`
+        // and `handleError`, even in the face of weird exceptions.
+        //
+        // In extreme circumstances we may not call either, for example if we fail to make the JNA
+        // call to `handleSuccess`.  This means we will leak the Arc reference, which is better than
+        // double-freeing it.
+        val callResult = try {
+            makeCall()
+        } catch(e: kotlin.Exception) {
+            handleError(
+                UniffiRustCallStatus.create(
+                    UNIFFI_CALL_UNEXPECTED_ERROR,
+                    FfiConverterString.lower(e.toString()),
+                )
+            )
+            return@coroutineBlock
+        }
+        handleSuccess(callResult)
+    }
+    val handle = uniffiForeignFutureHandleMap.insert(job)
+    uniffiOutDroppedCallback.uniffiSetValue(UniffiForeignFutureDroppedCallbackStruct(handle, uniffiForeignFutureDroppedCallbackImpl))
+}
+
+internal inline fun<T, reified E: Throwable> uniffiTraitInterfaceCallAsyncWithError(
+    crossinline makeCall: suspend () -> T,
+    crossinline handleSuccess: (T) -> Unit,
+    crossinline handleError: (UniffiRustCallStatus.ByValue) -> Unit,
+    crossinline lowerError: (E) -> RustBuffer.ByValue,
+    uniffiOutDroppedCallback: UniffiForeignFutureDroppedCallbackStruct,
+) {
+    // See uniffiTraitInterfaceCallAsync for details on `DelicateCoroutinesApi`
+    @OptIn(DelicateCoroutinesApi::class)
+    val job = GlobalScope.launch coroutineBlock@ {
+        // See the note in uniffiTraitInterfaceCallAsync for details on `handleSuccess` and
+        // `handleError`.
+        val callResult = try {
+            makeCall()
+        } catch(e: kotlin.Exception) {
+            if (e is E) {
+                handleError(
+                    UniffiRustCallStatus.create(
+                        UNIFFI_CALL_ERROR,
+                        lowerError(e),
+                    )
+                )
+            } else {
+                handleError(
+                    UniffiRustCallStatus.create(
+                        UNIFFI_CALL_UNEXPECTED_ERROR,
+                        FfiConverterString.lower(e.toString()),
+                    )
+                )
+            }
+            return@coroutineBlock
+        }
+        handleSuccess(callResult)
+    }
+    val handle = uniffiForeignFutureHandleMap.insert(job)
+    uniffiOutDroppedCallback.uniffiSetValue(UniffiForeignFutureDroppedCallbackStruct(handle, uniffiForeignFutureDroppedCallbackImpl))
+}
+
+internal val uniffiForeignFutureHandleMap = UniffiHandleMap<Job>()
+
+internal object uniffiForeignFutureDroppedCallbackImpl: UniffiForeignFutureDroppedCallback {
+    override fun callback(handle: Long) {
+        val job = uniffiForeignFutureHandleMap.remove(handle)
+        if (!job.isCompleted) {
+            job.cancel()
+        }
+    }
+}
+
+// For testing
+public fun uniffiForeignFutureHandleCount() = uniffiForeignFutureHandleMap.size
 
 // Public interface members begin here.
 
@@ -1499,7 +1698,7 @@ public interface CloudStorageInterface {
     /**
      * Check if any cloud backup namespaces exist
      */
-    fun `hasAnyCloudBackup`(): kotlin.Boolean
+    suspend fun `hasAnyCloudBackup`(`policy`: CloudAccessPolicy): kotlin.Boolean
     
     companion object
 }
@@ -1617,18 +1816,25 @@ open class CloudStorage: Disposable, AutoCloseable, CloudStorageInterface
     /**
      * Check if any cloud backup namespaces exist
      */
-    @Throws(CloudStorageException::class)override fun `hasAnyCloudBackup`(): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    callWithHandle {
-    uniffiRustCallWithError(CloudStorageException) { _status ->
-    UniffiLib.uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(
-        it,
-        _status)
-}
-    }
+    @Throws(CloudStorageException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `hasAnyCloudBackup`(`policy`: CloudAccessPolicy) : kotlin.Boolean {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(
+                uniffiHandle,
+                FfiConverterTypeCloudAccessPolicy.lower(`policy`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_device_rust_future_poll_i8(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_device_rust_future_complete_i8(future, continuation) },
+        { future -> UniffiLib.ffi_cove_device_rust_future_free_i8(future) },
+        // lift function
+        { FfiConverterBoolean.lift(it) },
+        // Error FFI converter
+        CloudStorageException.ErrorHandler,
     )
     }
-    
 
     
 
@@ -1664,6 +1870,254 @@ public object FfiConverterTypeCloudStorage: FfiConverter<CloudStorage, Long> {
     override fun allocationSize(value: CloudStorage) = 8UL
 
     override fun write(value: CloudStorage, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface ConnectivityInterface {
+    
+    companion object
+}
+
+open class Connectivity: Disposable, AutoCloseable, ConnectivityInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor(`connectivity`: ConnectivityAccess) :
+        this(UniffiWithHandle, 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_device_fn_constructor_connectivity_new(
+    
+        FfiConverterTypeConnectivityAccess.lower(`connectivity`),_status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_device_fn_free_connectivity(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_device_fn_clone_connectivity(handle, status)
+        }
+    }
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeConnectivity: FfiConverter<Connectivity, Long> {
+    override fun lower(value: Connectivity): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): Connectivity {
+        return Connectivity(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): Connectivity {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: Connectivity) = 8UL
+
+    override fun write(value: Connectivity, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -2490,9 +2944,137 @@ public object FfiConverterTypeDiscoveredPasskeyResult: FfiConverterRustBuffer<Di
 
 
 
+data class PasskeyRegistrationResult (
+    var `credentialId`: kotlin.ByteArray
+    , 
+    var `providerAaguid`: kotlin.String
+    , 
+    var `registeredPlatform`: PasskeyRegistrationPlatform
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyRegistrationResult: FfiConverterRustBuffer<PasskeyRegistrationResult> {
+    override fun read(buf: ByteBuffer): PasskeyRegistrationResult {
+        return PasskeyRegistrationResult(
+            FfiConverterByteArray.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypePasskeyRegistrationPlatform.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PasskeyRegistrationResult) = (
+            FfiConverterByteArray.allocationSize(value.`credentialId`) +
+            FfiConverterString.allocationSize(value.`providerAaguid`) +
+            FfiConverterTypePasskeyRegistrationPlatform.allocationSize(value.`registeredPlatform`)
+    )
+
+    override fun write(value: PasskeyRegistrationResult, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`credentialId`, buf)
+            FfiConverterString.write(value.`providerAaguid`, buf)
+            FfiConverterTypePasskeyRegistrationPlatform.write(value.`registeredPlatform`, buf)
+    }
+}
+
+
+
+data class PasskeyRegistrationUser (
+    var `id`: kotlin.ByteArray
+    , 
+    var `name`: kotlin.String
+    , 
+    var `displayName`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyRegistrationUser: FfiConverterRustBuffer<PasskeyRegistrationUser> {
+    override fun read(buf: ByteBuffer): PasskeyRegistrationUser {
+        return PasskeyRegistrationUser(
+            FfiConverterByteArray.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PasskeyRegistrationUser) = (
+            FfiConverterByteArray.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterString.allocationSize(value.`displayName`)
+    )
+
+    override fun write(value: PasskeyRegistrationUser, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`id`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterString.write(value.`displayName`, buf)
+    }
+}
+
+
+
+
+enum class CloudAccessPolicy {
+    
+    CONSENT_ALLOWED,
+    SILENT;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudAccessPolicy: FfiConverterRustBuffer<CloudAccessPolicy> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudAccessPolicy.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudAccessPolicy) = 4UL
+
+    override fun write(value: CloudAccessPolicy, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 
 
 sealed class CloudStorageException: kotlin.Exception() {
+    
+    class AuthorizationRequired(
+        
+        val v1: kotlin.String
+        ) : CloudStorageException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
     
     class NotAvailable(
         
@@ -2568,28 +3150,36 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
         
 
         return when(buf.getInt()) {
-            1 -> CloudStorageException.NotAvailable(
+            1 -> CloudStorageException.AuthorizationRequired(
                 FfiConverterString.read(buf),
                 )
-            2 -> CloudStorageException.Offline(
+            2 -> CloudStorageException.NotAvailable(
                 FfiConverterString.read(buf),
                 )
-            3 -> CloudStorageException.UploadFailed(
+            3 -> CloudStorageException.Offline(
                 FfiConverterString.read(buf),
                 )
-            4 -> CloudStorageException.DownloadFailed(
+            4 -> CloudStorageException.UploadFailed(
                 FfiConverterString.read(buf),
                 )
-            5 -> CloudStorageException.NotFound(
+            5 -> CloudStorageException.DownloadFailed(
                 FfiConverterString.read(buf),
                 )
-            6 -> CloudStorageException.QuotaExceeded()
+            6 -> CloudStorageException.NotFound(
+                FfiConverterString.read(buf),
+                )
+            7 -> CloudStorageException.QuotaExceeded()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
 
     override fun allocationSize(value: CloudStorageException): ULong {
         return when(value) {
+            is CloudStorageException.AuthorizationRequired -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
             is CloudStorageException.NotAvailable -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
@@ -2624,33 +3214,38 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
 
     override fun write(value: CloudStorageException, buf: ByteBuffer) {
         when(value) {
-            is CloudStorageException.NotAvailable -> {
+            is CloudStorageException.AuthorizationRequired -> {
                 buf.putInt(1)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.Offline -> {
+            is CloudStorageException.NotAvailable -> {
                 buf.putInt(2)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.UploadFailed -> {
+            is CloudStorageException.Offline -> {
                 buf.putInt(3)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.DownloadFailed -> {
+            is CloudStorageException.UploadFailed -> {
                 buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.NotFound -> {
+            is CloudStorageException.DownloadFailed -> {
                 buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.QuotaExceeded -> {
+            is CloudStorageException.NotFound -> {
                 buf.putInt(6)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is CloudStorageException.QuotaExceeded -> {
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -2661,6 +3256,9 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
 
 
 sealed class CloudSyncHealth {
+    
+    object Unknown : CloudSyncHealth()
+    
     
     object AllUploaded : CloudSyncHealth()
     
@@ -2679,6 +3277,15 @@ sealed class CloudSyncHealth {
     
     object NoFiles : CloudSyncHealth()
     
+    
+    data class AuthorizationRequired(
+        val v1: kotlin.String) : CloudSyncHealth()
+        
+    {
+        
+
+        companion object
+    }
     
     object Unavailable : CloudSyncHealth()
     
@@ -2699,18 +3306,28 @@ sealed class CloudSyncHealth {
 public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSyncHealth>{
     override fun read(buf: ByteBuffer): CloudSyncHealth {
         return when(buf.getInt()) {
-            1 -> CloudSyncHealth.AllUploaded
-            2 -> CloudSyncHealth.Uploading
-            3 -> CloudSyncHealth.Failed(
+            1 -> CloudSyncHealth.Unknown
+            2 -> CloudSyncHealth.AllUploaded
+            3 -> CloudSyncHealth.Uploading
+            4 -> CloudSyncHealth.Failed(
                 FfiConverterString.read(buf),
                 )
-            4 -> CloudSyncHealth.NoFiles
-            5 -> CloudSyncHealth.Unavailable
+            5 -> CloudSyncHealth.NoFiles
+            6 -> CloudSyncHealth.AuthorizationRequired(
+                FfiConverterString.read(buf),
+                )
+            7 -> CloudSyncHealth.Unavailable
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
 
     override fun allocationSize(value: CloudSyncHealth): ULong = when(value) {
+        is CloudSyncHealth.Unknown -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is CloudSyncHealth.AllUploaded -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -2736,6 +3353,13 @@ public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSync
                 4UL
             )
         }
+        is CloudSyncHealth.AuthorizationRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
         is CloudSyncHealth.Unavailable -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -2746,25 +3370,34 @@ public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSync
 
     override fun write(value: CloudSyncHealth, buf: ByteBuffer) {
         when(value) {
-            is CloudSyncHealth.AllUploaded -> {
+            is CloudSyncHealth.Unknown -> {
                 buf.putInt(1)
                 Unit
             }
-            is CloudSyncHealth.Uploading -> {
+            is CloudSyncHealth.AllUploaded -> {
                 buf.putInt(2)
                 Unit
             }
-            is CloudSyncHealth.Failed -> {
+            is CloudSyncHealth.Uploading -> {
                 buf.putInt(3)
+                Unit
+            }
+            is CloudSyncHealth.Failed -> {
+                buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is CloudSyncHealth.NoFiles -> {
-                buf.putInt(4)
+                buf.putInt(5)
+                Unit
+            }
+            is CloudSyncHealth.AuthorizationRequired -> {
+                buf.putInt(6)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is CloudSyncHealth.Unavailable -> {
-                buf.putInt(5)
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -2959,10 +3592,10 @@ sealed class PasskeyException: kotlin.Exception() {
     
     class NotSupported(
         
-        val v1: kotlin.String
+        val `reason`: PasskeyFailureReason
         ) : PasskeyException() {
         override val message
-            get() = "v1=${ v1 }"
+            get() = "reason=${ `reason` }"
     }
     
     class PrfUnsupportedProvider(
@@ -2977,20 +3610,14 @@ sealed class PasskeyException: kotlin.Exception() {
             get() = ""
     }
     
-    class CreationFailed(
+    class RequestFailed(
         
-        val v1: kotlin.String
+        val `operation`: PasskeyOperation, 
+        
+        val `reason`: PasskeyFailureReason
         ) : PasskeyException() {
         override val message
-            get() = "v1=${ v1 }"
-    }
-    
-    class AuthenticationFailed(
-        
-        val v1: kotlin.String
-        ) : PasskeyException() {
-        override val message
-            get() = "v1=${ v1 }"
+            get() = "operation=${ `operation` }, reason=${ `reason` }"
     }
     
     class NoCredentialFound(
@@ -3028,17 +3655,15 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
 
         return when(buf.getInt()) {
             1 -> PasskeyException.NotSupported(
-                FfiConverterString.read(buf),
+                FfiConverterTypePasskeyFailureReason.read(buf),
                 )
             2 -> PasskeyException.PrfUnsupportedProvider()
             3 -> PasskeyException.UserCancelled()
-            4 -> PasskeyException.CreationFailed(
-                FfiConverterString.read(buf),
+            4 -> PasskeyException.RequestFailed(
+                FfiConverterTypePasskeyOperation.read(buf),
+                FfiConverterTypePasskeyFailureReason.read(buf),
                 )
-            5 -> PasskeyException.AuthenticationFailed(
-                FfiConverterString.read(buf),
-                )
-            6 -> PasskeyException.NoCredentialFound()
+            5 -> PasskeyException.NoCredentialFound()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -3048,7 +3673,7 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
             is PasskeyException.NotSupported -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
+                + FfiConverterTypePasskeyFailureReason.allocationSize(value.`reason`)
             )
             is PasskeyException.PrfUnsupportedProvider -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -3058,15 +3683,11 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
-            is PasskeyException.CreationFailed -> (
+            is PasskeyException.RequestFailed -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
-            )
-            is PasskeyException.AuthenticationFailed -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
+                + FfiConverterTypePasskeyOperation.allocationSize(value.`operation`)
+                + FfiConverterTypePasskeyFailureReason.allocationSize(value.`reason`)
             )
             is PasskeyException.NoCredentialFound -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -3079,7 +3700,7 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
         when(value) {
             is PasskeyException.NotSupported -> {
                 buf.putInt(1)
-                FfiConverterString.write(value.v1, buf)
+                FfiConverterTypePasskeyFailureReason.write(value.`reason`, buf)
                 Unit
             }
             is PasskeyException.PrfUnsupportedProvider -> {
@@ -3090,18 +3711,14 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
                 buf.putInt(3)
                 Unit
             }
-            is PasskeyException.CreationFailed -> {
+            is PasskeyException.RequestFailed -> {
                 buf.putInt(4)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is PasskeyException.AuthenticationFailed -> {
-                buf.putInt(5)
-                FfiConverterString.write(value.v1, buf)
+                FfiConverterTypePasskeyOperation.write(value.`operation`, buf)
+                FfiConverterTypePasskeyFailureReason.write(value.`reason`, buf)
                 Unit
             }
             is PasskeyException.NoCredentialFound -> {
-                buf.putInt(6)
+                buf.putInt(5)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -3111,36 +3728,347 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
 
 
 
+sealed class PasskeyFailureReason {
+    
+    object PlatformAuthorizationFailed : PasskeyFailureReason()
+    
+    
+    object InvalidResponse : PasskeyFailureReason()
+    
+    
+    object NotHandled : PasskeyFailureReason()
+    
+    
+    object Interrupted : PasskeyFailureReason()
+    
+    
+    object ProviderConfiguration : PasskeyFailureReason()
+    
+    
+    object NoCreateOption : PasskeyFailureReason()
+    
+    
+    object DeviceNotConfigured : PasskeyFailureReason()
+    
+    
+    object UnexpectedCredentialType : PasskeyFailureReason()
+    
+    
+    object MissingCredentialId : PasskeyFailureReason()
+    
+    
+    object MalformedResponse : PasskeyFailureReason()
+    
+    
+    object TimedOut : PasskeyFailureReason()
+    
+    
+    data class Unknown(
+        val `diagnosticMessage`: kotlin.String) : PasskeyFailureReason()
+        
+    {
+        
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_device_fn_method_passkeyfailurereason_uniffi_trait_display(FfiConverterTypePasskeyFailureReason.lower(this),
+        _status)
+}
+    )
+    }
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_device_fn_method_passkeyfailurereason_uniffi_trait_display(FfiConverterTypePasskeyFailureReason.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyFailureReason : FfiConverterRustBuffer<PasskeyFailureReason>{
+    override fun read(buf: ByteBuffer): PasskeyFailureReason {
+        return when(buf.getInt()) {
+            1 -> PasskeyFailureReason.PlatformAuthorizationFailed
+            2 -> PasskeyFailureReason.InvalidResponse
+            3 -> PasskeyFailureReason.NotHandled
+            4 -> PasskeyFailureReason.Interrupted
+            5 -> PasskeyFailureReason.ProviderConfiguration
+            6 -> PasskeyFailureReason.NoCreateOption
+            7 -> PasskeyFailureReason.DeviceNotConfigured
+            8 -> PasskeyFailureReason.UnexpectedCredentialType
+            9 -> PasskeyFailureReason.MissingCredentialId
+            10 -> PasskeyFailureReason.MalformedResponse
+            11 -> PasskeyFailureReason.TimedOut
+            12 -> PasskeyFailureReason.Unknown(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: PasskeyFailureReason): ULong = when(value) {
+        is PasskeyFailureReason.PlatformAuthorizationFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.InvalidResponse -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.NotHandled -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.Interrupted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.ProviderConfiguration -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.NoCreateOption -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.DeviceNotConfigured -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.UnexpectedCredentialType -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.MissingCredentialId -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.MalformedResponse -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.TimedOut -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.Unknown -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`diagnosticMessage`)
+            )
+        }
+    }
+
+    override fun write(value: PasskeyFailureReason, buf: ByteBuffer) {
+        when(value) {
+            is PasskeyFailureReason.PlatformAuthorizationFailed -> {
+                buf.putInt(1)
+                Unit
+            }
+            is PasskeyFailureReason.InvalidResponse -> {
+                buf.putInt(2)
+                Unit
+            }
+            is PasskeyFailureReason.NotHandled -> {
+                buf.putInt(3)
+                Unit
+            }
+            is PasskeyFailureReason.Interrupted -> {
+                buf.putInt(4)
+                Unit
+            }
+            is PasskeyFailureReason.ProviderConfiguration -> {
+                buf.putInt(5)
+                Unit
+            }
+            is PasskeyFailureReason.NoCreateOption -> {
+                buf.putInt(6)
+                Unit
+            }
+            is PasskeyFailureReason.DeviceNotConfigured -> {
+                buf.putInt(7)
+                Unit
+            }
+            is PasskeyFailureReason.UnexpectedCredentialType -> {
+                buf.putInt(8)
+                Unit
+            }
+            is PasskeyFailureReason.MissingCredentialId -> {
+                buf.putInt(9)
+                Unit
+            }
+            is PasskeyFailureReason.MalformedResponse -> {
+                buf.putInt(10)
+                Unit
+            }
+            is PasskeyFailureReason.TimedOut -> {
+                buf.putInt(11)
+                Unit
+            }
+            is PasskeyFailureReason.Unknown -> {
+                buf.putInt(12)
+                FfiConverterString.write(value.`diagnosticMessage`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class PasskeyOperation {
+    
+    REGISTRATION,
+    DISCOVER_ASSERTION,
+    AUTHENTICATE_ASSERTION;
+
+    
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_device_fn_method_passkeyoperation_uniffi_trait_display(FfiConverterTypePasskeyOperation.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyOperation: FfiConverterRustBuffer<PasskeyOperation> {
+    override fun read(buf: ByteBuffer) = try {
+        PasskeyOperation.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: PasskeyOperation) = 4UL
+
+    override fun write(value: PasskeyOperation, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class PasskeyRegistrationPlatform {
+    
+    IOS,
+    ANDROID;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyRegistrationPlatform: FfiConverterRustBuffer<PasskeyRegistrationPlatform> {
+    override fun read(buf: ByteBuffer) = try {
+        PasskeyRegistrationPlatform.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: PasskeyRegistrationPlatform) = 4UL
+
+    override fun write(value: PasskeyRegistrationPlatform, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 
 
 public interface CloudStorageAccess {
     
-    fun `uploadMasterKeyBackup`(`namespace`: kotlin.String, `data`: kotlin.ByteArray)
+    suspend fun `uploadMasterKeyBackup`(`namespace`: kotlin.String, `data`: kotlin.ByteArray, `policy`: CloudAccessPolicy)
     
-    fun `uploadWalletBackup`(`namespace`: kotlin.String, `recordId`: kotlin.String, `data`: kotlin.ByteArray)
+    suspend fun `uploadWalletBackup`(`namespace`: kotlin.String, `recordId`: kotlin.String, `data`: kotlin.ByteArray, `policy`: CloudAccessPolicy)
     
-    fun `downloadMasterKeyBackup`(`namespace`: kotlin.String): kotlin.ByteArray
+    suspend fun `downloadMasterKeyBackup`(`namespace`: kotlin.String, `policy`: CloudAccessPolicy): kotlin.ByteArray
     
-    fun `downloadWalletBackup`(`namespace`: kotlin.String, `recordId`: kotlin.String): kotlin.ByteArray
+    suspend fun `downloadWalletBackup`(`namespace`: kotlin.String, `recordId`: kotlin.String, `policy`: CloudAccessPolicy): kotlin.ByteArray
     
-    fun `deleteWalletBackup`(`namespace`: kotlin.String, `recordId`: kotlin.String)
+    suspend fun `deleteWalletBackup`(`namespace`: kotlin.String, `recordId`: kotlin.String, `policy`: CloudAccessPolicy)
+    
+    suspend fun `deleteNamespace`(`namespace`: kotlin.String, `policy`: CloudAccessPolicy)
     
     /**
      * List all namespace IDs (subdirectories of cspp-namespaces/)
      */
-    fun `listNamespaces`(): List<kotlin.String>
+    suspend fun `listNamespaces`(`policy`: CloudAccessPolicy): List<kotlin.String>
     
     /**
-     * List wallet backup filenames within a namespace (e.g. "wallet-<hash>.json")
+     * List wallet backup filenames within a namespace
      */
-    fun `listWalletFiles`(`namespace`: kotlin.String): List<kotlin.String>
+    suspend fun `listWalletFiles`(`namespace`: kotlin.String, `policy`: CloudAccessPolicy): List<kotlin.String>
     
     /**
      * Check whether a blob has been fully uploaded to iCloud
      */
-    fun `isBackupUploaded`(`namespace`: kotlin.String, `recordId`: kotlin.String): kotlin.Boolean
+    suspend fun `isBackupUploaded`(`namespace`: kotlin.String, `recordId`: kotlin.String, `policy`: CloudAccessPolicy): kotlin.Boolean
     
-    fun `overallSyncHealth`(): CloudSyncHealth
+    suspend fun `overallSyncHealth`(`policy`: CloudAccessPolicy): CloudSyncHealth
     
     companion object
 }
@@ -3150,155 +4078,348 @@ public interface CloudStorageAccess {
 // Put the implementation in an object so we don't pollute the top-level namespace
 internal object uniffiCallbackInterfaceCloudStorageAccess {
     internal object `uploadMasterKeyBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod0 {
-        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
-            val makeCall = { ->
+            val makeCall = suspend { ->
                 uniffiObj.`uploadMasterKeyBackup`(
                     FfiConverterString.lift(`namespace`),
                     FfiConverterByteArray.lift(`data`),
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
                 )
             }
-            val writeReturn = { _: Unit -> Unit }
-            uniffiTraitInterfaceCallWithError(
-                uniffiCallStatus,
+            val uniffiHandleSuccess = { _: Unit ->
+                val uniffiResult = UniffiForeignFutureResultVoid.UniffiByValue(
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid.UniffiByValue(
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall,
-                writeReturn,
-                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) }
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) },
+                uniffiOutDroppedCallback
             )
         }
     }
     internal object `uploadWalletBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod1 {
-        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
-            val makeCall = { ->
+            val makeCall = suspend { ->
                 uniffiObj.`uploadWalletBackup`(
                     FfiConverterString.lift(`namespace`),
                     FfiConverterString.lift(`recordId`),
                     FfiConverterByteArray.lift(`data`),
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
                 )
             }
-            val writeReturn = { _: Unit -> Unit }
-            uniffiTraitInterfaceCallWithError(
-                uniffiCallStatus,
+            val uniffiHandleSuccess = { _: Unit ->
+                val uniffiResult = UniffiForeignFutureResultVoid.UniffiByValue(
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid.UniffiByValue(
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall,
-                writeReturn,
-                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) }
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) },
+                uniffiOutDroppedCallback
             )
         }
     }
     internal object `downloadMasterKeyBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod2 {
-        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
-            val makeCall = { ->
+            val makeCall = suspend { ->
                 uniffiObj.`downloadMasterKeyBackup`(
                     FfiConverterString.lift(`namespace`),
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
                 )
             }
-            val writeReturn = { value: kotlin.ByteArray -> uniffiOutReturn.setValue(FfiConverterByteArray.lower(value)) }
-            uniffiTraitInterfaceCallWithError(
-                uniffiCallStatus,
+            val uniffiHandleSuccess = { returnValue: kotlin.ByteArray ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterByteArray.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall,
-                writeReturn,
-                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) }
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) },
+                uniffiOutDroppedCallback
             )
         }
     }
     internal object `downloadWalletBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod3 {
-        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
-            val makeCall = { ->
+            val makeCall = suspend { ->
                 uniffiObj.`downloadWalletBackup`(
                     FfiConverterString.lift(`namespace`),
                     FfiConverterString.lift(`recordId`),
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
                 )
             }
-            val writeReturn = { value: kotlin.ByteArray -> uniffiOutReturn.setValue(FfiConverterByteArray.lower(value)) }
-            uniffiTraitInterfaceCallWithError(
-                uniffiCallStatus,
+            val uniffiHandleSuccess = { returnValue: kotlin.ByteArray ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterByteArray.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall,
-                writeReturn,
-                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) }
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) },
+                uniffiOutDroppedCallback
             )
         }
     }
     internal object `deleteWalletBackup`: UniffiCallbackInterfaceCloudStorageAccessMethod4 {
-        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
-            val makeCall = { ->
+            val makeCall = suspend { ->
                 uniffiObj.`deleteWalletBackup`(
                     FfiConverterString.lift(`namespace`),
                     FfiConverterString.lift(`recordId`),
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
                 )
             }
-            val writeReturn = { _: Unit -> Unit }
-            uniffiTraitInterfaceCallWithError(
-                uniffiCallStatus,
+            val uniffiHandleSuccess = { _: Unit ->
+                val uniffiResult = UniffiForeignFutureResultVoid.UniffiByValue(
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid.UniffiByValue(
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall,
-                writeReturn,
-                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) }
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) },
+                uniffiOutDroppedCallback
             )
         }
     }
-    internal object `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod5 {
-        override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+    internal object `deleteNamespace`: UniffiCallbackInterfaceCloudStorageAccessMethod5 {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
-            val makeCall = { ->
+            val makeCall = suspend { ->
+                uniffiObj.`deleteNamespace`(
+                    FfiConverterString.lift(`namespace`),
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
+                )
+            }
+            val uniffiHandleSuccess = { _: Unit ->
+                val uniffiResult = UniffiForeignFutureResultVoid.UniffiByValue(
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultVoid.UniffiByValue(
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) },
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod6 {
+        override fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
                 uniffiObj.`listNamespaces`(
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
                 )
             }
-            val writeReturn = { value: List<kotlin.String> -> uniffiOutReturn.setValue(FfiConverterSequenceString.lower(value)) }
-            uniffiTraitInterfaceCallWithError(
-                uniffiCallStatus,
+            val uniffiHandleSuccess = { returnValue: List<kotlin.String> ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterSequenceString.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall,
-                writeReturn,
-                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) }
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) },
+                uniffiOutDroppedCallback
             )
         }
     }
-    internal object `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod6 {
-        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+    internal object `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod7 {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
-            val makeCall = { ->
+            val makeCall = suspend { ->
                 uniffiObj.`listWalletFiles`(
                     FfiConverterString.lift(`namespace`),
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
                 )
             }
-            val writeReturn = { value: List<kotlin.String> -> uniffiOutReturn.setValue(FfiConverterSequenceString.lower(value)) }
-            uniffiTraitInterfaceCallWithError(
-                uniffiCallStatus,
+            val uniffiHandleSuccess = { returnValue: List<kotlin.String> ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterSequenceString.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall,
-                writeReturn,
-                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) }
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) },
+                uniffiOutDroppedCallback
             )
         }
     }
-    internal object `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod7 {
-        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,) {
+    internal object `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod8 {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteI8,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
-            val makeCall = { ->
+            val makeCall = suspend { ->
                 uniffiObj.`isBackupUploaded`(
                     FfiConverterString.lift(`namespace`),
                     FfiConverterString.lift(`recordId`),
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
                 )
             }
-            val writeReturn = { value: kotlin.Boolean -> uniffiOutReturn.setValue(FfiConverterBoolean.lower(value)) }
-            uniffiTraitInterfaceCallWithError(
-                uniffiCallStatus,
+            val uniffiHandleSuccess = { returnValue: kotlin.Boolean ->
+                val uniffiResult = UniffiForeignFutureResultI8.UniffiByValue(
+                    FfiConverterBoolean.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultI8.UniffiByValue(
+                        0.toByte(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
                 makeCall,
-                writeReturn,
-                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) }
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) },
+                uniffiOutDroppedCallback
             )
         }
     }
-    internal object `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod8 {
-        override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+    internal object `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod9 {
+        override fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
-            val makeCall = { ->
+            val makeCall = suspend { ->
                 uniffiObj.`overallSyncHealth`(
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
                 )
             }
-            val writeReturn = { value: CloudSyncHealth -> uniffiOutReturn.setValue(FfiConverterTypeCloudSyncHealth.lower(value)) }
-            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+            val uniffiHandleSuccess = { returnValue: CloudSyncHealth ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeCloudSyncHealth.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
         }
     }
 
@@ -3322,6 +4443,7 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
         `downloadMasterKeyBackup`,
         `downloadWalletBackup`,
         `deleteWalletBackup`,
+        `deleteNamespace`,
         `listNamespaces`,
         `listWalletFiles`,
         `isBackupUploaded`,
@@ -3341,6 +4463,65 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
  * @suppress
  */
 public object FfiConverterTypeCloudStorageAccess: FfiConverterCallbackInterface<CloudStorageAccess>()
+
+
+
+
+
+public interface ConnectivityAccess {
+    
+    fun `isConnected`(): kotlin.Boolean
+    
+    companion object
+}
+
+
+
+// Put the implementation in an object so we don't pollute the top-level namespace
+internal object uniffiCallbackInterfaceConnectivityAccess {
+    internal object `isConnected`: UniffiCallbackInterfaceConnectivityAccessMethod0 {
+        override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeConnectivityAccess.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`isConnected`(
+                )
+            }
+            val writeReturn = { value: kotlin.Boolean -> uniffiOutReturn.setValue(FfiConverterBoolean.lower(value)) }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+
+    internal object uniffiFree: UniffiCallbackInterfaceFree {
+        override fun callback(handle: Long) {
+            FfiConverterTypeConnectivityAccess.handleMap.remove(handle)
+        }
+    }
+
+    internal object uniffiClone: UniffiCallbackInterfaceClone {
+        override fun callback(handle: Long): Long {
+            return FfiConverterTypeConnectivityAccess.handleMap.clone(handle)
+        }
+    }
+
+    internal var vtable = UniffiVTableCallbackInterfaceConnectivityAccess.UniffiByValue(
+        uniffiFree,
+        uniffiClone,
+        `isConnected`,
+    )
+
+    // Registers the foreign callback with the Rust side.
+    // This method is generated for each callback interface.
+    internal fun register(lib: UniffiLib) {
+        lib.uniffi_cove_device_fn_init_callback_vtable_connectivityaccess(vtable)
+    }
+}
+
+/**
+ * The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
+ *
+ * @suppress
+ */
+public object FfiConverterTypeConnectivityAccess: FfiConverterCallbackInterface<ConnectivityAccess>()
 
 
 
@@ -3513,7 +4694,7 @@ public interface PasskeyProvider {
     /**
      * Create a new passkey credential
      */
-    fun `createPasskey`(`rpId`: kotlin.String, `userId`: kotlin.ByteArray, `challenge`: kotlin.ByteArray): kotlin.ByteArray
+    fun `createPasskey`(`rpId`: kotlin.String, `challenge`: kotlin.ByteArray, `user`: PasskeyRegistrationUser): PasskeyRegistrationResult
     
     /**
      * Authenticate with a known credential_id (enable flow, re-enable)
@@ -3548,16 +4729,16 @@ public interface PasskeyProvider {
 // Put the implementation in an object so we don't pollute the top-level namespace
 internal object uniffiCallbackInterfacePasskeyProvider {
     internal object `createPasskey`: UniffiCallbackInterfacePasskeyProviderMethod0 {
-        override fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`userId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+        override fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`user`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypePasskeyProvider.handleMap.get(uniffiHandle)
             val makeCall = { ->
                 uniffiObj.`createPasskey`(
                     FfiConverterString.lift(`rpId`),
-                    FfiConverterByteArray.lift(`userId`),
                     FfiConverterByteArray.lift(`challenge`),
+                    FfiConverterTypePasskeyRegistrationUser.lift(`user`),
                 )
             }
-            val writeReturn = { value: kotlin.ByteArray -> uniffiOutReturn.setValue(FfiConverterByteArray.lower(value)) }
+            val writeReturn = { value: PasskeyRegistrationResult -> uniffiOutReturn.setValue(FfiConverterTypePasskeyRegistrationResult.lower(value)) }
             uniffiTraitInterfaceCallWithError(
                 uniffiCallStatus,
                 makeCall,
@@ -3725,4 +4906,23 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
         }
     }
 }
+
+
+
+
+
+
+
+
+    @Throws(PasskeyException::class) fun `passkeyAaguidFromAttestationObject`(`attestationObject`: kotlin.ByteArray): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(PasskeyException) { _status ->
+    UniffiLib.uniffi_cove_device_fn_func_passkey_aaguid_from_attestation_object(
+    
+        FfiConverterByteArray.lower(`attestationObject`),_status)
+}
+    )
+    }
+    
+
 

@@ -318,7 +318,7 @@ struct MainSettingsScreen: View {
         } else if manager.hasPendingUploadVerification {
             Image(systemName: "arrow.clockwise.icloud")
                 .foregroundStyle(.blue)
-            Text("Cloud Backup Verifying")
+            Text("Cloud Backup Confirming")
         } else {
             Image(
                 systemName: manager.isVerificationStale
@@ -402,7 +402,10 @@ struct MainSettingsScreen: View {
             }
 
             SettingsRow(title: "Retry", symbol: "arrow.clockwise") {
-                manager.dispatch(action: .enableCloudBackup)
+                manager.dispatch(action: .enableCloudBackup(.init(
+                    savedPasskeyConfirmation: .manual,
+                    verificationSource: .settings
+                )))
             }
         }
     }
@@ -538,7 +541,7 @@ struct MainSettingsScreen: View {
                 """,
                 actions: {
                     Button("Go To Wallet") {
-                        try? app.rust.selectWallet(id: walletId)
+                        try? app.selectWalletOrThrow(walletId)
                     }
 
                     Button("Cancel", role: .cancel) { alertState = .none }
@@ -896,14 +899,16 @@ struct MainSettingsScreen: View {
             }
 
         case .cloudBackupOnboarding:
-            CloudBackupEnableOnboardingView(
-                onEnable: {
+            SettingsCloudBackupEnableSheet(
+                onComplete: {
                     sheetState = .none
-                    CloudBackupManager.shared.dispatch(action: .enableCloudBackup)
+                    DispatchQueue.main.async {
+                        app.pushRoute(.settings(.cloudBackup))
+                    }
                 },
-                onCancel: { sheetState = .none },
-                message: nil,
-                isBusy: false
+                onDismiss: {
+                    sheetState = .none
+                }
             )
         }
     }
@@ -942,6 +947,210 @@ struct MainSettingsScreen: View {
         do { try auth.rust.setDecoyPin(pin: pin) } catch {
             let error = error as! AuthManagerError
             alertState = .init(.extraSetPinError(error.description))
+        }
+    }
+}
+
+private struct SettingsCloudBackupEnableSheet: View {
+    private enum PasskeyEnableFlow {
+        case idle
+        case choosing
+        case startedEnable
+
+        var isChoosing: Bool {
+            if case .choosing = self { return true }
+            return false
+        }
+    }
+
+    @State private var manager = CloudBackupManager.shared
+    @State private var isStartingEnable = false
+    @State private var passkeyEnableFlow = PasskeyEnableFlow.idle
+    @State private var existingBackupContext: CloudBackupEnableContext?
+    @State private var existingBackupPasskeyHint: CloudBackupPasskeyHint?
+
+    let onComplete: () -> Void
+    let onDismiss: () -> Void
+
+    private var message: String? {
+        switch manager.status {
+        case .unsupportedPasskeyProvider:
+            "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
+        case let .error(message):
+            message
+        default:
+            nil
+        }
+    }
+
+    private var isBusy: Bool {
+        if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableState {
+            return false
+        }
+
+        return isStartingEnable || {
+            if case .enabling = manager.status { true } else { false }
+        }()
+    }
+
+    private func shouldDismiss(for promptIntent: CloudBackupPromptIntent) -> Bool {
+        if case .existingBackupFound = promptIntent { return false }
+        if case .none = promptIntent { return false }
+        return true
+    }
+
+    private func isEnablePasskeyChoice(_ promptIntent: CloudBackupPromptIntent) -> Bool {
+        guard case let .passkeyChoice(intent) = promptIntent else { return false }
+        if case .enable = intent { return true }
+        return false
+    }
+
+    private func shouldSuppressEnablePasskeyChoicePrompt(
+        _ promptIntent: CloudBackupPromptIntent
+    ) -> Bool {
+        guard case .startedEnable = passkeyEnableFlow else { return false }
+        return isEnablePasskeyChoice(promptIntent)
+    }
+
+    private func startEnable(action: CloudBackupManagerAction) {
+        guard !isBusy else { return }
+        passkeyEnableFlow = .startedEnable
+        isStartingEnable = true
+        manager.dispatch(action: action)
+    }
+
+    private func handlePromptIntent(_ promptIntent: CloudBackupPromptIntent) {
+        if case let .existingBackupFound(context, passkeyHint) = promptIntent {
+            existingBackupContext = context
+            existingBackupPasskeyHint = passkeyHint
+            passkeyEnableFlow = .idle
+            isStartingEnable = false
+            return
+        }
+
+        if shouldSuppressEnablePasskeyChoicePrompt(promptIntent) {
+            passkeyEnableFlow = .idle
+            isStartingEnable = false
+            manager.dispatch(action: .dismissPasskeyChoicePrompt)
+            return
+        }
+
+        if shouldDismiss(for: promptIntent) {
+            onDismiss()
+        }
+    }
+
+    private var existingBackupMessage: String {
+        guard let existingBackupPasskeyHint else {
+            return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead."
+        }
+
+        return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey named Cove Cloud Backup (\(existingBackupPasskeyHint.nameSuffix)), use that passkey instead."
+    }
+
+    var body: some View {
+        let showingPasskeyChoice = Binding(
+            get: { passkeyEnableFlow.isChoosing },
+            set: { isPresented in
+                guard !isPresented, case .choosing = passkeyEnableFlow else { return }
+                passkeyEnableFlow = .idle
+            }
+        )
+
+        ZStack {
+            if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableState {
+                CloudBackupEnableConfirmationView(
+                    onContinue: {
+                        manager.dispatch(action: .confirmSavedPasskey)
+                    },
+                    onCancel: {
+                        manager.dispatch(action: .discardPendingEnableCloudBackup)
+                        onDismiss()
+                    }
+                )
+            } else {
+                CloudBackupEnableOnboardingView(
+                    onEnable: {
+                        guard !isBusy else { return }
+                        passkeyEnableFlow = .choosing
+                    },
+                    onCancel: onDismiss,
+                    message: message,
+                    isBusy: isBusy
+                )
+            }
+
+            if isBusy {
+                CloudBackupEnableBusyOverlay(enableState: manager.enableState)
+            }
+        }
+        .onChange(of: manager.status, initial: true) { _, status in
+            if case .enabling = status {
+                isStartingEnable = false
+            } else if isStartingEnable {
+                isStartingEnable = false
+            }
+
+            if case .enabled = status {
+                onComplete()
+            }
+        }
+        .onChange(of: manager.promptIntent, initial: true) { _, promptIntent in
+            handlePromptIntent(promptIntent)
+        }
+        .alert(
+            "Passkey Options",
+            isPresented: showingPasskeyChoice
+        ) {
+            Button("Use Existing Passkey") {
+                startEnable(action: .enableCloudBackup(.init(
+                    savedPasskeyConfirmation: .manual,
+                    verificationSource: .settings
+                )))
+            }
+            Button("Create New Passkey") {
+                startEnable(action: .enableCloudBackupNoDiscovery(.init(
+                    savedPasskeyConfirmation: .manual,
+                    verificationSource: .settings
+                )))
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Would you like to use an existing passkey or create a new one?")
+        }
+        .alert(
+            "Existing Cloud Backup Found",
+            isPresented: Binding(
+                get: { existingBackupContext != nil },
+                set: { isPresented in
+                    guard !isPresented else { return }
+                    if existingBackupContext != nil {
+                        manager.dispatch(action: .discardPendingEnableCloudBackup)
+                    }
+                    existingBackupContext = nil
+                    existingBackupPasskeyHint = nil
+                }
+            )
+        ) {
+            Button("Create New Backup", role: .destructive) {
+                guard let context = existingBackupContext else { return }
+                existingBackupContext = nil
+                existingBackupPasskeyHint = nil
+                manager.dispatch(action: .enableCloudBackupForceNew(context))
+            }
+            Button("Try Existing Passkey") {
+                guard let context = existingBackupContext else { return }
+                existingBackupContext = nil
+                existingBackupPasskeyHint = nil
+                manager.dispatch(action: .enableCloudBackup(context))
+            }
+            Button("Cancel", role: .cancel) {
+                existingBackupContext = nil
+                existingBackupPasskeyHint = nil
+                manager.dispatch(action: .discardPendingEnableCloudBackup)
+            }
+        } message: {
+            Text(existingBackupMessage)
         }
     }
 }

@@ -14,7 +14,15 @@ use rust_cktap::{
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use crate::{database::Database, network::Network, psbt::Psbt};
+use crate::{
+    database::Database,
+    network::Network,
+    psbt::Psbt,
+    wallet::metadata::{
+        TAP_SIGNER_ANNOUNCEMENT_HEIGHT, WalletBirthday, tap_signer_setup_birthday,
+        valid_birth_height,
+    },
+};
 use cove_util::result_ext::ResultExt as _;
 
 use super::{CkTapError, TapcardTransport, TapcardTransportProtocol, TransportError};
@@ -128,6 +136,7 @@ pub struct ContinueFromDerive {
 pub struct TapSignerSetupComplete {
     pub backup: Vec<u8>,
     pub derive_info: DeriveInfo,
+    pub birthday: WalletBirthday,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
@@ -137,6 +146,7 @@ pub struct DeriveInfo {
     pub chain_code: Vec<u8>,
     pub path: Vec<u32>,
     pub network: Network,
+    pub birth_height: Option<u64>,
 }
 
 impl TapSignerReader {
@@ -359,7 +369,10 @@ impl TapSignerReader {
             return response;
         }
 
-        let complete = TapSignerSetupComplete { backup, derive_info };
+        let birthday = tap_signer_setup_birthday(derive_info.network, derive_info.birth_height)
+            .unwrap_or(WalletBirthday::BlockHeight(TAP_SIGNER_ANNOUNCEMENT_HEIGHT));
+
+        let complete = TapSignerSetupComplete { backup, derive_info, birthday };
 
         *self.last_response.lock() = Some(SetupCmdResponse::Complete(complete.clone()).into());
         SetupCmdResponse::Complete(complete)
@@ -393,8 +406,16 @@ impl TapSignerReader {
             _ => [84, 1, 0],
         };
 
-        let derive_response = self.reader.lock().await.derive(&path, pin).await?;
-        let derive_info = DeriveInfo::from_response(derive_response, path.to_vec(), self.network);
+        let (derive_response, birth_height) = {
+            let mut reader = self.reader.lock().await;
+            let birth_height = valid_birth_height(Some(
+                reader.birth.try_into().expect("usize birth height fits in u64"),
+            ));
+            let derive_response = reader.derive(&path, pin).await?;
+            (derive_response, birth_height)
+        };
+        let derive_info =
+            DeriveInfo::from_response(derive_response, path.to_vec(), self.network, birth_height);
 
         Ok(derive_info)
     }
@@ -456,6 +477,7 @@ impl DeriveInfo {
         derive_response: DeriveResponse,
         path: Vec<u32>,
         network: Network,
+        birth_height: Option<u64>,
     ) -> Self {
         let master_pubkey = derive_response.master_pubkey;
         let chain_code = derive_response.chain_code;
@@ -467,6 +489,7 @@ impl DeriveInfo {
             chain_code: chain_code.to_vec(),
             path,
             network,
+            birth_height,
         }
     }
 
@@ -561,6 +584,7 @@ mod ffi {
             pubkey: xpub_bytes.to_vec(),
             chain_code: original_xpub.chain_code.to_bytes().to_vec(),
             path: vec![84, 1, 0],
+            birth_height: Some(700_553),
         }
     }
 }
@@ -630,5 +654,9 @@ fn _ffi_tap_signer_setup_complete_new(preview: bool) -> TapSignerSetupComplete {
     assert!(preview);
 
     let backup = vec![0u8; 32];
-    TapSignerSetupComplete { backup, derive_info: ffi::derive_info() }
+    TapSignerSetupComplete {
+        backup,
+        derive_info: ffi::derive_info(),
+        birthday: WalletBirthday::BlockHeight(700_553),
+    }
 }

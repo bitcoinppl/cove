@@ -30,6 +30,8 @@ struct SelectedWalletScreen: View {
     /// nav bar height (~50) + scroll view system insets (~50)
     /// safeAreaInsets.top handles device-specific differences (notch, Dynamic Island)
     private let navBarAndScrollInsets: CGFloat = 100
+    /// Delay long enough for SwiftUI to dismiss the title context menu before routing
+    private let contextMenuDismissNavigationDelay: Duration = .milliseconds(350)
 
     /// public
     var manager: WalletManager
@@ -50,6 +52,7 @@ struct SelectedWalletScreen: View {
     @State private var showLabelsQrExport = false
     @State private var showExportXpubConfirmation = false
     @State private var showXpubQrExport = false
+    @State private var pendingRenameNavigationTask: Task<Void, Never>? = nil
 
     /// private
     @State private var runPostRefresh = false
@@ -173,6 +176,21 @@ struct SelectedWalletScreen: View {
         showXpubQrExport = true
     }
 
+    private func showRenameFromTitleMenu() {
+        let walletId = metadata.id
+
+        pendingRenameNavigationTask?.cancel()
+        pendingRenameNavigationTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: contextMenuDismissNavigationDelay)
+            } catch {
+                return
+            }
+
+            app.pushRoute(Route.settings(.wallet(id: walletId, route: .changeName)))
+        }
+    }
+
     func shareXpubFile() {
         Task {
             do {
@@ -243,7 +261,7 @@ struct SelectedWalletScreen: View {
         )
         .contextMenu {
             Button("Change Name") {
-                app.pushRoute(Route.settings(.wallet(id: metadata.id, route: .changeName)))
+                showRenameFromTitleMenu()
             }
         }
     }
@@ -272,6 +290,7 @@ struct SelectedWalletScreen: View {
                         .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
                         .font(.callout)
                 }
+                .accessibilityIdentifier("selectedWallet.more")
                 .confirmationDialog(
                     "Export Labels",
                     isPresented: $showExportLabelsConfirmation
@@ -515,7 +534,9 @@ struct SelectedWalletScreen: View {
             app.isPastHeader = false
         }
         .onDisappear {
-            // reset scroll state when leaving this screen
+            pendingRenameNavigationTask?.cancel()
+            pendingRenameNavigationTask = nil
+
             app.isPastHeader = false
         }
         .alert(

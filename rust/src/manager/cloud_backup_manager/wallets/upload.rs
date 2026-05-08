@@ -14,11 +14,11 @@ use cove_util::ResultExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
-use super::super::ops::load_master_key_for_cloud_action;
-use super::super::{CloudBackupError, RustCloudBackupManager};
-use super::{
-    PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, all_local_wallets,
-    persist_enabled_cloud_backup_state, prepare_wallet_backup,
+use super::{PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, prepare_wallet_backup};
+use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
+use crate::manager::cloud_backup_manager::{
+    CloudBackupError, CloudBackupStore, CloudStorageIssue, RustCloudBackupManager,
+    is_connectivity_related_issue,
 };
 
 const STALE_UPLOADING_RETRY_THRESHOLD_SECS: u64 = 60;
@@ -45,7 +45,7 @@ impl DirtyWalletUploadPreparationError {
 
 impl RustCloudBackupManager {
     /// Upload wallets to cloud and update local cache
-    pub fn do_backup_wallets(
+    pub async fn do_backup_wallets(
         &self,
         wallets: &[crate::wallet::metadata::WalletMetadata],
     ) -> Result<(), CloudBackupError> {
@@ -61,16 +61,20 @@ impl RustCloudBackupManager {
             .map_err_prefix("load local master key", CloudBackupError::Internal)?
         {
             Some(master_key) => master_key,
-            None => self.recover_local_master_key_from_cloud_without_discovery(
-                &namespace,
-                UPLOAD_WALLET_RECOVERY_MESSAGE,
-            )?,
+            None => {
+                self.recover_local_master_key_from_cloud_without_discovery(
+                    &namespace,
+                    UPLOAD_WALLET_RECOVERY_MESSAGE,
+                )
+                .await?
+            }
         };
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
-        let cloud = CloudStorage::global();
+        let cloud = CloudStorage::global_explicit_client();
         let existing_cloud_record_ids = cloud
             .list_wallet_backups(namespace.clone())
+            .await
             .ok()
             .map(|record_ids| record_ids.into_iter().collect::<HashSet<_>>());
 
@@ -82,7 +86,7 @@ impl RustCloudBackupManager {
 
         for (index, metadata) in wallets.iter().enumerate() {
             info!("Backup: uploading wallet {}/{} '{}'", index + 1, wallets.len(), metadata.name);
-            let prepared = prepare_wallet_backup(metadata, metadata.wallet_mode)?;
+            let prepared = prepare_wallet_backup(metadata, metadata.wallet_mode).await?;
             let encrypted = wallet_crypto::encrypt_wallet_entry(&prepared.entry, &critical_key)
                 .map_err_str(CloudBackupError::Crypto)?;
 
@@ -91,7 +95,7 @@ impl RustCloudBackupManager {
 
             cloud
                 .upload_wallet_backup(namespace.clone(), prepared.record_id.clone(), wallet_json)
-                .map_err_str(CloudBackupError::Cloud)?;
+                .await?;
 
             let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
             self.mark_wallet_uploaded_pending_confirmation_if_revision_current(
@@ -100,7 +104,8 @@ impl RustCloudBackupManager {
                 prepared.record_id.clone(),
                 prepared.revision_hash.clone(),
                 uploaded_at,
-            )?;
+            )
+            .await?;
 
             uploaded_record_ids.push(prepared.record_id);
             info!("Backup: wallet {}/{} uploaded", index + 1, wallets.len());
@@ -130,8 +135,11 @@ impl RustCloudBackupManager {
                 previous_count + new_record_count
             });
 
-        let listed_wallet_count =
-            cloud.list_wallet_backups(namespace).ok().map(|record_ids| record_ids.len() as u32);
+        let listed_wallet_count = cloud
+            .list_wallet_backups(namespace)
+            .await
+            .ok()
+            .map(|record_ids| record_ids.len() as u32);
 
         let wallet_count = [
             Some(previous_count),
@@ -143,13 +151,13 @@ impl RustCloudBackupManager {
         .flatten()
         .max()
         .unwrap_or(previous_count);
-        persist_enabled_cloud_backup_state(&db, wallet_count)?;
+        CloudBackupStore::new(&db).persist_enabled(wallet_count)?;
 
         info!("Backed up {} wallet(s) to cloud", wallets.len());
         Ok(())
     }
 
-    pub fn do_upload_wallet_if_dirty(
+    pub async fn do_upload_wallet_if_dirty(
         &self,
         wallet_id: &crate::wallet::metadata::WalletId,
     ) -> Result<(), CloudBackupError> {
@@ -173,7 +181,8 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
-        let Some(metadata) = all_local_wallets(&Database::global())?
+        let Some(metadata) = CloudBackupStore::global()
+            .all_wallets()?
             .into_iter()
             .find(|wallet| wallet.id == *wallet_id)
         else {
@@ -181,7 +190,7 @@ impl RustCloudBackupManager {
             return Ok(());
         };
 
-        if self.is_definitely_offline() {
+        if self.is_known_offline() {
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
             ));
@@ -189,7 +198,7 @@ impl RustCloudBackupManager {
 
         let namespace = self.current_namespace_id()?;
 
-        let prepared_upload = match self.prepare_dirty_wallet_upload(&namespace, &metadata) {
+        let prepared_upload = match self.prepare_dirty_wallet_upload(&namespace, &metadata).await {
             Ok(prepared_upload) => prepared_upload,
             Err(error) => {
                 return self.handle_dirty_wallet_upload_error(
@@ -201,7 +210,7 @@ impl RustCloudBackupManager {
         };
 
         let PreparedDirtyWalletUpload { prepared, wallet_json } = prepared_upload;
-        let cloud = CloudStorage::global();
+        let cloud = CloudStorage::global_silent_client();
         let uploading_state = PersistedCloudBlobSyncState {
             state: PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
                 revision_hash: prepared.revision_hash.clone(),
@@ -219,7 +228,7 @@ impl RustCloudBackupManager {
         }
 
         if let Err(error) =
-            cloud.upload_wallet_backup(namespace.clone(), record_id.clone(), wallet_json)
+            cloud.upload_wallet_backup(namespace.clone(), record_id.clone(), wallet_json).await
         {
             return self.handle_dirty_wallet_upload_cloud_error(
                 &uploading_state,
@@ -244,9 +253,11 @@ impl RustCloudBackupManager {
         revision_hash: Option<String>,
         error: CloudStorageError,
     ) -> Result<(), CloudBackupError> {
-        let issue = Self::cloud_storage_issue(&error);
-        let cloud_error = CloudBackupError::Cloud(error.to_string());
-        if Self::is_connectivity_related_issue(issue) {
+        let issue = CloudStorageIssue::from(&error);
+        let retryable = Self::is_upload_failure_retryable(&error);
+        let persisted_issue = Self::cloud_blob_failure_issue(issue);
+        let cloud_error = CloudBackupError::CloudStorage(error);
+        if is_connectivity_related_issue(issue) {
             self.mark_blob_dirty_state(current_state)?;
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
@@ -256,7 +267,8 @@ impl RustCloudBackupManager {
         self.mark_blob_failed_if_current(
             current_state,
             revision_hash,
-            is_upload_failure_retryable(&error),
+            retryable,
+            persisted_issue,
             cloud_error.to_string(),
         )?;
         Err(cloud_error)
@@ -268,7 +280,8 @@ impl RustCloudBackupManager {
         revision_hash: Option<String>,
         error: CloudBackupError,
     ) -> Result<(), CloudBackupError> {
-        if Self::is_connectivity_related_issue(self.cloud_backup_issue(&error)) {
+        let issue = CloudStorageIssue::from(&error);
+        if is_connectivity_related_issue(issue) {
             self.mark_blob_dirty_state(current_state)?;
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
@@ -278,7 +291,8 @@ impl RustCloudBackupManager {
         self.mark_blob_failed_if_current(
             current_state,
             revision_hash,
-            is_upload_preparation_failure_retryable(&error),
+            Self::is_upload_preparation_failure_retryable(&error),
+            Self::cloud_blob_failure_issue(issue),
             error.to_string(),
         )?;
         Err(error)
@@ -292,7 +306,7 @@ impl RustCloudBackupManager {
             return Ok(Some(current_state));
         };
 
-        if !is_stale_uploading_state(uploading_state.started_at) {
+        if !Self::is_stale_uploading_state(uploading_state.started_at) {
             return Ok(Some(current_state));
         }
 
@@ -313,12 +327,13 @@ impl RustCloudBackupManager {
         Ok(wrote_dirty.then_some(dirty_state))
     }
 
-    fn prepare_dirty_wallet_upload(
+    async fn prepare_dirty_wallet_upload(
         &self,
         namespace: &str,
         metadata: &WalletMetadata,
     ) -> Result<PreparedDirtyWalletUpload, DirtyWalletUploadPreparationError> {
         let prepared = prepare_wallet_backup(metadata, metadata.wallet_mode)
+            .await
             .map_err(DirtyWalletUploadPreparationError::without_revision_hash)?;
 
         let revision_hash = Some(prepared.revision_hash.clone());
@@ -329,6 +344,7 @@ impl RustCloudBackupManager {
                 UPLOAD_WALLET_RECOVERY_MESSAGE,
             )
         })
+        .await
         .map_err(|source| DirtyWalletUploadPreparationError::new(source, revision_hash.clone()))?;
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
@@ -345,7 +361,7 @@ impl RustCloudBackupManager {
         Ok(PreparedDirtyWalletUpload { prepared, wallet_json })
     }
 
-    fn mark_wallet_uploaded_pending_confirmation_if_revision_current(
+    async fn mark_wallet_uploaded_pending_confirmation_if_revision_current(
         &self,
         namespace_id: &str,
         wallet_id: crate::wallet::metadata::WalletId,
@@ -353,7 +369,8 @@ impl RustCloudBackupManager {
         revision_hash: String,
         uploaded_at: u64,
     ) -> Result<(), CloudBackupError> {
-        let Some(current_metadata) = all_local_wallets(&Database::global())?
+        let Some(current_metadata) = CloudBackupStore::global()
+            .all_wallets()?
             .into_iter()
             .find(|wallet| wallet.id == wallet_id)
         else {
@@ -367,7 +384,9 @@ impl RustCloudBackupManager {
         };
 
         let current_revision_hash =
-            prepare_wallet_backup(&current_metadata, current_metadata.wallet_mode)?.revision_hash;
+            prepare_wallet_backup(&current_metadata, current_metadata.wallet_mode)
+                .await?
+                .revision_hash;
 
         if current_revision_hash != revision_hash {
             return Ok(());
@@ -395,61 +414,40 @@ impl RustCloudBackupManager {
             uploaded_at,
         )
     }
-}
 
-fn is_stale_uploading_state(started_at: u64) -> bool {
-    let now: u64 = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
-    now.saturating_sub(started_at) >= STALE_UPLOADING_RETRY_THRESHOLD_SECS
-}
-
-pub fn upload_all_wallets(
-    cloud: &CloudStorage,
-    namespace: &str,
-    critical_key: &[u8; 32],
-    db: &Database,
-) -> Result<Vec<PreparedWalletBackup>, CloudBackupError> {
-    let mut uploaded_wallets = Vec::new();
-
-    for metadata in all_local_wallets(db)? {
-        let prepared = prepare_wallet_backup(&metadata, metadata.wallet_mode)?;
-        let encrypted = wallet_crypto::encrypt_wallet_entry(&prepared.entry, critical_key)
-            .map_err_str(CloudBackupError::Crypto)?;
-
-        let wallet_json = serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
-
-        cloud
-            .upload_wallet_backup(namespace.to_string(), prepared.record_id.clone(), wallet_json)
-            .map_err_str(CloudBackupError::Cloud)?;
-
-        uploaded_wallets.push(prepared);
+    fn is_stale_uploading_state(started_at: u64) -> bool {
+        let now: u64 = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        now.saturating_sub(started_at) >= STALE_UPLOADING_RETRY_THRESHOLD_SECS
     }
 
-    Ok(uploaded_wallets)
-}
-
-fn is_upload_preparation_failure_retryable(error: &CloudBackupError) -> bool {
-    match error {
-        CloudBackupError::Cloud(_)
-        | CloudBackupError::Offline(_)
-        | CloudBackupError::Deferred(_) => true,
-        CloudBackupError::NotSupported(_)
-        | CloudBackupError::UnsupportedPasskeyProvider
-        | CloudBackupError::RecoveryRequired(_)
-        | CloudBackupError::Passkey(_)
-        | CloudBackupError::Crypto(_)
-        | CloudBackupError::Internal(_)
-        | CloudBackupError::PasskeyMismatch
-        | CloudBackupError::PasskeyDiscoveryCancelled
-        | CloudBackupError::Cancelled => false,
+    fn is_upload_preparation_failure_retryable(error: &CloudBackupError) -> bool {
+        match error {
+            CloudBackupError::Cloud(_)
+            | CloudBackupError::CloudStorage(_)
+            | CloudBackupError::CloudStorageContext { .. }
+            | CloudBackupError::Offline(_)
+            | CloudBackupError::Deferred(_) => true,
+            CloudBackupError::NotSupported(_)
+            | CloudBackupError::UnsupportedPasskeyProvider
+            | CloudBackupError::RecoveryRequired(_)
+            | CloudBackupError::Passkey(_)
+            | CloudBackupError::Crypto(_)
+            | CloudBackupError::Internal(_)
+            | CloudBackupError::Compatibility(_)
+            | CloudBackupError::PasskeyMismatch
+            | CloudBackupError::PasskeyDiscoveryCancelled
+            | CloudBackupError::Cancelled => false,
+        }
     }
-}
 
-fn is_upload_failure_retryable(error: &CloudStorageError) -> bool {
-    matches!(
-        error,
-        CloudStorageError::Offline(_)
-            | CloudStorageError::NotAvailable(_)
-            | CloudStorageError::UploadFailed(_)
-            | CloudStorageError::DownloadFailed(_)
-    )
+    fn is_upload_failure_retryable(error: &CloudStorageError) -> bool {
+        matches!(
+            error,
+            CloudStorageError::AuthorizationRequired(_)
+                | CloudStorageError::Offline(_)
+                | CloudStorageError::NotAvailable(_)
+                | CloudStorageError::UploadFailed(_)
+                | CloudStorageError::DownloadFailed(_)
+        )
+    }
 }

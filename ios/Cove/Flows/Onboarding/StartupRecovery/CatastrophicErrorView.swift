@@ -1,7 +1,5 @@
 import SwiftUI
 
-@_exported import CoveCore
-
 struct CatastrophicErrorView: View {
     let onRestoreFromCloud: () -> Void
     let onWipeOnly: () -> Void
@@ -49,7 +47,7 @@ struct CatastrophicErrorView: View {
         Task.detached {
             let cloud = CloudStorage(cloudStorage: CloudStorageAccessImpl())
             do {
-                let exists = try cloud.hasAnyCloudBackup()
+                let exists = try await cloud.hasAnyCloudBackup(policy: .consentAllowed)
                 await MainActor.run {
                     cloudProbeState = exists ? .available : .unavailable
                 }
@@ -85,56 +83,60 @@ private struct CatastrophicErrorContent: View {
     let onWipeOnly: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-                .frame(height: 16)
+        ScrollView {
+            VStack(spacing: 0) {
+                Spacer()
+                    .frame(height: 16)
 
-            ZStack {
-                Circle()
-                    .fill(Color.red.opacity(0.12))
-                    .frame(width: 118, height: 118)
+                ZStack {
+                    Circle()
+                        .fill(Color.red.opacity(0.12))
+                        .frame(width: 118, height: 118)
 
-                Circle()
-                    .stroke(Color.red.opacity(0.18), lineWidth: 1)
-                    .frame(width: 118, height: 118)
+                    Circle()
+                        .stroke(Color.red.opacity(0.18), lineWidth: 1)
+                        .frame(width: 118, height: 118)
 
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 42, weight: .semibold))
-                    .foregroundStyle(.red)
-            }
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 42, weight: .semibold))
+                        .foregroundStyle(.red)
+                }
 
-            Spacer()
-                .frame(height: 40)
+                Spacer()
+                    .frame(height: 40)
 
-            VStack(spacing: 16) {
-                Text("Encryption Key Error")
-                    .font(OnboardingRecoveryTypography.heroTitle)
-                    .foregroundStyle(.white)
+                VStack(spacing: 16) {
+                    Text("Encryption Key Error")
+                        .font(OnboardingRecoveryTypography.heroTitle)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+
+                    Text(
+                        "Your app's encryption key doesn't match the stored data. This is unexpected and your local wallet data on this device can’t be opened safely."
+                    )
+                    .font(OnboardingRecoveryTypography.body)
+                    .foregroundStyle(.coveLightGray.opacity(0.76))
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 8)
 
-                Text(
-                    "Your app's encryption key doesn't match the stored data. This is unexpected and your local wallet data on this device can’t be opened safely."
-                )
-                .font(OnboardingRecoveryTypography.body)
-                .foregroundStyle(.coveLightGray.opacity(0.76))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                    .frame(height: 24)
+
+                cloudProbeContent
+
+                Spacer(minLength: 26)
+
+                actionButtons
             }
-            .padding(.horizontal, 8)
-
-            Spacer()
-                .frame(height: 24)
-
-            cloudProbeContent
-
-            Spacer(minLength: 26)
-
-            actionButtons
+            .padding(.horizontal, 28)
+            .padding(.top, 12)
+            .padding(.bottom, 26)
+            .frame(maxWidth: .infinity)
+            .containerRelativeFrame(.vertical, alignment: .center)
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 12)
-        .padding(.bottom, 26)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
     }
 

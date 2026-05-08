@@ -172,6 +172,7 @@ struct LockView<Content: View>: View {
 
     var numberPadPinView: NumberPadPinView {
         NumberPadPinView(
+            title: "Enter Cove PIN",
             lockState: lockState,
             isPinCorrect: isPinCorrect,
             showPin: showPin,
@@ -215,7 +216,7 @@ struct LockView<Content: View>: View {
 
             if lockType == .both {
                 Button(action: { screen = .pin }) {
-                    Text("Enter Pin")
+                    Text("Enter Cove PIN")
                         .frame(width: 100, height: 40)
                         .background(
                             .ultraThinMaterial,

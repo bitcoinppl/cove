@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 # cove crates
 cove-cspp = { path = "../cove-cspp" }
+cove-tokio = { path = "../cove-tokio" }
 cove-types = { path = "../cove-types" }
 cove-util = { path = "../cove-util" }
 
@@ -22,6 +23,9 @@ thiserror = { workspace = true }
 # logging
 tracing = { workspace = true }
 
+# async
+async-trait = { workspace = true }
+
 # uniffi
 uniffi = { workspace = true }
 
@@ -30,3 +34,6 @@ hex = { workspace = true }
 
 # crypto
 rand = { workspace = true }
+
+# cbor
+minicbor = { workspace = true }

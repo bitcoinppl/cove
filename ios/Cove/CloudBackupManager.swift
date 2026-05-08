@@ -1,6 +1,4 @@
 import Foundation
-
-@_exported import CoveCore
 import SwiftUI
 
 extension WeakReconciler: CloudBackupManagerReconciler where Reconciler == CloudBackupManager {}
@@ -30,6 +28,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
         syncHealthObserver.start()
+        // Keep the initial iCloud health probe off the main startup path.
+        rustBridge.async { rust.cloudStorageDidChange() }
     }
 
     var status: CloudBackupStatus {
@@ -38,10 +38,6 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
 
     var promptIntent: CloudBackupPromptIntent {
         state.promptIntent
-    }
-
-    var connectivityHint: CloudConnectivityHint {
-        state.connectivityHint
     }
 
     var syncHealth: CloudSyncHealth {
@@ -64,14 +60,20 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.syncError
     }
 
+    var enableState: CloudBackupEnableState {
+        state.enableState
+    }
+
+    var pendingUploadVerification: PendingUploadVerificationState {
+        state.pendingUploadVerification
+    }
+
     var hasPendingUploadVerification: Bool {
-        state.hasPendingUploadVerification
+        pendingUploadVerification != .idle
     }
 
     var isBackgroundVerifying: Bool {
-        guard hasPendingUploadVerification else { return false }
-        if case .verifying = verification { return true }
-        return false
+        hasPendingUploadVerification
     }
 
     var shouldPromptVerification: Bool {
@@ -116,6 +118,10 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.verification
     }
 
+    var verificationPresentation: CloudBackupVerificationPresentation {
+        state.verificationPresentation
+    }
+
     var sync: SyncState {
         state.sync
     }
@@ -132,6 +138,10 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.cloudOnlyOperation
     }
 
+    var otherBackupsOperation: OtherBackupsOperation {
+        state.otherBackupsOperation
+    }
+
     func dispatch(action: Action) {
         dispatch(action)
     }
@@ -140,12 +150,14 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         rustBridge.async { self.rust.dispatch(action: action) }
     }
 
+    func startVerification(source: CloudBackupVerificationSource = .settings) {
+        dispatch(.startVerification(source))
+    }
+
     private func apply(_ message: Message) {
         switch message {
         case let .status(status):
             state.status = status
-        case let .connectivityHint(connectivityHint):
-            state.connectivityHint = connectivityHint
         case let .syncHealth(syncHealth):
             state.syncHealth = syncHealth
         case let .promptIntent(promptIntent):
@@ -158,12 +170,16 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
             state.restoreReport = report
         case let .syncError(syncError):
             state.syncError = syncError
+        case let .enableState(enableState):
+            state.enableState = enableState
         case let .verificationPrompt(pending):
             state.shouldPromptVerification = pending
         case let .verificationMetadata(verificationMetadata):
             state.verificationMetadata = verificationMetadata
+        case let .verificationPresentation(presentation):
+            state.verificationPresentation = presentation
         case let .pendingUploadVerification(pending):
-            state.hasPendingUploadVerification = pending
+            state.pendingUploadVerification = pending
         case let .detail(detail):
             state.detail = detail
         case let .verification(verification):
@@ -176,6 +192,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
             state.cloudOnly = cloudOnly
         case let .cloudOnlyOperation(cloudOnlyOperation):
             state.cloudOnlyOperation = cloudOnlyOperation
+        case let .otherBackupsOperation(otherBackupsOperation):
+            state.otherBackupsOperation = otherBackupsOperation
         }
     }
 

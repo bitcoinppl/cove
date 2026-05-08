@@ -10,7 +10,7 @@ list:
 # Run an xtask command
 [group('utils')]
 xtask *args:
-    cd rust && test -f target/debug/xtask || cargo build --package xtask -q && ./target/debug/xtask {{args}}
+    cd rust && cargo xtask {{args}}
 
 # Sign a PSBT and output all formats (base64, hex, binary, bbqr-gif, ur-gif)
 # Requires MNEMONIC env var (set in .envrc or pass directly)
@@ -107,6 +107,11 @@ build-ios-release:
 [private]
 alias bir := build-ios-release
 
+# Bump iOS build, build release bindings, then upload to TestFlight
+[group('build')]
+testflight:
+    just xtask testflight
+
 # Build iOS debug for device
 [group('build')]
 build-ios-debug-device:
@@ -133,11 +138,49 @@ compile-ios:
 [group('build')]
 [working-directory: 'android']
 compile-android:
-    ./gradlew assembleDebug && just notf "done compile android"
+    ./gradlew assembleDevDebug && just notf "done compile android"
 
 # ------------------------------------------------------------------------------
 # test
 # ------------------------------------------------------------------------------
+
+# Run manual Android full-launch onboarding UI tests
+[group('test')]
+[working-directory: 'android']
+[script('bash')]
+android-ui-manual:
+    set -e
+
+    cleanup() {
+        adb uninstall org.bitcoinppl.cove.uitest.test >/dev/null 2>&1 || true
+        adb uninstall org.bitcoinppl.cove.uitest >/dev/null 2>&1 || true
+    }
+
+    trap cleanup EXIT
+
+    ./gradlew :app:connectedUiTestDebugAndroidTest \
+        -Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.ManualFullLaunchTest
+
+[private]
+alias aum := android-ui-manual
+
+# Run manual iOS full-launch UI tests without opening Simulator
+[group('test')]
+[script('bash')]
+ios-ui-background device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITests":
+    cd rust && cargo build --package xtask -q && ./target/debug/xtask ios-ui --device "{{device}}" --test "{{test}}"
+
+[private]
+alias iub := ios-ui-background
+
+# Run manual iOS full-launch UI tests with Simulator visible
+[group('test')]
+[script('bash')]
+ios-ui-foreground device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITests":
+    cd rust && cargo build --package xtask -q && ./target/debug/xtask ios-ui --foreground --device "{{device}}" --test "{{test}}"
+
+[private]
+alias iuf := ios-ui-foreground
 
 # Run all tests
 [group('test')]

@@ -5,9 +5,7 @@
 //  Created by Praveen Perera  on 6/17/24.
 //
 
-@_exported import CoveCore
 import MijickPopups
-import Network
 import SwiftUI
 
 extension EnvironmentValues {
@@ -40,7 +38,7 @@ struct CoveApp: App {
     enum StartupState {
         case loading
         case ready(AppManager, AuthManager)
-        case onboarding(AppManager, AuthManager)
+        case onboarding(AppManager, AuthManager, OnboardingManager)
         case catastrophicError
         case fatalError(String)
     }
@@ -52,6 +50,7 @@ struct CoveApp: App {
     init() {
         _ = Keychain(keychain: KeychainAccessor())
         _ = Device(device: DeviceAccesor())
+        _ = Connectivity(connectivity: CloudConnectivityMonitor.shared)
         _ = PasskeyAccess(provider: PasskeyProviderImpl())
         _ = CloudStorage(cloudStorage: CloudStorageAccessImpl())
         Self.excludeDataDirFromBackup(logFailure: false)
@@ -112,8 +111,8 @@ extension CoveApp {
             CoverView(errorMessage: nil)
         case let .ready(app, auth):
             CoveMainView(app: app, auth: auth)
-        case let .onboarding(app, auth):
-            OnboardingContainer(manager: OnboardingManager(app: app), auth: auth) {
+        case let .onboarding(app, auth, manager):
+            OnboardingContainer(manager: manager, auth: auth) {
                 startupState = .ready(app, auth)
                 startBackupIntegrityCheck()
             }
@@ -243,7 +242,11 @@ extension CoveApp {
 
         if needsOnboarding {
             Log.info("[STARTUP] entering onboarding flow")
-            self.startupState = .onboarding(appManager, AuthManager.shared)
+            self.startupState = .onboarding(
+                appManager,
+                AuthManager.shared,
+                OnboardingManager(app: appManager)
+            )
         } else {
             Log.info("[STARTUP] going to ready state")
             self.startupState = .ready(appManager, AuthManager.shared)
@@ -286,9 +289,7 @@ extension CoveApp {
             let isICloudAvailable = await MainActor.run { FileManager.default.ubiquityIdentityToken != nil }
             guard isICloudAvailable else { return }
 
-            let warning = await Task.detached {
-                CloudBackupManager.shared.rust.verifyBackupIntegrity()
-            }.value
+            let warning = await CloudBackupManager.shared.rust.verifyBackupIntegrity()
             if let warning { Log.error("[STARTUP] backup integrity warning: \(warning)") }
         }
     }
@@ -302,38 +303,5 @@ private enum BootstrapResult {
 private struct BootstrapTimeoutError: LocalizedError {
     var errorDescription: String? {
         "bootstrap timed out"
-    }
-}
-
-final class CloudConnectivityMonitor: @unchecked Sendable {
-    static let shared = CloudConnectivityMonitor()
-
-    private let monitor = NWPathMonitor()
-    private let queue = DispatchQueue(label: "cove.CloudConnectivityMonitor")
-    private let lock = NSLock()
-    private var started = false
-
-    private init() {}
-
-    func start() {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !started else { return }
-        started = true
-
-        monitor.pathUpdateHandler = { path in
-            let hint: CloudConnectivityHint =
-                if path.status == .satisfied {
-                    .online
-                } else if path.status == .unsatisfied {
-                    .offline
-                } else {
-                    .unknown
-                }
-
-            CloudBackupManager.shared.rust.updateConnectivityHint(hint: hint)
-        }
-
-        monitor.start(queue: queue)
     }
 }

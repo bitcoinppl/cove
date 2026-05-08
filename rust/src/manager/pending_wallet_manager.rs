@@ -10,6 +10,7 @@ use crate::{
     mnemonic::{GroupedWord, MnemonicExt as _, NumberOfBip39Words, WordAccess as _},
     multi_format::MultiFormatError,
     pending_wallet::PendingWallet,
+    router::{HotWalletRoute, NewWalletRoute, Route},
     wallet::{Wallet, fingerprint::Fingerprint, metadata::WalletMetadata},
 };
 
@@ -50,6 +51,12 @@ pub struct PendingWalletManagerState {
     pub wallet: Arc<PendingWallet>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PendingWalletSaveResult {
+    pub metadata: WalletMetadata,
+    pub routes: Vec<Route>,
+}
+
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum PendingWalletManagerAction {
     UpdateWords(NumberOfBip39Words),
@@ -72,6 +79,9 @@ pub enum WalletCreationError {
 
     #[error("failed to import hardware wallet: {0}")]
     Import(String),
+
+    #[error("unexpected wallet creation error: {0}")]
+    Unexpected(String),
 
     #[error(transparent)]
     MultiFormat(#[from] MultiFormatError),
@@ -111,7 +121,7 @@ impl RustPendingWalletManager {
     }
 
     #[uniffi::method]
-    pub fn save_wallet(&self) -> Result<WalletMetadata, Error> {
+    pub fn save_wallet(&self) -> Result<PendingWalletSaveResult, Error> {
         let network = self.state.read().wallet.network;
         let mode = Database::global().global_config.wallet_mode();
 
@@ -122,7 +132,7 @@ impl RustPendingWalletManager {
         let fingerprint: Fingerprint =
             self.state.read().wallet.mnemonic.xpub(network.into()).fingerprint().into();
 
-        let wallet_metadata = WalletMetadata::new(name, Some(fingerprint));
+        let wallet_metadata = WalletMetadata::new_cove_created_wallet(name, Some(fingerprint));
 
         // create, persist and select the wallet
         let wallet = Wallet::try_new_persisted_and_selected(
@@ -132,7 +142,12 @@ impl RustPendingWalletManager {
         )?;
         CLOUD_BACKUP_MANAGER.handle_wallet_set_change();
 
-        Ok(wallet.metadata)
+        let routes = post_save_routes(
+            wallet.metadata.id.clone(),
+            CLOUD_BACKUP_MANAGER.is_cloud_backup_enabled(),
+        );
+
+        Ok(PendingWalletSaveResult { metadata: wallet.metadata, routes })
     }
 
     #[uniffi::method]
@@ -199,15 +214,69 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
                 Self::Import(format!("wallet already exists: {id}"))
             }
 
-            WalletError::WalletNotFound => unreachable!("no wallet found in creation"),
-            WalletError::LoadError(error) => unreachable!("no loading in creation:{error}"),
-            WalletError::MetadataNotFound => unreachable!("no metadata found in creation"),
+            WalletError::WalletNotFound => {
+                Self::Unexpected("wallet not found during creation".to_string())
+            }
+            WalletError::LoadError(error) => {
+                Self::Unexpected(format!("load error during creation: {error}"))
+            }
+            WalletError::MetadataNotFound => {
+                Self::Unexpected("wallet metadata not found during creation".to_string())
+            }
             WalletError::UnsupportedWallet(error) => {
-                unreachable!("unreachable unsupported wallet: {error}")
+                Self::Unexpected(format!("unsupported wallet during creation: {error}"))
             }
             WalletError::DescriptorKeyParseError(error) => {
-                unreachable!("unreachable descriptor key parse error: {error}")
+                Self::Unexpected(format!("descriptor key parse error during creation: {error}"))
             }
         }
+    }
+}
+
+fn post_save_routes(
+    wallet_id: crate::wallet::metadata::WalletId,
+    cloud_backup_enabled: bool,
+) -> Vec<Route> {
+    let selected_wallet = Route::SelectedWallet(wallet_id.clone());
+
+    if cloud_backup_enabled {
+        return vec![selected_wallet];
+    }
+
+    vec![
+        selected_wallet,
+        Route::NewWallet(NewWalletRoute::HotWallet(HotWalletRoute::VerifyWords(wallet_id))),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        manager::pending_wallet_manager::post_save_routes,
+        router::{HotWalletRoute, NewWalletRoute, Route},
+        wallet::metadata::WalletId,
+    };
+
+    #[test]
+    fn post_save_routes_skip_word_verification_when_cloud_backup_enabled() {
+        let wallet_id = WalletId::new();
+
+        assert_eq!(
+            post_save_routes(wallet_id.clone(), true),
+            vec![Route::SelectedWallet(wallet_id)]
+        );
+    }
+
+    #[test]
+    fn post_save_routes_include_word_verification_without_cloud_backup() {
+        let wallet_id = WalletId::new();
+
+        assert_eq!(
+            post_save_routes(wallet_id.clone(), false),
+            vec![
+                Route::SelectedWallet(wallet_id.clone()),
+                Route::NewWallet(NewWalletRoute::HotWallet(HotWalletRoute::VerifyWords(wallet_id))),
+            ]
+        );
     }
 }

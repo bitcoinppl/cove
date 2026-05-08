@@ -10,6 +10,7 @@ bitcoin = { workspace = true, features = ["serde"] }
 rand = { workspace = true }
 hex = { workspace = true }
 uniffi = { workspace = true, features = ["tokio"] }
+parking_lot = { workspace = true }
 
 thiserror = { workspace = true }
 tracing = { workspace = true }

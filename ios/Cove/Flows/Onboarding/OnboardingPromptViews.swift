@@ -58,6 +58,7 @@ struct OnboardingWelcomeScreen: View {
 }
 
 struct OnboardingBitcoinChoiceScreen: View {
+    let errorMessage: String?
     let onNewHere: () -> Void
     let onHasBitcoin: () -> Void
 
@@ -67,6 +68,10 @@ struct OnboardingBitcoinChoiceScreen: View {
             title: "Do you already have Bitcoin?",
             subtitle: "We’ll tailor the setup based on where you’re starting from."
         ) {
+            if let errorMessage {
+                OnboardingInlineMessage(text: errorMessage)
+            }
+
             VStack(spacing: 14) {
                 OnboardingChoiceCard(
                     title: "No, I’m new here",
@@ -84,41 +89,6 @@ struct OnboardingBitcoinChoiceScreen: View {
                     onHasBitcoin()
                 }
             }
-        }
-    }
-}
-
-struct OnboardingReturningUserChoiceScreen: View {
-    let onRestoreFromCoveBackup: () -> Void
-    let onUseAnotherWallet: () -> Void
-    let onBack: () -> Void
-
-    var body: some View {
-        OnboardingPromptScreen(
-            icon: "arrow.trianglehead.branch",
-            title: "How would you like to continue?",
-            subtitle: "Restore from an existing Cove backup or connect another wallet you already use."
-        ) {
-            VStack(spacing: 14) {
-                OnboardingChoiceCard(
-                    title: "Restore from Cove backup",
-                    subtitle: "Use your passkey to restore from iCloud",
-                    systemImage: "icloud.and.arrow.down"
-                ) {
-                    onRestoreFromCoveBackup()
-                }
-
-                OnboardingChoiceCard(
-                    title: "Use another wallet",
-                    subtitle: "Import or connect a wallet from somewhere else",
-                    systemImage: "wallet.pass"
-                ) {
-                    onUseAnotherWallet()
-                }
-            }
-
-            Button("Back", action: onBack)
-                .buttonStyle(OnboardingSecondaryButtonStyle())
         }
     }
 }
@@ -142,7 +112,27 @@ struct OnboardingRestoreUnavailableScreen: View {
     }
 }
 
+struct OnboardingRestoreOfflineScreen: View {
+    let onContinue: () -> Void
+    let onBack: () -> Void
+
+    var body: some View {
+        OnboardingPromptScreen(
+            icon: "wifi.slash",
+            title: "You’re Offline",
+            subtitle: "Cove can’t check for an iCloud backup right now. You can continue onboarding and check Cloud Backup later in Settings."
+        ) {
+            Button("Continue Without Cloud Restore", action: onContinue)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
+
+            Button("Back", action: onBack)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
+        }
+    }
+}
+
 struct OnboardingStorageChoiceScreen: View {
+    let errorMessage: String?
     let onRestoreFromCoveBackup: (() -> Void)?
     let onSelectStorage: (OnboardingStorageSelection) -> Void
     let onBack: () -> Void
@@ -153,6 +143,10 @@ struct OnboardingStorageChoiceScreen: View {
             title: "How do you store your Bitcoin?",
             subtitle: "Choose the option that best matches what you use today."
         ) {
+            if let errorMessage {
+                OnboardingInlineMessage(text: errorMessage)
+            }
+
             VStack(spacing: 14) {
                 if let onRestoreFromCoveBackup {
                     OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
@@ -189,45 +183,6 @@ struct OnboardingStorageChoiceScreen: View {
     }
 }
 
-struct OnboardingSoftwareChoiceScreen: View {
-    let onRestoreFromCoveBackup: (() -> Void)?
-    let onSelectSoftwareAction: (OnboardingSoftwareSelection) -> Void
-    let onBack: () -> Void
-
-    var body: some View {
-        OnboardingPromptScreen(
-            icon: "arrow.left.arrow.right.square",
-            title: "What would you like to do?",
-            subtitle: "Create a new wallet in Cove or import the one you already use."
-        ) {
-            VStack(spacing: 14) {
-                if let onRestoreFromCoveBackup {
-                    OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
-                }
-
-                OnboardingChoiceCard(
-                    title: "Create a new wallet",
-                    subtitle: "Generate a fresh 12-word recovery phrase",
-                    systemImage: "plus.circle"
-                ) {
-                    onSelectSoftwareAction(.createNewWallet)
-                }
-
-                OnboardingChoiceCard(
-                    title: "Import existing wallet",
-                    subtitle: "Use words or QR from another wallet",
-                    systemImage: "square.and.arrow.down"
-                ) {
-                    onSelectSoftwareAction(.importExistingWallet)
-                }
-            }
-
-            Button("Back", action: onBack)
-                .buttonStyle(OnboardingSecondaryButtonStyle())
-        }
-    }
-}
-
 struct OnboardingCloudRestoreChoiceCard: View {
     let action: () -> Void
 
@@ -248,43 +203,49 @@ struct OnboardingPromptScreen<Footer: View>: View {
     @ViewBuilder let footer: Footer
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
+        ScrollView {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
 
-            OnboardingStatusHero(
-                systemImage: icon,
-                pulse: false,
-                iconSize: 22
-            )
+                OnboardingStatusHero(
+                    systemImage: icon,
+                    pulse: true,
+                    iconSize: 22
+                )
 
-            Spacer()
-                .frame(height: 36)
+                Spacer()
+                    .frame(height: 36)
 
-            VStack(spacing: 12) {
-                Text(title)
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(spacing: 12) {
+                    Text(title)
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(subtitle)
-                    .font(.footnote)
-                    .foregroundStyle(.coveLightGray.opacity(0.74))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.74))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 24)
+
+                Spacer()
+                    .frame(height: 26)
+
+                VStack(spacing: 14) {
+                    footer
+                }
+                .padding(.horizontal, 24)
+
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 24)
-
-            Spacer()
-                .frame(height: 26)
-
-            VStack(spacing: 14) {
-                footer
-            }
-            .padding(.horizontal, 24)
-
-            Spacer(minLength: 0)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity)
+            .containerRelativeFrame(.vertical, alignment: .center)
         }
-        .padding(.vertical, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
     }
@@ -315,12 +276,15 @@ struct OnboardingChoiceCard: View {
                         .font(.headline)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Text(subtitle)
                         .font(.footnote)
                         .foregroundStyle(.coveLightGray.opacity(0.74))
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .layoutPriority(1)
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "chevron.right")
                     .font(.system(size: isSelected ? 18 : 14, weight: .semibold))
@@ -422,4 +386,8 @@ struct OnboardingInlineMessage: View {
 
 #Preview("Cloud Check") {
     CloudCheckContent()
+}
+
+#Preview("Restore Offline") {
+    OnboardingRestoreOfflineScreen(onContinue: {}, onBack: {})
 }

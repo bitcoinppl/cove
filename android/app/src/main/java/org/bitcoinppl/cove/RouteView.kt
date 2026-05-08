@@ -77,8 +77,7 @@ fun RouteView(app: AppManager, route: Route) {
             is Route.LoadAndReset -> {
                 LoadAndResetContainer(
                     app = app,
-                    nextRoutes = route.resetTo.map { it.route() },
-                    loadingTimeMs = route.afterMillis.toLong(),
+                    route = route,
                 )
             }
         }
@@ -92,24 +91,21 @@ fun RouteView(app: AppManager, route: Route) {
 @Composable
 private fun LoadAndResetContainer(
     app: AppManager,
-    nextRoutes: List<Route>,
-    loadingTimeMs: Long,
+    route: Route.LoadAndReset,
 ) {
+    val nextRoutes = route.resetTo.map { it.route() }
+    val loadingTimeMs = route.afterMillis.toLong()
+
     // show loading indicator
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
     }
 
     // execute reset after delay
-    LaunchedEffect(Unit) {
+    LaunchedEffect(route) {
+        val generation = app.captureLoadAndResetGeneration()
         delay(loadingTimeMs)
 
-        if (nextRoutes.size > 1) {
-            // nested routes: first route is default, rest are nested
-            app.resetRoute(nextRoutes)
-        } else if (nextRoutes.isNotEmpty()) {
-            // single route becomes new default
-            app.resetRoute(nextRoutes[0])
-        }
+        app.resetAfterLoadingIfCurrent(generation, route, nextRoutes)
     }
 }

@@ -46,11 +46,7 @@ struct MoreInfoPopover: View {
         Task {
             do {
                 let result = try await manager.rust.exportTransactionsCsv()
-                ShareSheet.present(data: result.content, filename: result.filename) { success in
-                    if !success {
-                        Log.warn("Transaction Export Failed: cancelled or failed")
-                    }
-                }
+                ShareSheet.presentFromMenu(data: result.content, filename: result.filename)
             } catch {
                 app.alertState = .init(.general(
                     title: "Transaction Export Failed",
@@ -79,10 +75,7 @@ struct MoreInfoPopover: View {
             let prefix = t.identFileNamePrefix()
             let filename = "\(prefix)_backup.txt"
 
-            ShareLink(
-                item: BackupExport(content: content, filename: filename),
-                preview: SharePreview(filename)
-            ) {
+            Button(action: { ShareSheet.presentFromMenu(data: content, filename: filename) }) {
                 Label("Download Backup", systemImage: "square.and.arrow.down")
             }
         } else if let backupError = tapSignerBackupError {

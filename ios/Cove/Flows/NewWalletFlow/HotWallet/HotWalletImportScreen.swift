@@ -71,15 +71,18 @@ struct HotWalletImportScreen: View {
     let autocomplete = Bip39AutoComplete()
     @State private var numberOfWords: NumberOfBip39Words
     let importType: ImportType
+    let autoImportScannedWords: Bool
     let onImported: ((WalletId) -> Void)?
 
     init(
         numberOfWords: NumberOfBip39Words,
         importType: ImportType = .manual,
+        autoImportScannedWords: Bool = false,
         onImported: ((WalletId) -> Void)? = nil
     ) {
         _numberOfWords = State(initialValue: numberOfWords)
         self.importType = importType
+        self.autoImportScannedWords = autoImportScannedWords
         self.onImported = onImported
     }
 
@@ -194,7 +197,14 @@ struct HotWalletImportScreen: View {
                 if case let .mnemonic(mnemonic) = multiFormat {
                     let mnemonicString = mnemonic.words().joined(separator: " ")
                     if let words = try? groupedPlainWordsOf(mnemonic: mnemonicString, groups: UInt8(groupsOf)) {
+                        scanner.reset()
+
                         setWords(words)
+
+                        if autoImportScannedWords {
+                            sheetState = .none
+                            importWallet(enteredWords: words)
+                        }
                     }
                 } else {
                     sheetState = .none
@@ -216,15 +226,15 @@ struct HotWalletImportScreen: View {
         }
     }
 
-    func importWallet() {
+    func importWallet(enteredWords wordsToImport: [[String]]? = nil) {
         do {
-            let walletMetadata = try manager.rust.importWallet(enteredWords: enteredWords)
+            let walletMetadata = try manager.rust.importWallet(enteredWords: wordsToImport ?? enteredWords)
             if let onImported {
                 onImported(walletMetadata.id)
                 return
             }
 
-            try app.rust.selectWallet(id: walletMetadata.id)
+            try app.selectWalletOrThrow(walletMetadata.id)
             app.walletManager = nil
             app.resetRoute(to: .selectedWallet(walletMetadata.id))
         } catch let error as ImportWalletError {
@@ -310,6 +320,7 @@ struct HotWalletImportScreen: View {
         Button("Import wallet") {
             importWallet()
         }
+        .accessibilityIdentifier("hotWalletImport.import")
         .font(.subheadline)
         .fontWeight(.medium)
         .frame(maxWidth: .infinity)
@@ -355,7 +366,6 @@ struct HotWalletImportScreen: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .ignoresSafeArea(.keyboard)
     }
 
     private var KeyboardToolbar: some View {
@@ -513,8 +523,15 @@ struct HotWalletImportScreen: View {
                             return
                         }
 
-                        try? app.rust.selectWallet(id: walletId)
-                        app.resetRoute(to: .selectedWallet(walletId))
+                        do {
+                            try app.selectWalletOrThrow(walletId)
+                            app.resetRoute(to: .selectedWallet(walletId))
+                        } catch {
+                            app.alertState = TaggedItem(.general(
+                                title: "Unable to Select Wallet",
+                                message: error.localizedDescription
+                            ))
+                        }
                     }
                 }
             )

@@ -6,6 +6,8 @@ Cove is a simple, intuitive, but powerful Bitcoin wallet. The goal is to help ne
 
 That balance matters whenever adding new functionality. Every feature must earn its place by remaining simple and intuitive. If we cannot make a feature feel simple and intuitive, we probably should not add it.
 
+Prefer direct, structurally correct fixes over temporary workarounds. The right solution usually starts with the correct data model: represent the domain state, ownership, and invariants explicitly, then let the UI and orchestration code follow from that model. A larger diff is acceptable when it is needed to solve the requested change cleanly across the affected layers.
+
 ## Prerequisites
 
 - [Rust](https://rustup.rs)
@@ -35,10 +37,12 @@ The `COVE_KEYSTORE_*` variables in `.envrc.example` are only needed for signed A
 ### iOS
 
 ```bash
-just build-ios-release    # alias: just bir
+just testflight
 ```
 
-Then archive and distribute via Xcode (Product → Archive).
+This bumps the iOS build number, rebuilds the release iOS bindings, archives the app, and uploads it to App Store Connect for TestFlight processing using App Store Connect API key credentials.
+
+Set `ASC_API_KEY_PATH`, `ASC_API_KEY_ID`, and `ASC_API_ISSUER_ID`. The API key must have access to cloud-managed distribution certificates.
 
 ### Android
 
@@ -89,7 +93,6 @@ Run `just` to see the public recipes. Aliases are shortcuts for commands you use
 - **iOS builds stuck?** Try `just xcode-reset` to clear Xcode caches
 - **Clean slate needed?** Run `just clean` to remove all build artifacts
 - **UniFFI binding issues?** Regenerate bindings after changing Rust exports
-- **Actor not receiving messages?** Verify `FfiApp::init_on_start` is called during app startup
 
 ## Before Committing
 
@@ -97,18 +100,19 @@ Run `just` to see the public recipes. Aliases are shortcuts for commands you use
 2. Run `just ci` to execute all checks (format, lint, clippy, tests, compilation)
 3. Fix any issues reported by CI checks
 4. If clippy reports warnings, run `just fix` first to auto-fix what's possible
+5. If you changed Rust exports that generate bindings, run `just build-ios` and `just build-android` before committing
+6. Merge the latest `master` into your branch if `master` has changed since you started your work
 
 ## Commit Messages
 
-Write clear, concise commit messages following these guidelines:
+Write clear, concise commit messages that explain what changed and why. Let the code describe how.
+
+Helpful defaults:
 
 - **Use imperative mood**: "Add feature" not "Added feature"
-- **Limit subject to 50 chars**: Be concise, this is the title
 - **Capitalize the subject line**
 - **No period at the end of the subject**
-- **Separate subject from body with a blank line**
-- **Wrap body at 72 chars**
-- **Explain what and why, not how**: The code shows how
+- **Add a body when it helps explain context or motivation**
 
 Example:
 ```
@@ -123,7 +127,16 @@ A good subject line completes: "If applied, this commit will ___"
 
 See [How to Write a Git Commit Message](https://cbea.ms/git-commit/) for the full guide.
 
+## Pull Requests
+
+- If you are addressing review feedback, add follow-up commits instead of squashing so reviewers can easily see what changed since the last review
+- Merge the latest `master` into your branch when needed instead of rebasing. We squash commits when the pull request is merged
+- If changes were requested on your pull request and you addressed them, request review again
+- If you do not get a review within two days, ping Praveen on Discord or tag him in the GitHub pull request
+
 ## Further Reading
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System design, Rust core, UniFFI, mobile patterns
-- [docs/IOS_ANDROID_PARITY.md](docs/IOS_ANDROID_PARITY.md) - iOS/Android UI parity patterns
+- [docs/ios_android_parity.md](docs/ios_android_parity.md) - iOS/Android UI parity patterns
+- [docs/icloud_drive.md](docs/icloud_drive.md) - iCloud Drive behavior and file coordination notes
+- [docs/passkeys.md](docs/passkeys.md) - Passkey behavior and Cloud Backup confirmation notes

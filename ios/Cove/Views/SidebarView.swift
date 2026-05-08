@@ -9,7 +9,6 @@ import SwiftUI
 
 struct SidebarView: View {
     @Environment(AppManager.self) private var app
-    @Environment(\.navigate) private var navigate
 
     let currentRoute: Route
 
@@ -35,145 +34,128 @@ struct SidebarView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top) {
-            VStack {
-                HStack(alignment: .top) {
-                    Image(.icon)
-                        .resizable()
-                        .frame(width: 65, height: 65)
-                        .clipShape(Circle())
+        VStack(spacing: 0) {
+            header
 
-                    Spacer()
-
-                    Button(action: app.nfcReader.scan) {
-                        Image(systemName: "wave.3.right")
-                    }
-                    .foregroundStyle(.white)
-                }
-
-                Divider()
-                    .overlay(Color(.white))
-                    .opacity(0.50)
-                    .padding(.vertical, 22)
-
-                HStack {
-                    Text("My Wallets")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.white)
-
-                    Spacer()
-                }
-                .padding(.bottom, 16)
-
-                VStack(spacing: 12) {
+            ScrollView(.vertical) {
+                LazyVStack(spacing: 12) {
                     ForEach(app.wallets, id: \.id) { wallet in
-                        Button(action: {
-                            goTo(Route.selectedWallet(wallet.id))
-                        }) {
-                            HStack(spacing: 10) {
-                                Circle()
-                                    .fill(Color(wallet.color))
-                                    .frame(width: 8, height: 8, alignment: .leading)
-
-                                Text(wallet.name)
-                                    .font(.footnote)
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(.white)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.80)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                                Spacer(minLength: 0)
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .padding()
-                        .background(Color.coveLightGray.opacity(0.06))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.clear, lineWidth: 1)
-                        }
-                        .cornerRadius(10)
-                        .contentShape(
-                            .contextMenuPreview,
-                            RoundedRectangle(cornerRadius: 10)
-                        )
-                        .contextMenu {
-                            Button("Settings") {
-                                app.isSidebarVisible = false
-                                app.pushRoutes(RouteFactory().nestedWalletSettings(id: wallet.id))
-                            }
-                        }
-                    }
-                }
-
-                Spacer()
-
-                VStack(spacing: 32) {
-                    Divider()
-                        .overlay(.coveLightGray)
-                        .opacity(0.50)
-
-                    Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
-                        HStack(spacing: 20) {
-                            Image(systemName: "wallet.bifold")
-                            Text("Add Wallet")
-                                .font(.callout)
-                            Spacer()
-                        }
-                        .foregroundColor(.white)
-                        .contentShape(Rectangle())
-                    }
-
-                    Button(action: { goTo(Route.settings(.main)) }) {
-                        HStack(spacing: 22) {
-                            Image(systemName: "gear")
-                            Text("Settings")
-                                .font(.callout)
-                            Spacer()
-                        }
-                        .foregroundColor(.white)
-                        .contentShape(Rectangle())
+                        walletButton(wallet)
                     }
                 }
             }
+            .scrollIndicators(.hidden)
+
+            footer
         }
         .padding(20)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(.midnightBlue)
     }
 
-    func goTo(_ route: Route) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            app.isSidebarVisible = false
-        }
+    private var header: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top) {
+                Image(.icon)
+                    .resizable()
+                    .frame(width: 65, height: 65)
+                    .clipShape(Circle())
 
-        Task {
-            try? await Task.sleep(for: .milliseconds(200))
-            await navigateRoute(route)
-        }
-    }
+                Spacer()
 
-    private func navigateRouteOnMain(_ route: Route) {
-        navigate(route)
-    }
-
-    private func navigateRoute(_ route: Route) async {
-        do {
-            if case let Route.selectedWallet(id: id) = route {
-                try app.rust.selectWallet(id: id)
-                return
+                Button(action: app.closeSidebarAndScanNfc) {
+                    Image(systemName: "wave.3.right")
+                }
+                .foregroundStyle(.white)
             }
 
-            if !app.hasWallets, route == Route.newWallet(.select) {
-                app.resetRoute(to: [RouteFactory().newWalletSelect()])
-                return
-            }
-        } catch {
-            Log.error("Failed to select wallet \(error)")
-        }
+            Divider()
+                .overlay(Color(.white))
+                .opacity(0.50)
+                .padding(.vertical, 22)
 
-        navigateRouteOnMain(route)
+            HStack {
+                Text("My Wallets")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.white)
+
+                Spacer()
+            }
+            .padding(.bottom, 16)
+        }
     }
+
+    private var footer: some View {
+        VStack(spacing: 32) {
+            Divider()
+                .overlay(.coveLightGray)
+                .opacity(0.50)
+
+            Button(action: app.closeSidebarAndOpenNewWallet) {
+                HStack(spacing: 20) {
+                    Image(systemName: "wallet.bifold")
+                    Text("Add Wallet")
+                        .font(.callout)
+                    Spacer()
+                }
+                .foregroundColor(.white)
+                .contentShape(Rectangle())
+            }
+
+            Button(action: app.closeSidebarAndOpenSettings) {
+                HStack(spacing: 22) {
+                    Image(systemName: "gear")
+                    Text("Settings")
+                        .font(.callout)
+                    Spacer()
+                }
+                .foregroundColor(.white)
+                .contentShape(Rectangle())
+            }
+        }
+        .padding(.top, 20)
+    }
+
+    private func walletButton(_ wallet: WalletMetadata) -> some View {
+        Button(action: {
+            app.closeSidebarAndSelectWallet(wallet.id)
+        }) {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(Color(wallet.color))
+                    .frame(width: 8, height: 8, alignment: .leading)
+
+                Text(wallet.name)
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.80)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding()
+        .background(Color.coveLightGray.opacity(0.06))
+        .cornerRadius(10)
+        .contentShape(
+            .contextMenuPreview,
+            RoundedRectangle(cornerRadius: 10)
+        )
+        .contextMenu {
+            Button("Settings") {
+                app.closeSidebarAndOpenWalletSettings(wallet.id)
+            }
+        }
+    }
+}
+
+#Preview("Many Wallets") {
+    let app = AppManager.shared
+    app.wallets = (1 ... 14).map { WalletMetadata("Wallet \($0)", preview: true) }
+
+    return SidebarView(currentRoute: app.currentRoute)
+        .frame(width: 280)
+        .environment(app)
 }

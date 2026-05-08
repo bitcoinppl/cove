@@ -212,6 +212,14 @@ final class ICloudDriveHelper: @unchecked Sendable {
         return try walletFileURL(namespace: namespace, recordId: recordId)
     }
 
+    func backupFileReadURL(namespace: String, recordId: String) throws -> URL {
+        if recordId == csppMasterKeyRecordId() {
+            return try masterKeyFileReadURL(namespace: namespace)
+        }
+
+        return try walletFileReadURL(namespace: namespace, recordId: recordId)
+    }
+
     // MARK: - File coordination
 
     /// Coordinates iCloud-backed filesystem access because ubiquitous items may
@@ -497,14 +505,31 @@ final class ICloudDriveHelper: @unchecked Sendable {
 
         try triggerDownload(url: resolvedItem.url, recordId: recordId, filename: filename)
 
+        var coordinatedReadAttempt = 1
+        var lastCoordinatedReadError: Error?
+
+        // try a coordinated read before waiting for iCloud status to catch up
+        Log.info(
+            "downloadFile: trying coordinated read attempt=\(coordinatedReadAttempt) reason=initial file=\(filename)"
+        )
+
+        do {
+            let data = try coordinatedRead(from: resolvedItem.url)
+            Log.info("downloadFile: coordinated read succeeded for \(filename)")
+            return data
+        } catch {
+            lastCoordinatedReadError = error
+            Log.warn(
+                "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt) file=\(filename): \(error.localizedDescription)"
+            )
+        }
+
         // poll with periodic re-triggers and inline coordinated reads because
         // some restored-device placeholders never transition out of
         // not-downloaded even though they can be materialized
         let retriggerInterval: TimeInterval = 5
         var lastRetrigger = Date()
         var lastProgressLog = Date.distantPast
-        var coordinatedReadAttempt = 0
-        var lastCoordinatedReadError: Error?
 
         while Date() < deadline {
             let now = Date()

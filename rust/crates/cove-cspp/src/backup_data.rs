@@ -45,6 +45,51 @@ pub fn wallet_record_id_from_filename(filename: &str) -> Option<&str> {
     filename.strip_prefix(WALLET_FILE_PREFIX).and_then(|rest| rest.strip_suffix(".json"))
 }
 
+/// Supported encrypted master key backup versions
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MasterKeyBackupVersion {
+    V1,
+}
+
+impl MasterKeyBackupVersion {
+    /// Returns the serialized backup version
+    pub const fn as_u32(self) -> u32 {
+        match self {
+            Self::V1 => 1,
+        }
+    }
+}
+
+/// Encrypted master key backup version not supported by this app
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnsupportedMasterKeyBackupVersion(pub u32);
+
+impl TryFrom<u32> for MasterKeyBackupVersion {
+    type Error = UnsupportedMasterKeyBackupVersion;
+
+    fn try_from(version: u32) -> Result<Self, Self::Error> {
+        match version {
+            1 => Ok(Self::V1),
+            version => Err(UnsupportedMasterKeyBackupVersion(version)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PasskeyRegistrationPlatform {
+    Ios,
+    Android,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PasskeyProviderHint {
+    pub aaguid: String,
+    pub registered_platform: PasskeyRegistrationPlatform,
+    pub registered_at: u64,
+    pub name_suffix: String,
+}
+
 /// Wallet data to be encrypted and uploaded to cloud backup
 #[derive(Debug, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct WalletEntry {
@@ -99,14 +144,18 @@ pub enum WalletMode {
     Decoy,
 }
 
-/// Encrypted wallet backup envelope, uploaded to CloudKit
+/// Encrypted wallet backup envelope, uploaded to cloud storage
+///
+/// The wallet salt derives a new encryption key from the critical data key for
+/// this envelope. The nonce is used with that derived key for
+/// ChaCha20-Poly1305.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedWalletBackup {
     pub version: u32,
-    /// Random per-wallet salt for HKDF derivation
+    /// Random HKDF salt that derives this backup's new encryption key from the critical data key
     #[serde(with = "hex_array")]
     pub wallet_salt: [u8; 32],
-    /// ChaCha20-Poly1305 nonce
+    /// Random ChaCha20-Poly1305 nonce used with this backup's derived key
     #[serde(with = "hex_array")]
     pub nonce: [u8; 12],
     /// Encrypted WalletEntry JSON
@@ -114,19 +163,35 @@ pub struct EncryptedWalletBackup {
     pub ciphertext: Vec<u8>,
 }
 
-/// Encrypted master key backup envelope, uploaded to CloudKit
+/// Encrypted master key backup envelope, uploaded to cloud storage
+///
+/// The PRF salt lets the selected passkey re-derive the wrapping key used for
+/// this envelope. The nonce is used directly with that PRF-derived wrapping key.
+/// Unlike wallet backups, this wrapper does not derive a new data key per
+/// encryption because it is written infrequently: normally once, plus a few more
+/// times during repair or reinitialization flows.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedMasterKeyBackup {
     pub version: u32,
-    /// PRF salt used with the passkey to re-derive the wrapping key
+    pub passkey_provider_hint: Option<PasskeyProviderHint>,
+    /// Salt used with the passkey PRF to re-derive the existing wrapping key
     #[serde(with = "hex_array")]
     pub prf_salt: [u8; 32],
-    /// ChaCha20-Poly1305 nonce
+    /// Random ChaCha20-Poly1305 nonce used with the PRF-derived wrapping key
     #[serde(with = "hex_array")]
     pub nonce: [u8; 12],
     /// Encrypted master key bytes
     #[serde(with = "base64_serde")]
     pub ciphertext: Vec<u8>,
+}
+
+impl EncryptedMasterKeyBackup {
+    /// Returns the parsed backup version when supported by this app
+    pub fn backup_version(
+        &self,
+    ) -> Result<MasterKeyBackupVersion, UnsupportedMasterKeyBackupVersion> {
+        self.version.try_into()
+    }
 }
 
 #[cfg(test)]
@@ -223,6 +288,12 @@ mod tests {
     fn encrypted_master_key_backup_json_roundtrip() {
         let backup = EncryptedMasterKeyBackup {
             version: 1,
+            passkey_provider_hint: Some(PasskeyProviderHint {
+                aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+                registered_platform: PasskeyRegistrationPlatform::Android,
+                registered_at: 1_777_661_234,
+                name_suffix: "09IX".into(),
+            }),
             prf_salt: [0xCC; 32],
             nonce: [0xDD; 12],
             ciphertext: vec![10, 20, 30],
@@ -231,6 +302,7 @@ mod tests {
         let json = serde_json::to_string(&backup).unwrap();
         let decoded: EncryptedMasterKeyBackup = serde_json::from_str(&json).unwrap();
 
+        assert_eq!(decoded.passkey_provider_hint, backup.passkey_provider_hint);
         assert_eq!(decoded.prf_salt, [0xCC; 32]);
         assert_eq!(decoded.nonce, [0xDD; 12]);
         assert_eq!(decoded.ciphertext, vec![10, 20, 30]);

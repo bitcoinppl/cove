@@ -103,10 +103,10 @@ struct TapSignerEnterPin: View {
                     let txId = psbt.txId()
                     let record = try db.getTxThrow(txId: txId)
                     let route = RouteFactory()
-                        .sendConfirm(
+                        .sendConfirmSignedPsbt(
                             id: record.walletId(),
                             details: record.confirmDetails(),
-                            signedPsbt: signedPsbt
+                            psbt: signedPsbt
                         )
 
                     await MainActor.run {
@@ -163,7 +163,7 @@ struct TapSignerEnterPin: View {
                 }
 
                 VStack(spacing: 20) {
-                    Text("Enter PIN")
+                    Text("Enter TAPSIGNER PIN")
                         .font(.largeTitle)
                         .fontWeight(.bold)
 

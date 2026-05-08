@@ -258,13 +258,10 @@ struct SendFlowHardwareScreen: View {
 
             let (txnRecord, parsed) = try parseSignedImport(fileContents)
 
-            let route = RouteFactory()
-                .sendConfirm(
-                    id: txnRecord.walletId(),
-                    details: txnRecord.confirmDetails(),
-                    signedTransaction: parsed.transaction(),
-                    signedPsbt: parsed.psbt()
-                )
+            let route = parsed.sendConfirmRoute(
+                id: txnRecord.walletId(),
+                details: txnRecord.confirmDetails()
+            )
 
             app.pushRoute(route)
         } catch {
@@ -281,13 +278,10 @@ struct SendFlowHardwareScreen: View {
             let db = Database().unsignedTransactions()
             let txnRecord = try db.getTxThrow(txId: parsed.txId())
 
-            let route = RouteFactory()
-                .sendConfirm(
-                    id: txnRecord.walletId(),
-                    details: txnRecord.confirmDetails(),
-                    signedTransaction: parsed.transaction(),
-                    signedPsbt: parsed.psbt()
-                )
+            let route = parsed.sendConfirmRoute(
+                id: txnRecord.walletId(),
+                details: txnRecord.confirmDetails()
+            )
 
             app.pushRoute(route)
         } catch {
@@ -442,17 +436,7 @@ struct SendFlowHardwareScreen: View {
         }
 
         Button("More...") {
-            // Defer presentation until the confirmationDialog's dismissal
-            // animation completes. A SwiftUI `ShareLink` presented directly
-            // from a confirmationDialog action races the dialog's dismissal
-            // and either fails silently (Save to Files) or surfaces extension
-            // errors (Signal). See issues #449 and #313.
-            let psbtBytes = details.psbtBytes()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                ShareSheet.present(data: psbtBytes, filename: "transaction.psbt") { success in
-                    if !success { Log.warn("PSBT export cancelled or failed") }
-                }
-            }
+            ShareSheet.presentFromMenu(data: details.psbtBytes(), filename: "transaction.psbt")
         }
     }
 
@@ -475,13 +459,10 @@ struct SendFlowHardwareScreen: View {
 
             do {
                 let (txnRecord, parsed) = try parseSignedImport(code)
-                let route = RouteFactory()
-                    .sendConfirm(
-                        id: txnRecord.walletId(),
-                        details: txnRecord.confirmDetails(),
-                        signedTransaction: parsed.transaction(),
-                        signedPsbt: parsed.psbt()
-                    )
+                let route = parsed.sendConfirmRoute(
+                    id: txnRecord.walletId(),
+                    details: txnRecord.confirmDetails()
+                )
                 app.pushRoute(route)
             } catch {
                 alertState = .init(.pasteError(error.localizedDescription))

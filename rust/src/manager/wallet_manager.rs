@@ -12,6 +12,7 @@ use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
+use cove_common::consts::MAX_RESCAN_GAP_LIMIT;
 use cove_tokio::task::{self, spawn_actor};
 use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
 
@@ -40,7 +41,10 @@ use crate::{
         Address, AddressInfo, Wallet, WalletAddressType, WalletError,
         balance::Balance,
         fingerprint::Fingerprint,
-        metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata, WalletType},
+        metadata::{
+            DiscoveryState, FiatOrBtc, WalletBirthday, WalletColor, WalletId, WalletMetadata,
+            WalletType,
+        },
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
@@ -387,16 +391,21 @@ impl RustWalletManager {
         })
     }
 
-    #[uniffi::constructor(default(backup = None))]
+    #[uniffi::constructor(default(backup = None, birthday = None))]
     pub fn try_new_from_tap_signer(
         tap_signer: Arc<cove_tap_card::TapSigner>,
         derive_info: DeriveInfo,
         backup: Option<Vec<u8>>,
+        birthday: Option<WalletBirthday>,
     ) -> Result<Self, Error> {
         let (sender, receiver) = flume::bounded(100);
 
-        let wallet =
-            Wallet::try_new_persisted_from_tap_signer(tap_signer.clone(), derive_info, backup)?;
+        let wallet = Wallet::try_new_persisted_from_tap_signer(
+            tap_signer.clone(),
+            derive_info,
+            backup,
+            birthday,
+        )?;
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
@@ -715,6 +724,18 @@ impl RustWalletManager {
         if show_unit { amount.fmt_string_with_unit(unit) } else { amount.fmt_string(unit) }
     }
 
+    /// Formats a pending BTC amount (e.g. "+ 0.00050000 BTC pending")
+    /// Returns None if the amount is zero.
+    #[uniffi::method]
+    pub fn display_amount_pending_fmt(&self, amount: Arc<Amount>) -> Option<String> {
+        if amount.as_sats() == 0 {
+            return None;
+        }
+
+        let formatted = self.display_amount(amount, true);
+        Some(format!("+ {formatted} pending"))
+    }
+
     /// Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
     ///
     /// Includes "-" prefix for outgoing transactions, no prefix for incoming.
@@ -772,6 +793,22 @@ impl RustWalletManager {
         }
 
         format!("{symbol}{fiat}")
+    }
+
+    /// Formats a pending fiat amount (e.g. "+ $50.00 pending")
+    /// Returns None if the amount is zero.
+    #[uniffi::method(default(with_suffix = true))]
+    pub fn display_fiat_amount_pending_fmt(
+        &self,
+        amount: f64,
+        with_suffix: bool,
+    ) -> Option<String> {
+        if amount <= 0.0 {
+            return None;
+        }
+
+        let formatted = self.display_fiat_amount(amount, with_suffix);
+        Some(format!("+ {formatted} pending"))
     }
 
     /// Formats a fiat amount with direction prefix (e.g., "-$50.00")
@@ -985,10 +1022,7 @@ impl RustWalletManager {
     pub async fn start_wallet_scan(&self) -> Result<(), Error> {
         debug!("start_wallet_scan: {}", self.id);
 
-        let actor = self.actor.clone();
-        tokio::spawn(async move {
-            send!(actor.wallet_scan_and_notify(false));
-        });
+        send!(self.actor.wallet_scan_and_notify(false));
 
         Ok(())
     }
@@ -997,10 +1031,22 @@ impl RustWalletManager {
     pub async fn force_wallet_scan(&self) {
         debug!("force_wallet_scan: {}", self.id);
 
-        let actor = self.actor.clone();
-        tokio::spawn(async move {
-            send!(actor.wallet_scan_and_notify(true));
-        });
+        send!(self.actor.wallet_scan_and_notify(true));
+    }
+
+    #[uniffi::method]
+    pub async fn rescan_wallet_with_gap_limit(&self, gap_limit: u32) -> Result<(), Error> {
+        debug!("rescan_wallet_with_gap_limit: {} gap_limit={}", self.id, gap_limit);
+
+        if gap_limit == 0 || gap_limit > MAX_RESCAN_GAP_LIMIT {
+            return Err(Error::WalletScanError(format!(
+                "gap_limit must be between 1 and {MAX_RESCAN_GAP_LIMIT}",
+            )));
+        }
+
+        send!(self.actor.perform_rescan_full_scan(gap_limit));
+
+        Ok(())
     }
 
     #[uniffi::method]
@@ -1012,12 +1058,9 @@ impl RustWalletManager {
             wallet_metadata.clone()
         };
 
-        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
+        Database::global().wallets.mark_wallet_as_verified(&metadata.id)?;
 
-        Database::global()
-            .wallets
-            .mark_wallet_as_verified(&metadata.id)
-            .map_err(Error::MarkWalletAsVerifiedError)?;
+        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
 
         Ok(())
     }

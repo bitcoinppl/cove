@@ -46,6 +46,10 @@ impl Migration {
         self.current.fetch_add(1, Ordering::Release);
     }
 
+    pub(crate) fn add_total(&self, count: u32) {
+        self.total.fetch_add(count, Ordering::Release);
+    }
+
     pub(crate) fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::Acquire)
     }

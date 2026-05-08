@@ -245,9 +245,7 @@ impl LabelManager {
 
         cove_tokio::task::spawn_blocking(move || {
             let labels = db.labels.all_labels().map_err_str(LabelManagerError::Get)?;
-
             let labels = labels.export().map_err_str(LabelManagerError::Export)?;
-
             Ok(labels)
         })
         .await
@@ -303,11 +301,6 @@ impl LabelManager {
 
     pub fn import_labels(&self, labels: impl Into<Labels>) -> Result<(), LabelManagerError> {
         self.save_imported_labels(labels.into(), true)
-    }
-
-    pub(crate) fn export_blocking(&self) -> Result<String, LabelManagerError> {
-        let labels = self.db.labels.all_labels().map_err_str(LabelManagerError::Get)?;
-        labels.export().map_err_str(LabelManagerError::Export)
     }
 
     pub(crate) fn import_without_cloud_backup_dirty(

@@ -7,6 +7,7 @@ struct WalletSettingsView: View {
 
     let manager: WalletManager
 
+    @State private var cloudBackupManager = CloudBackupManager.shared
     @State private var showingDeleteConfirmation = false
     @State private var showingSecretWordsConfirmation = false
     @State private var showingSecondDeleteConfirmation = false
@@ -23,6 +24,18 @@ struct WalletSettingsView: View {
 
     var deleteConfirmationMessage: String {
         manager.rust.deletionWarningMessage()
+    }
+
+    var finalDeleteConfirmationMessage: String {
+        if cloudBackupManager.isCloudBackupEnabled {
+            return "This wallet will be deleted from this device. You can recover it from the Cloud Backup screen, or permanently delete it from there."
+        }
+
+        return "This wallet is not backed up and contains funds. You will lose access to these funds forever."
+    }
+
+    var finalDeleteButtonTitle: String {
+        cloudBackupManager.isCloudBackupEnabled ? "Delete" : "Delete Forever"
     }
 
     let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 5)
@@ -46,6 +59,16 @@ struct WalletSettingsView: View {
                         .foregroundColor(.secondary)
                 }
                 .font(.subheadline)
+
+                if let birthday = metadata.birthday {
+                    HStack {
+                        Text("Birthday")
+                        Spacer()
+                        Text(birthday.displayValue)
+                            .foregroundColor(.secondary)
+                    }
+                    .font(.subheadline)
+                }
 
                 if let masterFingerprint = manager.rust.masterFingerprint(), !metadata.isTapSigner() {
                     HStack {
@@ -197,12 +220,12 @@ struct WalletSettingsView: View {
                     Text("Are you sure you want to delete '\(metadata.name)'?")
                 }
                 .alert("Final Warning", isPresented: $showingFinalDeleteConfirmation) {
-                    Button("Delete Forever", role: .destructive) {
+                    Button(finalDeleteButtonTitle, role: .destructive) {
                         deleteWallet()
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("This wallet is not backed up and contains funds. You will lose access to these funds forever.")
+                    Text(finalDeleteConfirmationMessage)
                 }
             }
         }
@@ -212,6 +235,18 @@ struct WalletSettingsView: View {
         .onDisappear { manager.validateMetadata() }
         .onAppear { manager.validateMetadata() }
         .scrollContentBackground(.hidden)
+    }
+}
+
+private extension WalletBirthday {
+    var displayValue: String {
+        switch self {
+        case let .blockHeight(height):
+            "Block \(height.formatted(.number.grouping(.automatic)))"
+        case let .timestamp(timestamp):
+            Date(timeIntervalSince1970: TimeInterval(timestamp))
+                .formatted(date: .abbreviated, time: .omitted)
+        }
     }
 }
 

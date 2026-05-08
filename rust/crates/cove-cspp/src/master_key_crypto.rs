@@ -2,15 +2,30 @@ use chacha20poly1305::{ChaCha20Poly1305, KeyInit as _, aead::Aead as _};
 use cove_util::ResultExt as _;
 use rand::RngExt as _;
 
-use crate::backup_data::EncryptedMasterKeyBackup;
+use crate::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion, PasskeyProviderHint};
 use crate::error::CsppError;
 use crate::master_key::MasterKey;
 
 /// Encrypt a master key with a PRF-derived wrapping key
+///
+/// The master key wrapper uses the PRF-derived wrapping key directly with a
+/// random 96-bit nonce. This envelope is written rarely: normally once when
+/// cloud backup is enabled, and only a few additional times for repair or
+/// reinitialization flows. Higher-volume wallet backup encryption derives a
+/// fresh per-backup key before using ChaCha20-Poly1305.
 pub fn encrypt_master_key(
     master_key: &MasterKey,
     prf_key: &[u8; 32],
     prf_salt: &[u8; 32],
+) -> Result<EncryptedMasterKeyBackup, CsppError> {
+    encrypt_master_key_with_provider_hint(master_key, prf_key, prf_salt, None)
+}
+
+pub fn encrypt_master_key_with_provider_hint(
+    master_key: &MasterKey,
+    prf_key: &[u8; 32],
+    prf_salt: &[u8; 32],
+    passkey_provider_hint: Option<PasskeyProviderHint>,
 ) -> Result<EncryptedMasterKeyBackup, CsppError> {
     let cipher = ChaCha20Poly1305::new(prf_key.into());
 
@@ -21,7 +36,13 @@ pub fn encrypt_master_key(
     let ciphertext =
         cipher.encrypt(nonce, master_key.as_bytes().as_slice()).map_err_str(CsppError::Encrypt)?;
 
-    Ok(EncryptedMasterKeyBackup { version: 1, prf_salt: *prf_salt, nonce: nonce_bytes, ciphertext })
+    Ok(EncryptedMasterKeyBackup {
+        version: MasterKeyBackupVersion::V1.as_u32(),
+        passkey_provider_hint,
+        prf_salt: *prf_salt,
+        nonce: nonce_bytes,
+        ciphertext,
+    })
 }
 
 /// Decrypt a master key backup using a PRF-derived wrapping key

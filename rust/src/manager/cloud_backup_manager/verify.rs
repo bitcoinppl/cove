@@ -1,42 +1,58 @@
+pub(crate) mod coordinator;
 mod integrity;
 mod passkey_auth;
 mod pending_completion;
 mod session;
 mod wrapper_repair;
 
-use cove_cspp::CsppStore as _;
-use cove_cspp::backup_data::EncryptedMasterKeyBackup;
+use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
-use cove_device::keychain::{CSPP_CREDENTIAL_ID_KEY, Keychain};
+use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use cove_util::ResultExt as _;
 use tracing::{error, info, warn};
 
-use self::passkey_auth::{PasskeyAuthOutcome, PasskeyAuthPolicy, authenticate_with_policy};
+use self::passkey_auth::{PasskeyAuthOutcome, PasskeyAuthPolicy, PasskeyAuthenticator};
 use self::session::VerificationSession;
 use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
-use super::wallets::persist_enabled_cloud_backup_state;
+use super::CloudBackupStore;
 use super::{
-    BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupStatus,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    PendingVerificationCompletion, RustCloudBackupManager, VerificationFailureKind,
+    BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
+    CloudBackupRetryAction, CloudBackupRetryContext, CloudBackupStatus, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
+    PendingVerificationUpload, RustCloudBackupManager, is_connectivity_related_issue,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
-use crate::manager::cloud_backup_detail_manager::{RecoveryState, VerificationState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IntegrityDowngrade {
     Unverified,
 }
 
+impl IntegrityDowngrade {
+    fn apply_to(&self, current: &PersistedCloudBackupState) -> Option<PersistedCloudBackupState> {
+        match self {
+            Self::Unverified => match current.status {
+                PersistedCloudBackupStatus::Enabled => Some(PersistedCloudBackupState {
+                    status: PersistedCloudBackupStatus::Unverified,
+                    ..current.clone()
+                }),
+                PersistedCloudBackupStatus::Unverified => Some(current.clone()),
+                PersistedCloudBackupStatus::PasskeyMissing
+                | PersistedCloudBackupStatus::Disabled => None,
+            },
+        }
+    }
+}
+
 impl RustCloudBackupManager {
     /// Deep verification of cloud backup integrity
     ///
     /// Checks state, runs do_deep_verify, wraps errors, persists result
-    pub(crate) fn deep_verify_cloud_backup(
+    pub(crate) async fn deep_verify_cloud_backup(
         &self,
         force_discoverable: bool,
     ) -> DeepVerificationResult {
@@ -46,15 +62,24 @@ impl RustCloudBackupManager {
         }
 
         self.clear_pending_verification_completion();
-        let result = match self.do_deep_verify_cloud_backup(force_discoverable) {
+        let result = match self.do_deep_verify_cloud_backup(force_discoverable).await {
             Ok(result) => result,
             Err(error) => {
                 error!("Deep verification unexpected error: {error}");
-                DeepVerificationResult::Failed(DeepVerificationFailure {
-                    kind: VerificationFailureKind::Retry,
-                    message: error.to_string(),
-                    detail: None,
-                })
+                let retry_context = is_connectivity_related_issue(&error).then(|| {
+                    let action = if force_discoverable {
+                        CloudBackupRetryAction::VerifyDiscoverable
+                    } else {
+                        CloudBackupRetryAction::Verify
+                    };
+                    CloudBackupRetryContext::connectivity(action)
+                });
+
+                DeepVerificationResult::Failed(DeepVerificationFailure::retry(
+                    error.to_string(),
+                    None,
+                    retry_context,
+                ))
             }
         };
 
@@ -99,9 +124,7 @@ impl RustCloudBackupManager {
 
         match current.status {
             PersistedCloudBackupStatus::Enabled | PersistedCloudBackupStatus::Unverified => {
-                let Some(mut new_state) =
-                    downgrade_cloud_backup_state(&current, IntegrityDowngrade::Unverified)
-                else {
+                let Some(mut new_state) = IntegrityDowngrade::Unverified.apply_to(&current) else {
                     return;
                 };
 
@@ -119,53 +142,72 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub(crate) fn do_repair_passkey_wrapper(&self) -> Result<(), CloudBackupError> {
+    pub(crate) async fn do_repair_passkey_wrapper(&self) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
-        self.do_repair_passkey_wrapper_with_strategy(WrapperRepairStrategy::DiscoverOrCreate)
+        self.do_repair_passkey_wrapper_with_strategy(WrapperRepairStrategy::DiscoverOrCreate).await
     }
 
-    pub(crate) fn do_repair_passkey_wrapper_no_discovery(&self) -> Result<(), CloudBackupError> {
+    pub(crate) async fn do_repair_passkey_wrapper_no_discovery(
+        &self,
+    ) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
-        self.do_repair_passkey_wrapper_with_strategy(WrapperRepairStrategy::CreateNew)
+        self.do_repair_passkey_wrapper_with_strategy(WrapperRepairStrategy::CreateNew).await
     }
 
-    fn do_repair_passkey_wrapper_with_strategy(
+    async fn do_repair_passkey_wrapper_with_strategy(
         &self,
         strategy: WrapperRepairStrategy,
     ) -> Result<(), CloudBackupError> {
         let keychain = Keychain::global();
         let cspp = cove_cspp::Cspp::new(keychain.clone());
-        let cloud = CloudStorage::global();
+        let cloud = CloudStorage::global_explicit_client();
         let passkey = PasskeyAccess::global();
         let namespace = self.current_namespace_id()?;
+        let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
 
         let local_master_key = cspp
             .load_master_key_from_store()
             .map_err_prefix("load local master key", CloudBackupError::Internal)?
             .ok_or_else(|| CloudBackupError::Internal("no local master key".into()))?;
 
-        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()) {
+        let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(ids) => ids,
             Err(CloudStorageError::NotFound(_)) => Vec::new(),
             Err(error) => {
-                return Err(CloudBackupError::Cloud(format!("list wallet backups: {error}")));
+                return Err(CloudBackupError::cloud_storage_context("list wallet backups", error));
             }
         };
 
-        let repair = WrapperRepairOperation::new(self, keychain, cloud, passkey, &namespace);
+        let repair =
+            WrapperRepairOperation::new(self, &cloud_keychain, &cloud, passkey, &namespace);
         repair
             .run(&local_master_key, &wallet_record_ids, strategy)
-            .map_err(|error| error.into_cloud_backup_error())?;
+            .await
+            .map_err(CloudBackupError::from)?;
+
+        self.replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: true,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace,
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        ));
 
         info!("Repaired cloud master key wrapper with repaired passkey association");
         Ok(())
     }
 
-    pub(crate) fn finalize_passkey_repair(&self) -> Result<(), CloudBackupError> {
+    pub(crate) async fn finalize_passkey_repair(&self) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
         let namespace = self.current_namespace_id()?;
-        let cloud = CloudStorage::global();
-        let wallet_count = match cloud.list_wallet_backups(namespace) {
+        let cloud = CloudStorage::global_explicit_client();
+        let wallet_count = match cloud.list_wallet_backups(namespace).await {
             Ok(wallet_record_ids) => wallet_record_ids.len() as u32,
             Err(error) => {
                 warn!("Repair passkey: failed to refresh wallet backups after repair: {error}");
@@ -178,10 +220,10 @@ impl RustCloudBackupManager {
             }
         };
 
-        persist_enabled_cloud_backup_state(&Database::global(), wallet_count)?;
+        CloudBackupStore::global().persist_enabled(wallet_count)?;
         self.set_status(CloudBackupStatus::Enabled);
 
-        match self.refresh_cloud_backup_detail() {
+        match self.refresh_cloud_backup_detail().await {
             Some(CloudBackupDetailResult::Success(detail)) => {
                 self.set_detail(Some(detail));
             }
@@ -191,18 +233,19 @@ impl RustCloudBackupManager {
             None => {}
         }
 
+        self.refresh_sync_health();
         Ok(())
     }
 
-    pub(crate) fn do_deep_verify_cloud_backup(
+    pub(crate) async fn do_deep_verify_cloud_backup(
         &self,
         force_discoverable: bool,
     ) -> Result<DeepVerificationResult, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Verify)?;
-        VerificationSession::new(self, force_discoverable)?.run()
+        VerificationSession::new(self, force_discoverable)?.run().await
     }
 
-    pub(crate) fn recover_local_master_key_from_cloud(
+    pub(crate) async fn recover_local_master_key_from_cloud(
         &self,
         namespace: &str,
         recovery_message: &str,
@@ -211,10 +254,12 @@ impl RustCloudBackupManager {
             namespace,
             recovery_message,
             PasskeyAuthPolicy::StoredThenDiscover,
+            CloudStorage::global_explicit_client(),
         )
+        .await
     }
 
-    pub(crate) fn recover_local_master_key_from_cloud_without_discovery(
+    pub(crate) async fn recover_local_master_key_from_cloud_without_discovery(
         &self,
         namespace: &str,
         recovery_message: &str,
@@ -223,51 +268,60 @@ impl RustCloudBackupManager {
             namespace,
             recovery_message,
             PasskeyAuthPolicy::StoredOnly,
+            CloudStorage::global_silent_client(),
         )
+        .await
     }
 
-    fn recover_local_master_key_from_cloud_with_policy(
+    async fn recover_local_master_key_from_cloud_with_policy(
         &self,
         namespace: &str,
         recovery_message: &str,
         auth_policy: PasskeyAuthPolicy,
+        cloud: cove_device::cloud_storage::CloudStorageClient,
     ) -> Result<MasterKey, CloudBackupError> {
         let keychain = Keychain::global();
         let cspp = cove_cspp::Cspp::new(keychain.clone());
-        let cloud = CloudStorage::global();
         let passkey = PasskeyAccess::global();
 
-        let master_json = match cloud.download_master_key_backup(namespace.to_string()) {
+        let master_json = match cloud.download_master_key_backup(namespace.to_string()).await {
             Ok(json) => json,
             Err(CloudStorageError::NotFound(_)) => {
                 return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
             }
             Err(error) => {
-                return Err(CloudBackupError::Cloud(format!(
-                    "download master key backup: {error}",
-                )));
+                return Err(CloudBackupError::cloud_storage_context(
+                    "download master key backup",
+                    error,
+                ));
             }
         };
 
         let encrypted: EncryptedMasterKeyBackup =
             serde_json::from_slice(&master_json).map_err_str(CloudBackupError::Internal)?;
-        if encrypted.version != 1 {
-            let version = encrypted.version;
-            return Err(CloudBackupError::Internal(format!(
-                "master key backup version {version} is not supported",
-            )));
+        match encrypted.backup_version() {
+            Ok(MasterKeyBackupVersion::V1) => {}
+            Err(unsupported) => {
+                let version = unsupported.0;
+                return Err(CloudBackupError::Compatibility(format!(
+                    "master key backup version {version} is not supported",
+                )));
+            }
         }
 
-        let authenticated =
-            match authenticate_with_policy(keychain, passkey, &encrypted.prf_salt, auth_policy)? {
-                PasskeyAuthOutcome::Authenticated(result) => result,
-                PasskeyAuthOutcome::UserCancelled => {
-                    return Err(CloudBackupError::Passkey("user cancelled".into()));
-                }
-                PasskeyAuthOutcome::NoCredentialFound => {
-                    return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
-                }
-            };
+        let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
+        let authenticator = PasskeyAuthenticator::new(&cloud_keychain, passkey);
+        let auth_outcome =
+            authenticator.authenticate_with_policy(&encrypted.prf_salt, auth_policy).await?;
+        let authenticated = match auth_outcome {
+            PasskeyAuthOutcome::Authenticated(result) => result,
+            PasskeyAuthOutcome::UserCancelled => {
+                return Err(CloudBackupError::Passkey("user cancelled".into()));
+            }
+            PasskeyAuthOutcome::NoCredentialFound => {
+                return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
+            }
+        };
 
         let master_key = master_key_crypto::decrypt_master_key(&encrypted, &authenticated.prf_key)
             .map_err(|_| match auth_policy {
@@ -281,40 +335,14 @@ impl RustCloudBackupManager {
                 }
             })?;
 
-        keychain
-            .save_cspp_passkey(&authenticated.credential_id, encrypted.prf_salt)
+        CloudBackupKeychain::new(keychain.clone())
+            .save_passkey(&authenticated.credential_id, encrypted.prf_salt)
             .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
         cspp.save_master_key(&master_key)
             .map_err_prefix("save recovered master key", CloudBackupError::Internal)?;
 
         info!("Recovered local master key from cloud");
         Ok(master_key)
-    }
-}
-
-pub(super) fn load_stored_credential_id(keychain: &Keychain) -> Option<Vec<u8>> {
-    keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).and_then(|hex_str| {
-        hex::decode(hex_str)
-            .inspect_err(|error| warn!("Failed to decode stored credential_id: {error}"))
-            .ok()
-    })
-}
-
-fn downgrade_cloud_backup_state(
-    current: &PersistedCloudBackupState,
-    downgrade: IntegrityDowngrade,
-) -> Option<PersistedCloudBackupState> {
-    match downgrade {
-        IntegrityDowngrade::Unverified => match current.status {
-            PersistedCloudBackupStatus::Enabled => Some(PersistedCloudBackupState {
-                status: PersistedCloudBackupStatus::Unverified,
-                ..current.clone()
-            }),
-            PersistedCloudBackupStatus::Unverified => Some(current.clone()),
-            PersistedCloudBackupStatus::PasskeyMissing | PersistedCloudBackupStatus::Disabled => {
-                None
-            }
-        },
     }
 }
 
@@ -332,8 +360,7 @@ mod tests {
             ..PersistedCloudBackupState::default()
         };
 
-        let updated =
-            downgrade_cloud_backup_state(&current, IntegrityDowngrade::Unverified).unwrap();
+        let updated = IntegrityDowngrade::Unverified.apply_to(&current).unwrap();
 
         assert_eq!(
             updated,
@@ -357,7 +384,7 @@ mod tests {
             ..PersistedCloudBackupState::default()
         };
 
-        let updated = downgrade_cloud_backup_state(&current, IntegrityDowngrade::Unverified);
+        let updated = IntegrityDowngrade::Unverified.apply_to(&current);
 
         assert!(updated.is_none());
     }

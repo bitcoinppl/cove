@@ -101,7 +101,7 @@ impl State {
 
         match sort {
             CoinControlListSort::Date(ListSortDirection::Ascending) => {
-                utxos.sort_by(|a, b| a.datetime.cmp(&b.datetime));
+                utxos.sort_by_key(|a| a.datetime);
             }
             CoinControlListSort::Date(ListSortDirection::Descending) => {
                 utxos.sort_by(|a, b| a.datetime.cmp(&b.datetime).reverse());
@@ -127,7 +127,7 @@ impl State {
             }
 
             CoinControlListSort::Change(UtxoType::Change) => {
-                utxos.sort_by(|a, b| a.type_.cmp(&b.type_));
+                utxos.sort_by_key(|a| a.type_);
             }
         }
     }

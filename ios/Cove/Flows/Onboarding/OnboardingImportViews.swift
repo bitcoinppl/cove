@@ -1,40 +1,5 @@
 import SwiftUI
 
-struct OnboardingHardwareDeviceSelectionScreen: View {
-    let selectedDevice: OnboardingHardwareDevice?
-    let onRestoreFromCoveBackup: (() -> Void)?
-    let onSelect: (OnboardingHardwareDevice) -> Void
-    let onBack: () -> Void
-
-    var body: some View {
-        OnboardingPromptScreen(
-            icon: "shield.lefthalf.filled",
-            title: "Which hardware wallet do you use?",
-            subtitle: "Import the wallet you already have without moving your keys onto this device."
-        ) {
-            VStack(spacing: 14) {
-                if let onRestoreFromCoveBackup {
-                    OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
-                }
-
-                ForEach(OnboardingHardwareDevice.allCases, id: \.self) { device in
-                    OnboardingChoiceCard(
-                        title: device.title,
-                        subtitle: device.subtitle,
-                        systemImage: device.systemImage,
-                        isSelected: selectedDevice == device
-                    ) {
-                        onSelect(device)
-                    }
-                }
-            }
-
-            Button("Back", action: onBack)
-                .buttonStyle(OnboardingSecondaryButtonStyle())
-        }
-    }
-}
-
 struct OnboardingSoftwareImportFlowView: View {
     enum Mode {
         case chooser
@@ -45,10 +10,25 @@ struct OnboardingSoftwareImportFlowView: View {
 
     @State private var mode: Mode = .chooser
 
+    let errorMessage: String?
+    let cloudRestoreAlertVisible: Binding<Bool>
     let onImported: (WalletId) -> Void
+    let onCreateWallet: () -> Void
+    let onRestoreFromCloudBackup: () -> Void
+    let onDismissCloudRestoreAlert: () -> Void
     let onBack: () -> Void
 
     var body: some View {
+        content
+            .cloudRestoreAlert(
+                isPresented: cloudRestoreAlertVisible,
+                onRestore: onRestoreFromCloudBackup,
+                onContinue: onDismissCloudRestoreAlert
+            )
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch mode {
         case .chooser:
             OnboardingPromptScreen(
@@ -56,6 +36,10 @@ struct OnboardingSoftwareImportFlowView: View {
                 title: "Import your software wallet",
                 subtitle: "Choose how you want to bring your existing wallet into Cove."
             ) {
+                if let errorMessage {
+                    OnboardingInlineMessage(text: errorMessage)
+                }
+
                 VStack(spacing: 14) {
                     OnboardingChoiceCard(
                         title: "Enter recovery words",
@@ -76,6 +60,14 @@ struct OnboardingSoftwareImportFlowView: View {
 
                 Button("Back", action: onBack)
                     .buttonStyle(OnboardingSecondaryButtonStyle())
+
+                Button("Create a new wallet instead", action: onCreateWallet)
+                    .font(OnboardingRecoveryTypography.bodySemibold)
+                    .foregroundStyle(.white.opacity(0.68))
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 2)
+                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
             }
 
         case .wordCount:
@@ -120,6 +112,7 @@ struct OnboardingSoftwareImportFlowView: View {
                 HotWalletImportScreen(
                     numberOfWords: .twelve,
                     importType: .qr,
+                    autoImportScannedWords: true,
                     onImported: onImported
                 )
             }
@@ -135,23 +128,31 @@ struct OnboardingHardwareImportFlowView: View {
         case nfc
     }
 
-    let device: OnboardingHardwareDevice?
-    let onImported: (WalletId) -> Void
-    let onBack: () -> Void
-
     @State private var mode: Mode = .chooser
 
-    private var supportsNfc: Bool {
-        device == .coldcard
-    }
+    let cloudRestoreAlertVisible: Binding<Bool>
+    let onImported: (WalletId) -> Void
+    let onRestoreFromCloudBackup: () -> Void
+    let onDismissCloudRestoreAlert: () -> Void
+    let onBack: () -> Void
 
     var body: some View {
+        content
+            .cloudRestoreAlert(
+                isPresented: cloudRestoreAlertVisible,
+                onRestore: onRestoreFromCloudBackup,
+                onContinue: onDismissCloudRestoreAlert
+            )
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch mode {
         case .chooser:
             OnboardingPromptScreen(
                 icon: "arrow.down.doc",
                 title: "Import your hardware wallet",
-                subtitle: "Choose an export method supported by your device."
+                subtitle: "Choose how your hardware wallet exports its public data."
             ) {
                 VStack(spacing: 14) {
                     OnboardingChoiceCard(
@@ -170,14 +171,12 @@ struct OnboardingHardwareImportFlowView: View {
                         mode = .file
                     }
 
-                    if supportsNfc {
-                        OnboardingChoiceCard(
-                            title: "Scan with NFC",
-                            subtitle: "Tap your device to this iPhone",
-                            systemImage: "wave.3.right"
-                        ) {
-                            mode = .nfc
-                        }
+                    OnboardingChoiceCard(
+                        title: "Scan with NFC",
+                        subtitle: "Hold your hardware wallet or export tag near the top of your iPhone.",
+                        systemImage: "wave.3.right"
+                    ) {
+                        mode = .nfc
                     }
                 }
 
@@ -203,6 +202,21 @@ struct OnboardingHardwareImportFlowView: View {
                 onImported: onImported,
                 onBack: { mode = .chooser }
             )
+        }
+    }
+}
+
+private extension View {
+    func cloudRestoreAlert(
+        isPresented: Binding<Bool>,
+        onRestore: @escaping () -> Void,
+        onContinue: @escaping () -> Void
+    ) -> some View {
+        alert("Cove backup found", isPresented: isPresented) {
+            Button("Restore from Cove backup", action: onRestore)
+            Button("Continue setup", role: .cancel, action: onContinue)
+        } message: {
+            Text("We found a cloud backup for this account.")
         }
     }
 }
@@ -356,49 +370,6 @@ struct OnboardingEmbeddedNavigation<Content: View>: View {
                         Button("Back", action: onBack)
                     }
                 }
-        }
-    }
-}
-
-extension OnboardingHardwareDevice {
-    static let allCases: [OnboardingHardwareDevice] = [.coldcard, .ledger, .trezor, .other]
-
-    var title: String {
-        switch self {
-        case .coldcard:
-            "Coldcard"
-        case .ledger:
-            "Ledger"
-        case .trezor:
-            "Trezor"
-        case .other:
-            "Other hardware wallet"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .coldcard:
-            "Import via QR, file, or NFC"
-        case .ledger:
-            "Import via QR or file"
-        case .trezor:
-            "Import via QR or file"
-        case .other:
-            "Import via QR or file"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .coldcard:
-            "creditcard.and.123"
-        case .ledger:
-            "lanyardcard"
-        case .trezor:
-            "shield.lefthalf.filled"
-        case .other:
-            "externaldrive"
         }
     }
 }

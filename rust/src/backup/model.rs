@@ -310,6 +310,7 @@ mod tests {
             address_type: WalletAddressType::NativeSegwit,
             fiat_or_btc: FiatOrBtc::Btc,
             origin: None,
+            birthday: None,
             hardware_metadata: Some(HardwareWalletMetadata::TapSigner(tap_signer)),
             show_labels: true,
             internal: InternalOnlyMetadata::default(),
@@ -364,8 +365,8 @@ mod tests {
         let payload = sample_payload();
 
         let json = serde_json::to_vec(&payload).unwrap();
-        let compressed = super::super::crypto::compress(&json).unwrap();
-        let decompressed = super::super::crypto::decompress(&compressed).unwrap();
+        let compressed = crate::backup::crypto::compress(&json).unwrap();
+        let decompressed = crate::backup::crypto::decompress(&compressed).unwrap();
         let decoded: BackupPayload = serde_json::from_slice(&decompressed).unwrap();
 
         assert_eq!(decoded.version, 1);

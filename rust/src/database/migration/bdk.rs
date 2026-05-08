@@ -17,9 +17,6 @@ use self::recovery::{
 };
 use super::MigrationFailure;
 
-#[cfg(test)]
-use self::recovery::{recover_at_path, recovery_target_path};
-
 #[derive(Debug, thiserror::Error)]
 enum BdkMigrationError {
     #[error("BDK migration cancelled")]
@@ -299,8 +296,10 @@ fn count_bdk_databases_in_dir(dir: &Path) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use super::recovery::{recover_at_path, recovery_target_path};
     use super::*;
     use crate::database::encrypted_backend;
+    use crate::database::encrypted_backend::tests::set_test_encryption_key;
     use std::sync::atomic::AtomicBool;
     use tempfile::TempDir;
 
@@ -311,7 +310,7 @@ mod tests {
     }
 
     fn setup_test_key() {
-        encrypted_backend::set_test_encryption_key();
+        set_test_encryption_key();
     }
 
     fn test_migration(total: u32) -> Arc<Migration> {

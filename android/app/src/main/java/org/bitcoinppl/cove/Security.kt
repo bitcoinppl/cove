@@ -73,3 +73,17 @@ private fun createEncryptedPrefs(context: Context, requestStrongBox: Boolean): S
 class DeviceAccessor : DeviceAccess {
     override fun timezone(): String = TimeZone.getDefault().id
 }
+
+/** Ref-counts the number of sensitive screens currently on the back stack.
+ *  Seed screens call enter() on appear and exit() on dispose. FLAG_SECURE is only
+ *  cleared when the count reaches zero, preventing gaps during screen transitions. */
+object ScreenSecurity {
+    private val count = java.util.concurrent.atomic.AtomicInteger(0)
+
+    val isSensitiveScreen: Boolean
+        get() = count.get() > 0
+
+    fun enter() { count.incrementAndGet() }
+
+    fun exit() { count.updateAndGet { if (it > 0) it - 1 else 0 } }
+}

@@ -292,16 +292,15 @@ impl WalletScanner {
         self.workers
             .iter()
             .filter_map(|worker| {
-                worker
-                    .as_ref()
-                    .filter(|worker| matches!(worker.state, WorkerState::FoundAddress(_)))
-                    .map(|worker| {
-                        let WorkerState::FoundAddress(first_address) = worker.state.clone() else {
-                            panic!("impossible")
-                        };
+                let worker = worker.as_ref()?;
+                let WorkerState::FoundAddress(first_address) = &worker.state else {
+                    return None;
+                };
 
-                        FoundAddress { type_: worker.wallet_type, first_address }
-                    })
+                Some(FoundAddress {
+                    type_: worker.wallet_type,
+                    first_address: first_address.clone(),
+                })
             })
             .collect::<Vec<FoundAddress>>()
     }
