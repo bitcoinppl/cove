@@ -663,6 +663,7 @@ impl RustSendFlowManager {
                 let mut state = self.state.lock();
                 state.address = Some(address.clone());
                 state.entering_address = address.to_string();
+                state.payjoin_endpoint = None;
             }
 
             Action::NotifyAmountChanged(amount) => self.handle_amount_changed(*amount),
@@ -910,8 +911,16 @@ impl RustSendFlowManager {
             self.handle_amount_changed(amount);
         }
 
+        let payjoin_endpoint = parsed
+            .as_ref()
+            .and_then(|address_with_network| address_with_network.payjoin.as_ref())
+            .map(|payjoin| payjoin.endpoint.clone());
         let address = parsed.map(|address_with_network| Arc::new(address_with_network.address));
-        self.state.lock().address = address.clone();
+        {
+            let mut state = self.state.lock();
+            state.address = address.clone();
+            state.payjoin_endpoint = payjoin_endpoint;
+        }
         sender.queue(Message::UpdateAddress(address.clone()));
 
         // if both address and amount are valid, then clear the focus field, if amount is invalid, then focus on amount
@@ -963,7 +972,11 @@ impl RustSendFlowManager {
 
     fn clear_address(self: &Arc<Self>) {
         let mut sender = DeferredSender::new(self.reconciler.clone());
-        self.state.lock().address = None;
+        {
+            let mut state = self.state.lock();
+            state.address = None;
+            state.payjoin_endpoint = None;
+        }
         sender.queue(Message::UpdateAddress(None));
 
         self.state.lock().entering_address = String::new();
@@ -1546,9 +1559,15 @@ impl RustSendFlowManager {
         }
 
         // set address
+        let payjoin_endpoint =
+            address_with_network.payjoin.as_ref().map(|payjoin| payjoin.endpoint.clone());
         let address = Arc::new(address_with_network.address);
 
-        self.state.lock().address = Some(address.clone());
+        {
+            let mut state = self.state.lock();
+            state.address = Some(address.clone());
+            state.payjoin_endpoint = payjoin_endpoint;
+        }
         sender.queue(Message::UpdateAddress(Some(address.clone())));
 
         self.state.lock().entering_address = address.to_string();
