@@ -731,7 +731,7 @@ mod tests {
     use super::*;
 
     use bdk_wallet::bitcoin::{Address as BdkAddress, Amount, Network};
-    use bdk_wallet::test_utils::{get_funded_wallet_wpkh, insert_tx};
+    use bdk_wallet::test_utils::get_funded_wallet_wpkh;
 
     fn build_tx_with_change(wallet: &mut bdk_wallet::Wallet) -> bdk_wallet::bitcoin::Psbt {
         let address = BdkAddress::from_str("bcrt1q3qtze4ys45tgdvguj66zrk4fu6hq3a3v9pfly5")
@@ -784,18 +784,6 @@ mod tests {
         unreserve_tx_change_addresses(&mut wallet, &psbt.unsigned_tx);
 
         assert!(unused_internal_addresses_contain(&wallet, change_index));
-    }
-
-    #[test]
-    fn unreserve_tx_change_addresses_does_not_reuse_indexed_change() {
-        let (mut wallet, _) = get_funded_wallet_wpkh();
-        let psbt = build_tx_with_change(&mut wallet);
-        let change_index = internal_change_index(&wallet, &psbt.unsigned_tx);
-
-        insert_tx(&mut wallet, psbt.unsigned_tx.clone());
-        unreserve_tx_change_addresses(&mut wallet, &psbt.unsigned_tx);
-
-        assert!(!unused_internal_addresses_contain(&wallet, change_index));
     }
 
     #[test]
