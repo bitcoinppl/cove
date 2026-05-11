@@ -1,8 +1,8 @@
 package org.bitcoinppl.cove.cloudbackup
 
-import androidx.compose.runtime.mutableStateOf
 import org.bitcoinppl.cove_core.CloudBackupConfiguredState
 import org.bitcoinppl.cove_core.CloudBackupDetailState
+import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
@@ -22,7 +22,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import sun.misc.Unsafe
 
 class CloudBackupRegressionHelpersTest {
     @Test
@@ -182,7 +181,6 @@ class CloudBackupRegressionHelpersTest {
         verification: CloudBackupVerificationState = CloudBackupVerificationState.NotVerified,
         sync: CloudBackupSyncState = CloudBackupSyncState.Idle,
     ): CloudBackupManager {
-        val manager = unsafe.allocateInstance(CloudBackupManager::class.java) as CloudBackupManager
         val state =
             CloudBackupState(
                 lifecycle =
@@ -191,6 +189,7 @@ class CloudBackupRegressionHelpersTest {
                             passkey = passkey,
                             verification = verification,
                             sync = sync,
+                            destructiveOperation = CloudBackupDestructiveOperationState.IDLE,
                             detail = CloudBackupDetailState.NotLoaded,
                             lastRestoreReport = null,
                             rootPrompt = CloudBackupRootPrompt.None,
@@ -200,20 +199,6 @@ class CloudBackupRegressionHelpersTest {
                     ),
             )
 
-        CloudBackupManager::class.java
-            .getDeclaredField("state\$delegate")
-            .apply {
-                isAccessible = true
-                set(manager, mutableStateOf(state))
-            }
-
-        return manager
+        return CloudBackupManager(state)
     }
-
-    private val unsafe: Unsafe
-        get() {
-            val field = Unsafe::class.java.getDeclaredField("theUnsafe")
-            field.isAccessible = true
-            return field.get(null) as Unsafe
-        }
 }

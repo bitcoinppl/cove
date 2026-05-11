@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use cove_device::cloud_storage::CloudStorage;
 use cove_device::keychain::Keychain;
 use futures::stream::{self, StreamExt as _};
@@ -35,7 +37,7 @@ impl RustCloudBackupManager {
             })?;
 
         let db = Database::global();
-        let local_record_ids: std::collections::HashSet<_> = CloudBackupStore::new(&db)
+        let local_record_ids: HashSet<_> = CloudBackupStore::new(&db)
             .all_wallets()?
             .iter()
             .map(|wallet| cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref()))
@@ -198,12 +200,23 @@ impl RustCloudBackupManager {
         })?;
         let wallet_count = wallet_record_ids.len() as u32;
         let db = Database::global();
-        if let Ok(mut current) = db.cloud_backup_state.get() {
-            current.set_wallet_count(Some(wallet_count));
-            let _ = self.persist_cloud_backup_state(
-                &current,
-                "persist cloud backup state after deleting cloud wallet",
-            );
+        match db.cloud_backup_state.get() {
+            Ok(mut current) => {
+                current.set_wallet_count(Some(wallet_count));
+                if let Err(error) = self.persist_cloud_backup_state(
+                    &current,
+                    "persist cloud backup state after deleting cloud wallet",
+                ) {
+                    warn!(
+                        "Failed to persist cloud backup state after deleting cloud wallet: {error}"
+                    );
+                }
+            }
+            Err(error) => {
+                warn!(
+                    "Failed to load cloud backup state after deleting cloud wallet, skipping wallet count update: {error}"
+                );
+            }
         }
 
         info!("Deleted cloud wallet {record_id}");

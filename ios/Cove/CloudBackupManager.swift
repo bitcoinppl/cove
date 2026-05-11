@@ -161,6 +161,14 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         }
     }
 
+    var destructiveOperationState: CloudBackupDestructiveOperationState {
+        configuredState?.destructiveOperation ?? .idle
+    }
+
+    var isPerformingDestructiveAction: Bool {
+        destructiveOperationState != .idle
+    }
+
     var hasPendingUploadVerification: Bool {
         if case .awaitingUploadConfirmation = verificationState { return true }
         return false

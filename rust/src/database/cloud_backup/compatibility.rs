@@ -41,7 +41,9 @@ impl<'de> Deserialize<'de> for PersistedCloudBackupState {
         }
 
         match PersistedCloudBackupStateShape::deserialize(deserializer)? {
-            PersistedCloudBackupStateShape::Domain(record) => Ok(record.into_state()),
+            PersistedCloudBackupStateShape::Domain(record) => {
+                record.into_state().map_err(serde::de::Error::custom)
+            }
             PersistedCloudBackupStateShape::Legacy(state) => Ok(state.into()),
         }
     }
@@ -181,11 +183,18 @@ impl PersistedCloudBackupDomainRecord {
         Self { version: 1, backup }
     }
 
-    fn into_state(self) -> PersistedCloudBackupState {
+    fn into_state(self) -> Result<PersistedCloudBackupState, String> {
+        if self.version != 1 {
+            return Err(format!(
+                "unsupported persisted cloud backup record version: {}",
+                self.version
+            ));
+        }
+
         match self.backup {
-            PersistedBackupRecord::Disabled => PersistedCloudBackupState::default(),
+            PersistedBackupRecord::Disabled => Ok(PersistedCloudBackupState::default()),
             PersistedBackupRecord::Configured(configured) => {
-                PersistedCloudBackupState::Configured(configured)
+                Ok(PersistedCloudBackupState::Configured(configured))
             }
         }
     }
@@ -220,8 +229,12 @@ impl<'de> Deserialize<'de> for PersistedCloudBlobSyncState {
         }
 
         match PersistedCloudBlobSyncStateShape::deserialize(deserializer)? {
-            PersistedCloudBlobSyncStateShape::Domain(record) => Ok(record.into_sync_state()),
-            PersistedCloudBlobSyncStateShape::Legacy(state) => Ok(state.into()),
+            PersistedCloudBlobSyncStateShape::Domain(record) => {
+                record.into_sync_state().map_err(serde::de::Error::custom)
+            }
+            PersistedCloudBlobSyncStateShape::Legacy(state) => {
+                state.into_sync_state().map_err(serde::de::Error::custom)
+            }
         }
     }
 }
@@ -244,12 +257,19 @@ impl PersistedCloudBlobSyncDomainRecord {
         }
     }
 
-    fn into_sync_state(self) -> PersistedCloudBlobSyncState {
-        PersistedCloudBlobSyncState::from_record_key(
+    fn into_sync_state(self) -> Result<PersistedCloudBlobSyncState, String> {
+        if self.version != 1 {
+            return Err(format!(
+                "unsupported persisted cloud backup blob sync record version: {}",
+                self.version
+            ));
+        }
+
+        Ok(PersistedCloudBlobSyncState::from_record_key(
             self.namespace_id,
             self.record_key.into_record_key(),
             self.state,
-        )
+        ))
     }
 }
 
@@ -263,16 +283,29 @@ struct PersistedLegacyCloudBlobSyncState {
 
 impl From<PersistedLegacyCloudBlobSyncState> for PersistedCloudBlobSyncState {
     fn from(state: PersistedLegacyCloudBlobSyncState) -> Self {
-        if state.wallet_id.is_none() && state.record_id == MASTER_KEY_RECORD_ID {
-            return Self::master_key_wrapper(state.namespace_id, state.state);
+        state.into_sync_state().unwrap_or_else(|error| panic!("{error}"))
+    }
+}
+
+impl PersistedLegacyCloudBlobSyncState {
+    fn into_sync_state(self) -> Result<PersistedCloudBlobSyncState, String> {
+        if self.wallet_id.is_none() && self.record_id == MASTER_KEY_RECORD_ID {
+            return Ok(PersistedCloudBlobSyncState::master_key_wrapper(
+                self.namespace_id,
+                self.state,
+            ));
         }
 
-        let record_key = state
-            .wallet_id
-            .map(|wallet_id| CloudBackupRecordKey::Wallet(wallet_id, state.record_id))
-            .unwrap_or(CloudBackupRecordKey::MasterKeyWrapper);
+        let Some(wallet_id) = self.wallet_id else {
+            return Err(format!(
+                "invalid legacy blob: missing wallet_id for record_id {}",
+                self.record_id
+            ));
+        };
 
-        Self::from_record_key(state.namespace_id, record_key, state.state)
+        let record_key = CloudBackupRecordKey::Wallet(wallet_id, self.record_id);
+
+        Ok(PersistedCloudBlobSyncState::from_record_key(self.namespace_id, record_key, self.state))
     }
 }
 
@@ -421,6 +454,22 @@ mod tests {
     }
 
     #[test]
+    fn cloud_backup_state_rejects_unsupported_domain_version() {
+        let error = serde_json::from_value::<PersistedCloudBackupState>(serde_json::json!({
+            "version": 2,
+            "backup": {
+                "state": "Disabled"
+            }
+        }))
+        .unwrap_err();
+
+        assert!(
+            error.to_string().contains("unsupported persisted cloud backup record version: 2"),
+            "{error}"
+        );
+    }
+
+    #[test]
     fn blob_sync_state_accepts_legacy_master_key_json() {
         let state: PersistedCloudBlobSyncState = serde_json::from_value(serde_json::json!({
             "namespace_id": "ns-1",
@@ -502,6 +551,54 @@ mod tests {
         assert_eq!(
             state.record_key(),
             &CloudBackupRecordKey::Wallet("wallet-a".into(), "record-a".into())
+        );
+    }
+
+    #[test]
+    fn blob_sync_state_rejects_unsupported_domain_version() {
+        let error = serde_json::from_value::<PersistedCloudBlobSyncState>(serde_json::json!({
+            "version": 2,
+            "namespace_id": "ns-1",
+            "record_key": {
+                "kind": "Wallet",
+                "wallet_id": "wallet-a",
+                "record_id": "record-a"
+            },
+            "state": {
+                "Dirty": {
+                    "changed_at": 10
+                }
+            }
+        }))
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported persisted cloud backup blob sync record version: 2"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn blob_sync_state_rejects_legacy_wallet_without_wallet_id() {
+        let error = serde_json::from_value::<PersistedCloudBlobSyncState>(serde_json::json!({
+            "namespace_id": "ns-1",
+            "wallet_id": null,
+            "record_id": "record-a",
+            "state": {
+                "Dirty": {
+                    "changed_at": 10
+                }
+            }
+        }))
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid legacy blob: missing wallet_id for record_id record-a"),
+            "{error}"
         );
     }
 

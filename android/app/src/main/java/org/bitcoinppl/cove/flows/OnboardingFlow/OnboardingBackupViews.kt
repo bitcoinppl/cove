@@ -79,6 +79,7 @@ import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
+import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
@@ -154,9 +155,14 @@ internal fun shouldNotifyRestoreError(
 internal fun shouldCompleteOnboardingCloudBackup(
     configuredState: CloudBackupConfiguredState?,
     hasPendingUploadVerification: Boolean,
-): Boolean =
-    configuredState?.verification is CloudBackupVerificationState.Verified &&
-        !hasPendingUploadVerification
+): Boolean {
+    configuredState ?: return false
+    if (configuredState.passkey != CloudBackupPasskeyState.Available) return false
+    if (hasPendingUploadVerification) return false
+
+    val verification = configuredState.verification as? CloudBackupVerificationState.Verified
+    return verification?.report != null
+}
 
 @Composable
 internal fun OnboardingCreatingWalletView(
@@ -598,11 +604,12 @@ private fun OnboardingCloudBackupDetailsStepView(
     var didReportEnabled by remember { mutableStateOf(false) }
     var didAutoConfirmSavedPasskey by remember { mutableStateOf(false) }
 
+    val lifecycleMsg = backupManager.lifecycleFailureMessage
     val onboardingMessage =
         when {
             backupManager.isUnsupportedPasskeyProvider ->
                 "This passkey provider did not confirm support for Cloud Backup. Try another supported provider such as 1Password or Bitwarden."
-            backupManager.lifecycleFailureMessage != null -> backupManager.lifecycleFailureMessage
+            lifecycleMsg != null -> lifecycleMsg
             else -> (backupManager.verificationState as? CloudBackupVerificationState.Failed)?.v1?.message()
         }
     val isVerifying = backupManager.verificationState is CloudBackupVerificationState.Running

@@ -11,6 +11,8 @@ use super::{
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use cove_device::cloud_storage::CloudSyncHealth;
 
+const PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE: &str = "cloud authorization required";
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct CloudBackupModel {
     state: CloudBackupModelState,
@@ -41,6 +43,7 @@ struct CloudBackupConfiguredModelState {
     passkey: CloudBackupPasskeyState,
     verification: CloudBackupVerificationState,
     sync: CloudBackupSyncState,
+    destructive_operation: CloudBackupDestructiveOperationState,
     pending_upload_verification: PendingUploadVerificationState,
     detail: CloudBackupDetailState,
     last_restore_report: Option<CloudBackupRestoreReport>,
@@ -73,6 +76,7 @@ impl Default for CloudBackupConfiguredModelState {
             passkey: CloudBackupPasskeyState::Available,
             verification: CloudBackupVerificationState::NotVerified,
             sync: CloudBackupSyncState::Idle,
+            destructive_operation: CloudBackupDestructiveOperationState::Idle,
             pending_upload_verification: PendingUploadVerificationState::Idle,
             detail: CloudBackupDetailState::NotLoaded,
             last_restore_report: None,
@@ -109,6 +113,7 @@ impl CloudBackupModelState {
             passkey: self.configured.passkey.clone(),
             verification: self.public_verification_state(),
             sync: self.configured.sync.clone(),
+            destructive_operation: self.configured.destructive_operation.clone(),
             detail: self.configured.detail.clone(),
             last_restore_report: self.configured.last_restore_report.clone(),
             root_prompt: self.root_prompt(),
@@ -384,25 +389,13 @@ impl CloudBackupModelState {
                     CloudBackupEnableFlow::UploadingInitialBackup { progress },
                 );
             }
-            _ if progress.is_some() => {
-                self.phase = CloudBackupLifecyclePhase::Enabling(
-                    CloudBackupEnableFlow::UploadingInitialBackup { progress },
-                );
-            }
             _ => {}
         }
     }
 
     fn report_restore_progress(&mut self, progress: Option<CloudBackupRestoreProgress>) {
-        match &mut self.phase {
-            CloudBackupLifecyclePhase::Restoring(flow) => flow.progress = progress,
-            _ if progress.is_some() => {
-                self.phase = CloudBackupLifecyclePhase::Restoring(CloudBackupRestoreFlow {
-                    progress,
-                    report: None,
-                });
-            }
-            _ => {}
+        if let CloudBackupLifecyclePhase::Restoring(flow) = &mut self.phase {
+            flow.progress = progress;
         }
     }
 
@@ -440,8 +433,9 @@ impl CloudBackupModelState {
                 }
             }
             PendingUploadVerificationState::BlockedOnAuthorization => {
-                self.configured.sync =
-                    CloudBackupSyncState::Blocked("cloud authorization required".into());
+                self.configured.sync = CloudBackupSyncState::Blocked(
+                    PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE.into(),
+                );
             }
         }
     }
@@ -508,6 +502,13 @@ impl CloudBackupModelState {
     }
 
     fn resolve_sync(&mut self, sync: SyncState) {
+        if matches!(
+            self.configured.pending_upload_verification,
+            PendingUploadVerificationState::BlockedOnAuthorization
+        ) {
+            return;
+        }
+
         self.configured.sync = match sync {
             SyncState::Idle => CloudBackupSyncState::Idle,
             SyncState::Syncing => CloudBackupSyncState::Syncing,
@@ -518,11 +519,20 @@ impl CloudBackupModelState {
     fn resolve_recovery(&mut self, recovery: RecoveryState) {
         match recovery {
             RecoveryState::Idle => {
+                self.configured.destructive_operation = CloudBackupDestructiveOperationState::Idle;
                 if matches!(self.configured.passkey, CloudBackupPasskeyState::NeedsRepair { .. }) {
                     self.configured.passkey = CloudBackupPasskeyState::NeedsRepair {
                         state: CloudBackupPasskeyRepairState::Idle,
                     };
                 }
+            }
+            RecoveryState::Recovering(RecoveryAction::RecreateManifest) => {
+                self.configured.destructive_operation =
+                    CloudBackupDestructiveOperationState::RecreatingManifest;
+            }
+            RecoveryState::Recovering(RecoveryAction::ReinitializeBackup) => {
+                self.configured.destructive_operation =
+                    CloudBackupDestructiveOperationState::ReinitializingBackup;
             }
             RecoveryState::Recovering(RecoveryAction::RepairPasskey) => {
                 self.configured.passkey = CloudBackupPasskeyState::NeedsRepair {
@@ -530,14 +540,18 @@ impl CloudBackupModelState {
                 };
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
-            RecoveryState::Recovering(_) => {}
+            RecoveryState::Failed {
+                action: RecoveryAction::RecreateManifest | RecoveryAction::ReinitializeBackup,
+                ..
+            } => {
+                self.configured.destructive_operation = CloudBackupDestructiveOperationState::Idle;
+            }
             RecoveryState::Failed { action: RecoveryAction::RepairPasskey, error } => {
                 self.configured.passkey = CloudBackupPasskeyState::NeedsRepair {
                     state: CloudBackupPasskeyRepairState::Failed(error),
                 };
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
-            RecoveryState::Failed { .. } => {}
         }
     }
 
@@ -827,6 +841,13 @@ pub enum CloudBackupSyncState {
     Failed(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupDestructiveOperationState {
+    Idle,
+    RecreatingManifest,
+    ReinitializingBackup,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct LoadedCloudBackupDetail {
     pub detail: CloudBackupDetail,
@@ -848,6 +869,7 @@ pub struct CloudBackupConfiguredState {
     pub passkey: CloudBackupPasskeyState,
     pub verification: CloudBackupVerificationState,
     pub sync: CloudBackupSyncState,
+    pub destructive_operation: CloudBackupDestructiveOperationState,
     pub detail: CloudBackupDetailState,
     pub last_restore_report: Option<CloudBackupRestoreReport>,
     pub root_prompt: CloudBackupRootPrompt,
@@ -1321,7 +1343,10 @@ mod tests {
             Some(CloudBackupLifecycle::Configured(CloudBackupConfiguredState {
                 passkey: CloudBackupPasskeyState::Available,
                 verification: CloudBackupVerificationState::AwaitingUploadConfirmation,
-                sync: CloudBackupSyncState::Blocked("cloud authorization required".into()),
+                sync: CloudBackupSyncState::Blocked(
+                    PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE.into(),
+                ),
+                destructive_operation: CloudBackupDestructiveOperationState::Idle,
                 detail: CloudBackupDetailState::NotLoaded,
                 last_restore_report: None,
                 root_prompt: CloudBackupRootPrompt::None,
@@ -1330,6 +1355,30 @@ mod tests {
                     source: None,
                 },
             })),
+        );
+    }
+
+    #[test]
+    fn blocked_pending_upload_authorization_survives_sync_resolution() {
+        let mut model = CloudBackupModel::default();
+        model
+            .apply_event(CloudBackupModelEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled))
+            .unwrap();
+        model
+            .apply_event(CloudBackupModelEvent::PendingUploadVerificationReconciled(
+                PendingUploadVerificationState::BlockedOnAuthorization,
+            ))
+            .unwrap();
+
+        model.apply_event(CloudBackupModelEvent::SyncStateResolved(SyncState::Syncing)).unwrap();
+
+        let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
+            panic!("enabled backup should project configured lifecycle");
+        };
+
+        assert_eq!(
+            state.sync,
+            CloudBackupSyncState::Blocked(PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE.into()),
         );
     }
 
@@ -1382,6 +1431,7 @@ mod tests {
         };
         let mut model = CloudBackupModel::default();
 
+        model.apply_event(CloudBackupModelEvent::RestoreStarted).unwrap();
         model
             .apply_event(CloudBackupModelEvent::RestoreProgressReported(Some(progress.clone())))
             .unwrap();
@@ -1393,6 +1443,39 @@ mod tests {
                 report: None,
             }),
         );
+    }
+
+    #[test]
+    fn stray_enable_progress_does_not_enter_enabling() {
+        let mut model = CloudBackupModel::default();
+
+        let effects = model
+            .apply_event(CloudBackupModelEvent::EnableProgressReported(Some(CloudBackupProgress {
+                completed: 1,
+                total: 2,
+            })))
+            .unwrap();
+
+        assert_eq!(model.public_state().lifecycle, CloudBackupLifecycle::Disabled);
+        assert_eq!(effects, CloudBackupModelEffects::default());
+    }
+
+    #[test]
+    fn stray_restore_progress_does_not_enter_restoring() {
+        let mut model = CloudBackupModel::default();
+
+        let effects = model
+            .apply_event(CloudBackupModelEvent::RestoreProgressReported(Some(
+                CloudBackupRestoreProgress {
+                    stage: CloudBackupRestoreStage::Downloading,
+                    completed: 1,
+                    total: Some(3),
+                },
+            )))
+            .unwrap();
+
+        assert_eq!(model.public_state().lifecycle, CloudBackupLifecycle::Disabled);
+        assert_eq!(effects, CloudBackupModelEffects::default());
     }
 
     #[test]

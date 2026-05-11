@@ -207,17 +207,14 @@ final class ICloudDriveHelper: @unchecked Sendable {
         recordId: String,
         locations: [RemoteBackupLocation]
     ) throws -> URL {
-        let urls = try locations.map { location in
-            try backupFileReadURL(namespace: namespace, location: location)
-        }
-
-        for url in urls where FileManager.default.fileExists(atPath: url.path) {
-            return url
-        }
-
         var lastError: Error?
-        for url in urls {
+        for location in locations {
             do {
+                let url = try backupFileReadURL(namespace: namespace, location: location)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    return url
+                }
+
                 let item = try metadataItemIfPresent(
                     named: url.lastPathComponent,
                     parentDirectoryURL: url.deletingLastPathComponent()

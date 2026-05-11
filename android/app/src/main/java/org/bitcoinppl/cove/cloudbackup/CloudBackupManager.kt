@@ -35,27 +35,43 @@ import org.bitcoinppl.cove_core.RustCloudBackupManager
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 
 @Stable
-class CloudBackupManager private constructor() : CloudBackupManagerReconciler, Closeable {
-    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val rustScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+class CloudBackupManager private constructor(
+    private val rust: RustCloudBackupManager?,
+    initialState: CloudBackupState,
+    startLiveUpdates: Boolean,
+) : CloudBackupManagerReconciler, Closeable {
+    private val mainScope =
+        if (startLiveUpdates) {
+            CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        } else {
+            CoroutineScope(SupervisorJob())
+        }
+    private val rustScope =
+        if (startLiveUpdates) {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        } else {
+            CoroutineScope(SupervisorJob())
+        }
 
-    val rust: RustCloudBackupManager = RustCloudBackupManager()
-
-    var state by mutableStateOf(rust.state())
+    var state by mutableStateOf(initialState)
         private set
 
-    var isCloudBackupEnabled by mutableStateOf(runCatching { rust.isCloudBackupEnabled() }.getOrDefault(false))
+    var isCloudBackupEnabled by mutableStateOf(runCatching { rust?.isCloudBackupEnabled() == true }.getOrDefault(false))
         private set
 
     init {
-        rust.listenForUpdates(this)
-        rustScope.launch {
-            runCatching { rust.cloudStorageDidChange() }
-                .onFailure { error ->
-                    Log.w(TAG, "initial cloud storage refresh failed", error)
-                }
+        if (startLiveUpdates && rust != null) {
+            rust.listenForUpdates(this)
+            rustScope.launch {
+                runCatching { rust.cloudStorageDidChange() }
+                    .onFailure { error ->
+                        Log.w(TAG, "initial cloud storage refresh failed", error)
+                    }
+            }
         }
     }
+
+    internal constructor(initialState: CloudBackupState) : this(null, initialState, false)
 
     val lifecycle: CloudBackupLifecycle
         get() = state.lifecycle
@@ -196,14 +212,8 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
 
     val shouldPromptVerification: Boolean
         get() =
-            !isBackgroundVerifying &&
+            !hasPendingUploadVerification &&
                 verificationState is CloudBackupVerificationState.Required
-
-    val isBackgroundVerifying: Boolean
-        get() = hasPendingUploadVerification
-
-    val isUnverified: Boolean
-        get() = shouldPromptVerification
 
     val isConfigured: Boolean
         get() = state.lifecycle is CloudBackupLifecycle.Configured
@@ -219,10 +229,11 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
             }
 
     val isVerificationStale: Boolean
-        get() = lastVerifiedAt == null && isCloudBackupAvailable && !isUnverified
+        get() = lastVerifiedAt == null && isCloudBackupAvailable && !shouldPromptVerification
 
     fun dispatch(action: CloudBackupManagerAction) {
         rustScope.launch {
+            val rust = rust ?: return@launch
             runCatching { rust.dispatch(action) }
                 .onFailure { error ->
                     Log.e(TAG, "cloud backup action failed: $action", error)
@@ -232,6 +243,7 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
 
     fun syncPersistedState() {
         rustScope.launch {
+            val rust = rust ?: return@launch
             runCatching { rust.syncPersistedState() }
                 .onSuccess {
                     mainScope.launch {
@@ -246,6 +258,7 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
 
     fun resumePendingCloudUploadVerification() {
         rustScope.launch {
+            val rust = rust ?: return@launch
             runCatching { rust.resumePendingCloudUploadVerification() }
                 .onSuccess {
                     mainScope.launch {
@@ -260,6 +273,7 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
 
     fun refreshCloudState() {
         rustScope.launch {
+            val rust = rust ?: return@launch
             runCatching { rust.cloudStorageDidChange() }
                 .onSuccess {
                     mainScope.launch {
@@ -281,19 +295,19 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
     private fun apply(message: CloudBackupReconcileMessage) {
         when (message) {
             is CloudBackupReconcileMessage.Lifecycle -> state = state.copy(lifecycle = message.v1)
-        }
+        }.let {}
         refreshPersistedEnabledState()
     }
 
     private fun refreshPersistedEnabledState() {
-        isCloudBackupEnabled = runCatching { rust.isCloudBackupEnabled() }
+        isCloudBackupEnabled = runCatching { rust?.isCloudBackupEnabled() == true }
             .getOrDefault(isCloudBackupEnabled)
     }
 
     override fun close() {
         mainScope.cancel()
         rustScope.cancel()
-        rust.close()
+        rust?.close()
     }
 
     companion object {
@@ -302,9 +316,14 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
         @Volatile
         private var instance: CloudBackupManager? = null
 
+        private fun liveManager(): CloudBackupManager {
+            val rust = RustCloudBackupManager()
+            return CloudBackupManager(rust, rust.state(), true)
+        }
+
         fun getInstance(): CloudBackupManager =
             instance ?: synchronized(this) {
-                instance ?: CloudBackupManager().also { instance = it }
+                instance ?: liveManager().also { instance = it }
             }
     }
 }

@@ -143,6 +143,21 @@ struct CloudBackupDetailScreen: View {
                     Label("Waiting for iCloud authorization", systemImage: "icloud.slash")
                         .foregroundStyle(.orange)
                 }
+            } else if case let .failed(message) = manager.syncState {
+                Section {
+                    Label("Latest upload could not be confirmed", systemImage: "exclamationmark.icloud")
+                        .foregroundStyle(Color.statusError)
+
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        manager.dispatch(action: .syncUnsynced)
+                    } label: {
+                        Label("Try Again", systemImage: "arrow.clockwise")
+                    }
+                }
             } else {
                 Section {
                     HStack {

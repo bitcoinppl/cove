@@ -29,7 +29,9 @@ struct VerificationSection: View {
     let onReinitialize: () -> Void
 
     private var isBusy: Bool {
-        manager.verificationState.isVerifying || manager.passkeyRepairState.isRecovering
+        manager.verificationState.isVerifying ||
+            manager.passkeyRepairState.isRecovering ||
+            manager.isPerformingDestructiveAction
     }
 
     var body: some View {
@@ -210,6 +212,7 @@ struct VerificationSection: View {
             title: "Recreate Backup Index",
             progressTitle: "Recreating...",
             systemImage: "arrow.clockwise",
+            operation: .recreatingManifest,
             action: onRecreate
         )
     }
@@ -227,6 +230,7 @@ struct VerificationSection: View {
             title: "Reinitialize Cloud Backup",
             progressTitle: "Reinitializing...",
             systemImage: "arrow.counterclockwise",
+            operation: .reinitializingBackup,
             action: onReinitialize
         )
     }
@@ -245,12 +249,13 @@ struct VerificationSection: View {
         title: String,
         progressTitle: String,
         systemImage: String,
+        operation: CloudBackupDestructiveOperationState,
         action: @escaping () -> Void
     ) -> some View {
         Button(role: .destructive) {
             action()
         } label: {
-            if manager.passkeyRepairState.isRecovering {
+            if manager.destructiveOperationState == operation {
                 HStack {
                     ProgressView()
                         .padding(.trailing, 4)

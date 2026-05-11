@@ -316,7 +316,7 @@ class MainActivity : FragmentActivity() {
                             appInstance.asyncRuntimeReady = true
 
                             runCatching {
-                                appInstance.cloudBackupManager.rust.resumePendingCloudUploadVerification()
+                                appInstance.cloudBackupManager.resumePendingCloudUploadVerification()
                             }.onFailure { error ->
                                 Log.w(TAG, "[STARTUP] resumePendingCloudUploadVerification failed before startup routing", error)
                             }

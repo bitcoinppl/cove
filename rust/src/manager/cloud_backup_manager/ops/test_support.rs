@@ -155,6 +155,7 @@ struct MockCloudState {
     uploaded_wallet_backups: Vec<(String, String)>,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
     list_wallet_files_attempts: usize,
+    list_wallet_files_attempts_by_namespace: HashMap<String, usize>,
     wallet_backup_upload_attempts: usize,
     dirty_wallet_on_next_upload: Option<WalletId>,
     changed_wallet_on_next_upload: Option<WalletId>,
@@ -316,6 +317,15 @@ impl MockCloudStorage {
 
     pub(crate) fn list_wallet_files_attempt_count(&self) -> usize {
         self.state.lock().list_wallet_files_attempts
+    }
+
+    pub(crate) fn list_wallet_files_attempt_count_for_namespace(&self, namespace: &str) -> usize {
+        self.state
+            .lock()
+            .list_wallet_files_attempts_by_namespace
+            .get(namespace)
+            .copied()
+            .unwrap_or_default()
     }
 
     pub(crate) fn dirty_wallet_on_next_upload(&self, wallet_id: WalletId) {
@@ -504,6 +514,7 @@ impl CloudStorageAccess for MockCloudStorage {
     ) -> Result<Vec<String>, CloudStorageError> {
         let mut state = self.state.lock();
         state.list_wallet_files_attempts += 1;
+        *state.list_wallet_files_attempts_by_namespace.entry(namespace.clone()).or_default() += 1;
         if let Some(error) = state.next_list_wallet_files_error.take() {
             return Err(error);
         }

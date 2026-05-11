@@ -3007,6 +3007,7 @@ mod tests {
             total: Some(2),
         };
 
+        manager.reconcile_runtime_status(CloudBackupStatus::Restoring);
         manager
             .apply_restore_outcome(CloudBackupRestoreOutcome::ProgressReported(progress.clone()));
 
@@ -3079,6 +3080,8 @@ mod tests {
     fn restore_complete_clears_restore_progress() {
         let _guard = test_lock().lock();
         let manager = init_manager();
+
+        manager.reconcile_runtime_status(CloudBackupStatus::Restoring);
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressReported(
             CloudBackupRestoreProgress {
                 stage: CloudBackupRestoreStage::Restoring,
@@ -3112,6 +3115,7 @@ mod tests {
             labels_failed_errors: Vec::new(),
         };
 
+        manager.reconcile_runtime_status(CloudBackupStatus::Restoring);
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressReported(
             CloudBackupRestoreProgress {
                 stage: CloudBackupRestoreStage::Restoring,
@@ -3171,6 +3175,13 @@ mod tests {
             let manager = manager.clone();
             let progress = progress.clone();
             async move {
+                manager
+                    .apply_status_for_restore_operation(
+                        &current_operation,
+                        CloudBackupStatus::Restoring,
+                    )
+                    .await
+                    .unwrap();
                 manager
                     .apply_restore_outcome_for_restore_operation(
                         &current_operation,

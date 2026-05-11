@@ -1149,7 +1149,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 47835.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 24687.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 22196.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 52854.toShort()) {
@@ -4099,7 +4099,7 @@ public interface CloudStorageAccess {
     suspend fun `listNamespaces`(`policy`: CloudAccessPolicy): List<kotlin.String>
     
     /**
-     * List backup locations within a namespace
+     * List wallet backup file names for a namespace and access policy
      */
     suspend fun `listWalletFiles`(`namespace`: kotlin.String, `policy`: CloudAccessPolicy): List<kotlin.String>
     

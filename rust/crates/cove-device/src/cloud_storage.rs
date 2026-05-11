@@ -51,15 +51,9 @@ pub struct RemoteBackupLocation {
     pub relative_path: String,
 }
 
-impl RemoteBackupLocation {
-    fn new(relative_path: String) -> Self {
-        Self { relative_path }
-    }
-}
-
 impl From<String> for RemoteBackupLocation {
     fn from(relative_path: String) -> Self {
-        Self::new(relative_path)
+        Self { relative_path }
     }
 }
 
@@ -118,7 +112,7 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError>;
 
-    /// List backup locations within a namespace
+    /// List wallet backup file names for a namespace and access policy
     async fn list_wallet_files(
         &self,
         namespace: String,

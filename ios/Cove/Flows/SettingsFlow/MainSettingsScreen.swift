@@ -274,7 +274,7 @@ struct MainSettingsScreen: View {
                 case .restoring:
                     cloudBackupRestoringRow
                 case let .failed(failure):
-                    cloudBackupErrorContent(message: failure.message, manager: manager)
+                    cloudBackupErrorContent(message: failure.message)
                 case let .configured(configured):
                     switch configured.passkey {
                     case .available:
@@ -391,7 +391,7 @@ struct MainSettingsScreen: View {
         }
     }
 
-    private func cloudBackupErrorContent(message: String, manager: CloudBackupManager) -> some View {
+    private func cloudBackupErrorContent(message: String) -> some View {
         Group {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -404,11 +404,8 @@ struct MainSettingsScreen: View {
                     .foregroundStyle(.secondary)
             }
 
-            SettingsRow(title: "Retry", symbol: "arrow.clockwise") {
-                manager.dispatch(action: .enableCloudBackup(.init(
-                    savedPasskeyConfirmation: .manual,
-                    verificationSource: .settings
-                )))
+            SettingsRow(title: "Review", symbol: "arrow.right") {
+                app.pushRoute(Route.settings(.cloudBackup))
             }
         }
     }

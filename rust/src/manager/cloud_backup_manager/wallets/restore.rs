@@ -136,10 +136,6 @@ impl WalletBackupReader {
             return Ok(WalletBackupLookup::UnsupportedVersion(version));
         }
 
-        encrypted.remote_metadata.normalized_wallet(&self.namespace, record_id, None).map_err(
-            |error| CloudBackupError::Internal(format!("normalize wallet payload: {error}")),
-        )?;
-
         Ok(WalletBackupLookup::Found(encrypted))
     }
 

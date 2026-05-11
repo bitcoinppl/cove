@@ -58,23 +58,17 @@ impl RustCloudBackupManager {
         // passkey matching first, local master key as fallback
         let passkey = PasskeyAccess::global();
         let restorable_namespaces = match self.restore_via_passkey_matching(&cloud, passkey).await {
-            Ok(matches) => {
-                if matches.is_empty() {
-                    return Err(CloudBackupError::PasskeyMismatch);
-                }
-
-                matches
-                    .into_iter()
-                    .map(|matched| RestorableNamespace {
-                        namespace_id: matched.namespace_id,
-                        master_key: matched.master_key,
-                        passkey: Some(RestorableNamespacePasskey {
-                            credential_id: matched.credential_id,
-                            prf_salt: matched.prf_salt,
-                        }),
-                    })
-                    .collect::<Vec<_>>()
-            }
+            Ok(matches) => matches
+                .into_iter()
+                .map(|matched| RestorableNamespace {
+                    namespace_id: matched.namespace_id,
+                    master_key: matched.master_key,
+                    passkey: Some(RestorableNamespacePasskey {
+                        credential_id: matched.credential_id,
+                        prf_salt: matched.prf_salt,
+                    }),
+                })
+                .collect::<Vec<_>>(),
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
                 info!("Restore: passkey discovery cancelled");
                 return Err(CloudBackupError::PasskeyDiscoveryCancelled);
@@ -208,7 +202,8 @@ impl RustCloudBackupManager {
             return Err(CloudBackupError::Internal("all wallets failed to restore".into()));
         }
 
-        let now = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let now = u64::try_from(jiff::Timestamp::now().as_second())
+            .map_err(|_| CloudBackupError::Internal("invalid system clock".into()))?;
         let state = PersistedCloudBackupState::default()
             .mark_enabled_preserving_verification(now, wallet_count);
         self.persist_cloud_backup_state_for_restore_operation(
@@ -333,7 +328,7 @@ impl RustCloudBackupManager {
     /// Tries the selected passkey across all downloaded namespaces. If it
     /// doesn't match any of them, returns `PasskeyMismatch` so the caller can
     /// try local master key fallback or prompt the user to try a different
-    /// passkey
+    /// passkey. Successful matches are non-empty
     async fn restore_via_passkey_matching(
         &self,
         cloud: &CloudStorageClient,
@@ -489,14 +484,9 @@ impl RustCloudBackupManager {
                 self.do_backup_wallets(&restored_wallets).await.map_err(|error| {
                     blocking_cloud_error(BlockingCloudStep::RecoverOtherBackups, error)
                 })?;
-                current_wallet_record_ids = current_namespace_wallet_record_ids(
-                    cloud,
-                    &current_namespace,
-                    BlockingCloudStep::RecoverOtherBackups,
-                )
-                .await?
-                .into_iter()
-                .collect();
+                current_wallet_record_ids.extend(restored_wallets.iter().map(|metadata| {
+                    cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref())
+                }));
             }
 
             if !wallet_record_ids.is_empty()

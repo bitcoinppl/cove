@@ -8,8 +8,10 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.shouldNotifyRestoreError
 import org.bitcoinppl.cove_core.AppInitException
 import org.bitcoinppl.cove_core.CloudBackupConfiguredState
 import org.bitcoinppl.cove_core.CloudBackupDetailState
+import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
 import org.bitcoinppl.cove_core.CloudBackupFailure
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
@@ -256,6 +258,50 @@ class OnboardingHelpersTest {
         )
         assertFalse(
             shouldCompleteOnboardingCloudBackup(
+                configuredState =
+                    configuredState(
+                        passkey = CloudBackupPasskeyState.Missing,
+                        verification =
+                            CloudBackupVerificationState.Verified(
+                                report = defaultVerificationReport(),
+                                lastVerifiedAt = null,
+                            ),
+                    ),
+                hasPendingUploadVerification = false,
+            ),
+        )
+        assertFalse(
+            shouldCompleteOnboardingCloudBackup(
+                configuredState =
+                    configuredState(
+                        passkey =
+                            CloudBackupPasskeyState.NeedsRepair(
+                                CloudBackupPasskeyRepairState.Idle,
+                            ),
+                        verification =
+                            CloudBackupVerificationState.Verified(
+                                report = defaultVerificationReport(),
+                                lastVerifiedAt = null,
+                            ),
+                    ),
+                hasPendingUploadVerification = false,
+            ),
+        )
+        assertFalse(
+            shouldCompleteOnboardingCloudBackup(
+                configuredState =
+                    configuredState(
+                        verification =
+                            CloudBackupVerificationState.Verified(
+                                report = null,
+                                lastVerifiedAt = null,
+                            ),
+                    ),
+                hasPendingUploadVerification = false,
+            ),
+        )
+        assertFalse(
+            shouldCompleteOnboardingCloudBackup(
                 configuredState = configuredState(verification = CloudBackupVerificationState.NotVerified),
                 hasPendingUploadVerification = false,
             ),
@@ -294,6 +340,7 @@ class OnboardingHelpersTest {
             passkey = passkey,
             verification = verification,
             sync = sync,
+            destructiveOperation = CloudBackupDestructiveOperationState.IDLE,
             detail = CloudBackupDetailState.NotLoaded,
             lastRestoreReport = null,
             rootPrompt = CloudBackupRootPrompt.None,

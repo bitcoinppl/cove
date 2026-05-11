@@ -2299,7 +2299,7 @@ public protocol CloudStorageAccess: AnyObject, Sendable {
     func listNamespaces(policy: CloudAccessPolicy) async throws  -> [String]
     
     /**
-     * List backup locations within a namespace
+     * List wallet backup file names for a namespace and access policy
      */
     func listWalletFiles(namespace: String, policy: CloudAccessPolicy) async throws  -> [String]
     
@@ -3908,7 +3908,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 47835) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 24687) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 22196) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 52854) {

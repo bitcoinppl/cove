@@ -28012,6 +28012,8 @@ data class CloudBackupConfiguredState (
     , 
     var `sync`: CloudBackupSyncState
     , 
+    var `destructiveOperation`: CloudBackupDestructiveOperationState
+    , 
     var `detail`: CloudBackupDetailState
     , 
     var `lastRestoreReport`: CloudBackupRestoreReport?
@@ -28040,6 +28042,7 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupPasskeyState.read(buf),
             FfiConverterTypeCloudBackupVerificationState.read(buf),
             FfiConverterTypeCloudBackupSyncState.read(buf),
+            FfiConverterTypeCloudBackupDestructiveOperationState.read(buf),
             FfiConverterTypeCloudBackupDetailState.read(buf),
             FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
             FfiConverterTypeCloudBackupRootPrompt.read(buf),
@@ -28052,6 +28055,7 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupPasskeyState.allocationSize(value.`passkey`) +
             FfiConverterTypeCloudBackupVerificationState.allocationSize(value.`verification`) +
             FfiConverterTypeCloudBackupSyncState.allocationSize(value.`sync`) +
+            FfiConverterTypeCloudBackupDestructiveOperationState.allocationSize(value.`destructiveOperation`) +
             FfiConverterTypeCloudBackupDetailState.allocationSize(value.`detail`) +
             FfiConverterOptionalTypeCloudBackupRestoreReport.allocationSize(value.`lastRestoreReport`) +
             FfiConverterTypeCloudBackupRootPrompt.allocationSize(value.`rootPrompt`) +
@@ -28063,6 +28067,7 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupPasskeyState.write(value.`passkey`, buf)
             FfiConverterTypeCloudBackupVerificationState.write(value.`verification`, buf)
             FfiConverterTypeCloudBackupSyncState.write(value.`sync`, buf)
+            FfiConverterTypeCloudBackupDestructiveOperationState.write(value.`destructiveOperation`, buf)
             FfiConverterTypeCloudBackupDetailState.write(value.`detail`, buf)
             FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.`lastRestoreReport`, buf)
             FfiConverterTypeCloudBackupRootPrompt.write(value.`rootPrompt`, buf)
@@ -34387,6 +34392,41 @@ public object FfiConverterTypeCkTapError : FfiConverterRustBuffer<CkTapException
     }
 
 }
+
+
+
+
+enum class CloudBackupDestructiveOperationState {
+    
+    IDLE,
+    RECREATING_MANIFEST,
+    REINITIALIZING_BACKUP;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupDestructiveOperationState: FfiConverterRustBuffer<CloudBackupDestructiveOperationState> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupDestructiveOperationState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupDestructiveOperationState) = 4UL
+
+    override fun write(value: CloudBackupDestructiveOperationState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 

@@ -1610,6 +1610,76 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
     assert!(active_records.contains(&third_record_id));
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn enable_treats_missing_wallet_listing_as_empty_during_recovery() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+
+    let prf_key = [7u8; 32];
+    let empty_master_key = cove_cspp::master_key::MasterKey::generate();
+    let wallet_master_key = cove_cspp::master_key::MasterKey::generate();
+    let empty_namespace = empty_master_key.namespace_id();
+    let wallet_namespace = wallet_master_key.namespace_id();
+    let empty_encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(&empty_master_key, &prf_key, &[9; 32])
+            .unwrap();
+    let wallet_encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(&wallet_master_key, &prf_key, &[8; 32])
+            .unwrap();
+
+    globals.cloud.set_master_key_backup(
+        empty_namespace.clone(),
+        serde_json::to_vec(&empty_encrypted).unwrap(),
+    );
+    globals.cloud.set_master_key_backup(
+        wallet_namespace.clone(),
+        serde_json::to_vec(&wallet_encrypted).unwrap(),
+    );
+    globals.cloud.fail_list_wallet_files_for_namespace(
+        empty_namespace.clone(),
+        CloudStorageError::NotFound("wallet files missing".into()),
+    );
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+
+    let wallet = xpub_only_wallet_metadata();
+    let wallet = WalletMetadata { master_fingerprint: None, ..wallet };
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    let revision = crate::manager::cloud_backup_manager::wallets::prepare_wallet_backup(
+        &wallet,
+        wallet.wallet_mode,
+    )
+    .await
+    .unwrap()
+    .revision_hash;
+    globals.cloud.set_wallet_backup(
+        wallet_namespace.clone(),
+        record_id.clone(),
+        encrypted_wallet_backup_bytes(&wallet, &wallet_master_key, &revision, 1).await,
+    );
+    globals.cloud.set_wallet_files(
+        wallet_namespace.clone(),
+        vec![wallet_filename_from_record_id(&record_id)],
+    );
+
+    manager.do_enable_cloud_backup().await.unwrap();
+
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(wallet_namespace.clone()));
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(1));
+    assert!(globals.cloud.has_namespace(&wallet_namespace));
+}
+
 async fn enqueue_cleanup_for_test(
     manager: &RustCloudBackupManager,
     active_namespace: String,
@@ -2228,10 +2298,16 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
         vec![wallet_filename_from_record_id(&record_id)],
     );
 
+    let current_namespace_list_attempt_count =
+        globals.cloud.list_wallet_files_attempt_count_for_namespace(&current_namespace);
     let report = manager.do_recover_other_backups().await.unwrap();
 
     assert_eq!(report.wallets_restored, 1);
     assert_eq!(report.wallets_failed, 0);
+    assert_eq!(
+        globals.cloud.list_wallet_files_attempt_count_for_namespace(&current_namespace),
+        current_namespace_list_attempt_count + 3,
+    );
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
     assert!(!globals.cloud.has_namespace(&other_namespace));
     assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(current_namespace.clone()));

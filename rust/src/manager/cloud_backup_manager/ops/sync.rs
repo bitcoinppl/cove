@@ -1,6 +1,6 @@
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
-use tracing::info;
+use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use super::{
@@ -14,6 +14,7 @@ use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupStore, RustCloudBackupManager,
 };
 
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum FinalizeUploadStateMode {
     PreserveVerification,
     ResetVerification,
@@ -95,11 +96,15 @@ impl RustCloudBackupManager {
         state_mode: FinalizeUploadStateMode,
     ) -> Result<(), CloudBackupError> {
         let db = Database::global();
-        let wallet_count = cloud
-            .list_wallet_backups(namespace_id.to_owned())
-            .await
-            .map(|ids| ids.len() as u32)
-            .unwrap_or(uploaded_wallets.len() as u32);
+        let wallet_count = match cloud.list_wallet_backups(namespace_id.to_owned()).await {
+            Ok(ids) => ids.len() as u32,
+            Err(error) => {
+                warn!(
+                    "Sync: failed to list wallet backups for namespace_id={namespace_id}, falling back to uploaded wallet count: {error}"
+                );
+                uploaded_wallets.len() as u32
+            }
+        };
         match state_mode {
             FinalizeUploadStateMode::PreserveVerification => {
                 CloudBackupStore::new(&db).persist_enabled(wallet_count)?;

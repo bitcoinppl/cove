@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::master_key_crypto;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use cove_util::ResultExt as _;
@@ -238,12 +238,16 @@ impl RustCloudBackupManager {
 
         for matched in matches {
             let wallet_record_ids =
-                cloud.list_wallet_backups(matched.namespace_id.clone()).await.map_err(|error| {
-                    blocking_cloud_error(
-                        BlockingCloudStep::Enable,
-                        CloudBackupError::cloud_storage_context("list wallet backups", error),
-                    )
-                })?;
+                match cloud.list_wallet_backups(matched.namespace_id.clone()).await {
+                    Ok(wallet_record_ids) => wallet_record_ids,
+                    Err(CloudStorageError::NotFound(_)) => Vec::new(),
+                    Err(error) => {
+                        return Err(blocking_cloud_error(
+                            BlockingCloudStep::Enable,
+                            CloudBackupError::cloud_storage_context("list wallet backups", error),
+                        ));
+                    }
+                };
 
             merge_namespaces.push(MergeNamespace { matched, wallet_record_ids });
         }

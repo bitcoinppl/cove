@@ -264,14 +264,6 @@ impl PendingUploadVerifier {
                 encrypted.version
             ));
         }
-        if let Err(error) = encrypted.remote_metadata.normalized_wallet(
-            &sync_state.namespace_id,
-            sync_state.record_id(),
-            None,
-        ) {
-            return BlobCheckResult::terminal_failure(format!("normalize wallet payload: {error}"));
-        }
-
         match reader.decrypt_entry(&encrypted) {
             Ok(entry) => {
                 if let Err(error) = encrypted.remote_metadata.normalized_wallet(

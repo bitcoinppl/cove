@@ -89,8 +89,18 @@ impl RemotePayloadMetadata {
         validate_optional_string("namespace_id", self.namespace_id.as_deref(), namespace_id)?;
         validate_optional_string("record_id", self.record_id.as_deref(), record_id)?;
 
-        if let Some(wallet_id) = wallet_id {
-            validate_optional_string("wallet_id", self.wallet_id.as_deref(), wallet_id)?;
+        match wallet_id {
+            Some(wallet_id) => {
+                validate_optional_string("wallet_id", self.wallet_id.as_deref(), wallet_id)?;
+            }
+            None if let Some(actual) = self.wallet_id.as_deref() => {
+                return Err(RemotePayloadError::Mismatch {
+                    field: "wallet_id",
+                    expected: "none".to_string(),
+                    actual: actual.to_string(),
+                });
+            }
+            None => {}
         }
 
         Ok(NormalizedRemotePayloadMetadata {
@@ -228,5 +238,17 @@ mod tests {
 
         assert_eq!(normalized.kind, RemotePayloadKind::MasterKey);
         assert_eq!(normalized.record_id, MASTER_KEY_RECORD_ID);
+    }
+
+    #[test]
+    fn master_key_payload_metadata_rejects_wallet_id() {
+        let metadata = RemotePayloadMetadata {
+            wallet_id: Some("wallet-a".to_string()),
+            ..RemotePayloadMetadata::default()
+        };
+
+        let error = metadata.normalized_master_key("namespace-a").unwrap_err();
+
+        assert!(matches!(error, RemotePayloadError::Mismatch { field: "wallet_id", .. }));
     }
 }

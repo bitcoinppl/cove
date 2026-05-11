@@ -13009,6 +13009,7 @@ public struct CloudBackupConfiguredState: Equatable, Hashable {
     public var passkey: CloudBackupPasskeyState
     public var verification: CloudBackupVerificationState
     public var sync: CloudBackupSyncState
+    public var destructiveOperation: CloudBackupDestructiveOperationState
     public var detail: CloudBackupDetailState
     public var lastRestoreReport: CloudBackupRestoreReport?
     public var rootPrompt: CloudBackupRootPrompt
@@ -13017,10 +13018,11 @@ public struct CloudBackupConfiguredState: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(passkey: CloudBackupPasskeyState, verification: CloudBackupVerificationState, sync: CloudBackupSyncState, detail: CloudBackupDetailState, lastRestoreReport: CloudBackupRestoreReport?, rootPrompt: CloudBackupRootPrompt, syncHealth: CloudSyncHealth, verificationPresentation: CloudBackupVerificationPresentation) {
+    public init(passkey: CloudBackupPasskeyState, verification: CloudBackupVerificationState, sync: CloudBackupSyncState, destructiveOperation: CloudBackupDestructiveOperationState, detail: CloudBackupDetailState, lastRestoreReport: CloudBackupRestoreReport?, rootPrompt: CloudBackupRootPrompt, syncHealth: CloudSyncHealth, verificationPresentation: CloudBackupVerificationPresentation) {
         self.passkey = passkey
         self.verification = verification
         self.sync = sync
+        self.destructiveOperation = destructiveOperation
         self.detail = detail
         self.lastRestoreReport = lastRestoreReport
         self.rootPrompt = rootPrompt
@@ -13047,6 +13049,7 @@ public struct FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
                 passkey: FfiConverterTypeCloudBackupPasskeyState.read(from: &buf), 
                 verification: FfiConverterTypeCloudBackupVerificationState.read(from: &buf), 
                 sync: FfiConverterTypeCloudBackupSyncState.read(from: &buf), 
+                destructiveOperation: FfiConverterTypeCloudBackupDestructiveOperationState.read(from: &buf), 
                 detail: FfiConverterTypeCloudBackupDetailState.read(from: &buf), 
                 lastRestoreReport: FfiConverterOptionTypeCloudBackupRestoreReport.read(from: &buf), 
                 rootPrompt: FfiConverterTypeCloudBackupRootPrompt.read(from: &buf), 
@@ -13059,6 +13062,7 @@ public struct FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
         FfiConverterTypeCloudBackupPasskeyState.write(value.passkey, into: &buf)
         FfiConverterTypeCloudBackupVerificationState.write(value.verification, into: &buf)
         FfiConverterTypeCloudBackupSyncState.write(value.sync, into: &buf)
+        FfiConverterTypeCloudBackupDestructiveOperationState.write(value.destructiveOperation, into: &buf)
         FfiConverterTypeCloudBackupDetailState.write(value.detail, into: &buf)
         FfiConverterOptionTypeCloudBackupRestoreReport.write(value.lastRestoreReport, into: &buf)
         FfiConverterTypeCloudBackupRootPrompt.write(value.rootPrompt, into: &buf)
@@ -18876,6 +18880,79 @@ public func FfiConverterTypeCkTapError_lift(_ buf: RustBuffer) throws -> CkTapEr
 public func FfiConverterTypeCkTapError_lower(_ value: CkTapError) -> RustBuffer {
     return FfiConverterTypeCkTapError.lower(value)
 }
+
+
+
+public enum CloudBackupDestructiveOperationState: Equatable, Hashable {
+    
+    case idle
+    case recreatingManifest
+    case reinitializingBackup
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupDestructiveOperationState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupDestructiveOperationState: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupDestructiveOperationState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupDestructiveOperationState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .idle
+        
+        case 2: return .recreatingManifest
+        
+        case 3: return .reinitializingBackup
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupDestructiveOperationState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .idle:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .recreatingManifest:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .reinitializingBackup:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDestructiveOperationState_lift(_ buf: RustBuffer) throws -> CloudBackupDestructiveOperationState {
+    return try FfiConverterTypeCloudBackupDestructiveOperationState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDestructiveOperationState_lower(_ value: CloudBackupDestructiveOperationState) -> RustBuffer {
+    return FfiConverterTypeCloudBackupDestructiveOperationState.lower(value)
+}
+
 
 
 

@@ -268,13 +268,18 @@ private struct OnboardingCloudBackupDetailsStepView: View {
 
     private var onboardingMessage: String? {
         if backupManager.isUnsupportedPasskeyProvider {
-            "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
-        } else if let message = backupManager.lifecycleFailureMessage {
-            message
-        } else if case let .failed(failure) = backupManager.verificationState {
-            failure.message()
-        } else {
-            nil
+            return "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
+        }
+
+        if let message = backupManager.lifecycleFailureMessage {
+            return message
+        }
+
+        switch backupManager.verificationState {
+        case let .failed(failure):
+            return failure.message()
+        default:
+            return nil
         }
     }
 
@@ -397,12 +402,6 @@ private struct OnboardingCloudBackupDetailsStepView: View {
             autoConfirmSavedPasskeyIfNeeded()
         }
         .onChange(of: backupManager.lifecycle, initial: true) { _, _ in
-            completeIfEnabled()
-        }
-        .onChange(of: backupManager.hasPendingUploadVerification) { _, _ in
-            completeIfEnabled()
-        }
-        .onChange(of: backupManager.verificationState) { _, _ in
             completeIfEnabled()
         }
         .onChange(of: backupManager.enableFlow, initial: true) { _, _ in
