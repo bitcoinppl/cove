@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_types::network::Network;
@@ -70,8 +71,18 @@ impl CloudBackupStore {
 
         for metadata in self.all_wallets()? {
             let prepared = prepare_wallet_backup(&metadata, metadata.wallet_mode).await?;
-            let encrypted = wallet_crypto::encrypt_wallet_entry(&prepared.entry, critical_key)
-                .map_err_str(CloudBackupError::Crypto)?;
+            let remote_metadata = RemotePayloadMetadata::wallet(
+                namespace,
+                &prepared.record_id,
+                prepared.entry.wallet_id.as_str(),
+                prepared.entry.updated_at,
+            );
+            let encrypted = wallet_crypto::encrypt_wallet_entry_with_remote_metadata(
+                &prepared.entry,
+                critical_key,
+                remote_metadata,
+            )
+            .map_err_str(CloudBackupError::Crypto)?;
 
             let wallet_json =
                 serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;

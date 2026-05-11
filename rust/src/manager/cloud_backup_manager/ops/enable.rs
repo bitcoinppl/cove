@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
@@ -22,9 +23,10 @@ use crate::manager::cloud_backup_manager::workers::{
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnableState, CloudBackupError, CloudBackupKeychain,
-    CloudBackupPasskeyChoiceIntent, CloudBackupStatus, CloudBackupStore, PendingEnableSession,
-    PendingVerificationCompletion, PendingVerificationUpload, SavedPasskeyConfirmationMode,
-    VerificationState, is_connectivity_related_issue, master_key_wrapper_revision_hash,
+    CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt, CloudBackupStatus, CloudBackupStore,
+    PendingEnableSession, PendingVerificationCompletion, PendingVerificationUpload,
+    SavedPasskeyConfirmationMode, VerificationState, is_connectivity_related_issue,
+    master_key_wrapper_revision_hash,
 };
 use crate::wallet::metadata::WalletMetadata;
 
@@ -698,11 +700,13 @@ impl RustCloudBackupManager {
         ))
         .await;
 
-        let encrypted_master = master_key_crypto::encrypt_master_key_with_provider_hint(
+        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let encrypted_master = master_key_crypto::encrypt_master_key_with_remote_metadata(
             &master_key,
             &passkey.prf_key,
             &passkey.prf_salt,
             passkey.provider_hint.clone(),
+            RemotePayloadMetadata::master_key(&namespace_id, uploaded_at),
         )
         .map_err_str(CloudBackupError::Crypto)?;
         let master_json =
@@ -732,7 +736,6 @@ impl RustCloudBackupManager {
             .save_passkey_and_namespace(&passkey.credential_id, passkey.prf_salt, &namespace_id)
             .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
 
-        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
         self.mark_blob_uploaded_pending_confirmation(
             &namespace_id,
             CloudBackupRecordKey::MasterKeyWrapper,
@@ -765,10 +768,26 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn clear_enable_progress(&self, status: CloudBackupStatus) {
+        let snapshot = self.model_snapshot();
+        let preserve_awaiting_prompt = matches!(status, CloudBackupStatus::Disabled)
+            && matches!(snapshot.status, CloudBackupStatus::Enabling)
+            && matches!(
+                snapshot.root_prompt,
+                CloudBackupRootPrompt::ExistingBackupFound(_, _)
+                    | CloudBackupRootPrompt::PasskeyChoice(CloudBackupPasskeyChoiceIntent::Enable(
+                        _,
+                        _,
+                    ))
+            );
+
         self.set_progress(None);
         self.set_restore_progress(None);
         self.set_enable_state(CloudBackupEnableState::Idle);
-        self.set_status(status);
+        if preserve_awaiting_prompt {
+            self.set_status(CloudBackupStatus::Enabling);
+        } else {
+            self.set_status(status);
+        }
     }
 
     pub(crate) async fn stage_registered_passkey_for_confirmation(

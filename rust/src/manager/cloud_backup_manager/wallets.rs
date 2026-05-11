@@ -64,7 +64,17 @@ pub(crate) struct DownloadedWalletBackup {
 pub(crate) struct RemoteWalletBackupSummary {
     pub(crate) revision_hash: String,
     pub(crate) label_count: u32,
-    pub(crate) updated_at: u64,
+    pub(crate) updated_at: Option<u64>,
+}
+
+impl RemoteWalletBackupSummary {
+    pub(crate) fn from_entry(entry: &WalletEntry) -> Self {
+        Self {
+            revision_hash: entry.content_revision_hash.clone(),
+            label_count: entry.labels_count,
+            updated_at: (entry.updated_at != 0).then_some(entry.updated_at),
+        }
+    }
 }
 
 pub(crate) struct PreparedWalletBackup {

@@ -6,10 +6,18 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.resolveRestorePhase
 import org.bitcoinppl.cove.flows.OnboardingFlow.shouldCompleteOnboardingCloudBackup
 import org.bitcoinppl.cove.flows.OnboardingFlow.shouldNotifyRestoreError
 import org.bitcoinppl.cove_core.AppInitException
+import org.bitcoinppl.cove_core.CloudBackupConfiguredState
+import org.bitcoinppl.cove_core.CloudBackupDetailState
+import org.bitcoinppl.cove_core.CloudBackupFailure
+import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
 import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRestoreStage
-import org.bitcoinppl.cove_core.CloudBackupStatus
+import org.bitcoinppl.cove_core.CloudBackupRootPrompt
+import org.bitcoinppl.cove_core.CloudBackupSyncState
+import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
+import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.DeepVerificationReport
 import org.bitcoinppl.cove_core.OnboardingBranch
@@ -17,8 +25,7 @@ import org.bitcoinppl.cove_core.OnboardingCloudRestoreState
 import org.bitcoinppl.cove_core.OnboardingReconcileMessage
 import org.bitcoinppl.cove_core.OnboardingState
 import org.bitcoinppl.cove_core.OnboardingStep
-import org.bitcoinppl.cove_core.PendingUploadVerificationState
-import org.bitcoinppl.cove_core.VerificationState
+import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,7 +39,7 @@ class OnboardingHelpersTest {
             resolveStartupMode(
                 termsAccepted = false,
                 hasWallets = false,
-                cloudBackupStatus = CloudBackupStatus.Disabled,
+                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
                 hasPersistedOnboardingProgress = false,
             ),
         )
@@ -41,7 +48,7 @@ class OnboardingHelpersTest {
             resolveStartupMode(
                 termsAccepted = false,
                 hasWallets = true,
-                cloudBackupStatus = CloudBackupStatus.Enabled,
+                cloudBackupLifecycle = configuredLifecycle(),
                 hasPersistedOnboardingProgress = false,
             ),
         )
@@ -50,7 +57,7 @@ class OnboardingHelpersTest {
             resolveStartupMode(
                 termsAccepted = true,
                 hasWallets = false,
-                cloudBackupStatus = CloudBackupStatus.Disabled,
+                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
                 hasPersistedOnboardingProgress = false,
             ),
         )
@@ -59,7 +66,7 @@ class OnboardingHelpersTest {
             resolveStartupMode(
                 termsAccepted = true,
                 hasWallets = false,
-                cloudBackupStatus = CloudBackupStatus.Enabled,
+                cloudBackupLifecycle = configuredLifecycle(),
                 hasPersistedOnboardingProgress = false,
             ),
         )
@@ -68,7 +75,7 @@ class OnboardingHelpersTest {
             resolveStartupMode(
                 termsAccepted = true,
                 hasWallets = false,
-                cloudBackupStatus = CloudBackupStatus.PasskeyMissing,
+                cloudBackupLifecycle = configuredLifecycle(passkey = CloudBackupPasskeyState.Missing),
                 hasPersistedOnboardingProgress = false,
             ),
         )
@@ -77,7 +84,7 @@ class OnboardingHelpersTest {
             resolveStartupMode(
                 termsAccepted = true,
                 hasWallets = true,
-                cloudBackupStatus = CloudBackupStatus.Disabled,
+                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
                 hasPersistedOnboardingProgress = false,
             ),
         )
@@ -86,7 +93,7 @@ class OnboardingHelpersTest {
             resolveStartupMode(
                 termsAccepted = true,
                 hasWallets = true,
-                cloudBackupStatus = CloudBackupStatus.Enabled,
+                cloudBackupLifecycle = configuredLifecycle(),
                 hasPersistedOnboardingProgress = true,
             ),
         )
@@ -179,7 +186,7 @@ class OnboardingHelpersTest {
 
         val completePhase =
             resolveRestorePhase(
-                status = CloudBackupStatus.Enabled,
+                lifecycle = configuredLifecycle(),
                 restoreReport = report,
                 currentPhase = OnboardingRestorePhase.Restoring,
             )
@@ -187,7 +194,13 @@ class OnboardingHelpersTest {
 
         val errorPhase =
             resolveRestorePhase(
-                status = CloudBackupStatus.Error("restore failed"),
+                lifecycle =
+                    CloudBackupLifecycle.Failed(
+                        CloudBackupFailure(
+                            message = "restore failed",
+                            restoreReport = null,
+                        ),
+                    ),
                 restoreReport = null,
                 currentPhase = OnboardingRestorePhase.Restoring,
             )
@@ -211,43 +224,82 @@ class OnboardingHelpersTest {
     fun shouldCompleteOnboardingCloudBackupRequiresCompletedVerification() {
         assertTrue(
             shouldCompleteOnboardingCloudBackup(
-                status = CloudBackupStatus.Enabled,
-                pendingUploadVerification = PendingUploadVerificationState.IDLE,
-                verification = VerificationState.Verified(defaultVerificationReport()),
-            ),
-        )
-        assertFalse(
-            shouldCompleteOnboardingCloudBackup(
-                status = CloudBackupStatus.Enabling,
-                pendingUploadVerification = PendingUploadVerificationState.IDLE,
-                verification = VerificationState.Verified(defaultVerificationReport()),
-            ),
-        )
-        assertFalse(
-            shouldCompleteOnboardingCloudBackup(
-                status = CloudBackupStatus.Enabled,
-                pendingUploadVerification = PendingUploadVerificationState.CONFIRMING,
-                verification = VerificationState.Verified(defaultVerificationReport()),
-            ),
-        )
-        assertFalse(
-            shouldCompleteOnboardingCloudBackup(
-                status = CloudBackupStatus.Enabled,
-                pendingUploadVerification = PendingUploadVerificationState.IDLE,
-                verification = VerificationState.Idle,
-            ),
-        )
-        assertFalse(
-            shouldCompleteOnboardingCloudBackup(
-                status = CloudBackupStatus.Enabled,
-                pendingUploadVerification = PendingUploadVerificationState.IDLE,
-                verification =
-                    VerificationState.Failed(
-                        DeepVerificationFailure.Retry("verification failed", null, null),
+                configuredState =
+                    configuredState(
+                        verification =
+                            CloudBackupVerificationState.Verified(
+                                report = defaultVerificationReport(),
+                                lastVerifiedAt = null,
+                            ),
                     ),
+                hasPendingUploadVerification = false,
+            ),
+        )
+        assertFalse(
+            shouldCompleteOnboardingCloudBackup(
+                configuredState = null,
+                hasPendingUploadVerification = false,
+            ),
+        )
+        assertFalse(
+            shouldCompleteOnboardingCloudBackup(
+                configuredState =
+                    configuredState(
+                        verification =
+                            CloudBackupVerificationState.Verified(
+                                report = defaultVerificationReport(),
+                                lastVerifiedAt = null,
+                            ),
+                    ),
+                hasPendingUploadVerification = true,
+            ),
+        )
+        assertFalse(
+            shouldCompleteOnboardingCloudBackup(
+                configuredState = configuredState(verification = CloudBackupVerificationState.NotVerified),
+                hasPendingUploadVerification = false,
+            ),
+        )
+        assertFalse(
+            shouldCompleteOnboardingCloudBackup(
+                configuredState =
+                    configuredState(
+                        verification =
+                            CloudBackupVerificationState.Failed(
+                                DeepVerificationFailure.Retry("verification failed", null, null),
+                            ),
+                    ),
+                hasPendingUploadVerification = false,
             ),
         )
     }
+
+    private fun configuredLifecycle(
+        passkey: CloudBackupPasskeyState = CloudBackupPasskeyState.Available,
+        verification: CloudBackupVerificationState = CloudBackupVerificationState.NotVerified,
+    ): CloudBackupLifecycle =
+        CloudBackupLifecycle.Configured(
+            configuredState(
+                passkey = passkey,
+                verification = verification,
+            ),
+        )
+
+    private fun configuredState(
+        passkey: CloudBackupPasskeyState = CloudBackupPasskeyState.Available,
+        verification: CloudBackupVerificationState = CloudBackupVerificationState.NotVerified,
+        sync: CloudBackupSyncState = CloudBackupSyncState.Idle,
+    ): CloudBackupConfiguredState =
+        CloudBackupConfiguredState(
+            passkey = passkey,
+            verification = verification,
+            sync = sync,
+            detail = CloudBackupDetailState.NotLoaded,
+            lastRestoreReport = null,
+            rootPrompt = CloudBackupRootPrompt.None,
+            syncHealth = CloudSyncHealth.Unknown,
+            verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
+        )
 
     private fun defaultVerificationReport() =
         DeepVerificationReport(

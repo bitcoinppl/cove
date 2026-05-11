@@ -107,11 +107,20 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     }
 
     var rootPrompt: CloudBackupRootPrompt {
-        state.rootPrompt
+        switch state.lifecycle {
+        case let .enabling(.awaitingForceNewConfirmation(context, passkeyHint)):
+            .existingBackupFound(context, passkeyHint)
+        case let .enabling(.awaitingPasskeyChoice(intent)):
+            .passkeyChoice(intent)
+        case let .configured(configured):
+            configured.rootPrompt
+        default:
+            .none
+        }
     }
 
     var syncHealth: CloudSyncHealth {
-        state.syncHealth
+        configuredState?.syncHealth ?? .unknown
     }
 
     var progress: (completed: UInt32, total: UInt32)? {
@@ -198,7 +207,7 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     }
 
     var verificationPresentation: CloudBackupVerificationPresentation {
-        state.verificationPresentation
+        configuredState?.verificationPresentation ?? .hidden(source: nil)
     }
 
     var cloudOnly: CloudOnlyState {
@@ -240,12 +249,6 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         switch message {
         case let .lifecycle(lifecycle):
             state.lifecycle = lifecycle
-        case let .rootPrompt(rootPrompt):
-            state.rootPrompt = rootPrompt
-        case let .syncHealth(syncHealth):
-            state.syncHealth = syncHealth
-        case let .verificationPresentation(presentation):
-            state.verificationPresentation = presentation
         }
     }
 

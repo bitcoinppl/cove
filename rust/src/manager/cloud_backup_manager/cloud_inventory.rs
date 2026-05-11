@@ -184,7 +184,7 @@ impl CloudWalletInventory {
         match self.remote_wallet_state(wallet) {
             RemoteWalletState::Matching(remote_summary)
             | RemoteWalletState::Stale(remote_summary) => {
-                return Some(remote_summary.updated_at);
+                return remote_summary.updated_at;
             }
             RemoteWalletState::Unknown
             | RemoteWalletState::Unsupported
@@ -322,7 +322,7 @@ mod tests {
                     RemoteWalletBackupSummary {
                         revision_hash: "rev-1".into(),
                         label_count: 2,
-                        updated_at: 50,
+                        updated_at: Some(50),
                     },
                 )]),
                 unsupported_record_ids: HashSet::new(),
@@ -362,7 +362,7 @@ mod tests {
                     RemoteWalletBackupSummary {
                         revision_hash: "rev-1".into(),
                         label_count: 1,
-                        updated_at: 10,
+                        updated_at: Some(10),
                     },
                 )]),
                 unsupported_record_ids: HashSet::new(),
@@ -553,7 +553,7 @@ mod tests {
                         RemoteWalletBackupSummary {
                             revision_hash: "stale-uploading".into(),
                             label_count: 0,
-                            updated_at: 5,
+                            updated_at: Some(5),
                         },
                     ),
                     (
@@ -561,7 +561,7 @@ mod tests {
                         RemoteWalletBackupSummary {
                             revision_hash: "stale-pending".into(),
                             label_count: 0,
-                            updated_at: 6,
+                            updated_at: Some(6),
                         },
                     ),
                 ]),

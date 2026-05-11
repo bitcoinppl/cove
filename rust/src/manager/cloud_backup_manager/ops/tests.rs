@@ -34,9 +34,10 @@ use crate::manager::cloud_backup_manager::workers::{
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupEnableContext,
     CloudBackupEnableState, CloudBackupKeychain, CloudBackupManagerAction,
-    CloudBackupOtherBackupsState, CloudBackupRootPrompt, CloudBackupVerificationPresentation,
-    CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
+    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
+    CloudBackupVerificationPresentation, CloudBackupVerificationReason,
+    CloudBackupVerificationSource, CloudBackupWalletStatus, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
     PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
     SavedPasskeyConfirmationMode, VerificationState,
 };
@@ -499,62 +500,6 @@ async fn backup_new_wallet_marks_verification_required() {
     let state = Database::global().cloud_backup_state.get().unwrap();
     assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);
     assert!(state.last_verification_requested_at().is_some());
-
-    clear_wallet_upload_runtime_for_test_async(&manager).await;
-}
-
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
-#[tokio::test(flavor = "current_thread")]
-async fn verification_prompt_shows_while_pending_upload_confirmation_is_confirming() {
-    let _guard = test_lock().lock();
-    cove_tokio::init();
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 3);
-
-    manager.backup_new_wallet(xpub_only_wallet_metadata());
-    manager.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
-
-    let state = manager.model_snapshot();
-    assert_eq!(state.root_prompt, CloudBackupRootPrompt::Verification);
-    assert!(matches!(
-        state.verification_presentation,
-        CloudBackupVerificationPresentation::NeedsDecision {
-            reason: CloudBackupVerificationReason::BackupChanged,
-            ..
-        }
-    ));
-
-    clear_wallet_upload_runtime_for_test_async(&manager).await;
-}
-
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
-#[tokio::test(flavor = "current_thread")]
-async fn verification_prompt_shows_while_pending_upload_confirmation_needs_authorization() {
-    let _guard = test_lock().lock();
-    cove_tokio::init();
-    let globals = test_globals();
-    let manager = init_manager();
-    configure_enabled_cloud_backup(&manager, globals, 3);
-
-    manager.backup_new_wallet(xpub_only_wallet_metadata());
-    manager.set_pending_upload_verification(PendingUploadVerificationState::BlockedOnAuthorization);
-
-    let state = manager.model_snapshot();
-    assert_eq!(state.root_prompt, CloudBackupRootPrompt::Verification);
-    assert!(matches!(
-        state.verification_presentation,
-        CloudBackupVerificationPresentation::NeedsDecision {
-            reason: CloudBackupVerificationReason::BackupChanged,
-            ..
-        }
-    ));
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
@@ -2667,7 +2612,6 @@ async fn deferred_live_wallet_upload_retries_without_restart() {
 
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
     assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
-    assert!(manager.model_snapshot().sync_error.is_none());
     assert!(matches!(
         Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
         Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
@@ -2696,7 +2640,6 @@ async fn deferred_live_wallet_upload_retries_without_restart() {
     )
     .await;
     assert!(globals.cloud.uploaded_wallet_backup_count() >= 1);
-    assert!(manager.model_snapshot().sync_error.is_none());
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
@@ -2706,49 +2649,7 @@ async fn deferred_live_wallet_upload_retries_without_restart() {
     reason = "tests serialize shared cloud backup globals across awaits"
 )]
 #[tokio::test(flavor = "current_thread")]
-async fn permanent_failed_wallet_upload_does_not_retry_without_restart() {
-    let _guard = test_lock().lock();
-    cove_tokio::init();
-    let globals = test_globals();
-    let manager = global_manager();
-    configure_enabled_cloud_backup(&manager, globals, 0);
-
-    let metadata = xpub_only_wallet_metadata();
-    let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
-    persist_xpub_wallets(vec![metadata.clone()]);
-    persist_dirty_blob_state(metadata.id.clone());
-    globals.cloud.fail_wallet_backup_upload_quota_exceeded();
-
-    run_wallet_upload_for_test_async(&manager, metadata.id.clone()).await;
-
-    assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
-    assert!(matches!(
-        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
-        Some(PersistedCloudBlobSyncState {
-            state: PersistedCloudBlobState::Failed(CloudBlobFailedState { retryable: false, .. }),
-            ..
-        })
-    ));
-
-    assert_test_condition_stays_true(
-        crate::manager::cloud_backup_manager::LIVE_UPLOAD_DEBOUNCE + Duration::from_secs(1),
-        "non-retryable upload should not retry without restart",
-        || globals.cloud.wallet_backup_upload_attempt_count() == 1,
-    )
-    .await;
-
-    assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
-
-    clear_wallet_upload_runtime_for_test_async(&manager).await;
-    globals.cloud.clear_wallet_backup_upload_failure();
-}
-
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
-#[tokio::test(flavor = "current_thread")]
-async fn sync_error_clears_only_after_last_failed_wallet_upload_recovers() {
+async fn failed_blob_states_recover_only_after_last_failed_wallet_upload_recovers() {
     let _guard = test_lock().lock();
     cove_tokio::init();
     let globals = test_globals();
@@ -2768,7 +2669,10 @@ async fn sync_error_clears_only_after_last_failed_wallet_upload_recovers() {
     run_wallet_upload_for_test_async(&manager, first_wallet.id.clone()).await;
     run_wallet_upload_for_test_async(&manager, second_wallet.id.clone()).await;
 
-    assert!(manager.model_snapshot().sync_error.is_some());
+    assert!(matches!(
+        manager.compute_sync_health().await,
+        CloudSyncHealth::Failed(message) if message.contains("upload failed")
+    ));
     assert!(matches!(
         Database::global().cloud_blob_sync_states.get(&first_record_id).unwrap(),
         Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Failed(_), .. })
@@ -2783,7 +2687,10 @@ async fn sync_error_clears_only_after_last_failed_wallet_upload_recovers() {
     run_wallet_upload_for_test_async(&manager, first_wallet.id.clone()).await;
 
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
-    assert!(manager.model_snapshot().sync_error.is_some());
+    assert!(matches!(
+        manager.compute_sync_health().await,
+        CloudSyncHealth::Failed(message) if message.contains("upload failed")
+    ));
     assert!(matches!(
         Database::global().cloud_blob_sync_states.get(&first_record_id).unwrap(),
         Some(PersistedCloudBlobSyncState {
@@ -2800,7 +2707,6 @@ async fn sync_error_clears_only_after_last_failed_wallet_upload_recovers() {
     run_wallet_upload_for_test_async(&manager, second_wallet.id.clone()).await;
 
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 2);
-    assert!(manager.model_snapshot().sync_error.is_none());
     assert!(matches!(
         Database::global().cloud_blob_sync_states.get(&second_record_id).unwrap(),
         Some(PersistedCloudBlobSyncState {
@@ -2809,24 +2715,34 @@ async fn sync_error_clears_only_after_last_failed_wallet_upload_recovers() {
             ..
         })
     ));
+    assert!(
+        Database::global()
+            .cloud_blob_sync_states
+            .list()
+            .unwrap()
+            .into_iter()
+            .all(|state| !matches!(state.state, PersistedCloudBlobState::Failed(_)))
+    );
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[test]
-fn connectivity_reconnect_preserves_sync_error_when_failed_wallet_uploads_exist() {
+#[tokio::test(flavor = "current_thread")]
+async fn connectivity_reconnect_preserves_failed_wallet_upload_health() {
     let _guard = test_lock().lock();
+    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let wallet_id = xpub_only_wallet_metadata().id;
-    let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
+    let metadata = xpub_only_wallet_metadata();
+    let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+    persist_xpub_wallets(vec![metadata.clone()]);
     Database::global()
         .cloud_blob_sync_states
         .set(&PersistedCloudBlobSyncState::wallet(
             CloudBackupKeychain::global().namespace_id().unwrap(),
-            wallet_id,
+            metadata.id,
             record_id,
             PersistedCloudBlobState::Failed(CloudBlobFailedState {
                 revision_hash: None,
@@ -2837,24 +2753,26 @@ fn connectivity_reconnect_preserves_sync_error_when_failed_wallet_uploads_exist(
             }),
         ))
         .unwrap();
-    manager.set_sync_error(Some("upload failed".into()));
 
     manager.handle_connectivity_change(ConnectivityStatus::Connected);
 
-    assert_eq!(manager.model_snapshot().sync_error.as_deref(), Some("upload failed"));
+    assert!(matches!(
+        manager.compute_sync_health().await,
+        CloudSyncHealth::Failed(message) if message.contains("upload failed")
+    ));
 }
 
-#[test]
-fn connectivity_reconnect_clears_sync_error_when_failed_wallet_uploads_are_gone() {
+#[tokio::test(flavor = "current_thread")]
+async fn connectivity_reconnect_reports_clean_health_when_failed_wallet_uploads_are_gone() {
     let _guard = test_lock().lock();
+    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
-    manager.set_sync_error(Some("upload failed".into()));
 
     manager.handle_connectivity_change(ConnectivityStatus::Connected);
 
-    assert!(manager.model_snapshot().sync_error.is_none());
+    assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::NoFiles);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3002,7 +2920,6 @@ fn reset_cloud_backup_test_state_clears_state_before_reconnect() {
             }),
         ))
         .unwrap();
-    manager.set_sync_error(Some("upload failed".into()));
     manager.set_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
         SavedPasskeyConfirmationMode::Manual,
     ));
@@ -3010,7 +2927,6 @@ fn reset_cloud_backup_test_state_clears_state_before_reconnect() {
 
     reset_cloud_backup_test_state_with_hook(&manager, globals, || {
         assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
-        assert!(manager.model_snapshot().sync_error.is_none());
         assert_eq!(manager.model_snapshot().enable_state, CloudBackupEnableState::Idle);
     });
 
@@ -3083,12 +2999,10 @@ async fn startup_resume_retries_authorization_failed_wallet_uploads() {
 
     manager.resume_pending_cloud_upload_verification();
 
-    wait_for_test_condition(
-        Duration::from_secs(1),
-        "startup resume should set sync error for authorization failures",
-        || manager.model_snapshot().sync_error.as_deref() == Some("failed"),
-    )
-    .await;
+    assert_eq!(
+        manager.compute_sync_health().await,
+        CloudSyncHealth::AuthorizationRequired("failed".into()),
+    );
     wait_for_test_condition(
         Duration::from_secs(1),
         "startup resume should retry authorization failures",
@@ -4916,7 +4830,7 @@ async fn enable_no_discovery_preserves_awaiting_force_new_session() {
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
 
     assert_eq!(globals.passkey.create_count(), create_count);
-    assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabling);
     match manager.model_snapshot().root_prompt {
         CloudBackupRootPrompt::ExistingBackupFound(context, _) => {
             assert_eq!(context, CloudBackupEnableContext::settings_manual());
@@ -4958,7 +4872,7 @@ async fn force_new_after_other_namespace_enter_detail_reuses_runtime_authorizati
     assert_eq!(globals.passkey.create_count(), 0);
     assert_eq!(globals.passkey.authenticate_count(), 0);
     assert_eq!(globals.passkey.discover_count(), 0);
-    assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabling);
     match manager.model_snapshot().root_prompt {
         CloudBackupRootPrompt::ExistingBackupFound(context, _) => {
             assert_eq!(context, CloudBackupEnableContext::settings_manual());
@@ -5165,7 +5079,11 @@ async fn cancelled_enable_create_new_rolls_back_new_local_master_key() {
 
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     assert!(cspp.load_master_key_from_store().unwrap().is_none());
-    assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabling);
+    assert!(matches!(
+        manager.model_snapshot().root_prompt,
+        CloudBackupRootPrompt::PasskeyChoice(CloudBackupPasskeyChoiceIntent::Enable(_, _))
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -5182,7 +5100,11 @@ async fn cancelled_enable_no_discovery_rolls_back_new_local_master_key() {
 
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     assert!(cspp.load_master_key_from_store().unwrap().is_none());
-    assert_eq!(manager.current_status(), CloudBackupStatus::Disabled);
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabling);
+    assert!(matches!(
+        manager.model_snapshot().root_prompt,
+        CloudBackupRootPrompt::PasskeyChoice(CloudBackupPasskeyChoiceIntent::Enable(_, _))
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]

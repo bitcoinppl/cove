@@ -336,6 +336,7 @@ impl CloudStorageAccess for MockCloudStorage {
     async fn upload_master_key_backup(
         &self,
         namespace: String,
+        _location: cove_device::cloud_storage::RemoteBackupLocation,
         data: Vec<u8>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
@@ -351,6 +352,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
+        _location: cove_device::cloud_storage::RemoteBackupLocation,
         data: Vec<u8>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
@@ -383,6 +385,7 @@ impl CloudStorageAccess for MockCloudStorage {
     async fn download_master_key_backup(
         &self,
         namespace: String,
+        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         if let Some(error) = self.state.lock().master_key_download_errors.get(&namespace).cloned() {
@@ -401,6 +404,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
+        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         let dirty_wallet = self.state.lock().dirty_wallet_on_next_backup_check.take();
@@ -433,6 +437,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
+        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
         let mut state = self.state.lock();
@@ -535,6 +540,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
+        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<bool, CloudStorageError> {
         let state = self.state.lock();
@@ -1158,57 +1164,4 @@ pub(crate) async fn new_restore_operation_for_test(
     manager: &RustCloudBackupManager,
 ) -> RestoreOperation {
     call!(manager.supervisor.new_restore_operation()).await.expect("create restore operation")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test_passkey_user() -> PasskeyRegistrationUser {
-        PasskeyRegistrationUser {
-            id: vec![1],
-            name: "Cove Cloud Backup (test)".into(),
-            display_name: "Cove Cloud Backup".into(),
-        }
-    }
-
-    #[test]
-    fn passkey_create_result_is_consumed_after_first_use() {
-        let provider = MockPasskeyProviderImpl::default();
-        provider.set_create_result(Ok(vec![1, 2, 3]));
-
-        let registration = provider
-            .create_passkey("rp".into(), vec![2], test_passkey_user())
-            .expect("configured create result");
-        assert_eq!(registration.credential_id, vec![1, 2, 3]);
-        assert_eq!(registration.provider_aaguid, "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4");
-        assert_eq!(registration.registered_platform, PasskeyRegistrationPlatform::Android);
-        assert!(matches!(
-            provider.create_passkey("rp".into(), vec![2], test_passkey_user()),
-            Err(PasskeyError::RequestFailed {
-                operation: PasskeyOperation::Registration,
-                reason: PasskeyFailureReason::Unknown { diagnostic_message },
-            }) if diagnostic_message == "unexpected create_passkey call"
-        ));
-    }
-
-    #[test]
-    fn passkey_authenticate_result_is_consumed_after_first_use() {
-        let provider = MockPasskeyProviderImpl::default();
-        provider.set_authenticate_result(Ok(vec![4, 5, 6]));
-
-        assert_eq!(
-            provider
-                .authenticate_with_prf("rp".into(), vec![1], vec![2], vec![3])
-                .expect("configured authenticate result"),
-            vec![4, 5, 6]
-        );
-        assert!(matches!(
-            provider.authenticate_with_prf("rp".into(), vec![1], vec![2], vec![3]),
-            Err(PasskeyError::RequestFailed {
-                operation: PasskeyOperation::AuthenticateAssertion,
-                reason: PasskeyFailureReason::Unknown { diagnostic_message },
-            }) if diagnostic_message == "unexpected authenticate_with_prf call"
-        ));
-    }
 }

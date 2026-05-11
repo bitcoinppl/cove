@@ -8,22 +8,19 @@ use super::{
     RecoveryState, SyncState, VerificationState,
 };
 
-use super::prompt::CloudBackupPromptState;
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use cove_device::cloud_storage::CloudSyncHealth;
 
 #[derive(Debug, Clone)]
 pub(crate) struct CloudBackupModel {
     state: CloudBackupModelState,
-    prompt: CloudBackupPromptState,
 }
 
 #[derive(Debug, Clone)]
 struct CloudBackupModelState {
-    root_prompt: CloudBackupRootPrompt,
     lifecycle: CloudBackupLifecycle,
     sync_health: CloudSyncHealth,
-    sync_error: Option<String>,
+    missing_passkey_dismissed: bool,
     should_prompt_verification: bool,
     verification_metadata: CloudBackupVerificationMetadata,
     verification_presentation: CloudBackupVerificationPresentation,
@@ -32,10 +29,9 @@ struct CloudBackupModelState {
 impl Default for CloudBackupModelState {
     fn default() -> Self {
         Self {
-            root_prompt: CloudBackupRootPrompt::None,
             lifecycle: CloudBackupLifecycle::Disabled,
             sync_health: CloudSyncHealth::Unknown,
-            sync_error: None,
+            missing_passkey_dismissed: false,
             should_prompt_verification: false,
             verification_metadata: CloudBackupVerificationMetadata::NotConfigured,
             verification_presentation: CloudBackupVerificationPresentation::Hidden { source: None },
@@ -48,10 +44,9 @@ impl From<CloudBackupModelSnapshot> for CloudBackupModelState {
         let lifecycle = CloudBackupModelState::project_lifecycle_from_snapshot(&state);
 
         Self {
-            root_prompt: state.root_prompt,
             lifecycle,
             sync_health: state.sync_health,
-            sync_error: state.sync_error,
+            missing_passkey_dismissed: state.missing_passkey_dismissed,
             should_prompt_verification: state.should_prompt_verification,
             verification_metadata: state.verification_metadata,
             verification_presentation: state.verification_presentation,
@@ -63,15 +58,15 @@ impl CloudBackupModelState {
     fn snapshot(&self) -> CloudBackupModelSnapshot {
         CloudBackupModelSnapshot {
             lifecycle: self.lifecycle.clone(),
-            root_prompt: self.root_prompt.clone(),
+            root_prompt: self.explicit_root_prompt(),
             status: self.status(),
             sync_health: self.sync_health.clone(),
             progress: self.progress(),
             restore_progress: self.restore_progress(),
             restore_report: self.restore_report(),
-            sync_error: self.sync_error.clone(),
             enable_state: self.enable_state(),
             pending_upload_verification: self.pending_upload_verification(),
+            missing_passkey_dismissed: self.missing_passkey_dismissed,
             should_prompt_verification: self.should_prompt_verification,
             verification_metadata: self.verification_metadata.clone(),
             verification_presentation: self.verification_presentation.clone(),
@@ -82,6 +77,38 @@ impl CloudBackupModelState {
             cloud_only: self.cloud_only(),
             cloud_only_operation: self.cloud_only_operation(),
             other_backups_operation: self.other_backups_operation(),
+        }
+    }
+
+    fn explicit_root_prompt(&self) -> CloudBackupRootPrompt {
+        match &self.lifecycle {
+            CloudBackupLifecycle::Enabling(
+                CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, passkey_hint),
+            ) => CloudBackupRootPrompt::ExistingBackupFound(*context, passkey_hint.clone()),
+            CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::AwaitingPasskeyChoice(
+                intent,
+            )) => CloudBackupRootPrompt::PasskeyChoice(intent.clone()),
+            CloudBackupLifecycle::Enabling(
+                CloudBackupEnableFlow::DiscoveringExistingBackup
+                | CloudBackupEnableFlow::CreatingPasskey
+                | CloudBackupEnableFlow::WaitingForPasskeyAvailability
+                | CloudBackupEnableFlow::AwaitingSavedPasskeyConfirmation(_)
+                | CloudBackupEnableFlow::ConfirmingSavedPasskey
+                | CloudBackupEnableFlow::UploadingInitialBackup { .. }
+                | CloudBackupEnableFlow::RetryingUploadWithStagedMaterial { .. },
+            ) => CloudBackupRootPrompt::None,
+            CloudBackupLifecycle::Configured(configured) => match &configured.root_prompt {
+                CloudBackupRootPrompt::PasskeyChoice(intent) => {
+                    CloudBackupRootPrompt::PasskeyChoice(intent.clone())
+                }
+                CloudBackupRootPrompt::None
+                | CloudBackupRootPrompt::ExistingBackupFound(_, _)
+                | CloudBackupRootPrompt::MissingPasskeyReminder
+                | CloudBackupRootPrompt::Verification => CloudBackupRootPrompt::None,
+            },
+            CloudBackupLifecycle::Disabled
+            | CloudBackupLifecycle::Restoring(_)
+            | CloudBackupLifecycle::Failed(_) => CloudBackupRootPrompt::None,
         }
     }
 
@@ -151,8 +178,8 @@ impl CloudBackupModelState {
                 CloudBackupEnableState::UploadingBackup
             }
             CloudBackupEnableFlow::DiscoveringExistingBackup
-            | CloudBackupEnableFlow::AwaitingForceNewConfirmation
-            | CloudBackupEnableFlow::AwaitingPasskeyChoice
+            | CloudBackupEnableFlow::AwaitingForceNewConfirmation(_, _)
+            | CloudBackupEnableFlow::AwaitingPasskeyChoice(_)
             | CloudBackupEnableFlow::WaitingForPasskeyAvailability => CloudBackupEnableState::Idle,
         }
     }
@@ -319,11 +346,11 @@ impl CloudBackupModelState {
 
     fn prompt_enable_flow(root_prompt: &CloudBackupRootPrompt) -> Option<CloudBackupEnableFlow> {
         match root_prompt {
-            CloudBackupRootPrompt::ExistingBackupFound(_, _) => {
-                Some(CloudBackupEnableFlow::AwaitingForceNewConfirmation)
-            }
-            CloudBackupRootPrompt::PasskeyChoice(_) => {
-                Some(CloudBackupEnableFlow::AwaitingPasskeyChoice)
+            CloudBackupRootPrompt::ExistingBackupFound(context, passkey_hint) => Some(
+                CloudBackupEnableFlow::AwaitingForceNewConfirmation(*context, passkey_hint.clone()),
+            ),
+            CloudBackupRootPrompt::PasskeyChoice(intent) => {
+                Some(CloudBackupEnableFlow::AwaitingPasskeyChoice(intent.clone()))
             }
             CloudBackupRootPrompt::None
             | CloudBackupRootPrompt::MissingPasskeyReminder
@@ -338,6 +365,9 @@ impl CloudBackupModelState {
             sync: Self::sync_from_snapshot(snapshot),
             detail: Self::detail_from_snapshot(snapshot),
             last_restore_report: snapshot.restore_report.clone(),
+            root_prompt: snapshot.root_prompt.clone(),
+            sync_health: snapshot.sync_health.clone(),
+            verification_presentation: snapshot.verification_presentation.clone(),
         }
     }
 
@@ -457,6 +487,7 @@ impl CloudBackupModelState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Private model adapter events used while manager workers still report through narrow callbacks
 pub(crate) enum CloudBackupModelEvent {
     EnableStarted,
     RestoreStarted,
@@ -477,7 +508,6 @@ pub(crate) enum CloudBackupModelEvent {
     RestoreProgressUpdated(Option<CloudBackupRestoreProgress>),
     RestoreReportUpdated(Option<CloudBackupRestoreReport>),
     SyncHealthUpdated(CloudSyncHealth),
-    SyncErrorUpdated(Option<String>),
     EnableStateUpdated(CloudBackupEnableState),
     PendingUploadVerificationUpdated(PendingUploadVerificationState),
     PendingUploadVerificationRefreshed {
@@ -515,7 +545,6 @@ pub(crate) struct CloudBackupModelEffects {
     pub(crate) restore_progress: Option<Option<CloudBackupRestoreProgress>>,
     pub(crate) restore_report: Option<Option<CloudBackupRestoreReport>>,
     pub(crate) sync_health: Option<CloudSyncHealth>,
-    pub(crate) sync_error: Option<Option<String>>,
     pub(crate) enable_state: Option<CloudBackupEnableState>,
     pub(crate) pending_upload_verification: Option<PendingUploadVerificationState>,
     pub(crate) verification_metadata: Option<CloudBackupVerificationMetadata>,
@@ -588,13 +617,16 @@ pub struct CloudBackupConfiguredState {
     pub sync: CloudBackupSyncState,
     pub detail: CloudBackupDetailState,
     pub last_restore_report: Option<CloudBackupRestoreReport>,
+    pub root_prompt: CloudBackupRootPrompt,
+    pub sync_health: CloudSyncHealth,
+    pub verification_presentation: CloudBackupVerificationPresentation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupEnableFlow {
     DiscoveringExistingBackup,
-    AwaitingForceNewConfirmation,
-    AwaitingPasskeyChoice,
+    AwaitingForceNewConfirmation(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
+    AwaitingPasskeyChoice(CloudBackupPasskeyChoiceIntent),
     CreatingPasskey,
     WaitingForPasskeyAvailability,
     AwaitingSavedPasskeyConfirmation(super::SavedPasskeyConfirmationMode),
@@ -633,12 +665,12 @@ impl Default for CloudBackupModel {
 
 impl CloudBackupModel {
     pub(crate) fn from_snapshot(state: CloudBackupModelSnapshot) -> Self {
-        Self { state: state.into(), prompt: CloudBackupPromptState::default() }
+        Self { state: state.into() }
     }
 
     pub(crate) fn snapshot(&self) -> CloudBackupModelSnapshot {
         let mut state = self.state.snapshot();
-        state.root_prompt = self.prompt.resolve(&state);
+        state.root_prompt = Self::resolve_root_prompt(&state);
         state.projected_with_fresh_domain()
     }
 
@@ -690,30 +722,61 @@ impl CloudBackupModel {
                 )?;
             }
             CloudBackupModelEvent::RootPromptRefreshed => {
-                self.refresh_root_prompt_effect(&mut next_state, &mut effects);
+                Self::refresh_root_prompt_effect(&mut next_state, &mut effects);
             }
             CloudBackupModelEvent::ExistingBackupFoundPromptSet { context, passkey_hint } => {
-                self.prompt.set_existing_backup_found(context, passkey_hint);
+                Self::update_status(&mut next_state, CloudBackupStatus::Enabling, &mut effects);
+                Self::update_field(
+                    CloudBackupEnableState::Idle,
+                    &mut next_state.enable_state,
+                    &mut effects.enable_state,
+                );
+                next_state.root_prompt =
+                    CloudBackupRootPrompt::ExistingBackupFound(context, passkey_hint);
             }
             CloudBackupModelEvent::ExistingBackupFoundPromptCleared => {
-                self.prompt.clear_existing_backup_found();
+                if matches!(
+                    next_state.root_prompt,
+                    CloudBackupRootPrompt::ExistingBackupFound(_, _)
+                ) {
+                    next_state.root_prompt = CloudBackupRootPrompt::None;
+                    Self::update_status(&mut next_state, CloudBackupStatus::Disabled, &mut effects);
+                }
             }
             CloudBackupModelEvent::PasskeyChoicePromptSet(intent) => {
-                self.prompt.set_passkey_choice(intent);
+                if matches!(intent, CloudBackupPasskeyChoiceIntent::Enable(_, _)) {
+                    Self::update_status(&mut next_state, CloudBackupStatus::Enabling, &mut effects);
+                    Self::update_field(
+                        CloudBackupEnableState::Idle,
+                        &mut next_state.enable_state,
+                        &mut effects.enable_state,
+                    );
+                }
+                next_state.root_prompt = CloudBackupRootPrompt::PasskeyChoice(intent);
             }
             CloudBackupModelEvent::PasskeyChoicePromptCleared => {
-                self.prompt.clear_passkey_choice();
+                if let CloudBackupRootPrompt::PasskeyChoice(intent) = &next_state.root_prompt {
+                    let clears_enable_prompt =
+                        matches!(intent, CloudBackupPasskeyChoiceIntent::Enable(_, _));
+                    next_state.root_prompt = CloudBackupRootPrompt::None;
+                    if clears_enable_prompt {
+                        Self::update_status(
+                            &mut next_state,
+                            CloudBackupStatus::Disabled,
+                            &mut effects,
+                        );
+                    }
+                }
             }
             CloudBackupModelEvent::MissingPasskeyPromptDismissed => {
-                self.prompt.dismiss_missing_passkey();
+                next_state.missing_passkey_dismissed = true;
             }
             CloudBackupModelEvent::MissingPasskeyDismissalCleared => {
-                self.prompt.clear_missing_passkey_dismissal();
+                next_state.missing_passkey_dismissed = false;
             }
             CloudBackupModelEvent::PromptStateCleared => {
-                self.prompt.clear_existing_backup_found();
-                self.prompt.clear_passkey_choice();
-                self.prompt.clear_missing_passkey_dismissal();
+                next_state.root_prompt = CloudBackupRootPrompt::None;
+                next_state.missing_passkey_dismissed = false;
             }
             CloudBackupModelEvent::StatusEntered(status) => {
                 Self::enter_background_status(&mut next_state, status, &mut effects)?;
@@ -759,9 +822,6 @@ impl CloudBackupModel {
                     &mut next_state.sync_health,
                     &mut effects.sync_health,
                 );
-            }
-            CloudBackupModelEvent::SyncErrorUpdated(sync_error) => {
-                Self::update_field(sync_error, &mut next_state.sync_error, &mut effects.sync_error);
             }
             CloudBackupModelEvent::EnableStateUpdated(enable_state) => {
                 if !matches!(enable_state, CloudBackupEnableState::Idle)
@@ -995,34 +1055,57 @@ impl CloudBackupModel {
     }
 
     fn refresh_root_prompt_effect(
-        &self,
         state: &mut CloudBackupModelSnapshot,
         effects: &mut CloudBackupModelEffects,
     ) {
         let previous_root_prompt = state.root_prompt.clone();
-        let root_prompt = self.prompt.resolve(state);
+        let root_prompt = Self::resolve_root_prompt(state);
         state.root_prompt = root_prompt.clone();
         if state.root_prompt != previous_root_prompt {
             effects.root_prompt = Some(root_prompt);
         }
     }
 
-    pub(crate) fn resolve_root_prompt_for(
-        &self,
-        state: &CloudBackupModelSnapshot,
-    ) -> CloudBackupRootPrompt {
-        self.prompt.resolve(state)
+    fn resolve_root_prompt(state: &CloudBackupModelSnapshot) -> CloudBackupRootPrompt {
+        match &state.root_prompt {
+            CloudBackupRootPrompt::ExistingBackupFound(context, passkey_hint)
+                if matches!(state.status, CloudBackupStatus::Enabling) =>
+            {
+                return CloudBackupRootPrompt::ExistingBackupFound(*context, passkey_hint.clone());
+            }
+            CloudBackupRootPrompt::PasskeyChoice(intent) => {
+                return CloudBackupRootPrompt::PasskeyChoice(intent.clone());
+            }
+            CloudBackupRootPrompt::ExistingBackupFound(_, _)
+            | CloudBackupRootPrompt::None
+            | CloudBackupRootPrompt::MissingPasskeyReminder
+            | CloudBackupRootPrompt::Verification => {}
+        }
+
+        if matches!(state.status, CloudBackupStatus::PasskeyMissing)
+            && !state.missing_passkey_dismissed
+            && !matches!(state.recovery, RecoveryState::Recovering(RecoveryAction::RepairPasskey))
+        {
+            return CloudBackupRootPrompt::MissingPasskeyReminder;
+        }
+
+        match state.verification_presentation {
+            CloudBackupVerificationPresentation::NeedsDecision { .. } => {
+                CloudBackupRootPrompt::Verification
+            }
+            CloudBackupVerificationPresentation::Hidden { .. }
+            | CloudBackupVerificationPresentation::ManualVerifying { .. }
+            | CloudBackupVerificationPresentation::BackgroundConfirming(_)
+            | CloudBackupVerificationPresentation::BackgroundBlockedOnAuthorization(_)
+            | CloudBackupVerificationPresentation::Completed { .. }
+            | CloudBackupVerificationPresentation::Failed { .. } => CloudBackupRootPrompt::None,
+        }
     }
 }
 
 impl CloudBackupModelSnapshot {
     pub(crate) fn public_state(&self) -> super::CloudBackupState {
-        super::CloudBackupState {
-            lifecycle: self.lifecycle.clone(),
-            root_prompt: self.root_prompt.clone(),
-            sync_health: self.sync_health.clone(),
-            verification_presentation: self.verification_presentation.clone(),
-        }
+        super::CloudBackupState { lifecycle: self.lifecycle.clone() }
     }
 
     pub(crate) fn refresh_domain_projection(&mut self) {
@@ -1097,15 +1180,98 @@ mod tests {
     }
 
     #[test]
-    fn model_event_rejects_start_while_busy() {
-        let mut model = CloudBackupModel::from_snapshot(CloudBackupModelSnapshot {
-            status: CloudBackupStatus::Restoring,
-            ..CloudBackupModelSnapshot::default()
-        });
+    fn start_events_enter_background_lifecycle_from_top_level_states() {
+        let cases = [
+            (
+                CloudBackupModelSnapshot::default(),
+                CloudBackupModelEvent::EnableStarted,
+                CloudBackupStatus::Enabling,
+                CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::DiscoveringExistingBackup),
+            ),
+            (
+                CloudBackupModelSnapshot {
+                    status: CloudBackupStatus::Enabled,
+                    ..CloudBackupModelSnapshot::default()
+                },
+                CloudBackupModelEvent::EnableStarted,
+                CloudBackupStatus::Enabling,
+                CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::DiscoveringExistingBackup),
+            ),
+            (
+                CloudBackupModelSnapshot {
+                    status: CloudBackupStatus::Error("cloud backup failed".into()),
+                    ..CloudBackupModelSnapshot::default()
+                },
+                CloudBackupModelEvent::EnableStarted,
+                CloudBackupStatus::Enabling,
+                CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::DiscoveringExistingBackup),
+            ),
+            (
+                CloudBackupModelSnapshot::default(),
+                CloudBackupModelEvent::RestoreStarted,
+                CloudBackupStatus::Restoring,
+                CloudBackupLifecycle::Restoring(CloudBackupRestoreFlow {
+                    progress: None,
+                    report: None,
+                }),
+            ),
+            (
+                CloudBackupModelSnapshot {
+                    status: CloudBackupStatus::Enabled,
+                    ..CloudBackupModelSnapshot::default()
+                },
+                CloudBackupModelEvent::RestoreStarted,
+                CloudBackupStatus::Restoring,
+                CloudBackupLifecycle::Restoring(CloudBackupRestoreFlow {
+                    progress: None,
+                    report: None,
+                }),
+            ),
+            (
+                CloudBackupModelSnapshot {
+                    status: CloudBackupStatus::Error("cloud backup failed".into()),
+                    ..CloudBackupModelSnapshot::default()
+                },
+                CloudBackupModelEvent::RestoreStarted,
+                CloudBackupStatus::Restoring,
+                CloudBackupLifecycle::Restoring(CloudBackupRestoreFlow {
+                    progress: None,
+                    report: None,
+                }),
+            ),
+        ];
 
-        let result = model.apply_event(CloudBackupModelEvent::EnableStarted);
+        for (snapshot, event, expected_status, expected_lifecycle) in cases {
+            let mut model = CloudBackupModel::from_snapshot(snapshot);
 
-        assert_eq!(result, Err(CloudBackupModelEventRejection::Busy(CloudBackupStatus::Restoring)),);
+            let effects = model.apply_event(event).unwrap();
+
+            assert_eq!(model.status(), expected_status);
+            assert_eq!(effects.status, Some(expected_status));
+            assert_eq!(effects.lifecycle, Some(expected_lifecycle));
+        }
+    }
+
+    #[test]
+    fn start_events_reject_while_background_lifecycle_is_busy() {
+        let cases = [
+            (CloudBackupStatus::Enabling, CloudBackupModelEvent::EnableStarted),
+            (CloudBackupStatus::Enabling, CloudBackupModelEvent::RestoreStarted),
+            (CloudBackupStatus::Restoring, CloudBackupModelEvent::EnableStarted),
+            (CloudBackupStatus::Restoring, CloudBackupModelEvent::RestoreStarted),
+        ];
+
+        for (busy_status, event) in cases {
+            let mut model = CloudBackupModel::from_snapshot(CloudBackupModelSnapshot {
+                status: busy_status.clone(),
+                ..CloudBackupModelSnapshot::default()
+            });
+
+            let result = model.apply_event(event);
+
+            assert_eq!(result, Err(CloudBackupModelEventRejection::Busy(busy_status.clone())),);
+            assert_eq!(model.status(), busy_status);
+        }
     }
 
     #[test]
@@ -1133,6 +1299,11 @@ mod tests {
                 sync: CloudBackupSyncState::Blocked("cloud authorization required".into()),
                 detail: CloudBackupDetailState::NotLoaded,
                 last_restore_report: None,
+                root_prompt: CloudBackupRootPrompt::None,
+                sync_health: CloudSyncHealth::Unknown,
+                verification_presentation: CloudBackupVerificationPresentation::Hidden {
+                    source: None,
+                },
             })),
         );
     }
@@ -1346,6 +1517,7 @@ mod tests {
             registered_at: 1,
         };
         let state = CloudBackupModelSnapshot {
+            status: CloudBackupStatus::Enabling,
             root_prompt: CloudBackupRootPrompt::ExistingBackupFound(
                 CloudBackupEnableContext::settings_manual(),
                 Some(hint.clone()),
@@ -1361,24 +1533,28 @@ mod tests {
                 Some(hint),
             ),
         );
+        assert_eq!(
+            state.lifecycle,
+            CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::AwaitingForceNewConfirmation(
+                CloudBackupEnableContext::settings_manual(),
+                Some(CloudBackupPasskeyHint {
+                    provider_name: Some("iCloud Keychain".into()),
+                    name_suffix: "abc123".into(),
+                    registered_at: 1,
+                }),
+            )),
+        );
     }
 
     #[test]
     fn root_prompt_refresh_event_emits_prompt_effect() {
-        let mut model = CloudBackupModel::from_snapshot(CloudBackupModelSnapshot::default());
-        let context = CloudBackupEnableContext::settings_manual();
-        model
-            .apply_event(CloudBackupModelEvent::ExistingBackupFoundPromptSet {
-                context,
-                passkey_hint: None,
-            })
-            .unwrap();
+        let mut model = CloudBackupModel::from_snapshot(CloudBackupModelSnapshot {
+            status: CloudBackupStatus::PasskeyMissing,
+            ..CloudBackupModelSnapshot::default()
+        });
 
         let effects = model.apply_event(CloudBackupModelEvent::RootPromptRefreshed).unwrap();
 
-        assert_eq!(
-            effects.root_prompt,
-            Some(CloudBackupRootPrompt::ExistingBackupFound(context, None)),
-        );
+        assert_eq!(effects.root_prompt, Some(CloudBackupRootPrompt::MissingPasskeyReminder),);
     }
 }

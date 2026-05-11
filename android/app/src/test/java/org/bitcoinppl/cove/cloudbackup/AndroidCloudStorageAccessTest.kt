@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.cloudbackup
 
+import java.io.IOException
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.bitcoinppl.cove_core.device.CloudStorageException
@@ -7,7 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.IOException
 
 class AndroidCloudStorageAccessTest {
     @Test
@@ -35,29 +35,50 @@ class AndroidCloudStorageAccessTest {
     }
 
     @Test
-    fun driveFileNameForRecordIdUsesMasterKeyFileForMasterRecord() {
+    fun driveLocationPartsKeepsFlatFilesAtNamespaceRoot() {
         assertEquals(
-            "masterkey-hash.json",
-            driveFileNameForRecordId(
-                recordId = "cspp-master-key-v1",
-                masterKeyRecordId = "cspp-master-key-v1",
-                masterKeyFileName = { "masterkey-hash.json" },
-                walletFileName = { "wallet-$it.json" },
-            ),
+            DriveLocationParts(parentFolders = emptyList(), fileName = "wallet-record.json"),
+            driveLocationParts("wallet-record.json"),
         )
     }
 
     @Test
-    fun driveFileNameForRecordIdUsesWalletFileForWalletRecord() {
-        val recordId = "wallet-record"
-
+    fun driveLocationPartsSplitsKindPrefixedFiles() {
         assertEquals(
-            "wallet-wallet-record.json",
-            driveFileNameForRecordId(
-                recordId = recordId,
-                masterKeyRecordId = "cspp-master-key-v1",
-                masterKeyFileName = { "masterkey-hash.json" },
-                walletFileName = { "wallet-$it.json" },
+            DriveLocationParts(parentFolders = listOf("wallets"), fileName = "wallet-record.json"),
+            driveLocationParts("wallets/wallet-record.json"),
+        )
+    }
+
+    @Test
+    fun driveLocationPartsRejectsParentTraversal() {
+        val error = runCatching { driveLocationParts("wallets/../wallet-record.json") }
+            .exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+    }
+
+    @Test
+    fun drivePathsAcceptLegacyFlatAndKindPrefixedWalletLocations() {
+        assertTrue(
+            isWalletFileLocation(
+                location = "wallet-record.json",
+                walletFilePrefix = "wallet-",
+                walletsFolderName = "wallets",
+            ),
+        )
+        assertTrue(
+            isWalletFileLocation(
+                location = "wallets/wallet-record.json",
+                walletFilePrefix = "wallet-",
+                walletsFolderName = "wallets",
+            ),
+        )
+        assertFalse(
+            isWalletFileLocation(
+                location = "master-key/wallet-record.json",
+                walletFilePrefix = "wallet-",
+                walletsFolderName = "wallets",
             ),
         )
     }

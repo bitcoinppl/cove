@@ -118,7 +118,8 @@ impl RustCloudBackupManager {
                     .as_ref()
                     .map(|fingerprint| fingerprint.as_ref().as_uppercase()),
                 label_count: Some(wallet.entry.labels_count),
-                backup_updated_at: Some(wallet.entry.updated_at),
+                backup_updated_at: (wallet.entry.updated_at != 0)
+                    .then_some(wallet.entry.updated_at),
                 sync_status: CloudBackupWalletStatus::DeletedFromDevice,
                 record_id: record_id.clone(),
             });

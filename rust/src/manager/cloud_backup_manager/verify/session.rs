@@ -203,6 +203,11 @@ impl VerificationSession {
             Ok(json) => {
                 let encrypted: EncryptedMasterKeyBackup =
                     serde_json::from_slice(&json).map_err_str(CloudBackupError::Internal)?;
+                encrypted.remote_metadata.normalized_master_key(&self.namespace).map_err(
+                    |error| {
+                        CloudBackupError::Internal(format!("normalize master key payload: {error}"))
+                    },
+                )?;
 
                 match encrypted.backup_version() {
                     Ok(MasterKeyBackupVersion::V1) => {}

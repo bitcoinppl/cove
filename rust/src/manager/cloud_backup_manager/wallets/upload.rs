@@ -6,6 +6,7 @@ use crate::database::cloud_backup::{
     PersistedCloudBlobSyncState,
 };
 use crate::wallet::metadata::WalletMetadata;
+use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::backup_data::wallet_record_id;
 use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
@@ -86,8 +87,18 @@ impl RustCloudBackupManager {
         for (index, metadata) in wallets.iter().enumerate() {
             info!("Backup: uploading wallet {}/{} '{}'", index + 1, wallets.len(), metadata.name);
             let prepared = prepare_wallet_backup(metadata, metadata.wallet_mode).await?;
-            let encrypted = wallet_crypto::encrypt_wallet_entry(&prepared.entry, &critical_key)
-                .map_err_str(CloudBackupError::Crypto)?;
+            let remote_metadata = RemotePayloadMetadata::wallet(
+                &namespace,
+                &prepared.record_id,
+                prepared.entry.wallet_id.as_str(),
+                prepared.entry.updated_at,
+            );
+            let encrypted = wallet_crypto::encrypt_wallet_entry_with_remote_metadata(
+                &prepared.entry,
+                &critical_key,
+                remote_metadata,
+            )
+            .map_err_str(CloudBackupError::Crypto)?;
 
             let wallet_json =
                 serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
@@ -343,11 +354,19 @@ impl RustCloudBackupManager {
         .map_err(|source| DirtyWalletUploadPreparationError::new(source, revision_hash.clone()))?;
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
-        let encrypted = wallet_crypto::encrypt_wallet_entry(&prepared.entry, &critical_key)
-            .map_err_str(CloudBackupError::Crypto)
-            .map_err(|source| {
-                DirtyWalletUploadPreparationError::new(source, revision_hash.clone())
-            })?;
+        let remote_metadata = RemotePayloadMetadata::wallet(
+            namespace,
+            &prepared.record_id,
+            prepared.entry.wallet_id.as_str(),
+            prepared.entry.updated_at,
+        );
+        let encrypted = wallet_crypto::encrypt_wallet_entry_with_remote_metadata(
+            &prepared.entry,
+            &critical_key,
+            remote_metadata,
+        )
+        .map_err_str(CloudBackupError::Crypto)
+        .map_err(|source| DirtyWalletUploadPreparationError::new(source, revision_hash.clone()))?;
 
         let wallet_json = serde_json::to_vec(&encrypted)
             .map_err_str(CloudBackupError::Internal)

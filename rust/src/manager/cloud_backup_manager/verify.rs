@@ -300,6 +300,9 @@ impl RustCloudBackupManager {
 
         let encrypted: EncryptedMasterKeyBackup =
             serde_json::from_slice(&master_json).map_err_str(CloudBackupError::Internal)?;
+        encrypted.remote_metadata.normalized_master_key(namespace).map_err(|error| {
+            CloudBackupError::Internal(format!("normalize master key payload: {error}"))
+        })?;
         match encrypted.backup_version() {
             Ok(MasterKeyBackupVersion::V1) => {}
             Err(unsupported) => {

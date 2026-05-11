@@ -302,8 +302,8 @@ private fun cloudBackupEnableProgressCopy(enableFlow: CloudBackupEnableFlow?): P
         is CloudBackupEnableFlow.RetryingUploadWithStagedMaterial,
         ->
             "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
-        CloudBackupEnableFlow.AwaitingForceNewConfirmation,
-        CloudBackupEnableFlow.AwaitingPasskeyChoice,
+        is CloudBackupEnableFlow.AwaitingForceNewConfirmation,
+        is CloudBackupEnableFlow.AwaitingPasskeyChoice,
         CloudBackupEnableFlow.DiscoveringExistingBackup,
         null,
         -> "Creating your encrypted backup..." to "Cloud Backup will continue automatically"

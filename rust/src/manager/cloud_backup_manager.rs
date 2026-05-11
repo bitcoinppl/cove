@@ -4,7 +4,6 @@ mod keychain;
 mod model;
 mod ops;
 mod pending;
-mod prompt;
 mod store;
 mod verify;
 mod wallets;
@@ -161,13 +160,9 @@ pub enum CloudBackupManagerAction {
     EnterDetail,
 }
 
-#[expect(clippy::large_enum_variant, reason = "exported UniFFI enum keeps payloads inline")]
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
     Lifecycle(CloudBackupLifecycle),
-    RootPrompt(CloudBackupRootPrompt),
-    SyncHealth(CloudSyncHealth),
-    VerificationPresentation(CloudBackupVerificationPresentation),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -357,19 +352,11 @@ pub struct CloudBackupRetryContext {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CloudBackupState {
     pub lifecycle: CloudBackupLifecycle,
-    pub root_prompt: CloudBackupRootPrompt,
-    pub sync_health: CloudSyncHealth,
-    pub verification_presentation: CloudBackupVerificationPresentation,
 }
 
 impl Default for CloudBackupState {
     fn default() -> Self {
-        Self {
-            lifecycle: CloudBackupLifecycle::Disabled,
-            root_prompt: CloudBackupRootPrompt::None,
-            sync_health: CloudSyncHealth::Unknown,
-            verification_presentation: CloudBackupVerificationPresentation::Hidden { source: None },
-        }
+        Self { lifecycle: CloudBackupLifecycle::Disabled }
     }
 }
 
@@ -382,9 +369,9 @@ pub(crate) struct CloudBackupModelSnapshot {
     pub(crate) progress: Option<CloudBackupProgress>,
     pub(crate) restore_progress: Option<CloudBackupRestoreProgress>,
     pub(crate) restore_report: Option<CloudBackupRestoreReport>,
-    pub(crate) sync_error: Option<String>,
     pub(crate) enable_state: CloudBackupEnableState,
     pub(crate) pending_upload_verification: PendingUploadVerificationState,
+    pub(crate) missing_passkey_dismissed: bool,
     pub(crate) should_prompt_verification: bool,
     pub(crate) verification_metadata: CloudBackupVerificationMetadata,
     pub(crate) verification_presentation: CloudBackupVerificationPresentation,
@@ -407,9 +394,9 @@ impl Default for CloudBackupModelSnapshot {
             progress: None,
             restore_progress: None,
             restore_report: None,
-            sync_error: None,
             enable_state: CloudBackupEnableState::Idle,
             pending_upload_verification: PendingUploadVerificationState::Idle,
+            missing_passkey_dismissed: false,
             should_prompt_verification: false,
             verification_metadata: CloudBackupVerificationMetadata::NotConfigured,
             verification_presentation: CloudBackupVerificationPresentation::Hidden { source: None },
@@ -1095,6 +1082,10 @@ impl RustCloudBackupManager {
         self.state.read().status().clone()
     }
 
+    fn has_in_flight_lifecycle(status: &CloudBackupStatus) -> bool {
+        matches!(status, CloudBackupStatus::Enabling | CloudBackupStatus::Restoring)
+    }
+
     pub(crate) fn cloud_blob_failure_issue(
         issue: CloudStorageIssue,
     ) -> Option<CloudBlobFailureIssue> {
@@ -1144,6 +1135,7 @@ impl RustCloudBackupManager {
             supervisor: spawn_actor(CloudBackupSupervisor::new(manager.clone())),
         });
 
+        manager.sync_persisted_state();
         manager.start_connectivity_listener();
         manager
     }
@@ -1175,15 +1167,6 @@ impl RustCloudBackupManager {
     fn send_model_effects(&self, effects: CloudBackupModelEffects) {
         if let Some(lifecycle) = effects.lifecycle {
             self.send(Message::Lifecycle(lifecycle));
-        }
-        if let Some(root_prompt) = effects.root_prompt {
-            self.send(Message::RootPrompt(root_prompt));
-        }
-        if let Some(sync_health) = effects.sync_health {
-            self.send(Message::SyncHealth(sync_health));
-        }
-        if let Some(presentation) = effects.verification_presentation {
-            self.send(Message::VerificationPresentation(presentation));
         }
     }
 
@@ -1237,7 +1220,6 @@ impl RustCloudBackupManager {
             return;
         }
 
-        self.clear_sync_error_if_no_failed_wallet_uploads();
         send!(self.supervisor.resume_wallet_uploads_from_persisted_state());
         send!(self.supervisor.wake_pending_upload_verifier());
         self.start_pending_upload_verification_loop();
@@ -1290,12 +1272,6 @@ impl RustCloudBackupManager {
         CloudBackupVerificationCoordinator::current_source(
             self.state.read().verification_presentation(),
         )
-    }
-
-    fn verification_decision_presentation_for_state(
-        state: &CloudBackupModelSnapshot,
-    ) -> Option<CloudBackupVerificationPresentation> {
-        CloudBackupModel::verification_decision_presentation_for_state(state)
     }
 
     pub(crate) fn apply_verification_effect(&self, effect: CloudBackupVerificationEffect) {
@@ -1383,13 +1359,6 @@ impl RustCloudBackupManager {
         self.apply_model_event(
             CloudBackupModelEvent::RestoreReportUpdated(report),
             "set_restore_report",
-        );
-    }
-
-    pub(crate) fn set_sync_error(&self, sync_error: Option<String>) {
-        self.apply_model_event(
-            CloudBackupModelEvent::SyncErrorUpdated(sync_error),
-            "set_sync_error",
         );
     }
 
@@ -1597,7 +1566,6 @@ impl RustCloudBackupManager {
         self.set_progress(None);
         self.set_restore_progress(None);
         self.set_restore_report(None);
-        self.set_sync_error(None);
         self.set_sync_health(CloudSyncHealth::Unknown);
         self.set_enable_state(CloudBackupEnableState::Idle);
         self.set_pending_upload_verification(PendingUploadVerificationState::Idle);
@@ -1773,6 +1741,10 @@ impl RustCloudBackupManager {
             }) else {
                 continue;
             };
+            if encrypted.remote_metadata.normalized_master_key(namespace).is_err() {
+                warn!("Failed to normalize passkey hint for namespace {namespace}");
+                continue;
+            }
 
             let Some(provider_hint) = encrypted.passkey_provider_hint.as_ref() else {
                 continue;
@@ -2294,22 +2266,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn model_snapshot(&self) -> CloudBackupModelSnapshot {
-        let db_state = Self::load_persisted_state();
-        let model = self.state.read();
-        let mut state = model.snapshot();
-        state.status = Self::runtime_status_for(&db_state);
-        state.verification_metadata = CloudBackupVerificationMetadata::from(&db_state);
-        state.should_prompt_verification = db_state.should_prompt_verification();
-        if state.pending_upload_verification
-            != PendingUploadVerificationState::BlockedOnAuthorization
-        {
-            state.pending_upload_verification = self.current_pending_upload_verification_state();
-        }
-        if let Some(presentation) = Self::verification_decision_presentation_for_state(&state) {
-            state.verification_presentation = presentation;
-        }
-        state.root_prompt = model.resolve_root_prompt_for(&state);
-        state.projected_with_fresh_domain()
+        self.state.read().snapshot()
     }
 }
 
@@ -2361,13 +2318,17 @@ impl RustCloudBackupManager {
     /// even before the reconciler has delivered its first message
     pub fn sync_persisted_state(&self) {
         let db_state = Self::load_persisted_state();
-        self.set_status(Self::runtime_status_for(&db_state));
+        if !Self::has_in_flight_lifecycle(&self.current_status()) {
+            self.set_status(Self::runtime_status_for(&db_state));
+        }
+
         self.refresh_persisted_flags();
-        self.refresh_pending_upload_verification_state();
+        if !Self::has_in_flight_lifecycle(&self.current_status()) {
+            self.refresh_pending_upload_verification_state();
+        }
     }
 
     pub fn cloud_storage_did_change(&self) {
-        self.clear_sync_error_if_no_failed_wallet_uploads();
         send!(self.supervisor.resume_wallet_uploads_from_persisted_state());
         send!(self.supervisor.wake_pending_upload_verifier());
         self.start_pending_upload_verification_loop();
@@ -2399,26 +2360,6 @@ impl RustCloudBackupManager {
         })
     }
 
-    pub(super) fn clear_sync_error_if_no_failed_wallet_uploads(&self) {
-        if self.has_failed_wallet_uploads() {
-            return;
-        }
-
-        self.set_sync_error(None);
-    }
-
-    fn has_failed_wallet_uploads(&self) -> bool {
-        match Database::global().cloud_blob_sync_states.list() {
-            Ok(states) => states
-                .into_iter()
-                .any(|state| matches!(state.state, PersistedCloudBlobState::Failed(_))),
-            Err(error) => {
-                error!("Failed to read cloud blob sync states while clearing sync error: {error}");
-                true
-            }
-        }
-    }
-
     pub fn resume_pending_cloud_upload_verification(&self) {
         self.sync_persisted_state();
         send!(self.supervisor.resume_wallet_uploads_from_persisted_state());
@@ -2444,7 +2385,6 @@ impl RustCloudBackupManager {
         self.set_progress(None);
         self.set_restore_progress(None);
         self.set_restore_report(None);
-        self.set_sync_error(None);
         self.refresh_persisted_flags();
         self.set_enable_state(CloudBackupEnableState::Idle);
         self.set_pending_upload_verification(PendingUploadVerificationState::Idle);
@@ -2588,6 +2528,16 @@ pub fn cspp_master_key_filename() -> String {
 #[uniffi::export]
 pub fn cspp_wallet_filename_from_record_id(record_id: String) -> String {
     cove_cspp::backup_data::wallet_filename_from_record_id(&record_id)
+}
+
+#[uniffi::export]
+pub fn cspp_master_key_directory() -> String {
+    cove_cspp::backup_data::remote_layout::MASTER_KEY_DIRECTORY.to_string()
+}
+
+#[uniffi::export]
+pub fn cspp_wallets_directory() -> String {
+    cove_cspp::backup_data::remote_layout::WALLETS_DIRECTORY.to_string()
 }
 
 #[uniffi::export]
@@ -3307,6 +3257,49 @@ mod tests {
 
         assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabling);
         manager.set_status(CloudBackupStatus::Disabled);
+    }
+
+    #[test]
+    fn public_state_preserves_enabling_when_persisted_state_is_disabled() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        Database::global().cloud_backup_state.set(&PersistedCloudBackupState::Disabled).unwrap();
+
+        assert!(manager.begin_background_operation("enable", Some(CloudBackupStatus::Enabling),));
+
+        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Enabling(_)));
+        assert_eq!(manager.model_snapshot().status, CloudBackupStatus::Enabling);
+    }
+
+    #[test]
+    fn public_state_preserves_restoring_when_persisted_state_is_configured() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        Database::global()
+            .cloud_backup_state
+            .set(&PersistedCloudBackupState::mark_enabled_reset_verification(42, 2))
+            .unwrap();
+
+        assert!(manager.begin_background_operation("restore", Some(CloudBackupStatus::Restoring),));
+
+        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Restoring(_)));
+        assert_eq!(manager.model_snapshot().status, CloudBackupStatus::Restoring);
+    }
+
+    #[test]
+    fn sync_persisted_state_preserves_in_flight_lifecycle() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        Database::global()
+            .cloud_backup_state
+            .set(&PersistedCloudBackupState::mark_enabled_reset_verification(42, 2))
+            .unwrap();
+
+        assert!(manager.begin_background_operation("enable", Some(CloudBackupStatus::Enabling),));
+        manager.sync_persisted_state();
+
+        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Enabling(_)));
+        assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabling);
     }
 
     #[test]

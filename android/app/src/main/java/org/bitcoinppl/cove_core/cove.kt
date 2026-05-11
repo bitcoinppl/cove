@@ -1095,6 +1095,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_updatepricesifneeded(
     ): Short
+    external fun uniffi_cove_checksum_func_cspp_master_key_directory(
+    ): Short
     external fun uniffi_cove_checksum_func_cspp_master_key_filename(
     ): Short
     external fun uniffi_cove_checksum_func_cspp_master_key_record_id(
@@ -1104,6 +1106,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_func_cspp_wallet_file_prefix(
     ): Short
     external fun uniffi_cove_checksum_func_cspp_wallet_filename_from_record_id(
+    ): Short
+    external fun uniffi_cove_checksum_func_cspp_wallets_directory(
     ): Short
     external fun uniffi_cove_checksum_func_reset_local_data_for_catastrophic_recovery(
     ): Short
@@ -1419,13 +1423,9 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count(
     ): Short
-    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_clear_sync_error_if_no_failed_wallet_uploads(
-    ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_cloud_storage_did_change(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_debug_reset_cloud_backup_state(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_has_failed_wallet_uploads(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(
     ): Short
@@ -2453,14 +2453,10 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_backup_wallet_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_clear_sync_error_if_no_failed_wallet_uploads(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_cloud_storage_did_change(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_debug_reset_cloud_backup_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_has_failed_wallet_uploads(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Byte
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_is_cloud_backup_enabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -3365,6 +3361,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_func_updatepricesifneeded(
     ): Long
+    external fun uniffi_cove_fn_func_cspp_master_key_directory(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_cspp_master_key_filename(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_cspp_master_key_record_id(uniffi_out_err: UniffiRustCallStatus, 
@@ -3374,6 +3372,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_func_cspp_wallet_file_prefix(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_cspp_wallet_filename_from_record_id(`recordId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_cspp_wallets_directory(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_reset_local_data_for_catastrophic_recovery(uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -3593,6 +3593,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_updatepricesifneeded() != 5753.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_func_cspp_master_key_directory() != 24318.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_func_cspp_master_key_filename() != 60745.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3606,6 +3609,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_cspp_wallet_filename_from_record_id() != 46175.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_cspp_wallets_directory() != 11300.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_reset_local_data_for_catastrophic_recovery() != 19583.toShort()) {
@@ -4079,16 +4085,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count() != 17456.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_clear_sync_error_if_no_failed_wallet_uploads() != 7150.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_cloud_storage_did_change() != 44707.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_debug_reset_cloud_backup_state() != 45375.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_has_failed_wallet_uploads() != 28193.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification() != 4437.toShort()) {
@@ -17960,8 +17960,6 @@ public interface RustCloudBackupManagerInterface {
      */
     fun `backupWalletCount`(): kotlin.UInt?
     
-    fun `clearSyncErrorIfNoFailedWalletUploads`()
-    
     fun `cloudStorageDidChange`()
     
     /**
@@ -17970,8 +17968,6 @@ public interface RustCloudBackupManagerInterface {
      * Debug-only: pair with Swift-side iCloud wipe for full reset
      */
     fun `debugResetCloudBackupState`()
-    
-    fun `hasFailedWalletUploads`(): kotlin.Boolean
     
     fun `hasPendingCloudUploadVerification`(): kotlin.Boolean
     
@@ -18157,18 +18153,6 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     }
     
 
-    override fun `clearSyncErrorIfNoFailedWalletUploads`()
-        = 
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_clear_sync_error_if_no_failed_wallet_uploads(
-        it,
-        _status)
-}
-    }
-    
-    
-
     override fun `cloudStorageDidChange`()
         = 
     callWithHandle {
@@ -18196,19 +18180,6 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
 }
     }
     
-    
-
-    override fun `hasFailedWalletUploads`(): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_has_failed_wallet_uploads(
-        it,
-        _status)
-}
-    }
-    )
-    }
     
 
     override fun `hasPendingCloudUploadVerification`(): kotlin.Boolean {
@@ -28044,6 +28015,12 @@ data class CloudBackupConfiguredState (
     var `detail`: CloudBackupDetailState
     , 
     var `lastRestoreReport`: CloudBackupRestoreReport?
+    , 
+    var `rootPrompt`: CloudBackupRootPrompt
+    , 
+    var `syncHealth`: CloudSyncHealth
+    , 
+    var `verificationPresentation`: CloudBackupVerificationPresentation
     
 ){
     
@@ -28065,6 +28042,9 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupSyncState.read(buf),
             FfiConverterTypeCloudBackupDetailState.read(buf),
             FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
+            FfiConverterTypeCloudBackupRootPrompt.read(buf),
+            FfiConverterTypeCloudSyncHealth.read(buf),
+            FfiConverterTypeCloudBackupVerificationPresentation.read(buf),
         )
     }
 
@@ -28073,7 +28053,10 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupVerificationState.allocationSize(value.`verification`) +
             FfiConverterTypeCloudBackupSyncState.allocationSize(value.`sync`) +
             FfiConverterTypeCloudBackupDetailState.allocationSize(value.`detail`) +
-            FfiConverterOptionalTypeCloudBackupRestoreReport.allocationSize(value.`lastRestoreReport`)
+            FfiConverterOptionalTypeCloudBackupRestoreReport.allocationSize(value.`lastRestoreReport`) +
+            FfiConverterTypeCloudBackupRootPrompt.allocationSize(value.`rootPrompt`) +
+            FfiConverterTypeCloudSyncHealth.allocationSize(value.`syncHealth`) +
+            FfiConverterTypeCloudBackupVerificationPresentation.allocationSize(value.`verificationPresentation`)
     )
 
     override fun write(value: CloudBackupConfiguredState, buf: ByteBuffer) {
@@ -28082,6 +28065,9 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupSyncState.write(value.`sync`, buf)
             FfiConverterTypeCloudBackupDetailState.write(value.`detail`, buf)
             FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.`lastRestoreReport`, buf)
+            FfiConverterTypeCloudBackupRootPrompt.write(value.`rootPrompt`, buf)
+            FfiConverterTypeCloudSyncHealth.write(value.`syncHealth`, buf)
+            FfiConverterTypeCloudBackupVerificationPresentation.write(value.`verificationPresentation`, buf)
     }
 }
 
@@ -28517,12 +28503,6 @@ public object FfiConverterTypeCloudBackupRetryContext: FfiConverterRustBuffer<Cl
 
 data class CloudBackupState (
     var `lifecycle`: CloudBackupLifecycle
-    , 
-    var `rootPrompt`: CloudBackupRootPrompt
-    , 
-    var `syncHealth`: CloudSyncHealth
-    , 
-    var `verificationPresentation`: CloudBackupVerificationPresentation
     
 ){
     
@@ -28540,24 +28520,15 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
     override fun read(buf: ByteBuffer): CloudBackupState {
         return CloudBackupState(
             FfiConverterTypeCloudBackupLifecycle.read(buf),
-            FfiConverterTypeCloudBackupRootPrompt.read(buf),
-            FfiConverterTypeCloudSyncHealth.read(buf),
-            FfiConverterTypeCloudBackupVerificationPresentation.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudBackupState) = (
-            FfiConverterTypeCloudBackupLifecycle.allocationSize(value.`lifecycle`) +
-            FfiConverterTypeCloudBackupRootPrompt.allocationSize(value.`rootPrompt`) +
-            FfiConverterTypeCloudSyncHealth.allocationSize(value.`syncHealth`) +
-            FfiConverterTypeCloudBackupVerificationPresentation.allocationSize(value.`verificationPresentation`)
+            FfiConverterTypeCloudBackupLifecycle.allocationSize(value.`lifecycle`)
     )
 
     override fun write(value: CloudBackupState, buf: ByteBuffer) {
             FfiConverterTypeCloudBackupLifecycle.write(value.`lifecycle`, buf)
-            FfiConverterTypeCloudBackupRootPrompt.write(value.`rootPrompt`, buf)
-            FfiConverterTypeCloudSyncHealth.write(value.`syncHealth`, buf)
-            FfiConverterTypeCloudBackupVerificationPresentation.write(value.`verificationPresentation`, buf)
     }
 }
 
@@ -34535,11 +34506,24 @@ sealed class CloudBackupEnableFlow {
     object DiscoveringExistingBackup : CloudBackupEnableFlow()
     
     
-    object AwaitingForceNewConfirmation : CloudBackupEnableFlow()
+    data class AwaitingForceNewConfirmation(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext, 
+        val v2: org.bitcoinppl.cove_core.CloudBackupPasskeyHint?) : CloudBackupEnableFlow()
+        
+    {
+        
+
+        companion object
+    }
     
-    
-    object AwaitingPasskeyChoice : CloudBackupEnableFlow()
-    
+    data class AwaitingPasskeyChoice(
+        val v1: org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent) : CloudBackupEnableFlow()
+        
+    {
+        
+
+        companion object
+    }
     
     object CreatingPasskey : CloudBackupEnableFlow()
     
@@ -34594,8 +34578,13 @@ public object FfiConverterTypeCloudBackupEnableFlow : FfiConverterRustBuffer<Clo
     override fun read(buf: ByteBuffer): CloudBackupEnableFlow {
         return when(buf.getInt()) {
             1 -> CloudBackupEnableFlow.DiscoveringExistingBackup
-            2 -> CloudBackupEnableFlow.AwaitingForceNewConfirmation
-            3 -> CloudBackupEnableFlow.AwaitingPasskeyChoice
+            2 -> CloudBackupEnableFlow.AwaitingForceNewConfirmation(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.read(buf),
+                )
+            3 -> CloudBackupEnableFlow.AwaitingPasskeyChoice(
+                FfiConverterTypeCloudBackupPasskeyChoiceIntent.read(buf),
+                )
             4 -> CloudBackupEnableFlow.CreatingPasskey
             5 -> CloudBackupEnableFlow.WaitingForPasskeyAvailability
             6 -> CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation(
@@ -34623,12 +34612,15 @@ public object FfiConverterTypeCloudBackupEnableFlow : FfiConverterRustBuffer<Clo
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+                + FfiConverterOptionalTypeCloudBackupPasskeyHint.allocationSize(value.v2)
             )
         }
         is CloudBackupEnableFlow.AwaitingPasskeyChoice -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeCloudBackupPasskeyChoiceIntent.allocationSize(value.v1)
             )
         }
         is CloudBackupEnableFlow.CreatingPasskey -> {
@@ -34680,10 +34672,13 @@ public object FfiConverterTypeCloudBackupEnableFlow : FfiConverterRustBuffer<Clo
             }
             is CloudBackupEnableFlow.AwaitingForceNewConfirmation -> {
                 buf.putInt(2)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
+                FfiConverterOptionalTypeCloudBackupPasskeyHint.write(value.v2, buf)
                 Unit
             }
             is CloudBackupEnableFlow.AwaitingPasskeyChoice -> {
                 buf.putInt(3)
+                FfiConverterTypeCloudBackupPasskeyChoiceIntent.write(value.v1, buf)
                 Unit
             }
             is CloudBackupEnableFlow.CreatingPasskey -> {
@@ -35666,33 +35661,6 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
     
-    data class RootPrompt(
-        val v1: org.bitcoinppl.cove_core.CloudBackupRootPrompt) : CloudBackupReconcileMessage()
-        
-    {
-        
-
-        companion object
-    }
-    
-    data class SyncHealth(
-        val v1: org.bitcoinppl.cove_core.device.CloudSyncHealth) : CloudBackupReconcileMessage()
-        
-    {
-        
-
-        companion object
-    }
-    
-    data class VerificationPresentation(
-        val v1: org.bitcoinppl.cove_core.CloudBackupVerificationPresentation) : CloudBackupReconcileMessage()
-        
-    {
-        
-
-        companion object
-    }
-    
 
     
 
@@ -35712,15 +35680,6 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             1 -> CloudBackupReconcileMessage.Lifecycle(
                 FfiConverterTypeCloudBackupLifecycle.read(buf),
                 )
-            2 -> CloudBackupReconcileMessage.RootPrompt(
-                FfiConverterTypeCloudBackupRootPrompt.read(buf),
-                )
-            3 -> CloudBackupReconcileMessage.SyncHealth(
-                FfiConverterTypeCloudSyncHealth.read(buf),
-                )
-            4 -> CloudBackupReconcileMessage.VerificationPresentation(
-                FfiConverterTypeCloudBackupVerificationPresentation.read(buf),
-                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -35733,27 +35692,6 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 + FfiConverterTypeCloudBackupLifecycle.allocationSize(value.v1)
             )
         }
-        is CloudBackupReconcileMessage.RootPrompt -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeCloudBackupRootPrompt.allocationSize(value.v1)
-            )
-        }
-        is CloudBackupReconcileMessage.SyncHealth -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeCloudSyncHealth.allocationSize(value.v1)
-            )
-        }
-        is CloudBackupReconcileMessage.VerificationPresentation -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeCloudBackupVerificationPresentation.allocationSize(value.v1)
-            )
-        }
     }
 
     override fun write(value: CloudBackupReconcileMessage, buf: ByteBuffer) {
@@ -35761,21 +35699,6 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             is CloudBackupReconcileMessage.Lifecycle -> {
                 buf.putInt(1)
                 FfiConverterTypeCloudBackupLifecycle.write(value.v1, buf)
-                Unit
-            }
-            is CloudBackupReconcileMessage.RootPrompt -> {
-                buf.putInt(2)
-                FfiConverterTypeCloudBackupRootPrompt.write(value.v1, buf)
-                Unit
-            }
-            is CloudBackupReconcileMessage.SyncHealth -> {
-                buf.putInt(3)
-                FfiConverterTypeCloudSyncHealth.write(value.v1, buf)
-                Unit
-            }
-            is CloudBackupReconcileMessage.VerificationPresentation -> {
-                buf.putInt(4)
-                FfiConverterTypeCloudBackupVerificationPresentation.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -56887,6 +56810,16 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
         UniffiNullRustCallStatusErrorHandler,
     )
     }
+ fun `csppMasterKeyDirectory`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_cspp_master_key_directory(
+    
+        _status)
+}
+    )
+    }
+    
  fun `csppMasterKeyFilename`(): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
@@ -56934,6 +56867,16 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     
         
         FfiConverterString.lower(`recordId`),_status)
+}
+    )
+    }
+    
+ fun `csppWalletsDirectory`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_cspp_wallets_directory(
+    
+        _status)
 }
     )
     }

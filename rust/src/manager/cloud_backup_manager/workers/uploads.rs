@@ -262,16 +262,13 @@ impl CloudBackupUploadWorker {
                     "Cloud backup upload paused until authorization is restored for wallet_id={wallet_id}: {error_message}"
                 );
                 self.reset_wallet_upload_retry_count(&wallet_id);
-                manager.set_sync_error(Some(error_message));
                 manager.refresh_sync_health();
                 return;
             }
 
             error!("Cloud backup upload failed for wallet_id={wallet_id}: {error_message}");
-            manager.set_sync_error(Some(error_message));
         } else if succeeded {
             self.reset_wallet_upload_retry_count(&wallet_id);
-            manager.clear_sync_error_if_no_failed_wallet_uploads();
         }
 
         manager.refresh_sync_health();
@@ -308,7 +305,6 @@ impl CloudBackupUploadWorker {
                     if is_authorization_failed_blob(failed_state)
                         && let Some(manager) = &manager
                     {
-                        manager.set_sync_error(Some(failed_state.error.clone()));
                         manager.refresh_sync_health();
                     }
                     send!(addr.schedule_wallet_upload(wallet_id, true));

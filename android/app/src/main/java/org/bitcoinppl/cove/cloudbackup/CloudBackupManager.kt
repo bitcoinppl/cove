@@ -102,10 +102,22 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
         get() = passkeyState is CloudBackupPasskeyState.UnsupportedProvider
 
     val rootPrompt: CloudBackupRootPrompt
-        get() = state.rootPrompt
+        get() =
+            when (val lifecycle = state.lifecycle) {
+                is CloudBackupLifecycle.Enabling ->
+                    when (val flow = lifecycle.v1) {
+                        is CloudBackupEnableFlow.AwaitingForceNewConfirmation ->
+                            CloudBackupRootPrompt.ExistingBackupFound(flow.v1, flow.v2)
+                        is CloudBackupEnableFlow.AwaitingPasskeyChoice ->
+                            CloudBackupRootPrompt.PasskeyChoice(flow.v1)
+                        else -> CloudBackupRootPrompt.None
+                    }
+                is CloudBackupLifecycle.Configured -> lifecycle.v1.rootPrompt
+                else -> CloudBackupRootPrompt.None
+            }
 
     val syncHealth: CloudSyncHealth
-        get() = state.syncHealth
+        get() = configuredState?.syncHealth ?: CloudSyncHealth.Unknown
 
     val progress: CloudBackupProgress?
         get() =
@@ -144,7 +156,7 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
             }
 
     val verificationPresentation: CloudBackupVerificationPresentation
-        get() = state.verificationPresentation
+        get() = configuredState?.verificationPresentation ?: CloudBackupVerificationPresentation.Hidden(null)
 
     val cloudOnly: CloudOnlyState
         get() =
@@ -269,9 +281,6 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
     private fun apply(message: CloudBackupReconcileMessage) {
         when (message) {
             is CloudBackupReconcileMessage.Lifecycle -> state = state.copy(lifecycle = message.v1)
-            is CloudBackupReconcileMessage.RootPrompt -> state = state.copy(rootPrompt = message.v1)
-            is CloudBackupReconcileMessage.SyncHealth -> state = state.copy(syncHealth = message.v1)
-            is CloudBackupReconcileMessage.VerificationPresentation -> state = state.copy(verificationPresentation = message.v1)
         }
         refreshPersistedEnabledState()
     }

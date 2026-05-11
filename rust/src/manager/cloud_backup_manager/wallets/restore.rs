@@ -59,11 +59,7 @@ impl WalletBackupReader {
     ) -> Result<WalletBackupLookup<RemoteWalletBackupSummary>, CloudBackupError> {
         match self.lookup_entry(record_id).await? {
             WalletBackupLookup::Found(entry) => {
-                Ok(WalletBackupLookup::Found(RemoteWalletBackupSummary {
-                    revision_hash: entry.content_revision_hash.clone(),
-                    label_count: entry.labels_count,
-                    updated_at: entry.updated_at,
-                }))
+                Ok(WalletBackupLookup::Found(RemoteWalletBackupSummary::from_entry(&entry)))
             }
             WalletBackupLookup::NotFound => Ok(WalletBackupLookup::NotFound),
             WalletBackupLookup::UnsupportedVersion(version) => {
@@ -94,10 +90,19 @@ impl WalletBackupReader {
         record_id: &str,
     ) -> Result<WalletBackupLookup<WalletEntry>, CloudBackupError> {
         match self.download_encrypted(record_id).await? {
-            WalletBackupLookup::Found(encrypted) => Ok(WalletBackupLookup::Found(
-                self.decrypt_entry(&encrypted)
-                    .map_err_prefix("decrypt wallet", CloudBackupError::Crypto)?,
-            )),
+            WalletBackupLookup::Found(encrypted) => {
+                let entry = self
+                    .decrypt_entry(&encrypted)
+                    .map_err_prefix("decrypt wallet", CloudBackupError::Crypto)?;
+                encrypted
+                    .remote_metadata
+                    .normalized_wallet(&self.namespace, record_id, Some(entry.wallet_id.as_str()))
+                    .map_err(|error| {
+                        CloudBackupError::Internal(format!("normalize wallet payload: {error}"))
+                    })?;
+
+                Ok(WalletBackupLookup::Found(entry))
+            }
             WalletBackupLookup::NotFound => Ok(WalletBackupLookup::NotFound),
             WalletBackupLookup::UnsupportedVersion(version) => {
                 Ok(WalletBackupLookup::UnsupportedVersion(version))
@@ -130,6 +135,10 @@ impl WalletBackupReader {
             );
             return Ok(WalletBackupLookup::UnsupportedVersion(version));
         }
+
+        encrypted.remote_metadata.normalized_wallet(&self.namespace, record_id, None).map_err(
+            |error| CloudBackupError::Internal(format!("normalize wallet payload: {error}")),
+        )?;
 
         Ok(WalletBackupLookup::Found(encrypted))
     }
@@ -320,5 +329,16 @@ mod tests {
 
         assert_eq!(session.0.len(), 1);
         assert_eq!(session.0[0].0, *metadata.master_fingerprint.unwrap().as_ref());
+    }
+
+    #[test]
+    fn legacy_wallet_summary_omits_missing_updated_at() {
+        let metadata = WalletMetadata::preview_new();
+        let mut entry = test_wallet_entry(&metadata);
+        entry.updated_at = 0;
+
+        let summary = RemoteWalletBackupSummary::from_entry(&entry);
+
+        assert_eq!(summary.updated_at, None);
     }
 }

@@ -1768,6 +1768,13 @@ async fn inspect_cloud_restore_namespaces(
         };
         found_backup = true;
 
+        if encrypted.remote_metadata.normalized_master_key(&namespace).is_err() {
+            info!(
+                "No cloud restore passkey provider hint namespace={namespace} reason=invalid_payload_metadata"
+            );
+            continue;
+        }
+
         let Some(raw_hint) = encrypted.passkey_provider_hint.as_ref() else {
             info!("No cloud restore passkey provider hint namespace={namespace} reason=missing");
             continue;
