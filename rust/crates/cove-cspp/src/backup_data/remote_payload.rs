@@ -132,7 +132,11 @@ fn validate_optional_kind(
     actual: Option<RemotePayloadKind>,
     expected: RemotePayloadKind,
 ) -> Result<(), RemotePayloadError> {
-    if actual.is_none_or(|actual| actual == expected) {
+    let Some(actual) = actual else {
+        return Ok(());
+    };
+
+    if actual == expected {
         return Ok(());
     }
 
@@ -195,6 +199,26 @@ mod tests {
             metadata.normalized_wallet("namespace-a", "record-a", Some("wallet-a")).unwrap_err();
 
         assert!(matches!(error, RemotePayloadError::Mismatch { field: "record_id", .. }));
+    }
+
+    #[test]
+    fn wallet_payload_metadata_rejects_conflicting_kind_without_option_wrapper() {
+        let metadata = RemotePayloadMetadata {
+            kind: Some(RemotePayloadKind::MasterKey),
+            ..RemotePayloadMetadata::default()
+        };
+
+        let error =
+            metadata.normalized_wallet("namespace-a", "record-a", Some("wallet-a")).unwrap_err();
+
+        assert_eq!(
+            error,
+            RemotePayloadError::Mismatch {
+                field: "kind",
+                expected: "Wallet".to_string(),
+                actual: "MasterKey".to_string(),
+            },
+        );
     }
 
     #[test]
