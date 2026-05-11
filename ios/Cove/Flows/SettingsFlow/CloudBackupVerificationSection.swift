@@ -88,31 +88,6 @@ struct VerificationSection: View {
         }
     }
 
-    private var cancelledSection: some View {
-        Section {
-            Label(
-                "Verification was cancelled",
-                systemImage: "exclamationmark.shield.fill"
-            )
-            .foregroundStyle(Color.statusWarning)
-
-            Text(
-                "If your passkey was deleted, tap \"Create New Passkey\" to restore cloud backup protection. Otherwise tap \"Verify Now\" to try again."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            Button {
-                manager.startVerification()
-            } label: {
-                Label("Verify Now", systemImage: "checkmark.shield")
-            }
-            .disabled(isBusy)
-
-            repairPasskeyButton
-        }
-    }
-
     @ViewBuilder
     private func verifiedSection(_ report: DeepVerificationReport) -> some View {
         Section {
