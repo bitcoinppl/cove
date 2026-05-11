@@ -9,7 +9,7 @@ use tracing::{error, info, warn};
 use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupError, CloudBackupRestoreProgress, CloudBackupRestoreReport, CloudBackupStatus,
+    CloudBackupEnableOutcome, CloudBackupError, CloudBackupRestoreOutcome, CloudBackupStatus,
     RustCloudBackupManager,
 };
 
@@ -58,7 +58,7 @@ impl CloudBackupRestoreWorker {
         }
     }
 
-    pub(crate) async fn set_restore_status(
+    pub(crate) async fn apply_restore_status(
         &mut self,
         generation: GenerationToken,
         status: CloudBackupStatus,
@@ -70,14 +70,14 @@ impl CloudBackupRestoreWorker {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         }
 
-        manager.set_status(status);
+        manager.reconcile_runtime_status(status);
         Produces::ok(Ok(()))
     }
 
-    pub(crate) async fn set_restore_progress(
+    pub(crate) async fn apply_restore_outcome(
         &mut self,
         generation: GenerationToken,
-        progress: Option<CloudBackupRestoreProgress>,
+        outcome: CloudBackupRestoreOutcome,
     ) -> ActorResult<Result<(), CloudBackupError>> {
         let Some(manager) = self.manager() else {
             return Produces::ok(Err(CloudBackupError::Cancelled));
@@ -86,23 +86,7 @@ impl CloudBackupRestoreWorker {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         }
 
-        manager.set_restore_progress(progress);
-        Produces::ok(Ok(()))
-    }
-
-    pub(crate) async fn set_restore_report(
-        &mut self,
-        generation: GenerationToken,
-        report: Option<CloudBackupRestoreReport>,
-    ) -> ActorResult<Result<(), CloudBackupError>> {
-        let Some(manager) = self.manager() else {
-            return Produces::ok(Err(CloudBackupError::Cancelled));
-        };
-        if !self.restore_generation_is_current(generation) {
-            return Produces::ok(Err(CloudBackupError::Cancelled));
-        }
-
-        manager.set_restore_report(report);
+        manager.apply_restore_outcome(outcome);
         Produces::ok(Ok(()))
     }
 
@@ -124,7 +108,7 @@ impl CloudBackupRestoreWorker {
             .set(&state)
             .map_err(|error| CloudBackupError::Internal(format!("{context}: {error}")));
         if result.is_ok() {
-            manager.set_status(RustCloudBackupManager::runtime_status_for(&state));
+            manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(&state));
             manager.refresh_persisted_flags();
         }
 
@@ -180,10 +164,10 @@ impl CloudBackupRestoreWorker {
         }
 
         self.restore_operations.invalidate();
-        manager.set_progress(None);
-        manager.set_restore_progress(None);
-        manager.set_restore_report(None);
-        manager.set_status(RustCloudBackupManager::runtime_status_for(
+        manager.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
+        manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
+        manager.apply_restore_outcome(CloudBackupRestoreOutcome::ReportCleared);
+        manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(
             &RustCloudBackupManager::load_persisted_state(),
         ));
         info!("restore_from_cloud_backup: cancelled active restore");
@@ -212,29 +196,20 @@ impl RestoreOperation {
             .map_err(|_| CloudBackupError::Cancelled)?
     }
 
-    pub(crate) async fn set_status(
+    pub(crate) async fn apply_status(
         &self,
         status: CloudBackupStatus,
     ) -> Result<(), CloudBackupError> {
-        call!(self.restore_actor.set_restore_status(self.generation(), status))
+        call!(self.restore_actor.apply_restore_status(self.generation(), status))
             .await
             .map_err(|_| CloudBackupError::Cancelled)?
     }
 
-    pub(crate) async fn set_progress(
+    pub(crate) async fn apply_outcome(
         &self,
-        progress: Option<CloudBackupRestoreProgress>,
+        outcome: CloudBackupRestoreOutcome,
     ) -> Result<(), CloudBackupError> {
-        call!(self.restore_actor.set_restore_progress(self.generation(), progress))
-            .await
-            .map_err(|_| CloudBackupError::Cancelled)?
-    }
-
-    pub(crate) async fn set_report(
-        &self,
-        report: Option<CloudBackupRestoreReport>,
-    ) -> Result<(), CloudBackupError> {
-        call!(self.restore_actor.set_restore_report(self.generation(), report))
+        call!(self.restore_actor.apply_restore_outcome(self.generation(), outcome))
             .await
             .map_err(|_| CloudBackupError::Cancelled)?
     }

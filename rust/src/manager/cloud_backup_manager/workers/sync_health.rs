@@ -131,7 +131,7 @@ impl CloudBackupSyncHealthWorker {
         self.sync_health_refresh_state = SyncHealthRefreshState::Idle;
 
         if is_current && let Some(manager) = self.manager() {
-            manager.set_sync_health(sync_health);
+            manager.observe_sync_health(sync_health);
         }
 
         if !rerun_queued {

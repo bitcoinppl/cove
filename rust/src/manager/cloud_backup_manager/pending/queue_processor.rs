@@ -449,13 +449,13 @@ impl PendingUploadVerifier {
     fn send_pending_state(&self, blocked_on_authorization: bool, pending: bool) {
         if blocked_on_authorization {
             let state = PendingUploadVerificationState::BlockedOnAuthorization;
-            self.0.set_pending_upload_verification(state);
+            self.0.reconcile_pending_upload_verification(state);
             return;
         }
 
         if pending {
             let state = PendingUploadVerificationState::Confirming;
-            self.0.set_pending_upload_verification(state);
+            self.0.reconcile_pending_upload_verification(state);
             return;
         }
 
@@ -464,7 +464,7 @@ impl PendingUploadVerifier {
             None => PendingUploadVerificationState::Idle,
         };
 
-        self.0.set_pending_upload_verification(state);
+        self.0.reconcile_pending_upload_verification(state);
     }
 
     fn should_retry_wallet_upload(

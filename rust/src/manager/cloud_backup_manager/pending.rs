@@ -84,7 +84,7 @@ impl RustCloudBackupManager {
             );
         }
 
-        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
+        self.reconcile_pending_upload_verification(PendingUploadVerificationState::Confirming);
         self.wake_pending_upload_verifier();
         self.start_pending_upload_verification_loop();
 
@@ -121,7 +121,7 @@ impl RustCloudBackupManager {
             );
         }
 
-        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
+        self.reconcile_pending_upload_verification(PendingUploadVerificationState::Confirming);
         self.wake_pending_upload_verifier();
         self.start_pending_upload_verification_loop();
 

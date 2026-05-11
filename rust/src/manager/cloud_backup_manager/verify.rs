@@ -19,10 +19,11 @@ use self::session::VerificationSession;
 use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
 use super::CloudBackupStore;
 use super::{
-    BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
-    CloudBackupRetryAction, CloudBackupRetryContext, CloudBackupStatus, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
-    PendingVerificationUpload, RustCloudBackupManager, is_connectivity_related_issue,
+    BlockingCloudStep, CloudBackupDetailOutcome, CloudBackupDetailResult, CloudBackupError,
+    CloudBackupKeychain, CloudBackupRetryAction, CloudBackupRetryContext, CloudBackupStatus,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    PendingVerificationCompletion, PendingVerificationUpload, RustCloudBackupManager,
+    is_connectivity_related_issue,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
@@ -222,11 +223,11 @@ impl RustCloudBackupManager {
         };
 
         CloudBackupStore::global().persist_enabled(wallet_count)?;
-        self.set_status(CloudBackupStatus::Enabled);
+        self.reconcile_runtime_status(CloudBackupStatus::Enabled);
 
         match self.refresh_cloud_backup_detail().await {
             Some(CloudBackupDetailResult::Success(detail)) => {
-                self.set_detail(Some(detail));
+                self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
             }
             Some(CloudBackupDetailResult::AccessError(error)) => {
                 warn!("Failed to refresh detail after passkey repair: {error}");

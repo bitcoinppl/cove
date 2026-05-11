@@ -33,11 +33,11 @@ use crate::manager::cloud_backup_manager::workers::{
 };
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupEnableContext,
-    CloudBackupEnableState, CloudBackupKeychain, CloudBackupManagerAction,
-    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
-    CloudBackupVerificationPresentation, CloudBackupVerificationReason,
-    CloudBackupVerificationSource, CloudBackupWalletStatus, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
+    CloudBackupEnableOutcome, CloudBackupEnableState, CloudBackupKeychain,
+    CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
+    CloudBackupRootPrompt, CloudBackupVerificationOutcome, CloudBackupVerificationPresentation,
+    CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
     PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
     SavedPasskeyConfirmationMode, VerificationState,
 };
@@ -519,13 +519,15 @@ async fn pending_upload_state_changes_do_not_dismiss_verification_prompt() {
     manager.backup_new_wallet(xpub_only_wallet_metadata());
     assert_eq!(manager.model_snapshot().root_prompt, CloudBackupRootPrompt::Verification);
 
-    manager.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
+    manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Confirming);
     assert_eq!(manager.model_snapshot().root_prompt, CloudBackupRootPrompt::Verification);
 
-    manager.set_pending_upload_verification(PendingUploadVerificationState::BlockedOnAuthorization);
+    manager.reconcile_pending_upload_verification(
+        PendingUploadVerificationState::BlockedOnAuthorization,
+    );
     assert_eq!(manager.model_snapshot().root_prompt, CloudBackupRootPrompt::Verification);
 
-    manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
+    manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
     let state = manager.model_snapshot();
     assert_eq!(state.root_prompt, CloudBackupRootPrompt::Verification);
     assert!(matches!(
@@ -552,12 +554,12 @@ async fn verification_prompt_restored_when_pending_upload_idle_hides_persisted_d
     configure_enabled_cloud_backup(&manager, globals, 3);
 
     manager.backup_new_wallet(xpub_only_wallet_metadata());
-    manager.set_verification_presentation(CloudBackupVerificationPresentation::Hidden {
+    manager.reconcile_verification_presentation(CloudBackupVerificationPresentation::Hidden {
         source: Some(CloudBackupVerificationSource::Settings),
     });
     assert_eq!(manager.state.read().snapshot().root_prompt, CloudBackupRootPrompt::None);
 
-    manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
+    manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
 
     let state = manager.model_snapshot();
     assert_eq!(state.root_prompt, CloudBackupRootPrompt::Verification);
@@ -663,7 +665,7 @@ async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
 
     let metadata = xpub_only_wallet_metadata();
     let record_id = wallet_record_id(metadata.id.as_ref());
-    manager.set_status(CloudBackupStatus::Error("offline".into()));
+    manager.reconcile_runtime_status(CloudBackupStatus::Error("offline".into()));
 
     manager.backup_new_wallet(metadata);
 
@@ -1202,8 +1204,8 @@ async fn detail_entry_starts_discoverable_verification_without_runtime_authoriza
 
     manager.clear_runtime_passkey_authorization();
     manager.clear_pending_verification_completion();
-    manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
-    manager.set_verification(VerificationState::Idle);
+    manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
+    manager.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
     Database::global().cloud_blob_sync_states.delete_all().unwrap();
     globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
     globals.cloud.fail_list_wallet_files("list should not run before passkey auth");
@@ -1243,8 +1245,9 @@ async fn detail_entry_does_not_restart_rust_owned_verification_states() {
         configure_enabled_cloud_backup(&manager, globals, 0);
         manager.clear_runtime_passkey_authorization();
         manager.clear_pending_verification_completion();
-        manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
-        manager.set_verification(verification);
+        manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
+        manager
+            .apply_verification_outcome(CloudBackupVerificationOutcome::from_state(verification));
         globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
 
         let discover_count = globals.passkey.discover_count();
@@ -1907,7 +1910,9 @@ async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() 
     persist_xpub_wallets(vec![metadata]);
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
     globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
-    manager.set_sync_health(CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into()));
+    manager.observe_sync_health(CloudSyncHealth::Failed(
+        SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into(),
+    ));
 
     manager.do_repair_passkey_wrapper_no_discovery().await.unwrap();
     manager.finalize_passkey_repair().await.unwrap();
@@ -2920,7 +2925,7 @@ fn reset_cloud_backup_test_state_clears_state_before_reconnect() {
             }),
         ))
         .unwrap();
-    manager.set_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+    manager.apply_enable_outcome(CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
         SavedPasskeyConfirmationMode::Manual,
     ));
     CONNECTIVITY_MANAGER.set_connection_state(false);
@@ -4710,7 +4715,7 @@ fn clear_in_process_state_for_local_reset_clears_enable_state() {
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
-    manager.set_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+    manager.apply_enable_outcome(CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
         SavedPasskeyConfirmationMode::Manual,
     ));
 
@@ -5023,8 +5028,8 @@ async fn detail_entry_after_restart_without_active_authorization_prompts_normall
     let restarted_manager = init_manager();
     restarted_manager.sync_persisted_state();
     restarted_manager.clear_pending_verification_completion();
-    restarted_manager.set_pending_upload_verification(PendingUploadVerificationState::Idle);
-    restarted_manager.set_verification(VerificationState::Idle);
+    restarted_manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
+    restarted_manager.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
     Database::global().cloud_blob_sync_states.delete_all().unwrap();
     globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
 

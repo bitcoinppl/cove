@@ -16,10 +16,10 @@ use crate::manager::cloud_backup_manager::wallets::{
 };
 use crate::manager::cloud_backup_manager::workers::RestoredPasskeyMaterial;
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupRestoreProgress,
-    CloudBackupRestoreReport, CloudBackupRestoreStage, CloudBackupStatus, CloudStorageIssue,
-    RestoreOperation, RustCloudBackupManager, current_namespace_wallet_record_ids,
-    is_connectivity_related_issue,
+    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupEnableOutcome, CloudBackupError,
+    CloudBackupRestoreOutcome, CloudBackupRestoreProgress, CloudBackupRestoreReport,
+    CloudBackupRestoreStage, CloudBackupStatus, CloudStorageIssue, RestoreOperation,
+    RustCloudBackupManager, current_namespace_wallet_record_ids, is_connectivity_related_issue,
 };
 
 struct RestorableNamespace {
@@ -45,10 +45,10 @@ impl RustCloudBackupManager {
         operation: &RestoreOperation,
     ) -> Result<(), CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Restore)?;
-        self.set_progress(None);
-        self.set_restore_progress(None);
-        self.set_restore_report(None);
-        self.set_status_for_restore_operation(operation, CloudBackupStatus::Restoring).await?;
+        self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
+        self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
+        self.apply_restore_outcome(CloudBackupRestoreOutcome::ReportCleared);
+        self.apply_status_for_restore_operation(operation, CloudBackupStatus::Restoring).await?;
         self.send_restore_progress(operation, CloudBackupRestoreStage::Finding, 0, None).await?;
 
         let cloud = CloudStorage::global_explicit_client();
@@ -195,8 +195,16 @@ impl RustCloudBackupManager {
         }
 
         if report.wallets_restored == 0 && report.wallets_failed > 0 {
-            self.set_restore_progress_for_restore_operation(operation, None).await?;
-            self.set_restore_report_for_restore_operation(operation, Some(report)).await?;
+            self.apply_restore_outcome_for_restore_operation(
+                operation,
+                CloudBackupRestoreOutcome::ProgressCleared,
+            )
+            .await?;
+            self.apply_restore_outcome_for_restore_operation(
+                operation,
+                CloudBackupRestoreOutcome::ReportRecorded(report),
+            )
+            .await?;
             return Err(CloudBackupError::Internal("all wallets failed to restore".into()));
         }
 
@@ -221,9 +229,17 @@ impl RustCloudBackupManager {
             operation.save_keychain_state(master_key, passkey, active.namespace_id.clone()).await?;
         }
 
-        self.set_restore_progress_for_restore_operation(operation, None).await?;
-        self.set_restore_report_for_restore_operation(operation, Some(report)).await?;
-        self.set_status_for_restore_operation(operation, CloudBackupStatus::Enabled).await?;
+        self.apply_restore_outcome_for_restore_operation(
+            operation,
+            CloudBackupRestoreOutcome::ProgressCleared,
+        )
+        .await?;
+        self.apply_restore_outcome_for_restore_operation(
+            operation,
+            CloudBackupRestoreOutcome::ReportRecorded(report),
+        )
+        .await?;
+        self.apply_status_for_restore_operation(operation, CloudBackupStatus::Enabled).await?;
 
         info!("Cloud backup restore complete");
         Ok(())
@@ -236,9 +252,13 @@ impl RustCloudBackupManager {
         completed: u32,
         total: Option<u32>,
     ) -> Result<(), CloudBackupError> {
-        self.set_restore_progress_for_restore_operation(
+        self.apply_restore_outcome_for_restore_operation(
             operation,
-            Some(CloudBackupRestoreProgress { stage, completed, total }),
+            CloudBackupRestoreOutcome::ProgressReported(CloudBackupRestoreProgress {
+                stage,
+                completed,
+                total,
+            }),
         )
         .await
     }

@@ -599,7 +599,7 @@ impl RustOnboardingManager {
         match discovery {
             CloudRestoreDiscovery::BackupFound(hint) => {
                 CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
-                CLOUD_BACKUP_MANAGER.set_passkey_choice_prompt(
+                CLOUD_BACKUP_MANAGER.present_passkey_choice_prompt(
                     CloudBackupPasskeyChoiceIntent::Enable(
                         CloudBackupEnableContext {
                             saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
