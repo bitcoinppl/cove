@@ -187,6 +187,16 @@ impl TransactionDetails {
 
         Some(sans_fee.into())
     }
+
+    /// Default block explorer URL for a given network and transaction ID.
+    fn default_transaction_url(network: Network, tx_id: &TxId) -> String {
+        match network {
+            Network::Bitcoin => format!("https://mempool.space/tx/{}", tx_id.0),
+            Network::Testnet => format!("https://mempool.space/testnet/tx/{}", tx_id.0),
+            Network::Testnet4 => format!("https://mempool.space/testnet4/tx/{}", tx_id.0),
+            Network::Signet => format!("https://mutinynet.com/tx/{}", tx_id.0),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
@@ -341,10 +351,6 @@ impl TransactionDetails {
         self.pending_or_confirmed.is_confirmed()
     }
 
-    /// Whether the transaction signals opt-in Replace-By-Fee (BIP 125).
-    ///
-    /// Returns `true` when at least one input has `nSequence < 0xFFFFFFFE`,
-    /// indicating the sender opted in to fee replacement while unconfirmed.
     #[uniffi::method]
     pub fn is_rbf_signaling(&self) -> bool {
         self.is_rbf_signaling
@@ -378,12 +384,26 @@ impl TransactionDetails {
 
     #[uniffi::method]
     pub fn transaction_url(&self) -> String {
-        match self.network {
-            Network::Bitcoin => format!("https://mempool.space/tx/{}", self.tx_id.0),
-            Network::Testnet => format!("https://mempool.space/testnet/tx/{}", self.tx_id.0),
-            Network::Testnet4 => format!("https://mempool.space/testnet4/tx/{}", self.tx_id.0),
-            Network::Signet => format!("https://mutinynet.com/tx/{}", self.tx_id.0),
+        let custom_url = Database::global().global_config.custom_block_explorer(self.network);
+
+        let Some(url) = custom_url else {
+            return Self::default_transaction_url(self.network, &self.tx_id);
+        };
+
+        if url.is_empty() {
+            return Self::default_transaction_url(self.network, &self.tx_id);
         }
+
+        if url.contains("{txid}") || url.contains("{tx_id}") || url.contains("{0}") {
+            let tx_id_str = self.tx_id.0.to_string();
+            return url
+                .replace("{txid}", &tx_id_str)
+                .replace("{tx_id}", &tx_id_str)
+                .replace("{0}", &tx_id_str);
+        }
+
+        let base = url.trim_end_matches('/');
+        format!("{base}/{}", self.tx_id.0)
     }
 
     #[uniffi::method]

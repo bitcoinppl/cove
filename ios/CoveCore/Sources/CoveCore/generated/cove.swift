@@ -3965,9 +3965,13 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     
     func authType()  -> AuthType
     
+    func clearCustomBlockExplorer(network: Network) throws 
+    
     func clearSelectedWallet() throws 
     
     func colorScheme()  -> ColorSchemeSelection
+    
+    func customBlockExplorer(network: Network)  -> String?
     
     func delete(key: GlobalConfigKey) throws 
     
@@ -3994,6 +3998,8 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     func set(key: GlobalConfigKey, value: String) throws 
     
     func setColorScheme(colorScheme: ColorSchemeSelection) throws 
+    
+    func setCustomBlockExplorer(network: Network, url: String) throws 
     
     func setHashedPinCode(hashedPinCode: String) throws 
     
@@ -4065,6 +4071,14 @@ open func authType() -> AuthType  {
 })
 }
     
+open func clearCustomBlockExplorer(network: Network)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_globalconfigtable_clear_custom_block_explorer(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNetwork_lower(network),$0
+    )
+}
+}
+    
 open func clearSelectedWallet()throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_clear_selected_wallet(
             self.uniffiCloneHandle(),$0
@@ -4076,6 +4090,15 @@ open func colorScheme() -> ColorSchemeSelection  {
     return try!  FfiConverterTypeColorSchemeSelection_lift(try! rustCall() {
     uniffi_cove_fn_method_globalconfigtable_colorscheme(
             self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func customBlockExplorer(network: Network) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtable_custom_block_explorer(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNetwork_lower(network),$0
     )
 })
 }
@@ -4181,6 +4204,15 @@ open func setColorScheme(colorScheme: ColorSchemeSelection)throws   {try rustCal
     uniffi_cove_fn_method_globalconfigtable_setcolorscheme(
             self.uniffiCloneHandle(),
         FfiConverterTypeColorSchemeSelection_lower(colorScheme),$0
+    )
+}
+}
+    
+open func setCustomBlockExplorer(network: Network, url: String)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_globalconfigtable_set_custom_block_explorer(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNetwork_lower(network),
+        FfiConverterString.lower(url),$0
     )
 }
 }
@@ -10439,12 +10471,6 @@ public protocol TransactionDetailsProtocol: AnyObject, Sendable {
     
     func isConfirmed()  -> Bool
     
-    /**
-     * Whether the transaction signals opt-in Replace-By-Fee (BIP 125).
-     *
-     * Returns `true` when at least one input has `nSequence < 0xFFFFFFFE`,
-     * indicating the sender opted in to fee replacement while unconfirmed.
-     */
     func isRbfSignaling()  -> Bool
     
     func isReceived()  -> Bool
@@ -10732,12 +10758,6 @@ open func isConfirmed() -> Bool  {
 })
 }
     
-    /**
-     * Whether the transaction signals opt-in Replace-By-Fee (BIP 125).
-     *
-     * Returns `true` when at least one input has `nSequence < 0xFFFFFFFE`,
-     * indicating the sender opted in to fee replacement while unconfirmed.
-     */
 open func isRbfSignaling() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_method_transactiondetails_is_rbf_signaling(
@@ -22640,6 +22660,8 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case decoySelectedWalletId
     case lockedAt
     case onboardingProgress
+    case customBlockExplorer(Network
+    )
 
 
 
@@ -22689,6 +22711,9 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case 13: return .lockedAt
         
         case 14: return .onboardingProgress
+        
+        case 15: return .customBlockExplorer(try FfiConverterTypeNetwork.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -22754,6 +22779,11 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case .onboardingProgress:
             writeInt(&buf, Int32(14))
         
+        
+        case let .customBlockExplorer(v1):
+            writeInt(&buf, Int32(15))
+            FfiConverterTypeNetwork.write(v1, into: &buf)
+            
         }
     }
 }
@@ -37769,10 +37799,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_authtype() != 62043) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_clear_custom_block_explorer() != 16461) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet() != 50864) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_colorscheme() != 59965) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_custom_block_explorer() != 26446) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_delete() != 4239) {
@@ -37812,6 +37848,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_setcolorscheme() != 39030) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer() != 3709) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 44857) {
@@ -38591,7 +38630,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_transactiondetails_is_confirmed() != 13728) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_transactiondetails_is_rbf_signaling() != 22881) {
+    if (uniffi_cove_checksum_method_transactiondetails_is_rbf_signaling() != 48827) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_is_received() != 28034) {
