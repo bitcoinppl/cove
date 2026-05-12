@@ -490,7 +490,7 @@ pub fn confirm_details_preview_new() -> ConfirmDetails {
         spending_amount: Amount::from_sat(20448),
         sending_amount: Amount::from_sat(20448 - 658),
         fee_total: Amount::from_sat(658),
-        fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(3).into(),
+        fee_rate: BdkFeeRate::from_sat_per_vb_u32(3).into(),
         fee_percentage: 3,
         sending_to: Address::preview_new(),
         psbt,
