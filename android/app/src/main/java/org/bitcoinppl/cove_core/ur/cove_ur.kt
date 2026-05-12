@@ -99,6 +99,43 @@ internal open class ForeignBytes : Structure() {
 
     class ByValue : ForeignBytes(), Structure.ByValue
 }
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Only `lower` is valid — zero-copy byte buffers only flow foreign -> Rust,
+// and only in argument position. `lift`, `read`, `write`, and
+// `allocationSize` have no sound implementation here and all panic at
+// runtime. The `FfiConverter` interface is implemented so that the
+// compiler enforces the full method set (rather than relying on eyeball).
+//
+// The provided `ByteBuffer` MUST be direct — only direct buffers have a
+// stable native address that JNA can expose via `getDirectBufferPointer`.
+// The returned `ForeignBytes.ByValue` is only valid for the duration of
+// the FFI call; the Rust side treats it as a borrow.
+internal object FfiConverterByRefBytes : FfiConverter<java.nio.ByteBuffer, ForeignBytes.ByValue> {
+    override fun lower(value: java.nio.ByteBuffer): ForeignBytes.ByValue {
+        require(value.isDirect) { "UniFFI zero-copy &[u8] requires a direct ByteBuffer. Use ByteBuffer.allocateDirect()." }
+        val remaining = value.remaining()
+        val fb = ForeignBytes.ByValue()
+        fb.len = remaining
+        // Zero-length direct buffers: skip getDirectBufferPointer (platform-variable behavior)
+        // and pass null. The Rust side treats (null, 0) as &[].
+        fb.data = if (remaining == 0) null else com.sun.jna.Native.getDirectBufferPointer(value)
+        return fb
+    }
+
+    override fun lift(value: ForeignBytes.ByValue): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+
+    override fun read(buf: java.nio.ByteBuffer): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun write(value: java.nio.ByteBuffer, buf: java.nio.ByteBuffer): Unit =
+        error("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun allocationSize(value: java.nio.ByteBuffer): ULong =
+        error("ByRef bytes have no RustBuffer allocation size: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+}
 /**
  * The FfiConverter interface handles converter types to and from the FFI
  *
@@ -878,25 +915,25 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_ur_checksum_method_cryptoseed_get_note() != 48679.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptohdkey_decode() != 1054.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptohdkey_decode() != 11408.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_decode() != 64081.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_decode() != 15440.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_from_psbt_bytes() != 26270.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_from_psbt_bytes() != 45405.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_from_ur() != 46845.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptopsbt_from_ur() != 39071.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_decode() != 39151.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_decode() != 41815.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy() != 13375.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy() != 54769.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy_with_metadata() != 63642.toShort()) {
+    if (lib.uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy_with_metadata() != 26965.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1413,6 +1450,7 @@ open class CryptoHdkey: Disposable, AutoCloseable, CryptoHdkeyInterface
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptohdkey_decode(
     
+        
         FfiConverterByteArray.lower(`cbor`),_status)
 }
     )
@@ -1754,6 +1792,7 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptopsbt_decode(
     
+        
         FfiConverterByteArray.lower(`cbor`),_status)
 }
     )
@@ -1772,6 +1811,7 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptopsbt_from_psbt_bytes(
     
+        
         FfiConverterByteArray.lower(`psbtBytes`),_status)
 }
     )
@@ -1790,6 +1830,7 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptopsbt_from_ur(
     
+        
         FfiConverterString.lower(`ur`),_status)
 }
     )
@@ -2166,6 +2207,7 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptoseed_decode(
     
+        
         FfiConverterByteArray.lower(`cbor`),_status)
 }
     )
@@ -2184,6 +2226,7 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptoseed_from_entropy(
     
+        
         FfiConverterByteArray.lower(`payload`),_status)
 }
     )
@@ -2202,7 +2245,11 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptoseed_from_entropy_with_metadata(
     
-        FfiConverterByteArray.lower(`payload`),FfiConverterOptionalString.lower(`name`),FfiConverterOptionalString.lower(`note`),FfiConverterOptionalULong.lower(`creationDate`),_status)
+        
+        FfiConverterByteArray.lower(`payload`),
+        FfiConverterOptionalString.lower(`name`),
+        FfiConverterOptionalString.lower(`note`),
+        FfiConverterOptionalULong.lower(`creationDate`),_status)
 }
     )
     }

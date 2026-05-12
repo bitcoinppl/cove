@@ -217,6 +217,43 @@ internal open class ForeignBytes : Structure() {
 
     class ByValue : ForeignBytes(), Structure.ByValue
 }
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Only `lower` is valid — zero-copy byte buffers only flow foreign -> Rust,
+// and only in argument position. `lift`, `read`, `write`, and
+// `allocationSize` have no sound implementation here and all panic at
+// runtime. The `FfiConverter` interface is implemented so that the
+// compiler enforces the full method set (rather than relying on eyeball).
+//
+// The provided `ByteBuffer` MUST be direct — only direct buffers have a
+// stable native address that JNA can expose via `getDirectBufferPointer`.
+// The returned `ForeignBytes.ByValue` is only valid for the duration of
+// the FFI call; the Rust side treats it as a borrow.
+internal object FfiConverterByRefBytes : FfiConverter<java.nio.ByteBuffer, ForeignBytes.ByValue> {
+    override fun lower(value: java.nio.ByteBuffer): ForeignBytes.ByValue {
+        require(value.isDirect) { "UniFFI zero-copy &[u8] requires a direct ByteBuffer. Use ByteBuffer.allocateDirect()." }
+        val remaining = value.remaining()
+        val fb = ForeignBytes.ByValue()
+        fb.len = remaining
+        // Zero-length direct buffers: skip getDirectBufferPointer (platform-variable behavior)
+        // and pass null. The Rust side treats (null, 0) as &[].
+        fb.data = if (remaining == 0) null else com.sun.jna.Native.getDirectBufferPointer(value)
+        return fb
+    }
+
+    override fun lift(value: ForeignBytes.ByValue): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+
+    override fun read(buf: java.nio.ByteBuffer): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun write(value: java.nio.ByteBuffer, buf: java.nio.ByteBuffer): Unit =
+        error("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun allocationSize(value: java.nio.ByteBuffer): ULong =
+        error("ByRef bytes have no RustBuffer allocation size: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+}
 /**
  * The FfiConverter interface handles converter types to and from the FFI
  *
@@ -3521,7 +3558,7 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_checksum_func_set_root_data_dir() != 56109.toShort()) {
+    if (lib.uniffi_cove_checksum_func_set_root_data_dir() != 5349.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_initialize_app() != 18498.toShort()) {
@@ -3548,13 +3585,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_all_fiat_currencies() != 53482.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_is_fiat_currency_symbol() != 60129.toShort()) {
+    if (lib.uniffi_cove_checksum_func_is_fiat_currency_symbol() != 18433.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_fiat_amount_preview_new() != 29492.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_prices_are_equal() != 22419.toShort()) {
+    if (lib.uniffi_cove_checksum_func_prices_are_equal() != 29733.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_updatepricesifneeded() != 5753.toShort()) {
@@ -3572,70 +3609,70 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_cspp_wallet_file_prefix() != 10192.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_cspp_wallet_filename_from_record_id() != 30909.toShort()) {
+    if (lib.uniffi_cove_checksum_func_cspp_wallet_filename_from_record_id() != 46175.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_reset_local_data_for_catastrophic_recovery() != 19583.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 25696.toShort()) {
+    if (lib.uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 5267.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_grouped_plain_words_of() != 51957.toShort()) {
+    if (lib.uniffi_cove_checksum_func_grouped_plain_words_of() != 56420.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_numberofwordsingroups() != 45196.toShort()) {
+    if (lib.uniffi_cove_checksum_func_numberofwordsingroups() != 6917.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_numberofwordstowordcount() != 42516.toShort()) {
+    if (lib.uniffi_cove_checksum_func_numberofwordstowordcount() != 25330.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_multi_format_try_from_nfc_message() != 63598.toShort()) {
+    if (lib.uniffi_cove_checksum_func_multi_format_try_from_nfc_message() != 61406.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_default_node_selection() != 32212.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_tap_signer_confirm_pin_args_new_from_new_pin() != 4888.toShort()) {
+    if (lib.uniffi_cove_checksum_func_tap_signer_confirm_pin_args_new_from_new_pin() != 47482.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_signed_transaction_or_psbt_try_from_bytes() != 29004.toShort()) {
+    if (lib.uniffi_cove_checksum_func_signed_transaction_or_psbt_try_from_bytes() != 24127.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_signed_transaction_or_psbt_try_from_nfc_message() != 64085.toShort()) {
+    if (lib.uniffi_cove_checksum_func_signed_transaction_or_psbt_try_from_nfc_message() != 44461.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_signed_transaction_or_psbt_try_parse() != 50770.toShort()) {
+    if (lib.uniffi_cove_checksum_func_signed_transaction_or_psbt_try_parse() != 1615.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_create_transport_error_from_code() != 12205.toShort()) {
+    if (lib.uniffi_cove_checksum_func_create_transport_error_from_code() != 25443.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_is_valid_chain_code() != 38380.toShort()) {
+    if (lib.uniffi_cove_checksum_func_is_valid_chain_code() != 9081.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_create_tap_signer_reader() != 37635.toShort()) {
+    if (lib.uniffi_cove_checksum_func_create_tap_signer_reader() != 3262.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_tapsignerresponsebackupresponse() != 56452.toShort()) {
+    if (lib.uniffi_cove_checksum_func_tapsignerresponsebackupresponse() != 35822.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_tapsignerresponsechangeresponse() != 16196.toShort()) {
+    if (lib.uniffi_cove_checksum_func_tapsignerresponsechangeresponse() != 39472.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_tapsignerresponsederiveresponse() != 33262.toShort()) {
+    if (lib.uniffi_cove_checksum_func_tapsignerresponsederiveresponse() != 2522.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_tapsignerresponsesetupresponse() != 13906.toShort()) {
+    if (lib.uniffi_cove_checksum_func_tapsignerresponsesetupresponse() != 8378.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_tapsignerresponsesignresponse() != 8089.toShort()) {
+    if (lib.uniffi_cove_checksum_func_tapsignerresponsesignresponse() != 14002.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_tapsignersetupcompletenew() != 44793.toShort()) {
+    if (lib.uniffi_cove_checksum_func_tapsignersetupcompletenew() != 48003.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_tapsignersetupretrycontinuecmd() != 55236.toShort()) {
+    if (lib.uniffi_cove_checksum_func_tapsignersetupretrycontinuecmd() != 41835.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_transaction_preview_confirmed_new() != 46336.toShort()) {
@@ -3644,7 +3681,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_transaction_preview_unconfirmed_new() != 27289.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_transactions_preview_new() != 59467.toShort()) {
+    if (lib.uniffi_cove_checksum_func_transactions_preview_new() != 39646.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_ffi_min_send_amount() != 61138.toShort()) {
@@ -3677,22 +3714,22 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_debug_or_release() != 2224.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet() != 27181.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet() != 9591.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_dispatch() != 7288.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_dispatch() != 26517.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_email_mailto() != 41824.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_email_mailto() != 5943.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_fees() != 5661.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet() != 57891.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet() != 27662.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 37911.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 63223.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_git_short_hash() != 52244.toShort()) {
@@ -3710,13 +3747,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_is_at_root() != 23036.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 31459.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 29679.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route() != 12168.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route() != 16208.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 60004.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 21077.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_network() != 44430.toShort()) {
@@ -3728,16 +3765,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_prices() != 42098.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_reset_after_loading() != 53361.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_reset_after_loading() != 51356.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 31408.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 27696.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to() != 59502.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to() != 57261.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 24217.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 11203.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_state() != 49253.toShort()) {
@@ -3749,55 +3786,55 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_version() != 27942.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_authpin_check() != 37111.toShort()) {
+    if (lib.uniffi_cove_checksum_method_authpin_check() != 31797.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_autocomplete_autocomplete() != 50983.toShort()) {
+    if (lib.uniffi_cove_checksum_method_autocomplete_autocomplete() != 6726.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_autocomplete_is_valid_word() != 305.toShort()) {
+    if (lib.uniffi_cove_checksum_method_autocomplete_is_valid_word() != 65409.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_bip39autocomplete_autocomplete() != 29231.toShort()) {
+    if (lib.uniffi_cove_checksum_method_bip39autocomplete_autocomplete() != 38112.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_bip39autocomplete_is_valid_word() != 48769.toShort()) {
+    if (lib.uniffi_cove_checksum_method_bip39autocomplete_is_valid_word() != 57287.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_bip39autocomplete_next_field_number() != 51302.toShort()) {
+    if (lib.uniffi_cove_checksum_method_bip39autocomplete_next_field_number() != 32500.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_bip39wordspecificautocomplete_autocomplete() != 40714.toShort()) {
+    if (lib.uniffi_cove_checksum_method_bip39wordspecificautocomplete_autocomplete() != 2246.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_bip39_word() != 47413.toShort()) {
+    if (lib.uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_bip39_word() != 65281.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_valid_word() != 24260.toShort()) {
+    if (lib.uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_valid_word() != 4732.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_bip39wordspecificautocomplete_next_field_number() != 62639.toShort()) {
+    if (lib.uniffi_cove_checksum_method_bip39wordspecificautocomplete_next_field_number() != 32810.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_backupmanager_backup_account_name() != 2715.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_backupmanager_export() != 27227.toShort()) {
+    if (lib.uniffi_cove_checksum_method_backupmanager_export() != 57847.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_backupmanager_generate_password() != 46391.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_backupmanager_importbackup() != 62441.toShort()) {
+    if (lib.uniffi_cove_checksum_method_backupmanager_importbackup() != 60835.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_backupmanager_is_password_valid() != 20774.toShort()) {
+    if (lib.uniffi_cove_checksum_method_backupmanager_is_password_valid() != 49165.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_backupmanager_validate_format() != 196.toShort()) {
+    if (lib.uniffi_cove_checksum_method_backupmanager_validate_format() != 1869.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_backupmanager_verifybackup() != 12745.toShort()) {
+    if (lib.uniffi_cove_checksum_method_backupmanager_verifybackup() != 21413.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_migration_cancel() != 11370.toShort()) {
@@ -3806,10 +3843,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_migration_progress() != 29592.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_converter_parse_fiat_str() != 21091.toShort()) {
+    if (lib.uniffi_cove_checksum_method_converter_parse_fiat_str() != 59628.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_converter_remove_fiat_suffix() != 41995.toShort()) {
+    if (lib.uniffi_cove_checksum_method_converter_remove_fiat_suffix() != 8821.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_database_dangerous_reset_all_data() != 25988.toShort()) {
@@ -3839,13 +3876,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_globalconfigtable_colorscheme() != 59965.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_delete() != 4239.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_delete() != 58450.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code() != 24897.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_get() != 63339.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_get() != 65389.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_hashed_pin_code() != 59065.toShort()) {
@@ -3857,7 +3894,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode() != 25736.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 60640.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 33046.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_selectedfiatcurrency() != 11234.toShort()) {
@@ -3872,40 +3909,40 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_globalconfigtable_selected_wallet() != 6128.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_set() != 46117.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_set() != 28192.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_setcolorscheme() != 39030.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_setcolorscheme() != 42967.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 44857.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 7049.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 47630.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 20578.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_selected_node() != 44882.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_selected_node() != 4222.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_wallet_mode() != 27720.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalflagtable_get() != 10621.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalflagtable_get() != 19454.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalflagtable_get_bool_config() != 8824.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalflagtable_get_bool_config() != 63323.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalflagtable_is_terms_accepted() != 22175.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalflagtable_set() != 45485.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalflagtable_set() != 34408.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalflagtable_set_bool_config() != 46453.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalflagtable_set_bool_config() != 64063.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 43871.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 15867.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_unsignedtransactionrecord_confirm_details() != 63212.toShort()) {
@@ -3920,10 +3957,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_unsignedtransactionrecord_wallet_id() != 45598.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_unsignedtransactionstable_gettx() != 43509.toShort()) {
+    if (lib.uniffi_cove_checksum_method_unsignedtransactionstable_gettx() != 16726.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_unsignedtransactionstable_gettxthrow() != 11583.toShort()) {
+    if (lib.uniffi_cove_checksum_method_unsignedtransactionstable_gettxthrow() != 38612.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_walletstable_all() != 1090.toShort()) {
@@ -3938,52 +3975,52 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_walletstable_is_empty() != 59967.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_walletstable_len() != 51436.toShort()) {
+    if (lib.uniffi_cove_checksum_method_walletstable_len() != 56374.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_priceresponse_get() != 6552.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_priceresponse_get_for_currency() != 944.toShort()) {
+    if (lib.uniffi_cove_checksum_method_priceresponse_get_for_currency() != 43118.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_filehandler_read() != 12343.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 50691.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 18479.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_labelmanager_export() != 24203.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_export_default_file_name() != 28880.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_export_default_file_name() != 22688.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density() != 50284.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density() != 3845.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_labelmanager_has_labels() != 29517.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_import() != 60353.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_import() != 37462.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_importlabels() != 36909.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_importlabels() != 52503.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_insert_or_update_labels_for_txn() != 29934.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_insert_or_update_labels_for_txn() != 51703.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_transaction_label() != 50059.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_transaction_label() != 3331.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_auth_type() != 16523.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_checkdecoypin() != 46529.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_checkdecoypin() != 62177.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_checkwipedatapin() != 38200.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_checkwipedatapin() != 60799.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_delete_decoy_pin() != 4703.toShort()) {
@@ -3992,7 +4029,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_delete_wipe_data_pin() != 54055.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_dispatch() != 9261.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_dispatch() != 34084.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_is_decoy_pin_enabled() != 56755.toShort()) {
@@ -4004,25 +4041,25 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_is_wipe_data_pin_enabled() != 9487.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_listen_for_updates() != 26735.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_listen_for_updates() != 2817.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_locked_at() != 56936.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_send() != 44537.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_send() != 57691.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_set_auth_type() != 12110.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_set_auth_type() != 39222.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin() != 17908.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin() != 8681.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_set_locked_at() != 21515.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_set_locked_at() != 10095.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin() != 16843.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin() != 47802.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_switch_to_decoy_mode() != 59870.toShort()) {
@@ -4031,16 +4068,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 36755.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_new_pin() != 2677.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_new_pin() != 9789.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 50929.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 26176.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 4302.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 16336.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 25342.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 9615.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count() != 17456.toShort()) {
@@ -4073,7 +4110,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_is_cloud_backup_unverified() != 14699.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_listen_for_updates() != 57718.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_listen_for_updates() != 38172.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification() != 24590.toShort()) {
@@ -4088,19 +4125,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_verify_backup_integrity() != 35162.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch() != 23570.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch() != 7867.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 24764.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 40315.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_dispatch() != 42057.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_dispatch() != 23123.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_id() != 30707.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates() != 62581.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates() != 53354.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_reload_labels() != 44692.toShort()) {
@@ -4118,31 +4155,31 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_is_connected() != 47607.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_state() != 17798.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_state() != 14005.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_status() != 59768.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_status() != 19324.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_state() != 43225.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_dispatch() != 59923.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_dispatch() != 6624.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet() != 19980.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet() != 59354.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_listen_for_updates() != 12813.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_listen_for_updates() != 1669.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id() != 41633.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustonboardingmanager_dispatch() != 60436.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustonboardingmanager_dispatch() != 56210.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustonboardingmanager_listen_for_updates() != 1994.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustonboardingmanager_listen_for_updates() != 23064.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustonboardingmanager_state() != 3480.toShort()) {
@@ -4160,13 +4197,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_card_indexes() != 4104.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_dispatch() != 27062.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_dispatch() != 53473.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_get_state() != 5102.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_listen_for_updates() != 24629.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_listen_for_updates() != 7576.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_number_of_words_count() != 7796.toShort()) {
@@ -4184,19 +4221,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount_sats() != 25668.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_dispatch() != 4249.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_dispatch() != 60263.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_display_fiat_amount() != 9610.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_display_fiat_amount() != 2229.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_entering_fiat_amount() != 28644.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_get_custom_fee_option() != 15013.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_get_custom_fee_option() != 64560.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 60412.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 39583.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_maxsendminusfees() != 19710.toShort()) {
@@ -4205,10 +4242,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_maxsendminusfeesandsmallutxo() != 9326.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount() != 12659.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount() != 53516.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_sanitize_fiat_entering_amount() != 54595.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_sanitize_fiat_entering_amount() != 54845.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_send_amount_btc() != 26631.toShort()) {
@@ -4229,13 +4266,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_utxos() != 24447.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_validate_address() != 64421.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_validate_address() != 34043.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_validate_amount() != 34659.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_validate_amount() != 64774.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_validate_fee_percentage() != 54512.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_validate_fee_percentage() != 52935.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_wait_for_init() != 6400.toShort()) {
@@ -4244,25 +4281,25 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_wallet_id() != 47057.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_address_at() != 13093.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_address_at() != 47845.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat() != 61774.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat() != 12391.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance() != 14970.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 63043.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 15439.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 9223.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat_string() != 4952.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat_string() != 26279.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_convert_to_fiat() != 24905.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_convert_to_fiat() != 35551.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_create_transactions_with_fiat_export() != 39040.toShort()) {
@@ -4271,7 +4308,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_current_block_height() != 53869.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_delete_unsigned_transaction() != 17810.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_delete_unsigned_transaction() != 8082.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_delete_wallet() != 58138.toShort()) {
@@ -4280,31 +4317,31 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_deletion_warning_message() != 57956.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 14781.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 57298.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount() != 41368.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount() != 10606.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount_pending_fmt() != 5678.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount_pending_fmt() != 9615.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction() != 60498.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction() != 51635.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount() != 60595.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount() != 58656.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_pending_fmt() != 55764.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_pending_fmt() != 29038.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_with_direction() != 5406.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_with_direction() != 53425.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount() != 49538.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount() != 50284.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_qr() != 32503.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_qr() != 39180.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_labels_for_share() != 38081.toShort()) {
@@ -4313,7 +4350,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_transactions_csv() != 27705.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_xpub_for_qr() != 3466.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_xpub_for_qr() != 56914.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_export_xpub_for_share() != 18121.toShort()) {
@@ -4325,7 +4362,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_fees() != 63480.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_finalize_psbt() != 51432.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_finalize_psbt() != 27122.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_first_address() != 34209.toShort()) {
@@ -4352,7 +4389,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates() != 19177.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates() != 34012.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_mark_wallet_as_verified() != 27203.toShort()) {
@@ -4364,52 +4401,52 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_coin_control_manager() != 11951.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 21514.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 55235.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_next_address() != 38399.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations() != 55676.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations() != 6064.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt() != 32886.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt() != 60488.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations() != 30427.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_rescan_wallet_with_gap_limit() != 28630.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_rescan_wallet_with_gap_limit() != 7508.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction() != 43358.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction() != 1404.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_selected_fiat_currency() != 2567.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_sent_and_received_fiat() != 33144.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_sent_and_received_fiat() != 43897.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata() != 11441.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata() != 8711.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 23118.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 13112.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 32531.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 26740.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs() != 15558.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs() != 4285.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_start_wallet_scan() != 1741.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_wallet_address_type() != 64255.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_wallet_address_type() != 37401.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_transaction_details() != 35364.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_transaction_details() != 34155.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 36684.toShort()) {
@@ -4430,19 +4467,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_mnemonic_words() != 8009.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 9328.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 42980.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_check_selected_node() != 64855.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_check_selected_node() != 34244.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_node_list() != 26686.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 62414.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 26788.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_select_preset_node() != 59069.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_select_preset_node() != 55812.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_selected_node() != 20791.toShort()) {
@@ -4451,43 +4488,43 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_qrscanner_reset() != 17017.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_qrscanner_scan() != 55003.toShort()) {
+    if (lib.uniffi_cove_checksum_method_qrscanner_scan() != 42248.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_boxedroute_route() != 6095.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_coin_control_send() != 46427.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_coin_control_send() != 10950.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_cold_wallet_import() != 3114.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_cold_wallet_import() != 56323.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_hot_wallet() != 59643.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_hot_wallet() != 11392.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_hot_wallet_import_from_scan() != 39695.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_is_same_parent_route() != 8524.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_is_same_parent_route() != 17637.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_load_and_reset_nested_to() != 27109.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_load_and_reset_nested_to() != 57827.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_load_and_reset_to() != 35517.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_load_and_reset_to() != 1406.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_load_and_reset_to_after() != 9407.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_load_and_reset_to_after() != 37823.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_main_wallet_settings() != 27709.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_main_wallet_settings() != 36802.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_nested_settings() != 45233.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_nested_settings() != 21457.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_nested_wallet_settings() != 8770.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_nested_wallet_settings() != 61751.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_new_hot_wallet() != 4033.toShort()) {
@@ -4499,46 +4536,46 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_routefactory_qr_import() != 52134.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_secret_words() != 54666.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_secret_words() != 29505.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_send() != 47898.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_send() != 19857.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm() != 22813.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm() != 13572.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm_signed_psbt() != 57735.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm_signed_psbt() != 63483.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm_signed_transaction() != 58855.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm_signed_transaction() != 47823.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_send_hardware_export() != 49069.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_send_hardware_export() != 13876.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_send_set_amount() != 20072.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_send_set_amount() != 53502.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_wallet_settings() != 55243.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_wallet_settings() != 16190.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_seedqr_get_words() != 37488.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_seedqr_grouped_plain_words() != 45204.toShort()) {
+    if (lib.uniffi_cove_checksum_method_seedqr_grouped_plain_words() != 29315.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_headericonpresenter_background_color() != 25849.toShort()) {
+    if (lib.uniffi_cove_checksum_method_headericonpresenter_background_color() != 40947.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_headericonpresenter_icon_color() != 1536.toShort()) {
+    if (lib.uniffi_cove_checksum_method_headericonpresenter_icon_color() != 65442.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_headericonpresenter_ring_color() != 38756.toShort()) {
+    if (lib.uniffi_cove_checksum_method_headericonpresenter_ring_color() != 13077.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapsignerreader_continue_setup() != 49046.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapsignerreader_continue_setup() != 58562.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_tapsignerreader_last_response() != 10948.toShort()) {
@@ -4547,10 +4584,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_tapsignerreader_run() != 41710.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapsignerreader_setup() != 41951.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapsignerreader_setup() != 31009.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapsignerreader_sign() != 52648.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapsignerreader_sign() != 27840.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_confirmedtransaction_block_height() != 51200.toShort()) {
@@ -4625,7 +4662,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_transactiondetails_amount_fiat_fmt_cached() != 11182.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_transactiondetails_amount_fmt() != 13996.toShort()) {
+    if (lib.uniffi_cove_checksum_method_transactiondetails_amount_fmt() != 45452.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_block_number() != 37642.toShort()) {
@@ -4643,7 +4680,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt_cached() != 1845.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 37631.toShort()) {
+    if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 45494.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_historical_fiat_fmt() != 9571.toShort()) {
@@ -4670,7 +4707,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt_cached() != 42399.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt() != 64427.toShort()) {
+    if (lib.uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt() != 43357.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_transaction_label() != 53712.toShort()) {
@@ -4727,13 +4764,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_fingerprint_as_uppercase() != 45978.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_wordvalidator_is_complete() != 16577.toShort()) {
+    if (lib.uniffi_cove_checksum_method_wordvalidator_is_complete() != 14889.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_wordvalidator_is_word_correct() != 20650.toShort()) {
+    if (lib.uniffi_cove_checksum_method_wordvalidator_is_word_correct() != 11787.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_wordvalidator_possible_words() != 58432.toShort()) {
+    if (lib.uniffi_cove_checksum_method_wordvalidator_possible_words() != 20003.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_wordverifystatemachine_animation_complete() != 38406.toShort()) {
@@ -4751,13 +4788,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_wordverifystatemachine_possible_words() != 5700.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_reset_to_word() != 43945.toShort()) {
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_reset_to_word() != 20767.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_wordverifystatemachine_return_complete() != 53818.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_select_word() != 45827.toShort()) {
+    if (lib.uniffi_cove_checksum_method_wordverifystatemachine_select_word() != 49272.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_wordverifystatemachine_state() != 57576.toShort()) {
@@ -4775,7 +4812,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_bip39autocomplete_new() != 13345.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_bip39wordspecificautocomplete_new() != 32688.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_bip39wordspecificautocomplete_new() != 64852.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_backupmanager_new() != 10138.toShort()) {
@@ -4787,13 +4824,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_database_new() != 1150.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_filehandler_new() != 14514.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_filehandler_new() != 16492.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_addressargs_new() != 7657.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_addressargs_new() != 36827.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_labelmanager_new() != 53348.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_labelmanager_new() != 55767.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_rustauthmanager_new() != 54478.toShort()) {
@@ -4802,10 +4839,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_rustcloudbackupmanager_new() != 6990.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_rustcoincontrolmanager_preview_new() != 19053.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_rustcoincontrolmanager_preview_new() != 52754.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_coincontrolmanagerstate_preview_new() != 11196.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_coincontrolmanagerstate_preview_new() != 11039.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_rustconnectivitymanager_new() != 58689.toShort()) {
@@ -4817,28 +4854,28 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_rustonboardingmanager_new() != 42858.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_rustpendingwalletmanager_new() != 1933.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_rustpendingwalletmanager_new() != 33880.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_new() != 19482.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_new() != 14266.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet() != 39975.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 41631.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 47049.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 10884.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 36942.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub() != 15129.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub() != 49068.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_mnemonic_new() != 40975.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_mnemonic_new() != 5870.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_mnemonic_preview() != 34768.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_mnemonic_preview() != 32994.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_nodeselector_new() != 62365.toShort()) {
@@ -4847,34 +4884,34 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_qrscanner_new() != 57573.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_boxedroute_new() != 21632.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_boxedroute_new() != 17916.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_routefactory_new() != 29995.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_seedqr_new_from_data() != 20096.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_seedqr_new_from_data() != 29102.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_seedqr_new_from_str() != 17486.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_seedqr_new_from_str() != 19766.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_headericonpresenter_new() != 27668.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_setupcmd_try_new() != 28305.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_setupcmd_try_new() != 36259.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_bitcointransaction_new() != 54413.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_bitcointransaction_new() != 3054.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_bitcointransaction_tryfromdata() != 28556.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_bitcointransaction_tryfromdata() != 146.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_bitcointransaction_tryfromnfcmessage() != 20549.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_bitcointransaction_tryfromnfcmessage() != 20132.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_bitcointransaction_tryfromstringordata() != 37802.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_bitcointransaction_tryfromstringordata() != 5567.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_transactiondetails_preview_confirmed_received() != 42056.toShort()) {
@@ -4886,7 +4923,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_transactiondetails_preview_new_confirmed() != 18691.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_transactiondetails_preview_new_with_label() != 51427.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_transactiondetails_preview_new_with_label() != 28978.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_transactiondetails_preview_pending_received() != 18117.toShort()) {
@@ -4898,13 +4935,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_unsignedtransaction_preview_new() != 60973.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_urresult_new() != 34590.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_urresult_new() != 34982.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_wallet_new_from_export() != 38500.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_wallet_new_from_export() != 4756.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_wallet_new_from_xpub() != 12329.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_wallet_new_from_xpub() != 16568.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_wallet_previewnewwallet() != 59961.toShort()) {
@@ -4913,58 +4950,58 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_balance_zero() != 52590.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_fingerprint_new() != 9042.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_fingerprint_new() != 57470.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_wordvalidator_preview() != 63940.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_wordvalidator_preview() != 38777.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_wordverifystatemachine_new() != 16955.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_wordverifystatemachine_new() != 8920.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffireconcile_reconcile() != 36143.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffireconcile_reconcile() != 31308.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_authmanagerreconciler_reconcile() != 565.toShort()) {
+    if (lib.uniffi_cove_checksum_method_authmanagerreconciler_reconcile() != 5624.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_cloudbackupmanagerreconciler_reconcile() != 23183.toShort()) {
+    if (lib.uniffi_cove_checksum_method_cloudbackupmanagerreconciler_reconcile() != 16486.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile() != 28640.toShort()) {
+    if (lib.uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile() != 43435.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 14668.toShort()) {
+    if (lib.uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 55187.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_importwalletmanagerreconciler_reconcile() != 13279.toShort()) {
+    if (lib.uniffi_cove_checksum_method_importwalletmanagerreconciler_reconcile() != 55979.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile() != 13047.toShort()) {
+    if (lib.uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile() != 11875.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile() != 54948.toShort()) {
+    if (lib.uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile() != 62782.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile() != 15254.toShort()) {
+    if (lib.uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile() != 64042.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile_many() != 4799.toShort()) {
+    if (lib.uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile_many() != 45190.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 4887.toShort()) {
+    if (lib.uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 44576.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_walletmanagerreconciler_reconcile_many() != 28999.toShort()) {
+    if (lib.uniffi_cove_checksum_method_walletmanagerreconciler_reconcile_many() != 25357.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_set_message() != 28436.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_set_message() != 44727.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_append_message() != 28952.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_append_message() != 54292.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu() != 31781.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu() != 62461.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -5715,7 +5752,10 @@ open class AddressArgs: Disposable, AutoCloseable, AddressArgsInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_addressargs_new(
     
-        FfiConverterOptionalTypeAddress.lower(`address`),FfiConverterOptionalTypeAddress.lower(`changeAddress`),FfiConverterTypeTransactionDirection.lower(`direction`),_status)
+        
+        FfiConverterOptionalTypeAddress.lower(`address`),
+        FfiConverterOptionalTypeAddress.lower(`changeAddress`),
+        FfiConverterTypeTransactionDirection.lower(`direction`),_status)
 }
     )
 
@@ -6051,6 +6091,7 @@ open class AuthPin: Disposable, AutoCloseable, AuthPinInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_authpin_check(
         it,
+        
         FfiConverterString.lower(`pin`),_status)
 }
     }
@@ -6308,6 +6349,7 @@ open class AutoCompleteImpl: Disposable, AutoCloseable, AutoComplete
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_autocomplete_autocomplete(
         it,
+        
         FfiConverterString.lower(`word`),_status)
 }
     }
@@ -6321,6 +6363,7 @@ open class AutoCompleteImpl: Disposable, AutoCloseable, AutoComplete
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_autocomplete_is_valid_word(
         it,
+        
         FfiConverterString.lower(`word`),_status)
 }
     }
@@ -6700,7 +6743,8 @@ open class BackupManager: Disposable, AutoCloseable, BackupManagerInterface
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_backupmanager_export(
                 uniffiHandle,
-                FfiConverterString.lower(`password`),
+                
+        FfiConverterString.lower(`password`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -6742,7 +6786,9 @@ open class BackupManager: Disposable, AutoCloseable, BackupManagerInterface
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_backupmanager_importbackup(
                 uniffiHandle,
-                FfiConverterByteArray.lower(`data`),FfiConverterString.lower(`password`),
+                
+        FfiConverterByteArray.lower(`data`),
+        FfiConverterString.lower(`password`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -6764,6 +6810,7 @@ open class BackupManager: Disposable, AutoCloseable, BackupManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_backupmanager_is_password_valid(
         it,
+        
         FfiConverterString.lower(`password`),_status)
 }
     }
@@ -6781,6 +6828,7 @@ open class BackupManager: Disposable, AutoCloseable, BackupManagerInterface
     uniffiRustCallWithError(BackupException) { _status ->
     UniffiLib.uniffi_cove_fn_method_backupmanager_validate_format(
         it,
+        
         FfiConverterByteArray.lower(`data`),_status)
 }
     }
@@ -6795,7 +6843,9 @@ open class BackupManager: Disposable, AutoCloseable, BackupManagerInterface
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_backupmanager_verifybackup(
                 uniffiHandle,
-                FfiConverterByteArray.lower(`data`),FfiConverterString.lower(`password`),
+                
+        FfiConverterByteArray.lower(`data`),
+        FfiConverterString.lower(`password`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -7090,6 +7140,7 @@ open class Balance: Disposable, AutoCloseable, BalanceInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_balance_uniffi_trait_eq_eq(
         it,
+        
         FfiConverterTypeBalance.lower(`other`),_status)
 }
     }
@@ -7605,6 +7656,7 @@ open class Bip39AutoComplete: Disposable, AutoCloseable, Bip39AutoCompleteInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_bip39autocomplete_autocomplete(
         it,
+        
         FfiConverterString.lower(`word`),_status)
 }
     }
@@ -7618,6 +7670,7 @@ open class Bip39AutoComplete: Disposable, AutoCloseable, Bip39AutoCompleteInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_bip39autocomplete_is_valid_word(
         it,
+        
         FfiConverterString.lower(`word`),_status)
 }
     }
@@ -7634,7 +7687,9 @@ open class Bip39AutoComplete: Disposable, AutoCloseable, Bip39AutoCompleteInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_bip39autocomplete_next_field_number(
         it,
-        FfiConverterUByte.lower(`currentFieldNumber`),FfiConverterSequenceString.lower(`enteredWords`),_status)
+        
+        FfiConverterUByte.lower(`currentFieldNumber`),
+        FfiConverterSequenceString.lower(`enteredWords`),_status)
 }
     }
     )
@@ -7817,7 +7872,9 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_bip39wordspecificautocomplete_new(
     
-        FfiConverterUShort.lower(`wordNumber`),FfiConverterTypeNumberOfBip39Words.lower(`numberOfWords`),_status)
+        
+        FfiConverterUShort.lower(`wordNumber`),
+        FfiConverterTypeNumberOfBip39Words.lower(`numberOfWords`),_status)
 }
     )
 
@@ -7903,7 +7960,9 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_bip39wordspecificautocomplete_autocomplete(
         it,
-        FfiConverterString.lower(`word`),FfiConverterSequenceSequenceString.lower(`allWords`),_status)
+        
+        FfiConverterString.lower(`word`),
+        FfiConverterSequenceSequenceString.lower(`allWords`),_status)
 }
     }
     )
@@ -7916,6 +7975,7 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_bip39wordspecificautocomplete_is_bip39_word(
         it,
+        
         FfiConverterString.lower(`word`),_status)
 }
     }
@@ -7929,7 +7989,9 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_bip39wordspecificautocomplete_is_valid_word(
         it,
-        FfiConverterString.lower(`word`),FfiConverterSequenceSequenceString.lower(`allWords`),_status)
+        
+        FfiConverterString.lower(`word`),
+        FfiConverterSequenceSequenceString.lower(`allWords`),_status)
 }
     }
     )
@@ -7942,7 +8004,9 @@ open class Bip39WordSpecificAutocomplete: Disposable, AutoCloseable, Bip39WordSp
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_bip39wordspecificautocomplete_next_field_number(
         it,
-        FfiConverterUByte.lower(`currentFieldNumber`),FfiConverterSequenceString.lower(`enteredWords`),_status)
+        
+        FfiConverterUByte.lower(`currentFieldNumber`),
+        FfiConverterSequenceString.lower(`enteredWords`),_status)
 }
     }
     )
@@ -8123,6 +8187,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
     uniffiRustCallWithError(BitcoinTransactionException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_bitcointransaction_new(
     
+        
         FfiConverterString.lower(`txHex`),_status)
 }
     )
@@ -8255,6 +8320,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
     uniffiRustCallWithError(BitcoinTransactionException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_bitcointransaction_tryfromdata(
     
+        
         FfiConverterByteArray.lower(`data`),_status)
 }
     )
@@ -8267,6 +8333,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
     uniffiRustCallWithError(BitcoinTransactionException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_bitcointransaction_tryfromnfcmessage(
     
+        
         FfiConverterTypeNfcMessage.lower(`nfcMessage`),_status)
 }
     )
@@ -8279,6 +8346,7 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
     uniffiRustCallWithError(BitcoinTransactionException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_bitcointransaction_tryfromstringordata(
     
+        
         FfiConverterTypeStringOrData.lower(`stringOrData`),_status)
 }
     )
@@ -8446,6 +8514,7 @@ open class BoxedRoute: Disposable, AutoCloseable, BoxedRouteInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_boxedroute_new(
     
+        
         FfiConverterTypeRoute.lower(`route`),_status)
 }
     )
@@ -8791,7 +8860,9 @@ open class CoinControlManagerState: Disposable, AutoCloseable, CoinControlManage
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_coincontrolmanagerstate_preview_new(
     
-        FfiConverterUByte.lower(`outputCount`),FfiConverterUByte.lower(`changeCount`),_status)
+        
+        FfiConverterUByte.lower(`outputCount`),
+        FfiConverterUByte.lower(`changeCount`),_status)
 }
     )
     }
@@ -9437,6 +9508,7 @@ open class Converter: Disposable, AutoCloseable, ConverterInterface
     uniffiRustCallWithError(ConverterException) { _status ->
     UniffiLib.uniffi_cove_fn_method_converter_parse_fiat_str(
         it,
+        
         FfiConverterString.lower(`fiatAmount`),_status)
 }
     }
@@ -9450,6 +9522,7 @@ open class Converter: Disposable, AutoCloseable, ConverterInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_converter_remove_fiat_suffix(
         it,
+        
         FfiConverterString.lower(`fiatAmount`),_status)
 }
     }
@@ -10235,6 +10308,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_delete_corrupted_wallet(
         it,
+        
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
     }
@@ -10251,6 +10325,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCallWithError(AppException) { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_dispatch(
         it,
+        
         FfiConverterTypeAppAction.lower(`action`),_status)
 }
     }
@@ -10263,6 +10338,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_email_mailto(
         it,
+        
         FfiConverterString.lower(`ios`),_status)
 }
     }
@@ -10294,6 +10370,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_find_tap_signer_wallet(
         it,
+        
         FfiConverterTypeTapSigner.lower(`tapSigner`),_status)
 }
     }
@@ -10311,6 +10388,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCallWithError(KeychainExceptionExternalErrorHandler) { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_get_tap_signer_backup(
         it,
+        
         FfiConverterTypeTapSigner.lower(`tapSigner`),_status)
 }
     }
@@ -10409,6 +10487,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_listen_for_updates(
         it,
+        
         FfiConverterTypeFfiReconcile.lower(`updater`),_status)
 }
     }
@@ -10424,6 +10503,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_load_and_reset_default_route(
         it,
+        
         FfiConverterTypeRoute.lower(`route`),_status)
 }
     }
@@ -10440,7 +10520,9 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_load_and_reset_default_route_after(
         it,
-        FfiConverterTypeRoute.lower(`route`),FfiConverterUInt.lower(`afterMillis`),_status)
+        
+        FfiConverterTypeRoute.lower(`route`),
+        FfiConverterUInt.lower(`afterMillis`),_status)
 }
     }
     
@@ -10498,6 +10580,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_reset_after_loading(
         it,
+        
         FfiConverterSequenceTypeRoute.lower(`to`),_status)
 }
     }
@@ -10513,6 +10596,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_reset_default_route_to(
         it,
+        
         FfiConverterTypeRoute.lower(`route`),_status)
 }
     }
@@ -10528,7 +10612,9 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_reset_nested_routes_to(
         it,
-        FfiConverterTypeRoute.lower(`defaultRoute`),FfiConverterSequenceTypeRoute.lower(`nestedRoutes`),_status)
+        
+        FfiConverterTypeRoute.lower(`defaultRoute`),
+        FfiConverterSequenceTypeRoute.lower(`nestedRoutes`),_status)
 }
     }
     
@@ -10543,7 +10629,9 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(
         it,
-        FfiConverterTypeTapSigner.lower(`tapSigner`),FfiConverterByteArray.lower(`backup`),_status)
+        
+        FfiConverterTypeTapSigner.lower(`tapSigner`),
+        FfiConverterByteArray.lower(`backup`),_status)
 }
     }
     )
@@ -11002,6 +11090,7 @@ open class FileHandler: Disposable, AutoCloseable, FileHandlerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_filehandler_new(
     
+        
         FfiConverterString.lower(`filePath`),_status)
 }
     )
@@ -11508,6 +11597,7 @@ open class Fingerprint: Disposable, AutoCloseable, FingerprintInterface
     uniffiRustCallWithError(FingerprintException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_fingerprint_new(
     
+        
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
     )
@@ -12180,6 +12270,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_delete(
         it,
+        
         FfiConverterTypeGlobalConfigKey.lower(`key`),_status)
 }
     }
@@ -12206,6 +12297,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_get(
         it,
+        
         FfiConverterTypeGlobalConfigKey.lower(`key`),_status)
 }
     }
@@ -12260,6 +12352,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_select_wallet(
         it,
+        
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
     }
@@ -12325,7 +12418,9 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_set(
         it,
-        FfiConverterTypeGlobalConfigKey.lower(`key`),FfiConverterString.lower(`value`),_status)
+        
+        FfiConverterTypeGlobalConfigKey.lower(`key`),
+        FfiConverterString.lower(`value`),_status)
 }
     }
     
@@ -12338,6 +12433,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_setcolorscheme(
         it,
+        
         FfiConverterTypeColorSchemeSelection.lower(`colorScheme`),_status)
 }
     }
@@ -12351,6 +12447,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(
         it,
+        
         FfiConverterString.lower(`hashedPinCode`),_status)
 }
     }
@@ -12364,6 +12461,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_selected_network(
         it,
+        
         FfiConverterTypeNetwork.lower(`network`),_status)
 }
     }
@@ -12377,6 +12475,7 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_selected_node(
         it,
+        
         FfiConverterTypeNode.lower(`node`),_status)
 }
     }
@@ -12655,6 +12754,7 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalflagtable_get(
         it,
+        
         FfiConverterTypeGlobalFlagKey.lower(`key`),_status)
 }
     }
@@ -12668,6 +12768,7 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_globalflagtable_get_bool_config(
         it,
+        
         FfiConverterTypeGlobalFlagKey.lower(`key`),_status)
 }
     }
@@ -12695,7 +12796,9 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalflagtable_set(
         it,
-        FfiConverterTypeGlobalFlagKey.lower(`key`),FfiConverterBoolean.lower(`value`),_status)
+        
+        FfiConverterTypeGlobalFlagKey.lower(`key`),
+        FfiConverterBoolean.lower(`value`),_status)
 }
     }
     
@@ -12708,7 +12811,9 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalflagtable_set_bool_config(
         it,
-        FfiConverterTypeGlobalFlagKey.lower(`key`),FfiConverterBoolean.lower(`value`),_status)
+        
+        FfiConverterTypeGlobalFlagKey.lower(`key`),
+        FfiConverterBoolean.lower(`value`),_status)
 }
     }
     
@@ -12721,6 +12826,7 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalflagtable_toggle_bool_config(
         it,
+        
         FfiConverterTypeGlobalFlagKey.lower(`key`),_status)
 }
     }
@@ -13227,7 +13333,11 @@ open class HeaderIconPresenter: Disposable, AutoCloseable, HeaderIconPresenterIn
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_headericonpresenter_background_color(
         it,
-        FfiConverterTypeTransactionState.lower(`state`),FfiConverterTypeTransactionDirection.lower(`direction`),FfiConverterTypeFfiColorScheme.lower(`colorScheme`),FfiConverterLong.lower(`confirmationCount`),_status)
+        
+        FfiConverterTypeTransactionState.lower(`state`),
+        FfiConverterTypeTransactionDirection.lower(`direction`),
+        FfiConverterTypeFfiColorScheme.lower(`colorScheme`),
+        FfiConverterLong.lower(`confirmationCount`),_status)
 }
     }
     )
@@ -13240,7 +13350,11 @@ open class HeaderIconPresenter: Disposable, AutoCloseable, HeaderIconPresenterIn
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_headericonpresenter_icon_color(
         it,
-        FfiConverterTypeTransactionState.lower(`state`),FfiConverterTypeTransactionDirection.lower(`direction`),FfiConverterTypeFfiColorScheme.lower(`colorScheme`),FfiConverterLong.lower(`confirmationCount`),_status)
+        
+        FfiConverterTypeTransactionState.lower(`state`),
+        FfiConverterTypeTransactionDirection.lower(`direction`),
+        FfiConverterTypeFfiColorScheme.lower(`colorScheme`),
+        FfiConverterLong.lower(`confirmationCount`),_status)
 }
     }
     )
@@ -13253,7 +13367,12 @@ open class HeaderIconPresenter: Disposable, AutoCloseable, HeaderIconPresenterIn
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_headericonpresenter_ring_color(
         it,
-        FfiConverterTypeTransactionState.lower(`state`),FfiConverterTypeFfiColorScheme.lower(`colorScheme`),FfiConverterTypeTransactionDirection.lower(`direction`),FfiConverterLong.lower(`confirmations`),FfiConverterLong.lower(`ringNumber`),_status)
+        
+        FfiConverterTypeTransactionState.lower(`state`),
+        FfiConverterTypeFfiColorScheme.lower(`colorScheme`),
+        FfiConverterTypeTransactionDirection.lower(`direction`),
+        FfiConverterLong.lower(`confirmations`),
+        FfiConverterLong.lower(`ringNumber`),_status)
 }
     }
     )
@@ -13929,6 +14048,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_labelmanager_new(
     
+        
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
     )
@@ -14016,6 +14136,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     uniffiRustCallWithError(LabelManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(
         it,
+        
         FfiConverterTypeTxId.lower(`txId`),_status)
 }
     }
@@ -14049,6 +14170,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_labelmanager_export_default_file_name(
         it,
+        
         FfiConverterString.lower(`name`),_status)
 }
     }
@@ -14067,7 +14189,8 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_labelmanager_export_to_bbqr_with_density(
                 uniffiHandle,
-                FfiConverterTypeQrDensity.lower(`density`),
+                
+        FfiConverterTypeQrDensity.lower(`density`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -14100,6 +14223,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     uniffiRustCallWithError(LabelManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_labelmanager_import(
         it,
+        
         FfiConverterString.lower(`jsonl`),_status)
 }
     }
@@ -14113,6 +14237,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     uniffiRustCallWithError(LabelManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_labelmanager_importlabels(
         it,
+        
         FfiConverterTypeBip329Labels.lower(`labels`),_status)
 }
     }
@@ -14126,7 +14251,10 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     uniffiRustCallWithError(LabelManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_labelmanager_insert_or_update_labels_for_txn(
         it,
-        FfiConverterTypeTransactionDetails.lower(`details`),FfiConverterString.lower(`label`),FfiConverterOptionalString.lower(`origin`),_status)
+        
+        FfiConverterTypeTransactionDetails.lower(`details`),
+        FfiConverterString.lower(`label`),
+        FfiConverterOptionalString.lower(`origin`),_status)
 }
     }
     
@@ -14138,6 +14266,7 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_labelmanager_transaction_label(
         it,
+        
         FfiConverterTypeTxId.lower(`txId`),_status)
 }
     }
@@ -14838,6 +14967,7 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
     uniffiRustCallWithError(MnemonicException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_mnemonic_new(
     
+        
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
     )
@@ -14974,6 +15104,7 @@ open class Mnemonic: Disposable, AutoCloseable, MnemonicInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_mnemonic_preview(
     
+        
         FfiConverterTypeNumberOfBip39Words.lower(`numberOfBip39Words`),_status)
 }
     )
@@ -15248,7 +15379,8 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_nodeselector_check_and_save_node(
                 uniffiHandle,
-                FfiConverterTypeNode.lower(`node`),
+                
+        FfiConverterTypeNode.lower(`node`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
@@ -15270,7 +15402,8 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_nodeselector_check_selected_node(
                 uniffiHandle,
-                FfiConverterTypeNode.lower(`node`),
+                
+        FfiConverterTypeNode.lower(`node`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
@@ -15307,7 +15440,10 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     uniffiRustCallWithError(NodeSelectorException) { _status ->
     UniffiLib.uniffi_cove_fn_method_nodeselector_parse_custom_node(
         it,
-        FfiConverterString.lower(`url`),FfiConverterString.lower(`name`),FfiConverterString.lower(`enteredName`),_status)
+        
+        FfiConverterString.lower(`url`),
+        FfiConverterString.lower(`name`),
+        FfiConverterString.lower(`enteredName`),_status)
 }
     }
     )
@@ -15321,6 +15457,7 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     uniffiRustCallWithError(NodeSelectorException) { _status ->
     UniffiLib.uniffi_cove_fn_method_nodeselector_select_preset_node(
         it,
+        
         FfiConverterString.lower(`name`),_status)
 }
     }
@@ -15844,6 +15981,7 @@ open class PriceResponse: Disposable, AutoCloseable, PriceResponseInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_priceresponse_get_for_currency(
         it,
+        
         FfiConverterTypeFiatCurrency.lower(`currency`),_status)
 }
     }
@@ -16400,6 +16538,7 @@ open class QrScanner: Disposable, AutoCloseable, QrScannerInterface
     uniffiRustCallWithError(MultiQrException) { _status ->
     UniffiLib.uniffi_cove_fn_method_qrscanner_scan(
         it,
+        
         FfiConverterTypeStringOrData.lower(`qr`),_status)
 }
     }
@@ -16705,7 +16844,9 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_coin_control_send(
         it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterSequenceTypeUtxo.lower(`utxos`),_status)
+        
+        FfiConverterTypeWalletId.lower(`id`),
+        FfiConverterSequenceTypeUtxo.lower(`utxos`),_status)
 }
     }
     )
@@ -16718,6 +16859,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_cold_wallet_import(
         it,
+        
         FfiConverterTypeColdWalletRoute.lower(`route`),_status)
 }
     }
@@ -16731,6 +16873,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_hot_wallet(
         it,
+        
         FfiConverterTypeHotWalletRoute.lower(`route`),_status)
 }
     }
@@ -16757,7 +16900,9 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_is_same_parent_route(
         it,
-        FfiConverterTypeRoute.lower(`route`),FfiConverterTypeRoute.lower(`routeToCheck`),_status)
+        
+        FfiConverterTypeRoute.lower(`route`),
+        FfiConverterTypeRoute.lower(`routeToCheck`),_status)
 }
     }
     )
@@ -16770,7 +16915,9 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_load_and_reset_nested_to(
         it,
-        FfiConverterTypeRoute.lower(`defaultRoute`),FfiConverterSequenceTypeRoute.lower(`nestedRoutes`),_status)
+        
+        FfiConverterTypeRoute.lower(`defaultRoute`),
+        FfiConverterSequenceTypeRoute.lower(`nestedRoutes`),_status)
 }
     }
     )
@@ -16783,6 +16930,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_load_and_reset_to(
         it,
+        
         FfiConverterTypeRoute.lower(`resetTo`),_status)
 }
     }
@@ -16796,7 +16944,9 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_load_and_reset_to_after(
         it,
-        FfiConverterTypeRoute.lower(`resetTo`),FfiConverterUInt.lower(`time`),_status)
+        
+        FfiConverterTypeRoute.lower(`resetTo`),
+        FfiConverterUInt.lower(`time`),_status)
 }
     }
     )
@@ -16809,6 +16959,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_main_wallet_settings(
         it,
+        
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
     }
@@ -16822,6 +16973,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_nested_settings(
         it,
+        
         FfiConverterTypeSettingsRoute.lower(`route`),_status)
 }
     }
@@ -16835,6 +16987,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_nested_wallet_settings(
         it,
+        
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
     }
@@ -16887,6 +17040,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_secret_words(
         it,
+        
         FfiConverterTypeWalletId.lower(`walletId`),_status)
 }
     }
@@ -16900,6 +17054,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_send(
         it,
+        
         FfiConverterTypeSendRoute.lower(`send`),_status)
 }
     }
@@ -16913,7 +17068,9 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_send_confirm(
         it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),_status)
+        
+        FfiConverterTypeWalletId.lower(`id`),
+        FfiConverterTypeConfirmDetails.lower(`details`),_status)
 }
     }
     )
@@ -16926,7 +17083,10 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_send_confirm_signed_psbt(
         it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),FfiConverterTypePsbt.lower(`psbt`),_status)
+        
+        FfiConverterTypeWalletId.lower(`id`),
+        FfiConverterTypeConfirmDetails.lower(`details`),
+        FfiConverterTypePsbt.lower(`psbt`),_status)
 }
     }
     )
@@ -16939,7 +17099,10 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_send_confirm_signed_transaction(
         it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),FfiConverterTypeBitcoinTransaction.lower(`transaction`),_status)
+        
+        FfiConverterTypeWalletId.lower(`id`),
+        FfiConverterTypeConfirmDetails.lower(`details`),
+        FfiConverterTypeBitcoinTransaction.lower(`transaction`),_status)
 }
     }
     )
@@ -16952,7 +17115,9 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_send_hardware_export(
         it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeConfirmDetails.lower(`details`),_status)
+        
+        FfiConverterTypeWalletId.lower(`id`),
+        FfiConverterTypeConfirmDetails.lower(`details`),_status)
 }
     }
     )
@@ -16965,7 +17130,10 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_send_set_amount(
         it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterOptionalTypeAddress.lower(`address`),FfiConverterOptionalTypeAmount.lower(`amount`),_status)
+        
+        FfiConverterTypeWalletId.lower(`id`),
+        FfiConverterOptionalTypeAddress.lower(`address`),
+        FfiConverterOptionalTypeAmount.lower(`amount`),_status)
 }
     }
     )
@@ -16978,7 +17146,9 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_routefactory_wallet_settings(
         it,
-        FfiConverterTypeWalletId.lower(`id`),FfiConverterTypeWalletSettingsRoute.lower(`route`),_status)
+        
+        FfiConverterTypeWalletId.lower(`id`),
+        FfiConverterTypeWalletSettingsRoute.lower(`route`),_status)
 }
     }
     )
@@ -17348,6 +17518,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_checkdecoypin(
         it,
+        
         FfiConverterString.lower(`pin`),_status)
 }
     }
@@ -17364,6 +17535,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_checkwipedatapin(
         it,
+        
         FfiConverterString.lower(`pin`),_status)
 }
     }
@@ -17410,6 +17582,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_dispatch(
         it,
+        
         FfiConverterTypeAuthManagerAction.lower(`action`),_status)
 }
     }
@@ -17470,6 +17643,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_listen_for_updates(
         it,
+        
         FfiConverterTypeAuthManagerReconciler.lower(`reconciler`),_status)
 }
     }
@@ -17495,6 +17669,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_send(
         it,
+        
         FfiConverterTypeAuthManagerReconcileMessage.lower(`message`),_status)
 }
     }
@@ -17507,6 +17682,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_set_auth_type(
         it,
+        
         FfiConverterTypeAuthType.lower(`authType`),_status)
 }
     }
@@ -17523,6 +17699,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCallWithError(AuthManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(
         it,
+        
         FfiConverterString.lower(`pin`),_status)
 }
     }
@@ -17536,6 +17713,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCallWithError(AuthManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_set_locked_at(
         it,
+        
         FfiConverterULong.lower(`lockedAt`),_status)
 }
     }
@@ -17552,6 +17730,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCallWithError(AuthManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_set_wipe_data_pin(
         it,
+        
         FfiConverterString.lower(`pin`),_status)
 }
     }
@@ -17597,6 +17776,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_validate_new_pin(
         it,
+        
         FfiConverterString.lower(`newPin`),_status)
 }
     }
@@ -17614,6 +17794,7 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCallWithError(TrickPinException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(
         it,
+        
         FfiConverterString.lower(`pin`),_status)
 }
     }
@@ -17629,7 +17810,9 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustauthmanager_validate_security_action(
         it,
-        FfiConverterTypeSecuritySettingsAction.lower(`action`),FfiConverterSequenceTypeWalletId.lower(`unverifiedWalletIds`),_status)
+        
+        FfiConverterTypeSecuritySettingsAction.lower(`action`),
+        FfiConverterSequenceTypeWalletId.lower(`unverifiedWalletIds`),_status)
 }
     }
     )
@@ -17960,6 +18143,7 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_backup_new_wallet(
         it,
+        
         FfiConverterTypeWalletMetadata.lower(`metadata`),_status)
 }
     }
@@ -18116,6 +18300,7 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_listen_for_updates(
         it,
+        
         FfiConverterTypeCloudBackupManagerReconciler.lower(`reconciler`),_status)
 }
     }
@@ -18194,6 +18379,7 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_dispatch(
         it,
+        
         FfiConverterTypeCloudBackupManagerAction.lower(`action`),_status)
 }
     }
@@ -18465,6 +18651,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_button_presentation(
         it,
+        
         FfiConverterTypeCoinControlListSortKey.lower(`button`),_status)
 }
     }
@@ -18481,6 +18668,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_dispatch(
         it,
+        
         FfiConverterTypeCoinControlManagerAction.lower(`action`),_status)
 }
     }
@@ -18506,6 +18694,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_listen_for_updates(
         it,
+        
         FfiConverterTypeCoinControlManagerReconciler.lower(`reconciler`),_status)
 }
     }
@@ -18584,7 +18773,9 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_rustcoincontrolmanager_preview_new(
     
-        FfiConverterUByte.lower(`outputCount`),FfiConverterUByte.lower(`changeCount`),_status)
+        
+        FfiConverterUByte.lower(`outputCount`),
+        FfiConverterUByte.lower(`changeCount`),_status)
 }
     )
     }
@@ -18856,6 +19047,7 @@ open class RustConnectivityManager: Disposable, AutoCloseable, RustConnectivityM
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustconnectivitymanager_set_connection_state(
         it,
+        
         FfiConverterBoolean.lower(`isConnected`),_status)
 }
     }
@@ -18868,6 +19060,7 @@ open class RustConnectivityManager: Disposable, AutoCloseable, RustConnectivityM
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustconnectivitymanager_set_connection_status(
         it,
+        
         FfiConverterTypeConnectivityStatus.lower(`status`),_status)
 }
     }
@@ -19156,6 +19349,7 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustimportwalletmanager_dispatch(
         it,
+        
         FfiConverterTypeImportWalletManagerAction.lower(`action`),_status)
 }
     }
@@ -19172,6 +19366,7 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
     uniffiRustCallWithError(ImportWalletException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustimportwalletmanager_import_wallet(
         it,
+        
         FfiConverterSequenceSequenceString.lower(`enteredWords`),_status)
 }
     }
@@ -19185,6 +19380,7 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustimportwalletmanager_listen_for_updates(
         it,
+        
         FfiConverterTypeImportWalletManagerReconciler.lower(`reconciler`),_status)
 }
     }
@@ -19468,6 +19664,7 @@ open class RustOnboardingManager: Disposable, AutoCloseable, RustOnboardingManag
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustonboardingmanager_dispatch(
         it,
+        
         FfiConverterTypeOnboardingAction.lower(`action`),_status)
 }
     }
@@ -19480,6 +19677,7 @@ open class RustOnboardingManager: Disposable, AutoCloseable, RustOnboardingManag
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustonboardingmanager_listen_for_updates(
         it,
+        
         FfiConverterTypeOnboardingManagerReconciler.lower(`reconciler`),_status)
 }
     }
@@ -19699,6 +19897,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_rustpendingwalletmanager_new(
     
+        
         FfiConverterTypeNumberOfBip39Words.lower(`numberOfWords`),_status)
 }
     )
@@ -19827,6 +20026,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_dispatch(
         it,
+        
         FfiConverterTypePendingWalletManagerAction.lower(`action`),_status)
 }
     }
@@ -19852,6 +20052,7 @@ open class RustPendingWalletManager: Disposable, AutoCloseable, RustPendingWalle
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustpendingwalletmanager_listen_for_updates(
         it,
+        
         FfiConverterTypePendingWalletManagerReconciler.lower(`reconciler`),_status)
 }
     }
@@ -20231,6 +20432,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_dispatch(
         it,
+        
         FfiConverterTypeSendFlowManagerAction.lower(`action`),_status)
 }
     }
@@ -20243,7 +20445,9 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_display_fiat_amount(
         it,
-        FfiConverterDouble.lower(`amount`),FfiConverterBoolean.lower(`withSuffix`),_status)
+        
+        FfiConverterDouble.lower(`amount`),
+        FfiConverterBoolean.lower(`withSuffix`),_status)
 }
     }
     )
@@ -20274,7 +20478,9 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_get_custom_fee_option(
                 uniffiHandle,
-                FfiConverterTypeFeeRate.lower(`feeRate`),FfiConverterTypeFeeSpeed.lower(`feeSpeed`),
+                
+        FfiConverterTypeFeeRate.lower(`feeRate`),
+        FfiConverterTypeFeeSpeed.lower(`feeSpeed`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
@@ -20293,6 +20499,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_listen_for_updates(
         it,
+        
         FfiConverterTypeSendFlowManagerReconciler.lower(`reconciler`),_status)
 }
     }
@@ -20331,7 +20538,9 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_sanitize_btc_entering_amount(
         it,
-        FfiConverterString.lower(`oldValue`),FfiConverterString.lower(`newValue`),_status)
+        
+        FfiConverterString.lower(`oldValue`),
+        FfiConverterString.lower(`newValue`),_status)
 }
     }
     )
@@ -20344,7 +20553,9 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_sanitize_fiat_entering_amount(
         it,
-        FfiConverterString.lower(`oldValue`),FfiConverterString.lower(`newValue`),_status)
+        
+        FfiConverterString.lower(`oldValue`),
+        FfiConverterString.lower(`newValue`),_status)
 }
     }
     )
@@ -20435,6 +20646,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_validate_address(
         it,
+        
         FfiConverterBoolean.lower(`displayAlert`),_status)
 }
     }
@@ -20448,6 +20660,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_validate_amount(
         it,
+        
         FfiConverterBoolean.lower(`displayAlert`),_status)
 }
     }
@@ -20461,6 +20674,7 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_validate_fee_percentage(
         it,
+        
         FfiConverterBoolean.lower(`displayAlert`),_status)
 }
     }
@@ -20867,6 +21081,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_new(
     
+        
         FfiConverterTypeWalletId.lower(`id`),_status)
 }
     )
@@ -20958,7 +21173,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_address_at(
                 uniffiHandle,
-                FfiConverterUInt.lower(`index`),
+                
+        FfiConverterUInt.lower(`index`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
@@ -20980,6 +21196,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(
         it,
+        
         FfiConverterTypeAmount.lower(`amount`),_status)
 }
     }
@@ -21015,7 +21232,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(
                 uniffiHandle,
-                FfiConverterTypeBitcoinTransaction.lower(`signedTransaction`),
+                
+        FfiConverterTypeBitcoinTransaction.lower(`signedTransaction`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
@@ -21035,7 +21253,10 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_convert_and_display_fiat(
         it,
-        FfiConverterTypeAmount.lower(`amount`),FfiConverterTypePriceResponse.lower(`prices`),FfiConverterBoolean.lower(`withSuffix`),_status)
+        
+        FfiConverterTypeAmount.lower(`amount`),
+        FfiConverterTypePriceResponse.lower(`prices`),
+        FfiConverterBoolean.lower(`withSuffix`),_status)
 }
     }
     )
@@ -21048,7 +21269,9 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_convert_from_fiat_string(
         it,
-        FfiConverterString.lower(`fiatAmount`),FfiConverterTypePriceResponse.lower(`prices`),_status)
+        
+        FfiConverterString.lower(`fiatAmount`),
+        FfiConverterTypePriceResponse.lower(`prices`),_status)
 }
     }
     )
@@ -21061,7 +21284,9 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_convert_to_fiat(
         it,
-        FfiConverterTypeAmount.lower(`amount`),FfiConverterTypePriceResponse.lower(`prices`),_status)
+        
+        FfiConverterTypeAmount.lower(`amount`),
+        FfiConverterTypePriceResponse.lower(`prices`),_status)
 }
     }
     )
@@ -21117,6 +21342,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_delete_unsigned_transaction(
         it,
+        
         FfiConverterTypeTxId.lower(`txId`),_status)
 }
     }
@@ -21161,6 +21387,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_dispatch(
         it,
+        
         FfiConverterTypeWalletManagerAction.lower(`action`),_status)
 }
     }
@@ -21180,7 +21407,9 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_amount(
         it,
-        FfiConverterTypeAmount.lower(`amount`),FfiConverterBoolean.lower(`showUnit`),_status)
+        
+        FfiConverterTypeAmount.lower(`amount`),
+        FfiConverterBoolean.lower(`showUnit`),_status)
 }
     }
     )
@@ -21197,6 +21426,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_amount_pending_fmt(
         it,
+        
         FfiConverterTypeAmount.lower(`amount`),_status)
 }
     }
@@ -21216,7 +21446,9 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_amount_with_direction(
         it,
-        FfiConverterTypeAmount.lower(`amount`),FfiConverterTypeTransactionDirection.lower(`direction`),_status)
+        
+        FfiConverterTypeAmount.lower(`amount`),
+        FfiConverterTypeTransactionDirection.lower(`direction`),_status)
 }
     }
     )
@@ -21229,7 +21461,9 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(
         it,
-        FfiConverterDouble.lower(`amount`),FfiConverterBoolean.lower(`withSuffix`),_status)
+        
+        FfiConverterDouble.lower(`amount`),
+        FfiConverterBoolean.lower(`withSuffix`),_status)
 }
     }
     )
@@ -21246,7 +21480,9 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount_pending_fmt(
         it,
-        FfiConverterDouble.lower(`amount`),FfiConverterBoolean.lower(`withSuffix`),_status)
+        
+        FfiConverterDouble.lower(`amount`),
+        FfiConverterBoolean.lower(`withSuffix`),_status)
 }
     }
     )
@@ -21265,7 +21501,10 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount_with_direction(
         it,
-        FfiConverterDouble.lower(`amount`),FfiConverterTypeTransactionDirection.lower(`direction`),FfiConverterBoolean.lower(`withSuffix`),_status)
+        
+        FfiConverterDouble.lower(`amount`),
+        FfiConverterTypeTransactionDirection.lower(`direction`),
+        FfiConverterBoolean.lower(`withSuffix`),_status)
 }
     }
     )
@@ -21284,6 +21523,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_sent_and_received_amount(
         it,
+        
         FfiConverterTypeSentAndReceived.lower(`sentAndReceived`),_status)
 }
     }
@@ -21302,7 +21542,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_export_labels_for_qr(
                 uniffiHandle,
-                FfiConverterTypeQrDensity.lower(`density`),
+                
+        FfiConverterTypeQrDensity.lower(`density`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -21374,7 +21615,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_export_xpub_for_qr(
                 uniffiHandle,
-                FfiConverterTypeQrDensity.lower(`density`),
+                
+        FfiConverterTypeQrDensity.lower(`density`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -21456,7 +21698,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_finalize_psbt(
                 uniffiHandle,
-                FfiConverterTypePsbt.lower(`psbt`),
+                
+        FfiConverterTypePsbt.lower(`psbt`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
@@ -21623,6 +21866,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_listen_for_updates(
         it,
+        
         FfiConverterTypeWalletManagerReconciler.lower(`reconciler`),_status)
 }
     }
@@ -21681,6 +21925,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(
         it,
+        
         FfiConverterTypeBalance.lower(`balance`),_status)
 }
     }
@@ -21720,7 +21965,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations(
                 uniffiHandle,
-                FfiConverterUInt.lower(`blockHeight`),
+                
+        FfiConverterUInt.lower(`blockHeight`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u32(future, callback, continuation) },
@@ -21741,7 +21987,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations_fmt(
                 uniffiHandle,
-                FfiConverterUInt.lower(`blockHeight`),
+                
+        FfiConverterUInt.lower(`blockHeight`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -21780,7 +22027,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_rescan_wallet_with_gap_limit(
                 uniffiHandle,
-                FfiConverterUInt.lower(`gapLimit`),
+                
+        FfiConverterUInt.lower(`gapLimit`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
@@ -21801,6 +22049,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_save_unsigned_transaction(
         it,
+        
         FfiConverterTypeConfirmDetails.lower(`details`),_status)
 }
     }
@@ -21828,7 +22077,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_sent_and_received_fiat(
                 uniffiHandle,
-                FfiConverterTypeSentAndReceived.lower(`sentAndReceived`),
+                
+        FfiConverterTypeSentAndReceived.lower(`sentAndReceived`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_f64(future, callback, continuation) },
@@ -21847,6 +22097,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(
         it,
+        
         FfiConverterTypeWalletMetadata.lower(`metadata`),_status)
 }
     }
@@ -21860,6 +22111,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(
         it,
+        
         FfiConverterTypeWalletType.lower(`walletType`),_status)
 }
     }
@@ -21874,7 +22126,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(
                 uniffiHandle,
-                FfiConverterTypePsbt.lower(`psbt`),
+                
+        FfiConverterTypePsbt.lower(`psbt`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
@@ -21896,7 +22149,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_split_transaction_outputs(
                 uniffiHandle,
-                FfiConverterSequenceTypeAddressAndAmount.lower(`outputs`),
+                
+        FfiConverterSequenceTypeAddressAndAmount.lower(`outputs`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -21939,7 +22193,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_switch_to_different_wallet_address_type(
                 uniffiHandle,
-                FfiConverterTypeWalletAddressType.lower(`walletAddressType`),
+                
+        FfiConverterTypeWalletAddressType.lower(`walletAddressType`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
@@ -21961,7 +22216,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_transaction_details(
                 uniffiHandle,
-                FfiConverterTypeTxId.lower(`txId`),
+                
+        FfiConverterTypeTxId.lower(`txId`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
@@ -22036,6 +22292,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet_with_metadata(
     
+        
         FfiConverterTypeWalletMetadata.lower(`metadata`),_status)
 }
     )
@@ -22048,7 +22305,11 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(
     
-        FfiConverterTypeTapSigner.lower(`tapSigner`),FfiConverterTypeDeriveInfo.lower(`deriveInfo`),FfiConverterOptionalByteArray.lower(`backup`),FfiConverterOptionalTypeWalletBirthday.lower(`birthday`),_status)
+        
+        FfiConverterTypeTapSigner.lower(`tapSigner`),
+        FfiConverterTypeDeriveInfo.lower(`deriveInfo`),
+        FfiConverterOptionalByteArray.lower(`backup`),
+        FfiConverterOptionalTypeWalletBirthday.lower(`birthday`),_status)
 }
     )
     }
@@ -22060,6 +22321,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(
     
+        
         FfiConverterString.lower(`xpub`),_status)
 }
     )
@@ -22320,6 +22582,7 @@ open class SeedQr: Disposable, AutoCloseable, SeedQrInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_seedqr_grouped_plain_words(
         it,
+        
         FfiConverterUByte.lower(`groupsOf`),_status)
 }
     }
@@ -22340,6 +22603,7 @@ open class SeedQr: Disposable, AutoCloseable, SeedQrInterface
     uniffiRustCallWithError(SeedQrException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_seedqr_new_from_data(
     
+        
         FfiConverterByteArray.lower(`data`),_status)
 }
     )
@@ -22352,6 +22616,7 @@ open class SeedQr: Disposable, AutoCloseable, SeedQrInterface
     uniffiRustCallWithError(SeedQrException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_seedqr_new_from_str(
     
+        
         FfiConverterString.lower(`qr`),_status)
 }
     )
@@ -22842,7 +23107,10 @@ open class SetupCmd: Disposable, AutoCloseable, SetupCmdInterface
     uniffiRustCallWithError(TapSignerReaderException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_setupcmd_try_new(
     
-        FfiConverterString.lower(`factoryPin`),FfiConverterString.lower(`newPin`),FfiConverterOptionalByteArray.lower(`chainCode`),_status)
+        
+        FfiConverterString.lower(`factoryPin`),
+        FfiConverterString.lower(`newPin`),
+        FfiConverterOptionalByteArray.lower(`chainCode`),_status)
 }
     )
     }
@@ -23109,7 +23377,8 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_tapsignerreader_continue_setup(
                 uniffiHandle,
-                FfiConverterTypeSetupCmdResponse.lower(`response`),
+                
+        FfiConverterTypeSetupCmdResponse.lower(`response`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -23170,7 +23439,8 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_tapsignerreader_setup(
                 uniffiHandle,
-                FfiConverterTypeSetupCmd.lower(`cmd`),
+                
+        FfiConverterTypeSetupCmd.lower(`cmd`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -23191,7 +23461,9 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_tapsignerreader_sign(
                 uniffiHandle,
-                FfiConverterTypePsbt.lower(`psbt`),FfiConverterString.lower(`pin`),
+                
+        FfiConverterTypePsbt.lower(`psbt`),
+        FfiConverterString.lower(`pin`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
@@ -23606,6 +23878,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_transactiondetails_amount_fmt(
         it,
+        
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
@@ -23692,6 +23965,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_transactiondetails_fee_fmt(
         it,
+        
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
@@ -23837,6 +24111,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fmt(
         it,
+        
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
@@ -23928,6 +24203,7 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_transactiondetails_preview_new_with_label(
     
+        
         FfiConverterString.lower(`label`),_status)
 }
     )
@@ -25136,6 +25412,7 @@ open class UnsignedTransactionsTable: Disposable, AutoCloseable, UnsignedTransac
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_unsignedtransactionstable_gettx(
         it,
+        
         FfiConverterTypeTxId.lower(`txId`),_status)
 }
     }
@@ -25150,6 +25427,7 @@ open class UnsignedTransactionsTable: Disposable, AutoCloseable, UnsignedTransac
     uniffiRustCallWithError(UnsignedTransactionsTableException) { _status ->
     UniffiLib.uniffi_cove_fn_method_unsignedtransactionstable_gettxthrow(
         it,
+        
         FfiConverterTypeTxId.lower(`txId`),_status)
 }
     }
@@ -25341,7 +25619,9 @@ open class UrResult: Disposable, AutoCloseable, UrResultInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_urresult_new(
     
-        FfiConverterByteArray.lower(`data`),FfiConverterTypeUrType.lower(`urType`),_status)
+        
+        FfiConverterByteArray.lower(`data`),
+        FfiConverterTypeUrType.lower(`urType`),_status)
 }
     )
 
@@ -25754,6 +26034,7 @@ open class Wallet: Disposable, AutoCloseable, WalletInterface
     uniffiRustCallWithError(WalletException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_wallet_new_from_export(
     
+        
         FfiConverterTypeHardwareExport.lower(`export`),_status)
 }
     )
@@ -25766,6 +26047,7 @@ open class Wallet: Disposable, AutoCloseable, WalletInterface
     uniffiRustCallWithError(WalletException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_wallet_new_from_xpub(
     
+        
         FfiConverterString.lower(`xpub`),_status)
 }
     )
@@ -26573,7 +26855,9 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_walletstable_len(
         it,
-        FfiConverterTypeNetwork.lower(`network`),FfiConverterTypeWalletMode.lower(`mode`),_status)
+        
+        FfiConverterTypeNetwork.lower(`network`),
+        FfiConverterTypeWalletMode.lower(`mode`),_status)
 }
     }
     )
@@ -26832,6 +27116,7 @@ open class WordValidator: Disposable, AutoCloseable, WordValidatorInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_wordvalidator_is_complete(
         it,
+        
         FfiConverterUByte.lower(`wordNumber`),_status)
 }
     }
@@ -26845,7 +27130,9 @@ open class WordValidator: Disposable, AutoCloseable, WordValidatorInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_wordvalidator_is_word_correct(
         it,
-        FfiConverterString.lower(`word`),FfiConverterUByte.lower(`for`),_status)
+        
+        FfiConverterString.lower(`word`),
+        FfiConverterUByte.lower(`for`),_status)
 }
     }
     )
@@ -26858,6 +27145,7 @@ open class WordValidator: Disposable, AutoCloseable, WordValidatorInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_wordvalidator_possible_words(
         it,
+        
         FfiConverterUByte.lower(`for`),_status)
 }
     }
@@ -26877,7 +27165,9 @@ open class WordValidator: Disposable, AutoCloseable, WordValidatorInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_wordvalidator_preview(
     
-        FfiConverterBoolean.lower(`preview`),FfiConverterOptionalTypeNumberOfBip39Words.lower(`numberOfWords`),_status)
+        
+        FfiConverterBoolean.lower(`preview`),
+        FfiConverterOptionalTypeNumberOfBip39Words.lower(`numberOfWords`),_status)
 }
     )
     }
@@ -27117,7 +27407,9 @@ open class WordVerifyStateMachine: Disposable, AutoCloseable, WordVerifyStateMac
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_constructor_wordverifystatemachine_new(
     
-        FfiConverterTypeWordValidator.lower(`validator`),FfiConverterUByte.lower(`startingWordNumber`),_status)
+        
+        FfiConverterTypeWordValidator.lower(`validator`),
+        FfiConverterUByte.lower(`startingWordNumber`),_status)
 }
     )
 
@@ -27291,6 +27583,7 @@ open class WordVerifyStateMachine: Disposable, AutoCloseable, WordVerifyStateMac
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_reset_to_word(
         it,
+        
         FfiConverterUByte.lower(`wordNumber`),_status)
 }
     }
@@ -27325,6 +27618,7 @@ open class WordVerifyStateMachine: Disposable, AutoCloseable, WordVerifyStateMac
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_wordverifystatemachine_select_word(
         it,
+        
         FfiConverterString.lower(`word`),_status)
 }
     }
@@ -29969,6 +30263,7 @@ data class WalletMetadata (
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_walletmetadata_is_equal(FfiConverterTypeWalletMetadata.lower(this),
+        
         FfiConverterTypeWalletMetadata.lower(`other`),_status)
 }
     )
@@ -29995,6 +30290,7 @@ data class WalletMetadata (
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_walletmetadata_uniffi_trait_eq_eq(FfiConverterTypeWalletMetadata.lower(this),
+        
         FfiConverterTypeWalletMetadata.lower(`other`),_status)
 }
     )
@@ -31284,6 +31580,7 @@ sealed class AppAlertState: Disposable  {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_appalertstate_is_equal(FfiConverterTypeAppAlertState.lower(this),
+        
         FfiConverterTypeAppAlertState.lower(`rhs`),_status)
 }
     )
@@ -38320,6 +38617,7 @@ sealed class DiscoveryState: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(FfiConverterTypeDiscoveryState.lower(this),
+        
         FfiConverterTypeDiscoveryState.lower(`other`),_status)
 }
     )
@@ -38352,6 +38650,7 @@ sealed class DiscoveryState: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(FfiConverterTypeDiscoveryState.lower(this),
+        
         FfiConverterTypeDiscoveryState.lower(`other`),_status)
 }
     )
@@ -38380,6 +38679,7 @@ sealed class DiscoveryState: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(FfiConverterTypeDiscoveryState.lower(this),
+        
         FfiConverterTypeDiscoveryState.lower(`other`),_status)
 }
     )
@@ -38450,6 +38750,7 @@ sealed class DiscoveryState: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(FfiConverterTypeDiscoveryState.lower(this),
+        
         FfiConverterTypeDiscoveryState.lower(`other`),_status)
 }
     )
@@ -40967,6 +41268,7 @@ sealed class MultiFormat: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        
         FfiConverterTypeMultiFormat.lower(`other`),_status)
 }
     )
@@ -40986,6 +41288,7 @@ sealed class MultiFormat: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        
         FfiConverterTypeMultiFormat.lower(`other`),_status)
 }
     )
@@ -41005,6 +41308,7 @@ sealed class MultiFormat: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        
         FfiConverterTypeMultiFormat.lower(`other`),_status)
 }
     )
@@ -41024,6 +41328,7 @@ sealed class MultiFormat: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        
         FfiConverterTypeMultiFormat.lower(`other`),_status)
 }
     )
@@ -41043,6 +41348,7 @@ sealed class MultiFormat: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        
         FfiConverterTypeMultiFormat.lower(`other`),_status)
 }
     )
@@ -41065,6 +41371,7 @@ sealed class MultiFormat: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        
         FfiConverterTypeMultiFormat.lower(`other`),_status)
 }
     )
@@ -41087,6 +41394,7 @@ sealed class MultiFormat: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        
         FfiConverterTypeMultiFormat.lower(`other`),_status)
 }
     )
@@ -41109,6 +41417,7 @@ sealed class MultiFormat: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        
         FfiConverterTypeMultiFormat.lower(`other`),_status)
 }
     )
@@ -41190,6 +41499,7 @@ sealed class MultiFormat: Disposable  {
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+        
         FfiConverterTypeMultiFormat.lower(`other`),_status)
 }
     )
@@ -43664,6 +43974,7 @@ sealed class Route: Disposable  {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_route_is_equal(FfiConverterTypeRoute.lower(this),
+        
         FfiConverterTypeRoute.lower(`routeToCheck`),_status)
 }
     )
@@ -48798,6 +49109,7 @@ sealed class TapSignerRoute: Disposable  {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_tapsignerroute_is_equal(FfiConverterTypeTapSignerRoute.lower(this),
+        
         FfiConverterTypeTapSignerRoute.lower(`other`),_status)
 }
     )
@@ -51347,6 +51659,7 @@ sealed class WalletLoadState: Disposable  {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_walletloadstate_is_equal(FfiConverterTypeWalletLoadState.lower(this),
+        
         FfiConverterTypeWalletLoadState.lower(`other`),_status)
 }
     )
@@ -56278,21 +56591,11 @@ public object FfiConverterSequenceTypeWalletId: FfiConverterRustBuffer<List<Wall
 
 
 
-/**
- * Typealias from the type name used in the UDL file to the builtin type.  This
- * is needed because the UDL type name is used in function/method signatures.
- * It's also what we have an external type that references a custom type.
- */
 public typealias RecordId = kotlin.String
 public typealias FfiConverterTypeRecordId = FfiConverterString
 
 
 
-/**
- * Typealias from the type name used in the UDL file to the builtin type.  This
- * is needed because the UDL type name is used in function/method signatures.
- * It's also what we have an external type that references a custom type.
- */
 public typealias Timestamp = kotlin.ULong
 public typealias FfiConverterTypeTimestamp = FfiConverterULong
 
@@ -56430,6 +56733,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCallWithError(InitException) { _status ->
     UniffiLib.uniffi_cove_fn_func_set_root_data_dir(
     
+        
         FfiConverterString.lower(`path`),_status)
 }
     
@@ -56568,6 +56872,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_is_fiat_currency_symbol(
     
+        
         FfiConverterString.lower(`symbol`),_status)
 }
     )
@@ -56588,7 +56893,9 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_prices_are_equal(
     
-        FfiConverterTypePriceResponse.lower(`lhs`),FfiConverterTypePriceResponse.lower(`rhs`),_status)
+        
+        FfiConverterTypePriceResponse.lower(`lhs`),
+        FfiConverterTypePriceResponse.lower(`rhs`),_status)
 }
     )
     }
@@ -56653,6 +56960,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_cspp_wallet_filename_from_record_id(
     
+        
         FfiConverterString.lower(`recordId`),_status)
 }
     )
@@ -56679,7 +56987,9 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_send_flow_alert_state_from_address_error(
     
-        FfiConverterTypeAddressError.lower(`error`),FfiConverterString.lower(`address`),_status)
+        
+        FfiConverterTypeAddressError.lower(`error`),
+        FfiConverterString.lower(`address`),_status)
 }
     )
     }
@@ -56690,7 +57000,9 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCallWithError(MnemonicParseException) { _status ->
     UniffiLib.uniffi_cove_fn_func_grouped_plain_words_of(
     
-        FfiConverterString.lower(`mnemonic`),FfiConverterUByte.lower(`groups`),_status)
+        
+        FfiConverterString.lower(`mnemonic`),
+        FfiConverterUByte.lower(`groups`),_status)
 }
     )
     }
@@ -56700,7 +57012,9 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_numberofwordsingroups(
     
-        FfiConverterTypeNumberOfBip39Words.lower(`me`),FfiConverterUByte.lower(`of`),_status)
+        
+        FfiConverterTypeNumberOfBip39Words.lower(`me`),
+        FfiConverterUByte.lower(`of`),_status)
 }
     )
     }
@@ -56710,6 +57024,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_numberofwordstowordcount(
     
+        
         FfiConverterTypeNumberOfBip39Words.lower(`me`),_status)
 }
     )
@@ -56721,6 +57036,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCallWithError(MultiFormatException) { _status ->
     UniffiLib.uniffi_cove_fn_func_multi_format_try_from_nfc_message(
     
+        
         FfiConverterTypeNfcMessage.lower(`nfcMessage`),_status)
 }
     )
@@ -56741,7 +57057,9 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_tap_signer_confirm_pin_args_new_from_new_pin(
     
-        FfiConverterTypeTapSignerNewPinArgs.lower(`args`),FfiConverterString.lower(`newPin`),_status)
+        
+        FfiConverterTypeTapSignerNewPinArgs.lower(`args`),
+        FfiConverterString.lower(`newPin`),_status)
 }
     )
     }
@@ -56752,6 +57070,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCallWithError(SignedImportException) { _status ->
     UniffiLib.uniffi_cove_fn_func_signed_transaction_or_psbt_try_from_bytes(
     
+        
         FfiConverterByteArray.lower(`data`),_status)
 }
     )
@@ -56763,6 +57082,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCallWithError(SignedImportException) { _status ->
     UniffiLib.uniffi_cove_fn_func_signed_transaction_or_psbt_try_from_nfc_message(
     
+        
         FfiConverterTypeNfcMessage.lower(`nfcMessage`),_status)
 }
     )
@@ -56774,6 +57094,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCallWithError(SignedImportException) { _status ->
     UniffiLib.uniffi_cove_fn_func_signed_transaction_or_psbt_try_parse(
     
+        
         FfiConverterString.lower(`input`),_status)
 }
     )
@@ -56784,7 +57105,9 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_create_transport_error_from_code(
     
-        FfiConverterUShort.lower(`code`),FfiConverterString.lower(`message`),_status)
+        
+        FfiConverterUShort.lower(`code`),
+        FfiConverterString.lower(`message`),_status)
 }
     )
     }
@@ -56794,6 +57117,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_is_valid_chain_code(
     
+        
         FfiConverterString.lower(`chainCode`),_status)
 }
     )
@@ -56808,7 +57132,9 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
      suspend fun `createTapSignerReader`(`transport`: TapcardTransportProtocol, `cmd`: TapSignerCmd?) : TapSignerReader {
         return uniffiRustCallAsync(
-        UniffiLib.uniffi_cove_fn_func_create_tap_signer_reader(FfiConverterTypeTapcardTransportProtocol.lower(`transport`),FfiConverterOptionalTypeTapSignerCmd.lower(`cmd`),),
+        UniffiLib.uniffi_cove_fn_func_create_tap_signer_reader(
+        FfiConverterTypeTapcardTransportProtocol.lower(`transport`),
+        FfiConverterOptionalTypeTapSignerCmd.lower(`cmd`),),
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
         { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
         { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
@@ -56823,6 +57149,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_tapsignerresponsebackupresponse(
     
+        
         FfiConverterTypeTapSignerResponse.lower(`response`),_status)
 }
     )
@@ -56833,6 +57160,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_tapsignerresponsechangeresponse(
     
+        
         FfiConverterTypeTapSignerResponse.lower(`response`),_status)
 }
     )
@@ -56843,6 +57171,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_tapsignerresponsederiveresponse(
     
+        
         FfiConverterTypeTapSignerResponse.lower(`response`),_status)
 }
     )
@@ -56853,6 +57182,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_tapsignerresponsesetupresponse(
     
+        
         FfiConverterTypeTapSignerResponse.lower(`response`),_status)
 }
     )
@@ -56863,6 +57193,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_tapsignerresponsesignresponse(
     
+        
         FfiConverterTypeTapSignerResponse.lower(`response`),_status)
 }
     )
@@ -56873,6 +57204,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_tapsignersetupcompletenew(
     
+        
         FfiConverterBoolean.lower(`preview`),_status)
 }
     )
@@ -56883,6 +57215,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_tapsignersetupretrycontinuecmd(
     
+        
         FfiConverterBoolean.lower(`preview`),_status)
 }
     )
@@ -56913,7 +57246,9 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_transactions_preview_new(
     
-        FfiConverterUByte.lower(`confirmed`),FfiConverterUByte.lower(`unconfirmed`),_status)
+        
+        FfiConverterUByte.lower(`confirmed`),
+        FfiConverterUByte.lower(`unconfirmed`),_status)
 }
     )
     }
