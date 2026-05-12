@@ -3,6 +3,7 @@ use color_eyre::Result;
 
 mod android;
 mod common;
+mod github;
 mod ios;
 mod util;
 mod version;
@@ -136,6 +137,10 @@ enum Commands {
     #[command(name = "install-deps")]
     InstallDeps,
 
+    /// Regenerate UniFFI bindings in GitHub Actions for the current branch
+    #[command(name = "regenerate-bindings")]
+    RegenerateBindings,
+
     /// Utility commands for development and testing
     #[command(subcommand)]
     Util(UtilCommands),
@@ -244,6 +249,8 @@ fn main() -> Result<()> {
         }
 
         Commands::InstallDeps => install_deps(cli.verbose),
+
+        Commands::RegenerateBindings => github::regenerate_bindings(),
 
         Commands::Util(util_cmd) => match util_cmd {
             UtilCommands::SignPsbt { mnemonic, psbt, network, format, output } => {

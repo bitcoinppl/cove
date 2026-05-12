@@ -63,6 +63,14 @@ ci:
     just compile
     just test
 
+# Regenerate UniFFI bindings in GitHub Actions for the current branch
+[group('ci')]
+regenerate-bindings:
+    just xtask regenerate-bindings
+
+[private]
+alias rb := regenerate-bindings
+
 # ------------------------------------------------------------------------------
 # build
 # ------------------------------------------------------------------------------
