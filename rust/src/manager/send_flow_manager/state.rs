@@ -47,6 +47,8 @@ pub struct SendFlowManagerState {
     pub focus_field: Option<SetAmountFocusField>,
 
     pub fee_selection: Option<FeeSelection>,
+
+    pub payjoin_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -145,6 +147,7 @@ impl SendFlowManagerState {
             btc_price_in_fiat,
             selected_fiat_currency,
             has_base_fees: false,
+            payjoin_endpoint: None,
         }
     }
 }
