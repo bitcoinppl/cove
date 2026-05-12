@@ -29,10 +29,12 @@ impl EsploraClient {
     }
 
     pub fn new_from_node(node: &Node) -> Result<Self, Error> {
-        let client = esplora_client::Builder::new(&node.url)
-            .build_async()
-            .map_err(Error::CreateEsploraClient)?
-            .into();
+        let mut builder = esplora_client::Builder::new(&node.url);
+        if node.tor.enabled {
+            builder = builder.proxy(&node.tor.socks5_url());
+        }
+
+        let client = builder.build_async().map_err(Error::CreateEsploraClient)?.into();
 
         Ok(Self::new(client))
     }
@@ -41,10 +43,12 @@ impl EsploraClient {
         node: &Node,
         options: NodeClientOptions,
     ) -> Result<Self, Error> {
-        let client = esplora_client::Builder::new(&node.url)
-            .build_async()
-            .map_err(Error::CreateEsploraClient)?
-            .into();
+        let mut builder = esplora_client::Builder::new(&node.url);
+        if node.tor.enabled {
+            builder = builder.proxy(&node.tor.socks5_url());
+        }
+
+        let client = builder.build_async().map_err(Error::CreateEsploraClient)?.into();
 
         Ok(Self::new_with_options(client, options))
     }

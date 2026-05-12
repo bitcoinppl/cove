@@ -19,14 +19,24 @@ struct NodeSelectionView: View {
     @State private var customNodeName: String = ""
     @State private var customUrl: String = ""
 
+    @State private var torEnabled: Bool = false
+    @State private var torProxyAddress: String = "127.0.0.1:9050"
+
     @State private var showParseUrlAlert = false
     @State private var parseUrlMessage = ""
 
     @State private var checkUrlTask: Task<Void, Never>?
 
     init() {
-        selectedNodeName = nodeSelector.selectedNode().name
+        let selected = nodeSelector.selectedNode()
+        selectedNodeName = selected.name
         nodeList = nodeSelector.nodeList()
+
+        // restore TOR settings from the currently selected node
+        if case let .custom(savedNode) = selected {
+            _torEnabled = State(initialValue: savedNode.tor.enabled)
+            _torProxyAddress = State(initialValue: savedNode.tor.proxyAddress)
+        }
     }
 
     var showCustomUrlField: Bool {
@@ -95,14 +105,45 @@ struct NodeSelectionView: View {
                 Button("Save Custom Node", action: checkAndSaveNode)
                     .disabled(customUrl.isEmpty)
             }
+
+            Section("Tor Proxy") {
+                Toggle("Use Tor", isOn: $torEnabled)
+                    .font(.subheadline)
+
+                if torEnabled {
+                    HStack {
+                        Text("Proxy")
+                            .frame(width: 60, alignment: .leading)
+
+                        TextField("127.0.0.1:9050", text: $torProxyAddress)
+                            .keyboardType(.numbersAndPunctuation)
+                            .textInputAutocapitalization(.never)
+                    }
+                    .font(.subheadline)
+
+                    Text("Ensure a Tor proxy (e.g. Orbot) is running on this address.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
     func checkAndSaveNode() {
         var node: Node? = nil
 
+        let torConfig = TorConfig(
+            enabled: torEnabled,
+            proxyAddress: torProxyAddress.isEmpty ? "127.0.0.1:9050" : torProxyAddress
+        )
+
         do {
-            node = try nodeSelector.parseCustomNode(url: customUrl, name: selectedNodeName, enteredName: customNodeName)
+            node = try nodeSelector.parseCustomNodeWithTor(
+                url: customUrl,
+                name: selectedNodeName,
+                enteredName: customNodeName,
+                tor: torConfig
+            )
             customUrl = node?.url ?? customUrl
             customNodeName = node?.name ?? customNodeName
         } catch {
@@ -195,11 +236,15 @@ struct NodeSelectionView: View {
                     if savedSelectedNode.apiType == .electrum, selectedNodeName.contains("Electrum") {
                         customUrl = savedSelectedNode.url
                         customNodeName = savedSelectedNode.name
+                        torEnabled = savedSelectedNode.tor.enabled
+                        torProxyAddress = savedSelectedNode.tor.proxyAddress
                     }
 
                     if savedSelectedNode.apiType == .esplora, selectedNodeName.contains("Esplora") {
                         customUrl = savedSelectedNode.url
                         customNodeName = savedSelectedNode.name
+                        torEnabled = savedSelectedNode.tor.enabled
+                        torProxyAddress = savedSelectedNode.tor.proxyAddress
                     }
                 }
 

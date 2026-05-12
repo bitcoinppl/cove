@@ -1,7 +1,11 @@
 use tracing::error;
 use url::Url;
 
-use crate::{database::Database, network::Network, node::Node};
+use crate::{
+    database::Database,
+    network::Network,
+    node::{Node, TorConfig},
+};
 use cove_macros::impl_default_for;
 use eyre::{Context, eyre};
 
@@ -137,10 +141,24 @@ impl NodeSelector {
         name: String,
         entered_name: String,
     ) -> Result<Node, Error> {
-        let node_type = name.to_ascii_lowercase();
+        self.parse_custom_node_with_tor(url, name, entered_name, TorConfig::default())
+    }
 
-        let url =
-            parse_node_url(&url).map_err(|error| Error::ParseNodeUrlError(error.to_string()))?;
+    #[uniffi::method]
+    /// Use the url and name of the custom node to set it as the selected node, with TOR config
+    pub fn parse_custom_node_with_tor(
+        &self,
+        url: String,
+        name: String,
+        entered_name: String,
+        tor: TorConfig,
+    ) -> Result<Node, Error> {
+        let node_type = name.to_ascii_lowercase();
+        let is_onion = url.contains(".onion");
+        let is_esplora = node_type.contains("esplora");
+
+        let url = parse_node_url(&url, is_onion, is_esplora)
+            .map_err(|error| Error::ParseNodeUrlError(error.to_string()))?;
 
         if !url.domain().unwrap_or_default().contains('.') {
             return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
@@ -154,7 +172,7 @@ impl NodeSelector {
             entered_name
         };
 
-        let node = if node_type.contains("electrum") {
+        let mut node = if node_type.contains("electrum") {
             Node::new_electrum(name, url_string, self.network)
         } else if node_type.contains("esplora") {
             Node::new_esplora(name, url_string, self.network)
@@ -162,6 +180,8 @@ impl NodeSelector {
             error!("invalid node type: {node_type}");
             Node::default(self.network)
         };
+
+        node.tor = tor;
 
         Ok(node)
     }
@@ -237,36 +257,62 @@ fn node_list(network: Network) -> Vec<Node> {
     }
 }
 
-fn parse_node_url(url: &str) -> eyre::Result<Url> {
-    let url = url.replace("http://", "tcp://");
-    let url = url.replace("https://", "ssl://");
+fn parse_node_url(url: &str, is_onion: bool, is_esplora: bool) -> eyre::Result<Url> {
+    // Esplora uses HTTP URLs — don't convert http/https to tcp/ssl
+    // Electrum uses tcp/ssl schemes
+    let url = if is_esplora {
+        url.to_string()
+    } else {
+        let url = url.replace("http://", "tcp://");
+        url.replace("https://", "ssl://")
+    };
 
     let mut url = if url.contains("://") {
         Url::parse(&url)?
+    } else if is_esplora {
+        // Esplora defaults to http
+        let url_str = format!("http://{url}/");
+        Url::parse(&url_str)?
     } else {
         let url_str = format!("none://{url}/");
         Url::parse(&url_str)?
     };
 
-    // set the scheme properly, use the port as a hint
-    match (url.scheme(), url.port()) {
-        ("none", Some(50002)) => url
-            .set_scheme("ssl")
-            .map_err(|()| eyre!("can't set scheme to ssl"))
-            .context("original: none, port is 50002")?,
-        ("none", Some(50001)) => url
-            .set_scheme("tcp")
-            .map_err(|()| eyre!("can't set scheme to tcp"))
-            .context("original: none, port is 50001")?,
-        ("none", port) => {
-            url.set_scheme("tcp")
-                .map_err(|()| eyre!("can't set scheme to tcp"))
-                .wrap_err_with(|| format!("original: none, port is {port:?}"))?;
-        }
-        _ => {}
+    // Esplora URLs keep their http/https scheme — skip electrum-specific scheme logic
+    if is_esplora {
+        return Ok(url);
     }
 
-    // set the port to if not set, default to 50002 for ssl and 50001 for tcp
+    // .onion addresses should always use tcp:// (TOR already provides encryption)
+    if is_onion {
+        match url.scheme() {
+            "none" | "ssl" | "https" => {
+                url.set_scheme("tcp")
+                    .map_err(|()| eyre!("can't set scheme to tcp for onion address"))?;
+            }
+            _ => {}
+        }
+    } else {
+        // set the scheme properly, use the port as a hint
+        match (url.scheme(), url.port()) {
+            ("none", Some(50002)) => url
+                .set_scheme("ssl")
+                .map_err(|()| eyre!("can't set scheme to ssl"))
+                .context("original: none, port is 50002")?,
+            ("none", Some(50001)) => url
+                .set_scheme("tcp")
+                .map_err(|()| eyre!("can't set scheme to tcp"))
+                .context("original: none, port is 50001")?,
+            ("none", port) => {
+                url.set_scheme("tcp")
+                    .map_err(|()| eyre!("can't set scheme to tcp"))
+                    .wrap_err_with(|| format!("original: none, port is {port:?}"))?;
+            }
+            _ => {}
+        }
+    }
+
+    // set the port if not set, default to 50002 for ssl and 50001 for tcp
     match (url.port(), url.scheme()) {
         (Some(_), _) => {}
         (None, "ssl") => url.set_port(Some(50002)).map_err(|()| eyre!("can't set port"))?,

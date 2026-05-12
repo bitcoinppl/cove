@@ -1646,6 +1646,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_parse_custom_node(
     ): Short
+    external fun uniffi_cove_checksum_method_nodeselector_parse_custom_node_with_tor(
+    ): Short
     external fun uniffi_cove_checksum_method_nodeselector_select_preset_node(
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_selected_node(
@@ -2761,6 +2763,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_nodeselector_node_list(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_nodeselector_parse_custom_node(`ptr`: Long,`url`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_nodeselector_parse_custom_node_with_tor(`ptr`: Long,`url`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,`tor`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_nodeselector_select_preset_node(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -4440,6 +4444,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 62414.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node_with_tor() != 43875.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_select_preset_node() != 59069.toShort()) {
@@ -15121,6 +15128,11 @@ public interface NodeSelectorInterface {
      */
     fun `parseCustomNode`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String): Node
     
+    /**
+     * Use the url and name of the custom node to set it as the selected node, with TOR config
+     */
+    fun `parseCustomNodeWithTor`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String, `tor`: TorConfig): Node
+    
     fun `selectPresetNode`(`name`: kotlin.String): Node
     
     fun `selectedNode`(): NodeSelection
@@ -15308,6 +15320,23 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     UniffiLib.uniffi_cove_fn_method_nodeselector_parse_custom_node(
         it,
         FfiConverterString.lower(`url`),FfiConverterString.lower(`name`),FfiConverterString.lower(`enteredName`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Use the url and name of the custom node to set it as the selected node, with TOR config
+     */
+    @Throws(NodeSelectorException::class)override fun `parseCustomNodeWithTor`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String, `tor`: TorConfig): Node {
+            return FfiConverterTypeNode.lift(
+    callWithHandle {
+    uniffiRustCallWithError(NodeSelectorException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_nodeselector_parse_custom_node_with_tor(
+        it,
+        FfiConverterString.lower(`url`),FfiConverterString.lower(`name`),FfiConverterString.lower(`enteredName`),FfiConverterTypeTorConfig.lower(`tor`),_status)
 }
     }
     )
@@ -29179,6 +29208,8 @@ data class Node (
     var `apiType`: ApiType
     , 
     var `url`: kotlin.String
+    , 
+    var `tor`: TorConfig
     
 ){
     
@@ -29199,6 +29230,7 @@ public object FfiConverterTypeNode: FfiConverterRustBuffer<Node> {
             FfiConverterTypeNetwork.read(buf),
             FfiConverterTypeApiType.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterTypeTorConfig.read(buf),
         )
     }
 
@@ -29206,7 +29238,8 @@ public object FfiConverterTypeNode: FfiConverterRustBuffer<Node> {
             FfiConverterString.allocationSize(value.`name`) +
             FfiConverterTypeNetwork.allocationSize(value.`network`) +
             FfiConverterTypeApiType.allocationSize(value.`apiType`) +
-            FfiConverterString.allocationSize(value.`url`)
+            FfiConverterString.allocationSize(value.`url`) +
+            FfiConverterTypeTorConfig.allocationSize(value.`tor`)
     )
 
     override fun write(value: Node, buf: ByteBuffer) {
@@ -29214,6 +29247,7 @@ public object FfiConverterTypeNode: FfiConverterRustBuffer<Node> {
             FfiConverterTypeNetwork.write(value.`network`, buf)
             FfiConverterTypeApiType.write(value.`apiType`, buf)
             FfiConverterString.write(value.`url`, buf)
+            FfiConverterTypeTorConfig.write(value.`tor`, buf)
     }
 }
 
@@ -29837,6 +29871,50 @@ public object FfiConverterTypeTapSignerSetupComplete: FfiConverterRustBuffer<Tap
             FfiConverterByteArray.write(value.`backup`, buf)
             FfiConverterTypeDeriveInfo.write(value.`deriveInfo`, buf)
             FfiConverterTypeWalletBirthday.write(value.`birthday`, buf)
+    }
+}
+
+
+
+data class TorConfig (
+    /**
+     * Whether TOR proxy is enabled
+     */
+    var `enabled`: kotlin.Boolean
+    , 
+    /**
+     * SOCKS5 proxy address (e.g. "127.0.0.1:9050")
+     */
+    var `proxyAddress`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTorConfig: FfiConverterRustBuffer<TorConfig> {
+    override fun read(buf: ByteBuffer): TorConfig {
+        return TorConfig(
+            FfiConverterBoolean.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TorConfig) = (
+            FfiConverterBoolean.allocationSize(value.`enabled`) +
+            FfiConverterString.allocationSize(value.`proxyAddress`)
+    )
+
+    override fun write(value: TorConfig, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`enabled`, buf)
+            FfiConverterString.write(value.`proxyAddress`, buf)
     }
 }
 

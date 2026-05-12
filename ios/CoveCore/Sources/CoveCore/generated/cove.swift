@@ -5556,6 +5556,11 @@ public protocol NodeSelectorProtocol: AnyObject, Sendable {
      */
     func parseCustomNode(url: String, name: String, enteredName: String) throws  -> Node
     
+    /**
+     * Use the url and name of the custom node to set it as the selected node, with TOR config
+     */
+    func parseCustomNodeWithTor(url: String, name: String, enteredName: String, tor: TorConfig) throws  -> Node
+    
     func selectPresetNode(name: String) throws  -> Node
     
     func selectedNode()  -> NodeSelection
@@ -5676,6 +5681,21 @@ open func parseCustomNode(url: String, name: String, enteredName: String)throws 
         FfiConverterString.lower(url),
         FfiConverterString.lower(name),
         FfiConverterString.lower(enteredName),$0
+    )
+})
+}
+    
+    /**
+     * Use the url and name of the custom node to set it as the selected node, with TOR config
+     */
+open func parseCustomNodeWithTor(url: String, name: String, enteredName: String, tor: TorConfig)throws  -> Node  {
+    return try  FfiConverterTypeNode_lift(try rustCallWithError(FfiConverterTypeNodeSelectorError_lift) {
+    uniffi_cove_fn_method_nodeselector_parse_custom_node_with_tor(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(url),
+        FfiConverterString.lower(name),
+        FfiConverterString.lower(enteredName),
+        FfiConverterTypeTorConfig_lower(tor),$0
     )
 })
 }
@@ -14828,14 +14848,16 @@ public struct Node: Equatable, Hashable {
     public var network: Network
     public var apiType: ApiType
     public var url: String
+    public var tor: TorConfig
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(name: String, network: Network, apiType: ApiType, url: String) {
+    public init(name: String, network: Network, apiType: ApiType, url: String, tor: TorConfig) {
         self.name = name
         self.network = network
         self.apiType = apiType
         self.url = url
+        self.tor = tor
     }
 
     
@@ -14857,7 +14879,8 @@ public struct FfiConverterTypeNode: FfiConverterRustBuffer {
                 name: FfiConverterString.read(from: &buf), 
                 network: FfiConverterTypeNetwork.read(from: &buf), 
                 apiType: FfiConverterTypeApiType.read(from: &buf), 
-                url: FfiConverterString.read(from: &buf)
+                url: FfiConverterString.read(from: &buf), 
+                tor: FfiConverterTypeTorConfig.read(from: &buf)
         )
     }
 
@@ -14866,6 +14889,7 @@ public struct FfiConverterTypeNode: FfiConverterRustBuffer {
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterTypeApiType.write(value.apiType, into: &buf)
         FfiConverterString.write(value.url, into: &buf)
+        FfiConverterTypeTorConfig.write(value.tor, into: &buf)
     }
 }
 
@@ -15619,6 +15643,72 @@ public func FfiConverterTypeTapSignerSetupComplete_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeTapSignerSetupComplete_lower(_ value: TapSignerSetupComplete) -> RustBuffer {
     return FfiConverterTypeTapSignerSetupComplete.lower(value)
+}
+
+
+public struct TorConfig: Equatable, Hashable {
+    /**
+     * Whether TOR proxy is enabled
+     */
+    public var enabled: Bool
+    /**
+     * SOCKS5 proxy address (e.g. "127.0.0.1:9050")
+     */
+    public var proxyAddress: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Whether TOR proxy is enabled
+         */enabled: Bool, 
+        /**
+         * SOCKS5 proxy address (e.g. "127.0.0.1:9050")
+         */proxyAddress: String) {
+        self.enabled = enabled
+        self.proxyAddress = proxyAddress
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TorConfig: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTorConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TorConfig {
+        return
+            try TorConfig(
+                enabled: FfiConverterBool.read(from: &buf), 
+                proxyAddress: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TorConfig, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.enabled, into: &buf)
+        FfiConverterString.write(value.proxyAddress, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorConfig_lift(_ buf: RustBuffer) throws -> TorConfig {
+    return try FfiConverterTypeTorConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorConfig_lower(_ value: TorConfig) -> RustBuffer {
+    return FfiConverterTypeTorConfig.lower(value)
 }
 
 
@@ -38376,6 +38466,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 62414) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_nodeselector_parse_custom_node_with_tor() != 43875) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_select_preset_node() != 59069) {

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bdk_electrum::{
     BdkElectrumClient,
-    electrum_client::{self, Client, ElectrumApi as _, Param},
+    electrum_client::{self, Client, ConfigBuilder, ElectrumApi as _, Param, Socks5Config},
 };
 use bdk_wallet::chain::{
     BlockId, ConfirmationBlockTime, TxGraph,
@@ -57,11 +57,21 @@ impl ElectrumClient {
         options: NodeClientOptions,
     ) -> Result<Self, Error> {
         let url = node.url.strip_suffix('/').unwrap_or(&node.url).to_string();
+        let tor = node.tor.clone();
 
         // use spawn_blocking for the synchronous TCP connection to avoid blocking the async runtime
-        let inner_client = cove_tokio::unblock::run_blocking(move || Client::new(&url))
-            .await
-            .map_err(Error::CreateElectrumClient)?;
+        let inner_client = cove_tokio::unblock::run_blocking(move || {
+            if tor.enabled {
+                let socks5 = Socks5Config::new(&tor.proxy_address);
+                let config = ConfigBuilder::new().socks5(Some(socks5)).timeout(Some(30)).build();
+
+                Client::from_config(&url, config)
+            } else {
+                Client::new(&url)
+            }
+        })
+        .await
+        .map_err(Error::CreateElectrumClient)?;
 
         let bdk_client = BdkElectrumClient::new(inner_client);
         let client = Arc::new(bdk_client);
@@ -303,6 +313,7 @@ mod tests {
             name: "blockstream".to_string(),
             api_type: crate::node::ApiType::Electrum,
             network: cove_types::network::Network::Bitcoin,
+            tor: crate::node::TorConfig::default(),
         })
         .await
         .unwrap();

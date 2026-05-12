@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -60,6 +61,7 @@ import org.bitcoinppl.cove_core.ApiType
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
+import org.bitcoinppl.cove_core.TorConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +81,14 @@ fun NodeSettingsScreen(
 
     var customUrl by remember { mutableStateOf("") }
     var customNodeName by remember { mutableStateOf("") }
+    var torEnabled by remember {
+        val savedNode = selectedNodeSelection.toNode()
+        mutableStateOf(savedNode.tor.enabled)
+    }
+    var torProxyAddress by remember {
+        val savedNode = selectedNodeSelection.toNode()
+        mutableStateOf(savedNode.tor.proxyAddress)
+    }
 
     var isLoading by remember { mutableStateOf(false) }
     var showErrorDialog by remember { mutableStateOf(false) }
@@ -118,6 +128,8 @@ fun NodeSettingsScreen(
                 if (matchesType) {
                     customUrl = node.url
                     customNodeName = node.name
+                    torEnabled = node.tor.enabled
+                    torProxyAddress = node.tor.proxyAddress
                 }
             }
         }
@@ -176,9 +188,19 @@ fun NodeSettingsScreen(
         scope.launch {
             isLoading = true
             try {
+                val torConfig = TorConfig(
+                    enabled = torEnabled,
+                    proxyAddress = torProxyAddress.ifEmpty { "127.0.0.1:9050" },
+                )
+
                 val node =
                     withContext(Dispatchers.IO) {
-                        nodeSelector.parseCustomNode(customUrl, selectedNodeName, customNodeName)
+                        nodeSelector.parseCustomNodeWithTor(
+                            customUrl,
+                            selectedNodeName,
+                            customNodeName,
+                            torConfig,
+                        )
                     }
 
                 // update fields with parsed values
@@ -350,6 +372,56 @@ fun NodeSettingsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(stringResource(R.string.node_save_button))
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(MaterialSpacing.medium))
+
+                    SectionHeader("Tor Proxy")
+                    MaterialSection {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(MaterialSpacing.medium),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "Use Tor",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                                Switch(
+                                    checked = torEnabled,
+                                    onCheckedChange = { torEnabled = it },
+                                )
+                            }
+
+                            if (torEnabled) {
+                                OutlinedTextField(
+                                    value = torProxyAddress,
+                                    onValueChange = { torProxyAddress = it },
+                                    label = { Text("Proxy Address") },
+                                    placeholder = { Text("127.0.0.1:9050") },
+                                    keyboardOptions =
+                                        KeyboardOptions(
+                                            keyboardType = KeyboardType.Uri,
+                                            capitalization = KeyboardCapitalization.None,
+                                        ),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+
+                                Text(
+                                    text = "Ensure a Tor proxy (e.g. Orbot) is running on this address.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }
