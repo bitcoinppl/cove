@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bdk_electrum::{
     BdkElectrumClient,
-    electrum_client::{self, Client, ElectrumApi as _, Param},
+    electrum_client::{self, Client, Config, ConfigBuilder, ElectrumApi as _, Param, Socks5Config},
 };
 use bdk_wallet::chain::{
     BlockId, ConfirmationBlockTime, TxGraph,
@@ -17,12 +17,16 @@ use bitcoin::{Transaction, Txid, consensus::Decodable};
 use serde::Deserialize;
 use serde_json::Value;
 use tap::TapFallible as _;
+use tokio::time::sleep;
 use tracing::{debug, error, warn};
 
 use super::{ELECTRUM_BATCH_SIZE, Error, NodeClientOptions};
-use crate::node::Node;
+use crate::node::{Node, TorMode};
 
 type ElectrumClientInner = BdkElectrumClient<Client>;
+
+const BUILT_IN_TOR_CONNECT_RETRY_DELAYS_MS: [u64; 8] =
+    [500, 1000, 1500, 2000, 3000, 5000, 8000, 12000];
 
 #[derive(Debug, Deserialize)]
 struct ElectrumTransactionResponse {
@@ -49,24 +53,95 @@ impl ElectrumClient {
     }
 
     pub async fn new_from_node(node: &Node) -> Result<Self, Error> {
-        Self::new_from_node_and_options(node, Self::default_options()).await
+        let options = Self::default_options();
+        Self::new_from_node_and_options(node, &options).await
     }
 
     pub async fn new_from_node_and_options(
         node: &Node,
-        options: NodeClientOptions,
+        options: &NodeClientOptions,
     ) -> Result<Self, Error> {
         let url = node.url.strip_suffix('/').unwrap_or(&node.url).to_string();
+        debug!(
+            api_type = "electrum",
+            tor_enabled = options.use_tor,
+            tor_mode = ?options.tor_mode,
+            batch_size = options.batch_size,
+            "creating electrum client from node and options"
+        );
+        let config = Self::connection_config(options);
+        let retry_delays = if options.use_tor && matches!(options.tor_mode, TorMode::BuiltIn) {
+            BUILT_IN_TOR_CONNECT_RETRY_DELAYS_MS.as_slice()
+        } else {
+            &[]
+        };
 
-        // use spawn_blocking for the synchronous TCP connection to avoid blocking the async runtime
-        let inner_client = cove_tokio::unblock::run_blocking(move || Client::new(&url))
-            .await
-            .map_err(Error::CreateElectrumClient)?;
+        let mut attempt: usize = 0;
+        let inner_client = loop {
+            let conn_url = url.clone();
+            let config = config.clone();
+
+            // use spawn_blocking for the synchronous TCP connection to avoid blocking the async runtime
+            match cove_tokio::unblock::run_blocking(move || Client::from_config(&conn_url, config))
+                .await
+            {
+                Ok(client) => break client,
+                Err(error) => {
+                    if Self::is_built_in_tor_bootstrap_socks_failure(&error)
+                        && let Some(delay_ms) = retry_delays.get(attempt).copied()
+                    {
+                        warn!(
+                            api_type = "electrum",
+                            tor_enabled = options.use_tor,
+                            tor_mode = ?options.tor_mode,
+                            attempt = attempt + 1,
+                            max_retries = retry_delays.len(),
+                            delay_ms,
+                            "electrum connect failed while built-in tor may still be bootstrapping; retrying"
+                        );
+                        attempt += 1;
+                        sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        continue;
+                    }
+
+                    let built_in_tor_status =
+                        if options.use_tor && matches!(options.tor_mode, TorMode::BuiltIn) {
+                            crate::tor_runtime::built_in_status_summary()
+                        } else {
+                            "n/a".to_string()
+                        };
+
+                    error!(
+                        api_type = "electrum",
+                        tor_enabled = options.use_tor,
+                        tor_mode = ?options.tor_mode,
+                        attempt = attempt + 1,
+                        max_retries = retry_delays.len(),
+                        built_in_tor_status = %built_in_tor_status,
+                        "failed to create electrum client"
+                    );
+
+                    if options.use_tor
+                        && matches!(options.tor_mode, TorMode::BuiltIn)
+                        && Self::is_built_in_tor_bootstrap_socks_failure(&error)
+                    {
+                        let enriched = format!(
+                            "{error}; built-in tor status: {built_in_tor_status}; this often means Tor bootstrap is still incomplete or bootstrap connectivity failed"
+                        );
+                        return Err(Error::CreateElectrumClient(electrum_client::Error::Message(
+                            enriched,
+                        )));
+                    }
+
+                    return Err(Error::CreateElectrumClient(error));
+                }
+            }
+        };
 
         let bdk_client = BdkElectrumClient::new(inner_client);
         let client = Arc::new(bdk_client);
 
-        Ok(Self::new_with_options(client, options))
+        Ok(Self::new_with_options(client, options.clone()))
     }
 
     pub async fn get_height(&self) -> Result<usize, Error> {
@@ -278,8 +353,35 @@ impl ElectrumClient {
         Ok(tx_id)
     }
 
-    const fn default_options() -> NodeClientOptions {
-        NodeClientOptions { batch_size: ELECTRUM_BATCH_SIZE }
+    fn default_options() -> NodeClientOptions {
+        NodeClientOptions { batch_size: ELECTRUM_BATCH_SIZE, ..NodeClientOptions::default() }
+    }
+
+    fn connection_config(options: &NodeClientOptions) -> Config {
+        let socks5_addr = if options.use_tor {
+            let endpoint = format!("{}:{}", options.tor_external_host, options.tor_external_port);
+            debug!(
+                api_type = "electrum",
+                tor_enabled = true,
+                tor_mode = ?options.tor_mode,
+                "electrum using socks5 endpoint"
+            );
+            Some(endpoint)
+        } else {
+            debug!("electrum connecting without tor proxy");
+            None
+        };
+
+        ConfigBuilder::new().socks5(socks5_addr.map(Socks5Config::new)).build()
+    }
+
+    fn is_built_in_tor_bootstrap_socks_failure(error: &electrum_client::Error) -> bool {
+        matches!(
+            error,
+            electrum_client::Error::IOError(io_error)
+                if io_error.kind() == std::io::ErrorKind::Other
+                    && io_error.to_string().contains("general SOCKS server failure")
+        )
     }
 }
 
@@ -292,7 +394,9 @@ impl std::fmt::Debug for ElectrumClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
+    use bdk_electrum::electrum_client::{ElectrumApi, Param};
+    use std::{str::FromStr, time::Duration};
+    use tokio::time::timeout;
 
     #[tokio::test]
     #[ignore] // requires external network connection to blockstream electrum server
@@ -317,5 +421,57 @@ mod tests {
             Ok(None) => panic!("Expected confirmed transaction but got None"),
             Err(e) => panic!("Fallback method failed: {e:?}"),
         }
+    }
+
+    #[tokio::test]
+    #[ignore] // requires local Tor SOCKS proxy and reachable onion electrum server
+    async fn test_onion_electrum_via_tor_proxy() {
+        cove_tokio::init();
+
+        let node = crate::node::Node {
+            url: "tcp://xotqmhnei2wy7fk423tekp62ilcxpawnf4aiqmnkfhuutfkimgpqk5qd.onion:50001"
+                .to_string(),
+            name: "onion-electrum".to_string(),
+            api_type: crate::node::ApiType::Electrum,
+            network: cove_types::network::Network::Bitcoin,
+        };
+
+        let options = NodeClientOptions {
+            batch_size: 10,
+            use_tor: true,
+            tor_mode: crate::node::TorMode::External,
+            tor_external_host: "127.0.0.1".to_string(),
+            tor_external_port: 9050,
+        };
+
+        let client = timeout(
+            Duration::from_secs(20),
+            ElectrumClient::new_from_node_and_options(&node, &options),
+        )
+        .await
+        .expect("timed out creating electrum client")
+        .expect("failed to create electrum client through tor proxy");
+
+        let raw_version = timeout(Duration::from_secs(20), async {
+            cove_tokio::unblock::run_blocking({
+                let inner = client.client.clone();
+                move || {
+                    inner.inner.raw_call(
+                        "server.version",
+                        [Param::String("cove-test".to_string()), Param::String("1.4".to_string())],
+                    )
+                }
+            })
+            .await
+        })
+        .await
+        .expect("timed out waiting for server.version response")
+        .expect("server.version call failed via onion electrum through tor proxy");
+
+        let response =
+            raw_version.as_array().expect("server.version response should be a JSON array");
+        assert!(response.len() >= 2, "server.version response array too short");
+        assert!(response[0].is_string(), "server software field must be a string");
+        assert!(response[1].is_string(), "protocol version field must be a string");
     }
 }

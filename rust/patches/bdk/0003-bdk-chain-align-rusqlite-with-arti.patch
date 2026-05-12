@@ -1,0 +1,13 @@
+diff --git a/crates/chain/Cargo.toml b/crates/chain/Cargo.toml
+index aebcc029..f50eec59 100644
+--- a/crates/chain/Cargo.toml
++++ b/crates/chain/Cargo.toml
+@@ -19,7 +19,7 @@ serde = { version = "1", optional = true, features = ["derive", "rc"] }
+ miniscript = { version = "12.3.1", optional = true, default-features = false }
+ 
+ # Feature dependencies
+-rusqlite = { version = "0.31.0", features = ["bundled"], optional = true }
++rusqlite = { version = "0.36.0", features = ["bundled"], optional = true }
+ 
+ [dev-dependencies]
+ rand = "0.8"

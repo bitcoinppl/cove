@@ -59,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,10 +83,15 @@ import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationPolicy
 import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
+import org.bitcoinppl.cove.flows.SettingsFlow.OrbotPackageHelper
+import org.bitcoinppl.cove.flows.SettingsFlow.isOnionNodeUrl
+import org.bitcoinppl.cove.flows.SettingsFlow.switchToFirstClearnetPresetNode
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.nfc.NfcScanSheet
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.sidebar.SidebarContainer
+import org.bitcoinppl.cove.tor.parseCoreTorMode
+import org.bitcoinppl.cove.tor.testSocksEndpoint
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove_core.bootstrap
@@ -111,9 +117,11 @@ import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TapSignerRoute
+import org.bitcoinppl.cove_core.TorMode
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.CloudBackupStatus
+import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 
 internal enum class StartupMode {
@@ -438,6 +446,97 @@ class MainActivity : FragmentActivity() {
                         null
                     }
                 }
+            val context = LocalContext.current
+            val uiScope = rememberCoroutineScope()
+            var startupTorUnavailableMode by remember { mutableStateOf<TorMode?>(null) }
+            var startupTorUnavailableEndpoint by remember { mutableStateOf("") }
+            var startupTorCheckCompleted by remember { mutableStateOf(false) }
+
+            suspend fun fallbackToClearnetAndDisableTor() {
+                var fallbackNodeName: String? = null
+                if (isOnionNodeUrl(app.selectedNode.url)) {
+                    val selector = NodeSelector()
+                    try {
+                        val fallbackResult = switchToFirstClearnetPresetNode(selector)
+                        if (fallbackResult.isFailure) {
+                            val reason =
+                                fallbackResult.exceptionOrNull()?.message
+                                    ?: "unknown error"
+                            app.alertState =
+                                TaggedItem(
+                                    AppAlertState.General(
+                                        title = "Fallback failed",
+                                        message = "Could not switch to a clearnet node: $reason",
+                                    ),
+                                )
+                            return
+                        }
+                        fallbackNodeName = fallbackResult.getOrThrow().name
+                    } finally {
+                        selector.close()
+                    }
+                }
+
+                app.pendingNodeAwaitingTorSetup = false
+                app.pendingNodeTorValidated = false
+                app.pendingNodeUrl = ""
+                app.pendingNodeName = ""
+                app.pendingNodeTypeName = ""
+                app.database.globalConfig().setUseTor(false)
+
+                val confirmation =
+                    if (fallbackNodeName != null) {
+                        "Switched to clearnet node \"$fallbackNodeName\" and disabled Tor."
+                    } else {
+                        "Disabled Tor."
+                    }
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.General(
+                            title = "Tor disabled",
+                            message = confirmation,
+                        ),
+                    )
+            }
+
+            LaunchedEffect(app.isTermsAccepted) {
+                if (!app.isTermsAccepted || startupTorCheckCompleted) {
+                    return@LaunchedEffect
+                }
+                startupTorCheckCompleted = true
+
+                val globalConfig = app.database.globalConfig()
+                val useTor = runCatching { globalConfig.useTor() }.getOrDefault(false)
+                if (!useTor) {
+                    return@LaunchedEffect
+                }
+
+                val mode = parseCoreTorMode(runCatching { globalConfig.get(GlobalConfigKey.TorMode) }.getOrNull())
+
+                when (mode) {
+                    TorMode.BUILT_IN -> Unit
+                    TorMode.ORBOT -> {
+                        val reachable = testSocksEndpoint("127.0.0.1", 9050, 1500).isSuccess
+                        if (!reachable) {
+                            startupTorUnavailableMode = TorMode.ORBOT
+                            startupTorUnavailableEndpoint = "127.0.0.1:9050"
+                        }
+                    }
+                    TorMode.EXTERNAL -> {
+                        val host =
+                            runCatching { globalConfig.get(GlobalConfigKey.TorExternalHost) }
+                                .getOrNull()
+                                ?.takeIf { it.isNotBlank() }
+                                ?: "127.0.0.1"
+                        val port = runCatching { globalConfig.torExternalPort().toInt() }.getOrDefault(9050)
+                        val reachable = testSocksEndpoint(host, port, 1500).isSuccess
+                        if (!reachable) {
+                            startupTorUnavailableMode = TorMode.EXTERNAL
+                            startupTorUnavailableEndpoint = "$host:$port"
+                        }
+                    }
+                }
+            }
 
             // compute dark theme based on user preference
             val systemDarkTheme = isSystemInDarkTheme()
@@ -517,6 +616,85 @@ class MainActivity : FragmentActivity() {
                                 snackbarHostState = snackbarHostState,
                             )
                         }
+                    }
+
+                    if (startupTorUnavailableMode != null) {
+                        AlertDialog(
+                            onDismissRequest = {
+                                startupTorUnavailableMode = null
+                                startupTorUnavailableEndpoint = ""
+                            },
+                            title = {
+                                Text(
+                                    when (startupTorUnavailableMode) {
+                                        TorMode.ORBOT -> "Orbot is not active"
+                                        TorMode.EXTERNAL -> "External Tor proxy is unavailable"
+                                        else -> "Tor proxy unavailable"
+                                    },
+                                )
+                            },
+                            text = {
+                                Text(
+                                    when (startupTorUnavailableMode) {
+                                        TorMode.ORBOT ->
+                                            "Tor mode is set to Orbot, but $startupTorUnavailableEndpoint is unavailable. " +
+                                                "Start Orbot or switch to a clearnet node and disable Tor."
+                                        TorMode.EXTERNAL ->
+                                            "Tor mode is set to external SOCKS5, but $startupTorUnavailableEndpoint is unavailable. " +
+                                                "Fix proxy settings or switch to a clearnet node."
+                                        else -> "Tor proxy is unavailable."
+                                    },
+                                )
+                            },
+                            confirmButton = {
+                                Column(horizontalAlignment = Alignment.End) {
+                                    if (startupTorUnavailableMode == TorMode.ORBOT) {
+                                        TextButton(
+                                            onClick = {
+                                                startupTorUnavailableMode = null
+                                                startupTorUnavailableEndpoint = ""
+                                                val opened = OrbotPackageHelper.openOrbot(context)
+                                                if (!opened) {
+                                                    OrbotPackageHelper.openInstallPage(context)
+                                                }
+                                            },
+                                        ) {
+                                            Text("Open Orbot")
+                                        }
+                                    }
+                                    if (startupTorUnavailableMode == TorMode.EXTERNAL) {
+                                        TextButton(
+                                            onClick = {
+                                                startupTorUnavailableMode = null
+                                                startupTorUnavailableEndpoint = ""
+                                                app.pushRoute(Route.Settings(SettingsRoute.Network))
+                                            },
+                                        ) {
+                                            Text("Open network settings")
+                                        }
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            startupTorUnavailableMode = null
+                                            startupTorUnavailableEndpoint = ""
+                                            uiScope.launch {
+                                                fallbackToClearnetAndDisableTor()
+                                            }
+                                        },
+                                    ) {
+                                        Text("Use clearnet node")
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            startupTorUnavailableMode = null
+                                            startupTorUnavailableEndpoint = ""
+                                        },
+                                    ) {
+                                        Text("Ignore")
+                                    }
+                                }
+                            },
+                        )
                     }
                 }
             }

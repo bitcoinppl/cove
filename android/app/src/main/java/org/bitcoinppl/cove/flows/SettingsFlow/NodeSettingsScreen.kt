@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,9 +58,14 @@ import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.ApiType
+import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.GlobalFlagKey
+import org.bitcoinppl.cove_core.Node
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
+import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.SettingsRoute
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,11 +73,15 @@ fun NodeSettingsScreen(
     app: org.bitcoinppl.cove.AppManager,
     modifier: Modifier = Modifier,
 ) {
+    val logTag = "NodeSettingsScreen"
     val nodeSelector = remember { NodeSelector() }
+    val database = remember { Database() }
+    val globalConfig = remember { database.globalConfig() }
+    val globalFlag = remember { database.globalFlag() }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val nodeList = remember { nodeSelector.nodeList() }
+    var nodeList by remember { mutableStateOf(nodeSelector.nodeList()) }
     var selectedNodeSelection by remember { mutableStateOf(nodeSelector.selectedNode()) }
     var selectedNodeName by remember {
         mutableStateOf(selectedNodeSelection.toNode().name)
@@ -79,11 +89,21 @@ fun NodeSettingsScreen(
 
     var customUrl by remember { mutableStateOf("") }
     var customNodeName by remember { mutableStateOf("") }
+    var suppressCustomDraftActions by remember { mutableStateOf(false) }
 
     var isLoading by remember { mutableStateOf(false) }
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     var errorTitle by remember { mutableStateOf("") }
+
+    fun refreshNodeSelection(node: Node) {
+        nodeList = NodeSelector().nodeList()
+        selectedNodeSelection = NodeSelection.Custom(node)
+        selectedNodeName = node.name
+        suppressCustomDraftActions = true
+        customUrl = ""
+        customNodeName = ""
+    }
 
     // compute all string resources at composable level
     val customElectrum = stringResource(R.string.node_custom_electrum)
@@ -97,15 +117,71 @@ fun NodeSettingsScreen(
     val errorUnknown = stringResource(R.string.node_error_unknown)
     val errorUrlEmpty = stringResource(R.string.node_error_url_empty)
     val errorParseTitle = stringResource(R.string.node_error_parse_title)
+    val torRedirectMessage = stringResource(R.string.node_tor_redirect_message)
+    val nodeSavedViaTorNotice = stringResource(R.string.node_saved_via_tor_notice)
 
     val showCustomFields =
         selectedNodeSelection is NodeSelection.Custom ||
             selectedNodeName == customElectrum ||
             selectedNodeName == customEsplora
 
+    // restore pending onion draft and auto-attempt save after Tor setup
+    LaunchedEffect(Unit) {
+        if (app.pendingNodeAwaitingTorSetup && app.pendingNodeUrl.isNotBlank()) {
+            customUrl = app.pendingNodeUrl
+            customNodeName = app.pendingNodeName
+            selectedNodeName = app.pendingNodeTypeName
+            Log.d(logTag, "restored pending onion draft: type=$selectedNodeName, ${redactedEndpointForLog(customUrl)}")
+
+            if (globalConfig.useTor() && app.pendingNodeTorValidated) {
+                isLoading = true
+                try {
+                    val pendingTypeName = app.pendingNodeTypeName.ifBlank { customElectrum }
+                    val node =
+                        withContext(Dispatchers.IO) {
+                            nodeSelector.parseCustomNode(
+                                app.pendingNodeUrl,
+                                pendingTypeName,
+                                app.pendingNodeName,
+                            )
+                        }
+
+                    withContext(Dispatchers.IO) {
+                        nodeSelector.checkAndSaveNode(node)
+                    }
+
+                    refreshNodeSelection(node)
+
+                    app.pendingNodeAwaitingTorSetup = false
+                    app.pendingNodeTorValidated = false
+                    app.pendingNodeUrl = ""
+                    app.pendingNodeName = ""
+                    app.pendingNodeTypeName = ""
+
+                    scope.launch {
+                        snackbarHostState.showSnackbar(successSaved)
+                    }
+                    app.popRoute()
+                } catch (e: NodeSelectorException.NodeAccessException) {
+                    Log.e(logTag, "pending onion save failed: NodeAccess reason=${e.v1}", e)
+                    errorTitle = errorConnectionFailed
+                    errorMessage = errorConnectionMessage.format(e.v1)
+                    showErrorDialog = true
+                } catch (e: Exception) {
+                    Log.e(logTag, "pending onion save failed: unexpected reason=${e.message}", e)
+                    errorTitle = errorTitleDefault
+                    errorMessage = errorUnknown.format(e.message ?: "")
+                    showErrorDialog = true
+                } finally {
+                    isLoading = false
+                }
+            }
+        }
+    }
+
     // pre-fill custom fields if a custom node was previously saved
     LaunchedEffect(showCustomFields, selectedNodeSelection) {
-        if (showCustomFields && customUrl.isEmpty()) {
+        if (showCustomFields && customUrl.isEmpty() && !suppressCustomDraftActions) {
             val savedNode = selectedNodeSelection
             if (savedNode is NodeSelection.Custom) {
                 val node = savedNode.toNode()
@@ -124,6 +200,8 @@ fun NodeSettingsScreen(
     }
 
     fun selectPresetNode(nodeName: String) {
+        Log.d(logTag, "selectPresetNode: nodeName=$nodeName")
+        suppressCustomDraftActions = false
         selectedNodeName = nodeName
         customUrl = ""
         customNodeName = ""
@@ -133,11 +211,15 @@ fun NodeSettingsScreen(
             try {
                 val node =
                     withContext(Dispatchers.IO) {
-                        nodeSelector.selectPresetNode(nodeName)
+                        val selected = nodeSelector.selectPresetNode(nodeName)
+                        Log.d(logTag, "selectPresetNode resolved: ${redactedNodeForLog(selected)}")
+                        selected
                     }
 
                 withContext(Dispatchers.IO) {
+                    Log.d(logTag, "checkSelectedNode start: ${redactedNodeForLog(node)}")
                     nodeSelector.checkSelectedNode(node)
+                    Log.d(logTag, "checkSelectedNode success: ${redactedNodeForLog(node)}")
                 }
                 selectedNodeSelection = NodeSelection.Preset(node)
 
@@ -148,14 +230,17 @@ fun NodeSettingsScreen(
                     )
                 }
             } catch (e: NodeSelectorException.NodeNotFound) {
+                Log.e(logTag, "selectPresetNode failed: NodeNotFound name=$nodeName, reason=${e.v1}", e)
                 errorTitle = errorTitleDefault
                 errorMessage = errorNotFound.format(e.v1)
                 showErrorDialog = true
             } catch (e: NodeSelectorException.NodeAccessException) {
+                Log.e(logTag, "selectPresetNode failed: NodeAccess name=$nodeName, reason=${e.v1}", e)
                 errorTitle = errorConnectionFailed
                 errorMessage = errorConnectionMessage.format(e.v1)
                 showErrorDialog = true
             } catch (e: Exception) {
+                Log.e(logTag, "selectPresetNode failed: unexpected name=$nodeName, reason=${e.message}", e)
                 errorTitle = errorTitleDefault
                 errorMessage = errorUnknown.format(e.message ?: "")
                 showErrorDialog = true
@@ -165,8 +250,20 @@ fun NodeSettingsScreen(
         }
     }
 
+    fun selectCustomNodeType(nodeName: String) {
+        Log.d(logTag, "selectCustomNodeType: nodeName=$nodeName")
+        suppressCustomDraftActions = false
+        if (selectedNodeName != nodeName) {
+            customUrl = ""
+            customNodeName = ""
+        }
+        selectedNodeName = nodeName
+    }
+
     fun checkAndSaveCustomNode() {
+        Log.d(logTag, "checkAndSaveCustomNode: selectedNodeName=$selectedNodeName, ${redactedEndpointForLog(customUrl)}")
         if (customUrl.isEmpty()) {
+            Log.e(logTag, "checkAndSaveCustomNode aborted: empty customUrl")
             errorTitle = errorTitleDefault
             errorMessage = errorUrlEmpty
             showErrorDialog = true
@@ -176,34 +273,110 @@ fun NodeSettingsScreen(
         scope.launch {
             isLoading = true
             try {
+                val customNodeTypeName =
+                    when {
+                        selectedNodeName == customElectrum || selectedNodeName == customEsplora ->
+                            selectedNodeName
+
+                        selectedNodeSelection is NodeSelection.Custom ->
+                            when (selectedNodeSelection.toNode().apiType) {
+                                ApiType.ELECTRUM -> customElectrum
+                                ApiType.ESPLORA -> customEsplora
+                                else -> selectedNodeName
+                            }
+
+                        else -> selectedNodeName
+                    }
+                Log.d(logTag, "checkAndSaveCustomNode type inference: selectedNodeName=$selectedNodeName, customNodeTypeName=$customNodeTypeName, selectedApiType=${selectedNodeSelection.toNode().apiType}")
+
                 val node =
                     withContext(Dispatchers.IO) {
-                        nodeSelector.parseCustomNode(customUrl, selectedNodeName, customNodeName)
+                        Log.d(logTag, "parseCustomNode start: typeName=$customNodeTypeName, ${redactedEndpointForLog(customUrl)}")
+                        val parsed = nodeSelector.parseCustomNode(customUrl, customNodeTypeName, customNodeName)
+                        Log.d(logTag, "parseCustomNode success: ${redactedNodeForLog(parsed)}")
+                        parsed
                     }
 
                 // update fields with parsed values
                 customUrl = node.url
                 customNodeName = node.name
 
-                withContext(Dispatchers.IO) {
-                    nodeSelector.checkAndSaveNode(node)
+                val isOnionNode = isOnionNodeUrl(node.url)
+                if (isOnionNode) {
+                    if (globalConfig.useTor()) {
+                        Log.d(logTag, "onion node detected with Tor already enabled; saving directly: ${redactedNodeForLog(node)}")
+                        withContext(Dispatchers.IO) {
+                            nodeSelector.checkAndSaveNode(node)
+                        }
+                        refreshNodeSelection(node)
+                        app.pendingNodeAwaitingTorSetup = false
+                        app.pendingNodeTorValidated = false
+                        app.pendingNodeUrl = ""
+                        app.pendingNodeName = ""
+                        app.pendingNodeTypeName = ""
+                        scope.launch {
+                            snackbarHostState.showSnackbar(successSaved)
+                        }
+                        return@launch
+                    }
+
+                    Log.d(logTag, "onion node detected, redirecting to network settings: ${redactedNodeForLog(node)}")
+                    runCatching {
+                        globalFlag.set(GlobalFlagKey.TOR_SETTINGS_DISCOVERED, true)
+                        globalConfig.setUseTor(true)
+                    }.onFailure { error ->
+                        Log.e(logTag, "failed to persist Tor setup before onion redirect: ${error.message}", error)
+                        errorTitle = errorTitleDefault
+                        errorMessage = errorUnknown.format(error.message ?: "")
+                        showErrorDialog = true
+                        return@launch
+                    }
+
+                    selectedNodeSelection = NodeSelection.Custom(node)
+                    selectedNodeName =
+                        when (node.apiType) {
+                            ApiType.ELECTRUM -> customElectrum
+                            ApiType.ESPLORA -> customEsplora
+                            else -> node.name
+                        }
+
+                    app.pendingNodeUrl = node.url
+                    app.pendingNodeName = node.name
+                    app.pendingNodeTypeName = selectedNodeName
+                    app.pendingNodeAwaitingTorSetup = true
+                    app.pendingNodeTorValidated = false
+
+                    scope.launch {
+                        snackbarHostState.showSnackbar(torRedirectMessage)
+                    }
+                    app.pushRoute(Route.Settings(SettingsRoute.Network))
+                    return@launch
                 }
-                selectedNodeSelection = NodeSelection.Custom(node)
-                selectedNodeName = node.name
+
+                withContext(Dispatchers.IO) {
+                    Log.d(logTag, "checkAndSaveNode start: ${redactedNodeForLog(node)}")
+                    nodeSelector.checkAndSaveNode(node)
+                    Log.d(logTag, "checkAndSaveNode success: ${redactedNodeForLog(node)}")
+                }
+                refreshNodeSelection(node)
+                Log.d(logTag, "custom node saved: selectedNodeName=$selectedNodeName, ${redactedNodeForLog(node)}")
 
                 // launch snackbar in separate coroutine so it doesn't block finally
                 scope.launch {
                     snackbarHostState.showSnackbar(successSaved)
                 }
             } catch (e: NodeSelectorException.ParseNodeUrlException) {
+                Log.e(logTag, "checkAndSaveCustomNode failed: ParseNodeUrl ${redactedEndpointForLog(customUrl)}, selectedNodeName=$selectedNodeName, reason=${e.v1}", e)
                 errorTitle = errorParseTitle
                 errorMessage = e.v1
                 showErrorDialog = true
             } catch (e: NodeSelectorException.NodeAccessException) {
+                Log.e(logTag, "checkAndSaveCustomNode failed: NodeAccess ${redactedEndpointForLog(customUrl)}, selectedNodeName=$selectedNodeName, reason=${e.v1}", e)
                 errorTitle = errorConnectionFailed
                 errorMessage = errorConnectionMessage.format(e.v1)
                 showErrorDialog = true
             } catch (e: Exception) {
+                Log.e(logTag, "checkAndSaveCustomNode failed: unexpected ${redactedEndpointForLog(customUrl)}, selectedNodeName=$selectedNodeName, reason=${e.message}", e)
                 errorTitle = errorTitleDefault
                 errorMessage = errorUnknown.format(e.message ?: "")
                 showErrorDialog = true
@@ -286,9 +459,7 @@ fun NodeSettingsScreen(
                         NodeRow(
                             nodeName = customElectrum,
                             isSelected = selectedNodeName == customElectrum,
-                            onClick = {
-                                selectedNodeName = customElectrum
-                            },
+                            onClick = { selectCustomNodeType(customElectrum) },
                         )
 
                         MaterialDivider()
@@ -297,16 +468,14 @@ fun NodeSettingsScreen(
                         NodeRow(
                             nodeName = customEsplora,
                             isSelected = selectedNodeName == customEsplora,
-                            onClick = {
-                                selectedNodeName = customEsplora
-                            },
+                            onClick = { selectCustomNodeType(customEsplora) },
                         )
                     }
                 }
 
                 // custom node input fields
-                if (showCustomFields) {
-                    Spacer(modifier = Modifier.height(MaterialSpacing.medium))
+                        if (showCustomFields) {
+                            Spacer(modifier = Modifier.height(MaterialSpacing.medium))
 
                     SectionHeader("Custom node")
                     MaterialSection {
@@ -319,7 +488,10 @@ fun NodeSettingsScreen(
                         ) {
                             OutlinedTextField(
                                 value = customUrl,
-                                onValueChange = { customUrl = it },
+                                onValueChange = {
+                                    suppressCustomDraftActions = false
+                                    customUrl = it
+                                },
                                 label = { Text(stringResource(R.string.node_url_label)) },
                                 placeholder = { Text(stringResource(R.string.node_url_placeholder)) },
                                 keyboardOptions =
@@ -333,7 +505,10 @@ fun NodeSettingsScreen(
 
                             OutlinedTextField(
                                 value = customNodeName,
-                                onValueChange = { customNodeName = it },
+                                onValueChange = {
+                                    suppressCustomDraftActions = false
+                                    customNodeName = it
+                                },
                                 label = { Text(stringResource(R.string.node_name_label)) },
                                 placeholder = { Text(stringResource(R.string.node_name_placeholder)) },
                                 keyboardOptions =
@@ -344,12 +519,20 @@ fun NodeSettingsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             )
 
-                            Button(
-                                onClick = { checkAndSaveCustomNode() },
-                                enabled = customUrl.isNotEmpty() && !isLoading,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(stringResource(R.string.node_save_button))
+                            if (suppressCustomDraftActions) {
+                                Text(
+                                    text = nodeSavedViaTorNotice,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                Button(
+                                    onClick = { checkAndSaveCustomNode() },
+                                    enabled = customUrl.isNotEmpty() && !isLoading,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(stringResource(R.string.node_save_button))
+                                }
                             }
                         }
                     }

@@ -18,6 +18,16 @@ public extension Result where Failure == Swift.Error {
 }
 
 public extension Result {
+    var successValue: Success? {
+        guard case let .success(value) = self else { return nil }
+        return value
+    }
+
+    var failureValue: Failure? {
+        guard case let .failure(error) = self else { return nil }
+        return error
+    }
+
     func isSuccess() -> Bool {
         switch self {
         case .success: true

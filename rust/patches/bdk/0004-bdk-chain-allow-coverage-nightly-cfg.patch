@@ -1,0 +1,12 @@
+diff --git a/crates/chain/src/lib.rs b/crates/chain/src/lib.rs
+index 0cb5b48d..a79bcf5b 100644
+--- a/crates/chain/src/lib.rs
++++ b/crates/chain/src/lib.rs
+@@ -25,6 +25,7 @@
+ )]
+ #![no_std]
+ #![warn(missing_docs)]
++#![allow(unexpected_cfgs)]
+ #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+ 
+ pub use bitcoin;

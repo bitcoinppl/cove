@@ -7,6 +7,64 @@
 
 import SwiftUI
 
+private struct StartupTorUnavailable: Equatable {
+    let mode: TorMode
+    let endpoint: String
+    let error: String
+
+    var title: String {
+        switch mode {
+        case .orbot:
+            "Orbot is not active"
+        case .external:
+            "Tor proxy unavailable"
+        case .builtIn:
+            "Built-in Tor unavailable"
+        }
+    }
+
+    var message: String {
+        switch mode {
+        case .orbot:
+            "Cove is configured to use Orbot, but the SOCKS endpoint at \(endpoint) is not reachable. Start Orbot, fix Tor settings, or switch to a clearnet node."
+        case .external:
+            "Cove is configured to use a custom SOCKS5 proxy at \(endpoint), but it is not reachable. Fix the proxy or switch to a clearnet node."
+        case .builtIn:
+            "Built-in Tor is configured, but startup failed: \(error)"
+        }
+    }
+}
+
+private struct StartupTorWarningModifier: ViewModifier {
+    @Binding var warning: StartupTorUnavailable?
+    let openOrbot: () -> Void
+    let openNetworkSettings: () -> Void
+    let useClearnetNode: () -> Void
+
+    func body(content: Content) -> some View {
+        content.alert(
+            warning?.title ?? "Tor unavailable",
+            isPresented: Binding(
+                get: { warning != nil },
+                set: { if !$0 { warning = nil } }
+            ),
+            presenting: warning
+        ) { warning in
+            if warning.mode == .orbot {
+                Button("Open Orbot", action: openOrbot)
+            }
+
+            Button("Network Settings", action: openNetworkSettings)
+            Button("Use clearnet node", role: .destructive, action: useClearnetNode)
+            Button("Ignore", role: .cancel) {
+                self.warning = nil
+            }
+        } message: { warning in
+            Text(warning.message)
+        }
+    }
+}
+
 struct CoveMainView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var phase
@@ -18,6 +76,8 @@ struct CoveMainView: View {
     @State var showCover: Bool = true
     @State var scannedCode: TaggedItem<MultiFormat>? = .none
     @State var coverClearTask: Task<Void, Never>?
+    @State private var startupTorUnavailable: StartupTorUnavailable?
+    @State private var startupTorCheckSignature: String?
 
     @ViewBuilder
     private func alertMessage(alert: TaggedItem<AppAlertState>) -> some View {
@@ -331,6 +391,10 @@ struct CoveMainView: View {
         }
         .onChange(of: auth.lockState) { old, new in
             Log.warn("AUTH LOCK STATE CHANGED: \(old) --> \(new)")
+
+            if new == .unlocked {
+                Task { await checkStartupTorAvailabilityIfNeeded() }
+            }
         }
         .environment(app)
         .environment(auth)
@@ -376,6 +440,7 @@ struct CoveMainView: View {
             guard app.asyncRuntimeReady else { return }
             app.dispatch(action: AppAction.updateFees)
             app.dispatch(action: AppAction.updateFiatPrices)
+            Task { await checkStartupTorAvailabilityIfNeeded() }
         }
 
         // PIN auth active, no biometrics, leaving app
@@ -462,6 +527,95 @@ struct CoveMainView: View {
         }
     }
 
+    @MainActor
+    private func checkStartupTorAvailabilityIfNeeded() async {
+        guard phase == .active else { return }
+        guard app.isTermsAccepted else { return }
+        guard auth.lockState == .unlocked || !auth.isAuthEnabled else { return }
+
+        let config = Database().globalConfig()
+        guard config.useTor() else {
+            startupTorCheckSignature = nil
+            return
+        }
+
+        let mode = TorMode.fromConfig(try? config.get(key: .torMode))
+        guard mode != .builtIn else { return }
+
+        let endpoint: (host: String, port: Int)
+        switch mode {
+        case .builtIn:
+            return
+        case .orbot:
+            endpoint = ("127.0.0.1", 9050)
+        case .external:
+            let host = (try? config.get(key: .torExternalHost))?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            endpoint = (host?.isEmpty == false ? host! : "127.0.0.1", Int(config.torExternalPort()))
+        }
+
+        let endpointDescription = "\(endpoint.host):\(endpoint.port)"
+        let signature = "\(mode.persistedValue)|\(endpointDescription)|\(app.selectedNode.url)"
+        guard startupTorCheckSignature != signature || startupTorUnavailable != nil else { return }
+        startupTorCheckSignature = signature
+
+        let result = await testSocksEndpoint(host: endpoint.host, port: endpoint.port, timeout: 2)
+        if result.isSuccess() {
+            startupTorUnavailable = nil
+            return
+        }
+
+        guard let error = result.failureValue else { return }
+
+        startupTorUnavailable = StartupTorUnavailable(
+            mode: mode,
+            endpoint: endpointDescription,
+            error: error.localizedDescription
+        )
+    }
+
+    @MainActor
+    private func useClearnetAfterStartupTorFailure() async {
+        let config = Database().globalConfig()
+
+        do {
+            var message = "Tor has been disabled."
+            if isOnionNodeUrl(app.selectedNode.url) {
+                let fallback = try await switchToFirstClearnetPresetNode(NodeSelector())
+                app.selectedNode = fallback
+                message = "Switched to \(fallback.name) and disabled Tor."
+            }
+
+            app.clearPendingNodeTorDraft()
+            try? config.setUseTor(useTor: false)
+            startupTorUnavailable = nil
+            startupTorCheckSignature = nil
+            app.alertState = .init(.general(title: "Tor disabled", message: message))
+        } catch {
+            app.alertState = .init(
+                .general(
+                    title: "Unable to switch node",
+                    message: "Cove could not switch to a clearnet node: \(error.localizedDescription)"
+                )
+            )
+        }
+    }
+
+    private func openOrbotFromStartupWarning() {
+        startupTorUnavailable = nil
+        guard let url = URL(string: "orbot://") else { return }
+        UIApplication.shared.open(url, options: [:]) { success in
+            if !success {
+                app.alertState = .init(
+                    .general(
+                        title: "Unable to open Orbot",
+                        message: "Open Orbot manually, then return to Cove and retry Tor."
+                    )
+                )
+            }
+        }
+    }
+
     var body: some View {
         CloudBackupPresentationHost(app: app, auth: auth, isCoverPresented: showCover) {
             BodyView
@@ -486,5 +640,16 @@ struct CoveMainView: View {
                 .onOpenURL(perform: ScanManager.shared.handleFileOpen)
                 .onChange(of: phase, initial: true, handleScenePhaseChange)
         }
+        .modifier(StartupTorWarningModifier(
+            warning: $startupTorUnavailable,
+            openOrbot: openOrbotFromStartupWarning,
+            openNetworkSettings: {
+                startupTorUnavailable = nil
+                app.pushRoute(.settings(.network))
+            },
+            useClearnetNode: {
+                Task { await useClearnetAfterStartupTorFailure() }
+            }
+        ))
     }
 }

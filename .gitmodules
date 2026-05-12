@@ -1,0 +1,4 @@
+[submodule "rust/external/bdk"]
+	path = rust/external/bdk
+	url = https://github.com/bitcoindevkit/bdk.git
+	shallow = true

@@ -52,7 +52,7 @@ struct SettingsContainer: View {
             case .main:
                 MainSettingsScreen()
             case .network:
-                SettingsPicker(selection: selectedNetwork)
+                NetworkSettingsView(selection: selectedNetwork)
             case .appearance:
                 AppearancePicker
             case .node:

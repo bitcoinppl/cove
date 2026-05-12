@@ -57,11 +57,13 @@ fun MaterialSettingsItem(
     isSwitch: Boolean = false,
     switchCheckedState: Boolean = false,
     onCheckChanged: ((Boolean) -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     MaterialSettingsItem(
         title = title,
         onClick = onClick,
         subtitle = subtitle,
+        modifier = modifier,
         leadingContent = {
             Icon(
                 imageVector = icon,
@@ -99,6 +101,7 @@ fun MaterialSettingsItem(
     leadingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable () -> Unit)? = null,
     titleColor: Color? = null,
+    modifier: Modifier = Modifier,
 ) {
     ListItem(
         headlineContent = {
@@ -121,7 +124,7 @@ fun MaterialSettingsItem(
         leadingContent = leadingContent,
         trailingContent = trailingContent,
         modifier =
-            Modifier
+            modifier
                 .then(
                     if (onClick != null) {
                         Modifier.clickable(onClick = onClick)

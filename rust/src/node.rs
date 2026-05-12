@@ -28,6 +28,30 @@ pub enum ApiType {
 }
 
 #[derive(
+    Debug,
+    Copy,
+    Clone,
+    Hash,
+    Eq,
+    PartialEq,
+    Default,
+    derive_more::Display,
+    strum::EnumString,
+    uniffi::Enum,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub enum TorMode {
+    #[strum(serialize = "BuiltIn", serialize = "BUILT_IN")]
+    #[default]
+    BuiltIn,
+    #[strum(serialize = "Orbot", serialize = "ORBOT")]
+    Orbot,
+    #[strum(serialize = "External", serialize = "EXTERNAL")]
+    External,
+}
+
+#[derive(
     Debug, Clone, Hash, Eq, PartialEq, uniffi::Record, serde::Serialize, serde::Deserialize,
 )]
 pub struct Node {

@@ -82,6 +82,8 @@ fun SelectedWalletContainer(
             app.alertState = TaggedItem(
                 AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`, error = e.`error`)
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e(tag, "something went very wrong", e)
 

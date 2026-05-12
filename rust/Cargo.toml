@@ -92,7 +92,7 @@ eyre = "0.6"
 
 # database
 redb = "2.6"
-rusqlite = { version = "0.31", features = ["bundled-sqlcipher-vendored-openssl"] }
+rusqlite = { version = "0.36", features = ["bundled-sqlcipher-vendored-openssl"] }
 
 # ids
 nid = "3.0"
@@ -103,6 +103,13 @@ dirs = "6.0"
 # derive stuff
 derive_more = { version = "2.0" }
 strum = { version = "0.28", features = ["derive"] }
+
+# built-in tor runtime
+arti = { version = "2.2.0", default-features = false, features = ["tokio", "rustls", "compression", "dns-proxy", "experimental-api", "onion-service-client"] }
+arti-client = { version = "0.41.0", default-features = false, features = ["tokio", "rustls", "compression", "onion-service-client"] }
+tor-config = "0.41.0"
+tor-rtcompat = { version = "0.41.0", default-features = false, features = ["tokio", "rustls"] }
+tor-config-path = "0.41.0"
 
 # extensions
 tap = "1.0"
@@ -204,6 +211,13 @@ derive_more = { workspace = true, features = [
 ] }
 
 strum = { workspace = true, features = ["derive"] }
+
+# built-in tor runtime
+arti = { workspace = true }
+arti-client = { workspace = true }
+tor-config = { workspace = true }
+tor-rtcompat = { workspace = true }
+tor-config-path = { workspace = true }
 
 # helpers / utils / exts
 tap = "1.0.1"
@@ -309,3 +323,7 @@ opt-level = 3             # Optimize for speed
 [profile.release-smaller]
 inherits = "release-base"
 opt-level = 'z'           # Optimize for size.
+
+[patch.crates-io]
+bdk_chain = { path = "external/bdk/crates/chain" }
+bdk_core = { path = "external/bdk/crates/core" }

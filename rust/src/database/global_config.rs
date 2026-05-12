@@ -10,7 +10,7 @@ use crate::{
     color_scheme::ColorSchemeSelection,
     fiat::FiatCurrency,
     network::Network,
-    node::Node,
+    node::{Node, TorMode},
     wallet::metadata::{WalletId, WalletMode},
 };
 
@@ -27,6 +27,10 @@ pub enum GlobalConfigKey {
     SelectedNetwork,
     SelectedFiatCurrency,
     SelectedNode(Network),
+    UseTor,
+    TorMode,
+    TorExternalHost,
+    TorExternalPort,
     ColorScheme,
     AuthType,
     HashedPinCode,
@@ -49,6 +53,10 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::SelectedNode(Network::Testnet) => "selected_node_testnet",
             GlobalConfigKey::SelectedNode(Network::Testnet4) => "selected_node_testnet4",
             GlobalConfigKey::SelectedNode(Network::Signet) => "selected_node_signet",
+            GlobalConfigKey::UseTor => "use_tor",
+            GlobalConfigKey::TorMode => "tor_mode",
+            GlobalConfigKey::TorExternalHost => "tor_external_host",
+            GlobalConfigKey::TorExternalPort => "tor_external_port",
             GlobalConfigKey::ColorScheme => "color_scheme",
             GlobalConfigKey::AuthType => "auth_type",
             GlobalConfigKey::HashedPinCode => "hashed_pin_code",
@@ -88,6 +96,9 @@ pub enum GlobalConfigTableError {
 
     #[error("pin code must be hashed before saving")]
     PinCodeMustBeHashed,
+
+    #[error("failed to stop built-in tor proxy before publishing config update: {0}")]
+    BuiltInTorStop(String),
 }
 
 impl GlobalConfigTable {
@@ -110,6 +121,9 @@ impl GlobalConfigTable {
         FiatCurrency,
         Update::FiatCurrencyChanged
     );
+
+    string_config_accessor!(pub tor_mode, GlobalConfigKey::TorMode, TorMode);
+    string_config_accessor!(pub tor_external_host, GlobalConfigKey::TorExternalHost, String);
 
     string_config_accessor!(pub wipe_data_pin, GlobalConfigKey::WipeDataPin, String);
     string_config_accessor!(pub decoy_pin, GlobalConfigKey::DecoyPin, String);
@@ -247,6 +261,26 @@ impl GlobalConfigTable {
         serde_json::from_str(&node_json).unwrap_or_else(|_| Node::default(network))
     }
 
+    pub fn use_tor(&self) -> bool {
+        self.get(GlobalConfigKey::UseTor).unwrap_or(None).unwrap_or_else(|| "false".to_string())
+            == "true"
+    }
+
+    pub fn set_use_tor(&self, use_tor: bool) -> Result<()> {
+        self.set(GlobalConfigKey::UseTor, use_tor.to_string())
+    }
+
+    pub fn tor_external_port(&self) -> u16 {
+        self.get(GlobalConfigKey::TorExternalPort)
+            .unwrap_or(None)
+            .and_then(|port| port.parse::<u16>().ok())
+            .unwrap_or(9050)
+    }
+
+    pub fn set_tor_external_port(&self, port: u16) -> Result<()> {
+        self.set(GlobalConfigKey::TorExternalPort, port.to_string())
+    }
+
     pub fn set_selected_node(&self, node: &Node) -> Result<()> {
         let network = node.network;
         let node_json = serde_json::to_string(node)
@@ -317,6 +351,12 @@ impl GlobalConfigTable {
     }
 
     pub(crate) fn set(&self, key: GlobalConfigKey, value: String) -> Result<()> {
+        let should_stop_built_in_tor = match key {
+            GlobalConfigKey::TorMode => !matches!(value.parse::<TorMode>(), Ok(TorMode::BuiltIn)),
+            GlobalConfigKey::UseTor => value.eq_ignore_ascii_case("false"),
+            _ => false,
+        };
+
         let write_txn =
             self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
@@ -329,6 +369,13 @@ impl GlobalConfigTable {
             table
                 .insert(key, value)
                 .map_err(|error| GlobalConfigTableError::Save(error.to_string()))?;
+        }
+
+        if should_stop_built_in_tor && !crate::tor_runtime::request_stop_built_in_proxy() {
+            return Err(GlobalConfigTableError::BuiltInTorStop(
+                "timed out waiting for proxy shutdown".to_string(),
+            )
+            .into());
         }
 
         write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;

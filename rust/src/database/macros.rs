@@ -19,6 +19,7 @@ macro_rules! string_config_accessor {
         }
 
         paste::paste! {
+            #[allow(dead_code)]
             $vis fn [<set_ $fn_name>](&self, value: $return_type) -> Result<(), Error> {
                 let value_str = value.to_string();
                 self.set($key, value_str)?;

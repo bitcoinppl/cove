@@ -62,6 +62,7 @@ mod seed_qr;
 mod send_flow;
 mod signed_import;
 mod tap_card;
+mod tor_runtime;
 mod transaction;
 mod transaction_watcher;
 mod ur;
@@ -97,10 +98,49 @@ pub enum InitError {
     RootDataDirAlreadySet(String),
 }
 
+#[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+pub enum TorBootstrapError {
+    #[error("failed to initialize built-in tor proxy: {0}")]
+    BuiltInTor(String),
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BuiltInTorBootstrapStatus {
+    pub percent: u32,
+    pub ready: bool,
+    pub blocked: Option<String>,
+    pub message: String,
+    pub launched: bool,
+    pub last_error: Option<String>,
+}
+
 /// set root data directory before any database access
 /// required for Android to specify app-specific storage path
 #[uniffi::export]
 fn set_root_data_dir(path: String) -> Result<(), InitError> {
     cove_common::consts::set_root_data_dir(PathBuf::from(path))
         .map_err(InitError::RootDataDirAlreadySet)
+}
+
+#[uniffi::export(async_runtime = "tokio")]
+async fn ensure_built_in_tor_bootstrap() -> Result<String, TorBootstrapError> {
+    let endpoint = tor_runtime::built_in_socks_endpoint().await.map_err(|error| match error {
+        tor_runtime::Error::Proxy(message) => TorBootstrapError::BuiltInTor(message),
+    })?;
+    Ok(endpoint.to_string())
+}
+
+#[uniffi::export]
+fn tor_connection_logs() -> Vec<String> {
+    logging::tor_connection_logs()
+}
+
+#[uniffi::export]
+fn built_in_tor_bootstrap_status() -> BuiltInTorBootstrapStatus {
+    tor_runtime::built_in_bootstrap_status()
+}
+
+#[uniffi::export]
+fn clear_tor_connection_logs() {
+    logging::clear_tor_connection_logs();
 }

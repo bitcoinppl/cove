@@ -11,13 +11,17 @@ import SwiftUI
 struct NodeSelectionView: View {
     /// private
     private let nodeSelector = NodeSelector()
+    private let db = Database()
 
+    @Environment(AppManager.self) private var app
+
+    @State private var selectedNodeSelection: NodeSelection
     @State private var selectedNodeName: String
     private var nodeList: [NodeSelection]
 
-    @State private var nodeIsChecking = false
-    @State private var customNodeName: String = ""
-    @State private var customUrl: String = ""
+    @State private var customNodeName = ""
+    @State private var customUrl = ""
+    @State private var suppressCustomDraftActions = false
 
     @State private var showParseUrlAlert = false
     @State private var parseUrlMessage = ""
@@ -25,18 +29,32 @@ struct NodeSelectionView: View {
     @State private var checkUrlTask: Task<Void, Never>?
 
     init() {
-        selectedNodeName = nodeSelector.selectedNode().name
+        let selected = nodeSelector.selectedNode()
+        selectedNodeSelection = selected
+        selectedNodeName = selected.name
         nodeList = nodeSelector.nodeList()
     }
 
+    private var customElectrum: String {
+        "Custom Electrum"
+    }
+
+    private var customEsplora: String {
+        "Custom Esplora"
+    }
+
     var showCustomUrlField: Bool {
-        selectedNodeName.hasPrefix("Custom")
+        if selectedNodeName == customElectrum || selectedNodeName == customEsplora {
+            return true
+        }
+        if case .custom = selectedNodeSelection {
+            return true
+        }
+        return false
     }
 
     func cancelCheckUrlTask() {
-        if let checkUrlTask {
-            checkUrlTask.cancel()
-        }
+        checkUrlTask?.cancel()
     }
 
     private func showLoadingPopup() {
@@ -59,7 +77,8 @@ struct NodeSelectionView: View {
                 7
             case .success:
                 2
-            default: 0
+            default:
+                0
             }
 
             try? await Task.sleep(for: .seconds(1))
@@ -72,14 +91,21 @@ struct NodeSelectionView: View {
     @ViewBuilder
     var CustomFields: some View {
         if showCustomUrlField {
-            Section(selectedNodeName) {
+            Section("Custom node") {
                 HStack {
                     Text("URL")
                         .frame(width: 60, alignment: .leading)
 
-                    TextField("Enter URL", text: $customUrl)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
+                    TextField("Enter URL", text: Binding(
+                        get: { customUrl },
+                        set: { value in
+                            suppressCustomDraftActions = false
+                            customUrl = value
+                        }
+                    ))
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                 }
                 .font(.subheadline)
 
@@ -87,24 +113,93 @@ struct NodeSelectionView: View {
                     Text("Name")
                         .frame(width: 60, alignment: .leading)
 
-                    TextField("Node Name (optional)", text: $customNodeName)
-                        .textInputAutocapitalization(.never)
+                    TextField("Node Name (optional)", text: Binding(
+                        get: { customNodeName },
+                        set: { value in
+                            suppressCustomDraftActions = false
+                            customNodeName = value
+                        }
+                    ))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                 }
                 .font(.subheadline)
 
-                Button("Save Custom Node", action: checkAndSaveNode)
-                    .disabled(customUrl.isEmpty)
+                if suppressCustomDraftActions {
+                    Text("Node already saved through Tor validation. Edit URL or name to save changes.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button("Save Custom Node", action: checkAndSaveCustomNode)
+                        .disabled(customUrl.isEmpty)
+                }
             }
         }
     }
 
-    func checkAndSaveNode() {
-        var node: Node? = nil
+    private func customTypeName() -> String {
+        if selectedNodeName == customElectrum || selectedNodeName == customEsplora {
+            return selectedNodeName
+        }
 
+        if case let .custom(node) = selectedNodeSelection {
+            return node.apiType == .electrum ? customElectrum : customEsplora
+        }
+
+        return selectedNodeName
+    }
+
+    private func setCustomSelection(for node: Node) {
+        selectedNodeSelection = .custom(node)
+        selectedNodeName = node.apiType == .electrum ? customElectrum : customEsplora
+    }
+
+    private func clearPendingNodeDraft() {
+        app.clearPendingNodeTorDraft()
+    }
+
+    private func restorePendingNodeIfNeeded() {
+        guard app.pendingNodeAwaitingTorSetup, !app.pendingNodeUrl.isEmpty else { return }
+
+        customUrl = app.pendingNodeUrl
+        customNodeName = app.pendingNodeName
+        selectedNodeName = app.pendingNodeTypeName.isEmpty ? customElectrum : app.pendingNodeTypeName
+
+        guard db.globalConfig().useTor(), app.pendingNodeTorValidated else { return }
+
+        let task = Task {
+            showLoadingPopup()
+            do {
+                let node = try nodeSelector.parseCustomNode(
+                    url: app.pendingNodeUrl,
+                    name: selectedNodeName,
+                    enteredName: app.pendingNodeName
+                )
+                try await nodeSelector.checkAndSaveNode(node: node)
+                setCustomSelection(for: node)
+                clearPendingNodeDraft()
+                suppressCustomDraftActions = true
+                customUrl = ""
+                customNodeName = ""
+                completeLoading(.success("Connected to node successfully"))
+                app.popRoute()
+            } catch {
+                completeLoading(.failure("Failed to connect to node\n\(error.localizedDescription)"))
+            }
+        }
+        checkUrlTask = task
+    }
+
+    private func parseCustomNodeOrShowError() -> Node? {
         do {
-            node = try nodeSelector.parseCustomNode(url: customUrl, name: selectedNodeName, enteredName: customNodeName)
-            customUrl = node?.url ?? customUrl
-            customNodeName = node?.name ?? customNodeName
+            let node = try nodeSelector.parseCustomNode(
+                url: customUrl,
+                name: customTypeName(),
+                enteredName: customNodeName
+            )
+            customUrl = node.url
+            customNodeName = node.name
+            return node
         } catch {
             showParseUrlAlert = true
             switch error {
@@ -113,118 +208,158 @@ struct NodeSelectionView: View {
             default:
                 parseUrlMessage = "Unknown error \(error.localizedDescription)"
             }
+            return nil
+        }
+    }
+
+    func checkAndSaveCustomNode() {
+        guard !customUrl.isEmpty else { return }
+        guard let node = parseCustomNodeOrShowError() else { return }
+
+        if isOnionNodeUrl(node.url) {
+            if db.globalConfig().useTor() {
+                let task = Task {
+                    showLoadingPopup()
+                    do {
+                        try await nodeSelector.checkAndSaveNode(node: node)
+                        setCustomSelection(for: node)
+                        clearPendingNodeDraft()
+                        suppressCustomDraftActions = false
+                        completeLoading(.success("Connected to node successfully"))
+                    } catch {
+                        completeLoading(.failure("Failed to connect to node\n\(error.localizedDescription)"))
+                    }
+                }
+                checkUrlTask = task
+                return
+            }
+
+            do {
+                try db.globalFlag().set(key: .torSettingsDiscovered, value: true)
+                try db.globalConfig().setUseTor(useTor: true)
+            } catch {
+                showParseUrlAlert = true
+                parseUrlMessage = "Failed to enable Tor for this onion node: \(error.localizedDescription)"
+                return
+            }
+
+            setCustomSelection(for: node)
+            app.pendingNodeUrl = node.url
+            app.pendingNodeName = node.name
+            app.pendingNodeTypeName = node.apiType == .electrum ? customElectrum : customEsplora
+            app.pendingNodeAwaitingTorSetup = true
+            app.pendingNodeTorValidated = false
+            app.pushRoute(.settings(.network))
+            return
         }
 
-        if let node {
-            Task {
-                showLoadingPopup()
-                let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
-
-                switch result {
-                case .success: completeLoading(.success("Connected to node successfully"))
-                case let .failure(error):
-                    let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
-                    let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
-
-                    completeLoading(.failure(formattedMessage))
-                }
+        let task = Task {
+            showLoadingPopup()
+            do {
+                try await nodeSelector.checkAndSaveNode(node: node)
+                setCustomSelection(for: node)
+                completeLoading(.success("Connected to node successfully"))
+            } catch {
+                completeLoading(.failure("Failed to connect to node\n\(error.localizedDescription)"))
             }
         }
+        checkUrlTask = task
+    }
+
+    private func selectPresetNode(_ nodeSelection: NodeSelection) {
+        let node = nodeSelection.toNode()
+        selectedNodeSelection = nodeSelection
+        selectedNodeName = node.name
+        suppressCustomDraftActions = false
+
+        if case .custom = nodeSelection {
+            customUrl = node.url
+            customNodeName = node.name
+            selectedNodeName = node.apiType == .electrum ? customElectrum : customEsplora
+            return
+        }
+
+        customUrl = ""
+        customNodeName = ""
+        showLoadingPopup()
+        let task = Task {
+            do {
+                let selected = try nodeSelector.selectPresetNode(name: node.name)
+                try await nodeSelector.checkSelectedNode(node: selected)
+                selectedNodeSelection = .preset(selected)
+                selectedNodeName = selected.name
+                completeLoading(.success("Successfully connected to \(selected.url)"))
+            } catch {
+                completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
+            }
+        }
+        checkUrlTask = task
     }
 
     var body: some View {
         Form {
             Section {
-                ForEach(nodeList, id: \.name) { (node: NodeSelection) in
-                    HStack {
-                        Text(node.name)
-                            .font(.subheadline)
+                ForEach(nodeList, id: \.name) { nodeSelection in
+                    NodeRow(
+                        nodeName: nodeSelection.name,
+                        isSelected: selectedNodeSelection == nodeSelection || selectedNodeName == nodeSelection.name,
+                        onTap: { selectPresetNode(nodeSelection) }
+                    )
+                }
 
-                        Spacer()
-
-                        if selectedNodeName == node.name {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.blue)
-                                .font(.footnote)
-                                .fontWeight(.semibold)
+                NodeRow(
+                    nodeName: customElectrum,
+                    isSelected: selectedNodeName == customElectrum,
+                    onTap: {
+                        suppressCustomDraftActions = false
+                        selectedNodeName = customElectrum
+                        if case let .custom(node) = selectedNodeSelection, node.apiType == .electrum {
+                            customUrl = node.url
+                            customNodeName = node.name
+                        } else {
+                            customUrl = ""
+                            customNodeName = ""
                         }
                     }
-                    .contentShape(Rectangle())
-                    .onTapGesture { selectedNodeName = node.name }
-                }
+                )
 
-                HStack {
-                    Text("Custom Electrum")
-                        .font(.subheadline)
-
-                    Spacer()
-
-                    if selectedNodeName == "Custom Electrum" {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(.blue)
-                            .font(.footnote)
-                            .fontWeight(.semibold)
+                NodeRow(
+                    nodeName: customEsplora,
+                    isSelected: selectedNodeName == customEsplora,
+                    onTap: {
+                        suppressCustomDraftActions = false
+                        selectedNodeName = customEsplora
+                        if case let .custom(node) = selectedNodeSelection, node.apiType == .esplora {
+                            customUrl = node.url
+                            customNodeName = node.name
+                        } else {
+                            customUrl = ""
+                            customNodeName = ""
+                        }
                     }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture { selectedNodeName = "Custom Electrum" }
-
-                HStack {
-                    Text("Custom Esplora")
-                        .font(.subheadline)
-
-                    Spacer()
-
-                    if selectedNodeName == "Custom Esplora" {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(.blue)
-                            .font(.footnote)
-                            .fontWeight(.semibold)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture { selectedNodeName = "Custom Esplora" }
+                )
             }
 
             CustomFields
         }
         .scrollContentBackground(.hidden)
-        .onChange(of: selectedNodeName) { _, newSelectedNodeName in
-            if selectedNodeName.hasPrefix("Custom") {
-                if case let .custom(savedSelectedNode) = nodeSelector.selectedNode() {
-                    if savedSelectedNode.apiType == .electrum, selectedNodeName.contains("Electrum") {
-                        customUrl = savedSelectedNode.url
-                        customNodeName = savedSelectedNode.name
-                    }
-
-                    if savedSelectedNode.apiType == .esplora, selectedNodeName.contains("Esplora") {
-                        customUrl = savedSelectedNode.url
-                        customNodeName = savedSelectedNode.name
-                    }
+        .onAppear(perform: restorePendingNodeIfNeeded)
+        .onChange(of: selectedNodeName) { _, _ in
+            guard showCustomUrlField, customUrl.isEmpty, !suppressCustomDraftActions else { return }
+            if case let .custom(savedSelectedNode) = nodeSelector.selectedNode() {
+                if savedSelectedNode.apiType == .electrum, selectedNodeName == customElectrum {
+                    customUrl = savedSelectedNode.url
+                    customNodeName = savedSelectedNode.name
                 }
 
-                return
-            }
-
-            guard let node = try? nodeSelector.selectPresetNode(name: newSelectedNodeName) else { return }
-
-            showLoadingPopup()
-            let task = Task {
-                do {
-                    try await nodeSelector.checkSelectedNode(node: node)
-                    completeLoading(.success("Succesfully connected to \(node.url)"))
-                } catch {
-                    completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
+                if savedSelectedNode.apiType == .esplora, selectedNodeName == customEsplora {
+                    customUrl = savedSelectedNode.url
+                    customNodeName = savedSelectedNode.name
                 }
             }
-            checkUrlTask = task
-        }
-        .onChange(of: nodeList) { _, _ in
-            selectedNodeName = nodeSelector.selectedNode().name
         }
         .onDisappear {
-            // custom esplora or electrum is selected
-            if showCustomUrlField { checkAndSaveNode() }
+            cancelCheckUrlTask()
         }
         .alert(isPresented: $showParseUrlAlert) {
             Alert(
@@ -237,6 +372,30 @@ struct NodeSelectionView: View {
                 }
             )
         }
+    }
+}
+
+private struct NodeRow: View {
+    let nodeName: String
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(nodeName)
+                .font(.subheadline)
+
+            Spacer()
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.blue)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
     }
 }
 

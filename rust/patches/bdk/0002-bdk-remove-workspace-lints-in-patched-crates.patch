@@ -1,0 +1,56 @@
+diff --git a/crates/chain/Cargo.toml b/crates/chain/Cargo.toml
+index 62d0f2b3..aebcc029 100644
+--- a/crates/chain/Cargo.toml
++++ b/crates/chain/Cargo.toml
+@@ -12,9 +12,6 @@ readme = "README.md"
+ 
+ # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+ 
+-[lints]
+-workspace = true
+-
+ [dependencies]
+ bitcoin = { version = "0.32.0", default-features = false }
+ bdk_core = { path = "../core", version = "0.6.3", default-features = false }
+diff --git a/crates/electrum/Cargo.toml b/crates/electrum/Cargo.toml
+index 8fdd7823..0761ebfa 100644
+--- a/crates/electrum/Cargo.toml
++++ b/crates/electrum/Cargo.toml
+@@ -9,9 +9,6 @@ description = "Fetch data from electrum in the form BDK accepts"
+ license = "MIT OR Apache-2.0"
+ readme = "README.md"
+ 
+-[lints]
+-workspace = true
+-
+ [dependencies]
+ bdk_core = { path = "../core", version = "0.6.1" }
+ electrum-client = { version = "0.24.0", features = [ "proxy" ], default-features = false }
+diff --git a/crates/esplora/Cargo.toml b/crates/esplora/Cargo.toml
+index 1e5906d0..0d99e95e 100644
+--- a/crates/esplora/Cargo.toml
++++ b/crates/esplora/Cargo.toml
+@@ -11,9 +11,6 @@ readme = "README.md"
+ 
+ # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+ 
+-[lints]
+-workspace = true
+-
+ [dependencies]
+ bdk_core = { path = "../core", version = "0.6.3", default-features = false }
+ esplora-client = { version = "0.12.3", default-features = false }
+diff --git a/crates/file_store/Cargo.toml b/crates/file_store/Cargo.toml
+index 714c40e1..f1eb32a8 100644
+--- a/crates/file_store/Cargo.toml
++++ b/crates/file_store/Cargo.toml
+@@ -10,9 +10,6 @@ keywords = ["bitcoin", "persist", "persistence", "bdk", "file"]
+ authors = ["Bitcoin Dev Kit Developers"]
+ readme = "README.md"
+ 
+-[lints]
+-workspace = true
+-
+ [dependencies]
+ bdk_core = { path = "../core", version = "0.6.1", features = ["serde"]}
+ bincode = { version = "1" }

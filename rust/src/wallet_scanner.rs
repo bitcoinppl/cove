@@ -25,7 +25,7 @@ use crate::{
     keychain::Keychain,
     manager::wallet_manager::{SingleOrMany, WalletManagerReconcileMessage},
     mnemonic::MnemonicExt,
-    node::{client::NodeClientOptions, client_builder::NodeClientBuilder},
+    node::client_builder::NodeClientBuilder,
     wallet::{
         WalletAddressType, WalletError,
         metadata::{DiscoveryState, FoundAddress, FoundJson, WalletId, WalletMetadata},
@@ -162,9 +162,7 @@ impl WalletScanner {
         }
 
         let node = db.global_config().selected_node();
-        let options = NodeClientOptions { batch_size: 1 };
-
-        let client_builder = NodeClientBuilder { node, options };
+        let client_builder = NodeClientBuilder::with_defaults(node, 1);
         Ok(Self::new(metadata.id, client_builder, wallets, scan_source, reconciler))
     }
 

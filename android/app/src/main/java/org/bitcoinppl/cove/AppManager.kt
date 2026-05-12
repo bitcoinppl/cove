@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
+import org.bitcoinppl.cove.tor.parseCoreTorMode
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.device.KeychainException
@@ -73,6 +74,13 @@ class AppManager private constructor() : FfiReconcile {
     var selectedFiatCurrency by mutableStateOf(Database().globalConfig().selectedFiatCurrency())
         private set
 
+    // temporary node draft state used across Settings->Network->Node navigation
+    var pendingNodeUrl by mutableStateOf("")
+    var pendingNodeName by mutableStateOf("")
+    var pendingNodeTypeName by mutableStateOf("")
+    var pendingNodeAwaitingTorSetup by mutableStateOf(false)
+    var pendingNodeTorValidated by mutableStateOf(false)
+
     // prices and fees
     var prices: PriceResponse? by mutableStateOf(runCatching { rust.prices() }.getOrNull())
         private set
@@ -101,6 +109,7 @@ class AppManager private constructor() : FfiReconcile {
         Log.d(tag, "Initializing AppManager")
         rust.listenForUpdates(this)
         wallets = runCatching { Database().wallets().all() }.getOrElse { emptyList() }
+        warmupTorIfConfigured()
     }
 
     /**
@@ -531,6 +540,29 @@ class AppManager private constructor() : FfiReconcile {
         Log.d(tag, "dispatch $action")
         runCatching { rust.dispatch(action) }
             .onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
+    }
+
+    private fun warmupTorIfConfigured() {
+        val globalConfig = database.globalConfig()
+        if (!globalConfig.useTor()) {
+            return
+        }
+
+        val modeName = runCatching { globalConfig.get(GlobalConfigKey.TorMode) }.getOrNull()
+        val mode = parseCoreTorMode(modeName)
+        if (mode != TorMode.BUILT_IN) {
+            Log.d(tag, "Tor enabled with mode=$mode; no built-in warmup needed")
+            return
+        }
+
+        mainScope.launch(Dispatchers.IO) {
+            runCatching { ensureBuiltInTorBootstrap() }
+                .onSuccess { endpoint ->
+                    Log.d(tag, "Built-in Tor warmup started at $endpoint")
+                }.onFailure { error ->
+                    Log.e(tag, "Failed to warm up built-in Tor on launch: ${error.message}", error)
+                }
+        }
     }
 
     companion object {

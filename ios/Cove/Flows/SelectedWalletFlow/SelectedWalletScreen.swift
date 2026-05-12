@@ -56,6 +56,8 @@ struct SelectedWalletScreen: View {
 
     /// private
     @State private var runPostRefresh = false
+    @State private var torQuickStatus = TorQuickStatus()
+    @State private var showTorQuickStatus = false
 
     var metadata: WalletMetadata {
         manager.walletMetadata
@@ -239,6 +241,192 @@ struct SelectedWalletScreen: View {
         return .white
     }
 
+    @MainActor
+    private func pollTorQuickStatus() async {
+        while !Task.isCancelled {
+            await refreshTorQuickStatus()
+            try? await Task.sleep(for: .seconds(3))
+        }
+    }
+
+    @MainActor
+    private func refreshTorQuickStatus() async {
+        let config = Database().globalConfig()
+        guard config.useTor() else {
+            torQuickStatus = TorQuickStatus()
+            return
+        }
+
+        let mode = TorMode.fromConfig(try? config.get(key: .torMode))
+        var quick = TorQuickStatus(enabled: true)
+
+        switch mode {
+        case .builtIn:
+            await refreshBuiltInQuickStatus(quick: &quick)
+        case .orbot:
+            await refreshProxyQuickStatus(
+                host: "127.0.0.1",
+                port: 9050,
+                modeTitle: "Orbot",
+                quick: &quick
+            )
+        case .external:
+            let host = (try? config.get(key: .torExternalHost))?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            await refreshProxyQuickStatus(
+                host: host?.isEmpty == false ? host! : "127.0.0.1",
+                port: Int(config.torExternalPort()),
+                modeTitle: "Custom SOCKS5",
+                quick: &quick
+            )
+        }
+
+        applyWalletQuickStatus(to: &quick)
+        quick.overall = overallTorQuickDot(quick)
+        torQuickStatus = quick
+    }
+
+    @MainActor
+    private func refreshBuiltInQuickStatus(quick: inout TorQuickStatus) async {
+        do {
+            _ = try await ensureBuiltInTorBootstrap()
+        } catch {
+            quick.torConnection = .red
+            quick.torMessage = "Built-in Tor failed: \(error.localizedDescription)"
+            quick.logs = recentTorLogs(torConnectionLogs())
+            return
+        }
+
+        let logs = torConnectionLogs()
+        let snapshot = deriveBuiltInBootstrapSnapshot(logs)
+        let structuredStatus = builtInTorBootstrapStatus()
+        let hasStructuredStatus = structuredStatus.launched
+        quick.logs = recentTorLogs(logs)
+
+        if structuredStatus.ready || (!hasStructuredStatus && snapshot.isReady) {
+            quick.torConnection = .green
+            quick.torMessage = "Built-in Tor ready"
+        } else if let lastError = structuredStatus.lastError {
+            quick.torConnection = .red
+            quick.torMessage = lastError
+        } else if !hasStructuredStatus, snapshot.hasError {
+            quick.torConnection = .red
+            quick.torMessage = snapshot.step
+        } else {
+            let message =
+                structuredStatus.blocked.map { "Blocked: \($0)" }
+                    ?? (leadingPercent(snapshot.step) != nil ? snapshot.step : nil)
+                    ?? (hasStructuredStatus && !structuredStatus.message.isEmpty ? structuredStatus.message : snapshot.step)
+            let percent = leadingPercent(message) ?? (hasStructuredStatus ? Int(structuredStatus.percent) : snapshot.percent)
+            quick.torConnection = .yellow
+            quick.torMessage = "Built-in Tor bootstrapping (\(percent)%)"
+        }
+    }
+
+    @MainActor
+    private func refreshProxyQuickStatus(
+        host: String,
+        port: Int,
+        modeTitle: String,
+        quick: inout TorQuickStatus
+    ) async {
+        let result = await testSocksEndpoint(host: host, port: port, timeout: 1.5)
+        switch result {
+        case .success:
+            quick.torConnection = .green
+            quick.torMessage = "\(modeTitle) proxy reachable at \(host):\(port)"
+        case let .failure(error):
+            quick.torConnection = .red
+            quick.torMessage = "\(modeTitle) proxy unavailable: \(error.localizedDescription)"
+        }
+    }
+
+    private func applyWalletQuickStatus(to quick: inout TorQuickStatus) {
+        if quick.torConnection == .yellow {
+            quick.nodeReachable = .yellow
+            quick.nodeMessage = "Waiting for Tor"
+            quick.nodeSynced = .yellow
+            quick.syncMessage = "Waiting for Tor"
+            return
+        }
+
+        if quick.torConnection == .red {
+            quick.nodeReachable = .red
+            quick.nodeMessage = "Tor unavailable"
+            quick.nodeSynced = .red
+            quick.syncMessage = "Tor unavailable"
+            return
+        }
+
+        if case .nodeConnectionFailed = manager.errorAlert {
+            quick.nodeReachable = .red
+            quick.nodeMessage = "Node connection failed"
+        } else {
+            quick.nodeReachable = .green
+            quick.nodeMessage = "Node reachable"
+        }
+
+        switch manager.loadState {
+        case .loading:
+            quick.nodeSynced = .yellow
+            quick.syncMessage = "Wallet loading"
+        case .scanning:
+            quick.nodeSynced = .yellow
+            quick.syncMessage = "Wallet syncing"
+        case .loaded:
+            quick.nodeSynced = .green
+            quick.syncMessage = "Wallet synced"
+        }
+    }
+
+    private func overallTorQuickDot(_ status: TorQuickStatus) -> TorStatusDot {
+        let dots = [status.torConnection, status.nodeReachable, status.nodeSynced]
+        if dots.allSatisfy({ $0 == .green }) { return .green }
+        if dots.contains(.red) { return .red }
+        if dots.contains(.yellow) { return .yellow }
+        return .gray
+    }
+
+    private func recentTorLogs(_ logs: [String]) -> [String] {
+        let usefulMarkers = [
+            "arti_client::status",
+            "tor_dirmgr",
+            "tor_guardmgr",
+            "tor_runtime",
+            "bootstrapped",
+            "bootstrap",
+            "directory",
+            "consensus",
+            "microdescriptors",
+            "failed",
+            "error",
+            "warn",
+        ]
+        let usefulLogs = logs
+            .filter { line in
+                usefulMarkers.contains { marker in
+                    line.range(of: marker, options: .caseInsensitive) != nil
+                }
+            }
+            .map { line in
+                line.replacingOccurrences(
+                    of: #"^\[(INFO|WARN|ERROR|DEBUG) [^\]]+]\s*"#,
+                    with: "",
+                    options: .regularExpression
+                )
+            }
+            .filter { !$0.isEmpty }
+
+        return Array(NSOrderedSet(array: usefulLogs).array.compactMap { $0 as? String }.suffix(6))
+    }
+
+    private func leadingPercent(_ message: String) -> Int? {
+        guard let match = message.range(of: #"^\d{1,3}(?=%:)"#, options: .regularExpression) else {
+            return nil
+        }
+        return Int(message[match]).map { min(max($0, 0), 100) }
+    }
+
     var titleContent: some View {
         HStack(spacing: 10) {
             if case .cold = metadata.walletType {
@@ -270,6 +458,31 @@ struct SelectedWalletScreen: View {
     var MainToolBar: some ToolbarContent {
         ToolbarItemGroup(placement: .navigationBarTrailing) {
             HStack(spacing: 5) {
+                if torQuickStatus.enabled {
+                    Button(action: { showTorQuickStatus.toggle() }) {
+                        HStack(spacing: 2) {
+                            Image("iconTorOnion")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 26, height: 26)
+
+                            BlinkingTorStatusDot(dot: torQuickStatus.overall, size: 10)
+                        }
+                        .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
+                    }
+                    .popover(isPresented: $showTorQuickStatus) {
+                        TorQuickStatusPopover(
+                            status: torQuickStatus,
+                            openNetworkSettings: {
+                                showTorQuickStatus = false
+                                app.pushRoute(.settings(.network))
+                            }
+                        )
+                        .presentationCompactAdaptation(.popover)
+                    }
+                }
+
                 Button(action: {
                     app.sheetState = .init(.qr)
                 }) {
@@ -417,6 +630,9 @@ struct SelectedWalletScreen: View {
             .padding(.top, 10)
         }
         .onChange(of: scannedLabels, initial: false, onChangeOfScannedLabels)
+        .task(id: manager.id) {
+            await pollTorQuickStatus()
+        }
     }
 
     func handleScrollToTransaction(proxy: ScrollViewProxy) {
@@ -583,6 +799,128 @@ struct VerifyReminder: View {
                     .foregroundStyle(.black.opacity(0.66))
                 }
             }
+        }
+    }
+}
+
+private struct TorQuickStatusPopover: View {
+    let status: TorQuickStatus
+    let openNetworkSettings: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Tor Network Status")
+                .font(.headline.weight(.bold))
+
+            VStack(spacing: 12) {
+                TorQuickStatusRow(
+                    title: "Tor connection",
+                    detail: status.torMessage,
+                    dot: status.torConnection
+                )
+                TorQuickStatusRow(
+                    title: "Node reachable",
+                    detail: status.nodeMessage,
+                    dot: status.nodeReachable
+                )
+                TorQuickStatusRow(
+                    title: "Node synced",
+                    detail: status.syncMessage,
+                    dot: status.nodeSynced
+                )
+            }
+
+            if !status.logs.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Recent logs")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.blue)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(status.logs.enumerated()), id: \.offset) { _, line in
+                            Text(line)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.midnightBlue.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+
+            Button(action: openNetworkSettings) {
+                Text("Network Settings")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.blue)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+            }
+        }
+        .padding(18)
+        .frame(width: 280)
+    }
+}
+
+private struct TorQuickStatusRow: View {
+    let title: String
+    let detail: String
+    let dot: TorStatusDot
+
+    var body: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title.uppercased())
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.secondary.opacity(0.8))
+
+                Text(detail)
+                    .font(.system(size: 13, weight: .semibold))
+            }
+
+            Spacer()
+
+            if dot == .green {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(dot.color)
+                    .font(.system(size: 16))
+            } else {
+                Circle()
+                    .fill(dot.color)
+                    .frame(width: 12, height: 12)
+            }
+        }
+    }
+}
+
+private struct BlinkingTorStatusDot: View {
+    let dot: TorStatusDot
+    let size: CGFloat
+
+    @State private var pulse = false
+
+    var body: some View {
+        Circle()
+            .fill(dot.color)
+            .frame(width: size, height: size)
+            .opacity(dot == .yellow ? (pulse ? 1.0 : 0.28) : 1.0)
+            .onAppear(perform: startPulseIfNeeded)
+            .onChange(of: dot) { _, _ in
+                startPulseIfNeeded()
+            }
+    }
+
+    private func startPulseIfNeeded() {
+        guard dot == .yellow else {
+            pulse = false
+            return
+        }
+
+        pulse = false
+        withAnimation(.easeInOut(duration: 0.95).repeatForever(autoreverses: true)) {
+            pulse = true
         }
     }
 }

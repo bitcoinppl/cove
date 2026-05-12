@@ -24,29 +24,48 @@ pub struct EsploraClient {
 }
 
 impl EsploraClient {
-    pub const fn new(client: Arc<AsyncClient>) -> Self {
-        Self { client, options: NodeClientOptions { batch_size: ESPLORA_BATCH_SIZE } }
+    pub fn new(client: Arc<AsyncClient>) -> Self {
+        Self::new_with_options(
+            client,
+            NodeClientOptions { batch_size: ESPLORA_BATCH_SIZE, ..NodeClientOptions::default() },
+        )
     }
 
     pub fn new_from_node(node: &Node) -> Result<Self, Error> {
-        let client = esplora_client::Builder::new(&node.url)
-            .build_async()
-            .map_err(Error::CreateEsploraClient)?
-            .into();
-
-        Ok(Self::new(client))
+        let options = NodeClientOptions::default();
+        Self::new_from_node_and_options(node, &options)
     }
 
     pub fn new_from_node_and_options(
         node: &Node,
-        options: NodeClientOptions,
+        options: &NodeClientOptions,
     ) -> Result<Self, Error> {
-        let client = esplora_client::Builder::new(&node.url)
-            .build_async()
-            .map_err(Error::CreateEsploraClient)?
-            .into();
+        debug!(
+            api_type = "esplora",
+            tor_enabled = options.use_tor,
+            tor_mode = ?options.tor_mode,
+            batch_size = options.batch_size,
+            "creating esplora client from node and options"
+        );
+        let mut builder = esplora_client::Builder::new(&node.url);
 
-        Ok(Self::new_with_options(client, options))
+        if options.use_tor {
+            debug!(
+                api_type = "esplora",
+                tor_enabled = true,
+                tor_mode = ?options.tor_mode,
+                "esplora using socks proxy"
+            );
+            let proxy =
+                format!("socks5h://{}:{}", options.tor_external_host, options.tor_external_port);
+            builder = builder.proxy(&proxy);
+        } else {
+            debug!("esplora connecting without tor proxy");
+        }
+
+        let client = builder.build_async().map_err(Error::CreateEsploraClient)?.into();
+
+        Ok(Self::new_with_options(client, options.clone()))
     }
 
     pub const fn new_with_options(client: Arc<AsyncClient>, options: NodeClientOptions) -> Self {

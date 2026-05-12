@@ -1,0 +1,155 @@
+diff --git a/crates/chain/src/rusqlite_impl.rs b/crates/chain/src/rusqlite_impl.rs
+index 7e9e2f6f..d9f6a023 100644
+--- a/crates/chain/src/rusqlite_impl.rs
++++ b/crates/chain/src/rusqlite_impl.rs
+@@ -10,6 +10,9 @@ use alloc::{
+     sync::Arc,
+     vec::Vec,
+ };
++use core::convert::TryFrom;
++use std::io;
++
+ use bitcoin::consensus::{Decodable, Encodable};
+ use rusqlite;
+ use rusqlite::named_params;
+@@ -302,9 +305,9 @@ impl tx_graph::ChangeSet<ConfirmationBlockTime> {
+             Ok((
+                 row.get::<_, Impl<bitcoin::Txid>>("txid")?,
+                 row.get::<_, Option<Impl<bitcoin::Transaction>>>("raw_tx")?,
+-                row.get::<_, Option<u64>>("first_seen")?,
+-                row.get::<_, Option<u64>>("last_seen")?,
+-                row.get::<_, Option<u64>>("last_evicted")?,
++                row.get::<_, Option<i64>>("first_seen")?,
++                row.get::<_, Option<i64>>("last_seen")?,
++                row.get::<_, Option<i64>>("last_evicted")?,
+             ))
+         })?;
+         for row in row_iter {
+@@ -313,12 +316,42 @@ impl tx_graph::ChangeSet<ConfirmationBlockTime> {
+                 changeset.txs.insert(Arc::new(tx));
+             }
+             if let Some(first_seen) = first_seen {
++                let first_seen = u64::try_from(first_seen).map_err(|_| {
++                    rusqlite::Error::FromSqlConversionFailure(
++                        0,
++                        rusqlite::types::Type::Integer,
++                        Box::new(io::Error::new(
++                            io::ErrorKind::InvalidData,
++                            "first_seen must be non-negative",
++                        )),
++                    )
++                })?;
+                 changeset.first_seen.insert(txid, first_seen);
+             }
+             if let Some(last_seen) = last_seen {
++                let last_seen = u64::try_from(last_seen).map_err(|_| {
++                    rusqlite::Error::FromSqlConversionFailure(
++                        0,
++                        rusqlite::types::Type::Integer,
++                        Box::new(io::Error::new(
++                            io::ErrorKind::InvalidData,
++                            "last_seen must be non-negative",
++                        )),
++                    )
++                })?;
+                 changeset.last_seen.insert(txid, last_seen);
+             }
+             if let Some(last_evicted) = last_evicted {
++                let last_evicted = u64::try_from(last_evicted).map_err(|_| {
++                    rusqlite::Error::FromSqlConversionFailure(
++                        0,
++                        rusqlite::types::Type::Integer,
++                        Box::new(io::Error::new(
++                            io::ErrorKind::InvalidData,
++                            "last_evicted must be non-negative",
++                        )),
++                    )
++                })?;
+                 changeset.last_evicted.insert(txid, last_evicted);
+             }
+         }
+@@ -354,12 +387,22 @@ impl tx_graph::ChangeSet<ConfirmationBlockTime> {
+             Ok((
+                 row.get::<_, Impl<bitcoin::BlockHash>>("block_hash")?,
+                 row.get::<_, u32>("block_height")?,
+-                row.get::<_, u64>("confirmation_time")?,
++                row.get::<_, i64>("confirmation_time")?,
+                 row.get::<_, Impl<bitcoin::Txid>>("txid")?,
+             ))
+         })?;
+         for row in row_iter {
+             let (hash, height, confirmation_time, Impl(txid)) = row?;
++            let confirmation_time = u64::try_from(confirmation_time).map_err(|_| {
++                rusqlite::Error::FromSqlConversionFailure(
++                    0,
++                    rusqlite::types::Type::Integer,
++                    Box::new(io::Error::new(
++                        io::ErrorKind::InvalidData,
++                        "confirmation_time must be non-negative",
++                    )),
++                )
++            })?;
+             changeset.anchors.insert((
+                 ConfirmationBlockTime {
+                     block_id: BlockId::from((&height, &hash.0)),
+@@ -392,7 +435,12 @@ impl tx_graph::ChangeSet<ConfirmationBlockTime> {
+             Self::TXS_TABLE_NAME,
+         ))?;
+         for (&txid, &first_seen) in &self.first_seen {
+-            let checked_time = first_seen.to_sql()?;
++            let checked_time = i64::try_from(first_seen).map_err(|_| {
++                rusqlite::Error::ToSqlConversionFailure(Box::new(io::Error::new(
++                    io::ErrorKind::InvalidData,
++                    "first_seen is too large for sqlite INTEGER",
++                )))
++            })?;
+             statement.execute(named_params! {
+                 ":txid": Impl(txid),
+                 ":first_seen": Some(checked_time),
+@@ -405,7 +453,12 @@ impl tx_graph::ChangeSet<ConfirmationBlockTime> {
+                 Self::TXS_TABLE_NAME,
+             ))?;
+         for (&txid, &last_seen) in &self.last_seen {
+-            let checked_time = last_seen.to_sql()?;
++            let checked_time = i64::try_from(last_seen).map_err(|_| {
++                rusqlite::Error::ToSqlConversionFailure(Box::new(io::Error::new(
++                    io::ErrorKind::InvalidData,
++                    "last_seen is too large for sqlite INTEGER",
++                )))
++            })?;
+             statement.execute(named_params! {
+                 ":txid": Impl(txid),
+                 ":last_seen": Some(checked_time),
+@@ -418,7 +471,12 @@ impl tx_graph::ChangeSet<ConfirmationBlockTime> {
+                 Self::TXS_TABLE_NAME,
+             ))?;
+         for (&txid, &last_evicted) in &self.last_evicted {
+-            let checked_time = last_evicted.to_sql()?;
++            let checked_time = i64::try_from(last_evicted).map_err(|_| {
++                rusqlite::Error::ToSqlConversionFailure(Box::new(io::Error::new(
++                    io::ErrorKind::InvalidData,
++                    "last_evicted is too large for sqlite INTEGER",
++                )))
++            })?;
+             statement.execute(named_params! {
+                 ":txid": Impl(txid),
+                 ":last_evicted": Some(checked_time),
+@@ -451,11 +509,17 @@ impl tx_graph::ChangeSet<ConfirmationBlockTime> {
+             statement_txid.execute(named_params! {
+                 ":txid": Impl(*txid)
+             })?;
++            let checked_confirmation_time = i64::try_from(anchor.confirmation_time).map_err(|_| {
++                rusqlite::Error::ToSqlConversionFailure(Box::new(io::Error::new(
++                    io::ErrorKind::InvalidData,
++                    "confirmation_time is too large for sqlite INTEGER",
++                )))
++            })?;
+             statement.execute(named_params! {
+                 ":txid": Impl(*txid),
+                 ":block_height": anchor_block.height,
+                 ":block_hash": Impl(anchor_block.hash),
+-                ":confirmation_time": anchor.confirmation_time,
++                ":confirmation_time": checked_confirmation_time,
+             })?;
+         }
+ 

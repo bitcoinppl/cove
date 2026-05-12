@@ -4001,6 +4001,14 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     
     func setSelectedNode(node: Node) throws 
     
+    func setTorExternalPort(port: UInt16) throws 
+    
+    func setUseTor(useTor: Bool) throws 
+    
+    func torExternalPort()  -> UInt16
+    
+    func useTor()  -> Bool
+    
     func walletMode()  -> WalletMode
     
 }
@@ -4207,6 +4215,38 @@ open func setSelectedNode(node: Node)throws   {try rustCallWithError(FfiConverte
         FfiConverterTypeNode_lower(node),$0
     )
 }
+}
+    
+open func setTorExternalPort(port: UInt16)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_globalconfigtable_set_tor_external_port(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt16.lower(port),$0
+    )
+}
+}
+    
+open func setUseTor(useTor: Bool)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_globalconfigtable_set_use_tor(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(useTor),$0
+    )
+}
+}
+    
+open func torExternalPort() -> UInt16  {
+    return try!  FfiConverterUInt16.lift(try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtable_tor_external_port(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func useTor() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtable_use_tor(
+            self.uniffiCloneHandle(),$0
+    )
+})
 }
     
 open func walletMode() -> WalletMode  {
@@ -13031,6 +13071,76 @@ public func FfiConverterTypeBackupWalletSummary_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeBackupWalletSummary_lower(_ value: BackupWalletSummary) -> RustBuffer {
     return FfiConverterTypeBackupWalletSummary.lower(value)
+}
+
+
+public struct BuiltInTorBootstrapStatus: Equatable, Hashable {
+    public var percent: UInt32
+    public var ready: Bool
+    public var blocked: String?
+    public var message: String
+    public var launched: Bool
+    public var lastError: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(percent: UInt32, ready: Bool, blocked: String?, message: String, launched: Bool, lastError: String?) {
+        self.percent = percent
+        self.ready = ready
+        self.blocked = blocked
+        self.message = message
+        self.launched = launched
+        self.lastError = lastError
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BuiltInTorBootstrapStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBuiltInTorBootstrapStatus: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BuiltInTorBootstrapStatus {
+        return
+            try BuiltInTorBootstrapStatus(
+                percent: FfiConverterUInt32.read(from: &buf), 
+                ready: FfiConverterBool.read(from: &buf), 
+                blocked: FfiConverterOptionString.read(from: &buf), 
+                message: FfiConverterString.read(from: &buf), 
+                launched: FfiConverterBool.read(from: &buf), 
+                lastError: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BuiltInTorBootstrapStatus, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.percent, into: &buf)
+        FfiConverterBool.write(value.ready, into: &buf)
+        FfiConverterOptionString.write(value.blocked, into: &buf)
+        FfiConverterString.write(value.message, into: &buf)
+        FfiConverterBool.write(value.launched, into: &buf)
+        FfiConverterOptionString.write(value.lastError, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuiltInTorBootstrapStatus_lift(_ buf: RustBuffer) throws -> BuiltInTorBootstrapStatus {
+    return try FfiConverterTypeBuiltInTorBootstrapStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuiltInTorBootstrapStatus_lower(_ value: BuiltInTorBootstrapStatus) -> RustBuffer {
+    return FfiConverterTypeBuiltInTorBootstrapStatus.lower(value)
 }
 
 
@@ -22630,6 +22740,10 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case selectedFiatCurrency
     case selectedNode(Network
     )
+    case useTor
+    case torMode
+    case torExternalHost
+    case torExternalPort
     case colorScheme
     case authType
     case hashedPinCode
@@ -22670,25 +22784,33 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case 4: return .selectedNode(try FfiConverterTypeNetwork.read(from: &buf)
         )
         
-        case 5: return .colorScheme
+        case 5: return .useTor
         
-        case 6: return .authType
+        case 6: return .torMode
         
-        case 7: return .hashedPinCode
+        case 7: return .torExternalHost
         
-        case 8: return .wipeDataPin
+        case 8: return .torExternalPort
         
-        case 9: return .decoyPin
+        case 9: return .colorScheme
         
-        case 10: return .inDecoyMode
+        case 10: return .authType
         
-        case 11: return .mainSelectedWalletId
+        case 11: return .hashedPinCode
         
-        case 12: return .decoySelectedWalletId
+        case 12: return .wipeDataPin
         
-        case 13: return .lockedAt
+        case 13: return .decoyPin
         
-        case 14: return .onboardingProgress
+        case 14: return .inDecoyMode
+        
+        case 15: return .mainSelectedWalletId
+        
+        case 16: return .decoySelectedWalletId
+        
+        case 17: return .lockedAt
+        
+        case 18: return .onboardingProgress
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -22715,44 +22837,60 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
             FfiConverterTypeNetwork.write(v1, into: &buf)
             
         
-        case .colorScheme:
+        case .useTor:
             writeInt(&buf, Int32(5))
         
         
-        case .authType:
+        case .torMode:
             writeInt(&buf, Int32(6))
         
         
-        case .hashedPinCode:
+        case .torExternalHost:
             writeInt(&buf, Int32(7))
         
         
-        case .wipeDataPin:
+        case .torExternalPort:
             writeInt(&buf, Int32(8))
         
         
-        case .decoyPin:
+        case .colorScheme:
             writeInt(&buf, Int32(9))
         
         
-        case .inDecoyMode:
+        case .authType:
             writeInt(&buf, Int32(10))
         
         
-        case .mainSelectedWalletId:
+        case .hashedPinCode:
             writeInt(&buf, Int32(11))
         
         
-        case .decoySelectedWalletId:
+        case .wipeDataPin:
             writeInt(&buf, Int32(12))
         
         
-        case .lockedAt:
+        case .decoyPin:
             writeInt(&buf, Int32(13))
         
         
-        case .onboardingProgress:
+        case .inDecoyMode:
             writeInt(&buf, Int32(14))
+        
+        
+        case .mainSelectedWalletId:
+            writeInt(&buf, Int32(15))
+        
+        
+        case .decoySelectedWalletId:
+            writeInt(&buf, Int32(16))
+        
+        
+        case .lockedAt:
+            writeInt(&buf, Int32(17))
+        
+        
+        case .onboardingProgress:
+            writeInt(&buf, Int32(18))
         
         }
     }
@@ -22785,6 +22923,8 @@ enum GlobalConfigTableError: Swift.Error, Equatable, Hashable, Foundation.Locali
     case Read(String
     )
     case PinCodeMustBeHashed
+    case BuiltInTorStop(String
+    )
 
     
 
@@ -22831,6 +22971,9 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 3: return .PinCodeMustBeHashed
+        case 4: return .BuiltInTorStop(
+            try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -22856,6 +22999,11 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
         case .PinCodeMustBeHashed:
             writeInt(&buf, Int32(3))
         
+        
+        case let .BuiltInTorStop(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+            
         }
     }
 }
@@ -22883,6 +23031,7 @@ public enum GlobalFlagKey: Equatable, Hashable {
     case acceptedTerms
     case betaFeaturesEnabled
     case betaImportExportEnabled
+    case torSettingsDiscovered
 
 
 
@@ -22912,6 +23061,8 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case 4: return .betaImportExportEnabled
         
+        case 5: return .torSettingsDiscovered
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -22934,6 +23085,10 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case .betaImportExportEnabled:
             writeInt(&buf, Int32(4))
+        
+        
+        case .torSettingsDiscovered:
+            writeInt(&buf, Int32(5))
         
         }
     }
@@ -30386,6 +30541,154 @@ public func FfiConverterTypeTapSignerRoute_lower(_ value: TapSignerRoute) -> Rus
 
 
 
+public 
+enum TorBootstrapError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    case BuiltInTor(String
+    )
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension TorBootstrapError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTorBootstrapError: FfiConverterRustBuffer {
+    typealias SwiftType = TorBootstrapError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TorBootstrapError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .BuiltInTor(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TorBootstrapError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .BuiltInTor(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorBootstrapError_lift(_ buf: RustBuffer) throws -> TorBootstrapError {
+    return try FfiConverterTypeTorBootstrapError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorBootstrapError_lower(_ value: TorBootstrapError) -> RustBuffer {
+    return FfiConverterTypeTorBootstrapError.lower(value)
+}
+
+
+
+public enum TorMode: Equatable, Hashable {
+    
+    case builtIn
+    case orbot
+    case external
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TorMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTorMode: FfiConverterRustBuffer {
+    typealias SwiftType = TorMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TorMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .builtIn
+        
+        case 2: return .orbot
+        
+        case 3: return .external
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TorMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .builtIn:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .orbot:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .external:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorMode_lift(_ buf: RustBuffer) throws -> TorMode {
+    return try FfiConverterTypeTorMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorMode_lower(_ value: TorMode) -> RustBuffer {
+    return FfiConverterTypeTorMode.lower(value)
+}
+
+
+
 
 public enum Transaction {
     
@@ -37042,6 +37345,31 @@ private func uniffiForeignFutureDroppedCallback(handle: UInt64) {
 public func uniffiForeignFutureHandleCountCove() -> Int {
     UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.count
 }
+public func builtInTorBootstrapStatus() -> BuiltInTorBootstrapStatus  {
+    return try!  FfiConverterTypeBuiltInTorBootstrapStatus_lift(try! rustCall() {
+    uniffi_cove_fn_func_built_in_tor_bootstrap_status($0
+    )
+})
+}
+public func clearTorConnectionLogs()  {try! rustCall() {
+    uniffi_cove_fn_func_clear_tor_connection_logs($0
+    )
+}
+}
+public func ensureBuiltInTorBootstrap()async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_func_ensure_built_in_tor_bootstrap(
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeTorBootstrapError_lift
+        )
+}
 /**
  * set root data directory before any database access
  * required for Android to specify app-specific storage path
@@ -37051,6 +37379,12 @@ public func setRootDataDir(path: String)throws   {try rustCallWithError(FfiConve
         FfiConverterString.lower(path),$0
     )
 }
+}
+public func torConnectionLogs() -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_cove_fn_func_tor_connection_logs($0
+    )
+})
 }
 /**
  * Initialize the global App instance (Updater, router, state)
@@ -37457,7 +37791,19 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_cove_checksum_func_built_in_tor_bootstrap_status() != 39940) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_clear_tor_connection_logs() != 25876) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_ensure_built_in_tor_bootstrap() != 8592) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_set_root_data_dir() != 56109) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tor_connection_logs() != 59010) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_initialize_app() != 18498) {
@@ -37821,6 +38167,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_node() != 44882) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_tor_external_port() != 2190) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_use_tor() != 3178) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_tor_external_port() != 48622) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_use_tor() != 22520) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_wallet_mode() != 27720) {

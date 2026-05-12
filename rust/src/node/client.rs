@@ -18,9 +18,14 @@ use bdk_wallet::{
     },
 };
 use bitcoin::{Transaction, Txid};
-use tracing::debug;
+use cove_util::ResultExt as _;
+use tracing::{debug, info, warn};
 
-use crate::node::Node;
+use crate::{
+    database::Database,
+    node::{Node, TorMode},
+    tor_runtime,
+};
 
 use super::{ApiType, client_builder::NodeClientBuilder};
 
@@ -79,48 +84,127 @@ pub enum Error {
 
     #[error("failed to get transaction: {0}")]
     ElectrumGetTransaction(electrum_client::Error),
+
+    #[error("failed to resolve tor endpoint: {0}")]
+    ResolveTorEndpoint(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NodeClientOptions {
     pub batch_size: usize,
+    pub use_tor: bool,
+    pub tor_mode: TorMode,
+    pub tor_external_host: String,
+    pub tor_external_port: u16,
+}
+
+impl Default for NodeClientOptions {
+    fn default() -> Self {
+        Self {
+            batch_size: ESPLORA_BATCH_SIZE,
+            use_tor: false,
+            tor_mode: TorMode::BuiltIn,
+            tor_external_host: "127.0.0.1".to_string(),
+            tor_external_port: 9050,
+        }
+    }
+}
+
+impl NodeClientOptions {
+    pub async fn resolve_tor_endpoint(mut self) -> Result<Self, Error> {
+        info!(
+            use_tor = self.use_tor,
+            tor_mode = ?self.tor_mode,
+            tor_external_host = %self.tor_external_host,
+            tor_external_port = self.tor_external_port,
+            "resolving tor endpoint"
+        );
+
+        if !self.use_tor {
+            info!("tor disabled; skipping tor endpoint resolution");
+            return Ok(self);
+        }
+
+        match self.tor_mode {
+            TorMode::External | TorMode::Orbot => {
+                if self.tor_external_host.is_empty() {
+                    warn!("tor external host empty; defaulting to 127.0.0.1");
+                    self.tor_external_host = "127.0.0.1".to_string();
+                }
+                if self.tor_external_port == 0 {
+                    warn!("tor external port missing; defaulting to 9050");
+                    self.tor_external_port = 9050;
+                }
+                info!(
+                    tor_mode = ?self.tor_mode,
+                    tor_external_host = %self.tor_external_host,
+                    tor_external_port = self.tor_external_port,
+                    "using configured tor endpoint"
+                );
+            }
+            TorMode::BuiltIn => {
+                info!("tor mode is built-in; requesting Arti socks endpoint");
+                let endpoint = tor_runtime::built_in_socks_endpoint()
+                    .await
+                    .map_err_str(Error::ResolveTorEndpoint)?;
+                self.tor_external_host = endpoint.ip().to_string();
+                self.tor_external_port = endpoint.port();
+                info!(%endpoint, "resolved built-in tor socks endpoint");
+            }
+        }
+
+        Ok(self)
+    }
 }
 
 impl NodeClient {
     pub async fn new(node: &Node) -> Result<Self, Error> {
-        match node.api_type {
-            ApiType::Esplora => {
-                let client = esplora::EsploraClient::new_from_node(node)?;
-                Ok(Self::Esplora(client))
-            }
+        let db = Database::global();
+        let config = db.global_config();
+        let tor_external_host = config
+            .tor_external_host()
+            .ok()
+            .filter(|host| !host.is_empty())
+            .unwrap_or_else(|| "127.0.0.1".to_string());
 
-            ApiType::Electrum => {
-                let client = electrum::ElectrumClient::new_from_node(node).await?;
-                Ok(Self::Electrum(client))
-            }
+        let batch_size = match node.api_type {
+            ApiType::Electrum => ELECTRUM_BATCH_SIZE,
+            ApiType::Esplora | ApiType::Rpc => ESPLORA_BATCH_SIZE,
+        };
 
-            ApiType::Rpc => {
-                // TODO: implement rpc check, with auth
-                todo!()
-            }
-        }
+        let options = NodeClientOptions {
+            batch_size,
+            use_tor: config.use_tor(),
+            tor_mode: config.tor_mode().unwrap_or_default(),
+            tor_external_host,
+            tor_external_port: config.tor_external_port(),
+        };
+
+        info!(node = %node.url, api_type = ?node.api_type, options = ?options, "creating node client with db-backed options");
+
+        Self::new_with_options(node, options).await
     }
 
     pub async fn try_from_builder(builder: &NodeClientBuilder) -> Result<Self, Error> {
-        let node_client = Self::new_with_options(&builder.node, builder.options).await?;
+        let node_client = Self::new_with_options(&builder.node, builder.options.clone()).await?;
         Ok(node_client)
     }
 
     pub async fn new_with_options(node: &Node, options: NodeClientOptions) -> Result<Self, Error> {
+        info!(node = %node.url, api_type = ?node.api_type, options = ?options, "creating node client with explicit options");
+        let options = options.resolve_tor_endpoint().await?;
+
+        info!(node = %node.url, api_type = ?node.api_type, resolved_options = ?options, "node client options resolved");
+
         match node.api_type {
             ApiType::Esplora => {
-                let client = esplora::EsploraClient::new_from_node_and_options(node, options)?;
+                let client = esplora::EsploraClient::new_from_node_and_options(node, &options)?;
                 Ok(Self::Esplora(client))
             }
 
             ApiType::Electrum => {
                 let client =
-                    electrum::ElectrumClient::new_from_node_and_options(node, options).await?;
+                    electrum::ElectrumClient::new_from_node_and_options(node, &options).await?;
                 Ok(Self::Electrum(client))
             }
 

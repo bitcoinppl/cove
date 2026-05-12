@@ -17,6 +17,7 @@ pub enum GlobalFlagKey {
     AcceptedTerms,
     BetaFeaturesEnabled,
     BetaImportExportEnabled,
+    TorSettingsDiscovered,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
