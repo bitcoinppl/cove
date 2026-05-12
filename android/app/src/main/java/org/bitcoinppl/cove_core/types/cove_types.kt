@@ -99,6 +99,43 @@ internal open class ForeignBytes : Structure() {
 
     class ByValue : ForeignBytes(), Structure.ByValue
 }
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Only `lower` is valid — zero-copy byte buffers only flow foreign -> Rust,
+// and only in argument position. `lift`, `read`, `write`, and
+// `allocationSize` have no sound implementation here and all panic at
+// runtime. The `FfiConverter` interface is implemented so that the
+// compiler enforces the full method set (rather than relying on eyeball).
+//
+// The provided `ByteBuffer` MUST be direct — only direct buffers have a
+// stable native address that JNA can expose via `getDirectBufferPointer`.
+// The returned `ForeignBytes.ByValue` is only valid for the duration of
+// the FFI call; the Rust side treats it as a borrow.
+internal object FfiConverterByRefBytes : FfiConverter<java.nio.ByteBuffer, ForeignBytes.ByValue> {
+    override fun lower(value: java.nio.ByteBuffer): ForeignBytes.ByValue {
+        require(value.isDirect) { "UniFFI zero-copy &[u8] requires a direct ByteBuffer. Use ByteBuffer.allocateDirect()." }
+        val remaining = value.remaining()
+        val fb = ForeignBytes.ByValue()
+        fb.len = remaining
+        // Zero-length direct buffers: skip getDirectBufferPointer (platform-variable behavior)
+        // and pass null. The Rust side treats (null, 0) as &[].
+        fb.data = if (remaining == 0) null else com.sun.jna.Native.getDirectBufferPointer(value)
+        return fb
+    }
+
+    override fun lift(value: ForeignBytes.ByValue): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+
+    override fun read(buf: java.nio.ByteBuffer): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun write(value: java.nio.ByteBuffer, buf: java.nio.ByteBuffer): Unit =
+        error("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun allocationSize(value: java.nio.ByteBuffer): ULong =
+        error("ByRef bytes have no RustBuffer allocation size: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+}
 /**
  * The FfiConverter interface handles converter types to and from the FFI
  *
@@ -1399,13 +1436,13 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_types_checksum_func_address_is_valid() != 40004.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_address_is_valid() != 36208.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_address_is_valid_for_network() != 34573.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_address_is_valid_for_network() != 43002.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_address_string_spaced_out() != 27769.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_address_string_spaced_out() != 18228.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_all_color_schemes() != 49693.toShort()) {
@@ -1414,31 +1451,31 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_func_confirm_details_preview_new() != 41030.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_qr_density_is_equal() != 54760.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_qr_density_is_equal() != 42130.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal() != 17627.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal() != 36759.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_fee_speed_duration() != 51667.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_fee_speed_duration() != 11829.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_fee_speed_is_custom() != 38261.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_fee_speed_is_custom() != 23523.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 20193.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 62157.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_all_networks() != 5848.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_network_to_string() != 16428.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_network_to_string() != 41610.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_all_units() != 35208.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_previewnewutxolist() != 31621.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_previewnewutxolist() != 6622.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_address_hashtouint() != 25307.toShort()) {
@@ -1480,7 +1517,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_amount() != 15414.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork() != 42219.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork() != 45131.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_addresswithnetwork_network() != 25441.toShort()) {
@@ -1501,10 +1538,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 40607.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string() != 3973.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string() != 58551.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 64791.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 48730.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_amount_sats_string() != 34415.toShort()) {
@@ -1546,19 +1583,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr() != 2152.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_density() != 25796.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_density() != 44300.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_max_version() != 52826.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_max_version() != 64005.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur() != 59953.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur() != 52634.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 22044.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 31866.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253.toShort()) {
@@ -1606,7 +1643,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_feerateoption_fee_speed() != 40949.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoption_is_equal() != 33304.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoption_is_equal() != 39831.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_feerateoption_sat_per_vb() != 38044.toShort()) {
@@ -1627,7 +1664,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom() != 33675.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal() != 12772.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal() != 2340.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 61796.toShort()) {
@@ -1645,10 +1682,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_feerateoptions_slow() != 30350.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate() != 4884.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate() != 42043.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed() != 37692.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed() != 52079.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_custom() != 13008.toShort()) {
@@ -1660,7 +1697,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fee_rate_options() != 44824.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with() != 34987.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with() != 30247.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_medium() != 37448.toShort()) {
@@ -1687,7 +1724,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_psbt_weight() != 40555.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_outpoint_eq() != 14112.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_outpoint_eq() != 30337.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_outpoint_hashtouint() != 51667.toShort()) {
@@ -1705,7 +1742,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_sentandreceived_amount() != 64130.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_sentandreceived_amount_fmt() != 34174.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_sentandreceived_amount_fmt() != 17793.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_sentandreceived_direction() != 54585.toShort()) {
@@ -1726,7 +1763,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_txid_as_hash_string() != 7916.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_address_from_string() != 4732.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_address_from_string() != 4452.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_constructor_address_preview_new() != 61836.toShort()) {
@@ -1735,10 +1772,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_constructor_address_random() != 18866.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 55575.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 61140.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_amount_from_sat() != 32795.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_amount_from_sat() != 45934.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_constructor_amount_one_btc() != 13254.toShort()) {
@@ -1750,13 +1787,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_constructor_qrdensity_new() != 57563.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb() != 23120.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb() != 41119.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_feerateoption_new() != 46851.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_feerateoption_new() != 60715.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new() != 48098.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new() != 55634.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_constructor_feerateoptions_previewnew() != 40621.toShort()) {
@@ -1765,13 +1802,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_previewnew() != 31010.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_psbt_new() != 34001.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_psbt_new() != 34599.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_constructor_outpoint_previewnew() != 32440.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_constructor_outpoint_withvout() != 16885.toShort()) {
+    if (lib.uniffi_cove_types_checksum_constructor_outpoint_withvout() != 37073.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -2468,6 +2505,7 @@ open class Address: Disposable, AutoCloseable, AddressInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_address_uniffi_trait_eq_eq(
         it,
+        
         FfiConverterTypeAddress.lower(`other`),_status)
 }
     }
@@ -2505,7 +2543,9 @@ open class Address: Disposable, AutoCloseable, AddressInterface
     uniffiRustCallWithError(AddressException) { _status ->
     UniffiLib.uniffi_cove_types_fn_constructor_address_from_string(
     
-        FfiConverterString.lower(`address`),FfiConverterTypeNetwork.lower(`network`),_status)
+        
+        FfiConverterString.lower(`address`),
+        FfiConverterTypeNetwork.lower(`network`),_status)
 }
     )
     }
@@ -3320,6 +3360,7 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
     uniffiRustCallWithError(AddressException) { _status ->
     UniffiLib.uniffi_cove_types_fn_constructor_addresswithnetwork_new(
     
+        
         FfiConverterString.lower(`address`),_status)
 }
     )
@@ -3432,6 +3473,7 @@ open class AddressWithNetwork: Disposable, AutoCloseable, AddressWithNetworkInte
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_addresswithnetwork_isvalidfornetwork(
         it,
+        
         FfiConverterTypeNetwork.lower(`network`),_status)
 }
     }
@@ -3799,6 +3841,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_amount_fmt_string(
         it,
+        
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
@@ -3812,6 +3855,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_amount_fmt_string_with_unit(
         it,
+        
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
@@ -3861,6 +3905,7 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_constructor_amount_from_sat(
     
+        
         FfiConverterULong.lower(`sats`),_status)
 }
     )
@@ -4585,6 +4630,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
     uniffiRustCallWithError(ConfirmDetailsException) { _status ->
     UniffiLib.uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr_with_density(
         it,
+        
         FfiConverterTypeQrDensity.lower(`density`),_status)
 }
     }
@@ -4599,6 +4645,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
     uniffiRustCallWithError(ConfirmDetailsException) { _status ->
     UniffiLib.uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr_with_max_version(
         it,
+        
         FfiConverterUByte.lower(`maxVersion`),_status)
 }
     }
@@ -4632,6 +4679,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
     uniffiRustCallWithError(ConfirmDetailsException) { _status ->
     UniffiLib.uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur(
         it,
+        
         FfiConverterUInt.lower(`maxFragmentLen`),_status)
 }
     }
@@ -4652,6 +4700,7 @@ open class ConfirmDetails: Disposable, AutoCloseable, ConfirmDetailsInterface
     uniffiRustCallWithError(ConfirmDetailsException) { _status ->
     UniffiLib.uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur_with_density(
         it,
+        
         FfiConverterTypeQrDensity.lower(`density`),_status)
 }
     }
@@ -4965,6 +5014,7 @@ open class FeeRate: Disposable, AutoCloseable, FeeRateInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_constructor_feerate_from_sat_per_vb(
     
+        
         FfiConverterFloat.lower(`satPerVb`),_status)
 }
     )
@@ -5140,7 +5190,9 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_constructor_feerateoption_new(
     
-        FfiConverterTypeFeeSpeed.lower(`feeSpeed`),FfiConverterFloat.lower(`feeRate`),_status)
+        
+        FfiConverterTypeFeeSpeed.lower(`feeSpeed`),
+        FfiConverterFloat.lower(`feeRate`),_status)
 }
     )
 
@@ -5265,6 +5317,7 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_feerateoption_is_equal(
         it,
+        
         FfiConverterTypeFeeRateOption.lower(`rhs`),_status)
 }
     }
@@ -5469,7 +5522,10 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_constructor_feerateoptionwithtotalfee_new(
     
-        FfiConverterTypeFeeSpeed.lower(`feeSpeed`),FfiConverterTypeFeeRate.lower(`feeRate`),FfiConverterTypeAmount.lower(`totalFee`),_status)
+        
+        FfiConverterTypeFeeSpeed.lower(`feeSpeed`),
+        FfiConverterTypeFeeRate.lower(`feeRate`),
+        FfiConverterTypeAmount.lower(`totalFee`),_status)
 }
     )
 
@@ -5620,6 +5676,7 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_equal(
         it,
+        
         FfiConverterTypeFeeRateOptionWithTotalFee.lower(`rhs`),_status)
 }
     }
@@ -6213,6 +6270,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_add_custom_fee_rate(
         it,
+        
         FfiConverterTypeFeeRateOptionWithTotalFee.lower(`feeRate`),_status)
 }
     }
@@ -6226,6 +6284,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(
         it,
+        
         FfiConverterFloat.lower(`feeRate`),_status)
 }
     }
@@ -6278,6 +6337,7 @@ open class FeeRateOptionsWithTotalFee: Disposable, AutoCloseable, FeeRateOptions
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_feerateoptionswithtotalfee_get_fee_rate_with(
         it,
+        
         FfiConverterFloat.lower(`feeRate`),_status)
 }
     }
@@ -6842,6 +6902,7 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_outpoint_eq(
         it,
+        
         FfiConverterTypeOutPoint.lower(`rhs`),_status)
 }
     }
@@ -6924,6 +6985,7 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_constructor_outpoint_withvout(
     
+        
         FfiConverterUInt.lower(`vout`),_status)
 }
     )
@@ -7118,6 +7180,7 @@ open class Psbt: Disposable, AutoCloseable, PsbtInterface
     uniffiRustCallWithError(PsbtException) { _status ->
     UniffiLib.uniffi_cove_types_fn_constructor_psbt_new(
     
+        
         FfiConverterByteArray.lower(`data`),_status)
 }
     )
@@ -7949,6 +8012,7 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_sentandreceived_amount_fmt(
         it,
+        
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
@@ -8301,6 +8365,7 @@ open class TxId: Disposable, AutoCloseable, TxIdInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_txid_uniffi_trait_eq_eq(
         it,
+        
         FfiConverterTypeTxId.lower(`other`),_status)
 }
     }
@@ -8325,6 +8390,7 @@ open class TxId: Disposable, AutoCloseable, TxIdInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_txid_uniffi_trait_ord_cmp(
         it,
+        
         FfiConverterTypeTxId.lower(`other`),_status)
 }
     }
@@ -9391,6 +9457,7 @@ data class Utxo (
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_utxo_is_equal(FfiConverterTypeUtxo.lower(this),
+        
         FfiConverterTypeUtxo.lower(`other`),_status)
 }
     )
@@ -9417,6 +9484,7 @@ data class Utxo (
         return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_eq(FfiConverterTypeUtxo.lower(this),
+        
         FfiConverterTypeUtxo.lower(`other`),_status)
 }
     )
@@ -10879,21 +10947,11 @@ public object FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer<List<Netwo
 
 
 
-/**
- * Typealias from the type name used in the UDL file to the builtin type.  This
- * is needed because the UDL type name is used in function/method signatures.
- * It's also what we have an external type that references a custom type.
- */
 public typealias FfiOpacity = kotlin.UByte
 public typealias FfiConverterTypeFfiOpacity = FfiConverterUByte
 
 
 
-/**
- * Typealias from the type name used in the UDL file to the builtin type.  This
- * is needed because the UDL type name is used in function/method signatures.
- * It's also what we have an external type that references a custom type.
- */
 public typealias WalletId = kotlin.String
 public typealias FfiConverterTypeWalletId = FfiConverterString
     @Throws(AddressException::class) fun `addressIsValid`(`address`: kotlin.String, `network`: Network)
@@ -10901,7 +10959,9 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     uniffiRustCallWithError(AddressException) { _status ->
     UniffiLib.uniffi_cove_types_fn_func_address_is_valid(
     
-        FfiConverterString.lower(`address`),FfiConverterTypeNetwork.lower(`network`),_status)
+        
+        FfiConverterString.lower(`address`),
+        FfiConverterTypeNetwork.lower(`network`),_status)
 }
     
     
@@ -10911,7 +10971,9 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     uniffiRustCallWithError(AddressException) { _status ->
     UniffiLib.uniffi_cove_types_fn_func_address_is_valid_for_network(
     
-        FfiConverterString.lower(`address`),FfiConverterTypeNetwork.lower(`network`),_status)
+        
+        FfiConverterString.lower(`address`),
+        FfiConverterTypeNetwork.lower(`network`),_status)
 }
     
     
@@ -10920,6 +10982,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_func_address_string_spaced_out(
     
+        
         FfiConverterString.lower(`address`),_status)
 }
     )
@@ -10956,7 +11019,9 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_func_qr_density_is_equal(
     
-        FfiConverterTypeQrDensity.lower(`lhs`),FfiConverterTypeQrDensity.lower(`rhs`),_status)
+        
+        FfiConverterTypeQrDensity.lower(`lhs`),
+        FfiConverterTypeQrDensity.lower(`rhs`),_status)
 }
     )
     }
@@ -10966,7 +11031,9 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_func_fee_rate_options_with_total_fee_is_equal(
     
-        FfiConverterTypeFeeRateOptionsWithTotalFee.lower(`lhs`),FfiConverterTypeFeeRateOptionsWithTotalFee.lower(`rhs`),_status)
+        
+        FfiConverterTypeFeeRateOptionsWithTotalFee.lower(`lhs`),
+        FfiConverterTypeFeeRateOptionsWithTotalFee.lower(`rhs`),_status)
 }
     )
     }
@@ -10976,6 +11043,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_func_fee_speed_duration(
     
+        
         FfiConverterTypeFeeSpeed.lower(`feeSpeed`),_status)
 }
     )
@@ -10986,6 +11054,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_func_fee_speed_is_custom(
     
+        
         FfiConverterTypeFeeSpeed.lower(`feeSpeed`),_status)
 }
     )
@@ -10996,6 +11065,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_func_fee_speed_to_circle_color(
     
+        
         FfiConverterTypeFeeSpeed.lower(`feeSpeed`),_status)
 }
     )
@@ -11016,6 +11086,7 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_func_network_to_string(
     
+        
         FfiConverterTypeNetwork.lower(`network`),_status)
 }
     )
@@ -11036,7 +11107,9 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_func_previewnewutxolist(
     
-        FfiConverterUByte.lower(`outputCount`),FfiConverterUByte.lower(`changeCount`),_status)
+        
+        FfiConverterUByte.lower(`outputCount`),
+        FfiConverterUByte.lower(`changeCount`),_status)
 }
     )
     }

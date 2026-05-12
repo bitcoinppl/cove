@@ -40,7 +40,7 @@ impl MnemonicExt for bip39::Mnemonic {
         let seed = self.to_seed("");
         let xkey: ExtendedKey = seed.into_extended_key().expect("never fail proper mnemonic");
 
-        xkey.into_xpub(network, &Secp256k1::new())
+        xkey.into_xpub(network.into(), &Secp256k1::new())
     }
 }
 

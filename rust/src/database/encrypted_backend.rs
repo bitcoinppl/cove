@@ -1,6 +1,6 @@
 use chacha20poly1305::aead::{Aead as _, AeadCore as _, OsRng, Payload};
 use chacha20poly1305::{KeyInit as _, XChaCha20Poly1305, XNonce};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit as _, Mac};
 use sha2::Sha256;
 
 use std::fmt::{self, Debug};
@@ -116,8 +116,7 @@ fn acquire_lock(file: &File) -> io::Result<bool> {
 }
 
 fn compute_header_tag(key: &[u8; 32], header: &[u8; HEADER_SIZE]) -> [u8; HEADER_TAG_LEN] {
-    let mut mac =
-        <HmacSha256 as Mac>::new_from_slice(key).expect("HMAC-SHA256 accepts any key size");
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC-SHA256 accepts any key size");
     // authenticate magic + version + logical_len (bytes 0..13)
     mac.update(&header[..HEADER_TAG_OFFSET]);
     let result = mac.finalize();

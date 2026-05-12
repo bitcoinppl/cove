@@ -99,6 +99,43 @@ internal open class ForeignBytes : Structure() {
 
     class ByValue : ForeignBytes(), Structure.ByValue
 }
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Only `lower` is valid — zero-copy byte buffers only flow foreign -> Rust,
+// and only in argument position. `lift`, `read`, `write`, and
+// `allocationSize` have no sound implementation here and all panic at
+// runtime. The `FfiConverter` interface is implemented so that the
+// compiler enforces the full method set (rather than relying on eyeball).
+//
+// The provided `ByteBuffer` MUST be direct — only direct buffers have a
+// stable native address that JNA can expose via `getDirectBufferPointer`.
+// The returned `ForeignBytes.ByValue` is only valid for the duration of
+// the FFI call; the Rust side treats it as a borrow.
+internal object FfiConverterByRefBytes : FfiConverter<java.nio.ByteBuffer, ForeignBytes.ByValue> {
+    override fun lower(value: java.nio.ByteBuffer): ForeignBytes.ByValue {
+        require(value.isDirect) { "UniFFI zero-copy &[u8] requires a direct ByteBuffer. Use ByteBuffer.allocateDirect()." }
+        val remaining = value.remaining()
+        val fb = ForeignBytes.ByValue()
+        fb.len = remaining
+        // Zero-length direct buffers: skip getDirectBufferPointer (platform-variable behavior)
+        // and pass null. The Rust side treats (null, 0) as &[].
+        fb.data = if (remaining == 0) null else com.sun.jna.Native.getDirectBufferPointer(value)
+        return fb
+    }
+
+    override fun lift(value: ForeignBytes.ByValue): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+
+    override fun read(buf: java.nio.ByteBuffer): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun write(value: java.nio.ByteBuffer, buf: java.nio.ByteBuffer): Unit =
+        error("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun allocationSize(value: java.nio.ByteBuffer): ULong =
+        error("ByRef bytes have no RustBuffer allocation size: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+}
 /**
  * The FfiConverter interface handles converter types to and from the FFI
  *
@@ -861,13 +898,13 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_nfc_checksum_func_nfc_message_is_equal() != 46704.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_func_nfc_message_is_equal() != 46708.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 47483.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 52878.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 29577.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 55049.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_is_started() != 48293.toShort()) {
@@ -876,10 +913,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_message_info() != 39232.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 45759.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 11514.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 37789.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 28893.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_nfc_checksum_method_nfcconst_bytes_per_block() != 58669.toShort()) {
@@ -909,10 +946,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_nfc_checksum_constructor_nfcconst_new() != 10481.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 58473.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 19684.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 55572.toShort()) {
+    if (lib.uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 5028.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1480,6 +1517,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(
         it,
+        
         FfiConverterSequenceTypeNdefRecord.lower(`records`),_status)
 }
     }
@@ -1500,6 +1538,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     uniffiRustCallWithError(ResumeException) { _status ->
     UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(
         it,
+        
         FfiConverterByteArray.lower(`data`),_status)
 }
     }
@@ -1545,6 +1584,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     uniffiRustCallWithError(NfcReaderException) { _status ->
     UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_parse(
         it,
+        
         FfiConverterByteArray.lower(`data`),_status)
 }
     }
@@ -1558,6 +1598,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(
         it,
+        
         FfiConverterTypeNdefRecord.lower(`record`),_status)
 }
     }
@@ -1737,6 +1778,7 @@ open class NdefRecordReader: Disposable, AutoCloseable, NdefRecordReaderInterfac
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
     
+        
         FfiConverterTypeNdefRecord.lower(`record`),_status)
 }
     )
@@ -2431,7 +2473,9 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
     uniffiRustCallWithError(NfcMessageException) { _status ->
     UniffiLib.uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(
     
-        FfiConverterOptionalString.lower(`string`),FfiConverterOptionalByteArray.lower(`data`),_status)
+        
+        FfiConverterOptionalString.lower(`string`),
+        FfiConverterOptionalByteArray.lower(`data`),_status)
 }
     )
     }
@@ -3567,7 +3611,9 @@ public object FfiConverterSequenceTypeNdefRecord: FfiConverterRustBuffer<List<Nd
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_nfc_fn_func_nfc_message_is_equal(
     
-        FfiConverterTypeNfcMessage.lower(`lhs`),FfiConverterTypeNfcMessage.lower(`rhs`),_status)
+        
+        FfiConverterTypeNfcMessage.lower(`lhs`),
+        FfiConverterTypeNfcMessage.lower(`rhs`),_status)
 }
     )
     }

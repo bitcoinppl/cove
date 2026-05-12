@@ -185,7 +185,9 @@ pub(crate) mod test_support {
 
     pub(crate) fn delete_database() {
         init_test_database();
-        let _ = std::fs::remove_dir_all(ROOT_DATA_DIR.join("test"));
+        let test_dir = ROOT_DATA_DIR.join("test");
+        let _ = std::fs::remove_dir_all(&test_dir);
+        std::fs::create_dir_all(test_dir).expect("failed to recreate test database dir");
         let _ = std::fs::remove_dir_all(ROOT_DATA_DIR.join("wallet_data"));
     }
 }
