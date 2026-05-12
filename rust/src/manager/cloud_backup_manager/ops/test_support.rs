@@ -25,11 +25,13 @@ use super::*;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue, CloudBlobUploadingState,
-    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState,
+    PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
+    PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
+    PersistedPasskeyState,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, pending::PendingUploadVerificationStatus, workers::RestoreOperation,
+    CloudBackupKeychain, CloudBackupStore, pending::PendingUploadVerificationStatus,
+    workers::RestoreOperation,
 };
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
@@ -153,6 +155,7 @@ struct MockCloudState {
     uploaded_wallet_backups: Vec<(String, String)>,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
     list_wallet_files_attempts: usize,
+    list_wallet_files_attempts_by_namespace: HashMap<String, usize>,
     wallet_backup_upload_attempts: usize,
     dirty_wallet_on_next_upload: Option<WalletId>,
     changed_wallet_on_next_upload: Option<WalletId>,
@@ -316,6 +319,15 @@ impl MockCloudStorage {
         self.state.lock().list_wallet_files_attempts
     }
 
+    pub(crate) fn list_wallet_files_attempt_count_for_namespace(&self, namespace: &str) -> usize {
+        self.state
+            .lock()
+            .list_wallet_files_attempts_by_namespace
+            .get(namespace)
+            .copied()
+            .unwrap_or_default()
+    }
+
     pub(crate) fn dirty_wallet_on_next_upload(&self, wallet_id: WalletId) {
         self.state.lock().dirty_wallet_on_next_upload = Some(wallet_id);
     }
@@ -334,6 +346,7 @@ impl CloudStorageAccess for MockCloudStorage {
     async fn upload_master_key_backup(
         &self,
         namespace: String,
+        _location: cove_device::cloud_storage::RemoteBackupLocation,
         data: Vec<u8>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
@@ -349,6 +362,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
+        _location: cove_device::cloud_storage::RemoteBackupLocation,
         data: Vec<u8>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
@@ -381,6 +395,7 @@ impl CloudStorageAccess for MockCloudStorage {
     async fn download_master_key_backup(
         &self,
         namespace: String,
+        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         if let Some(error) = self.state.lock().master_key_download_errors.get(&namespace).cloned() {
@@ -399,6 +414,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
+        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         let dirty_wallet = self.state.lock().dirty_wallet_on_next_backup_check.take();
@@ -431,6 +447,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
+        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
         let mut state = self.state.lock();
@@ -497,6 +514,7 @@ impl CloudStorageAccess for MockCloudStorage {
     ) -> Result<Vec<String>, CloudStorageError> {
         let mut state = self.state.lock();
         state.list_wallet_files_attempts += 1;
+        *state.list_wallet_files_attempts_by_namespace.entry(namespace.clone()).or_default() += 1;
         if let Some(error) = state.next_list_wallet_files_error.take() {
             return Err(error);
         }
@@ -533,6 +551,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
+        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<bool, CloudStorageError> {
         let state = self.state.lock();
@@ -783,12 +802,12 @@ pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
 
     Database::global()
         .cloud_blob_sync_states
-        .set(&PersistedCloudBlobSyncState {
+        .set(&PersistedCloudBlobSyncState::wallet(
             namespace_id,
-            wallet_id: Some(wallet_id),
+            wallet_id,
             record_id,
-            state: PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
-        })
+            PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
+        ))
         .unwrap();
 }
 
@@ -822,18 +841,18 @@ pub(crate) fn persist_failed_blob_state_with_issue(
 
     Database::global()
         .cloud_blob_sync_states
-        .set(&PersistedCloudBlobSyncState {
+        .set(&PersistedCloudBlobSyncState::wallet(
             namespace_id,
-            wallet_id: Some(wallet_id),
+            wallet_id,
             record_id,
-            state: PersistedCloudBlobState::Failed(CloudBlobFailedState {
+            PersistedCloudBlobState::Failed(CloudBlobFailedState {
                 revision_hash: Some("rev-1".into()),
                 retryable,
                 error: "failed".into(),
                 issue,
                 failed_at,
             }),
-        })
+        ))
         .unwrap();
 }
 
@@ -843,15 +862,15 @@ pub(crate) fn persist_uploading_blob_state(wallet_id: WalletId, started_at: u64)
 
     Database::global()
         .cloud_blob_sync_states
-        .set(&PersistedCloudBlobSyncState {
+        .set(&PersistedCloudBlobSyncState::wallet(
             namespace_id,
-            wallet_id: Some(wallet_id),
+            wallet_id,
             record_id,
-            state: PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
+            PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
                 revision_hash: "rev-1".into(),
                 started_at,
             }),
-        })
+        ))
         .unwrap();
 }
 
@@ -933,11 +952,7 @@ pub(crate) fn configure_enabled_cloud_backup(
 
     manager
         .persist_cloud_backup_state(
-            &PersistedCloudBackupState {
-                status: PersistedCloudBackupStatus::Enabled,
-                wallet_count: Some(wallet_count),
-                ..PersistedCloudBackupState::default()
-            },
+            &persisted_enabled_cloud_backup_state(Some(wallet_count)),
             "set cloud backup enabled for test",
         )
         .unwrap();
@@ -956,15 +971,39 @@ pub(crate) fn enable_cloud_backup_without_reset(
 
     manager
         .persist_cloud_backup_state(
-            &PersistedCloudBackupState {
-                status: PersistedCloudBackupStatus::Enabled,
-                wallet_count: Some(wallet_count),
-                ..PersistedCloudBackupState::default()
-            },
+            &persisted_enabled_cloud_backup_state(Some(wallet_count)),
             "set cloud backup enabled for test",
         )
         .unwrap();
     manager.sync_persisted_state();
+}
+
+pub(crate) fn persisted_enabled_cloud_backup_state(
+    wallet_count: Option<u32>,
+) -> PersistedCloudBackupState {
+    PersistedCloudBackupState::Configured(PersistedConfiguredCloudBackup {
+        passkey: PersistedPasskeyState::Available,
+        verification: PersistedBackupVerificationState::NotVerified {
+            requested_at: None,
+            dismissed_at: None,
+        },
+        sync: PersistedBackupSyncState { last_sync: None, wallet_count },
+        pending_verification_completion: None,
+    })
+}
+
+pub(crate) fn persisted_passkey_missing_cloud_backup_state(
+    wallet_count: Option<u32>,
+) -> PersistedCloudBackupState {
+    PersistedCloudBackupState::Configured(PersistedConfiguredCloudBackup {
+        passkey: PersistedPasskeyState::Missing,
+        verification: PersistedBackupVerificationState::NotVerified {
+            requested_at: None,
+            dismissed_at: None,
+        },
+        sync: PersistedBackupSyncState { last_sync: None, wallet_count },
+        pending_verification_completion: None,
+    })
 }
 
 pub(crate) fn xpub_only_wallet_metadata() -> WalletMetadata {
@@ -1097,10 +1136,7 @@ pub(crate) fn prepare_deep_verify_with_unsynced_wallet(
 
     manager
         .persist_cloud_backup_state(
-            &PersistedCloudBackupState {
-                status: PersistedCloudBackupStatus::Enabled,
-                ..PersistedCloudBackupState::default()
-            },
+            &persisted_enabled_cloud_backup_state(None),
             "set cloud backup enabled for test",
         )
         .unwrap();
@@ -1139,57 +1175,4 @@ pub(crate) async fn new_restore_operation_for_test(
     manager: &RustCloudBackupManager,
 ) -> RestoreOperation {
     call!(manager.supervisor.new_restore_operation()).await.expect("create restore operation")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test_passkey_user() -> PasskeyRegistrationUser {
-        PasskeyRegistrationUser {
-            id: vec![1],
-            name: "Cove Cloud Backup (test)".into(),
-            display_name: "Cove Cloud Backup".into(),
-        }
-    }
-
-    #[test]
-    fn passkey_create_result_is_consumed_after_first_use() {
-        let provider = MockPasskeyProviderImpl::default();
-        provider.set_create_result(Ok(vec![1, 2, 3]));
-
-        let registration = provider
-            .create_passkey("rp".into(), vec![2], test_passkey_user())
-            .expect("configured create result");
-        assert_eq!(registration.credential_id, vec![1, 2, 3]);
-        assert_eq!(registration.provider_aaguid, "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4");
-        assert_eq!(registration.registered_platform, PasskeyRegistrationPlatform::Android);
-        assert!(matches!(
-            provider.create_passkey("rp".into(), vec![2], test_passkey_user()),
-            Err(PasskeyError::RequestFailed {
-                operation: PasskeyOperation::Registration,
-                reason: PasskeyFailureReason::Unknown { diagnostic_message },
-            }) if diagnostic_message == "unexpected create_passkey call"
-        ));
-    }
-
-    #[test]
-    fn passkey_authenticate_result_is_consumed_after_first_use() {
-        let provider = MockPasskeyProviderImpl::default();
-        provider.set_authenticate_result(Ok(vec![4, 5, 6]));
-
-        assert_eq!(
-            provider
-                .authenticate_with_prf("rp".into(), vec![1], vec![2], vec![3])
-                .expect("configured authenticate result"),
-            vec![4, 5, 6]
-        );
-        assert!(matches!(
-            provider.authenticate_with_prf("rp".into(), vec![1], vec![2], vec![3]),
-            Err(PasskeyError::RequestFailed {
-                operation: PasskeyOperation::AuthenticateAssertion,
-                reason: PasskeyFailureReason::Unknown { diagnostic_message },
-            }) if diagnostic_message == "unexpected authenticate_with_prf call"
-        ));
-    }
 }

@@ -2,7 +2,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use self::remote_payload::RemotePayloadMetadata;
 use crate::serde_helpers::{base64_serde, hex_array};
+
+pub mod remote_layout;
+pub mod remote_payload;
 
 /// Record ID for the master key in cloud backup
 pub const MASTER_KEY_RECORD_ID: &str = "cspp-master-key-v1";
@@ -102,12 +106,31 @@ pub struct WalletEntry {
     #[zeroize(skip)]
     pub wallet_mode: WalletMode,
     #[serde(with = "base64_serde::option")]
+    #[serde(default)]
     pub labels_zstd_jsonl: Option<Vec<u8>>,
+    #[serde(default)]
     pub labels_count: u32,
+    #[serde(default)]
     pub labels_hash: Option<String>,
+    #[serde(default)]
     pub labels_uncompressed_size: Option<u32>,
+    #[serde(default)]
     pub content_revision_hash: String,
+    #[serde(default)]
     pub updated_at: u64,
+}
+
+impl WalletEntry {
+    /// Deserializes a wallet entry and fills compatibility metadata for old payloads
+    pub fn from_json_slice(bytes: &[u8]) -> Result<Self, serde_json::Error> {
+        let mut entry: Self = serde_json::from_slice(bytes)?;
+
+        if entry.content_revision_hash.is_empty() {
+            entry.content_revision_hash = hex::encode(Sha256::digest(bytes));
+        }
+
+        Ok(entry)
+    }
 }
 
 /// Secret material for a wallet
@@ -151,7 +174,10 @@ pub enum WalletMode {
 /// ChaCha20-Poly1305.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedWalletBackup {
+    #[serde(default = "remote_payload::backup_envelope_version_v1")]
     pub version: u32,
+    #[serde(default, flatten)]
+    pub remote_metadata: RemotePayloadMetadata,
     /// Random HKDF salt that derives this backup's new encryption key from the critical data key
     #[serde(with = "hex_array")]
     pub wallet_salt: [u8; 32],
@@ -172,7 +198,11 @@ pub struct EncryptedWalletBackup {
 /// times during repair or reinitialization flows.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedMasterKeyBackup {
+    #[serde(default = "remote_payload::backup_envelope_version_v1")]
     pub version: u32,
+    #[serde(default, flatten)]
+    pub remote_metadata: RemotePayloadMetadata,
+    #[serde(default)]
     pub passkey_provider_hint: Option<PasskeyProviderHint>,
     /// Salt used with the passkey PRF to re-derive the existing wrapping key
     #[serde(with = "hex_array")]
@@ -251,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn wallet_entry_json_rejects_missing_new_fields() {
+    fn wallet_entry_json_defaults_missing_new_fields() {
         let json = serde_json::json!({
             "wallet_id": "test-wallet",
             "secret": "WatchOnly",
@@ -261,15 +291,38 @@ mod tests {
             "wallet_mode": "Main"
         });
 
-        let error = serde_json::from_value::<WalletEntry>(json).unwrap_err();
+        let decoded = serde_json::from_value::<WalletEntry>(json).unwrap();
 
-        assert!(error.to_string().contains("labels_zstd_jsonl"));
+        assert_eq!(decoded.labels_zstd_jsonl, None);
+        assert_eq!(decoded.labels_count, 0);
+        assert_eq!(decoded.labels_hash, None);
+        assert_eq!(decoded.labels_uncompressed_size, None);
+        assert_eq!(decoded.content_revision_hash, "");
+        assert_eq!(decoded.updated_at, 0);
+    }
+
+    #[test]
+    fn wallet_entry_from_json_slice_infers_legacy_content_revision_hash() {
+        let json = serde_json::json!({
+            "wallet_id": "test-wallet",
+            "secret": "WatchOnly",
+            "metadata": {"name": "Test Wallet"},
+            "descriptors": null,
+            "xpub": null,
+            "wallet_mode": "Main"
+        });
+        let bytes = serde_json::to_vec(&json).unwrap();
+
+        let decoded = WalletEntry::from_json_slice(&bytes).unwrap();
+
+        assert_eq!(decoded.content_revision_hash, hex::encode(Sha256::digest(&bytes)));
     }
 
     #[test]
     fn encrypted_wallet_backup_json_roundtrip() {
         let backup = EncryptedWalletBackup {
             version: 1,
+            remote_metadata: RemotePayloadMetadata::default(),
             wallet_salt: [0xAA; 32],
             nonce: [0xBB; 12],
             ciphertext: vec![1, 2, 3, 4, 5],
@@ -285,9 +338,24 @@ mod tests {
     }
 
     #[test]
+    fn encrypted_wallet_backup_json_defaults_missing_payload_metadata() {
+        let json = serde_json::json!({
+            "wallet_salt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "nonce": "bbbbbbbbbbbbbbbbbbbbbbbb",
+            "ciphertext": "AQIDBAU="
+        });
+
+        let decoded: EncryptedWalletBackup = serde_json::from_value(json).unwrap();
+
+        assert_eq!(decoded.version, 1);
+        assert_eq!(decoded.remote_metadata, RemotePayloadMetadata::default());
+    }
+
+    #[test]
     fn encrypted_master_key_backup_json_roundtrip() {
         let backup = EncryptedMasterKeyBackup {
             version: 1,
+            remote_metadata: RemotePayloadMetadata::default(),
             passkey_provider_hint: Some(PasskeyProviderHint {
                 aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
                 registered_platform: PasskeyRegistrationPlatform::Android,
@@ -306,6 +374,21 @@ mod tests {
         assert_eq!(decoded.prf_salt, [0xCC; 32]);
         assert_eq!(decoded.nonce, [0xDD; 12]);
         assert_eq!(decoded.ciphertext, vec![10, 20, 30]);
+    }
+
+    #[test]
+    fn encrypted_master_key_backup_json_defaults_missing_payload_metadata() {
+        let json = serde_json::json!({
+            "prf_salt": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "nonce": "dddddddddddddddddddddddd",
+            "ciphertext": "ChQe"
+        });
+
+        let decoded: EncryptedMasterKeyBackup = serde_json::from_value(json).unwrap();
+
+        assert_eq!(decoded.version, 1);
+        assert_eq!(decoded.remote_metadata, RemotePayloadMetadata::default());
+        assert_eq!(decoded.passkey_provider_hint, None);
     }
 
     #[test]

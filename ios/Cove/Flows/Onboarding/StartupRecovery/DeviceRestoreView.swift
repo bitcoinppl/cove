@@ -66,7 +66,7 @@ struct DeviceRestoreView: View {
         .onDisappear {
             timeoutTask?.cancel()
         }
-        .onChange(of: backupManager.status) { _, _ in
+        .onChange(of: backupManager.lifecycle) { _, _ in
             syncPhaseWithManager()
         }
         .onChange(of: backupManager.restoreReport) { _, _ in
@@ -100,15 +100,16 @@ struct DeviceRestoreView: View {
     }
 
     private func syncPhaseWithManager() {
-        switch backupManager.status {
-        case let .error(message):
+        switch backupManager.lifecycle {
+        case let .failed(failure):
+            let message = failure.message
             timeoutTask?.cancel()
             if case .restoring = phase {
                 phase = .error(message)
                 onError(message)
             }
 
-        case .enabled:
+        case .configured:
             guard let report = backupManager.restoreReport else { return }
             timeoutTask?.cancel()
             if case .complete = phase { return }

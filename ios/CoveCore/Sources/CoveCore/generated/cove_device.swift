@@ -1367,6 +1367,56 @@ public func FfiConverterTypePasskeyRegistrationUser_lower(_ value: PasskeyRegist
 }
 
 
+public struct RemoteBackupLocation: Equatable, Hashable {
+    public var relativePath: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(relativePath: String) {
+        self.relativePath = relativePath
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RemoteBackupLocation: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRemoteBackupLocation: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RemoteBackupLocation {
+        return
+            try RemoteBackupLocation(
+                relativePath: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RemoteBackupLocation, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.relativePath, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRemoteBackupLocation_lift(_ buf: RustBuffer) throws -> RemoteBackupLocation {
+    return try FfiConverterTypeRemoteBackupLocation.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRemoteBackupLocation_lower(_ value: RemoteBackupLocation) -> RustBuffer {
+    return FfiConverterTypeRemoteBackupLocation.lower(value)
+}
+
+
 
 public enum CloudAccessPolicy: Equatable, Hashable {
     
@@ -2293,15 +2343,15 @@ public func FfiConverterTypePasskeyRegistrationPlatform_lower(_ value: PasskeyRe
 
 public protocol CloudStorageAccess: AnyObject, Sendable {
     
-    func uploadMasterKeyBackup(namespace: String, data: Data, policy: CloudAccessPolicy) async throws 
+    func uploadMasterKeyBackup(namespace: String, location: RemoteBackupLocation, data: Data, policy: CloudAccessPolicy) async throws 
     
-    func uploadWalletBackup(namespace: String, recordId: String, data: Data, policy: CloudAccessPolicy) async throws 
+    func uploadWalletBackup(namespace: String, recordId: String, location: RemoteBackupLocation, data: Data, policy: CloudAccessPolicy) async throws 
     
-    func downloadMasterKeyBackup(namespace: String, policy: CloudAccessPolicy) async throws  -> Data
+    func downloadMasterKeyBackup(namespace: String, locations: [RemoteBackupLocation], policy: CloudAccessPolicy) async throws  -> Data
     
-    func downloadWalletBackup(namespace: String, recordId: String, policy: CloudAccessPolicy) async throws  -> Data
+    func downloadWalletBackup(namespace: String, recordId: String, locations: [RemoteBackupLocation], policy: CloudAccessPolicy) async throws  -> Data
     
-    func deleteWalletBackup(namespace: String, recordId: String, policy: CloudAccessPolicy) async throws 
+    func deleteWalletBackup(namespace: String, recordId: String, locations: [RemoteBackupLocation], policy: CloudAccessPolicy) async throws 
     
     func deleteNamespace(namespace: String, policy: CloudAccessPolicy) async throws 
     
@@ -2311,14 +2361,14 @@ public protocol CloudStorageAccess: AnyObject, Sendable {
     func listNamespaces(policy: CloudAccessPolicy) async throws  -> [String]
     
     /**
-     * List wallet backup filenames within a namespace
+     * List wallet backup file names for a namespace and access policy
      */
     func listWalletFiles(namespace: String, policy: CloudAccessPolicy) async throws  -> [String]
     
     /**
      * Check whether a blob has been fully uploaded to iCloud
      */
-    func isBackupUploaded(namespace: String, recordId: String, policy: CloudAccessPolicy) async throws  -> Bool
+    func isBackupUploaded(namespace: String, recordId: String, locations: [RemoteBackupLocation], policy: CloudAccessPolicy) async throws  -> Bool
     
     func overallSyncHealth(policy: CloudAccessPolicy) async  -> CloudSyncHealth
     
@@ -2350,6 +2400,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
         uploadMasterKeyBackup: { (
             uniffiHandle: UInt64,
             namespace: RustBuffer,
+            location: RustBuffer,
             data: RustBuffer,
             policy: RustBuffer,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
@@ -2363,6 +2414,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                 }
                 return try await uniffiObj.uploadMasterKeyBackup(
                      namespace: try FfiConverterString.lift(namespace),
+                     location: try FfiConverterTypeRemoteBackupLocation_lift(location),
                      data: try FfiConverterData.lift(data),
                      policy: try FfiConverterTypeCloudAccessPolicy_lift(policy)
                 )
@@ -2396,6 +2448,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
             uniffiHandle: UInt64,
             namespace: RustBuffer,
             recordId: RustBuffer,
+            location: RustBuffer,
             data: RustBuffer,
             policy: RustBuffer,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
@@ -2410,6 +2463,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                 return try await uniffiObj.uploadWalletBackup(
                      namespace: try FfiConverterString.lift(namespace),
                      recordId: try FfiConverterString.lift(recordId),
+                     location: try FfiConverterTypeRemoteBackupLocation_lift(location),
                      data: try FfiConverterData.lift(data),
                      policy: try FfiConverterTypeCloudAccessPolicy_lift(policy)
                 )
@@ -2442,6 +2496,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
         downloadMasterKeyBackup: { (
             uniffiHandle: UInt64,
             namespace: RustBuffer,
+            locations: RustBuffer,
             policy: RustBuffer,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
             uniffiCallbackData: UInt64,
@@ -2454,6 +2509,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                 }
                 return try await uniffiObj.downloadMasterKeyBackup(
                      namespace: try FfiConverterString.lift(namespace),
+                     locations: try FfiConverterSequenceTypeRemoteBackupLocation.lift(locations),
                      policy: try FfiConverterTypeCloudAccessPolicy_lift(policy)
                 )
             }
@@ -2488,6 +2544,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
             uniffiHandle: UInt64,
             namespace: RustBuffer,
             recordId: RustBuffer,
+            locations: RustBuffer,
             policy: RustBuffer,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
             uniffiCallbackData: UInt64,
@@ -2501,6 +2558,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                 return try await uniffiObj.downloadWalletBackup(
                      namespace: try FfiConverterString.lift(namespace),
                      recordId: try FfiConverterString.lift(recordId),
+                     locations: try FfiConverterSequenceTypeRemoteBackupLocation.lift(locations),
                      policy: try FfiConverterTypeCloudAccessPolicy_lift(policy)
                 )
             }
@@ -2535,6 +2593,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
             uniffiHandle: UInt64,
             namespace: RustBuffer,
             recordId: RustBuffer,
+            locations: RustBuffer,
             policy: RustBuffer,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteVoid,
             uniffiCallbackData: UInt64,
@@ -2548,6 +2607,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                 return try await uniffiObj.deleteWalletBackup(
                      namespace: try FfiConverterString.lift(namespace),
                      recordId: try FfiConverterString.lift(recordId),
+                     locations: try FfiConverterSequenceTypeRemoteBackupLocation.lift(locations),
                      policy: try FfiConverterTypeCloudAccessPolicy_lift(policy)
                 )
             }
@@ -2711,6 +2771,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
             uniffiHandle: UInt64,
             namespace: RustBuffer,
             recordId: RustBuffer,
+            locations: RustBuffer,
             policy: RustBuffer,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteI8,
             uniffiCallbackData: UInt64,
@@ -2724,6 +2785,7 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                 return try await uniffiObj.isBackupUploaded(
                      namespace: try FfiConverterString.lift(namespace),
                      recordId: try FfiConverterString.lift(recordId),
+                     locations: try FfiConverterSequenceTypeRemoteBackupLocation.lift(locations),
                      policy: try FfiConverterTypeCloudAccessPolicy_lift(policy)
                 )
             }
@@ -3642,6 +3704,56 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         return seq
     }
 }
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRemoteBackupLocation: FfiConverterRustBuffer {
+    typealias SwiftType = [RemoteBackupLocation]
+
+    public static func write(_ value: [RemoteBackupLocation], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRemoteBackupLocation.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RemoteBackupLocation] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RemoteBackupLocation]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRemoteBackupLocation.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [[String]]
+
+    public static func write(_ value: [[String]], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterSequenceString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [[String]] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [[String]]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterSequenceString.read(from: &buf))
+        }
+        return seq
+    }
+}
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_WAKE: Int8 = 1
 
@@ -3780,6 +3892,14 @@ private func uniffiForeignFutureDroppedCallback(handle: UInt64) {
 public func uniffiForeignFutureHandleCountCoveDevice() -> Int {
     UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.count
 }
+public func cloudBackupLocationsSyncHealth(namespaceLocations: [[String]]) -> CloudSyncHealth  {
+    return try!  FfiConverterTypeCloudSyncHealth_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_device_fn_func_cloud_backup_locations_sync_health(
+        FfiConverterSequenceSequenceString.lower(namespaceLocations),uniffiCallStatus
+    )
+})
+}
 public func passkeyAaguidFromAttestationObject(attestationObject: Data)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypePasskeyError_lift) {
         uniffiCallStatus in
@@ -3803,6 +3923,9 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_cove_device_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_cove_device_checksum_func_cloud_backup_locations_sync_health() != 21699) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object() != 8413) {
         return InitializationResult.apiChecksumMismatch
@@ -3828,19 +3951,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_constructor_passkeyaccess_new() != 28492) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_master_key_backup() != 349) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_master_key_backup() != 38541) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_wallet_backup() != 64447) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_wallet_backup() != 10833) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_master_key_backup() != 22160) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_master_key_backup() != 36922) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_wallet_backup() != 39674) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_wallet_backup() != 44396) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 40757) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 16836) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_namespace() != 11228) {
@@ -3849,10 +3972,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 38104) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 34628) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 25910) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 64060) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 9032) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 49127) {

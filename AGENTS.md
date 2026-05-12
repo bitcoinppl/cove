@@ -1,5 +1,9 @@
 The role of this file is to describe common mistakes and confusion points that agents might encounter as they work in this project. If you ever encounter something in the project that surprises you, please alert the developer working with you and indicate that this is the case in the AGENTS.md file to help prevent future agents from having the same issue.
 
+## Hard Rules
+
+- Never add `#[cfg(test)]` to production items; test-only helpers must live inside `mod tests` or dedicated `test_support` modules
+
 ## Rust Rules
 
 - Use `cove_util::ResultExt::map_err_str` instead of `.map_err(|e| Error::Variant(e.to_string()))` — it's cleaner and equivalent
@@ -19,4 +23,4 @@ The role of this file is to describe common mistakes and confusion points that a
 - generated UniFFI Kotlin enum readers have a tight ordinal contract with Rust enum variant order, for example `AppAction` ordinals in the generated `FfiConverterTypeAppAction` reader; never reorder, insert, or remove Rust variants without regenerating bindings and updating the generated checksum, because stale generated files can map ordinals like `SelectWallet`, `SelectLatestOrNewWallet`, and `ChangeNetwork` to the wrong action
 - don't be afraid to change uniffi bindings and api shape
 - data structures and UniFFI-derived Rust types may change when they directly serve the requested work; update generated bindings and affected Swift/Kotlin call sites when exported APIs change
-- no test specific code in production code only in test modules
+- Don't mix test-only code into production code; `#[cfg(test)]` helpers should live in `mod tests` or dedicated `test_support` modules

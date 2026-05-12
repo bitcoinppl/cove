@@ -364,6 +364,13 @@ pub fn open_or_create_database(path: &Path) -> Result<redb::Database, super::err
         return Err(DatabaseError::PlaintextNotAllowed { path: path_str });
     }
 
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| DatabaseError::BackendOpen {
+            path: path_str.clone(),
+            error: e.to_string(),
+        })?;
+    }
+
     let backend = EncryptedBackend::create_or_open(path, &key)
         .map_err(|e| io_err_to_db_error(&path_str, e))?;
 
@@ -1203,6 +1210,18 @@ pub(crate) mod tests {
             ),
             "empty file during creation race should not be rejected as plaintext"
         );
+    }
+
+    #[test]
+    fn open_or_create_database_creates_missing_parent_dir() {
+        set_test_encryption_key();
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("missing").join("nested.enc");
+
+        let db = open_or_create_database(&path).unwrap();
+
+        assert!(path.exists());
+        drop(db);
     }
 
     #[test]

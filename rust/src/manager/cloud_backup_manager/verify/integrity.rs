@@ -6,7 +6,7 @@ use super::{CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager};
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, CloudBackupOtherBackupsState, CloudBackupStore,
+    CloudBackupDetailOutcome, CloudBackupKeychain, CloudBackupOtherBackupsState, CloudBackupStore,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,7 +54,7 @@ impl RustCloudBackupManager {
     /// Verifies the master key is in the keychain and backup files exist in iCloud
     /// Returns None if everything is OK, Some(warning) if there's a problem
     pub async fn verify_backup_integrity_impl(&self) -> Option<String> {
-        let state = self.state.read().status.clone();
+        let state = self.state.read().status().clone();
         if !matches!(state, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
             return None;
         }
@@ -143,7 +143,9 @@ impl RustCloudBackupManager {
         let other_backups = self
             .other_backup_state_for_integrity_check(&cloud, IntegrityDetailContext::Startup)
             .await;
-        self.set_detail(Some(inventory.build_detail(other_backups)));
+        self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(
+            inventory.build_detail(other_backups),
+        ));
 
         let unsynced = inventory.upload_candidate_wallets();
         let handled_unsynced = !unsynced.is_empty();
@@ -222,7 +224,9 @@ impl RustCloudBackupManager {
         let other_backups = self
             .other_backup_state_for_integrity_check(&cloud, IntegrityDetailContext::Detail)
             .await;
-        self.set_detail(Some(inventory.build_detail(other_backups)));
+        self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(
+            inventory.build_detail(other_backups),
+        ));
     }
 
     async fn other_backup_state_for_integrity_check(

@@ -11,16 +11,15 @@ use self::queue_processor::PendingUploadVerifier;
 use super::{CloudBackupError, PendingUploadVerificationState, RustCloudBackupManager};
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
+    CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
     CloudBlobUploadedPendingConfirmationState, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
-use crate::wallet::metadata::WalletId;
 
 pub(crate) use detail::remote_wallet_revision_matches;
 
 pub(crate) const MASTER_KEY_UPLOAD_CONFIRMATION_GRACE: Duration = Duration::from_secs(60);
-pub(super) const MAX_PENDING_UPLOAD_VERIFICATION_DELAY: Duration = Duration::from_secs(10);
+pub(crate) const MAX_PENDING_UPLOAD_VERIFICATION_DELAY: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PendingUploadVerificationStatus {
@@ -29,7 +28,7 @@ pub(crate) enum PendingUploadVerificationStatus {
     BlockedOnAuthorization,
 }
 
-pub(super) fn build_pending_upload_backoff() -> backon::FibonacciBackoff {
+pub(crate) fn build_pending_upload_backoff() -> backon::FibonacciBackoff {
     FibonacciBuilder::default()
         .with_max_delay(MAX_PENDING_UPLOAD_VERIFICATION_DELAY)
         .without_max_times()
@@ -43,8 +42,7 @@ impl RustCloudBackupManager {
         next_state: PersistedCloudBlobState,
         error_context: &'static str,
     ) -> Result<bool, CloudBackupError> {
-        let next_sync_state =
-            PersistedCloudBlobSyncState { state: next_state, ..current_state.clone() };
+        let next_sync_state = current_state.with_state(next_state);
 
         Database::global()
             .cloud_blob_sync_states
@@ -55,25 +53,24 @@ impl RustCloudBackupManager {
     pub(crate) fn mark_blob_uploaded_pending_confirmation(
         &self,
         namespace_id: &str,
-        wallet_id: Option<WalletId>,
-        record_id: String,
+        record_key: CloudBackupRecordKey,
         revision_hash: String,
         uploaded_at: u64,
     ) -> Result<(), CloudBackupError> {
-        let starts_master_key_grace = wallet_id.is_none();
-        let sync_state = PersistedCloudBlobSyncState {
-            namespace_id: namespace_id.to_string(),
-            wallet_id,
-            record_id,
-            state: PersistedCloudBlobState::UploadedPendingConfirmation(
-                CloudBlobUploadedPendingConfirmationState {
-                    revision_hash,
-                    uploaded_at,
-                    attempt_count: 0,
-                    last_checked_at: None,
-                },
-            ),
-        };
+        let starts_master_key_grace = record_key.is_master_key_wrapper();
+        let state = PersistedCloudBlobState::UploadedPendingConfirmation(
+            CloudBlobUploadedPendingConfirmationState {
+                revision_hash,
+                uploaded_at,
+                attempt_count: 0,
+                last_checked_at: None,
+            },
+        );
+        let sync_state = PersistedCloudBlobSyncState::from_record_key(
+            namespace_id.to_string(),
+            record_key,
+            state,
+        );
 
         Database::global()
             .cloud_blob_sync_states
@@ -87,7 +84,7 @@ impl RustCloudBackupManager {
             );
         }
 
-        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
+        self.reconcile_pending_upload_verification(PendingUploadVerificationState::Confirming);
         self.wake_pending_upload_verifier();
         self.start_pending_upload_verification_loop();
 
@@ -117,14 +114,14 @@ impl RustCloudBackupManager {
             return Ok(false);
         }
 
-        if current_state.wallet_id.is_none() {
+        if current_state.is_master_key_wrapper() {
             send!(
                 self.supervisor
                     .start_master_key_upload_confirmation_grace(current_state.namespace_id.clone())
             );
         }
 
-        self.set_pending_upload_verification(PendingUploadVerificationState::Confirming);
+        self.reconcile_pending_upload_verification(PendingUploadVerificationState::Confirming);
         self.wake_pending_upload_verifier();
         self.start_pending_upload_verification_loop();
 
@@ -159,10 +156,8 @@ impl RustCloudBackupManager {
         current_state: &PersistedCloudBlobSyncState,
     ) -> Result<(), CloudBackupError> {
         let changed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
-        let dirty_state = PersistedCloudBlobSyncState {
-            state: PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
-            ..current_state.clone()
-        };
+        let dirty_state = current_state
+            .with_state(PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }));
 
         Database::global()
             .cloud_blob_sync_states
@@ -170,7 +165,7 @@ impl RustCloudBackupManager {
             .map_err_prefix("persist dirty cloud blob state", CloudBackupError::Internal)
     }
 
-    pub(super) fn remove_blob_sync_states<I>(&self, record_ids: I) -> Result<(), CloudBackupError>
+    pub(crate) fn remove_blob_sync_states<I>(&self, record_ids: I) -> Result<(), CloudBackupError>
     where
         I: IntoIterator<Item = String>,
     {
@@ -188,7 +183,7 @@ impl RustCloudBackupManager {
         Ok(())
     }
 
-    pub(super) fn start_pending_upload_verification_loop(&self) {
+    pub(crate) fn start_pending_upload_verification_loop(&self) {
         send!(self.supervisor.ensure_pending_upload_verification_loop());
     }
 
@@ -198,32 +193,5 @@ impl RustCloudBackupManager {
 
     pub(crate) fn wake_pending_upload_verifier(&self) {
         send!(self.supervisor.wake_pending_upload_verifier());
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pending_upload_backoff_resets_to_short_delay() {
-        let mut backoff = build_pending_upload_backoff();
-        let initial_delay = backoff.next().expect("expected initial delay");
-
-        let _ = backoff.next();
-        let _ = backoff.next();
-
-        let mut backoff = build_pending_upload_backoff();
-
-        assert_eq!(backoff.next().expect("expected reset delay"), initial_delay);
-    }
-
-    #[test]
-    fn pending_upload_backoff_produces_delays() {
-        let mut backoff = build_pending_upload_backoff();
-
-        for _ in 0..10 {
-            assert!(backoff.next().is_some(), "expected delay");
-        }
     }
 }

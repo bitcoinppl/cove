@@ -599,7 +599,7 @@ impl RustOnboardingManager {
         match discovery {
             CloudRestoreDiscovery::BackupFound(hint) => {
                 CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
-                CLOUD_BACKUP_MANAGER.set_passkey_choice_prompt(
+                CLOUD_BACKUP_MANAGER.present_passkey_choice_prompt(
                     CloudBackupPasskeyChoiceIntent::Enable(
                         CloudBackupEnableContext {
                             saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
@@ -1767,6 +1767,13 @@ async fn inspect_cloud_restore_namespaces(
             continue;
         };
         found_backup = true;
+
+        if encrypted.remote_metadata.normalized_master_key(&namespace).is_err() {
+            info!(
+                "No cloud restore passkey provider hint namespace={namespace} reason=invalid_payload_metadata"
+            );
+            continue;
+        }
 
         let Some(raw_hint) = encrypted.passkey_provider_hint.as_ref() else {
             info!("No cloud restore passkey provider hint namespace={namespace} reason=missing");

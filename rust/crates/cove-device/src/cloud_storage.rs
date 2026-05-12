@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cove_cspp::backup_data::wallet_record_id_from_filename;
+use cove_cspp::backup_data::remote_layout;
 use once_cell::sync::OnceCell;
 use tracing::warn;
 
@@ -46,12 +46,24 @@ pub enum CloudSyncHealth {
     Unavailable,
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct RemoteBackupLocation {
+    pub relative_path: String,
+}
+
+impl From<String> for RemoteBackupLocation {
+    fn from(relative_path: String) -> Self {
+        Self { relative_path }
+    }
+}
+
 #[uniffi::export(callback_interface)]
 #[async_trait::async_trait]
 pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
     async fn upload_master_key_backup(
         &self,
         namespace: String,
+        location: RemoteBackupLocation,
         data: Vec<u8>,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError>;
@@ -60,6 +72,7 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         &self,
         namespace: String,
         record_id: String,
+        location: RemoteBackupLocation,
         data: Vec<u8>,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError>;
@@ -67,6 +80,7 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
     async fn download_master_key_backup(
         &self,
         namespace: String,
+        locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError>;
 
@@ -74,6 +88,7 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         &self,
         namespace: String,
         record_id: String,
+        locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError>;
 
@@ -81,6 +96,7 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         &self,
         namespace: String,
         record_id: String,
+        locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError>;
 
@@ -96,7 +112,7 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError>;
 
-    /// List wallet backup filenames within a namespace
+    /// List wallet backup file names for a namespace and access policy
     async fn list_wallet_files(
         &self,
         namespace: String,
@@ -108,6 +124,7 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         &self,
         namespace: String,
         record_id: String,
+        locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) -> Result<bool, CloudStorageError>;
 
@@ -170,7 +187,15 @@ impl CloudStorageClient {
         namespace: String,
         data: Vec<u8>,
     ) -> Result<(), CloudStorageError> {
-        self.0.0.upload_master_key_backup(namespace, data, self.1).await
+        self.0
+            .0
+            .upload_master_key_backup(
+                namespace,
+                remote_layout::master_key_upload_location().into(),
+                data,
+                self.1,
+            )
+            .await
     }
 
     pub async fn upload_wallet_backup(
@@ -179,14 +204,23 @@ impl CloudStorageClient {
         record_id: String,
         data: Vec<u8>,
     ) -> Result<(), CloudStorageError> {
-        self.0.0.upload_wallet_backup(namespace, record_id, data, self.1).await
+        let location = remote_layout::wallet_upload_location(&record_id).into();
+
+        self.0.0.upload_wallet_backup(namespace, record_id, location, data, self.1).await
     }
 
     pub async fn download_master_key_backup(
         &self,
         namespace: String,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        self.0.0.download_master_key_backup(namespace, self.1).await
+        self.0
+            .0
+            .download_master_key_backup(
+                namespace,
+                locations(remote_layout::master_key_read_locations()),
+                self.1,
+            )
+            .await
     }
 
     pub async fn download_wallet_backup(
@@ -194,7 +228,9 @@ impl CloudStorageClient {
         namespace: String,
         record_id: String,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        self.0.0.download_wallet_backup(namespace, record_id, self.1).await
+        let read_locations = locations(remote_layout::wallet_read_locations(&record_id));
+
+        self.0.0.download_wallet_backup(namespace, record_id, read_locations, self.1).await
     }
 
     pub async fn delete_wallet_backup(
@@ -202,7 +238,9 @@ impl CloudStorageClient {
         namespace: String,
         record_id: String,
     ) -> Result<(), CloudStorageError> {
-        self.0.0.delete_wallet_backup(namespace, record_id, self.1).await
+        let delete_locations = locations(remote_layout::locations_for_record_id(&record_id));
+
+        self.0.0.delete_wallet_backup(namespace, record_id, delete_locations, self.1).await
     }
 
     pub async fn delete_namespace(&self, namespace: String) -> Result<(), CloudStorageError> {
@@ -225,7 +263,9 @@ impl CloudStorageClient {
         namespace: String,
         record_id: String,
     ) -> Result<bool, CloudStorageError> {
-        self.0.0.is_backup_uploaded(namespace, record_id, self.1).await
+        let upload_locations = locations(remote_layout::locations_for_record_id(&record_id));
+
+        self.0.0.is_backup_uploaded(namespace, record_id, upload_locations, self.1).await
     }
 
     pub async fn overall_sync_health(&self) -> CloudSyncHealth {
@@ -237,15 +277,36 @@ impl CloudStorageClient {
         namespace: String,
     ) -> Result<Vec<String>, CloudStorageError> {
         let filenames = self.0.0.list_wallet_files(namespace, self.1).await?;
-        Ok(filenames
-            .iter()
-            .filter_map(|f| wallet_record_id_from_filename(f).map(String::from))
-            .collect())
+        Ok(remote_layout::dedupe_wallet_record_ids(filenames.iter().map(String::as_str)))
     }
 
     pub async fn has_any_cloud_backup(&self) -> Result<bool, CloudStorageError> {
         Ok(!self.list_namespaces().await?.is_empty())
     }
+}
+
+fn locations(relative_paths: Vec<String>) -> Vec<RemoteBackupLocation> {
+    relative_paths.into_iter().map(RemoteBackupLocation::from).collect()
+}
+
+#[uniffi::export]
+pub fn cloud_backup_locations_sync_health(
+    namespace_locations: Vec<Vec<String>>,
+) -> CloudSyncHealth {
+    if namespace_locations
+        .iter()
+        .all(|locations| !remote_layout::has_backup_location(locations.iter().map(String::as_str)))
+    {
+        return CloudSyncHealth::NoFiles;
+    }
+
+    if namespace_locations.iter().all(|locations| {
+        remote_layout::has_master_key_location(locations.iter().map(String::as_str))
+    }) {
+        return CloudSyncHealth::AllUploaded;
+    }
+
+    CloudSyncHealth::Failed("cloud backup is incomplete".into())
 }
 
 #[cfg(test)]
@@ -265,6 +326,7 @@ mod tests {
     struct TestCloudStorage {
         expected_policy: CloudAccessPolicy,
         expected_policy_used: Arc<AtomicBool>,
+        wallet_files: Option<Vec<String>>,
     }
 
     #[async_trait::async_trait]
@@ -272,6 +334,7 @@ mod tests {
         async fn upload_master_key_backup(
             &self,
             _namespace: String,
+            _location: RemoteBackupLocation,
             _data: Vec<u8>,
             _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
@@ -282,6 +345,7 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _location: RemoteBackupLocation,
             _data: Vec<u8>,
             _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
@@ -291,6 +355,7 @@ mod tests {
         async fn download_master_key_backup(
             &self,
             _namespace: String,
+            _locations: Vec<RemoteBackupLocation>,
             _policy: CloudAccessPolicy,
         ) -> Result<Vec<u8>, CloudStorageError> {
             panic!("unused in test")
@@ -300,6 +365,7 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _locations: Vec<RemoteBackupLocation>,
             _policy: CloudAccessPolicy,
         ) -> Result<Vec<u8>, CloudStorageError> {
             panic!("unused in test")
@@ -309,6 +375,7 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _locations: Vec<RemoteBackupLocation>,
             _policy: CloudAccessPolicy,
         ) -> Result<(), CloudStorageError> {
             panic!("unused in test")
@@ -339,6 +406,10 @@ mod tests {
             _namespace: String,
             _policy: CloudAccessPolicy,
         ) -> Result<Vec<String>, CloudStorageError> {
+            if let Some(files) = &self.wallet_files {
+                return Ok(files.clone());
+            }
+
             panic!("unused in test")
         }
 
@@ -346,6 +417,7 @@ mod tests {
             &self,
             _namespace: String,
             _record_id: String,
+            _locations: Vec<RemoteBackupLocation>,
             _policy: CloudAccessPolicy,
         ) -> Result<bool, CloudStorageError> {
             panic!("unused in test")
@@ -372,6 +444,7 @@ mod tests {
         let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
             expected_policy: CloudAccessPolicy::Silent,
             expected_policy_used: expected_policy_used.clone(),
+            wallet_files: None,
         })));
 
         assert!(
@@ -387,6 +460,7 @@ mod tests {
         let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
             expected_policy: CloudAccessPolicy::ConsentAllowed,
             expected_policy_used: expected_policy_used.clone(),
+            wallet_files: None,
         })));
 
         assert!(
@@ -394,5 +468,41 @@ mod tests {
                 .expect("cloud check should succeed")
         );
         assert!(expected_policy_used.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn list_wallet_backups_dedupes_legacy_and_kind_prefixed_locations() {
+        let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
+            expected_policy: CloudAccessPolicy::Silent,
+            expected_policy_used: Arc::new(AtomicBool::new(false)),
+            wallet_files: Some(vec![
+                "wallet-record-a.json".into(),
+                "wallets/wallet-record-a.json".into(),
+                "wallet-record-b.json".into(),
+                "master-key/masterkey-record.json".into(),
+            ]),
+        })));
+
+        let record_ids = block_on_ready(
+            cloud.client(CloudAccessPolicy::Silent).list_wallet_backups("namespace".into()),
+        )
+        .expect("list wallet backups");
+
+        assert_eq!(record_ids, vec!["record-a".to_string(), "record-b".to_string()]);
+    }
+
+    #[test]
+    fn backup_locations_sync_health_uses_remote_layout_policy() {
+        assert_eq!(cloud_backup_locations_sync_health(Vec::new()), CloudSyncHealth::NoFiles);
+        assert_eq!(
+            cloud_backup_locations_sync_health(vec![vec![remote_layout::master_key_location()]]),
+            CloudSyncHealth::AllUploaded,
+        );
+        assert_eq!(
+            cloud_backup_locations_sync_health(vec![vec![
+                remote_layout::wallet_location_from_record_id("record-a")
+            ]]),
+            CloudSyncHealth::Failed("cloud backup is incomplete".into()),
+        );
     }
 }

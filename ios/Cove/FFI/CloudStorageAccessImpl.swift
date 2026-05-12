@@ -35,9 +35,14 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
 
     // MARK: - Upload
 
-    func uploadMasterKeyBackup(namespace: String, data: Data, policy _: CloudAccessPolicy) async throws {
+    func uploadMasterKeyBackup(
+        namespace: String,
+        location: RemoteBackupLocation,
+        data: Data,
+        policy _: CloudAccessPolicy
+    ) async throws {
         try await run {
-            let url = try self.helper.masterKeyFileURL(namespace: namespace)
+            let url = try self.helper.backupFileURL(namespace: namespace, location: location)
             try self.helper.writeForUpload(data: data, to: url)
             try self.helper.waitForMetadataVisibility(url: url)
         }
@@ -45,12 +50,13 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
 
     func uploadWalletBackup(
         namespace: String,
-        recordId: String,
+        recordId _: String,
+        location: RemoteBackupLocation,
         data: Data,
         policy _: CloudAccessPolicy
     ) async throws {
         try await run {
-            let url = try self.helper.walletFileURL(namespace: namespace, recordId: recordId)
+            let url = try self.helper.backupFileURL(namespace: namespace, location: location)
             try self.helper.writeForUpload(data: data, to: url)
             try self.helper.waitForMetadataVisibility(url: url)
         }
@@ -58,9 +64,17 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
 
     // MARK: - Download
 
-    func downloadMasterKeyBackup(namespace: String, policy _: CloudAccessPolicy) async throws -> Data {
+    func downloadMasterKeyBackup(
+        namespace: String,
+        locations: [RemoteBackupLocation],
+        policy _: CloudAccessPolicy
+    ) async throws -> Data {
         try await run {
-            let url = try self.helper.masterKeyFileReadURL(namespace: namespace)
+            let url = try self.helper.existingBackupFileReadURL(
+                namespace: namespace,
+                recordId: csppMasterKeyRecordId(),
+                locations: locations
+            )
             return try self.helper.downloadFile(url: url, recordId: csppMasterKeyRecordId())
         }
     }
@@ -68,10 +82,15 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
     func downloadWalletBackup(
         namespace: String,
         recordId: String,
+        locations: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
     ) async throws -> Data {
         try await run {
-            let url = try self.helper.walletFileReadURL(namespace: namespace, recordId: recordId)
+            let url = try self.helper.existingBackupFileReadURL(
+                namespace: namespace,
+                recordId: recordId,
+                locations: locations
+            )
             return try self.helper.downloadFile(url: url, recordId: recordId)
         }
     }
@@ -79,22 +98,15 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
     func deleteWalletBackup(
         namespace: String,
         recordId: String,
+        locations: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
     ) async throws {
         try await run {
-            let url = try self.helper.backupFileReadURL(namespace: namespace, recordId: recordId)
-            if FileManager.default.fileExists(atPath: url.path) {
-                try self.helper.coordinatedDelete(at: url, missingItemID: recordId)
-                return
-            }
-
-            let resolvedURL = try self.helper.metadataItemIfPresent(
-                named: url.lastPathComponent,
-                parentDirectoryURL: url.deletingLastPathComponent()
-            )?.url
-            guard let resolvedURL else { throw CloudStorageError.NotFound(recordId) }
-
-            try self.helper.coordinatedDelete(at: resolvedURL, missingItemID: recordId)
+            try self.helper.deleteExistingBackupFile(
+                namespace: namespace,
+                recordId: recordId,
+                locations: locations
+            )
         }
     }
 
@@ -132,17 +144,34 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
             guard namespaces.contains(namespace) else { throw CloudStorageError.NotFound(namespace) }
 
             let nsDir = try self.helper.namespaceDirectoryReadURL(namespace: namespace)
-            return try self.helper.listFiles(namespacePath: nsDir.path, prefix: csppWalletFilePrefix())
+            let legacyFiles = try self.helper.listFiles(
+                namespacePath: nsDir.path,
+                prefix: csppWalletFilePrefix()
+            )
+
+            let walletsDir = try self.helper.walletsDirectoryReadURL(namespace: namespace)
+            let currentFiles = try self.helper.listFiles(
+                namespacePath: walletsDir.path,
+                prefix: csppWalletFilePrefix()
+            )
+            .map { self.helper.walletLocation(filename: $0) }
+
+            return Array(Set(legacyFiles + currentFiles)).sorted()
         }
     }
 
     func isBackupUploaded(
         namespace: String,
         recordId: String,
+        locations: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
     ) async throws -> Bool {
         try await run {
-            try self.helper.isBackupUploaded(namespace: namespace, recordId: recordId)
+            try self.helper.isBackupUploaded(
+                namespace: namespace,
+                recordId: recordId,
+                locations: locations
+            )
         }
     }
 

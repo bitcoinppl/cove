@@ -8,7 +8,7 @@ use tokio::sync::Notify;
 use tracing::{error, info, warn};
 
 use crate::database::cloud_backup::{
-    CloudBlobFailedState, CloudBlobFailureIssue, PersistedCloudBlobState,
+    CloudBackupRecordKey, CloudBlobFailedState, CloudBlobFailureIssue, PersistedCloudBlobState,
 };
 use crate::manager::cloud_backup_manager::pending::{
     MAX_PENDING_UPLOAD_VERIFICATION_DELAY, PendingUploadVerificationStatus,
@@ -262,16 +262,13 @@ impl CloudBackupUploadWorker {
                     "Cloud backup upload paused until authorization is restored for wallet_id={wallet_id}: {error_message}"
                 );
                 self.reset_wallet_upload_retry_count(&wallet_id);
-                manager.set_sync_error(Some(error_message));
                 manager.refresh_sync_health();
                 return;
             }
 
             error!("Cloud backup upload failed for wallet_id={wallet_id}: {error_message}");
-            manager.set_sync_error(Some(error_message));
         } else if succeeded {
             self.reset_wallet_upload_retry_count(&wallet_id);
-            manager.clear_sync_error_if_no_failed_wallet_uploads();
         }
 
         manager.refresh_sync_health();
@@ -291,8 +288,11 @@ impl CloudBackupUploadWorker {
         let manager = self.manager();
 
         for sync_state in states {
-            let Some(wallet_id) = sync_state.wallet_id.clone() else {
-                continue;
+            let wallet_id = match sync_state.record_key() {
+                CloudBackupRecordKey::Wallet(wallet_id, _) => wallet_id.clone(),
+                CloudBackupRecordKey::MasterKeyWrapper => {
+                    continue;
+                }
             };
 
             match &sync_state.state {
@@ -305,7 +305,6 @@ impl CloudBackupUploadWorker {
                     if is_authorization_failed_blob(failed_state)
                         && let Some(manager) = &manager
                     {
-                        manager.set_sync_error(Some(failed_state.error.clone()));
                         manager.refresh_sync_health();
                     }
                     send!(addr.schedule_wallet_upload(wallet_id, true));
@@ -442,15 +441,6 @@ mod tests {
                 authorization_required,
             );
             Produces::ok(())
-        }
-    }
-
-    #[test]
-    fn pending_upload_retry_backoff_caps_at_max_delay() {
-        let mut backoff = PendingUploadRetryBackoff::new();
-
-        for _ in 0..10 {
-            assert!(backoff.next_delay() <= MAX_PENDING_UPLOAD_VERIFICATION_DELAY);
         }
     }
 }

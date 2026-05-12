@@ -184,7 +184,9 @@ impl CloudWalletInventory {
         match self.remote_wallet_state(wallet) {
             RemoteWalletState::Matching(remote_summary)
             | RemoteWalletState::Stale(remote_summary) => {
-                return Some(remote_summary.updated_at);
+                if let Some(updated_at) = remote_summary.updated_at {
+                    return Some(updated_at);
+                }
             }
             RemoteWalletState::Unknown
             | RemoteWalletState::Unsupported
@@ -291,12 +293,12 @@ mod tests {
     };
 
     fn sync_state(state: PersistedCloudBlobState) -> PersistedCloudBlobSyncState {
-        PersistedCloudBlobSyncState {
-            namespace_id: "ns-1".into(),
-            wallet_id: None,
-            record_id: "record-1".into(),
+        PersistedCloudBlobSyncState::wallet(
+            "ns-1".into(),
+            "wallet-1".into(),
+            "record-1".into(),
             state,
-        }
+        )
     }
 
     #[test]
@@ -322,7 +324,7 @@ mod tests {
                     RemoteWalletBackupSummary {
                         revision_hash: "rev-1".into(),
                         label_count: 2,
-                        updated_at: 50,
+                        updated_at: Some(50),
                     },
                 )]),
                 unsupported_record_ids: HashSet::new(),
@@ -333,6 +335,41 @@ mod tests {
 
         assert_eq!(inventory.sync_status_for_wallet(&wallet), CloudBackupWalletStatus::Confirmed);
         assert_eq!(inventory.backup_updated_at_for_wallet(&wallet), Some(50));
+    }
+
+    #[test]
+    fn matching_remote_without_updated_at_uses_local_confirmed_timestamp() {
+        let state = sync_state(PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+            revision_hash: "old".into(),
+            confirmed_at: 10,
+        }));
+        let wallet = LocalWalletSnapshot {
+            metadata: WalletMetadata::preview_new(),
+            record_id: "record-1".into(),
+            revision_hash: "rev-1".into(),
+            local_label_count: 3,
+        };
+        let inventory = CloudWalletInventory {
+            last_sync: None,
+            local_wallets: vec![wallet.clone()],
+            cloud_wallet_record_ids: HashSet::new(),
+            sync_states_by_record_id: HashMap::from([(wallet.record_id.clone(), state)]),
+            remote_wallet_truth: RemoteWalletTruth {
+                summaries_by_record_id: HashMap::from([(
+                    wallet.record_id.clone(),
+                    RemoteWalletBackupSummary {
+                        revision_hash: "rev-1".into(),
+                        label_count: 2,
+                        updated_at: None,
+                    },
+                )]),
+                unsupported_record_ids: HashSet::new(),
+                unknown_record_ids: HashSet::new(),
+            },
+            strict_cloud_presence: false,
+        };
+
+        assert_eq!(inventory.backup_updated_at_for_wallet(&wallet), Some(10));
     }
 
     #[test]
@@ -362,7 +399,7 @@ mod tests {
                     RemoteWalletBackupSummary {
                         revision_hash: "rev-1".into(),
                         label_count: 1,
-                        updated_at: 10,
+                        updated_at: Some(10),
                     },
                 )]),
                 unsupported_record_ids: HashSet::new(),
@@ -519,23 +556,23 @@ mod tests {
             sync_states_by_record_id: HashMap::from([
                 (
                     uploading_wallet.record_id.clone(),
-                    PersistedCloudBlobSyncState {
-                        namespace_id: "ns-1".into(),
-                        wallet_id: None,
-                        record_id: uploading_wallet.record_id.clone(),
-                        state: PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
+                    PersistedCloudBlobSyncState::wallet(
+                        "ns-1".into(),
+                        uploading_wallet.metadata.id.clone(),
+                        uploading_wallet.record_id.clone(),
+                        PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
                             revision_hash: "rev-uploading".into(),
                             started_at: 10,
                         }),
-                    },
+                    ),
                 ),
                 (
                     pending_wallet.record_id.clone(),
-                    PersistedCloudBlobSyncState {
-                        namespace_id: "ns-1".into(),
-                        wallet_id: None,
-                        record_id: pending_wallet.record_id.clone(),
-                        state: PersistedCloudBlobState::UploadedPendingConfirmation(
+                    PersistedCloudBlobSyncState::wallet(
+                        "ns-1".into(),
+                        pending_wallet.metadata.id.clone(),
+                        pending_wallet.record_id.clone(),
+                        PersistedCloudBlobState::UploadedPendingConfirmation(
                             CloudBlobUploadedPendingConfirmationState {
                                 revision_hash: "rev-pending".into(),
                                 uploaded_at: 20,
@@ -543,7 +580,7 @@ mod tests {
                                 last_checked_at: None,
                             },
                         ),
-                    },
+                    ),
                 ),
             ]),
             remote_wallet_truth: RemoteWalletTruth {
@@ -553,7 +590,7 @@ mod tests {
                         RemoteWalletBackupSummary {
                             revision_hash: "stale-uploading".into(),
                             label_count: 0,
-                            updated_at: 5,
+                            updated_at: Some(5),
                         },
                     ),
                     (
@@ -561,7 +598,7 @@ mod tests {
                         RemoteWalletBackupSummary {
                             revision_hash: "stale-pending".into(),
                             label_count: 0,
-                            updated_at: 6,
+                            updated_at: Some(6),
                         },
                     ),
                 ]),
