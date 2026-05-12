@@ -2388,9 +2388,9 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_labelmanager_has_labels(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_cove_fn_method_labelmanager_import(`ptr`: Long,`jsonl`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_labelmanager_importlabels(`ptr`: Long,`labels`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_labelmanager_insert_or_update_labels_for_txn(`ptr`: Long,`details`: Long,`label`: RustBuffer.ByValue,`origin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_cove_fn_method_labelmanager_transaction_label(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -4004,10 +4004,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_labelmanager_has_labels() != 29517.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_import() != 37462.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_import() != 57006.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_importlabels() != 52503.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_importlabels() != 8041.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_labelmanager_insert_or_update_labels_for_txn() != 51703.toShort()) {
@@ -14001,9 +14001,9 @@ public interface LabelManagerInterface {
     
     fun `hasLabels`(): kotlin.Boolean
     
-    fun `import`(`jsonl`: kotlin.String)
+    fun `import`(`jsonl`: kotlin.String): LabelParseReport
     
-    fun `importLabels`(`labels`: Bip329Labels)
+    fun `importLabels`(`labels`: Bip329Labels): LabelParseReport
     
     fun `insertOrUpdateLabelsForTxn`(`details`: TransactionDetails, `label`: kotlin.String, `origin`: kotlin.String?)
     
@@ -14210,8 +14210,8 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     
 
     
-    @Throws(LabelManagerException::class)override fun `import`(`jsonl`: kotlin.String)
-        = 
+    @Throws(LabelManagerException::class)override fun `import`(`jsonl`: kotlin.String): LabelParseReport {
+            return FfiConverterTypeLabelParseReport.lift(
     callWithHandle {
     uniffiRustCallWithError(LabelManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_labelmanager_import(
@@ -14220,12 +14220,13 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
         FfiConverterString.lower(`jsonl`),_status)
 }
     }
-    
+    )
+    }
     
 
     
-    @Throws(LabelManagerException::class)override fun `importLabels`(`labels`: Bip329Labels)
-        = 
+    @Throws(LabelManagerException::class)override fun `importLabels`(`labels`: Bip329Labels): LabelParseReport {
+            return FfiConverterTypeLabelParseReport.lift(
     callWithHandle {
     uniffiRustCallWithError(LabelManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_labelmanager_importlabels(
@@ -14234,7 +14235,8 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
         FfiConverterTypeBip329Labels.lower(`labels`),_status)
 }
     }
-    
+    )
+    }
     
 
     
@@ -27736,6 +27738,8 @@ data class BackupImportReport (
     , 
     var `walletsWithLabelsImported`: kotlin.UInt
     , 
+    var `labelsSkipped`: kotlin.UInt
+    , 
     var `labelsFailedWalletNames`: List<kotlin.String>
     , 
     var `labelsFailedErrors`: List<kotlin.String>
@@ -27777,6 +27781,7 @@ public object FfiConverterTypeBackupImportReport: FfiConverterRustBuffer<BackupI
             FfiConverterSequenceString.read(buf),
             FfiConverterSequenceString.read(buf),
             FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
             FfiConverterSequenceString.read(buf),
             FfiConverterSequenceString.read(buf),
             FfiConverterBoolean.read(buf),
@@ -27795,6 +27800,7 @@ public object FfiConverterTypeBackupImportReport: FfiConverterRustBuffer<BackupI
             FfiConverterSequenceString.allocationSize(value.`failedWalletNames`) +
             FfiConverterSequenceString.allocationSize(value.`failedWalletErrors`) +
             FfiConverterUInt.allocationSize(value.`walletsWithLabelsImported`) +
+            FfiConverterUInt.allocationSize(value.`labelsSkipped`) +
             FfiConverterSequenceString.allocationSize(value.`labelsFailedWalletNames`) +
             FfiConverterSequenceString.allocationSize(value.`labelsFailedErrors`) +
             FfiConverterBoolean.allocationSize(value.`settingsRestored`) +
@@ -27812,6 +27818,7 @@ public object FfiConverterTypeBackupImportReport: FfiConverterRustBuffer<BackupI
             FfiConverterSequenceString.write(value.`failedWalletNames`, buf)
             FfiConverterSequenceString.write(value.`failedWalletErrors`, buf)
             FfiConverterUInt.write(value.`walletsWithLabelsImported`, buf)
+            FfiConverterUInt.write(value.`labelsSkipped`, buf)
             FfiConverterSequenceString.write(value.`labelsFailedWalletNames`, buf)
             FfiConverterSequenceString.write(value.`labelsFailedErrors`, buf)
             FfiConverterBoolean.write(value.`settingsRestored`, buf)
@@ -29430,6 +29437,44 @@ public object FfiConverterTypeLabelExportResult: FfiConverterRustBuffer<LabelExp
     override fun write(value: LabelExportResult, buf: ByteBuffer) {
             FfiConverterString.write(value.`content`, buf)
             FfiConverterString.write(value.`filename`, buf)
+    }
+}
+
+
+
+data class LabelParseReport (
+    var `imported`: kotlin.UInt
+    , 
+    var `skipped`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLabelParseReport: FfiConverterRustBuffer<LabelParseReport> {
+    override fun read(buf: ByteBuffer): LabelParseReport {
+        return LabelParseReport(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: LabelParseReport) = (
+            FfiConverterUInt.allocationSize(value.`imported`) +
+            FfiConverterUInt.allocationSize(value.`skipped`)
+    )
+
+    override fun write(value: LabelParseReport, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`imported`, buf)
+            FfiConverterUInt.write(value.`skipped`, buf)
     }
 }
 

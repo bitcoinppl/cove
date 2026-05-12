@@ -5093,9 +5093,9 @@ public protocol LabelManagerProtocol: AnyObject, Sendable {
     
     func hasLabels()  -> Bool
     
-    func `import`(jsonl: String) throws 
+    func `import`(jsonl: String) throws  -> LabelParseReport
     
-    func importLabels(labels: Bip329Labels) throws 
+    func importLabels(labels: Bip329Labels) throws  -> LabelParseReport
     
     func insertOrUpdateLabelsForTxn(details: TransactionDetails, label: String, origin: String?) throws 
     
@@ -5229,22 +5229,24 @@ open func hasLabels() -> Bool  {
 })
 }
     
-open func `import`(jsonl: String)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
+open func `import`(jsonl: String)throws  -> LabelParseReport  {
+    return try  FfiConverterTypeLabelParseReport_lift(try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_labelmanager_import(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(jsonl),uniffiCallStatus
     )
-}
+})
 }
     
-open func importLabels(labels: Bip329Labels)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
+open func importLabels(labels: Bip329Labels)throws  -> LabelParseReport  {
+    return try  FfiConverterTypeLabelParseReport_lift(try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_labelmanager_importlabels(
             self.uniffiCloneHandle(),
         FfiConverterTypeBip329Labels_lower(labels),uniffiCallStatus
     )
-}
+})
 }
     
 open func insertOrUpdateLabelsForTxn(details: TransactionDetails, label: String, origin: String?)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
@@ -13102,6 +13104,7 @@ public struct BackupImportReport: Equatable, Hashable {
     public var failedWalletNames: [String]
     public var failedWalletErrors: [String]
     public var walletsWithLabelsImported: UInt32
+    public var labelsSkipped: UInt32
     public var labelsFailedWalletNames: [String]
     public var labelsFailedErrors: [String]
     public var settingsRestored: Bool
@@ -13117,7 +13120,7 @@ public struct BackupImportReport: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(walletsImported: UInt32, importedWalletNames: [String], walletsSkipped: UInt32, skippedWalletNames: [String], walletsFailed: UInt32, failedWalletNames: [String], failedWalletErrors: [String], walletsWithLabelsImported: UInt32, labelsFailedWalletNames: [String], labelsFailedErrors: [String], settingsRestored: Bool, settingsError: String?, 
+    public init(walletsImported: UInt32, importedWalletNames: [String], walletsSkipped: UInt32, skippedWalletNames: [String], walletsFailed: UInt32, failedWalletNames: [String], failedWalletErrors: [String], walletsWithLabelsImported: UInt32, labelsSkipped: UInt32, labelsFailedWalletNames: [String], labelsFailedErrors: [String], settingsRestored: Bool, settingsError: String?, 
         /**
          * Wallets imported with degraded functionality (e.g. unknown secret type)
          */degradedWalletNames: [String], 
@@ -13132,6 +13135,7 @@ public struct BackupImportReport: Equatable, Hashable {
         self.failedWalletNames = failedWalletNames
         self.failedWalletErrors = failedWalletErrors
         self.walletsWithLabelsImported = walletsWithLabelsImported
+        self.labelsSkipped = labelsSkipped
         self.labelsFailedWalletNames = labelsFailedWalletNames
         self.labelsFailedErrors = labelsFailedErrors
         self.settingsRestored = settingsRestored
@@ -13164,6 +13168,7 @@ public struct FfiConverterTypeBackupImportReport: FfiConverterRustBuffer {
                 failedWalletNames: FfiConverterSequenceString.read(from: &buf), 
                 failedWalletErrors: FfiConverterSequenceString.read(from: &buf), 
                 walletsWithLabelsImported: FfiConverterUInt32.read(from: &buf), 
+                labelsSkipped: FfiConverterUInt32.read(from: &buf), 
                 labelsFailedWalletNames: FfiConverterSequenceString.read(from: &buf), 
                 labelsFailedErrors: FfiConverterSequenceString.read(from: &buf), 
                 settingsRestored: FfiConverterBool.read(from: &buf), 
@@ -13182,6 +13187,7 @@ public struct FfiConverterTypeBackupImportReport: FfiConverterRustBuffer {
         FfiConverterSequenceString.write(value.failedWalletNames, into: &buf)
         FfiConverterSequenceString.write(value.failedWalletErrors, into: &buf)
         FfiConverterUInt32.write(value.walletsWithLabelsImported, into: &buf)
+        FfiConverterUInt32.write(value.labelsSkipped, into: &buf)
         FfiConverterSequenceString.write(value.labelsFailedWalletNames, into: &buf)
         FfiConverterSequenceString.write(value.labelsFailedErrors, into: &buf)
         FfiConverterBool.write(value.settingsRestored, into: &buf)
@@ -15274,6 +15280,60 @@ public func FfiConverterTypeLabelExportResult_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeLabelExportResult_lower(_ value: LabelExportResult) -> RustBuffer {
     return FfiConverterTypeLabelExportResult.lower(value)
+}
+
+
+public struct LabelParseReport: Equatable, Hashable {
+    public var imported: UInt32
+    public var skipped: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(imported: UInt32, skipped: UInt32) {
+        self.imported = imported
+        self.skipped = skipped
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LabelParseReport: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLabelParseReport: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LabelParseReport {
+        return
+            try LabelParseReport(
+                imported: FfiConverterUInt32.read(from: &buf), 
+                skipped: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LabelParseReport, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.imported, into: &buf)
+        FfiConverterUInt32.write(value.skipped, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelParseReport_lift(_ buf: RustBuffer) throws -> LabelParseReport {
+    return try FfiConverterTypeLabelParseReport.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelParseReport_lower(_ value: LabelParseReport) -> RustBuffer {
+    return FfiConverterTypeLabelParseReport.lower(value)
 }
 
 
@@ -38585,10 +38645,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_labelmanager_has_labels() != 29517) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_labelmanager_import() != 37462) {
+    if (uniffi_cove_checksum_method_labelmanager_import() != 57006) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_labelmanager_importlabels() != 52503) {
+    if (uniffi_cove_checksum_method_labelmanager_importlabels() != 8041) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_insert_or_update_labels_for_txn() != 51703) {
