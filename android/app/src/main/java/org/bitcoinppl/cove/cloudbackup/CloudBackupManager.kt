@@ -12,135 +12,228 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove_core.CloudBackupDetail
-import org.bitcoinppl.cove_core.CloudBackupEnableState
+import org.bitcoinppl.cove_core.CloudBackupDetailState
+import org.bitcoinppl.cove_core.CloudBackupEnableFlow
+import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupManagerReconciler
-import org.bitcoinppl.cove_core.CloudBackupPromptIntent
+import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
+import org.bitcoinppl.cove_core.CloudBackupPasskeyState
+import org.bitcoinppl.cove_core.CloudBackupProgress
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
+import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
+import org.bitcoinppl.cove_core.CloudBackupRestoreReport
+import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupState
-import org.bitcoinppl.cove_core.CloudBackupStatus
-import org.bitcoinppl.cove_core.CloudBackupVerificationMetadata
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
+import org.bitcoinppl.cove_core.CloudBackupVerificationState
+import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.CloudOnlyState
-import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.OtherBackupsOperation
-import org.bitcoinppl.cove_core.PendingUploadVerificationState
-import org.bitcoinppl.cove_core.RecoveryState
 import org.bitcoinppl.cove_core.RustCloudBackupManager
-import org.bitcoinppl.cove_core.SyncState
-import org.bitcoinppl.cove_core.VerificationState
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 
-internal fun cloudBackupEnabledForStatus(
-    status: CloudBackupStatus,
-    currentValue: Boolean,
-    readPersistedState: () -> Boolean,
-): Boolean =
-    when (status) {
-        is CloudBackupStatus.Disabled,
-        is CloudBackupStatus.Enabled,
-        is CloudBackupStatus.Enabling,
-        is CloudBackupStatus.Error,
-        is CloudBackupStatus.PasskeyMissing,
-        is CloudBackupStatus.Restoring,
-        is CloudBackupStatus.UnsupportedPasskeyProvider,
-        -> runCatching(readPersistedState).getOrDefault(currentValue)
-    }
-
 @Stable
-class CloudBackupManager private constructor() : CloudBackupManagerReconciler, Closeable {
-    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val rustScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+class CloudBackupManager private constructor(
+    private val rust: RustCloudBackupManager?,
+    initialState: CloudBackupState,
+    startLiveUpdates: Boolean,
+) : CloudBackupManagerReconciler, Closeable {
+    private val mainScope =
+        if (startLiveUpdates) {
+            CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        } else {
+            CoroutineScope(SupervisorJob())
+        }
+    private val rustScope =
+        if (startLiveUpdates) {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        } else {
+            CoroutineScope(SupervisorJob())
+        }
 
-    val rust: RustCloudBackupManager = RustCloudBackupManager()
-
-    var state by mutableStateOf(rust.state())
+    var state by mutableStateOf(initialState)
         private set
 
-    var isCloudBackupEnabled by mutableStateOf(runCatching { rust.isCloudBackupEnabled() }.getOrDefault(false))
+    var isCloudBackupEnabled by mutableStateOf(runCatching { rust?.isCloudBackupEnabled() == true }.getOrDefault(false))
         private set
 
     init {
-        rust.listenForUpdates(this)
-        rustScope.launch {
-            runCatching { rust.cloudStorageDidChange() }
-                .onFailure { error ->
-                    Log.w(TAG, "initial cloud storage refresh failed", error)
-                }
+        if (startLiveUpdates && rust != null) {
+            rust.listenForUpdates(this)
+            rustScope.launch {
+                runCatching { rust.cloudStorageDidChange() }
+                    .onFailure { error ->
+                        Log.w(TAG, "initial cloud storage refresh failed", error)
+                    }
+            }
         }
     }
 
-    val status: CloudBackupStatus
-        get() = state.status
+    internal constructor(initialState: CloudBackupState) : this(null, initialState, false)
 
-    val promptIntent: CloudBackupPromptIntent
-        get() = state.promptIntent
+    val lifecycle: CloudBackupLifecycle
+        get() = state.lifecycle
+
+    val configuredState
+        get() = (state.lifecycle as? CloudBackupLifecycle.Configured)?.v1
+
+    val enableFlow: CloudBackupEnableFlow?
+        get() = (state.lifecycle as? CloudBackupLifecycle.Enabling)?.v1
+
+    val passkeyState: CloudBackupPasskeyState?
+        get() = configuredState?.passkey
+
+    val passkeyRepairState: CloudBackupPasskeyRepairState?
+        get() = (passkeyState as? CloudBackupPasskeyState.NeedsRepair)?.state
+
+    val verificationState: CloudBackupVerificationState?
+        get() = configuredState?.verification
+
+    val syncState: CloudBackupSyncState?
+        get() = configuredState?.sync
+
+    val lifecycleFailureMessage: String?
+        get() = (state.lifecycle as? CloudBackupLifecycle.Failed)?.v1?.message
+
+    val isLifecycleDisabled: Boolean
+        get() = state.lifecycle is CloudBackupLifecycle.Disabled
+
+    val isLifecycleEnabling: Boolean
+        get() = state.lifecycle is CloudBackupLifecycle.Enabling
+
+    val isLifecycleRestoring: Boolean
+        get() = state.lifecycle is CloudBackupLifecycle.Restoring
+
+    val isCloudBackupAvailable: Boolean
+        get() = passkeyState is CloudBackupPasskeyState.Available
+
+    val isPasskeyMissing: Boolean
+        get() =
+            passkeyState is CloudBackupPasskeyState.Missing ||
+                passkeyState is CloudBackupPasskeyState.NeedsRepair
+
+    val isUnsupportedPasskeyProvider: Boolean
+        get() = passkeyState is CloudBackupPasskeyState.UnsupportedProvider
+
+    val rootPrompt: CloudBackupRootPrompt
+        get() =
+            when (val lifecycle = state.lifecycle) {
+                is CloudBackupLifecycle.Enabling ->
+                    when (val flow = lifecycle.v1) {
+                        is CloudBackupEnableFlow.AwaitingForceNewConfirmation ->
+                            CloudBackupRootPrompt.ExistingBackupFound(flow.v1, flow.v2)
+                        is CloudBackupEnableFlow.AwaitingPasskeyChoice ->
+                            CloudBackupRootPrompt.PasskeyChoice(flow.v1)
+                        else -> CloudBackupRootPrompt.None
+                    }
+                is CloudBackupLifecycle.Configured -> lifecycle.v1.rootPrompt
+                else -> CloudBackupRootPrompt.None
+            }
 
     val syncHealth: CloudSyncHealth
-        get() = state.syncHealth
+        get() = configuredState?.syncHealth ?: CloudSyncHealth.Unknown
+
+    val progress: CloudBackupProgress?
+        get() =
+            when (val lifecycle = state.lifecycle) {
+                is CloudBackupLifecycle.Enabling ->
+                    when (val flow = lifecycle.v1) {
+                        is CloudBackupEnableFlow.UploadingInitialBackup -> flow.progress
+                        is CloudBackupEnableFlow.RetryingUploadWithStagedMaterial -> flow.progress
+                        else -> null
+                    }
+                else -> null
+            }
+
+    val restoreProgress: CloudBackupRestoreProgress?
+        get() =
+            when (val lifecycle = state.lifecycle) {
+                is CloudBackupLifecycle.Restoring -> lifecycle.v1.progress
+                else -> null
+            }
+
+    val restoreReport: CloudBackupRestoreReport?
+        get() =
+            when (val lifecycle = state.lifecycle) {
+                is CloudBackupLifecycle.Restoring -> lifecycle.v1.report
+                is CloudBackupLifecycle.Configured -> lifecycle.v1.lastRestoreReport
+                is CloudBackupLifecycle.Failed -> lifecycle.v1.restoreReport
+                else -> null
+            }
 
     val detail: CloudBackupDetail?
-        get() = state.detail
-
-    val enableState: CloudBackupEnableState
-        get() = state.enableState
-
-    val verification: VerificationState
-        get() = state.verification
+        get() =
+            when (val lifecycle = state.lifecycle) {
+                is CloudBackupLifecycle.Configured ->
+                    (lifecycle.v1.detail as? CloudBackupDetailState.Loaded)?.state?.detail
+                else -> null
+            }
 
     val verificationPresentation: CloudBackupVerificationPresentation
-        get() = state.verificationPresentation
-
-    val sync: SyncState
-        get() = state.sync
-
-    val recovery: RecoveryState
-        get() = state.recovery
+        get() = configuredState?.verificationPresentation ?: CloudBackupVerificationPresentation.Hidden(null)
 
     val cloudOnly: CloudOnlyState
-        get() = state.cloudOnly
+        get() =
+            when (val lifecycle = state.lifecycle) {
+                is CloudBackupLifecycle.Configured ->
+                    when (val detail = lifecycle.v1.detail) {
+                        is CloudBackupDetailState.NotLoaded -> CloudOnlyState.NotFetched
+                        is CloudBackupDetailState.Loading -> CloudOnlyState.Loading
+                        is CloudBackupDetailState.Loaded -> detail.state.cloudOnly
+                        is CloudBackupDetailState.Failed -> CloudOnlyState.Failed(detail.v1)
+                    }
+                else -> CloudOnlyState.NotFetched
+            }
 
     val cloudOnlyOperation: CloudOnlyOperation
-        get() = state.cloudOnlyOperation
+        get() =
+            when (val lifecycle = state.lifecycle) {
+                is CloudBackupLifecycle.Configured ->
+                    (lifecycle.v1.detail as? CloudBackupDetailState.Loaded)
+                        ?.state
+                        ?.cloudOnlyOperation ?: CloudOnlyOperation.Idle
+                else -> CloudOnlyOperation.Idle
+            }
 
     val otherBackupsOperation: OtherBackupsOperation
-        get() = state.otherBackupsOperation
-
-    val pendingUploadVerification: PendingUploadVerificationState
-        get() = state.pendingUploadVerification
+        get() =
+            when (val lifecycle = state.lifecycle) {
+                is CloudBackupLifecycle.Configured ->
+                    (lifecycle.v1.detail as? CloudBackupDetailState.Loaded)
+                        ?.state
+                        ?.otherBackupsOperation ?: OtherBackupsOperation.Idle
+                else -> OtherBackupsOperation.Idle
+            }
 
     val hasPendingUploadVerification: Boolean
-        get() = pendingUploadVerification != PendingUploadVerificationState.IDLE
+        get() = verificationState is CloudBackupVerificationState.AwaitingUploadConfirmation
 
     val shouldPromptVerification: Boolean
-        get() = state.shouldPromptVerification && !isBackgroundVerifying
-
-    val isBackgroundVerifying: Boolean
-        get() = hasPendingUploadVerification
-
-    val isUnverified: Boolean
-        get() = !isBackgroundVerifying && state.verificationMetadata is CloudBackupVerificationMetadata.NeedsVerification
+        get() =
+            !hasPendingUploadVerification &&
+                verificationState is CloudBackupVerificationState.Required
 
     val isConfigured: Boolean
-        get() =
-            when (state.verificationMetadata) {
-                is CloudBackupVerificationMetadata.NotConfigured -> false
-                else -> true
-            }
+        get() = state.lifecycle is CloudBackupLifecycle.Configured
 
     val lastVerifiedAt: ULong?
         get() =
-            when (val metadata = state.verificationMetadata) {
-                is CloudBackupVerificationMetadata.Verified -> metadata.v1
+            when (
+                val verification =
+                    (state.lifecycle as? CloudBackupLifecycle.Configured)?.v1?.verification
+            ) {
+                is CloudBackupVerificationState.Verified -> verification.lastVerifiedAt
                 else -> null
             }
 
     val isVerificationStale: Boolean
-        get() = lastVerifiedAt == null && status is CloudBackupStatus.Enabled && !isUnverified
+        get() = lastVerifiedAt == null && isCloudBackupAvailable && !shouldPromptVerification
 
     fun dispatch(action: CloudBackupManagerAction) {
         rustScope.launch {
+            val rust = rust ?: return@launch
             runCatching { rust.dispatch(action) }
                 .onFailure { error ->
                     Log.e(TAG, "cloud backup action failed: $action", error)
@@ -150,6 +243,7 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
 
     fun syncPersistedState() {
         rustScope.launch {
+            val rust = rust ?: return@launch
             runCatching { rust.syncPersistedState() }
                 .onSuccess {
                     mainScope.launch {
@@ -164,6 +258,7 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
 
     fun resumePendingCloudUploadVerification() {
         rustScope.launch {
+            val rust = rust ?: return@launch
             runCatching { rust.resumePendingCloudUploadVerification() }
                 .onSuccess {
                     mainScope.launch {
@@ -178,6 +273,7 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
 
     fun refreshCloudState() {
         rustScope.launch {
+            val rust = rust ?: return@launch
             runCatching { rust.cloudStorageDidChange() }
                 .onSuccess {
                     mainScope.launch {
@@ -198,44 +294,20 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
 
     private fun apply(message: CloudBackupReconcileMessage) {
         when (message) {
-            is CloudBackupReconcileMessage.Status -> {
-                state = state.copy(status = message.v1)
-                refreshPersistedEnabledState(message.v1)
-            }
-            is CloudBackupReconcileMessage.SyncHealth -> state = state.copy(syncHealth = message.v1)
-            is CloudBackupReconcileMessage.Progress -> state = state.copy(progress = message.v1)
-            is CloudBackupReconcileMessage.RestoreProgress -> state = state.copy(restoreProgress = message.v1)
-            is CloudBackupReconcileMessage.RestoreReport -> state = state.copy(restoreReport = message.v1)
-            is CloudBackupReconcileMessage.SyncError -> state = state.copy(syncError = message.v1)
-            is CloudBackupReconcileMessage.EnableState -> state = state.copy(enableState = message.v1)
-            is CloudBackupReconcileMessage.VerificationPrompt -> state = state.copy(shouldPromptVerification = message.v1)
-            is CloudBackupReconcileMessage.VerificationMetadata -> state = state.copy(verificationMetadata = message.v1)
-            is CloudBackupReconcileMessage.VerificationPresentation -> state = state.copy(verificationPresentation = message.v1)
-            is CloudBackupReconcileMessage.PendingUploadVerification -> state = state.copy(pendingUploadVerification = message.v1)
-            is CloudBackupReconcileMessage.Detail -> state = state.copy(detail = message.v1)
-            is CloudBackupReconcileMessage.Verification -> state = state.copy(verification = message.v1)
-            is CloudBackupReconcileMessage.Sync -> state = state.copy(sync = message.v1)
-            is CloudBackupReconcileMessage.Recovery -> state = state.copy(recovery = message.v1)
-            is CloudBackupReconcileMessage.CloudOnly -> state = state.copy(cloudOnly = message.v1)
-            is CloudBackupReconcileMessage.CloudOnlyOperation -> state = state.copy(cloudOnlyOperation = message.v1)
-            is CloudBackupReconcileMessage.OtherBackupsOperation -> state = state.copy(otherBackupsOperation = message.v1)
-            is CloudBackupReconcileMessage.PromptIntent -> state = state.copy(promptIntent = message.v1)
-        }
+            is CloudBackupReconcileMessage.Lifecycle -> state = state.copy(lifecycle = message.v1)
+        }.let {}
+        refreshPersistedEnabledState()
     }
 
-    private fun refreshPersistedEnabledState(status: CloudBackupStatus = state.status) {
-        isCloudBackupEnabled =
-            cloudBackupEnabledForStatus(
-                status = status,
-                currentValue = isCloudBackupEnabled,
-                readPersistedState = rust::isCloudBackupEnabled,
-            )
+    private fun refreshPersistedEnabledState() {
+        isCloudBackupEnabled = runCatching { rust?.isCloudBackupEnabled() == true }
+            .getOrDefault(isCloudBackupEnabled)
     }
 
     override fun close() {
         mainScope.cancel()
         rustScope.cancel()
-        rust.close()
+        rust?.close()
     }
 
     companion object {
@@ -244,9 +316,14 @@ class CloudBackupManager private constructor() : CloudBackupManagerReconciler, C
         @Volatile
         private var instance: CloudBackupManager? = null
 
+        private fun liveManager(): CloudBackupManager {
+            val rust = RustCloudBackupManager()
+            return CloudBackupManager(rust, rust.state(), true)
+        }
+
         fun getInstance(): CloudBackupManager =
             instance ?: synchronized(this) {
-                instance ?: CloudBackupManager().also { instance = it }
+                instance ?: liveManager().also { instance = it }
             }
     }
 }

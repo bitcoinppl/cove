@@ -442,6 +442,10 @@ impl NamespacePasskeyMatcher {
                     continue;
                 }
             }
+            if encrypted.remote_metadata.normalized_master_key(namespace).is_err() {
+                had_download_failures = true;
+                continue;
+            }
 
             downloaded.push((namespace.clone(), encrypted));
         }

@@ -151,11 +151,16 @@ struct SidebarView: View {
     }
 }
 
-#Preview("Many Wallets") {
-    let app = AppManager.shared
-    app.wallets = (1 ... 14).map { WalletMetadata("Wallet \($0)", preview: true) }
+#if DEBUG
+    #Preview("Many Wallets") {
+        let app = {
+            let app = AppManager.shared
+            app.wallets = (1 ... 14).map { WalletMetadata("Wallet \($0)", preview: true) }
+            return app
+        }()
 
-    return SidebarView(currentRoute: app.currentRoute)
-        .frame(width: 280)
-        .environment(app)
-}
+        SidebarView(currentRoute: app.currentRoute)
+            .frame(width: 280)
+            .environment(app)
+    }
+#endif

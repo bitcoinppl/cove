@@ -99,6 +99,43 @@ internal open class ForeignBytes : Structure() {
 
     class ByValue : ForeignBytes(), Structure.ByValue
 }
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Only `lower` is valid — zero-copy byte buffers only flow foreign -> Rust,
+// and only in argument position. `lift`, `read`, `write`, and
+// `allocationSize` have no sound implementation here and all panic at
+// runtime. The `FfiConverter` interface is implemented so that the
+// compiler enforces the full method set (rather than relying on eyeball).
+//
+// The provided `ByteBuffer` MUST be direct — only direct buffers have a
+// stable native address that JNA can expose via `getDirectBufferPointer`.
+// The returned `ForeignBytes.ByValue` is only valid for the duration of
+// the FFI call; the Rust side treats it as a borrow.
+internal object FfiConverterByRefBytes : FfiConverter<java.nio.ByteBuffer, ForeignBytes.ByValue> {
+    override fun lower(value: java.nio.ByteBuffer): ForeignBytes.ByValue {
+        require(value.isDirect) { "UniFFI zero-copy &[u8] requires a direct ByteBuffer. Use ByteBuffer.allocateDirect()." }
+        val remaining = value.remaining()
+        val fb = ForeignBytes.ByValue()
+        fb.len = remaining
+        // Zero-length direct buffers: skip getDirectBufferPointer (platform-variable behavior)
+        // and pass null. The Rust side treats (null, 0) as &[].
+        fb.data = if (remaining == 0) null else com.sun.jna.Native.getDirectBufferPointer(value)
+        return fb
+    }
+
+    override fun lift(value: ForeignBytes.ByValue): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+
+    override fun read(buf: java.nio.ByteBuffer): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun write(value: java.nio.ByteBuffer, buf: java.nio.ByteBuffer): Unit =
+        error("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun allocationSize(value: java.nio.ByteBuffer): ULong =
+        error("ByRef bytes have no RustBuffer allocation size: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+}
 /**
  * The FfiConverter interface handles converter types to and from the FFI
  *
@@ -812,13 +849,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_util_checksum_func_generaterandomchaincode() != 10336.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_util_checksum_func_hexdecode() != 15286.toShort()) {
+    if (lib.uniffi_cove_util_checksum_func_hexdecode() != 10712.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_util_checksum_func_hexencode() != 43846.toShort()) {
+    if (lib.uniffi_cove_util_checksum_func_hexencode() != 17276.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_util_checksum_func_hextoutf8string() != 44131.toShort()) {
+    if (lib.uniffi_cove_util_checksum_func_hextoutf8string() != 12021.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_util_checksum_method_generationtracker_advance() != 52427.toShort()) {
@@ -827,7 +864,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_util_checksum_method_generationtracker_capture() != 44477.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_util_checksum_method_generationtracker_is_current() != 28139.toShort()) {
+    if (lib.uniffi_cove_util_checksum_method_generationtracker_is_current() != 63633.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_util_checksum_constructor_generationtracker_new() != 38534.toShort()) {
@@ -1376,6 +1413,7 @@ open class GenerationTracker: Disposable, AutoCloseable, GenerationTrackerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_util_fn_method_generationtracker_is_current(
         it,
+        
         FfiConverterTypeGenerationToken.lower(`capturedToken`),_status)
 }
     }
@@ -1534,6 +1572,7 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_util_fn_func_hexdecode(
     
+        
         FfiConverterString.lower(`hex`),_status)
 }
     )
@@ -1544,6 +1583,7 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_util_fn_func_hexencode(
     
+        
         FfiConverterByteArray.lower(`bytes`),_status)
 }
     )
@@ -1554,6 +1594,7 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_util_fn_func_hextoutf8string(
     
+        
         FfiConverterString.lower(`hex`),_status)
 }
     )

@@ -59,7 +59,7 @@ impl RustCloudBackupManager {
             .unwrap_or_default()
             .into_iter()
             .filter(|state| state.namespace_id == completion.namespace_id())
-            .map(|state| (state.record_id.clone(), state.state))
+            .map(|state| (state.record_id().to_string(), state.state))
             .collect();
 
         for upload in completion.uploads() {
@@ -171,7 +171,7 @@ impl RustCloudBackupManager {
             .unwrap_or_default()
             .into_iter()
             .filter(|state| state.namespace_id == completion.namespace_id())
-            .map(|state| (state.record_id.clone(), state.state))
+            .map(|state| (state.record_id().to_string(), state.state))
             .collect();
 
         for upload in completion.uploads() {

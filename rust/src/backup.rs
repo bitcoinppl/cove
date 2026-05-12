@@ -44,8 +44,8 @@ impl BackupManager {
     }
 
     /// Validate the file format without decrypting
-    pub fn validate_format(&self, data: &[u8]) -> Result<(), BackupError> {
-        crypto::validate_header(data)
+    pub fn validate_format(&self, data: Vec<u8>) -> Result<(), BackupError> {
+        crypto::validate_header(&data)
     }
 
     /// Generate a 12-word BIP39 mnemonic to use as the backup password

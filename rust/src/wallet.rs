@@ -614,6 +614,16 @@ impl Wallet {
         Ok(())
     }
 
+    pub fn unreserve_tx_change_addresses(&mut self, tx: &bdk_wallet::bitcoin::Transaction) {
+        for txout in &tx.output {
+            if let Some((KeychainKind::Internal, index)) =
+                self.bdk.derivation_of_spk(txout.script_pubkey.clone())
+            {
+                self.bdk.unmark_used(KeychainKind::Internal, index);
+            }
+        }
+    }
+
     /// Upgrade an existing watch-only wallet to cold by saving the xpub and descriptors
     fn upgrade_to_cold(
         mut metadata: WalletMetadata,
@@ -720,6 +730,113 @@ pub fn delete_wallet_specific_data(wallet_id: &WalletId) -> eyre::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use bdk_wallet::bitcoin::{
+        Address as BdkAddress, Amount, BlockHash, Network, hashes::Hash as _,
+    };
+    use bdk_wallet::chain::{BlockId, ConfirmationBlockTime};
+    use bdk_wallet::test_utils::{
+        get_funded_wallet_wpkh, insert_anchor, insert_checkpoint, insert_tx,
+    };
+
+    fn build_tx_with_change(wallet: &mut bdk_wallet::Wallet) -> bdk_wallet::bitcoin::Psbt {
+        let address = BdkAddress::from_str("bcrt1q3qtze4ys45tgdvguj66zrk4fu6hq3a3v9pfly5")
+            .unwrap()
+            .require_network(Network::Regtest)
+            .unwrap();
+
+        let mut builder = wallet.build_tx();
+        builder.add_recipient(address.script_pubkey(), Amount::from_sat(10_000));
+        builder.fee_absolute(Amount::from_sat(1_000));
+        builder.finish().unwrap()
+    }
+
+    fn tx_output_index(
+        wallet: &bdk_wallet::Wallet,
+        tx: &bdk_wallet::bitcoin::Transaction,
+        keychain: KeychainKind,
+    ) -> u32 {
+        tx.output
+            .iter()
+            .find_map(|txout| match wallet.derivation_of_spk(txout.script_pubkey.clone()) {
+                Some((txout_keychain, index)) if txout_keychain == keychain => Some(index),
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    fn unused_addresses_contain(
+        wallet: &bdk_wallet::Wallet,
+        keychain: KeychainKind,
+        index: u32,
+    ) -> bool {
+        wallet.list_unused_addresses(keychain).any(|address| address.index == index)
+    }
+
+    fn unreserve_tx_change_addresses(
+        wallet: &mut bdk_wallet::Wallet,
+        tx: &bdk_wallet::bitcoin::Transaction,
+    ) {
+        for txout in &tx.output {
+            if let Some((KeychainKind::Internal, index)) =
+                wallet.derivation_of_spk(txout.script_pubkey.clone())
+            {
+                wallet.unmark_used(KeychainKind::Internal, index);
+            }
+        }
+    }
+
+    #[test]
+    fn unreserve_tx_change_addresses_releases_reserved_change_index() {
+        let (mut wallet, _) = get_funded_wallet_wpkh();
+        let psbt = build_tx_with_change(&mut wallet);
+        let change_index = tx_output_index(&wallet, &psbt.unsigned_tx, KeychainKind::Internal);
+
+        assert!(!unused_addresses_contain(&wallet, KeychainKind::Internal, change_index));
+
+        unreserve_tx_change_addresses(&mut wallet, &psbt.unsigned_tx);
+
+        assert!(unused_addresses_contain(&wallet, KeychainKind::Internal, change_index));
+    }
+
+    #[test]
+    fn unreserve_tx_change_addresses_keeps_confirmed_change_index_used() {
+        let (mut wallet, _) = get_funded_wallet_wpkh();
+        let psbt = build_tx_with_change(&mut wallet);
+        let change_index = tx_output_index(&wallet, &psbt.unsigned_tx, KeychainKind::Internal);
+        let block_id = BlockId { height: 1, hash: BlockHash::hash(b"confirmed change") };
+        let confirmation = ConfirmationBlockTime { block_id, confirmation_time: 1 };
+
+        insert_checkpoint(&mut wallet, block_id);
+        insert_tx(&mut wallet, psbt.unsigned_tx.clone());
+        insert_anchor(&mut wallet, psbt.unsigned_tx.compute_txid(), confirmation);
+
+        unreserve_tx_change_addresses(&mut wallet, &psbt.unsigned_tx);
+
+        assert!(!unused_addresses_contain(&wallet, KeychainKind::Internal, change_index));
+    }
+
+    #[test]
+    fn unreserve_tx_change_addresses_keeps_self_send_receive_index_used() {
+        let (mut wallet, _) = get_funded_wallet_wpkh();
+        let receive_address = wallet.reveal_next_address(KeychainKind::External);
+
+        assert!(wallet.mark_used(KeychainKind::External, receive_address.index));
+
+        let mut builder = wallet.build_tx();
+        builder.add_recipient(receive_address.address.script_pubkey(), Amount::from_sat(10_000));
+        builder.fee_absolute(Amount::from_sat(1_000));
+
+        let psbt = builder.finish().unwrap();
+        let receive_index = tx_output_index(&wallet, &psbt.unsigned_tx, KeychainKind::External);
+
+        assert_eq!(receive_address.index, receive_index);
+        assert!(!unused_addresses_contain(&wallet, KeychainKind::External, receive_index));
+
+        unreserve_tx_change_addresses(&mut wallet, &psbt.unsigned_tx);
+
+        assert!(!unused_addresses_contain(&wallet, KeychainKind::External, receive_index));
+    }
 
     #[test]
     fn test_fingerprint() {

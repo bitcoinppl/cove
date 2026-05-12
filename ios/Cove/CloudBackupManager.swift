@@ -32,44 +32,146 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         rustBridge.async { rust.cloudStorageDidChange() }
     }
 
-    var status: CloudBackupStatus {
-        state.status
+    var lifecycle: CloudBackupLifecycle {
+        state.lifecycle
     }
 
-    var promptIntent: CloudBackupPromptIntent {
-        state.promptIntent
+    var configuredState: CloudBackupConfiguredState? {
+        guard case let .configured(configured) = state.lifecycle else { return nil }
+        return configured
+    }
+
+    var enableFlow: CloudBackupEnableFlow? {
+        guard case let .enabling(flow) = state.lifecycle else { return nil }
+        return flow
+    }
+
+    var passkeyState: CloudBackupPasskeyState? {
+        configuredState?.passkey
+    }
+
+    var passkeyRepairState: CloudBackupPasskeyRepairState? {
+        guard case let .needsRepair(state) = passkeyState else { return nil }
+        return state
+    }
+
+    var verificationState: CloudBackupVerificationState? {
+        configuredState?.verification
+    }
+
+    var syncState: CloudBackupSyncState? {
+        configuredState?.sync
+    }
+
+    var lifecycleFailureMessage: String? {
+        guard case let .failed(failure) = state.lifecycle else { return nil }
+        return failure.message
+    }
+
+    var isLifecycleDisabled: Bool {
+        if case .disabled = state.lifecycle { return true }
+        return false
+    }
+
+    var isLifecycleEnabling: Bool {
+        if case .enabling = state.lifecycle { return true }
+        return false
+    }
+
+    var isLifecycleRestoring: Bool {
+        if case .restoring = state.lifecycle { return true }
+        return false
+    }
+
+    var isLifecycleConfigured: Bool {
+        configuredState != nil
+    }
+
+    var isCloudBackupAvailable: Bool {
+        guard case .available = passkeyState else { return false }
+        return true
+    }
+
+    var isPasskeyMissing: Bool {
+        switch passkeyState {
+        case .missing, .needsRepair:
+            true
+        default:
+            false
+        }
+    }
+
+    var isUnsupportedPasskeyProvider: Bool {
+        guard case .unsupportedProvider = passkeyState else { return false }
+        return true
+    }
+
+    var rootPrompt: CloudBackupRootPrompt {
+        switch state.lifecycle {
+        case let .enabling(.awaitingForceNewConfirmation(context, passkeyHint)):
+            .existingBackupFound(context, passkeyHint)
+        case let .enabling(.awaitingPasskeyChoice(intent)):
+            .passkeyChoice(intent)
+        case let .configured(configured):
+            configured.rootPrompt
+        default:
+            .none
+        }
     }
 
     var syncHealth: CloudSyncHealth {
-        state.syncHealth
+        configuredState?.syncHealth ?? .unknown
     }
 
     var progress: (completed: UInt32, total: UInt32)? {
-        state.progress.map { ($0.completed, $0.total) }
+        let progress: CloudBackupProgress? = switch enableFlow {
+        case let .uploadingInitialBackup(progress), let .retryingUploadWithStagedMaterial(progress):
+            progress
+        default:
+            nil
+        }
+
+        return progress.map { ($0.completed, $0.total) }
     }
 
     var restoreProgress: CloudBackupRestoreProgress? {
-        state.restoreProgress
+        guard case let .restoring(flow) = state.lifecycle else { return nil }
+        return flow.progress
     }
 
     var restoreReport: CloudBackupRestoreReport? {
-        state.restoreReport
+        switch state.lifecycle {
+        case let .restoring(flow):
+            flow.report
+        case let .configured(configured):
+            configured.lastRestoreReport
+        case let .failed(failure):
+            failure.restoreReport
+        default:
+            nil
+        }
     }
 
     var syncError: String? {
-        state.syncError
+        switch syncState {
+        case let .blocked(message), let .failed(message):
+            message
+        default:
+            nil
+        }
     }
 
-    var enableState: CloudBackupEnableState {
-        state.enableState
+    var destructiveOperationState: CloudBackupDestructiveOperationState {
+        configuredState?.destructiveOperation ?? .idle
     }
 
-    var pendingUploadVerification: PendingUploadVerificationState {
-        state.pendingUploadVerification
+    var isPerformingDestructiveAction: Bool {
+        destructiveOperationState != .idle
     }
 
     var hasPendingUploadVerification: Bool {
-        pendingUploadVerification != .idle
+        if case .awaitingUploadConfirmation = verificationState { return true }
+        return false
     }
 
     var isBackgroundVerifying: Bool {
@@ -78,21 +180,17 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
 
     var shouldPromptVerification: Bool {
         if isBackgroundVerifying { return false }
-        return state.shouldPromptVerification
+        if case .required = verificationState { return true }
+        return false
     }
 
     var isUnverified: Bool {
         if isBackgroundVerifying { return false }
-        if case .needsVerification = state.verificationMetadata { return true }
-
-        return false
+        return shouldPromptVerification
     }
 
     var isConfigured: Bool {
-        switch state.verificationMetadata {
-        case .notConfigured: false
-        case .configuredNeverVerified, .verified, .needsVerification: true
-        }
+        isLifecycleConfigured
     }
 
     var isCloudBackupEnabled: Bool {
@@ -100,46 +198,48 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     }
 
     var lastVerifiedAt: Date? {
-        guard case let .verified(lastVerifiedAt) = state.verificationMetadata else { return nil }
+        guard case let .verified(report: _, lastVerifiedAt: lastVerifiedAt) = verificationState else { return nil }
+        guard let lastVerifiedAt else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(lastVerifiedAt))
     }
 
     var isVerificationStale: Bool {
-        guard case .enabled = status, !isUnverified else { return false }
+        if isBackgroundVerifying { return false }
+        guard isCloudBackupAvailable, !isUnverified else { return false }
         guard let lastVerifiedAt else { return true }
         return Date.now.timeIntervalSince(lastVerifiedAt) >= Self.staleVerificationThreshold
     }
 
     var detail: CloudBackupDetail? {
-        state.detail
-    }
-
-    var verification: VerificationState {
-        state.verification
+        guard case let .loaded(state: loaded) = configuredState?.detail else { return nil }
+        return loaded.detail
     }
 
     var verificationPresentation: CloudBackupVerificationPresentation {
-        state.verificationPresentation
-    }
-
-    var sync: SyncState {
-        state.sync
-    }
-
-    var recovery: RecoveryState {
-        state.recovery
+        configuredState?.verificationPresentation ?? .hidden(source: nil)
     }
 
     var cloudOnly: CloudOnlyState {
-        state.cloudOnly
+        switch configuredState?.detail {
+        case nil, .notLoaded:
+            .notFetched
+        case .loading:
+            .loading
+        case let .loaded(state: loaded):
+            loaded.cloudOnly
+        case let .failed(error):
+            .failed(error: error)
+        }
     }
 
     var cloudOnlyOperation: CloudOnlyOperation {
-        state.cloudOnlyOperation
+        guard case let .loaded(state: loaded) = configuredState?.detail else { return .idle }
+        return loaded.cloudOnlyOperation
     }
 
     var otherBackupsOperation: OtherBackupsOperation {
-        state.otherBackupsOperation
+        guard case let .loaded(state: loaded) = configuredState?.detail else { return .idle }
+        return loaded.otherBackupsOperation
     }
 
     func dispatch(action: Action) {
@@ -156,44 +256,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
 
     private func apply(_ message: Message) {
         switch message {
-        case let .status(status):
-            state.status = status
-        case let .syncHealth(syncHealth):
-            state.syncHealth = syncHealth
-        case let .promptIntent(promptIntent):
-            state.promptIntent = promptIntent
-        case let .progress(progress):
-            state.progress = progress
-        case let .restoreProgress(progress):
-            state.restoreProgress = progress
-        case let .restoreReport(report):
-            state.restoreReport = report
-        case let .syncError(syncError):
-            state.syncError = syncError
-        case let .enableState(enableState):
-            state.enableState = enableState
-        case let .verificationPrompt(pending):
-            state.shouldPromptVerification = pending
-        case let .verificationMetadata(verificationMetadata):
-            state.verificationMetadata = verificationMetadata
-        case let .verificationPresentation(presentation):
-            state.verificationPresentation = presentation
-        case let .pendingUploadVerification(pending):
-            state.pendingUploadVerification = pending
-        case let .detail(detail):
-            state.detail = detail
-        case let .verification(verification):
-            state.verification = verification
-        case let .sync(sync):
-            state.sync = sync
-        case let .recovery(recovery):
-            state.recovery = recovery
-        case let .cloudOnly(cloudOnly):
-            state.cloudOnly = cloudOnly
-        case let .cloudOnlyOperation(cloudOnlyOperation):
-            state.cloudOnlyOperation = cloudOnlyOperation
-        case let .otherBackupsOperation(otherBackupsOperation):
-            state.otherBackupsOperation = otherBackupsOperation
+        case let .lifecycle(lifecycle):
+            state.lifecycle = lifecycle
         }
     }
 

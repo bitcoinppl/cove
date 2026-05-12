@@ -22,10 +22,11 @@ use self::uploads::CloudBackupUploadWorker;
 use super::keychain::CloudBackupKeychain;
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
-    CloudBackupDetailResult, CloudBackupEnableContext, CloudBackupEnableState, CloudBackupStatus,
-    DeepVerificationResult, OtherBackupsOperation, PendingEnableSession,
-    PendingVerificationCompletion, RecoveryAction, RustCloudBackupManager, VerificationState,
-    WalletId,
+    CloudBackupBackgroundOperation, CloudBackupDetailOutcome, CloudBackupDetailResult,
+    CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupOtherBackupsOutcome,
+    CloudBackupStatus, CloudBackupVerificationOutcome, DeepVerificationResult,
+    OtherBackupsOperation, PendingEnableSession, PendingVerificationCompletion, RecoveryAction,
+    RustCloudBackupManager, VerificationState, WalletId,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -79,7 +80,7 @@ fn should_retry_connectivity_failure(status: ConnectivityStatus) -> bool {
 fn apply_refresh_detail_result(manager: &RustCloudBackupManager, result: &CloudBackupDetailResult) {
     match result {
         CloudBackupDetailResult::Success(detail) => {
-            manager.set_detail(Some(detail.clone()));
+            manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail.clone()));
         }
         CloudBackupDetailResult::AccessError(error) => {
             error!("Failed to refresh detail: {error}");
@@ -166,7 +167,7 @@ impl CloudBackupSupervisor {
         match operation {
             CloudBackupOperation::Enable(context) => {
                 if !manager.begin_background_operation(
-                    "enable_cloud_backup",
+                    CloudBackupBackgroundOperation::Enable,
                     Some(CloudBackupStatus::Enabling),
                 ) {
                     return;
@@ -180,7 +181,7 @@ impl CloudBackupSupervisor {
             }
             CloudBackupOperation::EnableForceNew(context) => {
                 if !manager.begin_background_operation(
-                    "enable_cloud_backup_force_new",
+                    CloudBackupBackgroundOperation::EnableForceNew,
                     Some(CloudBackupStatus::Enabling),
                 ) {
                     return;
@@ -196,7 +197,7 @@ impl CloudBackupSupervisor {
             }
             CloudBackupOperation::EnableNoDiscovery(context) => {
                 if !manager.begin_background_operation(
-                    "enable_cloud_backup_no_discovery",
+                    CloudBackupBackgroundOperation::EnableNoDiscovery,
                     Some(CloudBackupStatus::Enabling),
                 ) {
                     return;
@@ -237,8 +238,10 @@ impl CloudBackupSupervisor {
                 });
             }
             CloudBackupOperation::RecoverOtherBackups => {
-                if !Self::begin_other_backups_operation(&manager, OtherBackupsOperation::Recovering)
-                {
+                if !Self::begin_other_backups_operation(
+                    &manager,
+                    CloudBackupOtherBackupsOutcome::Recovering,
+                ) {
                     return;
                 }
 
@@ -247,7 +250,10 @@ impl CloudBackupSupervisor {
                 );
             }
             CloudBackupOperation::DeleteOtherBackups => {
-                if !Self::begin_other_backups_operation(&manager, OtherBackupsOperation::Deleting) {
+                if !Self::begin_other_backups_operation(
+                    &manager,
+                    CloudBackupOtherBackupsOutcome::Deleting,
+                ) {
                     return;
                 }
 
@@ -258,10 +264,10 @@ impl CloudBackupSupervisor {
 
     fn begin_other_backups_operation(
         manager: &RustCloudBackupManager,
-        operation: OtherBackupsOperation,
+        outcome: CloudBackupOtherBackupsOutcome,
     ) -> bool {
         if !matches!(
-            &manager.state.read().other_backups_operation,
+            manager.state.read().other_backups_operation(),
             OtherBackupsOperation::Idle
                 | OtherBackupsOperation::Recovered { .. }
                 | OtherBackupsOperation::Deleted
@@ -270,7 +276,7 @@ impl CloudBackupSupervisor {
             return false;
         }
 
-        manager.set_other_backups_operation(operation);
+        manager.apply_other_backups_outcome(outcome);
         true
     }
 
@@ -387,10 +393,10 @@ impl CloudBackupSupervisor {
 
         self.pending_verification_completion = None;
         if matches!(
-            manager.state.read().verification_presentation,
+            manager.state.read().verification_presentation(),
             super::CloudBackupVerificationPresentation::ManualVerifying { .. }
         ) {
-            manager.set_verification(VerificationState::Verifying);
+            manager.apply_verification_outcome(CloudBackupVerificationOutcome::Started);
         } else {
             manager.apply_verification_effect(CloudBackupVerificationCoordinator::begin_manual(
                 super::CloudBackupVerificationSource::Settings,
@@ -435,13 +441,13 @@ impl CloudBackupSupervisor {
     }
 
     fn detail_entry_plan(&self, manager: &RustCloudBackupManager) -> DetailEntryPlan {
-        let state = manager.state.read().clone();
-        if !matches!(state.status, CloudBackupStatus::Enabled) {
+        let state = manager.state.read();
+        if !matches!(state.status(), CloudBackupStatus::Enabled) {
             return DetailEntryPlan::RefreshOnly;
         }
 
         if matches!(
-            state.verification,
+            state.verification(),
             VerificationState::Verifying
                 | VerificationState::Verified(_)
                 | VerificationState::PasskeyConfirmed
@@ -516,7 +522,7 @@ impl CloudBackupSupervisor {
             }
         };
 
-        manager.set_enable_state(CloudBackupEnableState::ConfirmingSavedPasskey);
+        manager.apply_enable_outcome(CloudBackupEnableOutcome::ConfirmingSavedPasskey);
         cove_tokio::task::spawn(async move {
             manager.handle_confirm_saved_passkey_session(pending).await;
         });
@@ -567,8 +573,8 @@ impl CloudBackupSupervisor {
     pub async fn discard_pending_enable_cloud_backup(&mut self) -> ActorResult<()> {
         let Some(pending) = self.pending_enable_session.take() else {
             if let Some(manager) = self.manager() {
-                manager.set_enable_state(CloudBackupEnableState::Idle);
-                manager.set_status(CloudBackupStatus::Disabled);
+                manager.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+                manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
             }
             return Produces::ok(());
         };
@@ -581,8 +587,8 @@ impl CloudBackupSupervisor {
         }
 
         if let Some(manager) = self.manager() {
-            manager.set_enable_state(CloudBackupEnableState::Idle);
-            manager.set_status(CloudBackupStatus::Disabled);
+            manager.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+            manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
         }
 
         if should_delete_remote {

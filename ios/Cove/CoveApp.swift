@@ -256,7 +256,7 @@ extension CoveApp {
 
     private func shouldRunCloudRestoreCheck(appManager: AppManager) -> Bool {
         guard appManager.isTermsAccepted else { return false }
-        guard case .disabled = CloudBackupManager.shared.status else { return false }
+        guard CloudBackupManager.shared.isLifecycleDisabled else { return false }
         do {
             guard try !appManager.database.wallets().hasAnyWallets() else { return false }
         } catch {

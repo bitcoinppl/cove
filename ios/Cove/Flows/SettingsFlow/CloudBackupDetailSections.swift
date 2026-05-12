@@ -48,12 +48,12 @@ struct MissingPasskeyContent: View {
     let manager: CloudBackupManager
 
     private var isRepairing: Bool {
-        if case .recovering(.repairPasskey) = manager.recovery { return true }
+        if case .running = manager.passkeyRepairState { return true }
         return false
     }
 
     private var repairError: String? {
-        if case let .failed(action: .repairPasskey, error: error) = manager.recovery {
+        if case let .failed(error) = manager.passkeyRepairState {
             return error
         }
         return nil
@@ -64,17 +64,17 @@ struct MissingPasskeyContent: View {
             VStack(spacing: 12) {
                 Image(systemName: "exclamationmark.icloud.fill")
                     .font(.system(size: 36))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.statusError)
 
                 Text("Cloud Backup Passkey Missing")
                     .font(.headline)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.statusError)
 
                 Text(
                     "Your cloud backup is not accessible until you use an existing passkey or add a new one. Without it, your backups can't be restored."
                 )
                 .font(.subheadline)
-                .foregroundStyle(.red.opacity(0.85))
+                .foregroundStyle(Color.statusError.opacity(0.85))
                 .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
@@ -105,7 +105,7 @@ struct MissingPasskeyContent: View {
         if let repairError {
             Section {
                 Label(repairError, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.statusError)
                     .font(.caption)
             }
         }
@@ -146,19 +146,19 @@ struct HeaderSection: View {
                 .foregroundColor(.secondary)
         case .allUploaded, .noFiles:
             Image(systemName: "checkmark.icloud.fill")
-                .foregroundColor(.green)
+                .foregroundColor(.statusSuccess)
         case .uploading:
             Image(systemName: "arrow.clockwise.icloud.fill")
-                .foregroundColor(.blue)
+                .foregroundColor(.statusInfo)
         case .failed:
             Image(systemName: "exclamationmark.icloud.fill")
-                .foregroundColor(.red)
+                .foregroundColor(.statusError)
         case .authorizationRequired:
             Image(systemName: "exclamationmark.icloud.fill")
-                .foregroundColor(.orange)
+                .foregroundColor(.statusWarning)
         case .unavailable:
             Image(systemName: "checkmark.icloud.fill")
-                .foregroundColor(.green)
+                .foregroundColor(.statusSuccess)
         }
     }
 
@@ -176,7 +176,7 @@ struct HeaderSection: View {
         case .allUploaded:
             Label("All files synced to iCloud", systemImage: "checkmark.circle.fill")
                 .font(.caption)
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.statusSuccess)
         case .uploading:
             HStack(spacing: 4) {
                 ProgressView()
@@ -188,11 +188,11 @@ struct HeaderSection: View {
         case let .failed(message):
             Label("Sync error: \(message)", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.statusError)
         case .authorizationRequired:
             Label("iCloud Drive access needs to be reconnected", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
-                .foregroundStyle(.orange)
+                .foregroundStyle(Color.statusWarning)
         case .noFiles, .unavailable:
             EmptyView()
         }
@@ -291,7 +291,7 @@ struct OtherBackupsSection: View {
             if let failure {
                 Text(failure)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.statusError)
             }
         }
         .confirmationDialog(
@@ -396,7 +396,7 @@ struct OtherBackupsLoadFailedSection: View {
 
             Text(error)
                 .font(.caption)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.statusError)
         }
     }
 }
@@ -460,17 +460,17 @@ private struct CloudOnlySectionContent: View {
             if case let .failed(error) = manager.cloudOnlyOperation {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.statusError)
             } else if case let .warning(message: message, error: _) = manager.cloudOnlyOperation {
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.statusWarning)
             }
 
         case let .failed(error):
             Text(error)
                 .font(.caption)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.statusError)
         }
     }
 }
@@ -672,11 +672,11 @@ private struct StatusBadge: View {
 
     private var color: Color {
         switch status {
-        case .dirty: .orange
-        case .uploading, .uploadedPendingConfirmation: .blue
-        case .confirmed: .green
-        case .failed: .red
-        case .deletedFromDevice, .unsupportedVersion: .orange
+        case .dirty: .statusWarning
+        case .uploading, .uploadedPendingConfirmation: .statusInfo
+        case .confirmed: .statusSuccess
+        case .failed: .statusError
+        case .deletedFromDevice, .unsupportedVersion: .statusWarning
         case .remoteStateUnknown: .secondary
         }
     }

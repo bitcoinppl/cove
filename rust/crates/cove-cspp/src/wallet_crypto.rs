@@ -3,7 +3,9 @@ use cove_util::ResultExt as _;
 use rand::RngExt as _;
 use zeroize::Zeroizing;
 
-use crate::backup_data::{EncryptedWalletBackup, WalletEntry};
+use crate::backup_data::{
+    EncryptedWalletBackup, WalletEntry, remote_payload::RemotePayloadMetadata,
+};
 use crate::error::CsppError;
 use crate::key_derivation::derive_wallet_key;
 
@@ -18,6 +20,18 @@ pub fn encrypt_wallet_entry(
     entry: &WalletEntry,
     critical_data_key: &[u8; 32],
 ) -> Result<EncryptedWalletBackup, CsppError> {
+    encrypt_wallet_entry_with_remote_metadata(
+        entry,
+        critical_data_key,
+        RemotePayloadMetadata::default(),
+    )
+}
+
+pub fn encrypt_wallet_entry_with_remote_metadata(
+    entry: &WalletEntry,
+    critical_data_key: &[u8; 32],
+    remote_metadata: RemotePayloadMetadata,
+) -> Result<EncryptedWalletBackup, CsppError> {
     let mut wallet_salt = [0u8; 32];
     rand::rng().fill(&mut wallet_salt);
     let json = Zeroizing::new(serde_json::to_vec(entry).map_err_str(CsppError::Serialization)?);
@@ -30,7 +44,13 @@ pub fn encrypt_wallet_entry(
 
     let ciphertext = cipher.encrypt(nonce, json.as_slice()).map_err_str(CsppError::Encrypt)?;
 
-    Ok(EncryptedWalletBackup { version: 1, wallet_salt, nonce: nonce_bytes, ciphertext })
+    Ok(EncryptedWalletBackup {
+        version: 1,
+        remote_metadata,
+        wallet_salt,
+        nonce: nonce_bytes,
+        ciphertext,
+    })
 }
 
 /// Decrypt an encrypted wallet backup
@@ -47,12 +67,14 @@ pub fn decrypt_wallet_backup(
         cipher.decrypt(nonce, backup.ciphertext.as_slice()).map_err(|_| CsppError::WrongKey)?,
     );
 
-    serde_json::from_slice(&plaintext).map_err_str(CsppError::Deserialization)
+    WalletEntry::from_json_slice(&plaintext).map_err_str(CsppError::Deserialization)
 }
 
 #[cfg(test)]
 mod tests {
     use crate::backup_data::{DescriptorPair, WalletMode, WalletSecret};
+    use crate::key_derivation::derive_wallet_key;
+    use sha2::{Digest, Sha256};
 
     use super::*;
 
@@ -139,6 +161,40 @@ mod tests {
         let result = decrypt_wallet_backup(&encrypted, &wrong_key);
 
         assert!(matches!(result, Err(CsppError::WrongKey)));
+    }
+
+    #[test]
+    fn decrypt_wallet_backup_normalizes_legacy_wallet_entry() {
+        let critical_key = [42u8; 32];
+        let wallet_salt = [7u8; 32];
+        let nonce_bytes = [9u8; 12];
+        let legacy_json = serde_json::json!({
+            "wallet_id": "legacy-wallet",
+            "secret": "WatchOnly",
+            "metadata": {"name": "Legacy Wallet"},
+            "descriptors": null,
+            "xpub": null,
+            "wallet_mode": "Main"
+        });
+        let plaintext = serde_json::to_vec(&legacy_json).unwrap();
+        let wallet_key = derive_wallet_key(&critical_key, &wallet_salt);
+        let cipher = ChaCha20Poly1305::new((&wallet_key).into());
+        let nonce = chacha20poly1305::Nonce::from_slice(&nonce_bytes);
+        let ciphertext = cipher.encrypt(nonce, plaintext.as_slice()).unwrap();
+        let encrypted = EncryptedWalletBackup {
+            version: 1,
+            remote_metadata: RemotePayloadMetadata::default(),
+            wallet_salt,
+            nonce: nonce_bytes,
+            ciphertext,
+        };
+
+        let decoded = decrypt_wallet_backup(&encrypted, &critical_key).unwrap();
+
+        assert_eq!(decoded.wallet_id, "legacy-wallet");
+        assert_eq!(decoded.labels_count, 0);
+        assert_eq!(decoded.updated_at, 0);
+        assert_eq!(decoded.content_revision_hash, hex::encode(Sha256::digest(&plaintext)));
     }
 
     #[test]

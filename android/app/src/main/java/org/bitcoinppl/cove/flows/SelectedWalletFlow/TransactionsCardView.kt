@@ -58,7 +58,6 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
-import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.FiatOrBtc
@@ -402,12 +401,12 @@ internal fun ConfirmedTransactionWidget(
     sensitiveVisible: Boolean,
 ) {
     val scope = rememberCoroutineScope()
-    val isDark = !MaterialTheme.colorScheme.isLight
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
 
-    val iconBackground = if (isDark) Color.Gray.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.75f)
+    val iconBackground = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.75f)
+    val iconForeground = MaterialTheme.colorScheme.inverseOnSurface
     val icon = if (type == TransactionType.SENT) Icons.Filled.NorthEast else Icons.Filled.SouthWest
 
     Row(
@@ -444,7 +443,7 @@ internal fun ConfirmedTransactionWidget(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = Color.White,
+                tint = iconForeground,
                 modifier = Modifier.size(24.dp),
             )
         }
@@ -508,12 +507,12 @@ internal fun UnconfirmedTransactionWidget(
     sensitiveVisible: Boolean,
 ) {
     val scope = rememberCoroutineScope()
-    val isDark = !MaterialTheme.colorScheme.isLight
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
 
-    val iconBackground = if (isDark) Color.Gray.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.75f)
+    val iconBackground = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.75f)
+    val iconForeground = MaterialTheme.colorScheme.inverseOnSurface
 
     Row(
         modifier =
@@ -550,7 +549,7 @@ internal fun UnconfirmedTransactionWidget(
                 Icon(
                     imageVector = Icons.Filled.Schedule,
                     contentDescription = label,
-                    tint = Color.White,
+                    tint = iconForeground,
                     modifier = Modifier.size(24.dp),
                 )
             }
@@ -605,7 +604,6 @@ internal fun UnsignedTransactionWidget(
     fiatOrBtc: FiatOrBtc,
     sensitiveVisible: Boolean,
 ) {
-    val isDark = !MaterialTheme.colorScheme.isLight
     var showDeleteMenu by remember { mutableStateOf(false) }
     var fiatAmount by remember { mutableStateOf<Double?>(null) }
 
@@ -624,13 +622,8 @@ internal fun UnsignedTransactionWidget(
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
 
-    // icon background: same values as iOS (0.35 dark, 0.75 light)
-    val iconBackground =
-        if (isDark) {
-            Color.Gray.copy(alpha = 0.35f)
-        } else {
-            Color.Black.copy(alpha = 0.75f)
-        }
+    val iconBackground = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.75f)
+    val iconForeground = MaterialTheme.colorScheme.inverseOnSurface
 
     // format the spending amount (unsigned transactions are always outgoing)
     val formattedAmount =
@@ -693,14 +686,14 @@ internal fun UnsignedTransactionWidget(
                     Icon(
                         imageVector = Icons.Filled.LockOpen,
                         contentDescription = "Unsigned Transaction",
-                        tint = Color.White,
+                        tint = iconForeground,
                         modifier = Modifier.size(24.dp),
                     )
                     // small warning indicator
                     Icon(
                         imageVector = Icons.Filled.Warning,
                         contentDescription = null,
-                        tint = Color(0xFFFF9800),
+                        tint = CoveColor.WarningOrange,
                         modifier =
                             Modifier
                                 .size(14.dp)
@@ -724,7 +717,7 @@ internal fun UnsignedTransactionWidget(
                 )
                 Text(
                     text = stringResource(R.string.pending_signature),
-                    color = Color(0xFFFF9800).copy(alpha = 0.8f),
+                    color = CoveColor.WarningOrange.copy(alpha = 0.8f),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Normal,
                 )

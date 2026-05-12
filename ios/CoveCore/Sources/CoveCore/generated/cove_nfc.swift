@@ -39,6 +39,52 @@ fileprivate extension ForeignBytes {
     init(bufferPointer: UnsafeBufferPointer<UInt8>) {
         self.init(len: Int32(bufferPointer.count), data: bufferPointer.baseAddress)
     }
+
+    init(rawBufferPointer: UnsafeRawBufferPointer) {
+        self.init(
+            len: Int32(rawBufferPointer.count),
+            data: rawBufferPointer.baseAddress?.assumingMemoryBound(to: UInt8.self)
+        )
+    }
+}
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Conforms to `FfiConverter` so the compiler enforces the full converter
+// method set. Only the scope-bound `lower(_:_body:)` overload is sound —
+// zero-copy byte buffers only flow foreign -> Rust, and only in argument
+// position. The four protocol-witness methods (`lift`, `lower`, `read`,
+// `write`) `fatalError` at runtime if anyone reaches them.
+//
+// The scope-bound `lower` takes a closure because the `ForeignBytes`
+// pointer is only guaranteed valid for the duration of
+// `Data.withUnsafeBytes`. Callers must run the full FFI call inside
+// the closure body.
+fileprivate enum FfiConverterByRefBytes: FfiConverter {
+    typealias SwiftType = Data
+    typealias FfiType = ForeignBytes
+
+    static func lower<R>(_ value: Data, _ body: (ForeignBytes) throws -> R) rethrows -> R {
+        return try value.withUnsafeBytes { rawBuf in
+            try body(ForeignBytes(rawBufferPointer: rawBuf))
+        }
+    }
+
+    static func lower(_ value: Data) -> ForeignBytes {
+        fatalError("ByRef bytes cannot use the plain lower: returning ForeignBytes escapes the Data.withUnsafeBytes scope. Use the scope-bound lower(_:_body:) overload instead.")
+    }
+
+    static func lift(_ value: ForeignBytes) throws -> Data {
+        fatalError("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        fatalError("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
+
+    static func write(_ value: Data, into buf: inout [UInt8]) {
+        fatalError("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
 }
 
 // For every type used in the interface, we provide helper methods for conveniently
@@ -503,7 +549,11 @@ fileprivate struct FfiConverterString: FfiConverter {
             return String()
         }
         let bytes = UnsafeBufferPointer<UInt8>(start: value.data!, count: Int(value.len))
-        return String(bytes: bytes, encoding: String.Encoding.utf8)!
+        // Use Swift's native UTF-8 decoder; `String(bytes:encoding:.utf8)` goes
+        // through Foundation's NSString and silently strips a leading U+FEFF BOM.
+        // Invalid UTF-8 substitutes U+FFFD instead of trapping (unreachable
+        // given Rust's `String` invariant).
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     public static func lower(_ value: String) -> RustBuffer {
@@ -519,7 +569,8 @@ fileprivate struct FfiConverterString: FfiConverter {
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> String {
         let len: Int32 = try readInt(&buf)
-        return String(bytes: try readBytes(&buf, count: Int(len)), encoding: String.Encoding.utf8)!
+        // See `lift` above for why we avoid Foundation's NSString-backed decoder here.
+        return String(decoding: try readBytes(&buf, count: Int(len)), as: UTF8.self)
     }
 
     public static func write(_ value: String, into buf: inout [UInt8]) {
@@ -619,7 +670,8 @@ open class FfiNfcReader: FfiNfcReaderProtocol, @unchecked Sendable {
 public convenience init() {
     let handle =
         try! rustCall() {
-    uniffi_cove_nfc_fn_constructor_ffinfcreader_new($0
+        uniffiCallStatus in
+    uniffi_cove_nfc_fn_constructor_ffinfcreader_new(uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -639,9 +691,10 @@ public convenience init() {
     
 open func dataFromRecords(records: [NdefRecord]) -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(
             self.uniffiCloneHandle(),
-        FfiConverterSequenceTypeNdefRecord.lower(records),$0
+        FfiConverterSequenceTypeNdefRecord.lower(records),uniffiCallStatus
     )
 })
 }
@@ -653,25 +706,28 @@ open func dataFromRecords(records: [NdefRecord]) -> Data  {
      * Returns an error if the data does not match the expected state.
      */
 open func isResumeable(data: Data)throws   {try rustCallWithError(FfiConverterTypeResumeError_lift) {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(
             self.uniffiCloneHandle(),
-        FfiConverterData.lower(data),$0
+        FfiConverterData.lower(data),uniffiCallStatus
     )
 }
 }
     
 open func isStarted() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_ffinfcreader_is_started(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func messageInfo() -> MessageInfo?  {
     return try!  FfiConverterOptionTypeMessageInfo.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_ffinfcreader_message_info(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -684,18 +740,20 @@ open func messageInfo() -> MessageInfo?  {
      */
 open func parse(data: Data)throws  -> ParseResult  {
     return try  FfiConverterTypeParseResult_lift(try rustCallWithError(FfiConverterTypeNfcReaderError_lift) {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_ffinfcreader_parse(
             self.uniffiCloneHandle(),
-        FfiConverterData.lower(data),$0
+        FfiConverterData.lower(data),uniffiCallStatus
     )
 })
 }
     
 open func stringFromRecord(record: NdefRecord) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(
             self.uniffiCloneHandle(),
-        FfiConverterTypeNdefRecord_lower(record),$0
+        FfiConverterTypeNdefRecord_lower(record),uniffiCallStatus
     )
 })
 }
@@ -799,8 +857,9 @@ open class NdefRecordReader: NdefRecordReaderProtocol, @unchecked Sendable {
 public convenience init(record: NdefRecord) {
     let handle =
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
-        FfiConverterTypeNdefRecord_lower(record),$0
+        FfiConverterTypeNdefRecord_lower(record),uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -820,16 +879,18 @@ public convenience init(record: NdefRecord) {
     
 open func id() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_ndefrecordreader_id(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func type() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_ndefrecordreader_type_(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -935,7 +996,8 @@ open class NfcConst: NfcConstProtocol, @unchecked Sendable {
 public convenience init() {
     let handle =
         try! rustCall() {
-    uniffi_cove_nfc_fn_constructor_nfcconst_new($0
+        uniffiCallStatus in
+    uniffi_cove_nfc_fn_constructor_nfcconst_new(uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -955,24 +1017,27 @@ public convenience init() {
     
 open func bytesPerBlock() -> UInt16  {
     return try!  FfiConverterUInt16.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_nfcconst_bytes_per_block(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func numberOfBlocksPerChunk() -> UInt16  {
     return try!  FfiConverterUInt16.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_nfcconst_number_of_blocks_per_chunk(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func totalBytesPerChunk() -> UInt16  {
     return try!  FfiConverterUInt16.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_nfcconst_total_bytes_per_chunk(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1099,9 +1164,10 @@ open class NfcMessage: NfcMessageProtocol, @unchecked Sendable {
      */
 public static func tryNew(string: String? = nil, data: Data? = nil)throws  -> NfcMessage  {
     return try  FfiConverterTypeNfcMessage_lift(try rustCallWithError(FfiConverterTypeNfcMessageError_lift) {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(
         FfiConverterOptionString.lower(string),
-        FfiConverterOptionData.lower(data),$0
+        FfiConverterOptionData.lower(data),uniffiCallStatus
     )
 })
 }
@@ -1110,16 +1176,18 @@ public static func tryNew(string: String? = nil, data: Data? = nil)throws  -> Nf
     
 open func data() -> Data?  {
     return try!  FfiConverterOptionData.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_nfcmessage_data(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func string() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_method_nfcmessage_string(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -2359,9 +2427,10 @@ fileprivate struct FfiConverterSequenceTypeNdefRecord: FfiConverterRustBuffer {
 }
 public func nfcMessageIsEqual(lhs: NfcMessage, rhs: NfcMessage) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_nfc_fn_func_nfc_message_is_equal(
         FfiConverterTypeNfcMessage_lower(lhs),
-        FfiConverterTypeNfcMessage_lower(rhs),$0
+        FfiConverterTypeNfcMessage_lower(rhs),uniffiCallStatus
     )
 })
 }
@@ -2381,13 +2450,13 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_nfc_checksum_func_nfc_message_is_equal() != 46704) {
+    if (uniffi_cove_nfc_checksum_func_nfc_message_is_equal() != 46708) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 47483) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 52878) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 29577) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 55049) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_started() != 48293) {
@@ -2396,10 +2465,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_nfc_checksum_method_ffinfcreader_message_info() != 39232) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 45759) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 11514) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 37789) {
+    if (uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 28893) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_nfc_checksum_method_nfcconst_bytes_per_block() != 58669) {
@@ -2429,10 +2498,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_nfc_checksum_constructor_nfcconst_new() != 10481) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 58473) {
+    if (uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 19684) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 55572) {
+    if (uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 5028) {
         return InitializationResult.apiChecksumMismatch
     }
 

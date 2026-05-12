@@ -324,14 +324,14 @@ struct CloudBackupEnableConfirmationView: View {
 }
 
 struct CloudBackupEnableBusyOverlay: View {
-    let enableState: CloudBackupEnableState
+    let enableFlow: CloudBackupEnableFlow?
     var titleOverride: String?
     var subtitleOverride: String?
 
     private var title: String {
         if let titleOverride { return titleOverride }
 
-        return switch enableState {
+        return switch enableFlow {
         case .creatingPasskey:
             "Creating your passkey..."
         case .waitingForPasskeyAvailability:
@@ -340,9 +340,9 @@ struct CloudBackupEnableBusyOverlay: View {
             "Checking that your passkey is available..."
         case .confirmingSavedPasskey:
             "Confirming your passkey..."
-        case .uploadingBackup:
+        case .uploadingInitialBackup, .retryingUploadWithStagedMaterial:
             "Creating your encrypted backup..."
-        case .idle:
+        case nil, .discoveringExistingBackup, .awaitingForceNewConfirmation, .awaitingPasskeyChoice:
             "Creating your encrypted backup..."
         }
     }
@@ -350,7 +350,7 @@ struct CloudBackupEnableBusyOverlay: View {
     private var subtitle: String {
         if let subtitleOverride { return subtitleOverride }
 
-        return switch enableState {
+        return switch enableFlow {
         case .waitingForPasskeyAvailability, .awaitingSavedPasskeyConfirmation:
             "This can take a few seconds after saving it in your passkey/password manager app"
         default:

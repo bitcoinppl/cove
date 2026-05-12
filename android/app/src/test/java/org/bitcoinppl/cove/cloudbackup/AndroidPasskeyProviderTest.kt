@@ -16,6 +16,7 @@ import androidx.credentials.exceptions.publickeycredential.GetPublicKeyCredentia
 import org.bitcoinppl.cove_core.device.PasskeyException
 import org.bitcoinppl.cove_core.device.PasskeyFailureReason
 import org.bitcoinppl.cove_core.device.PasskeyOperation
+import org.bitcoinppl.cove_core.device.PasskeyRegistrationUser
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -29,8 +30,13 @@ class AndroidPasskeyProviderTest {
             JSONObject(
                 buildPasskeyCreateRequestJson(
                     rpId = "covebitcoinwallet.com",
-                    userId = byteArrayOf(1, 2, 3),
                     challenge = byteArrayOf(4, 5, 6),
+                    user =
+                        PasskeyRegistrationUser(
+                            id = byteArrayOf(1, 2, 3),
+                            name = "test@example.com",
+                            displayName = "Test User",
+                        ),
                 ),
             )
 

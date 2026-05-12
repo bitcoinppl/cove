@@ -1,30 +1,32 @@
 package org.bitcoinppl.cove.cloudbackup
 
-import java.security.MessageDigest
-import org.bitcoinppl.cove_core.csppMasterKeyRecordId
+import org.bitcoinppl.cove_core.csppMasterKeyDirectory
 import org.bitcoinppl.cove_core.csppNamespacesSubdirectory
 import org.bitcoinppl.cove_core.csppWalletFilePrefix
+import org.bitcoinppl.cove_core.csppWalletsDirectory
 
 internal object DrivePaths {
-    private const val MASTER_KEY_FILE_PREFIX = "masterkey-"
-
     val namespacesRootFolderName: String = csppNamespacesSubdirectory()
+    val masterKeyFolderName: String = csppMasterKeyDirectory()
+    val walletsFolderName: String = csppWalletsDirectory()
 
-    val masterKeyFileName: String =
-        buildString {
-            append(MASTER_KEY_FILE_PREFIX)
-            append(sha256Hex(csppMasterKeyRecordId()))
-            append(".json")
-        }
-
-    fun walletFileName(recordId: String): String = "${csppWalletFilePrefix()}$recordId.json"
+    fun walletLocationForFileName(fileName: String): String = "$walletsFolderName/$fileName"
 
     fun isWalletFile(name: String): Boolean =
-        name.startsWith(csppWalletFilePrefix()) && name.endsWith(".json")
-
-    private fun sha256Hex(input: String): String =
-        MessageDigest
-            .getInstance("SHA-256")
-            .digest(input.toByteArray())
-            .joinToString(separator = "") { byte -> "%02x".format(byte) }
+        isWalletFileLocation(
+            location = name,
+            walletFilePrefix = csppWalletFilePrefix(),
+            walletsFolderName = walletsFolderName,
+        )
 }
+
+internal fun isWalletFileLocation(
+    location: String,
+    walletFilePrefix: String,
+    walletsFolderName: String,
+): Boolean =
+    location
+        .removePrefix("$walletsFolderName/")
+        .takeUnless { it.contains("/") }
+        ?.let { fileName -> fileName.startsWith(walletFilePrefix) && fileName.endsWith(".json") }
+        ?: false

@@ -1,3 +1,4 @@
+use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::CloudStorageClient;
@@ -8,12 +9,13 @@ use rand::RngExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
+use crate::database::cloud_backup::CloudBackupRecordKey;
 use crate::manager::cloud_backup_manager::wallets::{
     PasskeyMaterialAcquirer, WalletBackupLookup, WalletBackupReader,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID, RustCloudBackupManager,
-    cspp_master_key_record_id, master_key_wrapper_revision_hash,
+    master_key_wrapper_revision_hash,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,11 +152,13 @@ impl WrapperRepairOperation {
 
         let credentials = self.credentials(strategy).await?;
 
-        let encrypted_backup = master_key_crypto::encrypt_master_key_with_provider_hint(
+        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let encrypted_backup = master_key_crypto::encrypt_master_key_with_remote_metadata(
             local_master_key,
             &credentials.prf_key,
             &credentials.prf_salt,
             credentials.provider_hint.clone(),
+            RemotePayloadMetadata::master_key(&self.namespace, uploaded_at),
         )
         .map_err_str(CloudBackupError::Crypto)?;
 
@@ -181,10 +185,9 @@ impl WrapperRepairOperation {
 
         self.manager.mark_blob_uploaded_pending_confirmation(
             self.namespace.as_str(),
-            None,
-            cspp_master_key_record_id(),
+            CloudBackupRecordKey::MasterKeyWrapper,
             master_key_wrapper_revision,
-            jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+            uploaded_at,
         )?;
 
         Ok(())

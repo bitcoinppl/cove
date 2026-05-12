@@ -1,13 +1,14 @@
 package org.bitcoinppl.cove.cloudbackup
 
+import java.io.IOException
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.bitcoinppl.cove_core.device.CloudStorageException
+import org.bitcoinppl.cove_core.device.RemoteBackupLocation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.IOException
 
 class AndroidCloudStorageAccessTest {
     @Test
@@ -35,29 +36,59 @@ class AndroidCloudStorageAccessTest {
     }
 
     @Test
-    fun driveFileNameForRecordIdUsesMasterKeyFileForMasterRecord() {
+    fun driveLocationPartsKeepsFlatFilesAtNamespaceRoot() {
         assertEquals(
-            "masterkey-hash.json",
-            driveFileNameForRecordId(
-                recordId = "cspp-master-key-v1",
-                masterKeyRecordId = "cspp-master-key-v1",
-                masterKeyFileName = { "masterkey-hash.json" },
-                walletFileName = { "wallet-$it.json" },
-            ),
+            DriveLocationParts(parentFolders = emptyList(), fileName = "wallet-record.json"),
+            driveLocationParts("wallet-record.json"),
         )
     }
 
     @Test
-    fun driveFileNameForRecordIdUsesWalletFileForWalletRecord() {
-        val recordId = "wallet-record"
-
+    fun driveLocationPartsSplitsKindPrefixedFiles() {
         assertEquals(
-            "wallet-wallet-record.json",
-            driveFileNameForRecordId(
-                recordId = recordId,
-                masterKeyRecordId = "cspp-master-key-v1",
-                masterKeyFileName = { "masterkey-hash.json" },
-                walletFileName = { "wallet-$it.json" },
+            DriveLocationParts(parentFolders = listOf("wallets"), fileName = "wallet-record.json"),
+            driveLocationParts("wallets/wallet-record.json"),
+        )
+    }
+
+    @Test
+    fun driveLocationPartsRejectsParentTraversal() {
+        val error = runCatching { driveLocationParts("wallets/../wallet-record.json") }
+            .exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+    }
+
+    @Test
+    fun driveLocationPartsRejectsBlankRelativePath() {
+        val error = runCatching { driveLocationParts("") }
+            .exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+        assertEquals("relativePath must not be blank", error?.message)
+    }
+
+    @Test
+    fun drivePathsAcceptLegacyFlatAndKindPrefixedWalletLocations() {
+        assertTrue(
+            isWalletFileLocation(
+                location = "wallet-record.json",
+                walletFilePrefix = "wallet-",
+                walletsFolderName = "wallets",
+            ),
+        )
+        assertTrue(
+            isWalletFileLocation(
+                location = "wallets/wallet-record.json",
+                walletFilePrefix = "wallet-",
+                walletsFolderName = "wallets",
+            ),
+        )
+        assertFalse(
+            isWalletFileLocation(
+                location = "master-key/wallet-record.json",
+                walletFilePrefix = "wallet-",
+                walletsFolderName = "wallets",
             ),
         )
     }
@@ -83,6 +114,46 @@ class AndroidCloudStorageAccessTest {
                 "google drive authorization is required",
                 (error as CloudStorageException.AuthorizationRequired).v1,
             )
+        }
+
+    @Test
+    fun walletOperationErrorsUseLocationErrorId() =
+        runBlocking {
+            val storage = AndroidCloudStorageAccess(FailingDriveAuthorization(DriveHttpException(404, "missing")))
+            val location = RemoteBackupLocation(relativePath = "wallets/wallet-record.json")
+
+            val uploadError =
+                captureError {
+                    storage.uploadWalletBackup(
+                        namespace = "namespace",
+                        recordId = "record-id",
+                        location = location,
+                        data = byteArrayOf(),
+                        policy = CloudAccessPolicy.SILENT,
+                    )
+                }
+            val downloadError =
+                captureError {
+                    storage.downloadWalletBackup(
+                        namespace = "namespace",
+                        recordId = "record-id",
+                        locations = listOf(location),
+                        policy = CloudAccessPolicy.SILENT,
+                    )
+                }
+            val deleteError =
+                captureError {
+                    storage.deleteWalletBackup(
+                        namespace = "namespace",
+                        recordId = "record-id",
+                        locations = listOf(location),
+                        policy = CloudAccessPolicy.SILENT,
+                    )
+                }
+
+            assertNotFoundTarget(uploadError, "wallets/wallet-record.json")
+            assertNotFoundTarget(downloadError, "wallets/wallet-record.json")
+            assertNotFoundTarget(deleteError, "wallets/wallet-record.json")
         }
 
     @Test
@@ -165,6 +236,19 @@ class AndroidCloudStorageAccessTest {
             }
         }
         """.trimIndent()
+
+    private suspend fun captureError(block: suspend () -> Unit): Throwable? =
+        try {
+            block()
+            null
+        } catch (error: Throwable) {
+            error
+        }
+
+    private fun assertNotFoundTarget(error: Throwable?, expected: String) {
+        assertTrue(error is CloudStorageException.NotFound)
+        assertEquals(expected, (error as CloudStorageException.NotFound).v1)
+    }
 
     private class FailingDriveAuthorization(
         private val error: Throwable,

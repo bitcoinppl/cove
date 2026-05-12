@@ -15,7 +15,7 @@ impl RustCloudBackupManager {
     /// Returns None if disabled. On access errors, returns AccessError so the UI can
     /// surface an explicit recovery action instead of mutating backup state during refresh
     pub(crate) async fn refresh_cloud_backup_detail(&self) -> Option<CloudBackupDetailResult> {
-        let status = self.state.read().status.clone();
+        let status = self.state.read().status().clone();
         if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
             info!("refresh_cloud_backup_detail: skipping, status={status:?}");
             return None;
@@ -99,26 +99,24 @@ impl RustCloudBackupManager {
 
             if !remote_wallet_revision_matches(
                 remote_wallet_truth,
-                &state.record_id,
+                state.record_id(),
                 &pending_state.revision_hash,
             ) {
                 continue;
             }
 
-            let confirmed_state = crate::database::cloud_backup::PersistedCloudBlobSyncState {
-                state: PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+            let confirmed_state =
+                state.with_state(PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
                     revision_hash: pending_state.revision_hash.clone(),
                     confirmed_at,
-                }),
-                ..state.clone()
-            };
+                }));
 
             let persisted = match table.set_if_current(&state, &confirmed_state) {
                 Ok(persisted) => persisted,
                 Err(error) => {
                     warn!(
                         "cleanup_confirmed_pending_blobs: persist confirmed record_id={} failed: {error}",
-                        confirmed_state.record_id
+                        confirmed_state.record_id()
                     );
                     continue;
                 }

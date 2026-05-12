@@ -209,7 +209,7 @@ struct MainSettingsScreen: View {
                 SettingsRow(title: "Change PIN", symbol: "lock.open.rotation") {
                     sheetState = .init(.changePin)
                 }
-                .foregroundStyle(.blue)
+                .foregroundStyle(.link)
 
                 SettingsToggle(
                     title: "Enable Wipe Data PIN",
@@ -237,7 +237,7 @@ struct MainSettingsScreen: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(.orange, in: Capsule())
+                    .background(Color.statusWarning, in: Capsule())
             }) {
                 SettingsRow(title: "Export All", symbol: "square.and.arrow.up") {
                     if auth.type != .none {
@@ -264,23 +264,26 @@ struct MainSettingsScreen: View {
             let manager = CloudBackupManager.shared
 
             Section(header: Text("Cloud Backup")) {
-                switch manager.status {
+                switch manager.lifecycle {
                 case .disabled:
                     SettingsRow(title: "Enable Cloud Backup", symbol: "icloud.and.arrow.up") {
                         sheetState = .init(.cloudBackupOnboarding)
                     }
                 case .enabling:
                     cloudBackupEnablingRow
-                case .enabled:
-                    cloudBackupEnabledRow(manager: manager)
-                case .passkeyMissing:
-                    cloudBackupPasskeyMissingRow
-                case .unsupportedPasskeyProvider:
-                    cloudBackupUnsupportedProviderRow
                 case .restoring:
                     cloudBackupRestoringRow
-                case let .error(message):
-                    cloudBackupErrorContent(message: message, manager: manager)
+                case let .failed(failure):
+                    cloudBackupErrorContent(message: failure.message)
+                case let .configured(configured):
+                    switch configured.passkey {
+                    case .available:
+                        cloudBackupEnabledRow(manager: manager)
+                    case .missing, .needsRepair:
+                        cloudBackupPasskeyMissingRow
+                    case .unsupportedProvider:
+                        cloudBackupUnsupportedProviderRow
+                    }
                 }
             }
         }
@@ -313,18 +316,18 @@ struct MainSettingsScreen: View {
     private func cloudBackupEnabledStatus(manager: CloudBackupManager) -> some View {
         if manager.isUnverified {
             Image(systemName: "exclamationmark.icloud")
-                .foregroundStyle(.orange)
+                .foregroundStyle(Color.statusWarning)
             Text("Cloud Backup Unverified")
         } else if manager.hasPendingUploadVerification {
             Image(systemName: "arrow.clockwise.icloud")
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.statusInfo)
             Text("Cloud Backup Confirming")
         } else {
             Image(
                 systemName: manager.isVerificationStale
                     ? "exclamationmark.icloud" : "checkmark.icloud"
             )
-            .foregroundStyle(manager.isVerificationStale ? .orange : .green)
+            .foregroundStyle(manager.isVerificationStale ? Color.statusWarning : Color.statusSuccess)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Cloud Backup Enabled")
@@ -332,7 +335,7 @@ struct MainSettingsScreen: View {
                 if manager.isVerificationStale {
                     Text("Verification recommended")
                         .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.statusWarning)
                 }
             }
         }
@@ -357,17 +360,17 @@ struct MainSettingsScreen: View {
     private func cloudBackupActionRow(icon: String, title: String, message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.statusError)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.statusError)
                     .fontWeight(.semibold)
                     .lineLimit(1)
 
                 Text(message)
                     .font(.caption2)
-                    .foregroundStyle(.red.opacity(0.5))
+                    .foregroundStyle(Color.statusError.opacity(0.5))
                     .lineLimit(1)
             }
 
@@ -388,12 +391,12 @@ struct MainSettingsScreen: View {
         }
     }
 
-    private func cloudBackupErrorContent(message: String, manager: CloudBackupManager) -> some View {
+    private func cloudBackupErrorContent(message: String) -> some View {
         Group {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Image(systemName: "exclamationmark.icloud")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.statusError)
                     Text("Cloud Backup Error")
                 }
                 Text(message)
@@ -401,11 +404,8 @@ struct MainSettingsScreen: View {
                     .foregroundStyle(.secondary)
             }
 
-            SettingsRow(title: "Retry", symbol: "arrow.clockwise") {
-                manager.dispatch(action: .enableCloudBackup(.init(
-                    savedPasskeyConfirmation: .manual,
-                    verificationSource: .settings
-                )))
+            SettingsRow(title: "Review", symbol: "arrow.right") {
+                app.pushRoute(Route.settings(.cloudBackup))
             }
         }
     }
@@ -973,43 +973,38 @@ private struct SettingsCloudBackupEnableSheet: View {
     let onDismiss: () -> Void
 
     private var message: String? {
-        switch manager.status {
-        case .unsupportedPasskeyProvider:
+        if manager.isUnsupportedPasskeyProvider {
             "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
-        case let .error(message):
-            message
-        default:
-            nil
+        } else {
+            manager.lifecycleFailureMessage
         }
     }
 
     private var isBusy: Bool {
-        if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableState {
+        if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableFlow {
             return false
         }
 
-        return isStartingEnable || {
-            if case .enabling = manager.status { true } else { false }
-        }()
+        return isStartingEnable || manager.isLifecycleEnabling
     }
 
-    private func shouldDismiss(for promptIntent: CloudBackupPromptIntent) -> Bool {
-        if case .existingBackupFound = promptIntent { return false }
-        if case .none = promptIntent { return false }
+    private func shouldDismiss(for rootPrompt: CloudBackupRootPrompt) -> Bool {
+        if case .existingBackupFound = rootPrompt { return false }
+        if case .none = rootPrompt { return false }
         return true
     }
 
-    private func isEnablePasskeyChoice(_ promptIntent: CloudBackupPromptIntent) -> Bool {
-        guard case let .passkeyChoice(intent) = promptIntent else { return false }
+    private func isEnablePasskeyChoice(_ rootPrompt: CloudBackupRootPrompt) -> Bool {
+        guard case let .passkeyChoice(intent) = rootPrompt else { return false }
         if case .enable = intent { return true }
         return false
     }
 
     private func shouldSuppressEnablePasskeyChoicePrompt(
-        _ promptIntent: CloudBackupPromptIntent
+        _ rootPrompt: CloudBackupRootPrompt
     ) -> Bool {
         guard case .startedEnable = passkeyEnableFlow else { return false }
-        return isEnablePasskeyChoice(promptIntent)
+        return isEnablePasskeyChoice(rootPrompt)
     }
 
     private func startEnable(action: CloudBackupManagerAction) {
@@ -1019,8 +1014,8 @@ private struct SettingsCloudBackupEnableSheet: View {
         manager.dispatch(action: action)
     }
 
-    private func handlePromptIntent(_ promptIntent: CloudBackupPromptIntent) {
-        if case let .existingBackupFound(context, passkeyHint) = promptIntent {
+    private func handleRootPrompt(_ rootPrompt: CloudBackupRootPrompt) {
+        if case let .existingBackupFound(context, passkeyHint) = rootPrompt {
             existingBackupContext = context
             existingBackupPasskeyHint = passkeyHint
             passkeyEnableFlow = .idle
@@ -1028,14 +1023,14 @@ private struct SettingsCloudBackupEnableSheet: View {
             return
         }
 
-        if shouldSuppressEnablePasskeyChoicePrompt(promptIntent) {
+        if shouldSuppressEnablePasskeyChoicePrompt(rootPrompt) {
             passkeyEnableFlow = .idle
             isStartingEnable = false
             manager.dispatch(action: .dismissPasskeyChoicePrompt)
             return
         }
 
-        if shouldDismiss(for: promptIntent) {
+        if shouldDismiss(for: rootPrompt) {
             onDismiss()
         }
     }
@@ -1058,7 +1053,7 @@ private struct SettingsCloudBackupEnableSheet: View {
         )
 
         ZStack {
-            if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableState {
+            if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableFlow {
                 CloudBackupEnableConfirmationView(
                     onContinue: {
                         manager.dispatch(action: .confirmSavedPasskey)
@@ -1081,22 +1076,22 @@ private struct SettingsCloudBackupEnableSheet: View {
             }
 
             if isBusy {
-                CloudBackupEnableBusyOverlay(enableState: manager.enableState)
+                CloudBackupEnableBusyOverlay(enableFlow: manager.enableFlow)
             }
         }
-        .onChange(of: manager.status, initial: true) { _, status in
-            if case .enabling = status {
+        .onChange(of: manager.lifecycle, initial: true) { _, lifecycle in
+            if case .enabling = lifecycle {
                 isStartingEnable = false
             } else if isStartingEnable {
                 isStartingEnable = false
             }
 
-            if case .enabled = status {
+            if manager.isCloudBackupAvailable {
                 onComplete()
             }
         }
-        .onChange(of: manager.promptIntent, initial: true) { _, promptIntent in
-            handlePromptIntent(promptIntent)
+        .onChange(of: manager.rootPrompt, initial: true) { _, rootPrompt in
+            handleRootPrompt(rootPrompt)
         }
         .alert(
             "Passkey Options",

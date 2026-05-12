@@ -56,7 +56,7 @@ struct EnterAmountView: View {
     }
 
     var amountTextColor: Color {
-        exceedsBalance ? .orange : .primary
+        exceedsBalance ? .statusWarning : .primary
     }
 
     private var btcTextField: some View {
@@ -200,7 +200,7 @@ struct EnterAmountView: View {
             Task {
                 await FloaterPopup(
                     text: "Exceeds available balance",
-                    backgroundColor: .orange,
+                    backgroundColor: .statusWarning,
                     textColor: .white,
                     iconColor: .white,
                     icon: "exclamationmark.triangle"

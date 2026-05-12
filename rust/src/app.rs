@@ -358,7 +358,7 @@ impl FfiApp {
     pub fn save_tap_signer_backup(
         &self,
         tap_signer: &cove_tap_card::TapSigner,
-        backup: &[u8],
+        backup: Vec<u8>,
     ) -> bool {
         let Some(metadata) = self.find_tap_signer_wallet(tap_signer) else {
             debug!("Unable to find wallet with card ident {}", tap_signer.card_ident);
@@ -366,7 +366,7 @@ impl FfiApp {
         };
 
         let keychain = Keychain::global();
-        match keychain.save_tap_signer_backup(&metadata.id, backup) {
+        match keychain.save_tap_signer_backup(&metadata.id, &backup) {
             Ok(()) => {
                 CLOUD_BACKUP_MANAGER.handle_wallet_backup_change(metadata.id.clone());
                 true

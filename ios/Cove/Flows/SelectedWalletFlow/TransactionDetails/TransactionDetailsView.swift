@@ -77,11 +77,11 @@ struct TransactionDetailsView: View {
         if transactionDetails.isConfirmed() {
             VStack(alignment: .center, spacing: 4) {
                 Text("Your transaction was successfully received")
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
 
                 Text(transactionDetails.confirmationDateTime() ?? "Unknown")
                     .fontWeight(.semibold)
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
             }
             .multilineTextAlignment(.center)
         }
@@ -90,10 +90,10 @@ struct TransactionDetailsView: View {
         if !transactionDetails.isConfirmed() {
             VStack(alignment: .center, spacing: 4) {
                 Text("Your transaction is pending. ")
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
 
                 Text("Please check back soon for an update.")
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
             }
             .multilineTextAlignment(.center)
         }
@@ -114,7 +114,7 @@ struct TransactionDetailsView: View {
 
         Group {
             if transactionDetails.isConfirmed() {
-                TransactionCapsule(text: "Received", icon: "arrow.down.left", color: .green)
+                TransactionCapsule(text: "Received", icon: "arrow.down.left", color: .statusSuccess)
             } else {
                 TransactionCapsule(
                     text: "Receiving", icon: "arrow.down.left",
@@ -163,11 +163,11 @@ struct TransactionDetailsView: View {
         if transactionDetails.isConfirmed() {
             VStack(alignment: .center, spacing: 4) {
                 Text("Your transaction was sent on")
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
 
                 Text(transactionDetails.confirmationDateTime() ?? "Unknown")
                     .fontWeight(.semibold)
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
             }
             .multilineTextAlignment(.center)
         }
@@ -176,11 +176,11 @@ struct TransactionDetailsView: View {
         if !transactionDetails.isConfirmed() {
             VStack(alignment: .center, spacing: 4) {
                 Text("Your transaction is pending. ")
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
 
                 Text("Please check back soon for an update.")
                     .fontWeight(.semibold)
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
             }
             .multilineTextAlignment(.center)
         }
@@ -293,7 +293,7 @@ struct TransactionDetailsView: View {
                     Text(detailsExpanded ? "Hide Details" : "Show Details")
                         .font(.footnote)
                         .fontWeight(.bold)
-                        .foregroundStyle(.gray.opacity(0.8))
+                        .foregroundStyle(Color.secondary.opacity(0.8))
                 }
                 .padding(.top, 10)
                 .offset(y: -20)
@@ -328,13 +328,13 @@ struct TransactionDetailsView: View {
             }
         )
         .onAppear {
-            UIRefreshControl.appearance().tintColor = colorScheme == .light ? .darkGray : .white
+            UIRefreshControl.appearance().tintColor = colorScheme == .light ? UIColor.label : UIColor.secondaryLabel
         }
         .onChange(of: colorScheme) { _, newScheme in
-            UIRefreshControl.appearance().tintColor = newScheme == .light ? .darkGray : .white
+            UIRefreshControl.appearance().tintColor = newScheme == .light ? UIColor.label : UIColor.secondaryLabel
         }
         .onDisappear {
-            UIRefreshControl.appearance().tintColor = .white
+            UIRefreshControl.appearance().tintColor = UIColor.secondaryLabel
         }
     }
 

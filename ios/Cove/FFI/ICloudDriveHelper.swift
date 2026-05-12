@@ -7,6 +7,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
     private let containerIdentifier = "iCloud.com.covebitcoinwallet"
     private let dataSubdirectory = "Data"
     private let namespacesSubdirectory = csppNamespacesSubdirectory()
+    private let walletsSubdirectory = csppWalletsDirectory()
     let defaultTimeout: TimeInterval = 60
     private let pollInterval: TimeInterval = 0.1
     let metadataSettleInterval: TimeInterval = 0.5
@@ -182,42 +183,75 @@ final class ICloudDriveHelper: @unchecked Sendable {
             .appendingPathComponent(namespace, isDirectory: true)
     }
 
-    func masterKeyFileURL(namespace: String) throws -> URL {
-        let filename = csppMasterKeyFilename()
-        return try namespaceDirectoryURL(namespace: namespace)
-            .appendingPathComponent(filename)
+    func walletsDirectoryReadURL(namespace: String) throws -> URL {
+        try namespaceDirectoryReadURL(namespace: namespace)
+            .appendingPathComponent(walletsSubdirectory, isDirectory: true)
     }
 
-    func masterKeyFileReadURL(namespace: String) throws -> URL {
-        let filename = csppMasterKeyFilename()
-        return try namespaceDirectoryReadURL(namespace: namespace)
-            .appendingPathComponent(filename)
+    func walletLocation(filename: String) -> String {
+        "\(walletsSubdirectory)/\(filename)"
     }
 
-    func walletFileURL(namespace: String, recordId: String) throws -> URL {
-        let filename = csppWalletFilenameFromRecordId(recordId: recordId)
-        return try namespaceDirectoryURL(namespace: namespace)
-            .appendingPathComponent(filename)
+    func backupFileURL(namespace: String, location: RemoteBackupLocation) throws -> URL {
+        let namespaceDirectory = try namespaceDirectoryURL(namespace: namespace)
+        return try appendBackupLocation(location, to: namespaceDirectory, createParentDirectories: true)
     }
 
-    func walletFileReadURL(namespace: String, recordId: String) throws -> URL {
-        let filename = csppWalletFilenameFromRecordId(recordId: recordId)
-        return try namespaceDirectoryReadURL(namespace: namespace)
-            .appendingPathComponent(filename)
+    func backupFileReadURL(namespace: String, location: RemoteBackupLocation) throws -> URL {
+        let namespaceDirectory = try namespaceDirectoryReadURL(namespace: namespace)
+        return try appendBackupLocation(location, to: namespaceDirectory, createParentDirectories: false)
     }
 
-    func backupFileURL(namespace: String, recordId: String) throws -> URL {
-        if recordId == csppMasterKeyRecordId() { return try masterKeyFileURL(namespace: namespace) }
+    func existingBackupFileReadURL(
+        namespace: String,
+        recordId: String,
+        locations: [RemoteBackupLocation]
+    ) throws -> URL {
+        var lastError: Error?
+        for location in locations {
+            do {
+                let url = try backupFileReadURL(namespace: namespace, location: location)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    return url
+                }
 
-        return try walletFileURL(namespace: namespace, recordId: recordId)
-    }
-
-    func backupFileReadURL(namespace: String, recordId: String) throws -> URL {
-        if recordId == csppMasterKeyRecordId() {
-            return try masterKeyFileReadURL(namespace: namespace)
+                let item = try metadataItemIfPresent(
+                    named: url.lastPathComponent,
+                    parentDirectoryURL: url.deletingLastPathComponent()
+                )
+                if let item { return item.url }
+            } catch {
+                lastError = error
+            }
         }
 
-        return try walletFileReadURL(namespace: namespace, recordId: recordId)
+        if let lastError { throw lastError }
+        throw CloudStorageError.NotFound(recordId)
+    }
+
+    private func appendBackupLocation(
+        _ location: RemoteBackupLocation,
+        to namespaceDirectory: URL,
+        createParentDirectories: Bool
+    ) throws -> URL {
+        let parts = location.relativePath.split(separator: "/").map(String.init)
+        guard
+            !parts.isEmpty,
+            parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
+        else {
+            throw CloudStorageError.NotAvailable("invalid backup location")
+        }
+
+        var directory = namespaceDirectory
+        for folder in parts.dropLast() {
+            directory.appendPathComponent(folder, isDirectory: true)
+        }
+
+        if createParentDirectories {
+            try coordinatedCreateDirectory(at: directory)
+        }
+
+        return directory.appendingPathComponent(parts.last!)
     }
 
     // MARK: - File coordination
@@ -773,23 +807,99 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
     }
 
-    func isBackupUploaded(namespace: String, recordId: String) throws -> Bool {
-        let url = try backupFileURL(namespace: namespace, recordId: recordId)
-        let resolvedURL =
-            resolvedMetadataItemIfPresent(
-                named: url.lastPathComponent,
-                parentDirectoryURL: url.deletingLastPathComponent()
-            )?.url ?? url
+    func isBackupUploaded(
+        namespace: String,
+        recordId: String,
+        locations: [RemoteBackupLocation]
+    ) throws -> Bool {
+        let urls = try locations.map { location in
+            try backupFileReadURL(namespace: namespace, location: location)
+        }
 
-        let state = uploadState(for: resolvedURL)
-        let usedMetadata = resolvedURL != url
-        Log.info(
-            "isBackupUploaded: recordId=\(recordId.prefix(12))… state=\(state) usedMetadata=\(usedMetadata)"
-        )
+        for url in urls {
+            let resolvedURL =
+                resolvedMetadataItemIfPresent(
+                    named: url.lastPathComponent,
+                    parentDirectoryURL: url.deletingLastPathComponent()
+                )?.url ?? url
 
-        switch state {
-        case .uploaded: return true
-        default: return false
+            let state = uploadState(for: resolvedURL)
+            let usedMetadata = resolvedURL != url
+            Log.info(
+                "isBackupUploaded: recordId=\(recordId.prefix(12))… path=\(url.path) state=\(state) usedMetadata=\(usedMetadata)"
+            )
+
+            if case .uploaded = state { return true }
+        }
+
+        return false
+    }
+
+    func deleteExistingBackupFile(
+        namespace: String,
+        recordId: String,
+        locations: [RemoteBackupLocation]
+    ) throws {
+        var deletedAny = false
+        var lastError: Error?
+
+        let urls = try locations.map { location in
+            try backupFileReadURL(namespace: namespace, location: location)
+        }
+
+        for url in urls {
+            do {
+                if FileManager.default.fileExists(atPath: url.path) {
+                    try coordinatedDelete(at: url, missingItemID: recordId)
+                    deletedAny = true
+                    continue
+                }
+
+                let resolvedURL = try metadataItemIfPresent(
+                    named: url.lastPathComponent,
+                    parentDirectoryURL: url.deletingLastPathComponent()
+                )?.url
+                guard let resolvedURL else { continue }
+
+                try coordinatedDelete(at: resolvedURL, missingItemID: recordId)
+                deletedAny = true
+            } catch CloudStorageError.NotFound {
+                continue
+            } catch {
+                lastError = error
+            }
+        }
+
+        if let lastError { throw lastError }
+        if !deletedAny { throw CloudStorageError.NotFound(recordId) }
+    }
+
+    private func allBackupFiles(in namespaceDirectory: URL) -> [URL] {
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: namespaceDirectory,
+                includingPropertiesForKeys: nil
+            )
+        else {
+            return []
+        }
+
+        return enumerator.compactMap { item -> URL? in
+            guard let url = item as? URL else { return nil }
+            guard url.pathExtension == "json" else { return nil }
+            return url
+        }
+    }
+
+    private func hasUploadedState(for file: URL) -> (hasFile: Bool, allUploaded: Bool, failed: String?) {
+        let status = uploadStatus(for: file)
+        switch status {
+        case .uploaded:
+            return (true, true, nil)
+        case .uploading, .unknown:
+            return (true, false, nil)
+        case let .failed(message):
+            return (true, false, message)
         }
     }
 
@@ -820,24 +930,13 @@ final class ICloudDriveHelper: @unchecked Sendable {
         var failureMessage: String?
 
         for nsDir in namespaceDirs where nsDir.hasDirectoryPath {
-            guard
-                let files = try? FileManager.default.contentsOfDirectory(
-                    at: nsDir, includingPropertiesForKeys: nil
-                )
-            else { continue }
-
-            for file in files where file.pathExtension == "json" {
-                hasFiles = true
-                let status = uploadStatus(for: file)
-                switch status {
-                case .uploaded: continue
-                case .uploading: allUploaded = false
-                case let .failed(msg):
+            for file in allBackupFiles(in: nsDir) {
+                let state = hasUploadedState(for: file)
+                hasFiles = hasFiles || state.hasFile
+                allUploaded = allUploaded && state.allUploaded
+                if let failed = state.failed {
                     anyFailed = true
-                    allUploaded = false
-                    failureMessage = msg
-                case .unknown:
-                    allUploaded = false
+                    failureMessage = failed
                 }
             }
         }

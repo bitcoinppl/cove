@@ -185,8 +185,16 @@ pub(crate) mod test_support {
 
     pub(crate) fn delete_database() {
         init_test_database();
-        let _ = std::fs::remove_dir_all(ROOT_DATA_DIR.join("test"));
-        let _ = std::fs::remove_dir_all(ROOT_DATA_DIR.join("wallet_data"));
+        let db_path = database_location();
+        let wallet_data_dir = ROOT_DATA_DIR.join("wallet_data");
+
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&wallet_data_dir);
+
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent).expect("failed to recreate test dir");
+        }
+        std::fs::create_dir_all(wallet_data_dir).expect("failed to recreate wallet data test dir");
     }
 }
 

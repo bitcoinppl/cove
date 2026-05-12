@@ -1,6 +1,6 @@
 use chacha20poly1305::aead::{Aead as _, AeadCore as _, OsRng, Payload};
 use chacha20poly1305::{KeyInit as _, XChaCha20Poly1305, XNonce};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit as _, Mac};
 use sha2::Sha256;
 
 use std::fmt::{self, Debug};
@@ -116,8 +116,7 @@ fn acquire_lock(file: &File) -> io::Result<bool> {
 }
 
 fn compute_header_tag(key: &[u8; 32], header: &[u8; HEADER_SIZE]) -> [u8; HEADER_TAG_LEN] {
-    let mut mac =
-        <HmacSha256 as Mac>::new_from_slice(key).expect("HMAC-SHA256 accepts any key size");
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC-SHA256 accepts any key size");
     // authenticate magic + version + logical_len (bytes 0..13)
     mac.update(&header[..HEADER_TAG_OFFSET]);
     let result = mac.finalize();
@@ -363,6 +362,13 @@ pub fn open_or_create_database(path: &Path) -> Result<redb::Database, super::err
     let has_header = path.metadata().map(|m| m.len() >= HEADER_SIZE as u64).unwrap_or(false);
     if has_header && !EncryptedBackend::is_encrypted(path) {
         return Err(DatabaseError::PlaintextNotAllowed { path: path_str });
+    }
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| DatabaseError::BackendOpen {
+            path: path_str.clone(),
+            error: e.to_string(),
+        })?;
     }
 
     let backend = EncryptedBackend::create_or_open(path, &key)
@@ -1204,6 +1210,18 @@ pub(crate) mod tests {
             ),
             "empty file during creation race should not be rejected as plaintext"
         );
+    }
+
+    #[test]
+    fn open_or_create_database_creates_missing_parent_dir() {
+        set_test_encryption_key();
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("missing").join("nested.enc");
+
+        let db = open_or_create_database(&path).unwrap();
+
+        assert!(path.exists());
+        drop(db);
     }
 
     #[test]

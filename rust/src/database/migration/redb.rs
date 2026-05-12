@@ -627,20 +627,16 @@ mod tests {
         let source_path = create_plaintext_main_db(&dir);
         let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
 
-        let backup_state = cloud_backup::PersistedCloudBackupState {
-            status: cloud_backup::PersistedCloudBackupStatus::Unverified,
-            last_sync: Some(42),
-            wallet_count: Some(2),
-            ..cloud_backup::PersistedCloudBackupState::default()
-        };
-        let sync_state = cloud_backup::PersistedCloudBlobSyncState {
-            namespace_id: "namespace".into(),
-            wallet_id: None,
-            record_id: "wallet-a".into(),
-            state: cloud_backup::PersistedCloudBlobState::Dirty(
-                cloud_backup::CloudBlobDirtyState { changed_at: 7 },
-            ),
-        };
+        let backup_state =
+            cloud_backup::PersistedCloudBackupState::mark_enabled_reset_verification(42, 2);
+        let sync_state = cloud_backup::PersistedCloudBlobSyncState::wallet(
+            "namespace".into(),
+            "wallet-a".into(),
+            "wallet-a".into(),
+            cloud_backup::PersistedCloudBlobState::Dirty(cloud_backup::CloudBlobDirtyState {
+                changed_at: 7,
+            }),
+        );
 
         {
             let db = redb::Database::open(&source_path).unwrap();
@@ -653,7 +649,7 @@ mod tests {
             {
                 let mut table =
                     write_txn.open_table(cloud_backup::CLOUD_BLOB_SYNC_STATE_TABLE).unwrap();
-                table.insert(sync_state.record_id.as_str(), sync_state.clone()).unwrap();
+                table.insert(sync_state.record_id(), sync_state.clone()).unwrap();
             }
             write_txn.commit().unwrap();
         }

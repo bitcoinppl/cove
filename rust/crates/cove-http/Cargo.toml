@@ -5,5 +5,5 @@ edition = "2024"
 
 [dependencies]
 reqwest = { workspace = true }
-rustls = { version = "0.23", features = ["ring"], default-features = false }
-webpki-roots = "1.0"
+rustls = { version = "0.23.40", features = ["ring"], default-features = false }
+webpki-roots = "1.0.7"

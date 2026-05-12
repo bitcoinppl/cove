@@ -39,6 +39,52 @@ fileprivate extension ForeignBytes {
     init(bufferPointer: UnsafeBufferPointer<UInt8>) {
         self.init(len: Int32(bufferPointer.count), data: bufferPointer.baseAddress)
     }
+
+    init(rawBufferPointer: UnsafeRawBufferPointer) {
+        self.init(
+            len: Int32(rawBufferPointer.count),
+            data: rawBufferPointer.baseAddress?.assumingMemoryBound(to: UInt8.self)
+        )
+    }
+}
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Conforms to `FfiConverter` so the compiler enforces the full converter
+// method set. Only the scope-bound `lower(_:_body:)` overload is sound —
+// zero-copy byte buffers only flow foreign -> Rust, and only in argument
+// position. The four protocol-witness methods (`lift`, `lower`, `read`,
+// `write`) `fatalError` at runtime if anyone reaches them.
+//
+// The scope-bound `lower` takes a closure because the `ForeignBytes`
+// pointer is only guaranteed valid for the duration of
+// `Data.withUnsafeBytes`. Callers must run the full FFI call inside
+// the closure body.
+fileprivate enum FfiConverterByRefBytes: FfiConverter {
+    typealias SwiftType = Data
+    typealias FfiType = ForeignBytes
+
+    static func lower<R>(_ value: Data, _ body: (ForeignBytes) throws -> R) rethrows -> R {
+        return try value.withUnsafeBytes { rawBuf in
+            try body(ForeignBytes(rawBufferPointer: rawBuf))
+        }
+    }
+
+    static func lower(_ value: Data) -> ForeignBytes {
+        fatalError("ByRef bytes cannot use the plain lower: returning ForeignBytes escapes the Data.withUnsafeBytes scope. Use the scope-bound lower(_:_body:) overload instead.")
+    }
+
+    static func lift(_ value: ForeignBytes) throws -> Data {
+        fatalError("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        fatalError("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
+
+    static func write(_ value: Data, into buf: inout [UInt8]) {
+        fatalError("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
 }
 
 // For every type used in the interface, we provide helper methods for conveniently
@@ -551,7 +597,11 @@ fileprivate struct FfiConverterString: FfiConverter {
             return String()
         }
         let bytes = UnsafeBufferPointer<UInt8>(start: value.data!, count: Int(value.len))
-        return String(bytes: bytes, encoding: String.Encoding.utf8)!
+        // Use Swift's native UTF-8 decoder; `String(bytes:encoding:.utf8)` goes
+        // through Foundation's NSString and silently strips a leading U+FEFF BOM.
+        // Invalid UTF-8 substitutes U+FFFD instead of trapping (unreachable
+        // given Rust's `String` invariant).
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     public static func lower(_ value: String) -> RustBuffer {
@@ -567,7 +617,8 @@ fileprivate struct FfiConverterString: FfiConverter {
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> String {
         let len: Int32 = try readInt(&buf)
-        return String(bytes: try readBytes(&buf, count: Int(len)), encoding: String.Encoding.utf8)!
+        // See `lift` above for why we avoid Foundation's NSString-backed decoder here.
+        return String(decoding: try readBytes(&buf, count: Int(len)), as: UTF8.self)
     }
 
     public static func write(_ value: String, into buf: inout [UInt8]) {
@@ -699,9 +750,10 @@ open class Address: AddressProtocol, @unchecked Sendable, Equatable, Hashable {
      */
 public static func fromString(address: String, network: Network)throws  -> Address  {
     return try  FfiConverterTypeAddress_lift(try rustCallWithError(FfiConverterTypeAddressError_lift) {
+        uniffiCallStatus in
     uniffi_cove_types_fn_constructor_address_from_string(
         FfiConverterString.lower(address),
-        FfiConverterTypeNetwork_lower(network),$0
+        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
     )
 })
 }
@@ -714,7 +766,8 @@ public static func fromString(address: String, network: Network)throws  -> Addre
      */
 public static func previewNew() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
-    uniffi_cove_types_fn_constructor_address_preview_new($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_constructor_address_preview_new(uniffiCallStatus
     )
 })
 }
@@ -727,7 +780,8 @@ public static func previewNew() -> Address  {
      */
 public static func random() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
-    uniffi_cove_types_fn_constructor_address_random($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_constructor_address_random(uniffiCallStatus
     )
 })
 }
@@ -736,24 +790,27 @@ public static func random() -> Address  {
     
 open func hashToUint() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_address_hashtouint(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func spacedOut() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_address_spaced_out(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func unformatted() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_address_unformatted(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -764,9 +821,10 @@ open func unformatted() -> String  {
 public static func == (self: Address, other: Address) -> Bool {
     return try!  FfiConverterBool.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_address_uniffi_trait_eq_eq(
             self.uniffiCloneHandle(),
-        FfiConverterTypeAddress_lower(other),$0
+        FfiConverterTypeAddress_lower(other),uniffiCallStatus
     )
 }
     )
@@ -775,8 +833,9 @@ public static func == (self: Address, other: Address) -> Bool {
 public func hash(into hasher: inout Hasher) {
     let val = try!  FfiConverterUInt64.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_address_uniffi_trait_hash(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
     )
@@ -894,24 +953,27 @@ open class AddressInfo: AddressInfoProtocol, @unchecked Sendable {
     
 open func address() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addressinfo_address(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func addressUnformatted() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addressinfo_address_unformatted(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func index() -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addressinfo_index(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1034,40 +1096,45 @@ open class AddressInfoWithDerivation: AddressInfoWithDerivationProtocol, @unchec
     
 open func address() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addressinfowithderivation_address(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func addressSpacedOut() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addressinfowithderivation_address_spaced_out(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func addressUnformatted() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addressinfowithderivation_address_unformatted(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func derivationPath() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addressinfowithderivation_derivation_path(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func index() -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addressinfowithderivation_index(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1183,8 +1250,9 @@ open class AddressWithNetwork: AddressWithNetworkProtocol, @unchecked Sendable {
 public convenience init(address: String)throws  {
     let handle =
         try rustCallWithError(FfiConverterTypeAddressError_lift) {
+        uniffiCallStatus in
     uniffi_cove_types_fn_constructor_addresswithnetwork_new(
-        FfiConverterString.lower(address),$0
+        FfiConverterString.lower(address),uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -1204,41 +1272,46 @@ public convenience init(address: String)throws  {
     
 open func address() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addresswithnetwork_address(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func amount() -> Amount?  {
     return try!  FfiConverterOptionTypeAmount.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addresswithnetwork_amount(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func isValidForNetwork(network: Network) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addresswithnetwork_isvalidfornetwork(
             self.uniffiCloneHandle(),
-        FfiConverterTypeNetwork_lower(network),$0
+        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
     )
 })
 }
     
 open func network() -> Network  {
     return try!  FfiConverterTypeNetwork_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addresswithnetwork_network(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func payjoin() -> PayJoinParams?  {
     return try!  FfiConverterOptionTypePayJoinParams.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_addresswithnetwork_payjoin(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1377,22 +1450,25 @@ open class Amount: AmountProtocol, @unchecked Sendable {
     
 public static func fromSat(sats: UInt64) -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_constructor_amount_from_sat(
-        FfiConverterUInt64.lower(sats),$0
+        FfiConverterUInt64.lower(sats),uniffiCallStatus
     )
 })
 }
     
 public static func oneBtc() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
-    uniffi_cove_types_fn_constructor_amount_one_btc($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_constructor_amount_one_btc(uniffiCallStatus
     )
 })
 }
     
 public static func oneSat() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
-    uniffi_cove_types_fn_constructor_amount_one_sat($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_constructor_amount_one_sat(uniffiCallStatus
     )
 })
 }
@@ -1401,16 +1477,18 @@ public static func oneSat() -> Amount  {
     
 open func asBtc() -> Double  {
     return try!  FfiConverterDouble.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_amount_as_btc(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func asSats() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_amount_as_sats(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1421,8 +1499,9 @@ open func asSats() -> UInt64  {
      */
 open func btcString() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_amount_btc_string(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1433,26 +1512,29 @@ open func btcString() -> String  {
      */
 open func btcStringWithUnit() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_amount_btc_string_with_unit(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func fmtString(unit: BitcoinUnit) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_amount_fmt_string(
             self.uniffiCloneHandle(),
-        FfiConverterTypeBitcoinUnit_lower(unit),$0
+        FfiConverterTypeBitcoinUnit_lower(unit),uniffiCallStatus
     )
 })
 }
     
 open func fmtStringWithUnit(unit: BitcoinUnit) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_amount_fmt_string_with_unit(
             self.uniffiCloneHandle(),
-        FfiConverterTypeBitcoinUnit_lower(unit),$0
+        FfiConverterTypeBitcoinUnit_lower(unit),uniffiCallStatus
     )
 })
 }
@@ -1463,16 +1545,18 @@ open func fmtStringWithUnit(unit: BitcoinUnit) -> String  {
      */
 open func satsString() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_amount_sats_string(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func satsStringWithUnit() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_amount_sats_string_with_unit(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1753,80 +1837,90 @@ open class ConfirmDetails: ConfirmDetailsProtocol, @unchecked Sendable {
     
 open func feePercentage() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_fee_percentage(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func feeRate() -> FeeRate  {
     return try!  FfiConverterTypeFeeRate_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_fee_rate(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func feeTotal() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_fee_total(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func id() -> TxId  {
     return try!  FfiConverterTypeTxId_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_id(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func idHash() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_id_hash(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func inputs() -> [AddressAndAmount]  {
     return try!  FfiConverterSequenceTypeAddressAndAmount.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_inputs(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func normalizedId() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_normalized_id(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func outputs() -> [AddressAndAmount]  {
     return try!  FfiConverterSequenceTypeAddressAndAmount.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_outputs(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func psbt() -> Psbt  {
     return try!  FfiConverterTypePsbt_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_psbt(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func psbtBytes() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_psbt_bytes(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1839,8 +1933,9 @@ open func psbtBytes() -> Data  {
      */
 open func psbtToBbqr()throws  -> [String]  {
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1853,26 +1948,29 @@ open func psbtToBbqr()throws  -> [String]  {
      */
 open func psbtToBbqrWithDensity(density: QrDensity)throws  -> [String]  {
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr_with_density(
             self.uniffiCloneHandle(),
-        FfiConverterTypeQrDensity_lower(density),$0
+        FfiConverterTypeQrDensity_lower(density),uniffiCallStatus
     )
 })
 }
     
 open func psbtToBbqrWithMaxVersion(maxVersion: UInt8)throws  -> [String]  {
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_psbt_to_bbqr_with_max_version(
             self.uniffiCloneHandle(),
-        FfiConverterUInt8.lower(maxVersion),$0
+        FfiConverterUInt8.lower(maxVersion),uniffiCallStatus
     )
 })
 }
     
 open func psbtToHex() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_psbt_to_hex(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1885,9 +1983,10 @@ open func psbtToHex() -> String  {
      */
 open func psbtToUr(maxFragmentLen: UInt32)throws  -> [String]  {
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur(
             self.uniffiCloneHandle(),
-        FfiConverterUInt32.lower(maxFragmentLen),$0
+        FfiConverterUInt32.lower(maxFragmentLen),uniffiCallStatus
     )
 })
 }
@@ -1900,33 +1999,37 @@ open func psbtToUr(maxFragmentLen: UInt32)throws  -> [String]  {
      */
 open func psbtToUrWithDensity(density: QrDensity)throws  -> [String]  {
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_psbt_to_ur_with_density(
             self.uniffiCloneHandle(),
-        FfiConverterTypeQrDensity_lower(density),$0
+        FfiConverterTypeQrDensity_lower(density),uniffiCallStatus
     )
 })
 }
     
 open func sendingAmount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_sending_amount(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func sendingTo() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_sending_to(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func spendingAmount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_confirmdetails_spending_amount(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -2039,8 +2142,9 @@ open class FeeRate: FeeRateProtocol, @unchecked Sendable {
     
 public static func fromSatPerVb(satPerVb: Float) -> FeeRate  {
     return try!  FfiConverterTypeFeeRate_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_constructor_feerate_from_sat_per_vb(
-        FfiConverterFloat.lower(satPerVb),$0
+        FfiConverterFloat.lower(satPerVb),uniffiCallStatus
     )
 })
 }
@@ -2049,8 +2153,9 @@ public static func fromSatPerVb(satPerVb: Float) -> FeeRate  {
     
 open func satPerVb() -> Float  {
     return try!  FfiConverterFloat.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerate_sat_per_vb(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -2160,9 +2265,10 @@ open class FeeRateOption: FeeRateOptionProtocol, @unchecked Sendable {
 public convenience init(feeSpeed: FeeSpeed, feeRate: Float) {
     let handle =
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_constructor_feerateoption_new(
         FfiConverterTypeFeeSpeed_lower(feeSpeed),
-        FfiConverterFloat.lower(feeRate),$0
+        FfiConverterFloat.lower(feeRate),uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -2182,41 +2288,46 @@ public convenience init(feeSpeed: FeeSpeed, feeRate: Float) {
     
 open func duration() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoption_duration(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func feeRate() -> FeeRate  {
     return try!  FfiConverterTypeFeeRate_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoption_fee_rate(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func feeSpeed() -> FeeSpeed  {
     return try!  FfiConverterTypeFeeSpeed_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoption_fee_speed(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func isEqual(rhs: FeeRateOption) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoption_is_equal(
             self.uniffiCloneHandle(),
-        FfiConverterTypeFeeRateOption_lower(rhs),$0
+        FfiConverterTypeFeeRateOption_lower(rhs),uniffiCallStatus
     )
 })
 }
     
 open func satPerVb() -> Float  {
     return try!  FfiConverterFloat.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoption_sat_per_vb(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -2332,10 +2443,11 @@ open class FeeRateOptionWithTotalFee: FeeRateOptionWithTotalFeeProtocol, @unchec
 public convenience init(feeSpeed: FeeSpeed, feeRate: FeeRate, totalFee: Amount) {
     let handle =
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_constructor_feerateoptionwithtotalfee_new(
         FfiConverterTypeFeeSpeed_lower(feeSpeed),
         FfiConverterTypeFeeRate_lower(feeRate),
-        FfiConverterTypeAmount_lower(totalFee),$0
+        FfiConverterTypeAmount_lower(totalFee),uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -2355,65 +2467,73 @@ public convenience init(feeSpeed: FeeSpeed, feeRate: FeeRate, totalFee: Amount) 
     
 open func duration() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_duration(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func feeRate() -> FeeRate  {
     return try!  FfiConverterTypeFeeRate_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func feeRateOptions() -> FeeRateOption  {
     return try!  FfiConverterTypeFeeRateOption_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_rate_options(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func feeSpeed() -> FeeSpeed  {
     return try!  FfiConverterTypeFeeSpeed_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_fee_speed(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func isCustom() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_custom(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func isEqual(rhs: FeeRateOptionWithTotalFee) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_is_equal(
             self.uniffiCloneHandle(),
-        FfiConverterTypeFeeRateOptionWithTotalFee_lower(rhs),$0
+        FfiConverterTypeFeeRateOptionWithTotalFee_lower(rhs),uniffiCallStatus
     )
 })
 }
     
 open func satPerVb() -> Float  {
     return try!  FfiConverterFloat.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sat_per_vb(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func totalFee() -> Amount?  {
     return try!  FfiConverterOptionTypeAmount.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_total_fee(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -2530,7 +2650,8 @@ open class FeeRateOptions: FeeRateOptionsProtocol, @unchecked Sendable {
     
 public static func previewNew() -> FeeRateOptions  {
     return try!  FfiConverterTypeFeeRateOptions_lift(try! rustCall() {
-    uniffi_cove_types_fn_constructor_feerateoptions_previewnew($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_constructor_feerateoptions_previewnew(uniffiCallStatus
     )
 })
 }
@@ -2539,24 +2660,27 @@ public static func previewNew() -> FeeRateOptions  {
     
 open func fast() -> FeeRateOption  {
     return try!  FfiConverterTypeFeeRateOption_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptions_fast(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func medium() -> FeeRateOption  {
     return try!  FfiConverterTypeFeeRateOption_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptions_medium(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func slow() -> FeeRateOption  {
     return try!  FfiConverterTypeFeeRateOption_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptions_slow(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -2687,7 +2811,8 @@ open class FeeRateOptionsWithTotalFee: FeeRateOptionsWithTotalFeeProtocol, @unch
     
 public static func previewNew() -> FeeRateOptionsWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
-    uniffi_cove_types_fn_constructor_feerateoptionswithtotalfee_previewnew($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_constructor_feerateoptionswithtotalfee_previewnew(uniffiCallStatus
     )
 })
 }
@@ -2696,83 +2821,93 @@ public static func previewNew() -> FeeRateOptionsWithTotalFee  {
     
 open func addCustomFeeRate(feeRate: FeeRateOptionWithTotalFee) -> FeeRateOptionsWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionswithtotalfee_add_custom_fee_rate(
             self.uniffiCloneHandle(),
-        FfiConverterTypeFeeRateOptionWithTotalFee_lower(feeRate),$0
+        FfiConverterTypeFeeRateOptionWithTotalFee_lower(feeRate),uniffiCallStatus
     )
 })
 }
     
 open func calculateCustomFeeSpeed(feeRate: Float) -> FeeSpeed  {
     return try!  FfiConverterTypeFeeSpeed_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(
             self.uniffiCloneHandle(),
-        FfiConverterFloat.lower(feeRate),$0
+        FfiConverterFloat.lower(feeRate),uniffiCallStatus
     )
 })
 }
     
 open func custom() -> FeeRateOptionWithTotalFee?  {
     return try!  FfiConverterOptionTypeFeeRateOptionWithTotalFee.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionswithtotalfee_custom(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func fast() -> FeeRateOptionWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionWithTotalFee_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fast(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func feeRateOptions() -> FeeRateOptions  {
     return try!  FfiConverterTypeFeeRateOptions_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionswithtotalfee_fee_rate_options(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func getFeeRateWith(feeRate: Float) -> FeeRateOptionWithTotalFee?  {
     return try!  FfiConverterOptionTypeFeeRateOptionWithTotalFee.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionswithtotalfee_get_fee_rate_with(
             self.uniffiCloneHandle(),
-        FfiConverterFloat.lower(feeRate),$0
+        FfiConverterFloat.lower(feeRate),uniffiCallStatus
     )
 })
 }
     
 open func medium() -> FeeRateOptionWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionWithTotalFee_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionswithtotalfee_medium(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func removeCustomFee() -> FeeRateOptionsWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionswithtotalfee_remove_custom_fee(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func slow() -> FeeRateOptionWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionWithTotalFee_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionswithtotalfee_slow(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func transactionSize() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionswithtotalfee_transaction_size(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -2999,15 +3134,17 @@ open class OutPoint: OutPointProtocol, @unchecked Sendable {
     
 public static func previewNew() -> OutPoint  {
     return try!  FfiConverterTypeOutPoint_lift(try! rustCall() {
-    uniffi_cove_types_fn_constructor_outpoint_previewnew($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_constructor_outpoint_previewnew(uniffiCallStatus
     )
 })
 }
     
 public static func withVout(vout: UInt32) -> OutPoint  {
     return try!  FfiConverterTypeOutPoint_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_constructor_outpoint_withvout(
-        FfiConverterUInt32.lower(vout),$0
+        FfiConverterUInt32.lower(vout),uniffiCallStatus
     )
 })
 }
@@ -3016,41 +3153,46 @@ public static func withVout(vout: UInt32) -> OutPoint  {
     
 open func eq(rhs: OutPoint) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_outpoint_eq(
             self.uniffiCloneHandle(),
-        FfiConverterTypeOutPoint_lower(rhs),$0
+        FfiConverterTypeOutPoint_lower(rhs),uniffiCallStatus
     )
 })
 }
     
 open func hashToUint() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_outpoint_hashtouint(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func txid() -> TxId  {
     return try!  FfiConverterTypeTxId_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_outpoint_txid(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func txidStr() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_outpoint_txid_str(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func txnLink() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_outpoint_txn_link(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3179,8 +3321,9 @@ open class Psbt: PsbtProtocol, @unchecked Sendable {
 public convenience init(data: Data)throws  {
     let handle =
         try rustCallWithError(FfiConverterTypePsbtError_lift) {
+        uniffiCallStatus in
     uniffi_cove_types_fn_constructor_psbt_new(
-        FfiConverterData.lower(data),$0
+        FfiConverterData.lower(data),uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -3206,8 +3349,9 @@ public convenience init(data: Data)throws  {
      */
 open func fee()throws  -> Amount  {
     return try  FfiConverterTypeAmount_lift(try rustCallWithError(FfiConverterTypePsbtError_lift) {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_psbt_fee(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3217,8 +3361,9 @@ open func fee()throws  -> Amount  {
      */
 open func outputTotalAmount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_psbt_output_total_amount(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3228,8 +3373,9 @@ open func outputTotalAmount() -> Amount  {
      */
 open func txId() -> TxId  {
     return try!  FfiConverterTypeTxId_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_psbt_tx_id(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3239,8 +3385,9 @@ open func txId() -> TxId  {
      */
 open func weight() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_psbt_weight(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3384,7 +3531,8 @@ open class QrDensity: QrDensityProtocol, @unchecked Sendable {
 public convenience init() {
     let handle =
         try! rustCall() {
-    uniffi_cove_types_fn_constructor_qrdensity_new($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_constructor_qrdensity_new(uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -3408,32 +3556,36 @@ public convenience init() {
      */
 open func bbqrAnimationIntervalMs() -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_qrdensity_bbqr_animation_interval_ms(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func bbqrMaxVersion() -> UInt8  {
     return try!  FfiConverterUInt8.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_qrdensity_bbqr_max_version(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func canDecrease() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_qrdensity_can_decrease(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func canIncrease() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_qrdensity_can_increase(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3443,8 +3595,9 @@ open func canIncrease() -> Bool  {
      */
 open func decrease() -> QrDensity  {
     return try!  FfiConverterTypeQrDensity_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_qrdensity_decrease(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3454,8 +3607,9 @@ open func decrease() -> QrDensity  {
      */
 open func increase() -> QrDensity  {
     return try!  FfiConverterTypeQrDensity_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_qrdensity_increase(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3466,16 +3620,18 @@ open func increase() -> QrDensity  {
      */
 open func urAnimationIntervalMs() -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_qrdensity_ur_animation_interval_ms(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func urFragmentLen() -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_qrdensity_ur_fragment_len(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3602,57 +3758,64 @@ open class SentAndReceived: SentAndReceivedProtocol, @unchecked Sendable {
     
 open func amount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_sentandreceived_amount(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func amountFmt(unit: BitcoinUnit) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_sentandreceived_amount_fmt(
             self.uniffiCloneHandle(),
-        FfiConverterTypeBitcoinUnit_lower(unit),$0
+        FfiConverterTypeBitcoinUnit_lower(unit),uniffiCallStatus
     )
 })
 }
     
 open func direction() -> TransactionDirection  {
     return try!  FfiConverterTypeTransactionDirection_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_sentandreceived_direction(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func externalSent() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_sentandreceived_external_sent(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func label() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_sentandreceived_label(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func received() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_sentandreceived_received(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
 open func sent() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_sentandreceived_sent(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3767,8 +3930,9 @@ open class TxId: TxIdProtocol, @unchecked Sendable, Equatable, Hashable, Compara
     
 open func asHashString() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_txid_as_hash_string(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -3779,8 +3943,9 @@ open func asHashString() -> String  {
 public var description: String {
     return try!  FfiConverterString.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_txid_uniffi_trait_display(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
     )
@@ -3789,9 +3954,10 @@ public var description: String {
 public static func == (self: TxId, other: TxId) -> Bool {
     return try!  FfiConverterBool.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_txid_uniffi_trait_eq_eq(
             self.uniffiCloneHandle(),
-        FfiConverterTypeTxId_lower(other),$0
+        FfiConverterTypeTxId_lower(other),uniffiCallStatus
     )
 }
     )
@@ -3800,8 +3966,9 @@ public static func == (self: TxId, other: TxId) -> Bool {
 public func hash(into hasher: inout Hasher) {
     let val = try!  FfiConverterUInt64.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_txid_uniffi_trait_hash(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
     )
@@ -3811,9 +3978,10 @@ public func hash(into hasher: inout Hasher) {
 public static func < (self: TxId, other: TxId) -> Bool {
     return try!  FfiConverterInt8.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_txid_uniffi_trait_ord_cmp(
             self.uniffiCloneHandle(),
-        FfiConverterTypeTxId_lower(other),$0
+        FfiConverterTypeTxId_lower(other),uniffiCallStatus
     )
 }
     ) < 0
@@ -4544,33 +4712,37 @@ public struct Utxo: Equatable, Hashable {
     
 public func date() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_utxo_date(
-            FfiConverterTypeUtxo_lower(self),$0
+            FfiConverterTypeUtxo_lower(self),uniffiCallStatus
     )
 })
 }
     
 public func hashToUint() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_utxo_hash_to_uint(
-            FfiConverterTypeUtxo_lower(self),$0
+            FfiConverterTypeUtxo_lower(self),uniffiCallStatus
     )
 })
 }
     
 public func isEqual(other: Utxo) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_utxo_is_equal(
             FfiConverterTypeUtxo_lower(self),
-        FfiConverterTypeUtxo_lower(other),$0
+        FfiConverterTypeUtxo_lower(other),uniffiCallStatus
     )
 })
 }
     
 public func name() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_utxo_name(
-            FfiConverterTypeUtxo_lower(self),$0
+            FfiConverterTypeUtxo_lower(self),uniffiCallStatus
     )
 })
 }
@@ -4581,9 +4753,10 @@ public func name() -> String  {
 public static func == (self: Utxo, other: Utxo) -> Bool {
     return try!  FfiConverterBool.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_utxo_uniffi_trait_eq_eq(
             FfiConverterTypeUtxo_lower(self),
-        FfiConverterTypeUtxo_lower(other),$0
+        FfiConverterTypeUtxo_lower(other),uniffiCallStatus
     )
 }
     )
@@ -4592,8 +4765,9 @@ public static func == (self: Utxo, other: Utxo) -> Bool {
 public func hash(into hasher: inout Hasher) {
     let val = try!  FfiConverterUInt64.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_utxo_uniffi_trait_hash(
-            FfiConverterTypeUtxo_lower(self),$0
+            FfiConverterTypeUtxo_lower(self),uniffiCallStatus
     )
 }
     )
@@ -4776,8 +4950,9 @@ public enum BitcoinUnit: Equatable, Hashable, CustomStringConvertible {
 public var description: String {
     return try!  FfiConverterString.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(
-            FfiConverterTypeBitcoinUnit_lower(self),$0
+            FfiConverterTypeBitcoinUnit_lower(self),uniffiCallStatus
     )
 }
     )
@@ -4849,8 +5024,9 @@ public enum ColorSchemeSelection: Equatable, Hashable {
 
 public func capitalizedString() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_colorschemeselection_capitalized_string(
-            FfiConverterTypeColorSchemeSelection_lower(self),$0
+            FfiConverterTypeColorSchemeSelection_lower(self),uniffiCallStatus
     )
 })
 }
@@ -5011,8 +5187,9 @@ public enum FeeSpeed: Equatable, Hashable, CustomStringConvertible {
 public var description: String {
     return try!  FfiConverterString.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(
-            FfiConverterTypeFeeSpeed_lower(self),$0
+            FfiConverterTypeFeeSpeed_lower(self),uniffiCallStatus
     )
 }
     )
@@ -5338,8 +5515,9 @@ public enum Network: Equatable, Hashable, CustomStringConvertible {
 
 public func displayName() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_network_display_name(
-            FfiConverterTypeNetwork_lower(self),$0
+            FfiConverterTypeNetwork_lower(self),uniffiCallStatus
     )
 })
 }
@@ -5350,8 +5528,9 @@ public func displayName() -> String  {
 public var description: String {
     return try!  FfiConverterString.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_network_uniffi_trait_display(
-            FfiConverterTypeNetwork_lower(self),$0
+            FfiConverterTypeNetwork_lower(self),uniffiCallStatus
     )
 }
     )
@@ -5540,8 +5719,9 @@ public enum QrExportFormat: Equatable, Hashable, CustomStringConvertible {
 public var description: String {
     return try!  FfiConverterString.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_method_qrexportformat_uniffi_trait_display(
-            FfiConverterTypeQrExportFormat_lower(self),$0
+            FfiConverterTypeQrExportFormat_lower(self),uniffiCallStatus
     )
 }
     )
@@ -6004,10 +6184,6 @@ fileprivate struct FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer {
 }
 
 
-/**
- * Typealias from the type name used in the UDL file to the builtin type.  This
- * is needed because the UDL type name is used in function/method signatures.
- */
 public typealias FfiOpacity = UInt8
 
 #if swift(>=5.8)
@@ -6048,10 +6224,6 @@ public func FfiConverterTypeFfiOpacity_lower(_ value: FfiOpacity) -> UInt8 {
 
 
 
-/**
- * Typealias from the type name used in the UDL file to the builtin type.  This
- * is needed because the UDL type name is used in function/method signatures.
- */
 public typealias WalletId = String
 
 #if swift(>=5.8)
@@ -6091,29 +6263,33 @@ public func FfiConverterTypeWalletId_lower(_ value: WalletId) -> RustBuffer {
 }
 
 public func addressIsValid(address: String, network: Network)throws   {try rustCallWithError(FfiConverterTypeAddressError_lift) {
+        uniffiCallStatus in
     uniffi_cove_types_fn_func_address_is_valid(
         FfiConverterString.lower(address),
-        FfiConverterTypeNetwork_lower(network),$0
+        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
     )
 }
 }
 public func addressIsValidForNetwork(address: String, network: Network)throws   {try rustCallWithError(FfiConverterTypeAddressError_lift) {
+        uniffiCallStatus in
     uniffi_cove_types_fn_func_address_is_valid_for_network(
         FfiConverterString.lower(address),
-        FfiConverterTypeNetwork_lower(network),$0
+        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
     )
 }
 }
 public func addressStringSpacedOut(address: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_func_address_string_spaced_out(
-        FfiConverterString.lower(address),$0
+        FfiConverterString.lower(address),uniffiCallStatus
     )
 })
 }
 public func allColorSchemes() -> [ColorSchemeSelection]  {
     return try!  FfiConverterSequenceTypeColorSchemeSelection.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_all_color_schemes($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_func_all_color_schemes(uniffiCallStatus
     )
 })
 }
@@ -6122,7 +6298,8 @@ public func allColorSchemes() -> [ColorSchemeSelection]  {
  */
 public func confirmDetailsPreviewNew() -> ConfirmDetails  {
     return try!  FfiConverterTypeConfirmDetails_lift(try! rustCall() {
-    uniffi_cove_types_fn_func_confirm_details_preview_new($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_func_confirm_details_preview_new(uniffiCallStatus
     )
 })
 }
@@ -6131,65 +6308,74 @@ public func confirmDetailsPreviewNew() -> ConfirmDetails  {
  */
 public func qrDensityIsEqual(lhs: QrDensity, rhs: QrDensity) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_func_qr_density_is_equal(
         FfiConverterTypeQrDensity_lower(lhs),
-        FfiConverterTypeQrDensity_lower(rhs),$0
+        FfiConverterTypeQrDensity_lower(rhs),uniffiCallStatus
     )
 })
 }
 public func feeRateOptionsWithTotalFeeIsEqual(lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_func_fee_rate_options_with_total_fee_is_equal(
         FfiConverterTypeFeeRateOptionsWithTotalFee_lower(lhs),
-        FfiConverterTypeFeeRateOptionsWithTotalFee_lower(rhs),$0
+        FfiConverterTypeFeeRateOptionsWithTotalFee_lower(rhs),uniffiCallStatus
     )
 })
 }
 public func feeSpeedDuration(feeSpeed: FeeSpeed) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_func_fee_speed_duration(
-        FfiConverterTypeFeeSpeed_lower(feeSpeed),$0
+        FfiConverterTypeFeeSpeed_lower(feeSpeed),uniffiCallStatus
     )
 })
 }
 public func feeSpeedIsCustom(feeSpeed: FeeSpeed) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_func_fee_speed_is_custom(
-        FfiConverterTypeFeeSpeed_lower(feeSpeed),$0
+        FfiConverterTypeFeeSpeed_lower(feeSpeed),uniffiCallStatus
     )
 })
 }
 public func feeSpeedToCircleColor(feeSpeed: FeeSpeed) -> FfiColor  {
     return try!  FfiConverterTypeFfiColor_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_func_fee_speed_to_circle_color(
-        FfiConverterTypeFeeSpeed_lower(feeSpeed),$0
+        FfiConverterTypeFeeSpeed_lower(feeSpeed),uniffiCallStatus
     )
 })
 }
 public func allNetworks() -> [Network]  {
     return try!  FfiConverterSequenceTypeNetwork.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_all_networks($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_func_all_networks(uniffiCallStatus
     )
 })
 }
 public func networkToString(network: Network) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_func_network_to_string(
-        FfiConverterTypeNetwork_lower(network),$0
+        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
     )
 })
 }
 public func allUnits() -> [BitcoinUnit]  {
     return try!  FfiConverterSequenceTypeBitcoinUnit.lift(try! rustCall() {
-    uniffi_cove_types_fn_func_all_units($0
+        uniffiCallStatus in
+    uniffi_cove_types_fn_func_all_units(uniffiCallStatus
     )
 })
 }
 public func previewNewUtxoList(outputCount: UInt8, changeCount: UInt8) -> [Utxo]  {
     return try!  FfiConverterSequenceTypeUtxo.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_types_fn_func_previewnewutxolist(
         FfiConverterUInt8.lower(outputCount),
-        FfiConverterUInt8.lower(changeCount),$0
+        FfiConverterUInt8.lower(changeCount),uniffiCallStatus
     )
 })
 }
@@ -6209,13 +6395,13 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_types_checksum_func_address_is_valid() != 40004) {
+    if (uniffi_cove_types_checksum_func_address_is_valid() != 36208) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_address_is_valid_for_network() != 34573) {
+    if (uniffi_cove_types_checksum_func_address_is_valid_for_network() != 43002) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_address_string_spaced_out() != 27769) {
+    if (uniffi_cove_types_checksum_func_address_string_spaced_out() != 18228) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_all_color_schemes() != 49693) {
@@ -6224,31 +6410,31 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_func_confirm_details_preview_new() != 41030) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_qr_density_is_equal() != 54760) {
+    if (uniffi_cove_types_checksum_func_qr_density_is_equal() != 42130) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal() != 17627) {
+    if (uniffi_cove_types_checksum_func_fee_rate_options_with_total_fee_is_equal() != 36759) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_fee_speed_duration() != 51667) {
+    if (uniffi_cove_types_checksum_func_fee_speed_duration() != 11829) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_fee_speed_is_custom() != 38261) {
+    if (uniffi_cove_types_checksum_func_fee_speed_is_custom() != 23523) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 20193) {
+    if (uniffi_cove_types_checksum_func_fee_speed_to_circle_color() != 62157) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_all_networks() != 5848) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_network_to_string() != 16428) {
+    if (uniffi_cove_types_checksum_func_network_to_string() != 41610) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_all_units() != 35208) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_previewnewutxolist() != 31621) {
+    if (uniffi_cove_types_checksum_func_previewnewutxolist() != 6622) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_address_hashtouint() != 25307) {
@@ -6290,7 +6476,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_addresswithnetwork_amount() != 15414) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork() != 42219) {
+    if (uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork() != 45131) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_addresswithnetwork_network() != 25441) {
@@ -6311,10 +6497,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 40607) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_fmt_string() != 3973) {
+    if (uniffi_cove_types_checksum_method_amount_fmt_string() != 58551) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 64791) {
+    if (uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 48730) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_amount_sats_string() != 34415) {
@@ -6356,19 +6542,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr() != 2152) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_density() != 25796) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_density() != 44300) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_max_version() != 52826) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_bbqr_with_max_version() != 64005) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_hex() != 28844) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur() != 59953) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur() != 52634) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 22044) {
+    if (uniffi_cove_types_checksum_method_confirmdetails_psbt_to_ur_with_density() != 31866) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_confirmdetails_sending_amount() != 32253) {
@@ -6416,7 +6602,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_feerateoption_fee_speed() != 40949) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoption_is_equal() != 33304) {
+    if (uniffi_cove_types_checksum_method_feerateoption_is_equal() != 39831) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoption_sat_per_vb() != 38044) {
@@ -6437,7 +6623,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_custom() != 33675) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal() != 12772) {
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal() != 2340) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 61796) {
@@ -6455,10 +6641,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_feerateoptions_slow() != 30350) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate() != 4884) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate() != 42043) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed() != 37692) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed() != 52079) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_custom() != 13008) {
@@ -6470,7 +6656,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_fee_rate_options() != 44824) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with() != 34987) {
+    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with() != 30247) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_medium() != 37448) {
@@ -6497,7 +6683,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_psbt_weight() != 40555) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_outpoint_eq() != 14112) {
+    if (uniffi_cove_types_checksum_method_outpoint_eq() != 30337) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_outpoint_hashtouint() != 51667) {
@@ -6515,7 +6701,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_sentandreceived_amount() != 64130) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_method_sentandreceived_amount_fmt() != 34174) {
+    if (uniffi_cove_types_checksum_method_sentandreceived_amount_fmt() != 17793) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_sentandreceived_direction() != 54585) {
@@ -6536,7 +6722,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_txid_as_hash_string() != 7916) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_address_from_string() != 4732) {
+    if (uniffi_cove_types_checksum_constructor_address_from_string() != 4452) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_constructor_address_preview_new() != 61836) {
@@ -6545,10 +6731,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_constructor_address_random() != 18866) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 55575) {
+    if (uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 61140) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_amount_from_sat() != 32795) {
+    if (uniffi_cove_types_checksum_constructor_amount_from_sat() != 45934) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_constructor_amount_one_btc() != 13254) {
@@ -6560,13 +6746,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_constructor_qrdensity_new() != 57563) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb() != 23120) {
+    if (uniffi_cove_types_checksum_constructor_feerate_from_sat_per_vb() != 41119) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_feerateoption_new() != 46851) {
+    if (uniffi_cove_types_checksum_constructor_feerateoption_new() != 60715) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new() != 48098) {
+    if (uniffi_cove_types_checksum_constructor_feerateoptionwithtotalfee_new() != 55634) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_constructor_feerateoptions_previewnew() != 40621) {
@@ -6575,13 +6761,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_previewnew() != 31010) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_psbt_new() != 34001) {
+    if (uniffi_cove_types_checksum_constructor_psbt_new() != 34599) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_constructor_outpoint_previewnew() != 32440) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_constructor_outpoint_withvout() != 16885) {
+    if (uniffi_cove_types_checksum_constructor_outpoint_withvout() != 37073) {
         return InitializationResult.apiChecksumMismatch
     }
 

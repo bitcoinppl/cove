@@ -1,4 +1,8 @@
 reviews:
+  path_filters:
+    - "!ios/CoveCore/Sources/CoveCore/generated/**"
+    - "!android/app/src/main/java/org/bitcoinppl/cove_core/**"
+    - "!android/app/src/main/java/uniffi/**"
   path_instructions:
     - path: "rust/**/*.rs"
       instructions: |

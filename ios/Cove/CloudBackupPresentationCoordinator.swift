@@ -9,8 +9,8 @@ enum CloudBackupRootPresentation: Equatable {
     case missingPasskeyReminder
     case verificationPrompt
 
-    init?(promptIntent: CloudBackupPromptIntent) {
-        switch promptIntent {
+    init?(rootPrompt: CloudBackupRootPrompt) {
+        switch rootPrompt {
         case .none:
             return nil
         case let .existingBackupFound(context, passkeyHint):
@@ -19,7 +19,7 @@ enum CloudBackupRootPresentation: Equatable {
             self = .passkeyChoice(intent)
         case .missingPasskeyReminder:
             self = .missingPasskeyReminder
-        case .verificationPrompt:
+        case .verification:
             self = .verificationPrompt
         }
     }
@@ -117,13 +117,13 @@ final class CloudBackupPresentationCoordinator {
     @ObservationIgnored private var requiresPresentationDelay = false
     @ObservationIgnored private var context = CloudBackupPresentationContext()
     @ObservationIgnored private var blockers: Set<CloudBackupPresentationBlocker> = []
-    @ObservationIgnored private let promptIntent: () -> CloudBackupPromptIntent
+    @ObservationIgnored private let rootPrompt: () -> CloudBackupRootPrompt
 
     private(set) var currentPresentation: CloudBackupRootPresentation?
     private(set) var queuedPresentation: CloudBackupRootPresentation?
 
-    init(promptIntent: @escaping () -> CloudBackupPromptIntent = { CloudBackupManager.shared.promptIntent }) {
-        self.promptIntent = promptIntent
+    init(rootPrompt: @escaping () -> CloudBackupRootPrompt = { CloudBackupManager.shared.rootPrompt }) {
+        self.rootPrompt = rootPrompt
     }
 
     func update(context: CloudBackupPresentationContext) {
@@ -162,7 +162,7 @@ final class CloudBackupPresentationCoordinator {
 
     func reconcile() {
         let desiredPresentation = CloudBackupRootPresentation(
-            promptIntent: promptIntent()
+            rootPrompt: rootPrompt()
         )
 
         guard let desiredPresentation else {
@@ -264,7 +264,7 @@ final class CloudBackupPresentationCoordinator {
 
         guard let queuedPresentation else { return }
         guard
-            CloudBackupRootPresentation(promptIntent: promptIntent())
+            CloudBackupRootPresentation(rootPrompt: rootPrompt())
             == queuedPresentation
         else {
             self.queuedPresentation = nil
@@ -506,10 +506,10 @@ struct CloudBackupPresentationHost<Content: View>: View {
             .onChange(of: presentationContext, initial: true) { _, context in
                 coordinator.update(context: context)
             }
-            .onChange(of: manager.promptIntent) { _, _ in
+            .onChange(of: manager.rootPrompt) { _, _ in
                 coordinator.reconcile()
             }
-            .onChange(of: manager.verification) { _, _ in
+            .onChange(of: manager.verificationState) { _, _ in
                 coordinator.reconcile()
             }
             .onChange(of: manager.verificationPresentation) { _, presentation in
@@ -595,13 +595,13 @@ private struct CloudBackupVerificationPromptView: View {
     let onVerify: () -> Void
 
     private var isVerifying: Bool {
-        if case .verifying = manager.verification { return true }
+        if case .running = manager.verificationState { return true }
         return false
     }
 
     private var failure: DeepVerificationFailure? {
         guard !manager.shouldPromptVerification else { return nil }
-        if case let .failed(failure) = manager.verification { return failure }
+        if case let .failed(failure) = manager.verificationState { return failure }
         return nil
     }
 
