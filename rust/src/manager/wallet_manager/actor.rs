@@ -95,6 +95,7 @@ pub struct WalletActor {
     receive_address_watcher: Option<Addr<ReceiveAddressWatcher>>,
     receive_address_refresh_timer: Option<AbortableTask<()>>,
     scan_actor: Option<Addr<WalletScanActor>>,
+    scan_generation: u64,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -184,6 +185,7 @@ impl WalletActor {
             receive_address_watcher: None,
             receive_address_refresh_timer: None,
             scan_actor: None,
+            scan_generation: 0,
             db,
         })
     }
@@ -1133,6 +1135,8 @@ impl WalletActor {
 
         self.stop_receive_address_watcher();
         self.stop_receive_address_refresh_timer();
+        self.scan_generation += 1;
+        self.state = ActorState::Initial;
         self.transaction_watchers = HashMap::default();
         self.send_scan_status(WalletScanStatus::Idle);
     }
@@ -1143,6 +1147,12 @@ impl WalletActor {
     }
 
     pub async fn perform_scan_for_single_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
+        // shutdown clears watchers, so skip delayed scans for removed transactions
+        if !self.transaction_watchers.contains_key(&tx_id) {
+            debug!("skipping single tx scan, watcher already removed for {tx_id}");
+            return Produces::ok(());
+        }
+
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
         let _ = self.update_height().await?.await;
 
@@ -1156,6 +1166,7 @@ impl WalletActor {
 
         let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
         debug!("done scan for spk in {}s", now - start);
+        let generation = self.scan_generation;
         self.addr.send_fut_with(|addr| async move {
             let scan_result = node_client.sync(&graph, sync_request).await;
 
@@ -1163,7 +1174,7 @@ impl WalletActor {
             debug!("done single txn id sync scan in {}s", now - start);
 
             // save updated txns and send to frontend
-            send!(addr.update_sync_state_and_send_transactions(scan_result));
+            send!(addr.update_sync_state_and_send_transactions(scan_result, generation));
         });
 
         Produces::ok(())
@@ -1468,7 +1479,16 @@ impl WalletActor {
     async fn update_sync_state_and_send_transactions(
         &mut self,
         scan_result: Result<SyncResponse, NodeError>,
+        generation: u64,
     ) -> ActorResult<()> {
+        if generation != self.scan_generation {
+            debug!(
+                "dropping stale single tx scan result (gen {generation} != {})",
+                self.scan_generation
+            );
+            return Produces::ok(());
+        }
+
         if scan_result.is_err() {
             self.state = ActorState::FailedSyncScan;
         }
