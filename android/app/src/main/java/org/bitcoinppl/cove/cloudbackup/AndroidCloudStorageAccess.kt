@@ -32,8 +32,9 @@ internal data class DriveLocationParts(
 )
 
 internal fun driveLocationParts(relativePath: String): DriveLocationParts {
+    require(relativePath.isNotBlank()) { "relativePath must not be blank" }
+
     val parts = relativePath.split("/")
-    require(parts.isNotEmpty())
     require(parts.none { it.isBlank() || it == "." || it == ".." })
 
     return DriveLocationParts(
@@ -239,7 +240,7 @@ class AndroidCloudStorageAccess internal constructor(
     ) {
         runDriveOperation(
             interactive = policy.allowsConsent(),
-            onError = { error -> mapDriveUploadError(error, recordId) },
+            onError = { error -> mapDriveUploadError(error, location.errorId(recordId)) },
         ) { token ->
             val namespaceFolderId = ensureNamespaceFolderId(token, namespace)
             val parentId = ensureLocationParentFolderId(token, namespaceFolderId, location)
@@ -282,7 +283,10 @@ class AndroidCloudStorageAccess internal constructor(
     ): ByteArray =
         runDriveOperation(
             interactive = policy.allowsConsent(),
-            onError = { error -> mapDriveDownloadError(error, recordId) },
+            onError = { error ->
+                val errorId = locations.firstOrNull()?.errorId(recordId) ?: recordId
+                mapDriveDownloadError(error, errorId)
+            },
         ) { token ->
             val namespaceFolderId = requireNamespaceFolderId(token, namespace)
             val fileId =
@@ -302,7 +306,10 @@ class AndroidCloudStorageAccess internal constructor(
     ) {
         runDriveOperation(
             interactive = policy.allowsConsent(),
-            onError = { error -> mapDriveDeleteError(error, recordId) },
+            onError = { error ->
+                val errorId = locations.firstOrNull()?.errorId(recordId) ?: recordId
+                mapDriveDeleteError(error, errorId)
+            },
         ) { token ->
             val namespaceFolderId = requireNamespaceFolderId(token, namespace)
             val files =
@@ -316,12 +323,23 @@ class AndroidCloudStorageAccess internal constructor(
                 throw DriveHttpException(404, "wallet backup not found")
             }
 
+            val failures = mutableListOf<DriveDeleteFailure>()
             files.forEach { file ->
-                driveRequest(
-                    token = token,
-                    method = "DELETE",
-                    url = "${DriveApi.FILES_ENDPOINT}/${file.id}",
-                )
+                try {
+                    driveRequest(
+                        token = token,
+                        method = "DELETE",
+                        url = "${DriveApi.FILES_ENDPOINT}/${file.id}",
+                    )
+                } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    Log.w("AndroidCloudStorage", "failed to delete drive file id=${file.id}", error)
+                    failures.add(DriveDeleteFailure(fileId = file.id, error = error))
+                }
+            }
+
+            if (failures.isNotEmpty()) {
+                throw aggregateDeleteFailures(failures)
             }
         }
     }
@@ -913,6 +931,39 @@ class AndroidCloudStorageAccess internal constructor(
         val isFolder: Boolean
             get() = mimeType == DriveApi.FOLDER_MIME_TYPE
     }
+
+    private data class DriveDeleteFailure(
+        val fileId: String,
+        val error: Throwable,
+    )
+
+    private fun aggregateDeleteFailures(failures: List<DriveDeleteFailure>): DriveHttpException {
+        val statusCode =
+            failures
+                .mapNotNull { (it.error as? DriveHttpException)?.statusCode }
+                .distinct()
+                .singleOrNull()
+                ?: HttpURLConnection.HTTP_INTERNAL_ERROR
+        val body =
+            failures.joinToString(
+                separator = "; ",
+                prefix = "failed to delete drive files: ",
+            ) { failure ->
+                "id=${failure.fileId} ${deleteFailureDetail(failure.error)}"
+            }
+
+        return DriveHttpException(statusCode, body).apply {
+            failures.forEach { addSuppressed(it.error) }
+        }
+    }
+
+    private fun deleteFailureDetail(error: Throwable): String =
+        when (error) {
+            is DriveHttpException ->
+                "status=${error.statusCode} body=${error.body.ifBlank { "empty response" }}"
+            else ->
+                "${error::class.java.simpleName}: ${error.message ?: "no message"}"
+        }
 
     private object DriveApi {
         const val FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
