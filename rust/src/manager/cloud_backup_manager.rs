@@ -2782,6 +2782,7 @@ mod tests {
     fn init_manager() -> Arc<RustCloudBackupManager> {
         ensure_cloud_backup_test_tokio_runtime();
         test_globals().reset();
+        Database::global().cloud_backup_state.set(&PersistedCloudBackupState::default()).unwrap();
         RustCloudBackupManager::init()
     }
 
