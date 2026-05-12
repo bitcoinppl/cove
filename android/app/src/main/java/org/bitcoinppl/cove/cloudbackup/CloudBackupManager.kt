@@ -21,8 +21,6 @@ import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupProgress
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
-import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
-import org.bitcoinppl.cove_core.CloudBackupRestoreReport
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupState
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
@@ -144,22 +142,6 @@ class CloudBackupManager private constructor(
                         is CloudBackupEnableFlow.RetryingUploadWithStagedMaterial -> flow.progress
                         else -> null
                     }
-                else -> null
-            }
-
-    val restoreProgress: CloudBackupRestoreProgress?
-        get() =
-            when (val lifecycle = state.lifecycle) {
-                is CloudBackupLifecycle.Restoring -> lifecycle.v1.progress
-                else -> null
-            }
-
-    val restoreReport: CloudBackupRestoreReport?
-        get() =
-            when (val lifecycle = state.lifecycle) {
-                is CloudBackupLifecycle.Restoring -> lifecycle.v1.report
-                is CloudBackupLifecycle.Configured -> lifecycle.v1.lastRestoreReport
-                is CloudBackupLifecycle.Failed -> lifecycle.v1.restoreReport
                 else -> null
             }
 

@@ -80,77 +80,37 @@ import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
-import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
-import org.bitcoinppl.cove_core.CloudBackupRestoreReport
-import org.bitcoinppl.cove_core.CloudBackupRestoreStage
+import org.bitcoinppl.cove_core.CloudBackupRestoreFlow
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingBranch
-
+import org.bitcoinppl.cove_core.OnboardingRestoreState
 
 internal enum class CloudBackupEnableOnboardingContext {
     STANDARD,
     HARDWARE_IMPORT,
 }
 
-internal const val RESTORE_TIMEOUT_MESSAGE = "Restore timed out. Please try again."
+internal fun combinedRestoreProgress(restoreState: OnboardingRestoreState): Float {
+    val flow = (restoreState as? OnboardingRestoreState.Restoring)?.v1 ?: return 0f
 
-internal sealed interface OnboardingRestorePhase {
-    data object Restoring : OnboardingRestorePhase
-
-    data class Complete(
-        val report: CloudBackupRestoreReport,
-    ) : OnboardingRestorePhase
-
-    data class Error(
-        val message: String,
-    ) : OnboardingRestorePhase
-}
-
-internal fun combinedRestoreProgress(restoreProgress: CloudBackupRestoreProgress?): Float {
-    restoreProgress ?: return 0f
-
-    return when (restoreProgress.stage) {
-        CloudBackupRestoreStage.FINDING -> 0f
-        CloudBackupRestoreStage.DOWNLOADING -> {
-            val total = restoreProgress.total?.toFloat() ?: return 0f
+    return when (flow) {
+        CloudBackupRestoreFlow.Finding -> 0f
+        is CloudBackupRestoreFlow.Downloading -> {
+            val total = flow.total.toFloat()
             if (total <= 0f) return 0f
-            restoreProgress.completed.toFloat() / (total * 2f)
+            flow.completed.toFloat() / (total * 2f)
         }
-        CloudBackupRestoreStage.RESTORING -> {
-            val total = restoreProgress.total?.toFloat() ?: return 0f
+        is CloudBackupRestoreFlow.Restoring -> {
+            val total = flow.total.toFloat()
             if (total <= 0f) return 0f
-            (total + restoreProgress.completed.toFloat()) / (total * 2f)
+            (total + flow.completed.toFloat()) / (total * 2f)
         }
     }
 }
-
-internal fun resolveRestorePhase(
-    lifecycle: CloudBackupLifecycle,
-    restoreReport: CloudBackupRestoreReport?,
-    currentPhase: OnboardingRestorePhase,
-): OnboardingRestorePhase =
-    when (lifecycle) {
-        is CloudBackupLifecycle.Failed -> {
-            if (currentPhase is OnboardingRestorePhase.Restoring) {
-                OnboardingRestorePhase.Error(lifecycle.v1.message)
-            } else {
-                currentPhase
-            }
-        }
-        is CloudBackupLifecycle.Configured -> {
-            restoreReport?.let { OnboardingRestorePhase.Complete(it) } ?: currentPhase
-        }
-        else -> currentPhase
-    }
-
-internal fun shouldNotifyRestoreError(
-    currentPhase: OnboardingRestorePhase,
-    hasDeliveredError: Boolean,
-): Boolean = currentPhase is OnboardingRestorePhase.Restoring && !hasDeliveredError
 
 internal fun shouldCompleteOnboardingCloudBackup(
     configuredState: CloudBackupConfiguredState?,
@@ -1016,86 +976,27 @@ private fun OnboardingToggleCard(
 
 @Composable
 internal fun OnboardingRestoreView(
-    onComplete: () -> Unit,
-    onError: (String) -> Unit,
+    restoreState: OnboardingRestoreState,
+    onDone: () -> Unit,
+    onRetry: () -> Unit,
+    onContinueWithoutBackup: () -> Unit,
 ) {
-    val backupManager = remember { CloudBackupManager.getInstance() }
-    var phase by remember { mutableStateOf<OnboardingRestorePhase>(OnboardingRestorePhase.Restoring) }
-    var hasStartedRestore by remember { mutableStateOf(false) }
-    var hasDeliveredCompletion by remember { mutableStateOf(false) }
-    var hasDeliveredError by remember { mutableStateOf(false) }
-    var timeoutNonce by remember { mutableStateOf(0) }
-
-    fun failRestore(message: String) {
-        val shouldNotify = shouldNotifyRestoreError(phase, hasDeliveredError)
-        phase = OnboardingRestorePhase.Error(message)
-        if (shouldNotify) {
-            hasDeliveredError = true
-            onError(message)
-        }
-    }
-
-    fun startRestore() {
-        phase = OnboardingRestorePhase.Restoring
-        hasStartedRestore = true
-        hasDeliveredCompletion = false
-        hasDeliveredError = false
-        timeoutNonce += 1
-        backupManager.dispatch(CloudBackupManagerAction.RestoreFromCloudBackup)
-    }
-
-    fun finishRestore() {
-        if (hasDeliveredCompletion) return
-        hasDeliveredCompletion = true
-        onComplete()
-    }
-
-    LaunchedEffect(Unit) {
-        if (hasStartedRestore) return@LaunchedEffect
-        startRestore()
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            if (backupManager.lifecycle is CloudBackupLifecycle.Restoring) {
-                backupManager.dispatch(CloudBackupManagerAction.CancelRestore)
-            }
-        }
-    }
-
-    LaunchedEffect(backupManager.lifecycle, backupManager.restoreReport) {
-        val nextPhase = resolveRestorePhase(backupManager.lifecycle, backupManager.restoreReport, phase)
-        if (nextPhase != phase) {
-            if (nextPhase is OnboardingRestorePhase.Error) {
-                failRestore(nextPhase.message)
-            } else {
-                phase = nextPhase
-            }
-        }
-    }
-
-    LaunchedEffect(timeoutNonce) {
-        if (timeoutNonce == 0) return@LaunchedEffect
-        delay(120_000)
-        if (phase != OnboardingRestorePhase.Restoring) return@LaunchedEffect
-        backupManager.dispatch(CloudBackupManagerAction.CancelRestore)
-        failRestore(RESTORE_TIMEOUT_MESSAGE)
-    }
-
     OnboardingRestoreContent(
-        phase = phase,
-        combinedProgress = combinedRestoreProgress(backupManager.restoreProgress),
-        onDone = ::finishRestore,
-        onRetry = ::startRestore,
+        restoreState = restoreState,
+        combinedProgress = combinedRestoreProgress(restoreState),
+        onDone = onDone,
+        onRetry = onRetry,
+        onContinueWithoutBackup = onContinueWithoutBackup,
     )
 }
 
 @Composable
 private fun OnboardingRestoreContent(
-    phase: OnboardingRestorePhase,
+    restoreState: OnboardingRestoreState,
     combinedProgress: Float,
     onDone: () -> Unit,
     onRetry: () -> Unit,
+    onContinueWithoutBackup: () -> Unit,
 ) {
     OnboardingBackground {
         BoxWithConstraints(
@@ -1113,15 +1014,17 @@ private fun OnboardingRestoreContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                when (phase) {
-                    OnboardingRestorePhase.Restoring -> OnboardingStatusHero(icon = Icons.Default.CloudDownload)
-                    is OnboardingRestorePhase.Complete ->
+                when (restoreState) {
+                    OnboardingRestoreState.Idle,
+                    is OnboardingRestoreState.Restoring,
+                    -> OnboardingStatusHero(icon = Icons.Default.CloudDownload)
+                    is OnboardingRestoreState.Complete ->
                         OnboardingStatusHero(
                             icon = Icons.Default.Check,
                             tint = OnboardingSuccess,
                             fillColor = OnboardingSuccess.copy(alpha = 0.12f),
                         )
-                    is OnboardingRestorePhase.Error ->
+                    is OnboardingRestoreState.Failed ->
                         OnboardingStatusHero(
                             icon = Icons.Default.Warning,
                             tint = Color.Red,
@@ -1131,8 +1034,10 @@ private fun OnboardingRestoreContent(
 
                 Spacer(modifier = Modifier.size(44.dp))
 
-                when (phase) {
-                    OnboardingRestorePhase.Restoring -> {
+                when (restoreState) {
+                    OnboardingRestoreState.Idle,
+                    is OnboardingRestoreState.Restoring,
+                    -> {
                         Text(
                             text = "Restoring from Google Drive...",
                             color = Color.White,
@@ -1150,7 +1055,7 @@ private fun OnboardingRestoreContent(
                         Spacer(modifier = Modifier.size(18.dp))
                         OnboardingThinProgressBar(progress = combinedProgress)
                     }
-                    is OnboardingRestorePhase.Complete -> {
+                    is OnboardingRestoreState.Complete -> {
                         Text(
                             text = "You're all set",
                             color = Color.White,
@@ -1166,7 +1071,7 @@ private fun OnboardingRestoreContent(
                             textAlign = TextAlign.Center,
                         )
                     }
-                    is OnboardingRestorePhase.Error -> {
+                    is OnboardingRestoreState.Failed -> {
                         Text(
                             text = "Restore Failed",
                             color = Color.White,
@@ -1187,25 +1092,33 @@ private fun OnboardingRestoreContent(
 
                 Spacer(modifier = Modifier.size(28.dp))
 
-                when (phase) {
-                    OnboardingRestorePhase.Restoring -> Unit
-                    is OnboardingRestorePhase.Complete -> {
-                        if (phase.report.walletsFailed.toInt() > 0) {
-                            OnboardingInlineMessage(text = "${phase.report.walletsFailed} wallet(s) could not be restored")
+                when (restoreState) {
+                    OnboardingRestoreState.Idle,
+                    is OnboardingRestoreState.Restoring,
+                    -> Unit
+                    is OnboardingRestoreState.Complete -> {
+                        val report = restoreState.v1
+                        if (report.walletsFailed.toInt() > 0) {
+                            OnboardingInlineMessage(text = "${report.walletsFailed} wallet(s) could not be restored")
                             Spacer(modifier = Modifier.size(16.dp))
                         }
-                        if (phase.report.labelsFailedWalletNames.isNotEmpty()) {
+                        if (report.labelsFailedWalletNames.isNotEmpty()) {
                             OnboardingInlineMessage(
-                                text = "${phase.report.labelsFailedWalletNames.size} restored wallet(s) had labels that could not be imported",
+                                text = "${report.labelsFailedWalletNames.size} restored wallet(s) had labels that could not be imported",
                             )
                             Spacer(modifier = Modifier.size(16.dp))
                         }
                         OnboardingPrimaryButton(text = "Done", onClick = onDone)
                     }
-                    is OnboardingRestorePhase.Error -> {
-                        OnboardingInlineMessage(text = phase.message)
+                    is OnboardingRestoreState.Failed -> {
+                        OnboardingInlineMessage(text = restoreState.message)
                         Spacer(modifier = Modifier.size(18.dp))
                         OnboardingPrimaryButton(text = "Retry", onClick = onRetry)
+                        Spacer(modifier = Modifier.size(12.dp))
+                        OnboardingSecondaryButton(
+                            text = "Continue without backup",
+                            onClick = onContinueWithoutBackup,
+                        )
                     }
                 }
 

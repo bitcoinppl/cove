@@ -56,8 +56,9 @@ pub use self::detail::{
     PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
 };
 pub(crate) use self::keychain::CloudBackupKeychain;
+pub use self::model::{CloudBackupLifecycle, CloudBackupRestoreFlow};
 use self::model::{
-    CloudBackupLifecycle, CloudBackupModel, CloudBackupModelEffects, CloudBackupModelEvent,
+    CloudBackupModel, CloudBackupModelEffects, CloudBackupModelEvent,
     CloudBackupModelEventRejection,
 };
 pub(crate) use self::store::CloudBackupStore;
@@ -66,6 +67,7 @@ use self::verify::coordinator::{
 };
 use self::wallets::wallet_metadata_change_requires_upload;
 use self::wallets::{StagedPrfKey, UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader};
+pub(crate) use self::workers::CloudBackupRestoreEvent;
 use self::workers::{
     CloudBackupCleanupJob, CloudBackupOperation, CloudBackupSupervisor, RestoreOperation,
 };
@@ -198,20 +200,6 @@ pub struct CloudBackupProgress {
 pub struct RecordId(String);
 
 uniffi::custom_newtype!(RecordId, String);
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum CloudBackupRestoreStage {
-    Finding,
-    Downloading,
-    Restoring,
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
-pub struct CloudBackupRestoreProgress {
-    pub stage: CloudBackupRestoreStage,
-    pub completed: u32,
-    pub total: Option<u32>,
-}
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupWalletStatus {
@@ -384,8 +372,7 @@ pub(crate) mod test_support {
         pub(crate) status: CloudBackupStatus,
         pub(crate) sync_health: CloudSyncHealth,
         pub(crate) progress: Option<CloudBackupProgress>,
-        pub(crate) restore_progress: Option<CloudBackupRestoreProgress>,
-        pub(crate) restore_report: Option<CloudBackupRestoreReport>,
+        pub(crate) restore_progress: Option<CloudBackupRestoreFlow>,
         pub(crate) enable_state: CloudBackupEnableState,
         pub(crate) pending_upload_verification: PendingUploadVerificationState,
         pub(crate) verification_presentation: CloudBackupVerificationPresentation,
@@ -401,7 +388,6 @@ pub(crate) mod test_support {
                 sync_health: CloudSyncHealth::Unknown,
                 progress: None,
                 restore_progress: None,
-                restore_report: None,
                 enable_state: CloudBackupEnableState::Idle,
                 pending_upload_verification: PendingUploadVerificationState::Idle,
                 verification_presentation: CloudBackupVerificationPresentation::Hidden {
@@ -1355,19 +1341,9 @@ impl RustCloudBackupManager {
 
     pub(crate) fn apply_restore_outcome(&self, outcome: CloudBackupRestoreOutcome) {
         match outcome {
-            CloudBackupRestoreOutcome::ProgressCleared => {
-                self.apply_model_event(CloudBackupModelEvent::RestoreProgressReported(None));
-            }
+            CloudBackupRestoreOutcome::ProgressCleared => {}
             CloudBackupRestoreOutcome::ProgressReported(progress) => {
-                self.apply_model_event(CloudBackupModelEvent::RestoreProgressReported(Some(
-                    progress,
-                )));
-            }
-            CloudBackupRestoreOutcome::ReportCleared => {
-                self.apply_model_event(CloudBackupModelEvent::RestoreReportRecorded(None));
-            }
-            CloudBackupRestoreOutcome::ReportRecorded(report) => {
-                self.apply_model_event(CloudBackupModelEvent::RestoreReportRecorded(Some(report)));
+                self.apply_model_event(CloudBackupModelEvent::RestoreProgressReported(progress));
             }
         }
     }
@@ -1656,7 +1632,6 @@ impl RustCloudBackupManager {
         self.clear_prompt_state();
         self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
         self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        self.apply_restore_outcome(CloudBackupRestoreOutcome::ReportCleared);
         self.observe_sync_health(CloudSyncHealth::Unknown);
         self.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
         self.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
@@ -2472,7 +2447,6 @@ impl RustCloudBackupManager {
         self.clear_prompt_state();
         self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
         self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        self.apply_restore_outcome(CloudBackupRestoreOutcome::ReportCleared);
         self.refresh_persisted_flags();
         self.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
         self.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
@@ -2533,6 +2507,15 @@ impl RustCloudBackupManager {
     pub(crate) fn restore_from_cloud_backup(&self) {
         info!("restore_from_cloud_backup: enqueueing restore task");
         send!(self.supervisor.start_restore_from_cloud_backup());
+    }
+
+    pub(crate) fn restore_from_cloud_backup_with_events(
+        &self,
+    ) -> Receiver<CloudBackupRestoreEvent> {
+        let (sender, receiver) = flume::bounded(100);
+        info!("restore_from_cloud_backup: enqueueing onboarding restore task");
+        send!(self.supervisor.start_restore_from_cloud_backup_with_events(sender));
+        receiver
     }
 
     fn clear_prompt_state(&self) {
@@ -3002,11 +2985,7 @@ mod tests {
     fn restore_progress_updates_state() {
         let _guard = test_lock().lock();
         let manager = init_manager();
-        let progress = CloudBackupRestoreProgress {
-            stage: CloudBackupRestoreStage::Downloading,
-            completed: 1,
-            total: Some(2),
-        };
+        let progress = CloudBackupRestoreFlow::Downloading { completed: 1, total: 2 };
 
         manager.reconcile_runtime_status(CloudBackupStatus::Restoring);
         manager
@@ -3078,59 +3057,33 @@ mod tests {
     }
 
     #[test]
-    fn restore_complete_clears_restore_progress() {
+    fn restore_complete_configures_lifecycle_without_report() {
         let _guard = test_lock().lock();
         let manager = init_manager();
 
         manager.reconcile_runtime_status(CloudBackupStatus::Restoring);
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressReported(
-            CloudBackupRestoreProgress {
-                stage: CloudBackupRestoreStage::Restoring,
-                completed: 1,
-                total: Some(2),
-            },
+            CloudBackupRestoreFlow::Restoring { completed: 1, total: 2 },
         ));
-        manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        manager.apply_restore_outcome(CloudBackupRestoreOutcome::ReportRecorded(
-            CloudBackupRestoreReport {
-                wallets_restored: 1,
-                wallets_failed: 0,
-                failed_wallet_errors: Vec::new(),
-                labels_failed_wallet_names: Vec::new(),
-                labels_failed_errors: Vec::new(),
-            },
-        ));
+        manager.reconcile_runtime_status(CloudBackupStatus::Enabled);
 
         assert!(manager.state.read().snapshot().restore_progress.is_none());
     }
 
     #[test]
-    fn terminal_status_clears_restore_progress_and_keeps_report() {
+    fn terminal_status_clears_restore_progress_without_report() {
         let _guard = test_lock().lock();
         let manager = init_manager();
-        let report = CloudBackupRestoreReport {
-            wallets_restored: 0,
-            wallets_failed: 2,
-            failed_wallet_errors: vec!["download failed".into()],
-            labels_failed_wallet_names: Vec::new(),
-            labels_failed_errors: Vec::new(),
-        };
 
         manager.reconcile_runtime_status(CloudBackupStatus::Restoring);
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressReported(
-            CloudBackupRestoreProgress {
-                stage: CloudBackupRestoreStage::Restoring,
-                completed: 1,
-                total: Some(2),
-            },
+            CloudBackupRestoreFlow::Restoring { completed: 1, total: 2 },
         ));
-        manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        manager.apply_restore_outcome(CloudBackupRestoreOutcome::ReportRecorded(report.clone()));
         manager.reconcile_runtime_status(CloudBackupStatus::Error("all wallets failed".into()));
 
         let state = manager.state.read();
         assert!(state.snapshot().restore_progress.is_none());
-        assert_eq!(state.snapshot().restore_report, Some(report));
+        assert!(matches!(state.public_state().lifecycle, CloudBackupLifecycle::Failed(_)));
     }
 
     #[test]
@@ -3149,11 +3102,7 @@ mod tests {
         let manager = init_manager();
         let stale_operation = new_restore_operation(&manager);
         let current_operation = new_restore_operation(&manager);
-        let progress = CloudBackupRestoreProgress {
-            stage: CloudBackupRestoreStage::Downloading,
-            completed: 1,
-            total: Some(3),
-        };
+        let progress = CloudBackupRestoreFlow::Downloading { completed: 1, total: 3 };
 
         let error = run_on_cloud_backup_runtime({
             let manager = manager.clone();
@@ -3233,54 +3182,6 @@ mod tests {
         });
 
         assert_eq!(manager.state.read().status(), CloudBackupStatus::Restoring);
-    }
-
-    #[test]
-    fn stale_restore_operation_cannot_update_restore_report() {
-        let _guard = test_lock().lock();
-        let manager = init_manager();
-        let stale_operation = new_restore_operation(&manager);
-        let current_operation = new_restore_operation(&manager);
-        let report = CloudBackupRestoreReport {
-            wallets_restored: 1,
-            wallets_failed: 0,
-            failed_wallet_errors: Vec::new(),
-            labels_failed_wallet_names: Vec::new(),
-            labels_failed_errors: Vec::new(),
-        };
-
-        let error = run_on_cloud_backup_runtime({
-            let manager = manager.clone();
-            let report = report.clone();
-            async move {
-                manager
-                    .apply_restore_outcome_for_restore_operation(
-                        &stale_operation,
-                        CloudBackupRestoreOutcome::ReportRecorded(report),
-                    )
-                    .await
-                    .unwrap_err()
-            }
-        });
-
-        assert!(matches!(error, CloudBackupError::Cancelled));
-        assert_eq!(manager.state.read().snapshot().restore_report, None);
-
-        run_on_cloud_backup_runtime({
-            let manager = manager.clone();
-            let report = report.clone();
-            async move {
-                manager
-                    .apply_restore_outcome_for_restore_operation(
-                        &current_operation,
-                        CloudBackupRestoreOutcome::ReportRecorded(report),
-                    )
-                    .await
-                    .unwrap()
-            }
-        });
-
-        assert_eq!(manager.state.read().snapshot().restore_report, Some(report));
     }
 
     #[test]
@@ -3368,7 +3269,6 @@ mod tests {
         manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
         manager.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        manager.apply_restore_outcome(CloudBackupRestoreOutcome::ReportCleared);
 
         assert!(manager.begin_background_operation(
             CloudBackupBackgroundOperation::Enable,

@@ -191,7 +191,6 @@ class CloudBackupRegressionHelpersTest {
                             sync = sync,
                             destructiveOperation = CloudBackupDestructiveOperationState.IDLE,
                             detail = CloudBackupDetailState.NotLoaded,
-                            lastRestoreReport = null,
                             rootPrompt = CloudBackupRootPrompt.None,
                             syncHealth = CloudSyncHealth.Unknown,
                             verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
