@@ -3034,7 +3034,7 @@ async fn startup_resume_skips_non_retryable_failed_wallet_uploads() {
     globals.cloud.fail_wallet_backup_upload_quota_exceeded();
     let initial_attempt_count = globals.cloud.wallet_backup_upload_attempt_count();
 
-    manager.resume_pending_cloud_upload_verification();
+    resume_wallet_uploads_from_persisted_state_for_test_async(&manager).await;
 
     assert_test_condition_stays_true(
         Duration::from_millis(250),
@@ -3078,7 +3078,7 @@ async fn startup_resume_retries_authorization_failed_wallet_uploads() {
     );
     let initial_attempt_count = globals.cloud.wallet_backup_upload_attempt_count();
 
-    manager.resume_pending_cloud_upload_verification();
+    resume_wallet_uploads_from_persisted_state_for_test_async(&manager).await;
 
     assert_eq!(
         manager.compute_sync_health().await,
@@ -3374,7 +3374,7 @@ async fn startup_resume_retries_interrupted_uploading_wallets() {
     persist_xpub_wallets(vec![metadata.clone()]);
     persist_uploading_blob_state(metadata.id, 1);
 
-    manager.resume_pending_cloud_upload_verification();
+    resume_wallet_uploads_from_persisted_state_for_test_async(&manager).await;
 
     wait_for_test_condition(
         Duration::from_secs(5),

@@ -1156,6 +1156,15 @@ pub(crate) async fn clear_wallet_upload_runtime_for_test_async(manager: &RustClo
         .expect("clear upload runtime state");
 }
 
+pub(crate) async fn resume_wallet_uploads_from_persisted_state_for_test_async(
+    manager: &RustCloudBackupManager,
+) {
+    manager.sync_persisted_state();
+    call!(manager.supervisor.resume_wallet_uploads_from_persisted_state())
+        .await
+        .expect("resume wallet uploads from persisted state");
+}
+
 pub(crate) async fn verify_pending_uploads_once_for_test_async(
     manager: &RustCloudBackupManager,
 ) -> bool {
