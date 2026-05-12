@@ -39,6 +39,52 @@ fileprivate extension ForeignBytes {
     init(bufferPointer: UnsafeBufferPointer<UInt8>) {
         self.init(len: Int32(bufferPointer.count), data: bufferPointer.baseAddress)
     }
+
+    init(rawBufferPointer: UnsafeRawBufferPointer) {
+        self.init(
+            len: Int32(rawBufferPointer.count),
+            data: rawBufferPointer.baseAddress?.assumingMemoryBound(to: UInt8.self)
+        )
+    }
+}
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Conforms to `FfiConverter` so the compiler enforces the full converter
+// method set. Only the scope-bound `lower(_:_body:)` overload is sound —
+// zero-copy byte buffers only flow foreign -> Rust, and only in argument
+// position. The four protocol-witness methods (`lift`, `lower`, `read`,
+// `write`) `fatalError` at runtime if anyone reaches them.
+//
+// The scope-bound `lower` takes a closure because the `ForeignBytes`
+// pointer is only guaranteed valid for the duration of
+// `Data.withUnsafeBytes`. Callers must run the full FFI call inside
+// the closure body.
+fileprivate enum FfiConverterByRefBytes: FfiConverter {
+    typealias SwiftType = Data
+    typealias FfiType = ForeignBytes
+
+    static func lower<R>(_ value: Data, _ body: (ForeignBytes) throws -> R) rethrows -> R {
+        return try value.withUnsafeBytes { rawBuf in
+            try body(ForeignBytes(rawBufferPointer: rawBuf))
+        }
+    }
+
+    static func lower(_ value: Data) -> ForeignBytes {
+        fatalError("ByRef bytes cannot use the plain lower: returning ForeignBytes escapes the Data.withUnsafeBytes scope. Use the scope-bound lower(_:_body:) overload instead.")
+    }
+
+    static func lift(_ value: ForeignBytes) throws -> Data {
+        fatalError("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        fatalError("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
+
+    static func write(_ value: Data, into buf: inout [UInt8]) {
+        fatalError("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
 }
 
 // For every type used in the interface, we provide helper methods for conveniently
@@ -461,7 +507,11 @@ fileprivate struct FfiConverterString: FfiConverter {
             return String()
         }
         let bytes = UnsafeBufferPointer<UInt8>(start: value.data!, count: Int(value.len))
-        return String(bytes: bytes, encoding: String.Encoding.utf8)!
+        // Use Swift's native UTF-8 decoder; `String(bytes:encoding:.utf8)` goes
+        // through Foundation's NSString and silently strips a leading U+FEFF BOM.
+        // Invalid UTF-8 substitutes U+FFFD instead of trapping (unreachable
+        // given Rust's `String` invariant).
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     public static func lower(_ value: String) -> RustBuffer {
@@ -477,7 +527,8 @@ fileprivate struct FfiConverterString: FfiConverter {
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> String {
         let len: Int32 = try readInt(&buf)
-        return String(bytes: try readBytes(&buf, count: Int(len)), encoding: String.Encoding.utf8)!
+        // See `lift` above for why we avoid Foundation's NSString-backed decoder here.
+        return String(decoding: try readBytes(&buf, count: Int(len)), as: UTF8.self)
     }
 
     public static func write(_ value: String, into buf: inout [UInt8]) {
@@ -558,8 +609,9 @@ open class CloudStorage: CloudStorageProtocol, @unchecked Sendable {
 public convenience init(cloudStorage: CloudStorageAccess) {
     let handle =
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_device_fn_constructor_cloudstorage_new(
-        FfiConverterCallbackInterfaceCloudStorageAccess_lower(cloudStorage),$0
+        FfiConverterCallbackInterfaceCloudStorageAccess_lower(cloudStorage),uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -692,8 +744,9 @@ open class Connectivity: ConnectivityProtocol, @unchecked Sendable {
 public convenience init(connectivity: ConnectivityAccess) {
     let handle =
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_device_fn_constructor_connectivity_new(
-        FfiConverterCallbackInterfaceConnectivityAccess_lower(connectivity),$0
+        FfiConverterCallbackInterfaceConnectivityAccess_lower(connectivity),uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -813,8 +866,9 @@ open class Device: DeviceProtocol, @unchecked Sendable {
 public convenience init(device: DeviceAccess) {
     let handle =
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_device_fn_constructor_device_new(
-        FfiConverterCallbackInterfaceDeviceAccess_lower(device),$0
+        FfiConverterCallbackInterfaceDeviceAccess_lower(device),uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -934,8 +988,9 @@ open class Keychain: KeychainProtocol, @unchecked Sendable {
 public convenience init(keychain: KeychainAccess) {
     let handle =
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_device_fn_constructor_keychain_new(
-        FfiConverterCallbackInterfaceKeychainAccess_lower(keychain),$0
+        FfiConverterCallbackInterfaceKeychainAccess_lower(keychain),uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -1050,8 +1105,9 @@ open class PasskeyAccess: PasskeyAccessProtocol, @unchecked Sendable {
 public convenience init(provider: PasskeyProvider) {
     let handle =
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_device_fn_constructor_passkeyaccess_new(
-        FfiConverterCallbackInterfacePasskeyProvider_lower(provider),$0
+        FfiConverterCallbackInterfacePasskeyProvider_lower(provider),uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -1071,8 +1127,9 @@ public convenience init(provider: PasskeyProvider) {
     
 open func isPrfSupported() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_device_fn_method_passkeyaccess_is_prf_supported(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1402,8 +1459,9 @@ enum CloudStorageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
 public var description: String {
     return try!  FfiConverterString.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_device_fn_method_cloudstorageerror_uniffi_trait_display(
-            FfiConverterTypeCloudStorageError_lower(self),$0
+            FfiConverterTypeCloudStorageError_lower(self),uniffiCallStatus
     )
 }
     )
@@ -1645,8 +1703,9 @@ enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
 public var description: String {
     return try!  FfiConverterString.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_device_fn_method_keychainerror_uniffi_trait_display(
-            FfiConverterTypeKeychainError_lower(self),$0
+            FfiConverterTypeKeychainError_lower(self),uniffiCallStatus
     )
 }
     )
@@ -1834,8 +1893,9 @@ enum PasskeyError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 public var description: String {
     return try!  FfiConverterString.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_device_fn_method_passkeyerror_uniffi_trait_display(
-            FfiConverterTypePasskeyError_lower(self),$0
+            FfiConverterTypePasskeyError_lower(self),uniffiCallStatus
     )
 }
     )
@@ -1954,8 +2014,9 @@ public enum PasskeyFailureReason: Equatable, Hashable, CustomStringConvertible {
 public var description: String {
     return try!  FfiConverterString.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_device_fn_method_passkeyfailurereason_uniffi_trait_display(
-            FfiConverterTypePasskeyFailureReason_lower(self),$0
+            FfiConverterTypePasskeyFailureReason_lower(self),uniffiCallStatus
     )
 }
     )
@@ -2093,8 +2154,9 @@ public enum PasskeyOperation: Equatable, Hashable, CustomStringConvertible {
 public var description: String {
     return try!  FfiConverterString.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_device_fn_method_passkeyoperation_uniffi_trait_display(
-            FfiConverterTypePasskeyOperation_lower(self),$0
+            FfiConverterTypePasskeyOperation_lower(self),uniffiCallStatus
     )
 }
     )
@@ -3720,8 +3782,9 @@ public func uniffiForeignFutureHandleCountCoveDevice() -> Int {
 }
 public func passkeyAaguidFromAttestationObject(attestationObject: Data)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypePasskeyError_lift) {
+        uniffiCallStatus in
     uniffi_cove_device_fn_func_passkey_aaguid_from_attestation_object(
-        FfiConverterData.lower(attestationObject),$0
+        FfiConverterData.lower(attestationObject),uniffiCallStatus
     )
 })
 }
@@ -3741,58 +3804,58 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object() != 43803) {
+    if (uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object() != 8413) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 42755) {
+    if (uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 24202) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_passkeyaccess_is_prf_supported() != 31494) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_constructor_cloudstorage_new() != 17602) {
+    if (uniffi_cove_device_checksum_constructor_cloudstorage_new() != 42765) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_constructor_connectivity_new() != 64633) {
+    if (uniffi_cove_device_checksum_constructor_connectivity_new() != 65308) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_constructor_device_new() != 18892) {
+    if (uniffi_cove_device_checksum_constructor_device_new() != 10720) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_constructor_keychain_new() != 47401) {
+    if (uniffi_cove_device_checksum_constructor_keychain_new() != 56447) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_constructor_passkeyaccess_new() != 32284) {
+    if (uniffi_cove_device_checksum_constructor_passkeyaccess_new() != 28492) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_master_key_backup() != 7662) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_master_key_backup() != 349) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_wallet_backup() != 40761) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_upload_wallet_backup() != 64447) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_master_key_backup() != 36628) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_master_key_backup() != 22160) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_wallet_backup() != 57693) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_download_wallet_backup() != 39674) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 27370) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 40757) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_namespace() != 26766) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_delete_namespace() != 11228) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 47835) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 38104) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 24091) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 34628) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 34175) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 64060) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 13608) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 49127) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918) {
@@ -3801,28 +3864,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_keychainaccess_save() != 32182) {
+    if (uniffi_cove_device_checksum_method_keychainaccess_save() != 21295) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_keychainaccess_get() != 23224) {
+    if (uniffi_cove_device_checksum_method_keychainaccess_get() != 45172) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_keychainaccess_delete() != 1213) {
+    if (uniffi_cove_device_checksum_method_keychainaccess_delete() != 52135) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 48177) {
+    if (uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 8345) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_passkeyprovider_authenticate_with_prf() != 17002) {
+    if (uniffi_cove_device_checksum_method_passkeyprovider_authenticate_with_prf() != 61713) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_passkeyprovider_discover_and_authenticate_with_prf() != 24396) {
+    if (uniffi_cove_device_checksum_method_passkeyprovider_discover_and_authenticate_with_prf() != 13423) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_passkeyprovider_is_prf_supported() != 18036) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_passkeyprovider_check_passkey_presence() != 32325) {
+    if (uniffi_cove_device_checksum_method_passkeyprovider_check_passkey_presence() != 42392) {
         return InitializationResult.apiChecksumMismatch
     }
 

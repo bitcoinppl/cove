@@ -39,6 +39,52 @@ fileprivate extension ForeignBytes {
     init(bufferPointer: UnsafeBufferPointer<UInt8>) {
         self.init(len: Int32(bufferPointer.count), data: bufferPointer.baseAddress)
     }
+
+    init(rawBufferPointer: UnsafeRawBufferPointer) {
+        self.init(
+            len: Int32(rawBufferPointer.count),
+            data: rawBufferPointer.baseAddress?.assumingMemoryBound(to: UInt8.self)
+        )
+    }
+}
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Conforms to `FfiConverter` so the compiler enforces the full converter
+// method set. Only the scope-bound `lower(_:_body:)` overload is sound —
+// zero-copy byte buffers only flow foreign -> Rust, and only in argument
+// position. The four protocol-witness methods (`lift`, `lower`, `read`,
+// `write`) `fatalError` at runtime if anyone reaches them.
+//
+// The scope-bound `lower` takes a closure because the `ForeignBytes`
+// pointer is only guaranteed valid for the duration of
+// `Data.withUnsafeBytes`. Callers must run the full FFI call inside
+// the closure body.
+fileprivate enum FfiConverterByRefBytes: FfiConverter {
+    typealias SwiftType = Data
+    typealias FfiType = ForeignBytes
+
+    static func lower<R>(_ value: Data, _ body: (ForeignBytes) throws -> R) rethrows -> R {
+        return try value.withUnsafeBytes { rawBuf in
+            try body(ForeignBytes(rawBufferPointer: rawBuf))
+        }
+    }
+
+    static func lower(_ value: Data) -> ForeignBytes {
+        fatalError("ByRef bytes cannot use the plain lower: returning ForeignBytes escapes the Data.withUnsafeBytes scope. Use the scope-bound lower(_:_body:) overload instead.")
+    }
+
+    static func lift(_ value: ForeignBytes) throws -> Data {
+        fatalError("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        fatalError("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
+
+    static func write(_ value: Data, into buf: inout [UInt8]) {
+        fatalError("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
 }
 
 // For every type used in the interface, we provide helper methods for conveniently
@@ -447,7 +493,11 @@ fileprivate struct FfiConverterString: FfiConverter {
             return String()
         }
         let bytes = UnsafeBufferPointer<UInt8>(start: value.data!, count: Int(value.len))
-        return String(bytes: bytes, encoding: String.Encoding.utf8)!
+        // Use Swift's native UTF-8 decoder; `String(bytes:encoding:.utf8)` goes
+        // through Foundation's NSString and silently strips a leading U+FEFF BOM.
+        // Invalid UTF-8 substitutes U+FFFD instead of trapping (unreachable
+        // given Rust's `String` invariant).
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     public static func lower(_ value: String) -> RustBuffer {
@@ -463,7 +513,8 @@ fileprivate struct FfiConverterString: FfiConverter {
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> String {
         let len: Int32 = try readInt(&buf)
-        return String(bytes: try readBytes(&buf, count: Int(len)), encoding: String.Encoding.utf8)!
+        // See `lift` above for why we avoid Foundation's NSString-backed decoder here.
+        return String(decoding: try readBytes(&buf, count: Int(len)), as: UTF8.self)
     }
 
     public static func write(_ value: String, into buf: inout [UInt8]) {
@@ -572,8 +623,9 @@ open class CryptoHdkey: CryptoHdkeyProtocol, @unchecked Sendable {
      */
 public static func decode(cbor: Data)throws  -> CryptoHdkey  {
     return try  FfiConverterTypeCryptoHdkey_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_constructor_cryptohdkey_decode(
-        FfiConverterData.lower(cbor),$0
+        FfiConverterData.lower(cbor),uniffiCallStatus
     )
 })
 }
@@ -589,8 +641,9 @@ public static func decode(cbor: Data)throws  -> CryptoHdkey  {
      */
 open func encode()throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_method_cryptohdkey_encode(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -736,8 +789,9 @@ open class CryptoPsbt: CryptoPsbtProtocol, @unchecked Sendable {
      */
 public static func decode(cbor: Data)throws  -> CryptoPsbt  {
     return try  FfiConverterTypeCryptoPsbt_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_constructor_cryptopsbt_decode(
-        FfiConverterData.lower(cbor),$0
+        FfiConverterData.lower(cbor),uniffiCallStatus
     )
 })
 }
@@ -750,8 +804,9 @@ public static func decode(cbor: Data)throws  -> CryptoPsbt  {
      */
 public static func fromPsbtBytes(psbtBytes: Data)throws  -> CryptoPsbt  {
     return try  FfiConverterTypeCryptoPsbt_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_constructor_cryptopsbt_from_psbt_bytes(
-        FfiConverterData.lower(psbtBytes),$0
+        FfiConverterData.lower(psbtBytes),uniffiCallStatus
     )
 })
 }
@@ -764,8 +819,9 @@ public static func fromPsbtBytes(psbtBytes: Data)throws  -> CryptoPsbt  {
      */
 public static func fromUr(ur: String)throws  -> CryptoPsbt  {
     return try  FfiConverterTypeCryptoPsbt_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_constructor_cryptopsbt_from_ur(
-        FfiConverterString.lower(ur),$0
+        FfiConverterString.lower(ur),uniffiCallStatus
     )
 })
 }
@@ -780,8 +836,9 @@ public static func fromUr(ur: String)throws  -> CryptoPsbt  {
      */
 open func encode()throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_method_cryptopsbt_encode(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -791,8 +848,9 @@ open func encode()throws  -> Data  {
      */
 open func toPsbtBytes() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_method_cryptopsbt_to_psbt_bytes(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -805,8 +863,9 @@ open func toPsbtBytes() -> Data  {
      */
 open func toUr()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_method_cryptopsbt_to_ur(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -959,8 +1018,9 @@ open class CryptoSeed: CryptoSeedProtocol, @unchecked Sendable {
      */
 public static func decode(cbor: Data)throws  -> CryptoSeed  {
     return try  FfiConverterTypeCryptoSeed_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_constructor_cryptoseed_decode(
-        FfiConverterData.lower(cbor),$0
+        FfiConverterData.lower(cbor),uniffiCallStatus
     )
 })
 }
@@ -973,8 +1033,9 @@ public static func decode(cbor: Data)throws  -> CryptoSeed  {
      */
 public static func fromEntropy(payload: Data)throws  -> CryptoSeed  {
     return try  FfiConverterTypeCryptoSeed_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_constructor_cryptoseed_from_entropy(
-        FfiConverterData.lower(payload),$0
+        FfiConverterData.lower(payload),uniffiCallStatus
     )
 })
 }
@@ -987,11 +1048,12 @@ public static func fromEntropy(payload: Data)throws  -> CryptoSeed  {
      */
 public static func fromEntropyWithMetadata(payload: Data, name: String?, note: String?, creationDate: UInt64?)throws  -> CryptoSeed  {
     return try  FfiConverterTypeCryptoSeed_lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_constructor_cryptoseed_from_entropy_with_metadata(
         FfiConverterData.lower(payload),
         FfiConverterOptionString.lower(name),
         FfiConverterOptionString.lower(note),
-        FfiConverterOptionUInt64.lower(creationDate),$0
+        FfiConverterOptionUInt64.lower(creationDate),uniffiCallStatus
     )
 })
 }
@@ -1006,8 +1068,9 @@ public static func fromEntropyWithMetadata(payload: Data, name: String?, note: S
      */
 open func encode()throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeUrError_lift) {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_method_cryptoseed_encode(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1017,8 +1080,9 @@ open func encode()throws  -> Data  {
      */
 open func entropy() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_method_cryptoseed_entropy(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1028,8 +1092,9 @@ open func entropy() -> Data  {
      */
 open func getCreationDate() -> UInt64?  {
     return try!  FfiConverterOptionUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_method_cryptoseed_get_creation_date(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1039,8 +1104,9 @@ open func getCreationDate() -> UInt64?  {
      */
 open func getName() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_method_cryptoseed_get_name(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1050,8 +1116,9 @@ open func getName() -> String?  {
      */
 open func getNote() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_method_cryptoseed_get_note(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1140,8 +1207,9 @@ enum UrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 public var description: String {
     return try!  FfiConverterString.lift(
         try! rustCall() {
+        uniffiCallStatus in
     uniffi_cove_ur_fn_method_urerror_uniffi_trait_display(
-            FfiConverterTypeUrError_lower(self),$0
+            FfiConverterTypeUrError_lower(self),uniffiCallStatus
     )
 }
     )
@@ -1388,25 +1456,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_ur_checksum_method_cryptoseed_get_note() != 48679) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptohdkey_decode() != 1054) {
+    if (uniffi_cove_ur_checksum_constructor_cryptohdkey_decode() != 11408) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_decode() != 64081) {
+    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_decode() != 15440) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_from_psbt_bytes() != 26270) {
+    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_from_psbt_bytes() != 45405) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_from_ur() != 46845) {
+    if (uniffi_cove_ur_checksum_constructor_cryptopsbt_from_ur() != 39071) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptoseed_decode() != 39151) {
+    if (uniffi_cove_ur_checksum_constructor_cryptoseed_decode() != 41815) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy() != 13375) {
+    if (uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy() != 54769) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy_with_metadata() != 63642) {
+    if (uniffi_cove_ur_checksum_constructor_cryptoseed_from_entropy_with_metadata() != 26965) {
         return InitializationResult.apiChecksumMismatch
     }
 
