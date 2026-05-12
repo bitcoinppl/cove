@@ -106,6 +106,43 @@ internal open class ForeignBytes : Structure() {
 
     class ByValue : ForeignBytes(), Structure.ByValue
 }
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Only `lower` is valid — zero-copy byte buffers only flow foreign -> Rust,
+// and only in argument position. `lift`, `read`, `write`, and
+// `allocationSize` have no sound implementation here and all panic at
+// runtime. The `FfiConverter` interface is implemented so that the
+// compiler enforces the full method set (rather than relying on eyeball).
+//
+// The provided `ByteBuffer` MUST be direct — only direct buffers have a
+// stable native address that JNA can expose via `getDirectBufferPointer`.
+// The returned `ForeignBytes.ByValue` is only valid for the duration of
+// the FFI call; the Rust side treats it as a borrow.
+internal object FfiConverterByRefBytes : FfiConverter<java.nio.ByteBuffer, ForeignBytes.ByValue> {
+    override fun lower(value: java.nio.ByteBuffer): ForeignBytes.ByValue {
+        require(value.isDirect) { "UniFFI zero-copy &[u8] requires a direct ByteBuffer. Use ByteBuffer.allocateDirect()." }
+        val remaining = value.remaining()
+        val fb = ForeignBytes.ByValue()
+        fb.len = remaining
+        // Zero-length direct buffers: skip getDirectBufferPointer (platform-variable behavior)
+        // and pass null. The Rust side treats (null, 0) as &[].
+        fb.data = if (remaining == 0) null else com.sun.jna.Native.getDirectBufferPointer(value)
+        return fb
+    }
+
+    override fun lift(value: ForeignBytes.ByValue): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+
+    override fun read(buf: java.nio.ByteBuffer): java.nio.ByteBuffer =
+        error("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun write(value: java.nio.ByteBuffer, buf: java.nio.ByteBuffer): Unit =
+        error("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+
+    override fun allocationSize(value: java.nio.ByteBuffer): ULong =
+        error("ByRef bytes have no RustBuffer allocation size: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+}
 /**
  * The FfiConverter interface handles converter types to and from the FFI
  *
@@ -1101,61 +1138,61 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_cove_device_checksum_func_cloud_backup_locations_sync_health() != 24716.toShort()) {
+    if (lib.uniffi_cove_device_checksum_func_cloud_backup_locations_sync_health() != 21699.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object() != 43803.toShort()) {
+    if (lib.uniffi_cove_device_checksum_func_passkey_aaguid_from_attestation_object() != 8413.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 42755.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 24202.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_passkeyaccess_is_prf_supported() != 31494.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_constructor_cloudstorage_new() != 17602.toShort()) {
+    if (lib.uniffi_cove_device_checksum_constructor_cloudstorage_new() != 42765.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_constructor_connectivity_new() != 64633.toShort()) {
+    if (lib.uniffi_cove_device_checksum_constructor_connectivity_new() != 65308.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_constructor_device_new() != 18892.toShort()) {
+    if (lib.uniffi_cove_device_checksum_constructor_device_new() != 10720.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_constructor_keychain_new() != 47401.toShort()) {
+    if (lib.uniffi_cove_device_checksum_constructor_keychain_new() != 56447.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_constructor_passkeyaccess_new() != 32284.toShort()) {
+    if (lib.uniffi_cove_device_checksum_constructor_passkeyaccess_new() != 28492.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_upload_master_key_backup() != 35505.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_upload_master_key_backup() != 38541.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_upload_wallet_backup() != 18134.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_upload_wallet_backup() != 10833.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_download_master_key_backup() != 16512.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_download_master_key_backup() != 36922.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_download_wallet_backup() != 36717.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_download_wallet_backup() != 44396.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 61956.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_delete_wallet_backup() != 16836.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_delete_namespace() != 26766.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_delete_namespace() != 11228.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 47835.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces() != 38104.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 22196.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 25910.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 52854.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 9032.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 13608.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 49127.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918.toShort()) {
@@ -1164,28 +1201,28 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_deviceaccess_timezone() != 54194.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_keychainaccess_save() != 32182.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_keychainaccess_save() != 21295.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_keychainaccess_get() != 23224.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_keychainaccess_get() != 45172.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_keychainaccess_delete() != 1213.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_keychainaccess_delete() != 52135.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 48177.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 8345.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_authenticate_with_prf() != 17002.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_authenticate_with_prf() != 61713.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_discover_and_authenticate_with_prf() != 24396.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_discover_and_authenticate_with_prf() != 13423.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_passkeyprovider_is_prf_supported() != 18036.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_check_passkey_presence() != 32325.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_passkeyprovider_check_passkey_presence() != 42392.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1739,6 +1776,7 @@ open class CloudStorage: Disposable, AutoCloseable, CloudStorageInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_constructor_cloudstorage_new(
     
+        
         FfiConverterTypeCloudStorageAccess.lower(`cloudStorage`),_status)
 }
     )
@@ -1830,7 +1868,8 @@ open class CloudStorage: Disposable, AutoCloseable, CloudStorageInterface
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(
                 uniffiHandle,
-                FfiConverterTypeCloudAccessPolicy.lower(`policy`),
+                
+        FfiConverterTypeCloudAccessPolicy.lower(`policy`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_device_rust_future_poll_i8(future, callback, continuation) },
@@ -2011,6 +2050,7 @@ open class Connectivity: Disposable, AutoCloseable, ConnectivityInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_constructor_connectivity_new(
     
+        
         FfiConverterTypeConnectivityAccess.lower(`connectivity`),_status)
 }
     )
@@ -2266,6 +2306,7 @@ open class Device: Disposable, AutoCloseable, DeviceInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_constructor_device_new(
     
+        
         FfiConverterTypeDeviceAccess.lower(`device`),_status)
 }
     )
@@ -2521,6 +2562,7 @@ open class Keychain: Disposable, AutoCloseable, KeychainInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_constructor_keychain_new(
     
+        
         FfiConverterTypeKeychainAccess.lower(`keychain`),_status)
 }
     )
@@ -2771,6 +2813,7 @@ open class PasskeyAccess: Disposable, AutoCloseable, PasskeyAccessInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_constructor_passkeyaccess_new(
     
+        
         FfiConverterTypePasskeyProvider.lower(`provider`),_status)
 }
     )
@@ -5020,6 +5063,7 @@ public object FfiConverterSequenceSequenceString: FfiConverterRustBuffer<List<Li
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_func_cloud_backup_locations_sync_health(
     
+        
         FfiConverterSequenceSequenceString.lower(`namespaceLocations`),_status)
 }
     )
@@ -5031,6 +5075,7 @@ public object FfiConverterSequenceSequenceString: FfiConverterRustBuffer<List<Li
     uniffiRustCallWithError(PasskeyException) { _status ->
     UniffiLib.uniffi_cove_device_fn_func_passkey_aaguid_from_attestation_object(
     
+        
         FfiConverterByteArray.lower(`attestationObject`),_status)
 }
     )
