@@ -144,6 +144,7 @@ pub struct BackupImportReport {
     pub failed_wallet_names: Vec<String>,
     pub failed_wallet_errors: Vec<String>,
     pub wallets_with_labels_imported: u32,
+    pub labels_skipped: u32,
     pub labels_failed_wallet_names: Vec<String>,
     pub labels_failed_errors: Vec<String>,
     pub settings_restored: bool,

@@ -11,7 +11,7 @@ use cove_types::network::Network;
 
 use crate::database::Database;
 use crate::database::global_config::GlobalConfigKey;
-use crate::label_manager::LabelManager;
+use crate::label_manager::{LabelManager, LabelParseReport};
 use crate::mnemonic::MnemonicExt as _;
 use crate::wallet::fingerprint::Fingerprint;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
@@ -43,6 +43,7 @@ pub async fn import_all(
             Ok(RestoreResult::Imported {
                 name,
                 labels_imported,
+                labels_skipped,
                 labels_failure,
                 fingerprint,
                 degraded,
@@ -51,6 +52,7 @@ pub async fn import_all(
                 if labels_imported {
                     report.wallets_with_labels_imported += 1;
                 }
+                report.labels_skipped += labels_skipped;
                 if let Some((name, error)) = labels_failure {
                     report.labels_failed_wallet_names.push(name);
                     report.labels_failed_errors.push(error);
@@ -121,6 +123,7 @@ enum RestoreResult {
     Imported {
         name: String,
         labels_imported: bool,
+        labels_skipped: u32,
         labels_failure: Option<(String, String)>,
         fingerprint: Option<(Fingerprint, Network, WalletMode)>,
         degraded: bool,
@@ -271,6 +274,7 @@ pub(crate) struct LabelRestoreWarning {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct LabelRestoreOutcome {
     pub imported: bool,
+    pub skipped: u32,
     pub warning: Option<LabelRestoreWarning>,
 }
 
@@ -331,12 +335,20 @@ async fn restore_wallet(
         LabelRestoreBehavior::MarkCloudBackupDirty,
     );
     let labels_imported = labels_outcome.imported;
+    let labels_skipped = labels_outcome.skipped;
     if let Some(warning) = labels_outcome.warning {
         warn!("Failed to import labels for wallet {name}: {}", warning.error);
         labels_failure = Some((warning.wallet_name, warning.error));
     }
 
-    Ok(RestoreResult::Imported { name, labels_imported, labels_failure, fingerprint, degraded })
+    Ok(RestoreResult::Imported {
+        name,
+        labels_imported,
+        labels_skipped,
+        labels_failure,
+        fingerprint,
+        degraded,
+    })
 }
 
 /// Run a restore operation, cleaning up on failure
@@ -532,16 +544,17 @@ pub(crate) fn cleanup_failed_wallet(metadata: &WalletMetadata) -> Vec<String> {
     failures
 }
 
-fn import_labels(id: &WalletId, jsonl: &str) -> Result<(), BackupError> {
+fn import_labels(id: &WalletId, jsonl: &str) -> Result<LabelParseReport, BackupError> {
     let manager = LabelManager::new(id.clone());
-    manager.import(jsonl).map_err_str(BackupError::Restore)?;
-    Ok(())
+    manager.import(jsonl).map_err_str(BackupError::Restore)
 }
 
-fn import_labels_preserve_backup(id: &WalletId, jsonl: &str) -> Result<(), BackupError> {
+fn import_labels_preserve_backup(
+    id: &WalletId,
+    jsonl: &str,
+) -> Result<LabelParseReport, BackupError> {
     let manager = LabelManager::new(id.clone());
-    manager.import_without_cloud_backup_dirty(jsonl).map_err_str(BackupError::Restore)?;
-    Ok(())
+    manager.import_without_cloud_backup_dirty(jsonl).map_err_str(BackupError::Restore)
 }
 
 pub(crate) fn restore_wallet_labels(
@@ -562,9 +575,14 @@ pub(crate) fn restore_wallet_labels(
     };
 
     match import_result {
-        Ok(()) => LabelRestoreOutcome { imported: true, warning: None },
+        Ok(report) => LabelRestoreOutcome {
+            imported: report.imported > 0,
+            skipped: report.skipped,
+            warning: None,
+        },
         Err(error) => LabelRestoreOutcome {
             imported: false,
+            skipped: 0,
             warning: Some(LabelRestoreWarning {
                 wallet_name: wallet_name.to_string(),
                 error: error.to_string(),
