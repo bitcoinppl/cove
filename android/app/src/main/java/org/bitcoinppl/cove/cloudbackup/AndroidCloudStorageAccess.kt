@@ -334,7 +334,7 @@ class AndroidCloudStorageAccess internal constructor(
             interactive = policy.allowsConsent(),
             onError = { error -> mapDriveDeleteError(error, namespace) },
         ) { token ->
-            val mutex = namespaceFolderMutexes.getOrPut(namespace) { Mutex() }
+            val mutex = namespaceFolderMutexes.computeIfAbsent(namespace) { Mutex() }
             mutex.withLock {
                 val namespaceFolderId =
                     findNamespaceFolderId(token, namespace)
@@ -438,7 +438,7 @@ class AndroidCloudStorageAccess internal constructor(
         namespace: String,
     ): String {
         val rootId = ensureNamespacesRootFolderId(token)
-        val mutex = namespaceFolderMutexes.getOrPut(namespace) { Mutex() }
+        val mutex = namespaceFolderMutexes.computeIfAbsent(namespace) { Mutex() }
         return mutex.withLock {
             findChildByName(
                 token = token,
@@ -490,7 +490,7 @@ class AndroidCloudStorageAccess internal constructor(
         parentId: String,
         folderName: String,
     ): String {
-        val mutex = childFolderMutexes.getOrPut("$parentId/$folderName") { Mutex() }
+        val mutex = childFolderMutexes.computeIfAbsent("$parentId/$folderName") { Mutex() }
         return mutex.withLock {
             findChildByName(
                 token = token,

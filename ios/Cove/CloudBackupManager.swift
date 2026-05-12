@@ -204,6 +204,7 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     }
 
     var isVerificationStale: Bool {
+        if isBackgroundVerifying { return false }
         guard isCloudBackupAvailable, !isUnverified else { return false }
         guard let lastVerifiedAt else { return true }
         return Date.now.timeIntervalSince(lastVerifiedAt) >= Self.staleVerificationThreshold
