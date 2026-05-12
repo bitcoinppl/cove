@@ -1094,6 +1094,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_is_valid_chain_code(
     ): Short
+    external fun uniffi_cove_checksum_func_create_sats_card_reader(
+    ): Short
     external fun uniffi_cove_checksum_func_create_tap_signer_reader(
     ): Short
     external fun uniffi_cove_checksum_func_tapsignerresponsebackupresponse(
@@ -1709,6 +1711,10 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_headericonpresenter_icon_color(
     ): Short
     external fun uniffi_cove_checksum_method_headericonpresenter_ring_color(
+    ): Short
+    external fun uniffi_cove_checksum_method_satscardreader_cached_status(
+    ): Short
+    external fun uniffi_cove_checksum_method_satscardreader_run(
     ): Short
     external fun uniffi_cove_checksum_method_tapsignerreader_continue_setup(
     ): Short
@@ -2866,6 +2872,14 @@ internal object UniffiLib {
     ): RustBufferFfiColor.ByValue
     external fun uniffi_cove_fn_method_headericonpresenter_ring_color(`ptr`: Long,`state`: RustBuffer.ByValue,`colorScheme`: RustBufferFfiColorScheme.ByValue,`direction`: RustBufferTransactionDirection.ByValue,`confirmations`: Long,`ringNumber`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBufferFfiColor.ByValue
+    external fun uniffi_cove_fn_clone_satscardreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_cove_fn_free_satscardreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_cove_fn_method_satscardreader_cached_status(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_satscardreader_run(`ptr`: Long,`cmd`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_clone_setupcmd(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_free_setupcmd(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -3260,6 +3274,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_transporterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_satscardreadererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_tapsignerreadererror_isautherror(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_cove_fn_method_tapsignerreadererror_isnobackuperror(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3368,6 +3384,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_is_valid_chain_code(`chainCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_cove_fn_func_create_sats_card_reader(`transport`: Long,
+    ): Long
     external fun uniffi_cove_fn_func_create_tap_signer_reader(`transport`: Long,`cmd`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_func_tapsignerresponsebackupresponse(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -3612,6 +3630,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_is_valid_chain_code() != 38380.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_create_sats_card_reader() != 19072.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_create_tap_signer_reader() != 37635.toShort()) {
@@ -4536,6 +4557,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_headericonpresenter_ring_color() != 38756.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_satscardreader_cached_status() != 246.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_satscardreader_run() != 33308.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_tapsignerreader_continue_setup() != 49046.toShort()) {
@@ -22191,6 +22218,290 @@ public object FfiConverterTypeRustWalletManager: FfiConverter<RustWalletManager,
 //
 
 
+public interface SatsCardReaderInterface {
+    
+    /**
+     * Get the cached slot status without NFC communication
+     */
+    fun `cachedStatus`(): SatsCardSlotStatus?
+    
+    suspend fun `run`(`cmd`: SatsCardCmd): SatsCardResponse
+    
+    companion object
+}
+
+open class SatsCardReader: Disposable, AutoCloseable, SatsCardReaderInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_satscardreader(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_satscardreader(handle, status)
+        }
+    }
+
+    
+    /**
+     * Get the cached slot status without NFC communication
+     */override fun `cachedStatus`(): SatsCardSlotStatus? {
+            return FfiConverterOptionalTypeSatsCardSlotStatus.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_satscardreader_cached_status(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(SatsCardReaderException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `run`(`cmd`: SatsCardCmd) : SatsCardResponse {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_satscardreader_run(
+                uniffiHandle,
+                FfiConverterTypeSatsCardCmd.lower(`cmd`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeSatsCardResponse.lift(it) },
+        // Error FFI converter
+        SatsCardReaderException.ErrorHandler,
+    )
+    }
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSatsCardReader: FfiConverter<SatsCardReader, Long> {
+    override fun lower(value: SatsCardReader): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): SatsCardReader {
+        return SatsCardReader(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): SatsCardReader {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: SatsCardReader) = 8UL
+
+    override fun write(value: SatsCardReader, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface SeedQrInterface {
     
     fun `getWords`(): List<kotlin.String>
@@ -29477,6 +29788,113 @@ public object FfiConverterTypeRouter: FfiConverterRustBuffer<Router> {
             FfiConverterTypeFfiApp.write(value.`app`, buf)
             FfiConverterTypeRoute.write(value.`default`, buf)
             FfiConverterSequenceTypeRoute.write(value.`routes`, buf)
+    }
+}
+
+
+
+/**
+ * Current slot status returned from a SATSCARD
+ */
+data class SatsCardSlotStatus (
+    var `activeSlot`: kotlin.UByte
+    , 
+    var `numSlots`: kotlin.UByte
+    , 
+    var `address`: kotlin.String?
+    , 
+    var `isSealed`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSatsCardSlotStatus: FfiConverterRustBuffer<SatsCardSlotStatus> {
+    override fun read(buf: ByteBuffer): SatsCardSlotStatus {
+        return SatsCardSlotStatus(
+            FfiConverterUByte.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SatsCardSlotStatus) = (
+            FfiConverterUByte.allocationSize(value.`activeSlot`) +
+            FfiConverterUByte.allocationSize(value.`numSlots`) +
+            FfiConverterOptionalString.allocationSize(value.`address`) +
+            FfiConverterBoolean.allocationSize(value.`isSealed`)
+    )
+
+    override fun write(value: SatsCardSlotStatus, buf: ByteBuffer) {
+            FfiConverterUByte.write(value.`activeSlot`, buf)
+            FfiConverterUByte.write(value.`numSlots`, buf)
+            FfiConverterOptionalString.write(value.`address`, buf)
+            FfiConverterBoolean.write(value.`isSealed`, buf)
+    }
+}
+
+
+
+/**
+ * Result of unsealing a SATSCARD slot, contains the private key for sweeping
+ */
+data class SatsCardUnsealResult (
+    var `slot`: kotlin.UByte
+    , 
+    var `privateKey`: kotlin.ByteArray
+    , 
+    var `pubkey`: kotlin.ByteArray
+    , 
+    var `masterPubkey`: kotlin.ByteArray
+    , 
+    var `chainCode`: kotlin.ByteArray
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSatsCardUnsealResult: FfiConverterRustBuffer<SatsCardUnsealResult> {
+    override fun read(buf: ByteBuffer): SatsCardUnsealResult {
+        return SatsCardUnsealResult(
+            FfiConverterUByte.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SatsCardUnsealResult) = (
+            FfiConverterUByte.allocationSize(value.`slot`) +
+            FfiConverterByteArray.allocationSize(value.`privateKey`) +
+            FfiConverterByteArray.allocationSize(value.`pubkey`) +
+            FfiConverterByteArray.allocationSize(value.`masterPubkey`) +
+            FfiConverterByteArray.allocationSize(value.`chainCode`)
+    )
+
+    override fun write(value: SatsCardUnsealResult, buf: ByteBuffer) {
+            FfiConverterUByte.write(value.`slot`, buf)
+            FfiConverterByteArray.write(value.`privateKey`, buf)
+            FfiConverterByteArray.write(value.`pubkey`, buf)
+            FfiConverterByteArray.write(value.`masterPubkey`, buf)
+            FfiConverterByteArray.write(value.`chainCode`, buf)
     }
 }
 
@@ -43870,6 +44288,330 @@ public object FfiConverterTypeSavedPasskeyConfirmationMode: FfiConverterRustBuff
 
 
 /**
+ * Commands that can be issued to a SATSCARD
+ */
+sealed class SatsCardCmd {
+    
+    object Status : SatsCardCmd()
+    
+    
+    data class Unseal(
+        val `slot`: kotlin.UByte, 
+        val `cvc`: kotlin.String) : SatsCardCmd()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSatsCardCmd : FfiConverterRustBuffer<SatsCardCmd>{
+    override fun read(buf: ByteBuffer): SatsCardCmd {
+        return when(buf.getInt()) {
+            1 -> SatsCardCmd.Status
+            2 -> SatsCardCmd.Unseal(
+                FfiConverterUByte.read(buf),
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SatsCardCmd): ULong = when(value) {
+        is SatsCardCmd.Status -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SatsCardCmd.Unseal -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUByte.allocationSize(value.`slot`)
+                + FfiConverterString.allocationSize(value.`cvc`)
+            )
+        }
+    }
+
+    override fun write(value: SatsCardCmd, buf: ByteBuffer) {
+        when(value) {
+            is SatsCardCmd.Status -> {
+                buf.putInt(1)
+                Unit
+            }
+            is SatsCardCmd.Unseal -> {
+                buf.putInt(2)
+                FfiConverterUByte.write(value.`slot`, buf)
+                FfiConverterString.write(value.`cvc`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+
+sealed class SatsCardReaderException: kotlin.Exception() {
+    
+    class SatsCardException(
+        
+        val v1: TransportException
+        ) : SatsCardReaderException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class UnknownCardType(
+        
+        val v1: kotlin.String
+        ) : SatsCardReaderException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class NoCommand(
+        ) : SatsCardReaderException() {
+        override val message
+            get() = ""
+    }
+    
+    class NoActiveAddress(
+        ) : SatsCardReaderException() {
+        override val message
+            get() = ""
+    }
+    
+    class AllSlotsUsed(
+        ) : SatsCardReaderException() {
+        override val message
+            get() = ""
+    }
+    
+    class Unknown(
+        
+        val v1: kotlin.String
+        ) : SatsCardReaderException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+
+    
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_satscardreadererror_uniffi_trait_display(FfiConverterTypeSatsCardReaderError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<SatsCardReaderException> {
+        override fun lift(error_buf: RustBuffer.ByValue): SatsCardReaderException = FfiConverterTypeSatsCardReaderError.lift(error_buf)
+    }
+
+    
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSatsCardReaderError : FfiConverterRustBuffer<SatsCardReaderException> {
+    override fun read(buf: ByteBuffer): SatsCardReaderException {
+        
+
+        return when(buf.getInt()) {
+            1 -> SatsCardReaderException.SatsCardException(
+                FfiConverterTypeTransportError.read(buf),
+                )
+            2 -> SatsCardReaderException.UnknownCardType(
+                FfiConverterString.read(buf),
+                )
+            3 -> SatsCardReaderException.NoCommand()
+            4 -> SatsCardReaderException.NoActiveAddress()
+            5 -> SatsCardReaderException.AllSlotsUsed()
+            6 -> SatsCardReaderException.Unknown(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SatsCardReaderException): ULong {
+        return when(value) {
+            is SatsCardReaderException.SatsCardException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeTransportError.allocationSize(value.v1)
+            )
+            is SatsCardReaderException.UnknownCardType -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is SatsCardReaderException.NoCommand -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is SatsCardReaderException.NoActiveAddress -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is SatsCardReaderException.AllSlotsUsed -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is SatsCardReaderException.Unknown -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: SatsCardReaderException, buf: ByteBuffer) {
+        when(value) {
+            is SatsCardReaderException.SatsCardException -> {
+                buf.putInt(1)
+                FfiConverterTypeTransportError.write(value.v1, buf)
+                Unit
+            }
+            is SatsCardReaderException.UnknownCardType -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is SatsCardReaderException.NoCommand -> {
+                buf.putInt(3)
+                Unit
+            }
+            is SatsCardReaderException.NoActiveAddress -> {
+                buf.putInt(4)
+                Unit
+            }
+            is SatsCardReaderException.AllSlotsUsed -> {
+                buf.putInt(5)
+                Unit
+            }
+            is SatsCardReaderException.Unknown -> {
+                buf.putInt(6)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+/**
+ * Responses from SATSCARD commands
+ */
+sealed class SatsCardResponse {
+    
+    data class Status(
+        val v1: org.bitcoinppl.cove_core.SatsCardSlotStatus) : SatsCardResponse()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Unseal(
+        val v1: org.bitcoinppl.cove_core.SatsCardUnsealResult) : SatsCardResponse()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSatsCardResponse : FfiConverterRustBuffer<SatsCardResponse>{
+    override fun read(buf: ByteBuffer): SatsCardResponse {
+        return when(buf.getInt()) {
+            1 -> SatsCardResponse.Status(
+                FfiConverterTypeSatsCardSlotStatus.read(buf),
+                )
+            2 -> SatsCardResponse.Unseal(
+                FfiConverterTypeSatsCardUnsealResult.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: SatsCardResponse): ULong = when(value) {
+        is SatsCardResponse.Status -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSatsCardSlotStatus.allocationSize(value.v1)
+            )
+        }
+        is SatsCardResponse.Unseal -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSatsCardUnsealResult.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: SatsCardResponse, buf: ByteBuffer) {
+        when(value) {
+            is SatsCardResponse.Status -> {
+                buf.putInt(1)
+                FfiConverterTypeSatsCardSlotStatus.write(value.v1, buf)
+                Unit
+            }
+            is SatsCardResponse.Unseal -> {
+                buf.putInt(2)
+                FfiConverterTypeSatsCardUnsealResult.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
  * Progress information for multi-part QR scans
  */
 sealed class ScanProgress {
@@ -55066,6 +55808,38 @@ public object FfiConverterOptionalTypeFiatAmount: FfiConverterRustBuffer<FiatAmo
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeSatsCardSlotStatus: FfiConverterRustBuffer<SatsCardSlotStatus?> {
+    override fun read(buf: ByteBuffer): SatsCardSlotStatus? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeSatsCardSlotStatus.read(buf)
+    }
+
+    override fun allocationSize(value: SatsCardSlotStatus?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeSatsCardSlotStatus.allocationSize(value)
+        }
+    }
+
+    override fun write(value: SatsCardSlotStatus?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeSatsCardSlotStatus.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeWalletMetadata: FfiConverterRustBuffer<WalletMetadata?> {
     override fun read(buf: ByteBuffer): WalletMetadata? {
         if (buf.get().toInt() == 0) {
@@ -56799,6 +57573,25 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     )
     }
     
+
+        /**
+         * Create a SatsCardReader instance for FFI callers
+         * UniFFI's Kotlin bindings do not support async primary constructors
+         */
+    @Throws(SatsCardReaderException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `createSatsCardReader`(`transport`: TapcardTransportProtocol) : SatsCardReader {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_cove_fn_func_create_sats_card_reader(FfiConverterTypeTapcardTransportProtocol.lower(`transport`),),
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeSatsCardReader.lift(it) },
+        // Error FFI converter
+        SatsCardReaderException.ErrorHandler,
+    )
+    }
 
         /**
          * Create a TapSignerReader instance for FFI callers
