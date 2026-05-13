@@ -175,14 +175,18 @@ impl CloudBackupRestoreWorker {
             info!("restore_from_cloud_backup: task started for onboarding");
             match manager.do_restore_from_cloud_backup(&operation).await {
                 Ok(report) => {
-                    operation.send_event(CloudBackupRestoreEvent::Complete(report)).await;
+                    operation
+                        .send_event_if_current(CloudBackupRestoreEvent::Complete(report))
+                        .await;
                 }
                 Err(CloudBackupError::Cancelled) => {
                     info!("restore_from_cloud_backup: task cancelled");
                 }
                 Err(error) => {
                     error!("restore_from_cloud_backup failed: {error}");
-                    operation.send_event(CloudBackupRestoreEvent::Failed(error.to_string())).await;
+                    operation
+                        .send_event_if_current(CloudBackupRestoreEvent::Failed(error.to_string()))
+                        .await;
                     manager.finish_background_operation_error(&error);
                 }
             }
@@ -276,10 +280,6 @@ impl RestoreOperation {
         }
 
         Ok(())
-    }
-
-    async fn send_event(&self, event: CloudBackupRestoreEvent) {
-        self.send_event_if_current(event).await;
     }
 
     async fn send_event_if_current(&self, event: CloudBackupRestoreEvent) {
