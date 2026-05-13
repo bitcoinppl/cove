@@ -1,4 +1,6 @@
-use crate::common::{command_exists, print_error, print_info, print_success};
+use crate::common::{
+    command_exists, print_error, print_info, print_success, trim_generated_trailing_whitespace,
+};
 use color_eyre::{
     eyre::{eyre, Context},
     Result,
@@ -332,6 +334,8 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
     // use sh -c to expand the glob properly
     let copy_cmd = format!("cp -r {}/*.swift {}", BINDINGS_DIR, generated_swift_sources);
     cmd!(sh, "sh -c {copy_cmd}").run().wrap_err("Failed to copy Swift sources")?;
+    trim_generated_trailing_whitespace(&generated_swift_sources, "swift")
+        .wrap_err("Failed to trim generated Swift bindings")?;
 
     // remove uniffi generated Package.swift file if it exists
     let package_swift = format!("{}{}", SPM_PACKAGE_DIR, PACKAGE_SWIFT_PATH);

@@ -398,7 +398,7 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that SWIFT handles always have the lowest bit set
 fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
 fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
@@ -678,13 +678,13 @@ fileprivate struct FfiConverterDuration: FfiConverterRustBuffer {
 
 
 public protocol AddressProtocol: AnyObject, Sendable {
-    
+
     func hashToUint()  -> UInt64
-    
+
     func spacedOut()  -> String
-    
+
     func unformatted()  -> String
-    
+
 }
 open class Address: AddressProtocol, @unchecked Sendable, Equatable, Hashable {
     fileprivate let handle: UInt64
@@ -736,7 +736,7 @@ open class Address: AddressProtocol, @unchecked Sendable, Equatable, Hashable {
         try! rustCall { uniffi_cove_types_fn_free_address(handle, $0) }
     }
 
-    
+
     /**
      * Creates an Address from a string and validates it for the given network
      *
@@ -757,7 +757,7 @@ public static func fromString(address: String, network: Network)throws  -> Addre
     )
 })
 }
-    
+
     /**
      * Creates a preview address for testing/development
      *
@@ -771,7 +771,7 @@ public static func previewNew() -> Address  {
     )
 })
 }
-    
+
     /**
      * Creates a random address from a set of predefined test addresses
      *
@@ -785,9 +785,9 @@ public static func random() -> Address  {
     )
 })
 }
-    
 
-    
+
+
 open func hashToUint() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
         uniffiCallStatus in
@@ -796,7 +796,7 @@ open func hashToUint() -> UInt64  {
     )
 })
 }
-    
+
 open func spacedOut() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -805,7 +805,7 @@ open func spacedOut() -> String  {
     )
 })
 }
-    
+
 open func unformatted() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -814,9 +814,9 @@ open func unformatted() -> String  {
     )
 })
 }
-    
 
-    
+
+
 // The local Rust `Eq` implementation - only `eq` is used.
 public static func == (self: Address, other: Address) -> Bool {
     return try!  FfiConverterBool.lift(
@@ -890,13 +890,13 @@ public func FfiConverterTypeAddress_lower(_ value: Address) -> UInt64 {
 
 
 public protocol AddressInfoProtocol: AnyObject, Sendable {
-    
+
     func address()  -> Address
-    
+
     func addressUnformatted()  -> String
-    
+
     func index()  -> UInt32
-    
+
 }
 open class AddressInfo: AddressInfoProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -948,9 +948,9 @@ open class AddressInfo: AddressInfoProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_addressinfo(handle, $0) }
     }
 
-    
 
-    
+
+
 open func address() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
         uniffiCallStatus in
@@ -959,7 +959,7 @@ open func address() -> Address  {
     )
 })
 }
-    
+
 open func addressUnformatted() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -968,7 +968,7 @@ open func addressUnformatted() -> String  {
     )
 })
 }
-    
+
 open func index() -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
         uniffiCallStatus in
@@ -977,9 +977,9 @@ open func index() -> UInt32  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -1029,17 +1029,17 @@ public func FfiConverterTypeAddressInfo_lower(_ value: AddressInfo) -> UInt64 {
 
 
 public protocol AddressInfoWithDerivationProtocol: AnyObject, Sendable {
-    
+
     func address()  -> Address
-    
+
     func addressSpacedOut()  -> String
-    
+
     func addressUnformatted()  -> String
-    
+
     func derivationPath()  -> String?
-    
+
     func index()  -> UInt32
-    
+
 }
 open class AddressInfoWithDerivation: AddressInfoWithDerivationProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1091,9 +1091,9 @@ open class AddressInfoWithDerivation: AddressInfoWithDerivationProtocol, @unchec
         try! rustCall { uniffi_cove_types_fn_free_addressinfowithderivation(handle, $0) }
     }
 
-    
 
-    
+
+
 open func address() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
         uniffiCallStatus in
@@ -1102,7 +1102,7 @@ open func address() -> Address  {
     )
 })
 }
-    
+
 open func addressSpacedOut() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1111,7 +1111,7 @@ open func addressSpacedOut() -> String  {
     )
 })
 }
-    
+
 open func addressUnformatted() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1120,7 +1120,7 @@ open func addressUnformatted() -> String  {
     )
 })
 }
-    
+
 open func derivationPath() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1129,7 +1129,7 @@ open func derivationPath() -> String?  {
     )
 })
 }
-    
+
 open func index() -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1138,9 +1138,9 @@ open func index() -> UInt32  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -1190,17 +1190,17 @@ public func FfiConverterTypeAddressInfoWithDerivation_lower(_ value: AddressInfo
 
 
 public protocol AddressWithNetworkProtocol: AnyObject, Sendable {
-    
+
     func address()  -> Address
-    
+
     func amount()  -> Amount?
-    
+
     func isValidForNetwork(network: Network)  -> Bool
-    
+
     func network()  -> Network
-    
+
     func payjoin()  -> PayJoinParams?
-    
+
 }
 open class AddressWithNetwork: AddressWithNetworkProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1267,9 +1267,9 @@ public convenience init(address: String)throws  {
         try! rustCall { uniffi_cove_types_fn_free_addresswithnetwork(handle, $0) }
     }
 
-    
 
-    
+
+
 open func address() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
         uniffiCallStatus in
@@ -1278,7 +1278,7 @@ open func address() -> Address  {
     )
 })
 }
-    
+
 open func amount() -> Amount?  {
     return try!  FfiConverterOptionTypeAmount.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1287,7 +1287,7 @@ open func amount() -> Amount?  {
     )
 })
 }
-    
+
 open func isValidForNetwork(network: Network) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1297,7 +1297,7 @@ open func isValidForNetwork(network: Network) -> Bool  {
     )
 })
 }
-    
+
 open func network() -> Network  {
     return try!  FfiConverterTypeNetwork_lift(try! rustCall() {
         uniffiCallStatus in
@@ -1306,7 +1306,7 @@ open func network() -> Network  {
     )
 })
 }
-    
+
 open func payjoin() -> PayJoinParams?  {
     return try!  FfiConverterOptionTypePayJoinParams.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1315,9 +1315,9 @@ open func payjoin() -> PayJoinParams?  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -1367,35 +1367,35 @@ public func FfiConverterTypeAddressWithNetwork_lower(_ value: AddressWithNetwork
 
 
 public protocol AmountProtocol: AnyObject, Sendable {
-    
+
     func asBtc()  -> Double
-    
+
     func asSats()  -> UInt64
-    
+
     /**
      * # Panics
      * Will not panic - separator is a valid character
      */
     func btcString()  -> String
-    
+
     /**
      * # Panics
      * Will not panic - separator is a valid character
      */
     func btcStringWithUnit()  -> String
-    
+
     func fmtString(unit: BitcoinUnit)  -> String
-    
+
     func fmtStringWithUnit(unit: BitcoinUnit)  -> String
-    
+
     /**
      * # Panics
      * Will not panic - separator is a valid character
      */
     func satsString()  -> String
-    
+
     func satsStringWithUnit()  -> String
-    
+
 }
 open class Amount: AmountProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1447,7 +1447,7 @@ open class Amount: AmountProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_amount(handle, $0) }
     }
 
-    
+
 public static func fromSat(sats: UInt64) -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
@@ -1456,7 +1456,7 @@ public static func fromSat(sats: UInt64) -> Amount  {
     )
 })
 }
-    
+
 public static func oneBtc() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
@@ -1464,7 +1464,7 @@ public static func oneBtc() -> Amount  {
     )
 })
 }
-    
+
 public static func oneSat() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
@@ -1472,9 +1472,9 @@ public static func oneSat() -> Amount  {
     )
 })
 }
-    
 
-    
+
+
 open func asBtc() -> Double  {
     return try!  FfiConverterDouble.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1483,7 +1483,7 @@ open func asBtc() -> Double  {
     )
 })
 }
-    
+
 open func asSats() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1492,7 +1492,7 @@ open func asSats() -> UInt64  {
     )
 })
 }
-    
+
     /**
      * # Panics
      * Will not panic - separator is a valid character
@@ -1505,7 +1505,7 @@ open func btcString() -> String  {
     )
 })
 }
-    
+
     /**
      * # Panics
      * Will not panic - separator is a valid character
@@ -1518,7 +1518,7 @@ open func btcStringWithUnit() -> String  {
     )
 })
 }
-    
+
 open func fmtString(unit: BitcoinUnit) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1528,7 +1528,7 @@ open func fmtString(unit: BitcoinUnit) -> String  {
     )
 })
 }
-    
+
 open func fmtStringWithUnit(unit: BitcoinUnit) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1538,7 +1538,7 @@ open func fmtStringWithUnit(unit: BitcoinUnit) -> String  {
     )
 })
 }
-    
+
     /**
      * # Panics
      * Will not panic - separator is a valid character
@@ -1551,7 +1551,7 @@ open func satsString() -> String  {
     )
 })
 }
-    
+
 open func satsStringWithUnit() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1560,9 +1560,9 @@ open func satsStringWithUnit() -> String  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -1612,7 +1612,7 @@ public func FfiConverterTypeAmount_lower(_ value: Amount) -> UInt64 {
 
 
 public protocol ChainPositionProtocol: AnyObject, Sendable {
-    
+
 }
 open class ChainPosition: ChainPositionProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1664,11 +1664,11 @@ open class ChainPosition: ChainPositionProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_chainposition(handle, $0) }
     }
 
-    
 
-    
 
-    
+
+
+
 }
 
 
@@ -1718,27 +1718,27 @@ public func FfiConverterTypeChainPosition_lower(_ value: ChainPosition) -> UInt6
 
 
 public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
-    
+
     func feePercentage()  -> UInt64
-    
+
     func feeRate()  -> FeeRate
-    
+
     func feeTotal()  -> Amount
-    
+
     func id()  -> TxId
-    
+
     func idHash()  -> String
-    
+
     func inputs()  -> [AddressAndAmount]
-    
+
     func normalizedId()  -> String
-    
+
     func outputs()  -> [AddressAndAmount]
-    
+
     func psbt()  -> Psbt
-    
+
     func psbtBytes()  -> Data
-    
+
     /**
      * Exports PSBT as `BBQr` encoded QR strings
      *
@@ -1746,7 +1746,7 @@ public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     func psbtToBbqr() throws  -> [String]
-    
+
     /**
      * Exports PSBT as `BBQr` with specified density
      *
@@ -1754,11 +1754,11 @@ public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     func psbtToBbqrWithDensity(density: QrDensity) throws  -> [String]
-    
+
     func psbtToBbqrWithMaxVersion(maxVersion: UInt8) throws  -> [String]
-    
+
     func psbtToHex()  -> String
-    
+
     /**
      * Exports PSBT as UR-encoded QR strings for animated display
      *
@@ -1766,7 +1766,7 @@ public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     func psbtToUr(maxFragmentLen: UInt32) throws  -> [String]
-    
+
     /**
      * Exports PSBT as UR with specified density
      *
@@ -1774,13 +1774,13 @@ public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
      * Returns `ConfirmDetailsError::QrCodeCreation` if encoding fails
      */
     func psbtToUrWithDensity(density: QrDensity) throws  -> [String]
-    
+
     func sendingAmount()  -> Amount
-    
+
     func sendingTo()  -> Address
-    
+
     func spendingAmount()  -> Amount
-    
+
 }
 open class ConfirmDetails: ConfirmDetailsProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1832,9 +1832,9 @@ open class ConfirmDetails: ConfirmDetailsProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_confirmdetails(handle, $0) }
     }
 
-    
 
-    
+
+
 open func feePercentage() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1843,7 +1843,7 @@ open func feePercentage() -> UInt64  {
     )
 })
 }
-    
+
 open func feeRate() -> FeeRate  {
     return try!  FfiConverterTypeFeeRate_lift(try! rustCall() {
         uniffiCallStatus in
@@ -1852,7 +1852,7 @@ open func feeRate() -> FeeRate  {
     )
 })
 }
-    
+
 open func feeTotal() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
@@ -1861,7 +1861,7 @@ open func feeTotal() -> Amount  {
     )
 })
 }
-    
+
 open func id() -> TxId  {
     return try!  FfiConverterTypeTxId_lift(try! rustCall() {
         uniffiCallStatus in
@@ -1870,7 +1870,7 @@ open func id() -> TxId  {
     )
 })
 }
-    
+
 open func idHash() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1879,7 +1879,7 @@ open func idHash() -> String  {
     )
 })
 }
-    
+
 open func inputs() -> [AddressAndAmount]  {
     return try!  FfiConverterSequenceTypeAddressAndAmount.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1888,7 +1888,7 @@ open func inputs() -> [AddressAndAmount]  {
     )
 })
 }
-    
+
 open func normalizedId() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1897,7 +1897,7 @@ open func normalizedId() -> String  {
     )
 })
 }
-    
+
 open func outputs() -> [AddressAndAmount]  {
     return try!  FfiConverterSequenceTypeAddressAndAmount.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1906,7 +1906,7 @@ open func outputs() -> [AddressAndAmount]  {
     )
 })
 }
-    
+
 open func psbt() -> Psbt  {
     return try!  FfiConverterTypePsbt_lift(try! rustCall() {
         uniffiCallStatus in
@@ -1915,7 +1915,7 @@ open func psbt() -> Psbt  {
     )
 })
 }
-    
+
 open func psbtBytes() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1924,7 +1924,7 @@ open func psbtBytes() -> Data  {
     )
 })
 }
-    
+
     /**
      * Exports PSBT as `BBQr` encoded QR strings
      *
@@ -1939,7 +1939,7 @@ open func psbtToBbqr()throws  -> [String]  {
     )
 })
 }
-    
+
     /**
      * Exports PSBT as `BBQr` with specified density
      *
@@ -1955,7 +1955,7 @@ open func psbtToBbqrWithDensity(density: QrDensity)throws  -> [String]  {
     )
 })
 }
-    
+
 open func psbtToBbqrWithMaxVersion(maxVersion: UInt8)throws  -> [String]  {
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
         uniffiCallStatus in
@@ -1965,7 +1965,7 @@ open func psbtToBbqrWithMaxVersion(maxVersion: UInt8)throws  -> [String]  {
     )
 })
 }
-    
+
 open func psbtToHex() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1974,7 +1974,7 @@ open func psbtToHex() -> String  {
     )
 })
 }
-    
+
     /**
      * Exports PSBT as UR-encoded QR strings for animated display
      *
@@ -1990,7 +1990,7 @@ open func psbtToUr(maxFragmentLen: UInt32)throws  -> [String]  {
     )
 })
 }
-    
+
     /**
      * Exports PSBT as UR with specified density
      *
@@ -2006,7 +2006,7 @@ open func psbtToUrWithDensity(density: QrDensity)throws  -> [String]  {
     )
 })
 }
-    
+
 open func sendingAmount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2015,7 +2015,7 @@ open func sendingAmount() -> Amount  {
     )
 })
 }
-    
+
 open func sendingTo() -> Address  {
     return try!  FfiConverterTypeAddress_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2024,7 +2024,7 @@ open func sendingTo() -> Address  {
     )
 })
 }
-    
+
 open func spendingAmount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2033,9 +2033,9 @@ open func spendingAmount() -> Amount  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -2085,9 +2085,9 @@ public func FfiConverterTypeConfirmDetails_lower(_ value: ConfirmDetails) -> UIn
 
 
 public protocol FeeRateProtocol: AnyObject, Sendable {
-    
+
     func satPerVb()  -> Float
-    
+
 }
 open class FeeRate: FeeRateProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -2139,7 +2139,7 @@ open class FeeRate: FeeRateProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_feerate(handle, $0) }
     }
 
-    
+
 public static func fromSatPerVb(satPerVb: Float) -> FeeRate  {
     return try!  FfiConverterTypeFeeRate_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2148,9 +2148,9 @@ public static func fromSatPerVb(satPerVb: Float) -> FeeRate  {
     )
 })
 }
-    
 
-    
+
+
 open func satPerVb() -> Float  {
     return try!  FfiConverterFloat.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2159,9 +2159,9 @@ open func satPerVb() -> Float  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -2211,17 +2211,17 @@ public func FfiConverterTypeFeeRate_lower(_ value: FeeRate) -> UInt64 {
 
 
 public protocol FeeRateOptionProtocol: AnyObject, Sendable {
-    
+
     func duration()  -> String
-    
+
     func feeRate()  -> FeeRate
-    
+
     func feeSpeed()  -> FeeSpeed
-    
+
     func isEqual(rhs: FeeRateOption)  -> Bool
-    
+
     func satPerVb()  -> Float
-    
+
 }
 open class FeeRateOption: FeeRateOptionProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -2283,9 +2283,9 @@ public convenience init(feeSpeed: FeeSpeed, feeRate: Float) {
         try! rustCall { uniffi_cove_types_fn_free_feerateoption(handle, $0) }
     }
 
-    
 
-    
+
+
 open func duration() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2294,7 +2294,7 @@ open func duration() -> String  {
     )
 })
 }
-    
+
 open func feeRate() -> FeeRate  {
     return try!  FfiConverterTypeFeeRate_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2303,7 +2303,7 @@ open func feeRate() -> FeeRate  {
     )
 })
 }
-    
+
 open func feeSpeed() -> FeeSpeed  {
     return try!  FfiConverterTypeFeeSpeed_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2312,7 +2312,7 @@ open func feeSpeed() -> FeeSpeed  {
     )
 })
 }
-    
+
 open func isEqual(rhs: FeeRateOption) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2322,7 +2322,7 @@ open func isEqual(rhs: FeeRateOption) -> Bool  {
     )
 })
 }
-    
+
 open func satPerVb() -> Float  {
     return try!  FfiConverterFloat.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2331,9 +2331,9 @@ open func satPerVb() -> Float  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -2383,23 +2383,23 @@ public func FfiConverterTypeFeeRateOption_lower(_ value: FeeRateOption) -> UInt6
 
 
 public protocol FeeRateOptionWithTotalFeeProtocol: AnyObject, Sendable {
-    
+
     func duration()  -> String
-    
+
     func feeRate()  -> FeeRate
-    
+
     func feeRateOptions()  -> FeeRateOption
-    
+
     func feeSpeed()  -> FeeSpeed
-    
+
     func isCustom()  -> Bool
-    
+
     func isEqual(rhs: FeeRateOptionWithTotalFee)  -> Bool
-    
+
     func satPerVb()  -> Float
-    
+
     func totalFee()  -> Amount?
-    
+
 }
 open class FeeRateOptionWithTotalFee: FeeRateOptionWithTotalFeeProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -2462,9 +2462,9 @@ public convenience init(feeSpeed: FeeSpeed, feeRate: FeeRate, totalFee: Amount) 
         try! rustCall { uniffi_cove_types_fn_free_feerateoptionwithtotalfee(handle, $0) }
     }
 
-    
 
-    
+
+
 open func duration() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2473,7 +2473,7 @@ open func duration() -> String  {
     )
 })
 }
-    
+
 open func feeRate() -> FeeRate  {
     return try!  FfiConverterTypeFeeRate_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2482,7 +2482,7 @@ open func feeRate() -> FeeRate  {
     )
 })
 }
-    
+
 open func feeRateOptions() -> FeeRateOption  {
     return try!  FfiConverterTypeFeeRateOption_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2491,7 +2491,7 @@ open func feeRateOptions() -> FeeRateOption  {
     )
 })
 }
-    
+
 open func feeSpeed() -> FeeSpeed  {
     return try!  FfiConverterTypeFeeSpeed_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2500,7 +2500,7 @@ open func feeSpeed() -> FeeSpeed  {
     )
 })
 }
-    
+
 open func isCustom() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2509,7 +2509,7 @@ open func isCustom() -> Bool  {
     )
 })
 }
-    
+
 open func isEqual(rhs: FeeRateOptionWithTotalFee) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2519,7 +2519,7 @@ open func isEqual(rhs: FeeRateOptionWithTotalFee) -> Bool  {
     )
 })
 }
-    
+
 open func satPerVb() -> Float  {
     return try!  FfiConverterFloat.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2528,7 +2528,7 @@ open func satPerVb() -> Float  {
     )
 })
 }
-    
+
 open func totalFee() -> Amount?  {
     return try!  FfiConverterOptionTypeAmount.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2537,9 +2537,9 @@ open func totalFee() -> Amount?  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -2589,13 +2589,13 @@ public func FfiConverterTypeFeeRateOptionWithTotalFee_lower(_ value: FeeRateOpti
 
 
 public protocol FeeRateOptionsProtocol: AnyObject, Sendable {
-    
+
     func fast()  -> FeeRateOption
-    
+
     func medium()  -> FeeRateOption
-    
+
     func slow()  -> FeeRateOption
-    
+
 }
 open class FeeRateOptions: FeeRateOptionsProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -2647,7 +2647,7 @@ open class FeeRateOptions: FeeRateOptionsProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_feerateoptions(handle, $0) }
     }
 
-    
+
 public static func previewNew() -> FeeRateOptions  {
     return try!  FfiConverterTypeFeeRateOptions_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2655,9 +2655,9 @@ public static func previewNew() -> FeeRateOptions  {
     )
 })
 }
-    
 
-    
+
+
 open func fast() -> FeeRateOption  {
     return try!  FfiConverterTypeFeeRateOption_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2666,7 +2666,7 @@ open func fast() -> FeeRateOption  {
     )
 })
 }
-    
+
 open func medium() -> FeeRateOption  {
     return try!  FfiConverterTypeFeeRateOption_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2675,7 +2675,7 @@ open func medium() -> FeeRateOption  {
     )
 })
 }
-    
+
 open func slow() -> FeeRateOption  {
     return try!  FfiConverterTypeFeeRateOption_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2684,9 +2684,9 @@ open func slow() -> FeeRateOption  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -2736,27 +2736,27 @@ public func FfiConverterTypeFeeRateOptions_lower(_ value: FeeRateOptions) -> UIn
 
 
 public protocol FeeRateOptionsWithTotalFeeProtocol: AnyObject, Sendable {
-    
+
     func addCustomFeeRate(feeRate: FeeRateOptionWithTotalFee)  -> FeeRateOptionsWithTotalFee
-    
+
     func calculateCustomFeeSpeed(feeRate: Float)  -> FeeSpeed
-    
+
     func custom()  -> FeeRateOptionWithTotalFee?
-    
+
     func fast()  -> FeeRateOptionWithTotalFee
-    
+
     func feeRateOptions()  -> FeeRateOptions
-    
+
     func getFeeRateWith(feeRate: Float)  -> FeeRateOptionWithTotalFee?
-    
+
     func medium()  -> FeeRateOptionWithTotalFee
-    
+
     func removeCustomFee()  -> FeeRateOptionsWithTotalFee
-    
+
     func slow()  -> FeeRateOptionWithTotalFee
-    
+
     func transactionSize()  -> UInt64
-    
+
 }
 open class FeeRateOptionsWithTotalFee: FeeRateOptionsWithTotalFeeProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -2808,7 +2808,7 @@ open class FeeRateOptionsWithTotalFee: FeeRateOptionsWithTotalFeeProtocol, @unch
         try! rustCall { uniffi_cove_types_fn_free_feerateoptionswithtotalfee(handle, $0) }
     }
 
-    
+
 public static func previewNew() -> FeeRateOptionsWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2816,9 +2816,9 @@ public static func previewNew() -> FeeRateOptionsWithTotalFee  {
     )
 })
 }
-    
 
-    
+
+
 open func addCustomFeeRate(feeRate: FeeRateOptionWithTotalFee) -> FeeRateOptionsWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2828,7 +2828,7 @@ open func addCustomFeeRate(feeRate: FeeRateOptionWithTotalFee) -> FeeRateOptions
     )
 })
 }
-    
+
 open func calculateCustomFeeSpeed(feeRate: Float) -> FeeSpeed  {
     return try!  FfiConverterTypeFeeSpeed_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2838,7 +2838,7 @@ open func calculateCustomFeeSpeed(feeRate: Float) -> FeeSpeed  {
     )
 })
 }
-    
+
 open func custom() -> FeeRateOptionWithTotalFee?  {
     return try!  FfiConverterOptionTypeFeeRateOptionWithTotalFee.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2847,7 +2847,7 @@ open func custom() -> FeeRateOptionWithTotalFee?  {
     )
 })
 }
-    
+
 open func fast() -> FeeRateOptionWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionWithTotalFee_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2856,7 +2856,7 @@ open func fast() -> FeeRateOptionWithTotalFee  {
     )
 })
 }
-    
+
 open func feeRateOptions() -> FeeRateOptions  {
     return try!  FfiConverterTypeFeeRateOptions_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2865,7 +2865,7 @@ open func feeRateOptions() -> FeeRateOptions  {
     )
 })
 }
-    
+
 open func getFeeRateWith(feeRate: Float) -> FeeRateOptionWithTotalFee?  {
     return try!  FfiConverterOptionTypeFeeRateOptionWithTotalFee.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2875,7 +2875,7 @@ open func getFeeRateWith(feeRate: Float) -> FeeRateOptionWithTotalFee?  {
     )
 })
 }
-    
+
 open func medium() -> FeeRateOptionWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionWithTotalFee_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2884,7 +2884,7 @@ open func medium() -> FeeRateOptionWithTotalFee  {
     )
 })
 }
-    
+
 open func removeCustomFee() -> FeeRateOptionsWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2893,7 +2893,7 @@ open func removeCustomFee() -> FeeRateOptionsWithTotalFee  {
     )
 })
 }
-    
+
 open func slow() -> FeeRateOptionWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionWithTotalFee_lift(try! rustCall() {
         uniffiCallStatus in
@@ -2902,7 +2902,7 @@ open func slow() -> FeeRateOptionWithTotalFee  {
     )
 })
 }
-    
+
 open func transactionSize() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
         uniffiCallStatus in
@@ -2911,9 +2911,9 @@ open func transactionSize() -> UInt64  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -2963,7 +2963,7 @@ public func FfiConverterTypeFeeRateOptionsWithTotalFee_lower(_ value: FeeRateOpt
 
 
 public protocol InputOutputDetailsProtocol: AnyObject, Sendable {
-    
+
 }
 open class InputOutputDetails: InputOutputDetailsProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -3015,11 +3015,11 @@ open class InputOutputDetails: InputOutputDetailsProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_inputoutputdetails(handle, $0) }
     }
 
-    
 
-    
 
-    
+
+
+
 }
 
 
@@ -3069,17 +3069,17 @@ public func FfiConverterTypeInputOutputDetails_lower(_ value: InputOutputDetails
 
 
 public protocol OutPointProtocol: AnyObject, Sendable {
-    
+
     func eq(rhs: OutPoint)  -> Bool
-    
+
     func hashToUint()  -> UInt64
-    
+
     func txid()  -> TxId
-    
+
     func txidStr()  -> String
-    
+
     func txnLink()  -> String
-    
+
 }
 open class OutPoint: OutPointProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -3131,7 +3131,7 @@ open class OutPoint: OutPointProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_outpoint(handle, $0) }
     }
 
-    
+
 public static func previewNew() -> OutPoint  {
     return try!  FfiConverterTypeOutPoint_lift(try! rustCall() {
         uniffiCallStatus in
@@ -3139,7 +3139,7 @@ public static func previewNew() -> OutPoint  {
     )
 })
 }
-    
+
 public static func withVout(vout: UInt32) -> OutPoint  {
     return try!  FfiConverterTypeOutPoint_lift(try! rustCall() {
         uniffiCallStatus in
@@ -3148,9 +3148,9 @@ public static func withVout(vout: UInt32) -> OutPoint  {
     )
 })
 }
-    
 
-    
+
+
 open func eq(rhs: OutPoint) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -3160,7 +3160,7 @@ open func eq(rhs: OutPoint) -> Bool  {
     )
 })
 }
-    
+
 open func hashToUint() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
         uniffiCallStatus in
@@ -3169,7 +3169,7 @@ open func hashToUint() -> UInt64  {
     )
 })
 }
-    
+
 open func txid() -> TxId  {
     return try!  FfiConverterTypeTxId_lift(try! rustCall() {
         uniffiCallStatus in
@@ -3178,7 +3178,7 @@ open func txid() -> TxId  {
     )
 })
 }
-    
+
 open func txidStr() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -3187,7 +3187,7 @@ open func txidStr() -> String  {
     )
 })
 }
-    
+
 open func txnLink() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -3196,9 +3196,9 @@ open func txnLink() -> String  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -3248,7 +3248,7 @@ public func FfiConverterTypeOutPoint_lower(_ value: OutPoint) -> UInt64 {
 
 
 public protocol PsbtProtocol: AnyObject, Sendable {
-    
+
     /**
      * Total fee in sats
      *
@@ -3256,22 +3256,22 @@ public protocol PsbtProtocol: AnyObject, Sendable {
      * Returns `PsbtError` variants if fee calculation fails
      */
     func fee() throws  -> Amount
-    
+
     /**
      * Get total sending amount of all outputs
      */
     func outputTotalAmount()  -> Amount
-    
+
     /**
      * Get the transaction id of the unsigned transaction
      */
     func txId()  -> TxId
-    
+
     /**
      * The virtual size of the transaction
      */
     func weight()  -> UInt64
-    
+
 }
 open class Psbt: PsbtProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -3338,9 +3338,9 @@ public convenience init(data: Data)throws  {
         try! rustCall { uniffi_cove_types_fn_free_psbt(handle, $0) }
     }
 
-    
 
-    
+
+
     /**
      * Total fee in sats
      *
@@ -3355,7 +3355,7 @@ open func fee()throws  -> Amount  {
     )
 })
 }
-    
+
     /**
      * Get total sending amount of all outputs
      */
@@ -3367,7 +3367,7 @@ open func outputTotalAmount() -> Amount  {
     )
 })
 }
-    
+
     /**
      * Get the transaction id of the unsigned transaction
      */
@@ -3379,7 +3379,7 @@ open func txId() -> TxId  {
     )
 })
 }
-    
+
     /**
      * The virtual size of the transaction
      */
@@ -3391,9 +3391,9 @@ open func weight() -> UInt64  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -3450,37 +3450,37 @@ public func FfiConverterTypePsbt_lower(_ value: Psbt) -> UInt64 {
  * Lower density = smaller/simpler QRs, more animation frames.
  */
 public protocol QrDensityProtocol: AnyObject, Sendable {
-    
+
     /**
      * Get the recommended animation interval in milliseconds for BBQR format
      * Lower density (smaller max version) = slower animation for better scanning
      */
     func bbqrAnimationIntervalMs()  -> UInt32
-    
+
     func bbqrMaxVersion()  -> UInt8
-    
+
     func canDecrease()  -> Bool
-    
+
     func canIncrease()  -> Bool
-    
+
     /**
      * Decrease density (smaller QRs, more animation frames)
      */
     func decrease()  -> QrDensity
-    
+
     /**
      * Increase density (larger QRs, fewer animation frames)
      */
     func increase()  -> QrDensity
-    
+
     /**
      * Get the recommended animation interval in milliseconds for UR format
      * Lower density (smaller fragments) = slower animation for better scanning
      */
     func urAnimationIntervalMs()  -> UInt32
-    
+
     func urFragmentLen()  -> UInt32
-    
+
 }
 /**
  * QR code density settings for export
@@ -3547,9 +3547,9 @@ public convenience init() {
         try! rustCall { uniffi_cove_types_fn_free_qrdensity(handle, $0) }
     }
 
-    
 
-    
+
+
     /**
      * Get the recommended animation interval in milliseconds for BBQR format
      * Lower density (smaller max version) = slower animation for better scanning
@@ -3562,7 +3562,7 @@ open func bbqrAnimationIntervalMs() -> UInt32  {
     )
 })
 }
-    
+
 open func bbqrMaxVersion() -> UInt8  {
     return try!  FfiConverterUInt8.lift(try! rustCall() {
         uniffiCallStatus in
@@ -3571,7 +3571,7 @@ open func bbqrMaxVersion() -> UInt8  {
     )
 })
 }
-    
+
 open func canDecrease() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -3580,7 +3580,7 @@ open func canDecrease() -> Bool  {
     )
 })
 }
-    
+
 open func canIncrease() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -3589,7 +3589,7 @@ open func canIncrease() -> Bool  {
     )
 })
 }
-    
+
     /**
      * Decrease density (smaller QRs, more animation frames)
      */
@@ -3601,7 +3601,7 @@ open func decrease() -> QrDensity  {
     )
 })
 }
-    
+
     /**
      * Increase density (larger QRs, fewer animation frames)
      */
@@ -3613,7 +3613,7 @@ open func increase() -> QrDensity  {
     )
 })
 }
-    
+
     /**
      * Get the recommended animation interval in milliseconds for UR format
      * Lower density (smaller fragments) = slower animation for better scanning
@@ -3626,7 +3626,7 @@ open func urAnimationIntervalMs() -> UInt32  {
     )
 })
 }
-    
+
 open func urFragmentLen() -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
         uniffiCallStatus in
@@ -3635,9 +3635,9 @@ open func urFragmentLen() -> UInt32  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -3687,21 +3687,21 @@ public func FfiConverterTypeQrDensity_lower(_ value: QrDensity) -> UInt64 {
 
 
 public protocol SentAndReceivedProtocol: AnyObject, Sendable {
-    
+
     func amount()  -> Amount
-    
+
     func amountFmt(unit: BitcoinUnit)  -> String
-    
+
     func direction()  -> TransactionDirection
-    
+
     func externalSent()  -> Amount
-    
+
     func label()  -> String
-    
+
     func received()  -> Amount
-    
+
     func sent()  -> Amount
-    
+
 }
 open class SentAndReceived: SentAndReceivedProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -3753,9 +3753,9 @@ open class SentAndReceived: SentAndReceivedProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_sentandreceived(handle, $0) }
     }
 
-    
 
-    
+
+
 open func amount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
@@ -3764,7 +3764,7 @@ open func amount() -> Amount  {
     )
 })
 }
-    
+
 open func amountFmt(unit: BitcoinUnit) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -3774,7 +3774,7 @@ open func amountFmt(unit: BitcoinUnit) -> String  {
     )
 })
 }
-    
+
 open func direction() -> TransactionDirection  {
     return try!  FfiConverterTypeTransactionDirection_lift(try! rustCall() {
         uniffiCallStatus in
@@ -3783,7 +3783,7 @@ open func direction() -> TransactionDirection  {
     )
 })
 }
-    
+
 open func externalSent() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
@@ -3792,7 +3792,7 @@ open func externalSent() -> Amount  {
     )
 })
 }
-    
+
 open func label() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -3801,7 +3801,7 @@ open func label() -> String  {
     )
 })
 }
-    
+
 open func received() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
@@ -3810,7 +3810,7 @@ open func received() -> Amount  {
     )
 })
 }
-    
+
 open func sent() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
@@ -3819,9 +3819,9 @@ open func sent() -> Amount  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -3871,9 +3871,9 @@ public func FfiConverterTypeSentAndReceived_lower(_ value: SentAndReceived) -> U
 
 
 public protocol TxIdProtocol: AnyObject, Sendable {
-    
+
     func asHashString()  -> String
-    
+
 }
 open class TxId: TxIdProtocol, @unchecked Sendable, Equatable, Hashable, Comparable, CustomStringConvertible {
     fileprivate let handle: UInt64
@@ -3925,9 +3925,9 @@ open class TxId: TxIdProtocol, @unchecked Sendable, Equatable, Hashable, Compara
         try! rustCall { uniffi_cove_types_fn_free_txid(handle, $0) }
     }
 
-    
 
-    
+
+
 open func asHashString() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -3936,9 +3936,9 @@ open func asHashString() -> String  {
     )
 })
 }
-    
 
-    
+
+
 // The local Rust `Display` implementation.
 public var description: String {
     return try!  FfiConverterString.lift(
@@ -4035,7 +4035,7 @@ public func FfiConverterTypeTxId_lower(_ value: TxId) -> UInt64 {
 
 
 public protocol TxInProtocol: AnyObject, Sendable {
-    
+
 }
 open class TxIn: TxInProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -4087,11 +4087,11 @@ open class TxIn: TxInProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_txin(handle, $0) }
     }
 
-    
 
-    
 
-    
+
+
+
 }
 
 
@@ -4141,7 +4141,7 @@ public func FfiConverterTypeTxIn_lower(_ value: TxIn) -> UInt64 {
 
 
 public protocol TxOutProtocol: AnyObject, Sendable {
-    
+
 }
 open class TxOut: TxOutProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -4193,11 +4193,11 @@ open class TxOut: TxOutProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_txout(handle, $0) }
     }
 
-    
 
-    
 
-    
+
+
+
 }
 
 
@@ -4247,7 +4247,7 @@ public func FfiConverterTypeTxOut_lower(_ value: TxOut) -> UInt64 {
 
 
 public protocol UtxoListProtocol: AnyObject, Sendable {
-    
+
 }
 open class UtxoList: UtxoListProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -4299,11 +4299,11 @@ open class UtxoList: UtxoListProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_types_fn_free_utxolist(handle, $0) }
     }
 
-    
 
-    
 
-    
+
+
+
 }
 
 
@@ -4365,9 +4365,9 @@ public struct AddressAndAmount {
         self.amount = amount
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -4381,9 +4381,9 @@ public struct FfiConverterTypeAddressAndAmount: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressAndAmount {
         return
             try AddressAndAmount(
-                label: FfiConverterOptionString.read(from: &buf), 
-                utxoType: FfiConverterOptionTypeUtxoType.read(from: &buf), 
-                address: FfiConverterTypeAddress.read(from: &buf), 
+                label: FfiConverterOptionString.read(from: &buf),
+                utxoType: FfiConverterOptionTypeUtxoType.read(from: &buf),
+                address: FfiConverterTypeAddress.read(from: &buf),
                 amount: FfiConverterTypeAmount.read(from: &buf)
         )
     }
@@ -4423,9 +4423,9 @@ public struct AddressIndex: Equatable, Hashable {
         self.addressListHash = addressListHash
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -4439,7 +4439,7 @@ public struct FfiConverterTypeAddressIndex: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressIndex {
         return
             try AddressIndex(
-                lastSeenIndex: FfiConverterUInt8.read(from: &buf), 
+                lastSeenIndex: FfiConverterUInt8.read(from: &buf),
                 addressListHash: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -4477,9 +4477,9 @@ public struct BlockSizeLast: Equatable, Hashable {
         self.lastSeen = lastSeen
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -4493,7 +4493,7 @@ public struct FfiConverterTypeBlockSizeLast: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlockSizeLast {
         return
             try BlockSizeLast(
-                blockHeight: FfiConverterUInt64.read(from: &buf), 
+                blockHeight: FfiConverterUInt64.read(from: &buf),
                 lastSeen: FfiConverterDuration.read(from: &buf)
         )
     }
@@ -4531,9 +4531,9 @@ public struct PayJoinParams: Equatable, Hashable {
         self.outputSubstitutionEnabled = outputSubstitutionEnabled
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -4547,7 +4547,7 @@ public struct FfiConverterTypePayJoinParams: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PayJoinParams {
         return
             try PayJoinParams(
-                endpoint: FfiConverterString.read(from: &buf), 
+                endpoint: FfiConverterString.read(from: &buf),
                 outputSubstitutionEnabled: FfiConverterBool.read(from: &buf)
         )
     }
@@ -4587,9 +4587,9 @@ public struct Rgb: Equatable, Hashable {
         self.b = b
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -4603,8 +4603,8 @@ public struct FfiConverterTypeRgb: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Rgb {
         return
             try Rgb(
-                r: FfiConverterUInt8.read(from: &buf), 
-                g: FfiConverterUInt8.read(from: &buf), 
+                r: FfiConverterUInt8.read(from: &buf),
+                g: FfiConverterUInt8.read(from: &buf),
                 b: FfiConverterUInt8.read(from: &buf)
         )
     }
@@ -4643,9 +4643,9 @@ public struct SplitOutput {
         self.`internal` = `internal`
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -4659,7 +4659,7 @@ public struct FfiConverterTypeSplitOutput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SplitOutput {
         return
             try SplitOutput(
-                external: FfiConverterSequenceTypeAddressAndAmount.read(from: &buf), 
+                external: FfiConverterSequenceTypeAddressAndAmount.read(from: &buf),
                 internal: FfiConverterSequenceTypeAddressAndAmount.read(from: &buf)
         )
     }
@@ -4709,7 +4709,7 @@ public struct Utxo: Equatable, Hashable {
         self.type = type
     }
 
-    
+
 public func date() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -4718,7 +4718,7 @@ public func date() -> String  {
     )
 })
 }
-    
+
 public func hashToUint() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
         uniffiCallStatus in
@@ -4727,7 +4727,7 @@ public func hashToUint() -> UInt64  {
     )
 })
 }
-    
+
 public func isEqual(other: Utxo) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -4737,7 +4737,7 @@ public func isEqual(other: Utxo) -> Bool  {
     )
 })
 }
-    
+
 public func name() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -4746,9 +4746,9 @@ public func name() -> String  {
     )
 })
 }
-    
 
-    
+
+
 // The local Rust `Eq` implementation - only `eq` is used.
 public static func == (self: Utxo, other: Utxo) -> Bool {
     return try!  FfiConverterBool.lift(
@@ -4786,13 +4786,13 @@ public struct FfiConverterTypeUtxo: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Utxo {
         return
             try Utxo(
-                outpoint: FfiConverterTypeOutPoint.read(from: &buf), 
-                label: FfiConverterOptionString.read(from: &buf), 
-                datetime: FfiConverterUInt64.read(from: &buf), 
-                amount: FfiConverterTypeAmount.read(from: &buf), 
-                address: FfiConverterTypeAddress.read(from: &buf), 
-                derivationIndex: FfiConverterUInt32.read(from: &buf), 
-                blockHeight: FfiConverterUInt32.read(from: &buf), 
+                outpoint: FfiConverterTypeOutPoint.read(from: &buf),
+                label: FfiConverterOptionString.read(from: &buf),
+                datetime: FfiConverterUInt64.read(from: &buf),
+                amount: FfiConverterTypeAmount.read(from: &buf),
+                address: FfiConverterTypeAddress.read(from: &buf),
+                derivationIndex: FfiConverterUInt32.read(from: &buf),
+                blockHeight: FfiConverterUInt32.read(from: &buf),
                 type: FfiConverterTypeUtxoType.read(from: &buf)
         )
     }
@@ -4825,11 +4825,11 @@ public func FfiConverterTypeUtxo_lower(_ value: Utxo) -> RustBuffer {
 }
 
 
-public 
+public
 enum AddressError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case NoOutputs
     case ScriptError(String
     )
@@ -4839,15 +4839,15 @@ enum AddressError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     )
     case EmptyAddress
 
-    
 
-    
 
-    
+
+
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -4864,9 +4864,9 @@ public struct FfiConverterTypeAddressError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .NoOutputs
         case 2: return .ScriptError(
             try FfiConverterString.read(from: &buf)
@@ -4874,7 +4874,7 @@ public struct FfiConverterTypeAddressError: FfiConverterRustBuffer {
         case 3: return .InvalidAddress
         case 4: return .UnsupportedNetwork
         case 5: return .WrongNetwork(
-            current: try FfiConverterTypeNetwork.read(from: &buf), 
+            current: try FfiConverterTypeNetwork.read(from: &buf),
             validFor: try FfiConverterTypeNetwork.read(from: &buf)
             )
         case 6: return .EmptyAddress
@@ -4886,36 +4886,36 @@ public struct FfiConverterTypeAddressError: FfiConverterRustBuffer {
     public static func write(_ value: AddressError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case .NoOutputs:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case let .ScriptError(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case .InvalidAddress:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .UnsupportedNetwork:
             writeInt(&buf, Int32(4))
-        
-        
+
+
         case let .WrongNetwork(current,validFor):
             writeInt(&buf, Int32(5))
             FfiConverterTypeNetwork.write(current, into: &buf)
             FfiConverterTypeNetwork.write(validFor, into: &buf)
-            
-        
+
+
         case .EmptyAddress:
             writeInt(&buf, Int32(6))
-        
+
         }
     }
 }
@@ -4938,7 +4938,7 @@ public func FfiConverterTypeAddressError_lower(_ value: AddressError) -> RustBuf
 
 
 public enum BitcoinUnit: Equatable, Hashable, CustomStringConvertible {
-    
+
     case btc
     case sat
 
@@ -4972,26 +4972,26 @@ public struct FfiConverterTypeBitcoinUnit: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BitcoinUnit {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .btc
-        
+
         case 2: return .sat
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: BitcoinUnit, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .btc:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .sat:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -5015,7 +5015,7 @@ public func FfiConverterTypeBitcoinUnit_lower(_ value: BitcoinUnit) -> RustBuffe
 
 
 public enum ColorSchemeSelection: Equatable, Hashable {
-    
+
     case light
     case dark
     case system
@@ -5048,32 +5048,32 @@ public struct FfiConverterTypeColorSchemeSelection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColorSchemeSelection {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .light
-        
+
         case 2: return .dark
-        
+
         case 3: return .system
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ColorSchemeSelection, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .light:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .dark:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .system:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -5095,23 +5095,23 @@ public func FfiConverterTypeColorSchemeSelection_lower(_ value: ColorSchemeSelec
 
 
 
-public 
+public
 enum ConfirmDetailsError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case QrCodeCreation(String
     )
 
-    
 
-    
 
-    
+
+
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -5128,9 +5128,9 @@ public struct FfiConverterTypeConfirmDetailsError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .QrCodeCreation(
             try FfiConverterString.read(from: &buf)
             )
@@ -5142,14 +5142,14 @@ public struct FfiConverterTypeConfirmDetailsError: FfiConverterRustBuffer {
     public static func write(_ value: ConfirmDetailsError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case let .QrCodeCreation(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
-            
+
         }
     }
 }
@@ -5172,7 +5172,7 @@ public func FfiConverterTypeConfirmDetailsError_lower(_ value: ConfirmDetailsErr
 
 
 public enum FeeSpeed: Equatable, Hashable, CustomStringConvertible {
-    
+
     case fast
     case medium
     case slow
@@ -5209,40 +5209,40 @@ public struct FfiConverterTypeFeeSpeed: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeSpeed {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .fast
-        
+
         case 2: return .medium
-        
+
         case 3: return .slow
-        
+
         case 4: return .custom(durationMins: try FfiConverterUInt32.read(from: &buf)
         )
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: FeeSpeed, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .fast:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .medium:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .slow:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case let .custom(durationMins):
             writeInt(&buf, Int32(4))
             FfiConverterUInt32.write(durationMins, into: &buf)
-            
+
         }
     }
 }
@@ -5266,7 +5266,7 @@ public func FfiConverterTypeFeeSpeed_lower(_ value: FeeSpeed) -> RustBuffer {
 
 
 public enum FfiColor: Equatable, Hashable {
-    
+
     case red(FfiOpacity
     )
     case blue(FfiOpacity
@@ -5311,111 +5311,111 @@ public struct FfiConverterTypeFfiColor: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiColor {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .red(try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         case 2: return .blue(try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         case 3: return .green(try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         case 4: return .yellow(try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         case 5: return .orange(try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         case 6: return .purple(try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         case 7: return .pink(try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         case 8: return .white(try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         case 9: return .black(try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         case 10: return .gray(try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         case 11: return .coolGray(try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         case 12: return .custom(try FfiConverterTypeRgb.read(from: &buf), try FfiConverterTypeFfiOpacity.read(from: &buf)
         )
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: FfiColor, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case let .red(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeFfiOpacity.write(v1, into: &buf)
-            
-        
+
+
         case let .blue(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeFfiOpacity.write(v1, into: &buf)
-            
-        
+
+
         case let .green(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeFfiOpacity.write(v1, into: &buf)
-            
-        
+
+
         case let .yellow(v1):
             writeInt(&buf, Int32(4))
             FfiConverterTypeFfiOpacity.write(v1, into: &buf)
-            
-        
+
+
         case let .orange(v1):
             writeInt(&buf, Int32(5))
             FfiConverterTypeFfiOpacity.write(v1, into: &buf)
-            
-        
+
+
         case let .purple(v1):
             writeInt(&buf, Int32(6))
             FfiConverterTypeFfiOpacity.write(v1, into: &buf)
-            
-        
+
+
         case let .pink(v1):
             writeInt(&buf, Int32(7))
             FfiConverterTypeFfiOpacity.write(v1, into: &buf)
-            
-        
+
+
         case let .white(v1):
             writeInt(&buf, Int32(8))
             FfiConverterTypeFfiOpacity.write(v1, into: &buf)
-            
-        
+
+
         case let .black(v1):
             writeInt(&buf, Int32(9))
             FfiConverterTypeFfiOpacity.write(v1, into: &buf)
-            
-        
+
+
         case let .gray(v1):
             writeInt(&buf, Int32(10))
             FfiConverterTypeFfiOpacity.write(v1, into: &buf)
-            
-        
+
+
         case let .coolGray(v1):
             writeInt(&buf, Int32(11))
             FfiConverterTypeFfiOpacity.write(v1, into: &buf)
-            
-        
+
+
         case let .custom(v1,v2):
             writeInt(&buf, Int32(12))
             FfiConverterTypeRgb.write(v1, into: &buf)
             FfiConverterTypeFfiOpacity.write(v2, into: &buf)
-            
+
         }
     }
 }
@@ -5439,7 +5439,7 @@ public func FfiConverterTypeFfiColor_lower(_ value: FfiColor) -> RustBuffer {
 
 
 public enum FfiColorScheme: Equatable, Hashable {
-    
+
     case light
     case dark
 
@@ -5462,26 +5462,26 @@ public struct FfiConverterTypeFfiColorScheme: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiColorScheme {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .light
-        
+
         case 2: return .dark
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: FfiColorScheme, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .light:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .dark:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -5505,7 +5505,7 @@ public func FfiConverterTypeFfiColorScheme_lower(_ value: FfiColorScheme) -> Rus
 
 
 public enum Network: Equatable, Hashable, CustomStringConvertible {
-    
+
     case bitcoin
     case testnet
     case testnet4
@@ -5550,38 +5550,38 @@ public struct FfiConverterTypeNetwork: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Network {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .bitcoin
-        
+
         case 2: return .testnet
-        
+
         case 3: return .testnet4
-        
+
         case 4: return .signet
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: Network, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .bitcoin:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .testnet:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .testnet4:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .signet:
             writeInt(&buf, Int32(4))
-        
+
         }
     }
 }
@@ -5603,26 +5603,26 @@ public func FfiConverterTypeNetwork_lower(_ value: Network) -> RustBuffer {
 
 
 
-public 
+public
 enum PsbtError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case MissingUtxo
     case NegativeFee
     case FeeOverflow
     case Other(String
     )
 
-    
 
-    
 
-    
+
+
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -5639,9 +5639,9 @@ public struct FfiConverterTypePsbtError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .MissingUtxo
         case 2: return .NegativeFee
         case 3: return .FeeOverflow
@@ -5656,26 +5656,26 @@ public struct FfiConverterTypePsbtError: FfiConverterRustBuffer {
     public static func write(_ value: PsbtError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case .MissingUtxo:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .NegativeFee:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .FeeOverflow:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case let .Other(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
-            
+
         }
     }
 }
@@ -5701,7 +5701,7 @@ public func FfiConverterTypePsbtError_lower(_ value: PsbtError) -> RustBuffer {
  */
 
 public enum QrExportFormat: Equatable, Hashable, CustomStringConvertible {
-    
+
     /**
      * `BBQr` format (Binary Bitcoin QR)
      */
@@ -5741,26 +5741,26 @@ public struct FfiConverterTypeQrExportFormat: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QrExportFormat {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .bbqr
-        
+
         case 2: return .ur
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: QrExportFormat, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .bbqr:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .ur:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -5784,7 +5784,7 @@ public func FfiConverterTypeQrExportFormat_lower(_ value: QrExportFormat) -> Rus
 
 
 public enum TransactionDirection: Equatable, Hashable {
-    
+
     case incoming
     case outgoing
 
@@ -5807,26 +5807,26 @@ public struct FfiConverterTypeTransactionDirection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionDirection {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .incoming
-        
+
         case 2: return .outgoing
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: TransactionDirection, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .incoming:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .outgoing:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -5850,7 +5850,7 @@ public func FfiConverterTypeTransactionDirection_lower(_ value: TransactionDirec
 
 
 public enum UtxoType: Equatable, Hashable {
-    
+
     case output
     case change
 
@@ -5873,26 +5873,26 @@ public struct FfiConverterTypeUtxoType: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UtxoType {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .output
-        
+
         case 2: return .change
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: UtxoType, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .output:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .change:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }

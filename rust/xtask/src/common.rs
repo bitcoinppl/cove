@@ -1,6 +1,6 @@
 use color_eyre::Result;
 use colored::Colorize;
-use std::process::Command;
+use std::{fs, path::Path, process::Command};
 use xshell::Shell;
 
 /// Check if a command exists in PATH
@@ -58,4 +58,37 @@ pub fn parse_build_flags(build_flag: &str) -> Vec<String> {
             _ => Vec::new(),
         }
     }
+}
+
+pub fn trim_generated_trailing_whitespace(dir: impl AsRef<Path>, extension: &str) -> Result<()> {
+    fn visit_dir(dir: &Path, extension: &str) -> Result<()> {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                visit_dir(&path, extension)?;
+                continue;
+            }
+
+            if path.extension().and_then(|ext| ext.to_str()) == Some(extension) {
+                trim_file(&path)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn trim_file(path: &Path) -> Result<()> {
+        let original = fs::read_to_string(path)?;
+        let trimmed = original.lines().map(str::trim_end).collect::<Vec<_>>().join("\n");
+        let trimmed = if original.ends_with('\n') { format!("{trimmed}\n") } else { trimmed };
+
+        if original != trimmed {
+            fs::write(path, trimmed)?;
+        }
+
+        Ok(())
+    }
+
+    visit_dir(dir.as_ref(), extension)
 }

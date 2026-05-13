@@ -11,6 +11,7 @@ use crate::{
             ReceiveAddressSession, ReceiveAddressState, ReceiveAddressStatus,
             RefreshExpiredAddressDecision,
         },
+        WalletScanPhase, WalletScanProgress, WalletScanStatus,
     },
     mnemonic,
     node::{
@@ -47,6 +48,7 @@ use bdk_wallet::{KeychainKind, LocalOutput, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
+use cove_bdk_progressive_scan::{KeychainProgress, ScanEvent, ScanProgress, ScanUpdate};
 use cove_common::consts::{GAP_LIMIT, MIN_SEND_AMOUNT};
 use cove_tokio::{AbortableTask, FutureTimeoutExt as _};
 use cove_types::{
@@ -59,6 +61,7 @@ use eyre::Result;
 use flume::Sender;
 use rand::RngExt as _;
 use std::{
+    collections::BTreeMap,
     sync::Arc,
     time::{Duration, UNIX_EPOCH},
 };
@@ -86,6 +89,11 @@ pub struct WalletActor {
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
     receive_address_watcher: Option<Addr<ReceiveAddressWatcher>>,
     receive_address_refresh_timer: Option<AbortableTask<()>>,
+    scan_actor: Option<Addr<WalletScanActor>>,
+    active_scan_cancel_token: Option<tokio_util::sync::CancellationToken>,
+    active_scan_generation: Option<u64>,
+    next_scan_generation: u64,
+    queued_rescan_gap_limit: Option<u32>,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -136,12 +144,21 @@ impl FullScanType {
             Self::Rescan(gap) => *gap as usize >= Self::Expanded.stop_gap(),
         }
     }
+
+    const fn phase(&self) -> WalletScanPhase {
+        match self {
+            Self::Initial => WalletScanPhase::Initial,
+            Self::Expanded => WalletScanPhase::Expanded,
+            Self::Rescan(_) => WalletScanPhase::Rescan,
+        }
+    }
 }
 
 #[async_trait::async_trait]
 impl Actor for WalletActor {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
+        self.scan_actor = Some(spawn_actor(WalletScanActor::new(self.addr.clone())));
         send!(addr.check_node_connection());
         Produces::ok(())
     }
@@ -203,6 +220,11 @@ impl WalletActor {
             transaction_watchers: HashMap::default(),
             receive_address_watcher: None,
             receive_address_refresh_timer: None,
+            scan_actor: None,
+            active_scan_cancel_token: None,
+            active_scan_generation: None,
+            next_scan_generation: 0,
+            queued_rescan_gap_limit: None,
             db,
         })
     }
@@ -1133,10 +1155,22 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    pub async fn stop_all_scans(&mut self) {
-        debug!("stop_all_scans");
+    pub async fn stop_all_transaction_watchers(&mut self) {
+        debug!("stop_all_transaction_watchers");
         self.transaction_watchers = HashMap::default();
-        // TODO: stop the wallet scans too, need to save the task handle when we start the scan
+    }
+
+    pub async fn shutdown(&mut self) {
+        debug!("shutdown wallet actor");
+        clear_scan_lifecycle(
+            &mut self.active_scan_cancel_token,
+            &mut self.active_scan_generation,
+            &mut self.queued_rescan_gap_limit,
+        );
+        self.stop_receive_address_watcher();
+        self.stop_receive_address_refresh_timer();
+        self.transaction_watchers = HashMap::default();
+        self.send_scan_status(WalletScanStatus::Idle);
     }
 
     async fn remove_watcher_for_txn(&mut self, tx_id: Txid) {
@@ -1190,7 +1224,12 @@ impl WalletActor {
         }
 
         debug!("starting initial full scan");
-        self.reconciler.send(WalletManagerReconcileMessage::StartedInitialFullScan.into()).unwrap();
+        self.send_scan_status(WalletScanStatus::Scanning(WalletScanProgress {
+            phase: FullScanType::Initial.phase(),
+            checked: 0,
+            gap: 0,
+            stop_gap: FullScanType::Initial.stop_gap() as u32,
+        }));
 
         // scan happens in the background, state update afterwards
         self.state = ActorState::PerformingFullScan(FullScanType::Initial);
@@ -1329,13 +1368,6 @@ impl WalletActor {
         }
 
         debug!("starting expanded full scan");
-        let txns = self.transactions().await?.await?;
-
-        self.reconciler
-            .send(WalletManagerReconcileMessage::StartedExpandedFullScan(txns).into())
-            .unwrap();
-
-        // scan happens in the background, state update afterwards
         self.state = ActorState::PerformingFullScan(FullScanType::Expanded);
         send!(self.addr.perform_expanded_full_scan());
 
@@ -1346,22 +1378,36 @@ impl WalletActor {
         debug!("perform_initial_full_scan");
         static FULL_SCAN_TYPE: FullScanType = FullScanType::Initial;
 
-        let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
-        self.addr.send_fut_with(|addr| async move {
+        let (full_scan_request, graph, last_revealed_indices, node_client) =
+            self.get_for_full_scan(FULL_SCAN_TYPE).await?;
+        let (scan_generation, cancel_token) = self.start_scan_generation();
+        let scan_actor = self.scan_actor();
+
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
             let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
-            let full_scan_result = node_client
-                .start_wallet_scan(&graph, full_scan_request, FULL_SCAN_TYPE.stop_gap())
-                .await;
+            let full_scan_result =
+                call!(scan_actor.run_progressive_full_scan(ProgressiveFullScanJob {
+                    node_client,
+                    graph,
+                    full_scan_request,
+                    last_revealed_indices,
+                    phase: FULL_SCAN_TYPE.phase(),
+                    stop_gap: FULL_SCAN_TYPE.stop_gap(),
+                    scan_generation,
+                    cancel_token,
+                }))
+                .await
+                .unwrap_or_else(|_| cancelled_progressive_scan_result());
 
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
             debug!("[initial] done initial full scan in {}s", now - start);
 
-            // update wallet state
-            let _ = call!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE)).await;
-
-            // perform next scan
-            send!(addr.maybe_perform_expanded_full_scan());
+            if call!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE)).await.is_ok()
+            {
+                send!(addr.maybe_perform_expanded_full_scan());
+            }
         });
 
         Produces::ok(())
@@ -1371,13 +1417,35 @@ impl WalletActor {
         debug!("perform_expanded_full_scan");
         static FULL_SCAN_TYPE: FullScanType = FullScanType::Expanded;
 
-        let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
-        self.addr.send_fut_with(|addr| async move {
+        self.send_scan_status(WalletScanStatus::Scanning(WalletScanProgress {
+            phase: FullScanType::Expanded.phase(),
+            checked: 0,
+            gap: 0,
+            stop_gap: FullScanType::Expanded.stop_gap() as u32,
+        }));
+
+        let (full_scan_request, graph, last_revealed_indices, node_client) =
+            self.get_for_full_scan(FULL_SCAN_TYPE).await?;
+        let (scan_generation, cancel_token) = self.start_scan_generation();
+        let scan_actor = self.scan_actor();
+
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
             let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
-            let full_scan_result = node_client
-                .start_wallet_scan(&graph, full_scan_request, FULL_SCAN_TYPE.stop_gap())
-                .await;
+            let full_scan_result =
+                call!(scan_actor.run_progressive_full_scan(ProgressiveFullScanJob {
+                    node_client,
+                    graph,
+                    full_scan_request,
+                    last_revealed_indices,
+                    phase: FULL_SCAN_TYPE.phase(),
+                    stop_gap: FULL_SCAN_TYPE.stop_gap(),
+                    scan_generation,
+                    cancel_token,
+                }))
+                .await
+                .unwrap_or_else(|_| cancelled_progressive_scan_result());
 
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
             debug!("[expanded] done expanded full scan in {}s", now - start);
@@ -1397,28 +1465,42 @@ impl WalletActor {
             self.state,
             ActorState::PerformingFullScan(_) | ActorState::PerformingIncrementalScan
         ) {
-            warn!("scan already in progress, rejecting rescan ({:?})", self.state);
-            return Err(
-                Error::WalletScanError("wallet scan already in progress".to_string()).into()
-            );
+            debug!("scan already in progress, queueing rescan gap_limit={gap_limit}");
+            self.queued_rescan_gap_limit = Some(gap_limit);
+            return Produces::ok(());
         }
 
         let scan_type = FullScanType::Rescan(gap_limit);
 
-        let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
+        self.send_scan_status(WalletScanStatus::Scanning(WalletScanProgress {
+            phase: scan_type.phase(),
+            checked: 0,
+            gap: 0,
+            stop_gap: scan_type.stop_gap() as u32,
+        }));
 
-        let txns = self.transactions().await?.await?;
-        self.reconciler
-            .send(WalletManagerReconcileMessage::StartedExpandedFullScan(txns).into())
-            .unwrap();
+        let (full_scan_request, graph, last_revealed_indices, node_client) =
+            self.get_for_full_scan(scan_type).await?;
+        let (scan_generation, cancel_token) = self.start_scan_generation();
+        let scan_actor = self.scan_actor();
 
         self.state = ActorState::PerformingFullScan(scan_type);
         self.addr.send_fut_with(|addr| async move {
             let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
-            let full_scan_result = node_client
-                .start_wallet_scan(&graph, full_scan_request, scan_type.stop_gap())
-                .await;
+            let full_scan_result =
+                call!(scan_actor.run_progressive_full_scan(ProgressiveFullScanJob {
+                    node_client,
+                    graph,
+                    full_scan_request,
+                    last_revealed_indices,
+                    phase: scan_type.phase(),
+                    stop_gap: scan_type.stop_gap(),
+                    scan_generation,
+                    cancel_token,
+                }))
+                .await
+                .unwrap_or_else(|_| cancelled_progressive_scan_result());
 
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
             debug!("[rescan] done rescan full scan in {}s", now - start);
@@ -1431,28 +1513,52 @@ impl WalletActor {
 
     async fn get_for_full_scan(
         &mut self,
-    ) -> Result<(FullScanRequest<KeychainKind>, TxGraph, NodeClient)> {
+        _scan_type: FullScanType,
+    ) -> Result<(FullScanRequest<KeychainKind>, TxGraph, BTreeMap<KeychainKind, u32>, NodeClient)>
+    {
         let node_client = self.node_client().await?.clone();
 
         let full_scan_request = self.wallet.bdk.start_full_scan().build();
         let graph = self.wallet.bdk.tx_graph().clone();
+        let last_revealed_indices = self.wallet.bdk.spk_index().last_revealed_indices();
 
-        Ok((full_scan_request, graph, node_client))
+        Ok((full_scan_request, graph, last_revealed_indices, node_client))
     }
 
     async fn perform_incremental_scan(&mut self) -> ActorResult<()> {
         debug!("starting incremental scan");
 
         self.state = ActorState::PerformingIncrementalScan;
+        self.send_scan_status(WalletScanStatus::Scanning(WalletScanProgress {
+            phase: WalletScanPhase::Incremental,
+            checked: 0,
+            gap: 0,
+            stop_gap: GAP_LIMIT as u32,
+        }));
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
         let node_client = self.node_client().await?.clone();
 
         let full_scan_request = self.wallet.bdk.start_full_scan().build();
         let graph = self.wallet.bdk.tx_graph().clone();
-        self.addr.send_fut_with(|addr| async move {
-            let scan_result =
-                node_client.start_wallet_scan(&graph, full_scan_request, GAP_LIMIT as usize).await;
+        let last_revealed_indices = self.wallet.bdk.spk_index().last_revealed_indices();
+        let (scan_generation, cancel_token) = self.start_scan_generation();
+        let scan_actor = self.scan_actor();
+
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            let scan_result = call!(scan_actor.run_progressive_full_scan(ProgressiveFullScanJob {
+                node_client,
+                graph,
+                full_scan_request,
+                last_revealed_indices,
+                phase: WalletScanPhase::Incremental,
+                stop_gap: GAP_LIMIT as usize,
+                scan_generation,
+                cancel_token,
+            }))
+            .await
+            .unwrap_or_else(|_| cancelled_progressive_scan_result());
 
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
             debug!("done incremental scan in {}s", now - start);
@@ -1476,19 +1582,42 @@ impl WalletActor {
                 self.wallet.bdk.apply_update(full_scan_result)?;
                 self.wallet.persist()?;
             }
+            Err(error)
+                if is_cancelled_progressive_scan(
+                    &error,
+                    self.active_scan_cancel_token.as_ref(),
+                ) =>
+            {
+                self.active_scan_cancel_token = None;
+                self.active_scan_generation = None;
+                self.queued_rescan_gap_limit = None;
+                self.send_scan_status(WalletScanStatus::Idle);
+                return Produces::ok(());
+            }
             Err(error) => {
                 self.state = ActorState::FailedFullScan(full_scan_type);
+                self.active_scan_cancel_token = None;
+                self.active_scan_generation = None;
+                self.send_scan_status(WalletScanStatus::Idle);
+                self.handle_queued_rescan(queued_rescan_after_failed_full_scan(full_scan_type));
                 return Err(error.into());
             }
         }
 
-        // only mark as scan complete when the scan covered at least the
-        // expanded 150-address gap; smaller rescans must not persist this
-        // or the automatic expanded scan will be skipped next boot.
-        if full_scan_type.covers_expanded() {
-            let now = jiff::Timestamp::now().as_second() as u64;
-            self.wallet.metadata.internal.performed_full_scan_at = Some(now);
-            Database::global().wallets.update_internal_metadata(&self.wallet.metadata)?;
+        match successful_full_scan_completion_effect(full_scan_type) {
+            FullScanCompletionEffect::DeferUserCompletion => {
+                self.state = ActorState::FullScanComplete(full_scan_type);
+                self.active_scan_cancel_token = None;
+                self.active_scan_generation = None;
+                return Produces::ok(());
+            }
+            FullScanCompletionEffect::CompleteUserScan { update_full_scan_metadata } => {
+                if update_full_scan_metadata {
+                    let now = jiff::Timestamp::now().as_second() as u64;
+                    self.wallet.metadata.internal.performed_full_scan_at = Some(now);
+                    Database::global().wallets.update_internal_metadata(&self.wallet.metadata)?;
+                }
+            }
         }
 
         // always update the last scan finished time
@@ -1497,6 +1626,61 @@ impl WalletActor {
 
         // update the state
         self.state = ActorState::FullScanComplete(full_scan_type);
+        self.active_scan_cancel_token = None;
+        self.active_scan_generation = None;
+        self.send_scan_status(WalletScanStatus::Idle);
+        self.handle_queued_rescan(queued_rescan_after_successful_full_scan(full_scan_type));
+
+        Produces::ok(())
+    }
+
+    async fn apply_progressive_scan_status(
+        &mut self,
+        scan_generation: u64,
+        status: WalletScanStatus,
+    ) -> ActorResult<()> {
+        if !should_accept_scan_generation(self.active_scan_generation, scan_generation) {
+            return Produces::ok(());
+        }
+
+        self.send_scan_status(status);
+
+        Produces::ok(())
+    }
+
+    async fn apply_progressive_scan_update(
+        &mut self,
+        scan_generation: u64,
+        scan_update: ScanUpdate<KeychainKind>,
+    ) -> ActorResult<()> {
+        if !should_accept_scan_generation(self.active_scan_generation, scan_generation) {
+            return Produces::ok(());
+        }
+
+        if scan_update.is_empty() {
+            return Produces::ok(());
+        }
+
+        self.wallet.bdk.apply_update(FullScanResponse {
+            chain_update: scan_update.chain_update,
+            tx_update: scan_update.tx_update,
+            last_active_indices: BTreeMap::new(),
+        })?;
+        self.wallet.persist()?;
+
+        Produces::ok(())
+    }
+
+    async fn flush_progressive_scan_ui(&mut self) -> ActorResult<()> {
+        if self.active_scan_generation.is_none() {
+            return Produces::ok(());
+        }
+
+        let balance = self.wallet.balance();
+        self.send(WalletManagerReconcileMessage::WalletBalanceChanged(balance.into()));
+
+        let transactions = self.transactions().await?.await?;
+        self.send(WalletManagerReconcileMessage::UpdatedTransactions(transactions));
 
         Produces::ok(())
     }
@@ -1505,16 +1689,39 @@ impl WalletActor {
         &mut self,
         scan_result: Result<FullScanResponse<KeychainKind>, NodeError>,
     ) -> ActorResult<()> {
-        if scan_result.is_err() {
-            self.state = ActorState::FailedIncrementalScan;
-        }
+        let sync_result = match scan_result {
+            Ok(sync_result) => sync_result,
+            Err(error)
+                if is_cancelled_progressive_scan(
+                    &error,
+                    self.active_scan_cancel_token.as_ref(),
+                ) =>
+            {
+                self.active_scan_cancel_token = None;
+                self.active_scan_generation = None;
+                self.queued_rescan_gap_limit = None;
+                self.send_scan_status(WalletScanStatus::Idle);
+                return Produces::ok(());
+            }
+            Err(error) => {
+                self.state = ActorState::FailedIncrementalScan;
+                self.active_scan_cancel_token = None;
+                self.active_scan_generation = None;
+                self.send_scan_status(WalletScanStatus::Idle);
+                self.start_queued_rescan();
+                return Err(error.into());
+            }
+        };
 
-        let sync_result = scan_result?;
         self.wallet.bdk.apply_update(sync_result)?;
         self.wallet.persist()?;
         self.save_last_scan_finished();
 
         self.notify_scan_complete().await?;
+        self.active_scan_cancel_token = None;
+        self.active_scan_generation = None;
+        self.send_scan_status(WalletScanStatus::Idle);
+        self.start_queued_rescan();
 
         Produces::ok(())
     }
@@ -2005,10 +2212,563 @@ impl WalletActor {
     fn send(&self, msg: WalletManagerReconcileMessage) {
         self.reconciler.send(msg.into()).unwrap();
     }
+
+    fn send_scan_status(&self, status: WalletScanStatus) {
+        self.send(WalletManagerReconcileMessage::WalletScanStatusChanged(status));
+    }
+
+    fn scan_actor(&mut self) -> Addr<WalletScanActor> {
+        if let Some(scan_actor) = &self.scan_actor {
+            return scan_actor.clone();
+        }
+
+        let scan_actor = spawn_actor(WalletScanActor::new(self.addr.clone()));
+        self.scan_actor = Some(scan_actor.clone());
+        scan_actor
+    }
+
+    fn start_scan_generation(&mut self) -> (u64, tokio_util::sync::CancellationToken) {
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let scan_generation = self.next_scan_generation;
+        self.next_scan_generation = self.next_scan_generation.saturating_add(1);
+        self.active_scan_cancel_token = Some(cancel_token.clone());
+        self.active_scan_generation = Some(scan_generation);
+        (scan_generation, cancel_token)
+    }
+
+    fn handle_queued_rescan(&mut self, disposition: QueuedRescanDisposition) {
+        match disposition {
+            QueuedRescanDisposition::Start => self.start_queued_rescan(),
+            QueuedRescanDisposition::KeepQueued => {}
+        }
+    }
+
+    fn start_queued_rescan(&mut self) {
+        let Some(gap_limit) = self.queued_rescan_gap_limit.take() else {
+            return;
+        };
+
+        send!(self.addr.perform_rescan_full_scan(gap_limit));
+    }
+}
+
+struct ProgressiveFullScanJob {
+    node_client: NodeClient,
+    graph: TxGraph,
+    full_scan_request: FullScanRequest<KeychainKind>,
+    last_revealed_indices: BTreeMap<KeychainKind, u32>,
+    phase: WalletScanPhase,
+    stop_gap: usize,
+    scan_generation: u64,
+    cancel_token: tokio_util::sync::CancellationToken,
+}
+
+const SCAN_PROGRESS_INTERVAL: Duration = Duration::from_millis(75);
+const SCAN_PARTIAL_FLUSH_INTERVAL: Duration = Duration::from_millis(300);
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum ScanFlushDecision {
+    Immediate,
+    Debounce(tokio::time::Instant),
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum FullScanCompletionEffect {
+    DeferUserCompletion,
+    CompleteUserScan { update_full_scan_metadata: bool },
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum QueuedRescanDisposition {
+    Start,
+    KeepQueued,
+}
+
+#[derive(Debug, Default)]
+struct ScanFlushCadence {
+    sent_first_flush: bool,
+}
+
+impl ScanFlushCadence {
+    fn record_update(&mut self, now: tokio::time::Instant) -> ScanFlushDecision {
+        if self.sent_first_flush {
+            ScanFlushDecision::Debounce(now + SCAN_PARTIAL_FLUSH_INTERVAL)
+        } else {
+            self.sent_first_flush = true;
+            ScanFlushDecision::Immediate
+        }
+    }
+}
+
+struct WalletScanActor {
+    wallet_addr: WeakAddr<WalletActor>,
+    progress: BTreeMap<KeychainKind, KeychainProgress>,
+}
+
+impl WalletScanActor {
+    fn new(wallet_addr: WeakAddr<WalletActor>) -> Self {
+        Self { wallet_addr, progress: BTreeMap::default() }
+    }
+
+    async fn run_progressive_full_scan(
+        &mut self,
+        job: ProgressiveFullScanJob,
+    ) -> ActorResult<std::result::Result<FullScanResponse<KeychainKind>, crate::node::client::Error>>
+    {
+        let (events_tx, events_rx) = flume::bounded(32);
+        let scan_future = job.node_client.start_progressive_wallet_scan(
+            &job.graph,
+            job.full_scan_request,
+            job.last_revealed_indices,
+            job.stop_gap,
+            events_tx,
+            job.cancel_token.clone(),
+        );
+        tokio::pin!(scan_future);
+        let mut flush_cadence = ScanFlushCadence::default();
+        let mut flush_deadline = Option::<tokio::time::Instant>::None;
+        let mut last_progress_sent = Option::<tokio::time::Instant>::None;
+        self.progress.clear();
+
+        let scan_result = loop {
+            tokio::select! {
+                result = &mut scan_future => break result,
+                event = events_rx.recv_async() => {
+                    if let Ok(event) = event && self.forward_scan_event(
+                        event,
+                        job.scan_generation,
+                        job.phase,
+                        &mut last_progress_sent,
+                    ) {
+                        match flush_cadence.record_update(tokio::time::Instant::now()) {
+                            ScanFlushDecision::Immediate => {
+                                send!(self.wallet_addr.flush_progressive_scan_ui());
+                            }
+                            ScanFlushDecision::Debounce(deadline) => {
+                                flush_deadline = Some(deadline);
+                            }
+                        }
+                    }
+                }
+                _ = async {
+                    tokio::time::sleep_until(flush_deadline.expect("flush deadline is set")).await;
+                }, if flush_deadline.is_some() => {
+                    flush_deadline = None;
+                    send!(self.wallet_addr.flush_progressive_scan_ui());
+                }
+            }
+        };
+
+        while let Ok(event) = events_rx.try_recv() {
+            if self.forward_scan_event(
+                event,
+                job.scan_generation,
+                job.phase,
+                &mut last_progress_sent,
+            ) && flush_cadence.record_update(tokio::time::Instant::now())
+                == ScanFlushDecision::Immediate
+            {
+                send!(self.wallet_addr.flush_progressive_scan_ui());
+            }
+        }
+
+        if flush_deadline.is_some()
+            && should_flush_pending_after_scan_result(&scan_result, &job.cancel_token)
+        {
+            send!(self.wallet_addr.flush_progressive_scan_ui());
+        }
+
+        Produces::ok(scan_result)
+    }
+
+    fn forward_scan_event(
+        &mut self,
+        event: ScanEvent<KeychainKind>,
+        scan_generation: u64,
+        phase: WalletScanPhase,
+        last_progress_sent: &mut Option<tokio::time::Instant>,
+    ) -> bool {
+        match event {
+            ScanEvent::Progress(progress) => {
+                if should_forward_scan_progress(last_progress_sent, tokio::time::Instant::now()) {
+                    let status = self.scan_status_from_progress(progress, phase);
+                    send!(self.wallet_addr.apply_progressive_scan_status(scan_generation, status));
+                }
+                false
+            }
+            ScanEvent::Update(update) => {
+                send!(self.wallet_addr.apply_progressive_scan_update(scan_generation, update));
+                true
+            }
+            ScanEvent::Complete(_) => false,
+        }
+    }
+
+    fn scan_status_from_progress(
+        &mut self,
+        progress: ScanProgress<KeychainKind>,
+        phase: WalletScanPhase,
+    ) -> WalletScanStatus {
+        self.progress.insert(
+            progress.keychain,
+            KeychainProgress {
+                checked: progress.checked,
+                gap: progress.gap,
+                stop_gap: progress.stop_gap,
+            },
+        );
+
+        let total =
+            self.progress.values().fold(KeychainProgress::default(), |mut total, progress| {
+                total.checked = total.checked.saturating_add(progress.checked);
+                total.gap = total.gap.saturating_add(progress.gap);
+                total.stop_gap = total.stop_gap.saturating_add(progress.stop_gap);
+                total
+            });
+
+        WalletScanStatus::Scanning(WalletScanProgress {
+            phase,
+            checked: total.checked,
+            gap: total.gap,
+            stop_gap: total.stop_gap,
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl Actor for WalletScanActor {}
+
+fn should_forward_scan_progress(
+    last_progress_sent: &mut Option<tokio::time::Instant>,
+    now: tokio::time::Instant,
+) -> bool {
+    let should_forward = last_progress_sent
+        .map(|last_sent| now.duration_since(last_sent) >= SCAN_PROGRESS_INTERVAL)
+        .unwrap_or(true);
+
+    if should_forward {
+        *last_progress_sent = Some(now);
+    }
+
+    should_forward
+}
+
+fn cancelled_progressive_scan_result()
+-> std::result::Result<FullScanResponse<KeychainKind>, crate::node::client::Error> {
+    Err(crate::node::client::Error::ProgressiveScan(cove_bdk_progressive_scan::Error::Cancelled))
+}
+
+fn is_cancelled_progressive_scan(
+    error: &crate::node::client::Error,
+    cancel_token: Option<&tokio_util::sync::CancellationToken>,
+) -> bool {
+    match error {
+        crate::node::client::Error::ProgressiveScan(
+            cove_bdk_progressive_scan::Error::Cancelled,
+        ) => true,
+        crate::node::client::Error::ProgressiveScan(
+            cove_bdk_progressive_scan::Error::ChannelClosed,
+        ) => cancel_token.is_some_and(tokio_util::sync::CancellationToken::is_cancelled),
+        _ => false,
+    }
+}
+
+fn should_flush_pending_after_scan_result(
+    scan_result: &std::result::Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
+    cancel_token: &tokio_util::sync::CancellationToken,
+) -> bool {
+    match scan_result {
+        Ok(_) => false,
+        Err(error) if is_cancelled_progressive_scan(error, Some(cancel_token)) => false,
+        Err(_) => true,
+    }
+}
+
+fn successful_full_scan_completion_effect(scan_type: FullScanType) -> FullScanCompletionEffect {
+    match scan_type {
+        FullScanType::Initial => FullScanCompletionEffect::DeferUserCompletion,
+        FullScanType::Expanded => {
+            FullScanCompletionEffect::CompleteUserScan { update_full_scan_metadata: true }
+        }
+        FullScanType::Rescan(gap_limit) => FullScanCompletionEffect::CompleteUserScan {
+            update_full_scan_metadata: gap_limit as usize >= FullScanType::Expanded.stop_gap(),
+        },
+    }
+}
+
+fn queued_rescan_after_successful_full_scan(scan_type: FullScanType) -> QueuedRescanDisposition {
+    match scan_type {
+        FullScanType::Initial => QueuedRescanDisposition::KeepQueued,
+        FullScanType::Expanded | FullScanType::Rescan(_) => QueuedRescanDisposition::Start,
+    }
+}
+
+fn queued_rescan_after_failed_full_scan(_scan_type: FullScanType) -> QueuedRescanDisposition {
+    QueuedRescanDisposition::Start
+}
+
+fn should_accept_scan_generation(active_generation: Option<u64>, event_generation: u64) -> bool {
+    active_generation == Some(event_generation)
+}
+
+fn clear_scan_lifecycle(
+    active_scan_cancel_token: &mut Option<tokio_util::sync::CancellationToken>,
+    active_scan_generation: &mut Option<u64>,
+    queued_rescan_gap_limit: &mut Option<u32>,
+) {
+    if let Some(cancel_token) = active_scan_cancel_token.take() {
+        cancel_token.cancel();
+    }
+    *active_scan_generation = None;
+    *queued_rescan_gap_limit = None;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        FullScanCompletionEffect, FullScanType, QueuedRescanDisposition,
+        SCAN_PARTIAL_FLUSH_INTERVAL, SCAN_PROGRESS_INTERVAL, ScanFlushCadence, ScanFlushDecision,
+        WalletScanActor, WalletScanPhase, WalletScanProgress, WalletScanStatus,
+        clear_scan_lifecycle, is_cancelled_progressive_scan, queued_rescan_after_failed_full_scan,
+        queued_rescan_after_successful_full_scan, should_accept_scan_generation,
+        should_flush_pending_after_scan_result, should_forward_scan_progress,
+        successful_full_scan_completion_effect,
+    };
+    use act_zero::WeakAddr;
+    use bdk_wallet::KeychainKind;
+    use bdk_wallet::chain::spk_client::FullScanResponse;
+    use cove_bdk_progressive_scan::ScanProgress;
+    use std::time::Duration;
+    use tokio_util::sync::CancellationToken;
+
+    #[test]
+    fn first_scan_progress_is_forwarded() {
+        let mut last_progress_sent = None;
+        let now = tokio::time::Instant::now();
+
+        assert!(should_forward_scan_progress(&mut last_progress_sent, now));
+        assert_eq!(last_progress_sent, Some(now));
+    }
+
+    #[test]
+    fn scan_progress_is_throttled_until_interval_passes() {
+        let now = tokio::time::Instant::now();
+        let mut last_progress_sent = Some(now);
+
+        assert!(!should_forward_scan_progress(
+            &mut last_progress_sent,
+            now + SCAN_PROGRESS_INTERVAL - Duration::from_millis(1),
+        ));
+        assert_eq!(last_progress_sent, Some(now));
+
+        let next = now + SCAN_PROGRESS_INTERVAL;
+
+        assert!(should_forward_scan_progress(&mut last_progress_sent, next));
+        assert_eq!(last_progress_sent, Some(next));
+    }
+
+    #[test]
+    fn scan_actor_aggregates_progress_across_keychains() {
+        let mut scan_actor = WalletScanActor::new(WeakAddr::default());
+
+        let external_status = scan_actor.scan_status_from_progress(
+            ScanProgress { keychain: KeychainKind::External, checked: 2, gap: 2, stop_gap: 20 },
+            WalletScanPhase::Expanded,
+        );
+        let internal_status = scan_actor.scan_status_from_progress(
+            ScanProgress { keychain: KeychainKind::Internal, checked: 1, gap: 1, stop_gap: 20 },
+            WalletScanPhase::Expanded,
+        );
+
+        assert_eq!(
+            external_status,
+            WalletScanStatus::Scanning(WalletScanProgress {
+                phase: WalletScanPhase::Expanded,
+                checked: 2,
+                gap: 2,
+                stop_gap: 20,
+            })
+        );
+        assert_eq!(
+            internal_status,
+            WalletScanStatus::Scanning(WalletScanProgress {
+                phase: WalletScanPhase::Expanded,
+                checked: 3,
+                gap: 3,
+                stop_gap: 40,
+            })
+        );
+    }
+
+    #[test]
+    fn scan_flush_cadence_flushes_first_update_immediately() {
+        let mut cadence = ScanFlushCadence::default();
+        let now = tokio::time::Instant::now();
+
+        assert_eq!(cadence.record_update(now), ScanFlushDecision::Immediate);
+    }
+
+    #[test]
+    fn scan_flush_cadence_debounces_later_updates() {
+        let mut cadence = ScanFlushCadence::default();
+        let now = tokio::time::Instant::now();
+        let later = now + Duration::from_millis(10);
+
+        assert_eq!(cadence.record_update(now), ScanFlushDecision::Immediate);
+        assert_eq!(
+            cadence.record_update(later),
+            ScanFlushDecision::Debounce(later + SCAN_PARTIAL_FLUSH_INTERVAL)
+        );
+    }
+
+    #[test]
+    fn failed_scan_flushes_pending_debounced_updates() {
+        let result = Err(crate::node::client::Error::ProgressiveScan(
+            cove_bdk_progressive_scan::Error::ChannelClosed,
+        ));
+        let cancel_token = CancellationToken::new();
+
+        assert!(should_flush_pending_after_scan_result(&result, &cancel_token));
+    }
+
+    #[test]
+    fn successful_or_cancelled_scan_does_not_flush_pending_debounce() {
+        let success = Ok(FullScanResponse::default());
+        let cancelled = Err(crate::node::client::Error::ProgressiveScan(
+            cove_bdk_progressive_scan::Error::Cancelled,
+        ));
+        let cancel_token = CancellationToken::new();
+
+        assert!(!should_flush_pending_after_scan_result(&success, &cancel_token));
+        assert!(!should_flush_pending_after_scan_result(&cancelled, &cancel_token));
+    }
+
+    #[test]
+    fn channel_closed_is_cancellation_only_when_token_is_cancelled() {
+        let cancelled = crate::node::client::Error::ProgressiveScan(
+            cove_bdk_progressive_scan::Error::Cancelled,
+        );
+        let channel_closed = crate::node::client::Error::ProgressiveScan(
+            cove_bdk_progressive_scan::Error::ChannelClosed,
+        );
+        let cancel_token = CancellationToken::new();
+
+        assert!(is_cancelled_progressive_scan(&cancelled, None));
+        assert!(!is_cancelled_progressive_scan(&channel_closed, Some(&cancel_token)));
+
+        cancel_token.cancel();
+
+        assert!(is_cancelled_progressive_scan(&channel_closed, Some(&cancel_token)));
+        assert!(!should_flush_pending_after_scan_result(&Err(channel_closed), &cancel_token));
+    }
+
+    #[test]
+    fn initial_full_scan_defers_user_visible_completion() {
+        assert_eq!(
+            successful_full_scan_completion_effect(FullScanType::Initial),
+            FullScanCompletionEffect::DeferUserCompletion
+        );
+    }
+
+    #[test]
+    fn expanded_full_scan_completes_and_updates_full_scan_metadata() {
+        assert_eq!(
+            successful_full_scan_completion_effect(FullScanType::Expanded),
+            FullScanCompletionEffect::CompleteUserScan { update_full_scan_metadata: true }
+        );
+    }
+
+    #[test]
+    fn small_rescan_completes_without_updating_full_scan_metadata() {
+        assert_eq!(
+            successful_full_scan_completion_effect(FullScanType::Rescan(20)),
+            FullScanCompletionEffect::CompleteUserScan { update_full_scan_metadata: false }
+        );
+    }
+
+    #[test]
+    fn expanded_range_rescan_updates_full_scan_metadata() {
+        assert_eq!(
+            successful_full_scan_completion_effect(FullScanType::Rescan(150)),
+            FullScanCompletionEffect::CompleteUserScan { update_full_scan_metadata: true }
+        );
+    }
+
+    #[test]
+    fn queued_rescan_waits_for_expanded_scan_after_successful_initial_scan() {
+        assert_eq!(
+            queued_rescan_after_successful_full_scan(FullScanType::Initial),
+            QueuedRescanDisposition::KeepQueued
+        );
+    }
+
+    #[test]
+    fn queued_rescan_starts_after_successful_expanded_or_rescan_completion() {
+        assert_eq!(
+            queued_rescan_after_successful_full_scan(FullScanType::Expanded),
+            QueuedRescanDisposition::Start
+        );
+        assert_eq!(
+            queued_rescan_after_successful_full_scan(FullScanType::Rescan(20)),
+            QueuedRescanDisposition::Start
+        );
+    }
+
+    #[test]
+    fn queued_rescan_starts_after_any_full_scan_failure() {
+        assert_eq!(
+            queued_rescan_after_failed_full_scan(FullScanType::Initial),
+            QueuedRescanDisposition::Start
+        );
+        assert_eq!(
+            queued_rescan_after_failed_full_scan(FullScanType::Expanded),
+            QueuedRescanDisposition::Start
+        );
+        assert_eq!(
+            queued_rescan_after_failed_full_scan(FullScanType::Rescan(20)),
+            QueuedRescanDisposition::Start
+        );
+    }
+
+    #[test]
+    fn scan_events_are_accepted_only_for_active_generation() {
+        assert!(should_accept_scan_generation(Some(7), 7));
+        assert!(!should_accept_scan_generation(Some(7), 6));
+        assert!(!should_accept_scan_generation(None, 7));
+    }
+
+    #[test]
+    fn clear_scan_lifecycle_cancels_active_scan_and_clears_queued_state() {
+        let cancel_token = CancellationToken::new();
+        let token_observer = cancel_token.clone();
+        let mut active_scan_cancel_token = Some(cancel_token);
+        let mut active_scan_generation = Some(7);
+        let mut queued_rescan_gap_limit = Some(42);
+
+        clear_scan_lifecycle(
+            &mut active_scan_cancel_token,
+            &mut active_scan_generation,
+            &mut queued_rescan_gap_limit,
+        );
+
+        assert!(token_observer.is_cancelled());
+        assert!(active_scan_cancel_token.is_none());
+        assert!(active_scan_generation.is_none());
+        assert!(queued_rescan_gap_limit.is_none());
+    }
 }
 
 impl Drop for WalletActor {
     fn drop(&mut self) {
+        clear_scan_lifecycle(
+            &mut self.active_scan_cancel_token,
+            &mut self.active_scan_generation,
+            &mut self.queued_rescan_gap_limit,
+        );
+        let _ = self.reconciler.send(
+            WalletManagerReconcileMessage::WalletScanStatusChanged(WalletScanStatus::Idle).into(),
+        );
+
         debug!("[DROP] Wallet Actor for {}", self.wallet.id);
     }
 }

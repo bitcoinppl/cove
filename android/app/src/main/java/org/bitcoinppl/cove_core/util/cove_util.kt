@@ -344,7 +344,7 @@ internal inline fun<T, reified E: Throwable> uniffiTraitInterfaceCallWithError(
         }
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that Kotlin-generated handles always have the lowest bit set
 private const val UNIFFI_HANDLEMAP_INITIAL = 1.toLong()
 private const val UNIFFI_HANDLEMAP_DELTA = 2.toLong()
@@ -354,7 +354,7 @@ private const val UNIFFI_HANDLEMAP_DELTA = 2.toLong()
 // This is used pass an opaque 64-bit handle representing a foreign object to the Rust code.
 internal class UniffiHandleMap<T: Any> {
     private val map = ConcurrentHashMap<Long, T>()
-    // Start 
+    // Start
     private val counter = java.util.concurrent.atomic.AtomicLong(UNIFFI_HANDLEMAP_INITIAL)
 
     val size: Int
@@ -692,48 +692,48 @@ internal object IntegrityCheckingUniffiLib {
     external fun ffi_cove_util_uniffi_contract_version(
     ): Int
 
-        
+
 }
 
 internal object UniffiLib {
-    
+
     // The Cleaner for the whole library
     internal val CLEANER: UniffiCleaner by lazy {
         UniffiCleaner.create()
     }
-    
+
 
     init {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_util"))
-        
+
     }
-    external fun uniffi_cove_util_fn_clone_generationtracker(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_clone_generationtracker(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_util_fn_free_generationtracker(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_free_generationtracker(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_util_fn_constructor_generationtracker_new(uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_constructor_generationtracker_new(uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_util_fn_method_generationtracker_advance(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_method_generationtracker_advance(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_util_fn_method_generationtracker_capture(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_method_generationtracker_capture(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_util_fn_method_generationtracker_is_current(`ptr`: Long,`capturedToken`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_method_generationtracker_is_current(`ptr`: Long,`capturedToken`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
-    external fun uniffi_cove_util_fn_func_generaterandomchaincode(uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_func_generaterandomchaincode(uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_util_fn_func_hexdecode(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_func_hexdecode(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_util_fn_func_hexencode(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_func_hexencode(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_util_fn_func_hextoutf8string(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_util_fn_func_hextoutf8string(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_util_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_util_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_util_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun ffi_cove_util_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun ffi_cove_util_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -741,7 +741,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_u8(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun ffi_cove_util_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -749,7 +749,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_i8(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun ffi_cove_util_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -757,7 +757,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_u16(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
     external fun ffi_cove_util_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -765,7 +765,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_i16(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
     external fun ffi_cove_util_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -773,7 +773,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_u32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Int
     external fun ffi_cove_util_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -781,7 +781,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_i32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Int
     external fun ffi_cove_util_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -789,7 +789,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_u64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun ffi_cove_util_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -797,7 +797,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_i64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun ffi_cove_util_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -805,7 +805,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_f32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Float
     external fun ffi_cove_util_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -813,7 +813,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_f64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Double
     external fun ffi_cove_util_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -821,7 +821,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_rust_buffer(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun ffi_cove_util_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -829,10 +829,10 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_util_rust_future_free_void(`handle`: Long,
     ): Unit
-    external fun ffi_cove_util_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_util_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
 
-        
+
 }
 
 private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
@@ -945,7 +945,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
         }
     }
 
-/** 
+/**
  * Placeholder object used to signal that we're constructing an interface with a FFI handle.
  *
  * This is the first argument for interface constructors that input a raw handle. It exists is that
@@ -956,7 +956,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
  * */
 object UniffiWithHandle
 
-/** 
+/**
  * Used to instantiate an interface without an actual pointer, for fakes in tests, mostly.
  *
  * @suppress
@@ -1254,13 +1254,13 @@ public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
  * serialization boundary.
  */
 public interface GenerationTrackerInterface {
-    
+
     fun `advance`(): GenerationToken
-    
+
     fun `capture`(): GenerationToken
-    
+
     fun `isCurrent`(`capturedToken`: GenerationToken): kotlin.Boolean
-    
+
     companion object
 }
 
@@ -1297,10 +1297,10 @@ open class GenerationTracker: Disposable, AutoCloseable, GenerationTrackerInterf
         this.cleanable = null
     }
     constructor() :
-        this(UniffiWithHandle, 
+        this(UniffiWithHandle,
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_util_fn_constructor_generationtracker_new(
-    
+
         _status)
 }
     )
@@ -1392,7 +1392,7 @@ open class GenerationTracker: Disposable, AutoCloseable, GenerationTrackerInterf
     }
     )
     }
-    
+
 
     override fun `capture`(): GenerationToken {
             return FfiConverterTypeGenerationToken.lift(
@@ -1405,7 +1405,7 @@ open class GenerationTracker: Disposable, AutoCloseable, GenerationTrackerInterf
     }
     )
     }
-    
+
 
     override fun `isCurrent`(`capturedToken`: GenerationToken): kotlin.Boolean {
             return FfiConverterBoolean.lift(
@@ -1413,26 +1413,26 @@ open class GenerationTracker: Disposable, AutoCloseable, GenerationTrackerInterf
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_util_fn_method_generationtracker_is_current(
         it,
-        
+
         FfiConverterTypeGenerationToken.lower(`capturedToken`),_status)
 }
     }
     )
     }
-    
-
-    
-
-    
 
 
-    
-    
+
+
+
+
+
+
+
     /**
      * @suppress
      */
     companion object
-    
+
 }
 
 
@@ -1466,13 +1466,13 @@ public object FfiConverterTypeGenerationTracker: FfiConverter<GenerationTracker,
  */
 data class GenerationToken (
     var `value`: kotlin.ULong
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -1561,44 +1561,44 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_util_fn_func_generaterandomchaincode(
-    
+
         _status)
 }
     )
     }
-    
+
  fun `hexDecode`(`hex`: kotlin.String): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_util_fn_func_hexdecode(
-    
-        
+
+
         FfiConverterString.lower(`hex`),_status)
 }
     )
     }
-    
+
  fun `hexEncode`(`bytes`: kotlin.ByteArray): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_util_fn_func_hexencode(
-    
-        
+
+
         FfiConverterByteArray.lower(`bytes`),_status)
 }
     )
     }
-    
+
  fun `hexToUtf8String`(`hex`: kotlin.String): kotlin.String? {
             return FfiConverterOptionalString.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_util_fn_func_hextoutf8string(
-    
-        
+
+
         FfiConverterString.lower(`hex`),_status)
 }
     )
     }
-    
+
 
 

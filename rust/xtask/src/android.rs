@@ -1,4 +1,6 @@
-use crate::common::{command_exists, print_error, print_info, print_success};
+use crate::common::{
+    command_exists, print_error, print_info, print_success, trim_generated_trailing_whitespace,
+};
 use color_eyre::{
     eyre::{Context, ContextCompat},
     Result,
@@ -186,6 +188,8 @@ pub fn build_android(profile: BuildProfile, verbose: bool) -> Result<()> {
     )
     .run()
     .wrap_err("Failed to generate Kotlin bindings")?;
+    trim_generated_trailing_whitespace(BINDINGS_DIR, "kt")
+        .wrap_err("Failed to trim generated Kotlin bindings")?;
 
     print_info(&format!("Copying Kotlin bindings into Android project at {}", ANDROID_KOTLIN_DIR));
 

@@ -45,6 +45,9 @@ class WalletManager :
     var loadState by mutableStateOf<WalletLoadState>(WalletLoadState.LOADING)
         private set
 
+    var scanStatus by mutableStateOf<WalletScanStatus>(WalletScanStatus.Idle)
+        private set
+
     var balance by mutableStateOf(Balance.zero())
         private set
 
@@ -236,16 +239,15 @@ class WalletManager :
 
     private fun apply(message: WalletManagerReconcileMessage) {
         when (message) {
-            is WalletManagerReconcileMessage.StartedInitialFullScan -> {
-                when (val current = loadState) {
-                    is WalletLoadState.SCANNING -> if (current.txns.isEmpty()) loadState = WalletLoadState.LOADING
-                    is WalletLoadState.LOADED -> loadState = WalletLoadState.SCANNING(current.txns)
-                    else -> loadState = WalletLoadState.LOADING
+            is WalletManagerReconcileMessage.WalletScanStatusChanged -> {
+                scanStatus = message.v1
+                if (message.v1 is WalletScanStatus.Scanning) {
+                    when (val current = loadState) {
+                        is WalletLoadState.SCANNING -> Unit
+                        is WalletLoadState.LOADED -> loadState = WalletLoadState.SCANNING(current.txns)
+                        is WalletLoadState.LOADING -> loadState = WalletLoadState.SCANNING(listOf())
+                    }
                 }
-            }
-
-            is WalletManagerReconcileMessage.StartedExpandedFullScan -> {
-                loadState = WalletLoadState.SCANNING(message.v1)
             }
 
             is WalletManagerReconcileMessage.AvailableTransactions -> {
@@ -393,6 +395,7 @@ class WalletManager :
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return
         logDebug("Closing WalletManager for $id")
+        rust.shutdown()
         ioScope.cancel()
         mainScope.cancel()
         rust.close()

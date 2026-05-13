@@ -344,7 +344,7 @@ internal inline fun<T, reified E: Throwable> uniffiTraitInterfaceCallWithError(
         }
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that Kotlin-generated handles always have the lowest bit set
 private const val UNIFFI_HANDLEMAP_INITIAL = 1.toLong()
 private const val UNIFFI_HANDLEMAP_DELTA = 2.toLong()
@@ -354,7 +354,7 @@ private const val UNIFFI_HANDLEMAP_DELTA = 2.toLong()
 // This is used pass an opaque 64-bit handle representing a foreign object to the Rust code.
 internal class UniffiHandleMap<T: Any> {
     private val map = ConcurrentHashMap<Long, T>()
-    // Start 
+    // Start
     private val counter = java.util.concurrent.atomic.AtomicLong(UNIFFI_HANDLEMAP_INITIAL)
 
     val size: Int
@@ -712,80 +712,80 @@ internal object IntegrityCheckingUniffiLib {
     external fun ffi_cove_nfc_uniffi_contract_version(
     ): Int
 
-        
+
 }
 
 internal object UniffiLib {
-    
+
     // The Cleaner for the whole library
     internal val CLEANER: UniffiCleaner by lazy {
         UniffiCleaner.create()
     }
-    
+
 
     init {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_nfc"))
-        
+
     }
-    external fun uniffi_cove_nfc_fn_clone_ffinfcreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_clone_ffinfcreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_nfc_fn_free_ffinfcreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_free_ffinfcreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_nfc_fn_constructor_ffinfcreader_new(uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_constructor_ffinfcreader_new(uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(`ptr`: Long,`records`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(`ptr`: Long,`records`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(`ptr`: Long,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(`ptr`: Long,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_nfc_fn_method_ffinfcreader_is_started(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_is_started(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
-    external fun uniffi_cove_nfc_fn_method_ffinfcreader_message_info(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_message_info(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_nfc_fn_method_ffinfcreader_parse(`ptr`: Long,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_parse(`ptr`: Long,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(`ptr`: Long,`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(`ptr`: Long,`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_nfc_fn_clone_nfcconst(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_clone_nfcconst(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_nfc_fn_free_nfcconst(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_free_nfcconst(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_nfc_fn_constructor_nfcconst_new(uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_constructor_nfcconst_new(uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_nfc_fn_method_nfcconst_bytes_per_block(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_nfcconst_bytes_per_block(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
-    external fun uniffi_cove_nfc_fn_method_nfcconst_number_of_blocks_per_chunk(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_nfcconst_number_of_blocks_per_chunk(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
-    external fun uniffi_cove_nfc_fn_method_nfcconst_total_bytes_per_chunk(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_nfcconst_total_bytes_per_chunk(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
-    external fun uniffi_cove_nfc_fn_clone_nfcmessage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_clone_nfcmessage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_nfc_fn_free_nfcmessage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_free_nfcmessage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(`string`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(`string`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_nfc_fn_method_nfcmessage_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_nfcmessage_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_nfc_fn_method_nfcmessage_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_nfcmessage_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_nfc_fn_clone_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_clone_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_nfc_fn_free_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_free_ndefrecordreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_nfc_fn_method_ndefrecordreader_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_ndefrecordreader_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_nfc_fn_method_ndefrecordreader_type_(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_method_ndefrecordreader_type_(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_nfc_fn_func_nfc_message_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_nfc_fn_func_nfc_message_is_equal(`lhs`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
-    external fun ffi_cove_nfc_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_nfc_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_nfc_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun ffi_cove_nfc_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun ffi_cove_nfc_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -793,7 +793,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_u8(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun ffi_cove_nfc_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -801,7 +801,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_i8(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun ffi_cove_nfc_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -809,7 +809,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_u16(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
     external fun ffi_cove_nfc_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -817,7 +817,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_i16(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
     external fun ffi_cove_nfc_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -825,7 +825,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_u32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Int
     external fun ffi_cove_nfc_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -833,7 +833,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_i32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Int
     external fun ffi_cove_nfc_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -841,7 +841,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_u64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun ffi_cove_nfc_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -849,7 +849,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_i64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun ffi_cove_nfc_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -857,7 +857,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_f32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Float
     external fun ffi_cove_nfc_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -865,7 +865,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_f64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Double
     external fun ffi_cove_nfc_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -873,7 +873,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_rust_buffer(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun ffi_cove_nfc_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -881,10 +881,10 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_nfc_rust_future_free_void(`handle`: Long,
     ): Unit
-    external fun ffi_cove_nfc_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_nfc_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
 
-        
+
 }
 
 private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
@@ -1027,7 +1027,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
         }
     }
 
-/** 
+/**
  * Placeholder object used to signal that we're constructing an interface with a FFI handle.
  *
  * This is the first argument for interface constructors that input a raw handle. It exists is that
@@ -1038,7 +1038,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
  * */
 object UniffiWithHandle
 
-/** 
+/**
  * Used to instantiate an interface without an actual pointer, for fakes in tests, mostly.
  *
  * @suppress
@@ -1374,9 +1374,9 @@ public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
 
 
 public interface FfiNfcReaderInterface {
-    
+
     fun `dataFromRecords`(`records`: List<NdefRecord>): kotlin.ByteArray
-    
+
     /**
      * Checks if reading can be resumed with the given data.
      *
@@ -1384,11 +1384,11 @@ public interface FfiNfcReaderInterface {
      * Returns an error if the data does not match the expected state.
      */
     fun `isResumeable`(`data`: kotlin.ByteArray)
-    
+
     fun `isStarted`(): kotlin.Boolean
-    
+
     fun `messageInfo`(): MessageInfo?
-    
+
     /**
      * Parses NFC data into a result.
      *
@@ -1396,9 +1396,9 @@ public interface FfiNfcReaderInterface {
      * Returns an error if parsing fails or if the data is incomplete.
      */
     fun `parse`(`data`: kotlin.ByteArray): ParseResult
-    
+
     fun `stringFromRecord`(`record`: NdefRecord): kotlin.String?
-    
+
     companion object
 }
 
@@ -1427,10 +1427,10 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
         this.cleanable = null
     }
     constructor() :
-        this(UniffiWithHandle, 
+        this(UniffiWithHandle,
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_nfc_fn_constructor_ffinfcreader_new(
-    
+
         _status)
 }
     )
@@ -1517,15 +1517,15 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(
         it,
-        
+
         FfiConverterSequenceTypeNdefRecord.lower(`records`),_status)
 }
     }
     )
     }
-    
 
-    
+
+
     /**
      * Checks if reading can be resumed with the given data.
      *
@@ -1533,17 +1533,17 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
      * Returns an error if the data does not match the expected state.
      */
     @Throws(ResumeException::class)override fun `isResumeable`(`data`: kotlin.ByteArray)
-        = 
+        =
     callWithHandle {
     uniffiRustCallWithError(ResumeException) { _status ->
     UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(
         it,
-        
+
         FfiConverterByteArray.lower(`data`),_status)
 }
     }
-    
-    
+
+
 
     override fun `isStarted`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
@@ -1556,7 +1556,7 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     }
     )
     }
-    
+
 
     override fun `messageInfo`(): MessageInfo? {
             return FfiConverterOptionalTypeMessageInfo.lift(
@@ -1569,9 +1569,9 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     }
     )
     }
-    
 
-    
+
+
     /**
      * Parses NFC data into a result.
      *
@@ -1584,13 +1584,13 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     uniffiRustCallWithError(NfcReaderException) { _status ->
     UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_parse(
         it,
-        
+
         FfiConverterByteArray.lower(`data`),_status)
 }
     }
     )
     }
-    
+
 
     override fun `stringFromRecord`(`record`: NdefRecord): kotlin.String? {
             return FfiConverterOptionalString.lift(
@@ -1598,26 +1598,26 @@ open class FfiNfcReader: Disposable, AutoCloseable, FfiNfcReaderInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(
         it,
-        
+
         FfiConverterTypeNdefRecord.lower(`record`),_status)
 }
     }
     )
     }
-    
-
-    
-
-    
 
 
-    
-    
+
+
+
+
+
+
+
     /**
      * @suppress
      */
     companion object
-    
+
 }
 
 
@@ -1741,11 +1741,11 @@ public object FfiConverterTypeFfiNfcReader: FfiConverter<FfiNfcReader, Long> {
 
 
 public interface NdefRecordReaderInterface {
-    
+
     fun `id`(): kotlin.String?
-    
+
     fun `type`(): kotlin.String?
-    
+
     companion object
 }
 
@@ -1774,11 +1774,11 @@ open class NdefRecordReader: Disposable, AutoCloseable, NdefRecordReaderInterfac
         this.cleanable = null
     }
     constructor(`record`: NdefRecord) :
-        this(UniffiWithHandle, 
+        this(UniffiWithHandle,
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
-    
-        
+
+
         FfiConverterTypeNdefRecord.lower(`record`),_status)
 }
     )
@@ -1870,7 +1870,7 @@ open class NdefRecordReader: Disposable, AutoCloseable, NdefRecordReaderInterfac
     }
     )
     }
-    
+
 
     override fun `type`(): kotlin.String? {
             return FfiConverterOptionalString.lift(
@@ -1883,20 +1883,20 @@ open class NdefRecordReader: Disposable, AutoCloseable, NdefRecordReaderInterfac
     }
     )
     }
-    
-
-    
-
-    
 
 
-    
-    
+
+
+
+
+
+
+
     /**
      * @suppress
      */
     companion object
-    
+
 }
 
 
@@ -2020,13 +2020,13 @@ public object FfiConverterTypeNdefRecordReader: FfiConverter<NdefRecordReader, L
 
 
 public interface NfcConstInterface {
-    
+
     fun `bytesPerBlock`(): kotlin.UShort
-    
+
     fun `numberOfBlocksPerChunk`(): kotlin.UShort
-    
+
     fun `totalBytesPerChunk`(): kotlin.UShort
-    
+
     companion object
 }
 
@@ -2055,10 +2055,10 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
         this.cleanable = null
     }
     constructor() :
-        this(UniffiWithHandle, 
+        this(UniffiWithHandle,
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_nfc_fn_constructor_nfcconst_new(
-    
+
         _status)
 }
     )
@@ -2150,7 +2150,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
     }
     )
     }
-    
+
 
     override fun `numberOfBlocksPerChunk`(): kotlin.UShort {
             return FfiConverterUShort.lift(
@@ -2163,7 +2163,7 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
     }
     )
     }
-    
+
 
     override fun `totalBytesPerChunk`(): kotlin.UShort {
             return FfiConverterUShort.lift(
@@ -2176,20 +2176,20 @@ open class NfcConst: Disposable, AutoCloseable, NfcConstInterface
     }
     )
     }
-    
-
-    
-
-    
 
 
-    
-    
+
+
+
+
+
+
+
     /**
      * @suppress
      */
     companion object
-    
+
 }
 
 
@@ -2316,11 +2316,11 @@ public object FfiConverterTypeNfcConst: FfiConverter<NfcConst, Long> {
  * A NFC message, could contain a string, data (bytes) or both
  */
 public interface NfcMessageInterface {
-    
+
     fun `data`(): kotlin.ByteArray?
-    
+
     fun `string`(): kotlin.String?
-    
+
     companion object
 }
 
@@ -2439,7 +2439,7 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
     }
     )
     }
-    
+
 
     override fun `string`(): kotlin.String? {
             return FfiConverterOptionalString.lift(
@@ -2452,16 +2452,16 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
     }
     )
     }
-    
-
-    
-
-    
 
 
-    
+
+
+
+
+
+
     companion object {
-        
+
     /**
      * Creates a new NFC message from optional string and data.
      *
@@ -2472,18 +2472,18 @@ open class NfcMessage: Disposable, AutoCloseable, NfcMessageInterface
             return FfiConverterTypeNfcMessage.lift(
     uniffiRustCallWithError(NfcMessageException) { _status ->
     UniffiLib.uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(
-    
-        
+
+
         FfiConverterOptionalString.lower(`string`),
         FfiConverterOptionalByteArray.lower(`data`),_status)
 }
     )
     }
-    
 
-        
+
+
     }
-    
+
 }
 
 
@@ -2517,19 +2517,19 @@ data class MessageInfo (
      * The payload length of the message, including the header info
      */
     var `fullMessageLength`: kotlin.UShort
-    , 
+    ,
     /**
      * The payload length of the message, reported in the info header
      * This is the length of the payload, without the header info
      */
     var `payloadLength`: kotlin.UShort
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -2559,29 +2559,29 @@ public object FfiConverterTypeMessageInfo: FfiConverterRustBuffer<MessageInfo> {
 
 data class NdefHeader (
     var `messageBegin`: kotlin.Boolean
-    , 
+    ,
     var `messageEnd`: kotlin.Boolean
-    , 
+    ,
     var `chunked`: kotlin.Boolean
-    , 
+    ,
     var `shortRecord`: kotlin.Boolean
-    , 
+    ,
     var `hasIdLength`: kotlin.Boolean
-    , 
+    ,
     var `typeNameFormat`: NdefType
-    , 
+    ,
     var `typeLength`: kotlin.UByte
-    , 
+    ,
     var `payloadLength`: kotlin.UInt
-    , 
+    ,
     var `idLength`: kotlin.UByte?
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -2632,19 +2632,19 @@ public object FfiConverterTypeNdefHeader: FfiConverterRustBuffer<NdefHeader> {
 
 data class NdefRecord (
     var `header`: NdefHeader
-    , 
+    ,
     var `type`: kotlin.ByteArray
-    , 
+    ,
     var `id`: kotlin.ByteArray?
-    , 
+    ,
     var `payload`: NdefPayload
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -2680,17 +2680,17 @@ public object FfiConverterTypeNdefRecord: FfiConverterRustBuffer<NdefRecord> {
 
 data class ParsingContext (
     var `messageInfo`: MessageInfo
-    , 
+    ,
     var `needed`: kotlin.UShort
-    , 
+    ,
     var `firstBlockHash`: kotlin.String?
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -2723,15 +2723,15 @@ public object FfiConverterTypeParsingContext: FfiConverterRustBuffer<ParsingCont
 
 data class ParsingMessage (
     var `messageInfo`: MessageInfo
-    , 
+    ,
     var `leftOverBytes`: kotlin.ByteArray
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -2761,17 +2761,17 @@ public object FfiConverterTypeParsingMessage: FfiConverterRustBuffer<ParsingMess
 
 data class TextPayload (
     var `format`: TextPayloadFormat
-    , 
+    ,
     var `language`: kotlin.String
-    , 
+    ,
     var `text`: kotlin.String
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -2803,39 +2803,39 @@ public object FfiConverterTypeTextPayload: FfiConverterRustBuffer<TextPayload> {
 
 
 sealed class NdefPayload {
-    
+
     data class Text(
         val v1: org.bitcoinppl.cove_core.nfc.TextPayload) : NdefPayload()
-        
+
     {
-        
+
 
         companion object
     }
-    
+
     data class Uri(
         val v1: kotlin.String) : NdefPayload()
-        
+
     {
-        
+
 
         companion object
     }
-    
+
     data class Data(
         val v1: kotlin.ByteArray) : NdefPayload()
-        
+
     {
-        
+
 
         companion object
     }
-    
 
-    
 
-    
-    
+
+
+
+
 
 
     companion object
@@ -2911,7 +2911,7 @@ public object FfiConverterTypeNdefPayload : FfiConverterRustBuffer<NdefPayload>{
 
 
 enum class NdefType {
-    
+
     EMPTY,
     WELL_KNOWN,
     MIME,
@@ -2921,7 +2921,7 @@ enum class NdefType {
     UNCHANGED,
     RESERVED;
 
-    
+
 
 
     companion object
@@ -2952,22 +2952,22 @@ public object FfiConverterTypeNdefType: FfiConverterRustBuffer<NdefType> {
 
 
 sealed class NfcMessageException: kotlin.Exception() {
-    
+
     class NoStringNorData(
         ) : NfcMessageException() {
         override val message
             get() = ""
     }
-    
 
-    
+
+
 
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NfcMessageException> {
         override fun lift(error_buf: RustBuffer.ByValue): NfcMessageException = FfiConverterTypeNfcMessageError.lift(error_buf)
     }
 
-    
+
 }
 
 /**
@@ -2975,7 +2975,7 @@ sealed class NfcMessageException: kotlin.Exception() {
  */
 public object FfiConverterTypeNfcMessageError : FfiConverterRustBuffer<NfcMessageException> {
     override fun read(buf: ByteBuffer): NfcMessageException {
-        
+
 
         return when(buf.getInt()) {
             1 -> NfcMessageException.NoStringNorData()
@@ -3008,36 +3008,36 @@ public object FfiConverterTypeNfcMessageError : FfiConverterRustBuffer<NfcMessag
 
 
 sealed class NfcReaderException: kotlin.Exception() {
-    
+
     class ParsingException(
-        
+
         val v1: kotlin.String
         ) : NfcReaderException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class NotEnoughData(
         ) : NfcReaderException() {
         override val message
             get() = ""
     }
-    
+
     class AlreadyParsed(
         ) : NfcReaderException() {
         override val message
             get() = ""
     }
-    
 
-    
+
+
 
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NfcReaderException> {
         override fun lift(error_buf: RustBuffer.ByValue): NfcReaderException = FfiConverterTypeNfcReaderError.lift(error_buf)
     }
 
-    
+
 }
 
 /**
@@ -3045,7 +3045,7 @@ sealed class NfcReaderException: kotlin.Exception() {
  */
 public object FfiConverterTypeNfcReaderError : FfiConverterRustBuffer<NfcReaderException> {
     override fun read(buf: ByteBuffer): NfcReaderException {
-        
+
 
         return when(buf.getInt()) {
             1 -> NfcReaderException.ParsingException(
@@ -3098,37 +3098,37 @@ public object FfiConverterTypeNfcReaderError : FfiConverterRustBuffer<NfcReaderE
 
 
 sealed class ParseResult {
-    
+
     /**
      * Completed The message is a NDEF message
      */
     data class Complete(
-        val v1: org.bitcoinppl.cove_core.nfc.MessageInfo, 
+        val v1: org.bitcoinppl.cove_core.nfc.MessageInfo,
         val v2: List<org.bitcoinppl.cove_core.nfc.NdefRecord>) : ParseResult()
-        
+
     {
-        
+
 
         companion object
     }
-    
+
     /**
      * Incomplete, need more data to parse the message
      */
     data class Incomplete(
         val v1: org.bitcoinppl.cove_core.nfc.ParsingMessage) : ParseResult()
-        
+
     {
-        
+
 
         companion object
     }
-    
 
-    
 
-    
-    
+
+
+
+
 
 
     companion object
@@ -3191,27 +3191,27 @@ public object FfiConverterTypeParseResult : FfiConverterRustBuffer<ParseResult>{
 
 
 sealed class ParserState {
-    
+
     object NotStarted : ParserState()
-    
-    
+
+
     data class Parsing(
         val v1: org.bitcoinppl.cove_core.nfc.ParsingContext) : ParserState()
-        
+
     {
-        
+
 
         companion object
     }
-    
+
     object Complete : ParserState()
-    
-    
 
-    
 
-    
-    
+
+
+
+
+
 
 
     companion object
@@ -3280,7 +3280,7 @@ public object FfiConverterTypeParserState : FfiConverterRustBuffer<ParserState>{
 
 
 sealed class ResumeException: kotlin.Exception() {
-    
+
     /**
      * The starting block of the new message is not the same as the one in the old message
      */
@@ -3289,21 +3289,21 @@ sealed class ResumeException: kotlin.Exception() {
         override val message
             get() = ""
     }
-    
+
     class AlreadyParsed(
         ) : ResumeException() {
         override val message
             get() = ""
     }
-    
+
     class ParsingException(
-        
+
         val v1: kotlin.String
         ) : ResumeException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     /**
      * Block size mismatch, expected {expected}, got {actual}
      *
@@ -3312,30 +3312,30 @@ sealed class ResumeException: kotlin.Exception() {
      * (`NUMBER_OF_BLOCKS_PER_CHUNK` * `BYTES_PER_BLOCK`)
      */
     class BlockSizeMismatch(
-        
-        val `expected`: kotlin.UShort, 
-        
+
+        val `expected`: kotlin.UShort,
+
         val `actual`: kotlin.UShort
         ) : ResumeException() {
         override val message
             get() = "expected=${ `expected` }, actual=${ `actual` }"
     }
-    
+
     class UnableToGetFirstBlockHash(
         ) : ResumeException() {
         override val message
             get() = ""
     }
-    
 
-    
+
+
 
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<ResumeException> {
         override fun lift(error_buf: RustBuffer.ByValue): ResumeException = FfiConverterTypeResumeError.lift(error_buf)
     }
 
-    
+
 }
 
 /**
@@ -3343,7 +3343,7 @@ sealed class ResumeException: kotlin.Exception() {
  */
 public object FfiConverterTypeResumeError : FfiConverterRustBuffer<ResumeException> {
     override fun read(buf: ByteBuffer): ResumeException {
-        
+
 
         return when(buf.getInt()) {
             1 -> ResumeException.BlocksDoNotMatch()
@@ -3422,11 +3422,11 @@ public object FfiConverterTypeResumeError : FfiConverterRustBuffer<ResumeExcepti
 
 
 enum class TextPayloadFormat {
-    
+
     UTF8,
     UTF16;
 
-    
+
 
 
     companion object
@@ -3610,13 +3610,13 @@ public object FfiConverterSequenceTypeNdefRecord: FfiConverterRustBuffer<List<Nd
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_nfc_fn_func_nfc_message_is_equal(
-    
-        
+
+
         FfiConverterTypeNfcMessage.lower(`lhs`),
         FfiConverterTypeNfcMessage.lower(`rhs`),_status)
 }
     )
     }
-    
+
 
 

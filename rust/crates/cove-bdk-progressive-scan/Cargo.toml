@@ -1,0 +1,19 @@
+[package]
+name = "cove-bdk-progressive-scan"
+version = "0.1.0"
+edition = "2024"
+description = "Progressive BDK full-scan helpers"
+
+[dependencies]
+bdk_esplora = { workspace = true }
+bdk_electrum = { workspace = true }
+bdk_wallet = { workspace = true }
+flume = { version = "0.12.0", features = ["async"] }
+futures = "0.3.32"
+thiserror = { workspace = true }
+tokio-util = "0.7.17"
+
+[dev-dependencies]
+bdk_wallet = { workspace = true, features = ["test-utils"] }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }

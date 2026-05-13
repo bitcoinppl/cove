@@ -79,11 +79,10 @@ struct SelectedWalletScreen: View {
         manager.rust.labelManager()
     }
 
-    func transactionsCard(transactions: [CoveCore.Transaction], scanComplete: Bool) -> some View {
+    func transactionsCard(transactions: [CoveCore.Transaction]) -> some View {
         TransactionsCardView(
             transactions: transactions,
             unsignedTransactions: manager.unsignedTransactions,
-            scanComplete: scanComplete,
             metadata: manager.walletMetadata
         )
         .ignoresSafeArea()
@@ -133,13 +132,9 @@ struct SelectedWalletScreen: View {
         case .loading:
             Loading
         case let .scanning(txns):
-            if manager.walletMetadata.internal.lastScanFinished == nil, txns.isEmpty {
-                Loading
-            } else {
-                transactionsCard(transactions: txns, scanComplete: false)
-            }
+            transactionsCard(transactions: txns)
         case let .loaded(txns):
-            transactionsCard(transactions: txns, scanComplete: true)
+            transactionsCard(transactions: txns)
         }
     }
 

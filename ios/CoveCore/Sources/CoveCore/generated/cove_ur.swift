@@ -398,7 +398,7 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that SWIFT handles always have the lowest bit set
 fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
 fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
@@ -549,7 +549,7 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
  * crypto-hdkey: Hierarchical Deterministic Key (BIP32)
  */
 public protocol CryptoHdkeyProtocol: AnyObject, Sendable {
-    
+
     /**
      * Encode as CBOR for UR
      *
@@ -558,7 +558,7 @@ public protocol CryptoHdkeyProtocol: AnyObject, Sendable {
      * Returns an error if CBOR encoding fails
      */
     func encode() throws  -> Data
-    
+
 }
 /**
  * crypto-hdkey: Hierarchical Deterministic Key (BIP32)
@@ -613,7 +613,7 @@ open class CryptoHdkey: CryptoHdkeyProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_ur_fn_free_cryptohdkey(handle, $0) }
     }
 
-    
+
     /**
      * Decode from CBOR
      *
@@ -629,9 +629,9 @@ public static func decode(cbor: Data)throws  -> CryptoHdkey  {
     )
 })
 }
-    
 
-    
+
+
     /**
      * Encode as CBOR for UR
      *
@@ -647,9 +647,9 @@ open func encode()throws  -> Data  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -703,7 +703,7 @@ public func FfiConverterTypeCryptoHdkey_lower(_ value: CryptoHdkey) -> UInt64 {
  * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 public protocol CryptoPsbtProtocol: AnyObject, Sendable {
-    
+
     /**
      * Encode as CBOR for UR
      *
@@ -711,12 +711,12 @@ public protocol CryptoPsbtProtocol: AnyObject, Sendable {
      * Returns error if CBOR encoding fails
      */
     func encode() throws  -> Data
-    
+
     /**
      * Get PSBT as bytes
      */
     func toPsbtBytes()  -> Data
-    
+
     /**
      * Encode as UR string
      *
@@ -724,7 +724,7 @@ public protocol CryptoPsbtProtocol: AnyObject, Sendable {
      * Returns error if CBOR encoding fails
      */
     func toUr() throws  -> String
-    
+
 }
 /**
  * crypto-psbt: PSBT encoded as CBOR byte string with tag 310
@@ -780,7 +780,7 @@ open class CryptoPsbt: CryptoPsbtProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_ur_fn_free_cryptopsbt(handle, $0) }
     }
 
-    
+
     /**
      * Decode from CBOR
      *
@@ -795,7 +795,7 @@ public static func decode(cbor: Data)throws  -> CryptoPsbt  {
     )
 })
 }
-    
+
     /**
      * Create from PSBT bytes
      *
@@ -810,7 +810,7 @@ public static func fromPsbtBytes(psbtBytes: Data)throws  -> CryptoPsbt  {
     )
 })
 }
-    
+
     /**
      * Decode from UR string
      *
@@ -825,9 +825,9 @@ public static func fromUr(ur: String)throws  -> CryptoPsbt  {
     )
 })
 }
-    
 
-    
+
+
     /**
      * Encode as CBOR for UR
      *
@@ -842,7 +842,7 @@ open func encode()throws  -> Data  {
     )
 })
 }
-    
+
     /**
      * Get PSBT as bytes
      */
@@ -854,7 +854,7 @@ open func toPsbtBytes() -> Data  {
     )
 })
 }
-    
+
     /**
      * Encode as UR string
      *
@@ -869,9 +869,9 @@ open func toUr()throws  -> String  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -925,7 +925,7 @@ public func FfiConverterTypeCryptoPsbt_lower(_ value: CryptoPsbt) -> UInt64 {
  * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 public protocol CryptoSeedProtocol: AnyObject, Sendable {
-    
+
     /**
      * Encode as CBOR for UR
      *
@@ -933,27 +933,27 @@ public protocol CryptoSeedProtocol: AnyObject, Sendable {
      * Returns error if CBOR encoding fails
      */
     func encode() throws  -> Data
-    
+
     /**
      * Get entropy bytes
      */
     func entropy()  -> Data
-    
+
     /**
      * Get creation date if present
      */
     func getCreationDate()  -> UInt64?
-    
+
     /**
      * Get name if present
      */
     func getName()  -> String?
-    
+
     /**
      * Get note if present
      */
     func getNote()  -> String?
-    
+
 }
 /**
  * crypto-seed: BIP39 seed with optional metadata
@@ -1009,7 +1009,7 @@ open class CryptoSeed: CryptoSeedProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_ur_fn_free_cryptoseed(handle, $0) }
     }
 
-    
+
     /**
      * Decode from CBOR
      *
@@ -1024,7 +1024,7 @@ public static func decode(cbor: Data)throws  -> CryptoSeed  {
     )
 })
 }
-    
+
     /**
      * Create from entropy bytes
      *
@@ -1039,7 +1039,7 @@ public static func fromEntropy(payload: Data)throws  -> CryptoSeed  {
     )
 })
 }
-    
+
     /**
      * Create from entropy bytes with optional metadata
      *
@@ -1057,9 +1057,9 @@ public static func fromEntropyWithMetadata(payload: Data, name: String?, note: S
     )
 })
 }
-    
 
-    
+
+
     /**
      * Encode as CBOR for UR
      *
@@ -1074,7 +1074,7 @@ open func encode()throws  -> Data  {
     )
 })
 }
-    
+
     /**
      * Get entropy bytes
      */
@@ -1086,7 +1086,7 @@ open func entropy() -> Data  {
     )
 })
 }
-    
+
     /**
      * Get creation date if present
      */
@@ -1098,7 +1098,7 @@ open func getCreationDate() -> UInt64?  {
     )
 })
 }
-    
+
     /**
      * Get name if present
      */
@@ -1110,7 +1110,7 @@ open func getName() -> String?  {
     )
 })
 }
-    
+
     /**
      * Get note if present
      */
@@ -1122,9 +1122,9 @@ open func getNote() -> String?  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -1171,11 +1171,11 @@ public func FfiConverterTypeCryptoSeed_lower(_ value: CryptoSeed) -> UInt64 {
 
 
 
-public 
+public
 enum UrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case CborEncodeError(String
     )
     case CborDecodeError(String
@@ -1200,9 +1200,9 @@ enum UrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     case InvalidUtf8(String
     )
 
-    
 
-    
+
+
 // The local Rust `Display` implementation.
 public var description: String {
     return try!  FfiConverterString.lift(
@@ -1215,11 +1215,11 @@ public var description: String {
     )
 }
 
-    
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -1236,9 +1236,9 @@ public struct FfiConverterTypeUrError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .CborEncodeError(
             try FfiConverterString.read(from: &buf)
             )
@@ -1252,11 +1252,11 @@ public struct FfiConverterTypeUrError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 5: return .InvalidKeyDataLength(
-            expected: try FfiConverterUInt64.read(from: &buf), 
+            expected: try FfiConverterUInt64.read(from: &buf),
             actual: try FfiConverterUInt64.read(from: &buf)
             )
         case 6: return .InvalidTag(
-            expected: try FfiConverterUInt64.read(from: &buf), 
+            expected: try FfiConverterUInt64.read(from: &buf),
             actual: try FfiConverterUInt64.read(from: &buf)
             )
         case 7: return .InvalidPayloadLength(
@@ -1283,70 +1283,70 @@ public struct FfiConverterTypeUrError: FfiConverterRustBuffer {
     public static func write(_ value: UrError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case let .CborEncodeError(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .CborDecodeError(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .InvalidField(v1):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .MissingField(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .InvalidKeyDataLength(expected,actual):
             writeInt(&buf, Int32(5))
             FfiConverterUInt64.write(expected, into: &buf)
             FfiConverterUInt64.write(actual, into: &buf)
-            
-        
+
+
         case let .InvalidTag(expected,actual):
             writeInt(&buf, Int32(6))
             FfiConverterUInt64.write(expected, into: &buf)
             FfiConverterUInt64.write(actual, into: &buf)
-            
-        
+
+
         case let .InvalidPayloadLength(v1):
             writeInt(&buf, Int32(7))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .UrParseError(v1):
             writeInt(&buf, Int32(8))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .InvalidOperation(v1):
             writeInt(&buf, Int32(9))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .InvalidKeyData(v1):
             writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case .MasterKeyNotAllowed:
             writeInt(&buf, Int32(11))
-        
-        
+
+
         case let .InvalidUtf8(v1):
             writeInt(&buf, Int32(12))
             FfiConverterString.write(v1, into: &buf)
-            
+
         }
     }
 }

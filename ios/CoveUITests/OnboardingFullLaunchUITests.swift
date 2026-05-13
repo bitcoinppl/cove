@@ -165,6 +165,27 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Transactions"].waitForExistence(timeout: 30))
         XCTAssertTrue(staticText(containing: "0 BTC").waitForExistence(timeout: 30))
+        XCTAssertTrue(app.staticTexts["Checking wallet history"].exists)
+        XCTAssertFalse(app.staticTexts["No transactions"].exists)
+    }
+
+    func testSoftwareWalletUserCanImportKnownLegacyWalletWithHistory() {
+        app.launch()
+
+        reachStorageChoices()
+        button(startingWith: "Software wallet").tap()
+
+        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
+
+        importKnownEmptyMainnetWalletWords()
+        app.buttons["Not Now"].tap()
+        acceptTermsAndContinue()
+        chooseLegacyImportedWalletFromSelectionSheet()
+
+        XCTAssertTrue(app.staticTexts["Transactions"].waitForExistence(timeout: 30))
+        XCTAssertTrue(staticText(containing: "0 BTC").waitForExistence(timeout: 30))
+        XCTAssertTrue(app.staticTexts["Checking wallet history"].waitForNonExistence(timeout: 45))
+        XCTAssertFalse(app.staticTexts["No transactions"].exists)
     }
 
     func testNewUserCanReachBackupWallet() {
@@ -217,7 +238,11 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         tapButton(named: "Get Started")
         acceptTermsIfNeeded()
         tapButton(startingWith: "Yes, I have Bitcoin")
-        tapButton(startingWith: "Use another wallet")
+
+        let useAnotherWallet = button(startingWith: "Use another wallet")
+        if useAnotherWallet.waitForExistence(timeout: 2) {
+            useAnotherWallet.tap()
+        }
 
         XCTAssertTrue(app.staticTexts["How do you store your Bitcoin?"].waitForExistence(timeout: 10))
     }
@@ -272,6 +297,12 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Wrapped Segwit"].exists || app.buttons["Wrapped Segwit"].exists)
         XCTAssertTrue(app.staticTexts["Legacy"].exists || app.buttons["Legacy"].exists)
         button(startingWith: "Keep Current").tap()
+        XCTAssertTrue(app.staticTexts["Transactions"].waitForExistence(timeout: 30))
+    }
+
+    private func chooseLegacyImportedWalletFromSelectionSheet() {
+        XCTAssertTrue(app.staticTexts["Multiple wallets found, please choose one"].waitForExistence(timeout: 30))
+        button(startingWith: "Legacy").tap()
         XCTAssertTrue(app.staticTexts["Transactions"].waitForExistence(timeout: 30))
     }
 

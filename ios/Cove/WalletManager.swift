@@ -14,6 +14,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState
+    var scanStatus: WalletScanStatus = .idle
     var balance: Balance = .zero()
     var foundAddresses: [FoundAddress] = []
     var unsignedTransactions: [UnsignedTransaction] = []
@@ -49,6 +50,10 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
+    }
+
+    func close() {
+        rust.shutdown()
     }
 
     init(xpub: String) throws {
@@ -165,18 +170,18 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
     func apply(_ message: Message) {
         switch message {
-        case .startedInitialFullScan:
-            switch self.loadState {
-            case let .scanning(txns) where !txns.isEmpty:
-                break
-            case let .loaded(txns):
-                self.loadState = .scanning(txns)
-            default:
-                self.loadState = .loading
+        case let .walletScanStatusChanged(status):
+            self.scanStatus = status
+            if case .scanning = status {
+                switch self.loadState {
+                case .scanning:
+                    break
+                case let .loaded(txns):
+                    self.loadState = .scanning(txns)
+                case .loading:
+                    self.loadState = .scanning([])
+                }
             }
-
-        case let .startedExpandedFullScan(txns):
-            self.loadState = .scanning(txns)
 
         case let .availableTransactions(txns):
             switch self.loadState {
@@ -327,6 +332,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     }
 
     deinit {
+        close()
         logger.debug("WalletManager deinit called for wallet \(id)")
     }
 }

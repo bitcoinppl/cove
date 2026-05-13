@@ -1,6 +1,7 @@
 pub mod electrum;
 pub mod esplora;
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use bdk_electrum::electrum_client;
@@ -18,6 +19,8 @@ use bdk_wallet::{
     },
 };
 use bitcoin::{Transaction, Txid};
+use cove_bdk_progressive_scan::ScanEvent;
+use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 use crate::node::Node;
@@ -61,6 +64,9 @@ pub enum Error {
 
     #[error("failed to complete wallet scan: {0}")]
     EsploraScan(Box<esplora_client::Error>),
+
+    #[error("failed to complete progressive wallet scan: {0}")]
+    ProgressiveScan(#[from] cove_bdk_progressive_scan::Error),
 
     #[error("failed to get a address: {0}")]
     EsploraAddress(esplora_client::Error),
@@ -174,6 +180,47 @@ impl NodeClient {
             Self::Electrum(client) => {
                 debug!("starting electrum full scan");
                 client.full_scan(full_scan_request, tx_graph, stop_gap).await?
+            }
+        };
+
+        Ok(full_scan_result)
+    }
+
+    pub async fn start_progressive_wallet_scan(
+        &self,
+        tx_graph: &TxGraph<ConfirmationBlockTime>,
+        full_scan_request: FullScanRequest<KeychainKind>,
+        last_revealed_indices: BTreeMap<KeychainKind, u32>,
+        stop_gap: usize,
+        events: flume::Sender<ScanEvent<KeychainKind>>,
+        cancel_token: CancellationToken,
+    ) -> Result<FullScanResponse<KeychainKind>, Error> {
+        let full_scan_result = match self {
+            Self::Esplora(client) => {
+                debug!("starting progressive esplora full scan");
+                client
+                    .progressive_full_scan(
+                        full_scan_request,
+                        last_revealed_indices,
+                        stop_gap,
+                        events,
+                        cancel_token,
+                    )
+                    .await?
+            }
+
+            Self::Electrum(client) => {
+                debug!("starting progressive electrum full scan");
+                client
+                    .progressive_full_scan(
+                        full_scan_request,
+                        tx_graph,
+                        last_revealed_indices,
+                        stop_gap,
+                        events,
+                        cancel_token,
+                    )
+                    .await?
             }
         };
 

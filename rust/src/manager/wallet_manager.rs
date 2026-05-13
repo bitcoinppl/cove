@@ -68,8 +68,7 @@ pub type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletManagerReconcileMessage {
-    StartedInitialFullScan,
-    StartedExpandedFullScan(Vec<Transaction>),
+    WalletScanStatusChanged(WalletScanStatus),
 
     AvailableTransactions(Vec<Transaction>),
     ScanComplete(Vec<Transaction>),
@@ -119,6 +118,28 @@ pub enum WalletLoadState {
     Loading,
     Scanning(Vec<Transaction>),
     Loaded(Vec<Transaction>),
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum WalletScanPhase {
+    Initial,
+    Expanded,
+    Rescan,
+    Incremental,
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct WalletScanProgress {
+    pub phase: WalletScanPhase,
+    pub checked: u32,
+    pub gap: u32,
+    pub stop_gap: u32,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum WalletScanStatus {
+    Idle,
+    Scanning(WalletScanProgress),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -1334,7 +1355,7 @@ impl RustWalletManager {
             Action::ToggleShowLabels => candidate.show_labels = !candidate.show_labels,
 
             Action::SelectedWalletDisappeared => {
-                send!(self.actor.stop_all_scans());
+                send!(self.actor.shutdown());
                 return;
             }
 
@@ -1368,6 +1389,10 @@ impl RustWalletManager {
         *self.metadata.write() = candidate.clone();
         self.reconciler.send(Message::WalletMetadataChanged(Box::new(candidate.clone())));
         CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &candidate);
+    }
+
+    pub fn shutdown(&self) {
+        send!(self.actor.shutdown());
     }
 }
 

@@ -16,10 +16,27 @@ struct TransactionsCardView: View {
 
     let transactions: [CoveCore.Transaction]
     let unsignedTransactions: [UnsignedTransaction]
-    let scanComplete: Bool
     let metadata: WalletMetadata
 
     private let screenHeight = UIScreen.main.bounds.height
+    private var scanProgress: WalletScanProgress? {
+        if case let .scanning(progress) = manager.scanStatus {
+            return progress
+        }
+
+        return nil
+    }
+
+    private var isScanning: Bool {
+        scanProgress != nil
+    }
+
+    private var scanProgressFraction: Double {
+        guard let scanProgress, scanProgress.stopGap > 0 else { return 0 }
+
+        let fraction = Double(scanProgress.gap) / Double(scanProgress.stopGap)
+        return min(max(fraction, 0), 1)
+    }
 
     var body: some View {
         VStack {
@@ -33,9 +50,8 @@ struct TransactionsCardView: View {
                 }
                 .padding(.bottom, 12)
 
-                if !scanComplete {
-                    ProgressView()
-                        .tint(.primary)
+                if isScanning, !transactions.isEmpty || !unsignedTransactions.isEmpty {
+                    TransactionsScanProgressStrip(progressFraction: scanProgressFraction)
                         .padding(.bottom, 10)
                 }
 
@@ -76,7 +92,17 @@ struct TransactionsCardView: View {
                     }
                 }
 
-                if transactions.isEmpty {
+                if transactions.isEmpty, unsignedTransactions.isEmpty, isScanning {
+                    EmptyWalletScanState(
+                        scanProgress: scanProgress,
+                        progressFraction: scanProgressFraction
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 56)
+
+                    Spacer()
+                        .frame(minHeight: screenHeight * 0.2)
+                } else if transactions.isEmpty, unsignedTransactions.isEmpty {
                     VStack {
                         ContentUnavailableView {
                             Label("No transactions", systemImage: "bitcoinsign.square.fill")
@@ -95,6 +121,39 @@ struct TransactionsCardView: View {
         }
         .onDisappear {
             Task { await dismissAllPopups() }
+        }
+    }
+}
+
+struct TransactionsScanProgressStrip: View {
+    let progressFraction: Double
+
+    var body: some View {
+        ProgressView(value: progressFraction)
+            .progressViewStyle(.linear)
+            .tint(.primary.opacity(0.45))
+            .frame(height: 2)
+    }
+}
+
+struct EmptyWalletScanState: View {
+    let scanProgress: WalletScanProgress?
+    let progressFraction: Double
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text("Checking wallet history")
+                .foregroundStyle(.secondary)
+                .font(.body)
+
+            ProgressView(value: progressFraction)
+                .progressViewStyle(.linear)
+                .tint(.primary)
+                .frame(maxWidth: 260)
+
+            Text("\(scanProgress?.checked ?? 0) addresses checked")
+                .foregroundStyle(.secondary)
+                .font(.caption)
         }
     }
 }
@@ -489,7 +548,6 @@ private struct TxnIcon: View {
         TransactionsCardView(
             transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(0)),
             unsignedTransactions: [],
-            scanComplete: true,
             metadata: walletMetadataPreview()
         )
         .environment(WalletManager(preview: "preview_only"))
@@ -502,7 +560,6 @@ private struct TxnIcon: View {
             TransactionsCardView(
                 transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(1)),
                 unsignedTransactions: [],
-                scanComplete: false,
                 metadata: walletMetadataPreview()
             )
             .background(.thickMaterial)
@@ -516,7 +573,6 @@ private struct TxnIcon: View {
         TransactionsCardView(
             transactions: [],
             unsignedTransactions: [],
-            scanComplete: false,
             metadata: walletMetadataPreview()
         )
         .environment(WalletManager(preview: "preview_only"))
@@ -528,7 +584,6 @@ private struct TxnIcon: View {
         TransactionsCardView(
             transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(2)),
             unsignedTransactions: [],
-            scanComplete: true,
             metadata: walletMetadataPreview()
         )
         .environment(WalletManager(preview: "preview_only"))
@@ -542,7 +597,6 @@ private struct TxnIcon: View {
             unsignedTransactions: [
                 UnsignedTransaction.previewNew(), UnsignedTransaction.previewNew(),
             ],
-            scanComplete: true,
             metadata: walletMetadataPreview()
         )
         .environment(WalletManager(preview: "preview_only"))
@@ -557,7 +611,6 @@ private struct TxnIcon: View {
         TransactionsCardView(
             transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(2)),
             unsignedTransactions: [],
-            scanComplete: true,
             metadata: metadata
         )
         .environment(WalletManager(preview: "preview_only"))
@@ -573,7 +626,6 @@ private struct TxnIcon: View {
             TransactionsCardView(
                 transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(2)),
                 unsignedTransactions: [],
-                scanComplete: true,
                 metadata: metadata
             )
             .environment(WalletManager(preview: "preview_only"))
@@ -590,7 +642,6 @@ private struct TxnIcon: View {
                 TransactionsCardView(
                     transactions: [],
                     unsignedTransactions: [],
-                    scanComplete: true,
                     metadata: walletMetadataPreview()
                 )
                 .background(

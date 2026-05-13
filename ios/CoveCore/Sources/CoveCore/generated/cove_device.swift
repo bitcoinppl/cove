@@ -398,7 +398,7 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that SWIFT handles always have the lowest bit set
 fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
 fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
@@ -560,12 +560,12 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 public protocol CloudStorageProtocol: AnyObject, Sendable {
-    
+
     /**
      * Check if any cloud backup namespaces exist
      */
     func hasAnyCloudBackup(policy: CloudAccessPolicy) async throws  -> Bool
-    
+
 }
 open class CloudStorage: CloudStorageProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -626,9 +626,9 @@ public convenience init(cloudStorage: CloudStorageAccess) {
         try! rustCall { uniffi_cove_device_fn_free_cloudstorage(handle, $0) }
     }
 
-    
 
-    
+
+
     /**
      * Check if any cloud backup namespaces exist
      */
@@ -648,9 +648,9 @@ open func hasAnyCloudBackup(policy: CloudAccessPolicy)async throws  -> Bool  {
             errorHandler: FfiConverterTypeCloudStorageError_lift
         )
 }
-    
 
-    
+
+
 }
 
 
@@ -700,7 +700,7 @@ public func FfiConverterTypeCloudStorage_lower(_ value: CloudStorage) -> UInt64 
 
 
 public protocol ConnectivityProtocol: AnyObject, Sendable {
-    
+
 }
 open class Connectivity: ConnectivityProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -761,11 +761,11 @@ public convenience init(connectivity: ConnectivityAccess) {
         try! rustCall { uniffi_cove_device_fn_free_connectivity(handle, $0) }
     }
 
-    
 
-    
 
-    
+
+
+
 }
 
 
@@ -815,7 +815,7 @@ public func FfiConverterTypeConnectivity_lower(_ value: Connectivity) -> UInt64 
 
 
 public protocol DeviceProtocol: AnyObject, Sendable {
-    
+
 }
 open class Device: DeviceProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -883,11 +883,11 @@ public convenience init(device: DeviceAccess) {
         try! rustCall { uniffi_cove_device_fn_free_device(handle, $0) }
     }
 
-    
 
-    
 
-    
+
+
+
 }
 
 
@@ -937,7 +937,7 @@ public func FfiConverterTypeDevice_lower(_ value: Device) -> UInt64 {
 
 
 public protocol KeychainProtocol: AnyObject, Sendable {
-    
+
 }
 open class Keychain: KeychainProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1005,11 +1005,11 @@ public convenience init(keychain: KeychainAccess) {
         try! rustCall { uniffi_cove_device_fn_free_keychain(handle, $0) }
     }
 
-    
 
-    
 
-    
+
+
+
 }
 
 
@@ -1059,9 +1059,9 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UInt64 {
 
 
 public protocol PasskeyAccessProtocol: AnyObject, Sendable {
-    
+
     func isPrfSupported()  -> Bool
-    
+
 }
 open class PasskeyAccess: PasskeyAccessProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1122,9 +1122,9 @@ public convenience init(provider: PasskeyProvider) {
         try! rustCall { uniffi_cove_device_fn_free_passkeyaccess(handle, $0) }
     }
 
-    
 
-    
+
+
 open func isPrfSupported() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -1133,9 +1133,9 @@ open func isPrfSupported() -> Bool  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -1200,7 +1200,7 @@ public struct DiscoveredPasskeyResult: Equatable, Hashable {
     public init(
         /**
          * 32-byte PRF key
-         */prfOutput: Data, 
+         */prfOutput: Data,
         /**
          * Discovered credential ID, persisted to local keychain
          */credentialId: Data) {
@@ -1208,9 +1208,9 @@ public struct DiscoveredPasskeyResult: Equatable, Hashable {
         self.credentialId = credentialId
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1224,7 +1224,7 @@ public struct FfiConverterTypeDiscoveredPasskeyResult: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscoveredPasskeyResult {
         return
             try DiscoveredPasskeyResult(
-                prfOutput: FfiConverterData.read(from: &buf), 
+                prfOutput: FfiConverterData.read(from: &buf),
                 credentialId: FfiConverterData.read(from: &buf)
         )
     }
@@ -1264,9 +1264,9 @@ public struct PasskeyRegistrationResult: Equatable, Hashable {
         self.registeredPlatform = registeredPlatform
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1280,8 +1280,8 @@ public struct FfiConverterTypePasskeyRegistrationResult: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyRegistrationResult {
         return
             try PasskeyRegistrationResult(
-                credentialId: FfiConverterData.read(from: &buf), 
-                providerAaguid: FfiConverterString.read(from: &buf), 
+                credentialId: FfiConverterData.read(from: &buf),
+                providerAaguid: FfiConverterString.read(from: &buf),
                 registeredPlatform: FfiConverterTypePasskeyRegistrationPlatform.read(from: &buf)
         )
     }
@@ -1322,9 +1322,9 @@ public struct PasskeyRegistrationUser: Equatable, Hashable {
         self.displayName = displayName
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1338,8 +1338,8 @@ public struct FfiConverterTypePasskeyRegistrationUser: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyRegistrationUser {
         return
             try PasskeyRegistrationUser(
-                id: FfiConverterData.read(from: &buf), 
-                name: FfiConverterString.read(from: &buf), 
+                id: FfiConverterData.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
                 displayName: FfiConverterString.read(from: &buf)
         )
     }
@@ -1376,9 +1376,9 @@ public struct RemoteBackupLocation: Equatable, Hashable {
         self.relativePath = relativePath
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1419,7 +1419,7 @@ public func FfiConverterTypeRemoteBackupLocation_lower(_ value: RemoteBackupLoca
 
 
 public enum CloudAccessPolicy: Equatable, Hashable {
-    
+
     case consentAllowed
     case silent
 
@@ -1442,26 +1442,26 @@ public struct FfiConverterTypeCloudAccessPolicy: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudAccessPolicy {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .consentAllowed
-        
+
         case 2: return .silent
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: CloudAccessPolicy, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .consentAllowed:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .silent:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -1483,11 +1483,11 @@ public func FfiConverterTypeCloudAccessPolicy_lower(_ value: CloudAccessPolicy) 
 
 
 
-public 
+public
 enum CloudStorageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case AuthorizationRequired(String
     )
     case NotAvailable(String
@@ -1502,9 +1502,9 @@ enum CloudStorageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     )
     case QuotaExceeded
 
-    
 
-    
+
+
 // The local Rust `Display` implementation.
 public var description: String {
     return try!  FfiConverterString.lift(
@@ -1517,11 +1517,11 @@ public var description: String {
     )
 }
 
-    
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -1538,9 +1538,9 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .AuthorizationRequired(
             try FfiConverterString.read(from: &buf)
             )
@@ -1568,43 +1568,43 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
     public static func write(_ value: CloudStorageError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case let .AuthorizationRequired(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .NotAvailable(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .Offline(v1):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .UploadFailed(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .DownloadFailed(v1):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .NotFound(v1):
             writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case .QuotaExceeded:
             writeInt(&buf, Int32(7))
-        
+
         }
     }
 }
@@ -1627,7 +1627,7 @@ public func FfiConverterTypeCloudStorageError_lower(_ value: CloudStorageError) 
 
 
 public enum CloudSyncHealth: Equatable, Hashable {
-    
+
     case unknown
     case allUploaded
     case uploading
@@ -1657,60 +1657,60 @@ public struct FfiConverterTypeCloudSyncHealth: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudSyncHealth {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .unknown
-        
+
         case 2: return .allUploaded
-        
+
         case 3: return .uploading
-        
+
         case 4: return .failed(try FfiConverterString.read(from: &buf)
         )
-        
+
         case 5: return .noFiles
-        
+
         case 6: return .authorizationRequired(try FfiConverterString.read(from: &buf)
         )
-        
+
         case 7: return .unavailable
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: CloudSyncHealth, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .unknown:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .allUploaded:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .uploading:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case let .failed(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case .noFiles:
             writeInt(&buf, Int32(5))
-        
-        
+
+
         case let .authorizationRequired(v1):
             writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case .unavailable:
             writeInt(&buf, Int32(7))
-        
+
         }
     }
 }
@@ -1732,11 +1732,11 @@ public func FfiConverterTypeCloudSyncHealth_lower(_ value: CloudSyncHealth) -> R
 
 
 
-public 
+public
 enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case Save
     case Delete
     case ParseSavedValue(String
@@ -1746,9 +1746,9 @@ enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     case Decrypt(String
     )
 
-    
 
-    
+
+
 // The local Rust `Display` implementation.
 public var description: String {
     return try!  FfiConverterString.lift(
@@ -1761,11 +1761,11 @@ public var description: String {
     )
 }
 
-    
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -1782,9 +1782,9 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .Save
         case 2: return .Delete
         case 3: return .ParseSavedValue(
@@ -1804,32 +1804,32 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
     public static func write(_ value: KeychainError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case .Save:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .Delete:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case let .ParseSavedValue(v1):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .Encrypt(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .Decrypt(v1):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
-            
+
         }
     }
 }
@@ -1852,7 +1852,7 @@ public func FfiConverterTypeKeychainError_lower(_ value: KeychainError) -> RustB
 
 
 public enum PasskeyCredentialPresence: Equatable, Hashable {
-    
+
     case present
     case missing
     case indeterminate
@@ -1876,32 +1876,32 @@ public struct FfiConverterTypePasskeyCredentialPresence: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyCredentialPresence {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .present
-        
+
         case 2: return .missing
-        
+
         case 3: return .indeterminate
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: PasskeyCredentialPresence, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .present:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .missing:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .indeterminate:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -1923,11 +1923,11 @@ public func FfiConverterTypePasskeyCredentialPresence_lower(_ value: PasskeyCred
 
 
 
-public 
+public
 enum PasskeyError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case NotSupported(reason: PasskeyFailureReason
     )
     case PrfUnsupportedProvider
@@ -1936,9 +1936,9 @@ enum PasskeyError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     )
     case NoCredentialFound
 
-    
 
-    
+
+
 // The local Rust `Display` implementation.
 public var description: String {
     return try!  FfiConverterString.lift(
@@ -1951,11 +1951,11 @@ public var description: String {
     )
 }
 
-    
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -1972,16 +1972,16 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .NotSupported(
             reason: try FfiConverterTypePasskeyFailureReason.read(from: &buf)
             )
         case 2: return .PrfUnsupportedProvider
         case 3: return .UserCancelled
         case 4: return .RequestFailed(
-            operation: try FfiConverterTypePasskeyOperation.read(from: &buf), 
+            operation: try FfiConverterTypePasskeyOperation.read(from: &buf),
             reason: try FfiConverterTypePasskeyFailureReason.read(from: &buf)
             )
         case 5: return .NoCredentialFound
@@ -1993,32 +1993,32 @@ public struct FfiConverterTypePasskeyError: FfiConverterRustBuffer {
     public static func write(_ value: PasskeyError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case let .NotSupported(reason):
             writeInt(&buf, Int32(1))
             FfiConverterTypePasskeyFailureReason.write(reason, into: &buf)
-            
-        
+
+
         case .PrfUnsupportedProvider:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .UserCancelled:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case let .RequestFailed(operation,reason):
             writeInt(&buf, Int32(4))
             FfiConverterTypePasskeyOperation.write(operation, into: &buf)
             FfiConverterTypePasskeyFailureReason.write(reason, into: &buf)
-            
-        
+
+
         case .NoCredentialFound:
             writeInt(&buf, Int32(5))
-        
+
         }
     }
 }
@@ -2041,7 +2041,7 @@ public func FfiConverterTypePasskeyError_lower(_ value: PasskeyError) -> RustBuf
 
 
 public enum PasskeyFailureReason: Equatable, Hashable, CustomStringConvertible {
-    
+
     case platformAuthorizationFailed
     case invalidResponse
     case notHandled
@@ -2086,88 +2086,88 @@ public struct FfiConverterTypePasskeyFailureReason: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyFailureReason {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .platformAuthorizationFailed
-        
+
         case 2: return .invalidResponse
-        
+
         case 3: return .notHandled
-        
+
         case 4: return .interrupted
-        
+
         case 5: return .providerConfiguration
-        
+
         case 6: return .noCreateOption
-        
+
         case 7: return .deviceNotConfigured
-        
+
         case 8: return .unexpectedCredentialType
-        
+
         case 9: return .missingCredentialId
-        
+
         case 10: return .malformedResponse
-        
+
         case 11: return .timedOut
-        
+
         case 12: return .unknown(diagnosticMessage: try FfiConverterString.read(from: &buf)
         )
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: PasskeyFailureReason, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .platformAuthorizationFailed:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .invalidResponse:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .notHandled:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .interrupted:
             writeInt(&buf, Int32(4))
-        
-        
+
+
         case .providerConfiguration:
             writeInt(&buf, Int32(5))
-        
-        
+
+
         case .noCreateOption:
             writeInt(&buf, Int32(6))
-        
-        
+
+
         case .deviceNotConfigured:
             writeInt(&buf, Int32(7))
-        
-        
+
+
         case .unexpectedCredentialType:
             writeInt(&buf, Int32(8))
-        
-        
+
+
         case .missingCredentialId:
             writeInt(&buf, Int32(9))
-        
-        
+
+
         case .malformedResponse:
             writeInt(&buf, Int32(10))
-        
-        
+
+
         case .timedOut:
             writeInt(&buf, Int32(11))
-        
-        
+
+
         case let .unknown(diagnosticMessage):
             writeInt(&buf, Int32(12))
             FfiConverterString.write(diagnosticMessage, into: &buf)
-            
+
         }
     }
 }
@@ -2191,7 +2191,7 @@ public func FfiConverterTypePasskeyFailureReason_lower(_ value: PasskeyFailureRe
 
 
 public enum PasskeyOperation: Equatable, Hashable, CustomStringConvertible {
-    
+
     case registration
     case discoverAssertion
     case authenticateAssertion
@@ -2226,32 +2226,32 @@ public struct FfiConverterTypePasskeyOperation: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyOperation {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .registration
-        
+
         case 2: return .discoverAssertion
-        
+
         case 3: return .authenticateAssertion
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: PasskeyOperation, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .registration:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .discoverAssertion:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .authenticateAssertion:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -2275,7 +2275,7 @@ public func FfiConverterTypePasskeyOperation_lower(_ value: PasskeyOperation) ->
 
 
 public enum PasskeyRegistrationPlatform: Equatable, Hashable {
-    
+
     case ios
     case android
 
@@ -2298,26 +2298,26 @@ public struct FfiConverterTypePasskeyRegistrationPlatform: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyRegistrationPlatform {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .ios
-        
+
         case 2: return .android
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: PasskeyRegistrationPlatform, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .ios:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .android:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -2342,36 +2342,36 @@ public func FfiConverterTypePasskeyRegistrationPlatform_lower(_ value: PasskeyRe
 
 
 public protocol CloudStorageAccess: AnyObject, Sendable {
-    
-    func uploadMasterKeyBackup(namespace: String, location: RemoteBackupLocation, data: Data, policy: CloudAccessPolicy) async throws 
-    
-    func uploadWalletBackup(namespace: String, recordId: String, location: RemoteBackupLocation, data: Data, policy: CloudAccessPolicy) async throws 
-    
+
+    func uploadMasterKeyBackup(namespace: String, location: RemoteBackupLocation, data: Data, policy: CloudAccessPolicy) async throws
+
+    func uploadWalletBackup(namespace: String, recordId: String, location: RemoteBackupLocation, data: Data, policy: CloudAccessPolicy) async throws
+
     func downloadMasterKeyBackup(namespace: String, locations: [RemoteBackupLocation], policy: CloudAccessPolicy) async throws  -> Data
-    
+
     func downloadWalletBackup(namespace: String, recordId: String, locations: [RemoteBackupLocation], policy: CloudAccessPolicy) async throws  -> Data
-    
-    func deleteWalletBackup(namespace: String, recordId: String, locations: [RemoteBackupLocation], policy: CloudAccessPolicy) async throws 
-    
-    func deleteNamespace(namespace: String, policy: CloudAccessPolicy) async throws 
-    
+
+    func deleteWalletBackup(namespace: String, recordId: String, locations: [RemoteBackupLocation], policy: CloudAccessPolicy) async throws
+
+    func deleteNamespace(namespace: String, policy: CloudAccessPolicy) async throws
+
     /**
      * List all namespace IDs (subdirectories of cspp-namespaces/)
      */
     func listNamespaces(policy: CloudAccessPolicy) async throws  -> [String]
-    
+
     /**
      * List wallet backup file names for a namespace and access policy
      */
     func listWalletFiles(namespace: String, policy: CloudAccessPolicy) async throws  -> [String]
-    
+
     /**
      * Check whether a blob has been fully uploaded to iCloud
      */
     func isBackupUploaded(namespace: String, recordId: String, locations: [RemoteBackupLocation], policy: CloudAccessPolicy) async throws  -> Bool
-    
+
     func overallSyncHealth(policy: CloudAccessPolicy) async  -> CloudSyncHealth
-    
+
 }
 
 
@@ -2937,9 +2937,9 @@ public func FfiConverterCallbackInterfaceCloudStorageAccess_lower(_ v: CloudStor
 
 
 public protocol ConnectivityAccess: AnyObject, Sendable {
-    
+
     func isConnected()  -> Bool
-    
+
 }
 
 
@@ -2979,7 +2979,7 @@ fileprivate struct UniffiCallbackInterfaceConnectivityAccess {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -3066,9 +3066,9 @@ public func FfiConverterCallbackInterfaceConnectivityAccess_lower(_ v: Connectiv
 
 
 public protocol DeviceAccess: AnyObject, Sendable {
-    
+
     func timezone()  -> String
-    
+
 }
 
 
@@ -3108,7 +3108,7 @@ fileprivate struct UniffiCallbackInterfaceDeviceAccess {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -3195,7 +3195,7 @@ public func FfiConverterCallbackInterfaceDeviceAccess_lower(_ v: DeviceAccess) -
 
 
 public protocol KeychainAccess: AnyObject, Sendable {
-    
+
     /**
      * Saves a key-value pair
      *
@@ -3203,12 +3203,12 @@ public protocol KeychainAccess: AnyObject, Sendable {
      *
      * Returns a `KeychainError` if the save operation fails
      */
-    func save(key: String, value: String) throws 
-    
+    func save(key: String, value: String) throws
+
     func get(key: String)  -> String?
-    
+
     func delete(key: String)  -> Bool
-    
+
 }
 
 
@@ -3252,7 +3252,7 @@ fileprivate struct UniffiCallbackInterfaceKeychainAccess {
                 )
             }
 
-            
+
             let writeReturn = { () }
             uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
@@ -3277,7 +3277,7 @@ fileprivate struct UniffiCallbackInterfaceKeychainAccess {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterOptionString.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -3301,7 +3301,7 @@ fileprivate struct UniffiCallbackInterfaceKeychainAccess {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -3388,17 +3388,17 @@ public func FfiConverterCallbackInterfaceKeychainAccess_lower(_ v: KeychainAcces
 
 
 public protocol PasskeyProvider: AnyObject, Sendable {
-    
+
     /**
      * Create a new passkey credential
      */
     func createPasskey(rpId: String, challenge: Data, user: PasskeyRegistrationUser) throws  -> PasskeyRegistrationResult
-    
+
     /**
      * Authenticate with a known credential_id (enable flow, re-enable)
      */
     func authenticateWithPrf(rpId: String, credentialId: Data, prfSalt: Data, challenge: Data) throws  -> Data
-    
+
     /**
      * Discoverable credential assertion — no credential_id needed
      *
@@ -3407,9 +3407,9 @@ public protocol PasskeyProvider: AnyObject, Sendable {
      * Returns both the 32-byte PRF output and the credential_id of the discovered passkey
      */
     func discoverAndAuthenticateWithPrf(rpId: String, prfSalt: Data, challenge: Data) throws  -> DiscoveredPasskeyResult
-    
+
     func isPrfSupported()  -> Bool
-    
+
     /**
      * Non-interactive check whether a passkey credential exists on the device
      *
@@ -3418,7 +3418,7 @@ public protocol PasskeyProvider: AnyObject, Sendable {
      * does not respond clearly enough to prove presence or absence
      */
     func checkPasskeyPresence(rpId: String, credentialId: Data)  -> PasskeyCredentialPresence
-    
+
 }
 
 
@@ -3464,7 +3464,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypePasskeyRegistrationResult_lower($0) }
             uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
@@ -3495,7 +3495,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterData.lower($0) }
             uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
@@ -3524,7 +3524,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeDiscoveredPasskeyResult_lower($0) }
             uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
@@ -3547,7 +3547,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -3573,7 +3573,7 @@ fileprivate struct UniffiCallbackInterfacePasskeyProvider {
                 )
             }
 
-            
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypePasskeyCredentialPresence_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
