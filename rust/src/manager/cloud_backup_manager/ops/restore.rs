@@ -62,23 +62,6 @@ fn restore_progress_flow(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn zero_total_restore_progress_maps_to_finding() {
-        assert_eq!(
-            restore_progress_flow(RestoreProgressPhase::Downloading, 0, 0),
-            CloudBackupRestoreFlow::Finding
-        );
-        assert_eq!(
-            restore_progress_flow(RestoreProgressPhase::Restoring, 0, 0),
-            CloudBackupRestoreFlow::Finding
-        );
-    }
-}
-
 impl RustCloudBackupManager {
     pub(crate) async fn do_restore_from_cloud_backup(
         &self,
@@ -539,5 +522,22 @@ impl RustCloudBackupManager {
         }
 
         Ok(report)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_total_restore_progress_maps_to_finding() {
+        assert_eq!(
+            restore_progress_flow(RestoreProgressPhase::Downloading, 0, 0),
+            CloudBackupRestoreFlow::Finding
+        );
+        assert_eq!(
+            restore_progress_flow(RestoreProgressPhase::Restoring, 0, 0),
+            CloudBackupRestoreFlow::Finding
+        );
     }
 }
