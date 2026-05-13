@@ -2504,6 +2504,12 @@ impl RustCloudBackupManager {
         send!(self.supervisor.cancel_restore());
     }
 
+    pub(crate) async fn cancel_restore_and_wait(&self) {
+        if let Err(error) = call!(self.supervisor.cancel_restore()).await {
+            warn!("restore_from_cloud_backup: failed to await restore cancellation: {error}");
+        }
+    }
+
     pub(crate) fn restore_from_cloud_backup(&self) {
         info!("restore_from_cloud_backup: enqueueing restore task");
         send!(self.supervisor.start_restore_from_cloud_backup());

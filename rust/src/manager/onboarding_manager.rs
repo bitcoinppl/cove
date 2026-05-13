@@ -666,15 +666,23 @@ impl RustOnboardingManager {
         let reconciler = self.reconciler.clone();
         cove_tokio::task::spawn(async move {
             tokio::time::sleep(Duration::from_secs(120)).await;
-            let should_cancel = Self::apply_restore_event(
+
+            if !Self::is_restore_attempt_current(&state, attempt_id) {
+                return;
+            }
+
+            CLOUD_BACKUP_MANAGER.cancel_restore_and_wait().await;
+
+            Self::apply_restore_event(
                 &state,
                 &reconciler,
                 InternalEvent::RestoreFailed { attempt_id, message: "Restore timed out".into() },
             );
-            if should_cancel {
-                CLOUD_BACKUP_MANAGER.cancel_restore();
-            }
         });
+    }
+
+    fn is_restore_attempt_current(state: &Arc<RwLock<InternalState>>, attempt_id: u64) -> bool {
+        state.read().flow.is_restore_attempt_current(attempt_id)
     }
 
     fn apply_restore_event(
@@ -1416,6 +1424,10 @@ impl FlowState {
             _ => return false,
         };
 
+        self.is_restore_attempt_current(event_attempt_id)
+    }
+
+    fn is_restore_attempt_current(&self, event_attempt_id: u64) -> bool {
         matches!(self, Self::Restoring { attempt_id, .. } if *attempt_id == event_attempt_id)
     }
 
