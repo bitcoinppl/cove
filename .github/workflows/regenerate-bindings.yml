@@ -19,9 +19,12 @@ jobs:
           fetch-depth: 1
 
       - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
         with:
-          toolchain: stable
+          workspaces: rust -> target
 
       - name: Set up just
         uses: taiki-e/install-action@v2
@@ -77,9 +80,12 @@ jobs:
         run: git pull --rebase origin ${{ github.ref_name }}
 
       - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
         with:
-          toolchain: stable
+          workspaces: rust -> target
 
       - name: Set up just
         uses: taiki-e/install-action@v2
