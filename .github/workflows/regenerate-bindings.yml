@@ -10,6 +10,8 @@ concurrency:
 jobs:
   regenerate-android-bindings:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -D warnings
     permissions:
       contents: write
     steps:
@@ -67,6 +69,8 @@ jobs:
 
   regenerate-ios-bindings:
     runs-on: macos-26
+    env:
+      RUSTFLAGS: -D warnings
     needs: regenerate-android-bindings
     permissions:
       contents: write
