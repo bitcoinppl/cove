@@ -47,6 +47,8 @@ jobs:
 
   compile-android:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v6
 
@@ -95,6 +97,8 @@ jobs:
 
   compile-ios:
     runs-on: macos-26
+    env:
+      RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v6
 
@@ -137,6 +141,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v6
 
@@ -153,6 +159,8 @@ jobs:
 
   clippy:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
