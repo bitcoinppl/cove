@@ -1,4 +1,6 @@
 reviews:
+  auto_review:
+    enabled: false
   path_filters:
     - "!ios/CoveCore/Sources/CoveCore/generated/**"
     - "!android/app/src/main/java/org/bitcoinppl/cove_core/**"
