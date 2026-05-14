@@ -1056,8 +1056,9 @@ private fun OnboardingRestoreContent(
                         OnboardingThinProgressBar(progress = combinedProgress)
                     }
                     is OnboardingRestoreState.Complete -> {
+                        val failedCount = restoreState.v1.walletsFailed.toInt()
                         Text(
-                            text = "You're all set",
+                            text = if (failedCount == 0) "You're all set" else "Some wallets were restored",
                             color = Color.White,
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.SemiBold,
@@ -1065,7 +1066,12 @@ private fun OnboardingRestoreContent(
                         )
                         Spacer(modifier = Modifier.size(10.dp))
                         Text(
-                            text = "Your wallets have been restored.",
+                            text =
+                                if (failedCount == 0) {
+                                    "Your wallets have been restored."
+                                } else {
+                                    "${pluralize(failedCount, "wallet", "wallets")} could not be restored. You can retry from backup settings."
+                                },
                             color = OnboardingTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
@@ -1127,6 +1133,12 @@ private fun OnboardingRestoreContent(
         }
     }
 }
+
+private fun pluralize(
+    count: Int,
+    singular: String,
+    plural: String,
+): String = "$count ${if (count == 1) singular else plural}"
 
 @Composable
 internal fun OnboardingExchangeFundingView(

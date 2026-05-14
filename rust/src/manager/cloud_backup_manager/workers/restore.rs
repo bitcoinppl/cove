@@ -164,8 +164,14 @@ impl CloudBackupRestoreWorker {
         let status = manager.state.read().status().clone();
         if matches!(status, CloudBackupStatus::Enabling | CloudBackupStatus::Restoring) {
             warn!("restore_from_cloud_backup called while {status:?}, ignoring");
-            let _ =
-                sender.send(CloudBackupRestoreEvent::Failed("restore already in progress".into()));
+            if let Err(error) = sender
+                .send_async(CloudBackupRestoreEvent::Failed("restore already in progress".into()))
+                .await
+            {
+                warn!(
+                    "restore_from_cloud_backup: failed to send already in progress event: {error}"
+                );
+            }
             return Produces::ok(());
         }
 
@@ -291,7 +297,9 @@ impl RestoreOperation {
             return;
         };
 
-        let _ = sender.send(event);
+        if let Err(error) = sender.send_async(event).await {
+            warn!("restore_from_cloud_backup: failed to send restore event: {error}");
+        }
     }
 
     pub(crate) async fn persist_cloud_backup_state(

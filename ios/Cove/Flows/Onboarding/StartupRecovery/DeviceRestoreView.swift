@@ -164,17 +164,22 @@ private struct DeviceRestoreContent: View {
             }
             .padding(.horizontal, 12)
 
-        case .complete:
+        case let .complete(report):
+            let failedCount = Int(report.walletsFailed)
             VStack(spacing: 10) {
-                Text("You’re all set")
+                Text(failedCount == 0 ? "You’re all set" : "Some wallets were restored")
                     .font(OnboardingRecoveryTypography.compactTitle)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
 
-                Text("Your wallets have been restored.")
-                    .font(OnboardingRecoveryTypography.body)
-                    .foregroundStyle(.coveLightGray.opacity(0.7))
-                    .multilineTextAlignment(.center)
+                Text(
+                    failedCount == 0
+                        ? "Your wallets have been restored."
+                        : "^[\(failedCount) wallet](inflect: true) could not be restored. You can retry from backup settings."
+                )
+                .font(OnboardingRecoveryTypography.body)
+                .foregroundStyle(.coveLightGray.opacity(0.7))
+                .multilineTextAlignment(.center)
             }
             .padding(.horizontal, 12)
 

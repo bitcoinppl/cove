@@ -2518,7 +2518,7 @@ impl RustCloudBackupManager {
     pub(crate) fn restore_from_cloud_backup_with_events(
         &self,
     ) -> Receiver<CloudBackupRestoreEvent> {
-        let (sender, receiver) = flume::bounded(100);
+        let (sender, receiver) = flume::bounded(250);
         info!("restore_from_cloud_backup: enqueueing onboarding restore task");
         send!(self.supervisor.start_restore_from_cloud_backup_with_events(sender));
         receiver
