@@ -1465,19 +1465,21 @@ fn downgrade_and_notify_if_needed(
 fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
     use cove_bdk::descriptor_ext::DescriptorExt;
 
-    // try keychain first
-    if let Ok(Some((external, internal))) = Keychain::global().get_public_descriptor(id) {
-        return Ok(DescriptorExt::to_export_string(&external, &internal));
+    match Wallet::try_load_persisted(id.clone()) {
+        Ok(wallet) => {
+            let external = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::External);
+            let internal = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::Internal);
+
+            Ok(DescriptorExt::to_export_string(external, internal))
+        }
+        Err(load_error) => {
+            if let Ok(Some((external, internal))) = Keychain::global().get_public_descriptor(id) {
+                return Ok(DescriptorExt::to_export_string(&external, &internal));
+            }
+
+            Err(Error::UnknownError(format!("failed to load wallet: {load_error}")))
+        }
     }
-
-    // fallback to loading from BDK wallet
-    let wallet = Wallet::try_load_persisted(id.clone())
-        .map_err_prefix("failed to load wallet", Error::UnknownError)?;
-
-    let external = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::External);
-    let internal = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::Internal);
-
-    Ok(DescriptorExt::to_export_string(external, internal))
 }
 
 #[uniffi::export]
