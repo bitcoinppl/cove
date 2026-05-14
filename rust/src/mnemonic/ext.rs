@@ -27,11 +27,8 @@ impl MnemonicExt for bip39::Mnemonic {
         let descriptor =
             new_descriptor(&descriptor_secret_key, bdk_wallet::KeychainKind::External, network);
 
-        let change_descriptor = Descriptor::new_bip84(
-            &descriptor_secret_key,
-            bdk_wallet::KeychainKind::Internal,
-            network,
-        );
+        let change_descriptor =
+            new_descriptor(&descriptor_secret_key, bdk_wallet::KeychainKind::Internal, network);
 
         Descriptors { external: descriptor, internal: change_descriptor }
     }
