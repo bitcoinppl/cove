@@ -16,7 +16,9 @@ pub(crate) use self::cleanup::{
     CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob,
 };
 use self::restore::CloudBackupRestoreWorker;
-pub(crate) use self::restore::{RestoreOperation, RestoredPasskeyMaterial};
+pub(crate) use self::restore::{
+    CloudBackupRestoreEvent, RestoreOperation, RestoredPasskeyMaterial,
+};
 use self::sync_health::CloudBackupSyncHealthWorker;
 use self::uploads::CloudBackupUploadWorker;
 use super::keychain::CloudBackupKeychain;
@@ -657,6 +659,14 @@ impl CloudBackupSupervisor {
 
     pub async fn start_restore_from_cloud_backup(&mut self) -> ActorResult<()> {
         call!(self.restore.start_restore_from_cloud_backup()).await?;
+        Produces::ok(())
+    }
+
+    pub async fn start_restore_from_cloud_backup_with_events(
+        &mut self,
+        sender: flume::Sender<CloudBackupRestoreEvent>,
+    ) -> ActorResult<()> {
+        call!(self.restore.start_restore_from_cloud_backup_with_events(sender)).await?;
         Produces::ok(())
     }
 

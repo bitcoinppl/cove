@@ -74,10 +74,12 @@ struct OnboardingContainer: View {
                 onBack: { manager.dispatch(.back) }
             )
 
-        case .restoring:
+        case .restoring, .restoreComplete, .restoreFailed:
             DeviceRestoreView(
-                onComplete: { manager.dispatch(.restoreComplete) },
-                onError: { error in manager.dispatch(.restoreFailed(error: error)) }
+                restoreState: manager.state.restoreState,
+                onDone: { manager.dispatch(.continueFromRestoreComplete) },
+                onRetry: { manager.dispatch(.retryRestore) },
+                onContinueWithoutBackup: { manager.dispatch(.skipRestore) }
             )
 
         case .welcome:

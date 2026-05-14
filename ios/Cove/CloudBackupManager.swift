@@ -134,24 +134,6 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         return progress.map { ($0.completed, $0.total) }
     }
 
-    var restoreProgress: CloudBackupRestoreProgress? {
-        guard case let .restoring(flow) = state.lifecycle else { return nil }
-        return flow.progress
-    }
-
-    var restoreReport: CloudBackupRestoreReport? {
-        switch state.lifecycle {
-        case let .restoring(flow):
-            flow.report
-        case let .configured(configured):
-            configured.lastRestoreReport
-        case let .failed(failure):
-            failure.restoreReport
-        default:
-            nil
-        }
-    }
-
     var syncError: String? {
         switch syncState {
         case let .blocked(message), let .failed(message):

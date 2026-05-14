@@ -9,8 +9,8 @@ use tracing::{error, info, warn};
 use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableOutcome, CloudBackupError, CloudBackupRestoreOutcome, CloudBackupStatus,
-    RustCloudBackupManager,
+    CloudBackupEnableOutcome, CloudBackupError, CloudBackupRestoreFlow, CloudBackupRestoreOutcome,
+    CloudBackupRestoreReport, CloudBackupStatus, RustCloudBackupManager,
 };
 
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
@@ -142,12 +142,57 @@ impl CloudBackupRestoreWorker {
         cove_tokio::task::spawn(async move {
             info!("restore_from_cloud_backup: task started");
             match manager.do_restore_from_cloud_backup(&operation).await {
-                Ok(()) => {}
+                Ok(_) => {}
                 Err(CloudBackupError::Cancelled) => {
                     info!("restore_from_cloud_backup: task cancelled");
                 }
                 Err(error) => {
                     error!("restore_from_cloud_backup failed: {error}");
+                    manager.finish_background_operation_error(&error);
+                }
+            }
+        });
+
+        Produces::ok(())
+    }
+
+    pub(crate) async fn start_restore_from_cloud_backup_with_events(
+        &mut self,
+        sender: flume::Sender<CloudBackupRestoreEvent>,
+    ) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        let status = manager.state.read().status().clone();
+        if matches!(status, CloudBackupStatus::Enabling | CloudBackupStatus::Restoring) {
+            warn!("restore_from_cloud_backup called while {status:?}, ignoring");
+            if let Err(error) = sender
+                .send_async(CloudBackupRestoreEvent::Failed("restore already in progress".into()))
+                .await
+            {
+                warn!(
+                    "restore_from_cloud_backup: failed to send already in progress event: {error}"
+                );
+            }
+            return Produces::ok(());
+        }
+
+        let operation =
+            RestoreOperation::new_with_events(self.restore_operations.clone(), self.addr(), sender);
+        cove_tokio::task::spawn(async move {
+            info!("restore_from_cloud_backup: task started for onboarding");
+            match manager.do_restore_from_cloud_backup(&operation).await {
+                Ok(report) => {
+                    operation
+                        .send_event_if_current(CloudBackupRestoreEvent::Complete(report))
+                        .await;
+                }
+                Err(CloudBackupError::Cancelled) => {
+                    info!("restore_from_cloud_backup: task cancelled");
+                }
+                Err(error) => {
+                    error!("restore_from_cloud_backup failed: {error}");
+                    operation
+                        .send_event_if_current(CloudBackupRestoreEvent::Failed(error.to_string()))
+                        .await;
                     manager.finish_background_operation_error(&error);
                 }
             }
@@ -166,7 +211,6 @@ impl CloudBackupRestoreWorker {
         self.restore_operations.invalidate();
         manager.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        manager.apply_restore_outcome(CloudBackupRestoreOutcome::ReportCleared);
         manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(
             &RustCloudBackupManager::load_persisted_state(),
         ));
@@ -176,14 +220,34 @@ impl CloudBackupRestoreWorker {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) enum CloudBackupRestoreEvent {
+    Progress(CloudBackupRestoreFlow),
+    Complete(CloudBackupRestoreReport),
+    Failed(String),
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct RestoreOperation {
     active_restore_generation: GenerationClaim,
     restore_actor: Addr<CloudBackupRestoreWorker>,
+    event_sender: Option<flume::Sender<CloudBackupRestoreEvent>>,
 }
 
 impl RestoreOperation {
     fn new(tracker: GenerationTracker, restore_actor: Addr<CloudBackupRestoreWorker>) -> Self {
-        Self { active_restore_generation: tracker.claim(), restore_actor }
+        Self { active_restore_generation: tracker.claim(), restore_actor, event_sender: None }
+    }
+
+    fn new_with_events(
+        tracker: GenerationTracker,
+        restore_actor: Addr<CloudBackupRestoreWorker>,
+        event_sender: flume::Sender<CloudBackupRestoreEvent>,
+    ) -> Self {
+        Self {
+            active_restore_generation: tracker.claim(),
+            restore_actor,
+            event_sender: Some(event_sender),
+        }
     }
 
     fn generation(&self) -> GenerationToken {
@@ -209,9 +273,33 @@ impl RestoreOperation {
         &self,
         outcome: CloudBackupRestoreOutcome,
     ) -> Result<(), CloudBackupError> {
+        let progress = match &outcome {
+            CloudBackupRestoreOutcome::ProgressReported(progress) => Some(progress.clone()),
+            CloudBackupRestoreOutcome::ProgressCleared => None,
+        };
         call!(self.restore_actor.apply_restore_outcome(self.generation(), outcome))
             .await
-            .map_err(|_| CloudBackupError::Cancelled)?
+            .map_err(|_| CloudBackupError::Cancelled)??;
+
+        if let Some(progress) = progress {
+            self.send_event_if_current(CloudBackupRestoreEvent::Progress(progress)).await;
+        }
+
+        Ok(())
+    }
+
+    async fn send_event_if_current(&self, event: CloudBackupRestoreEvent) {
+        if self.ensure_current().await.is_err() {
+            return;
+        }
+
+        let Some(sender) = &self.event_sender else {
+            return;
+        };
+
+        if let Err(error) = sender.send_async(event).await {
+            warn!("restore_from_cloud_backup: failed to send restore event: {error}");
+        }
     }
 
     pub(crate) async fn persist_cloud_backup_state(

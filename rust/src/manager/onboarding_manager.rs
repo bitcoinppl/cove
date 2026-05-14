@@ -21,7 +21,8 @@ use crate::{
     manager::{
         cloud_backup_manager::{
             CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent,
-            CloudBackupPasskeyHint, CloudBackupVerificationSource, CloudStorageIssue,
+            CloudBackupPasskeyHint, CloudBackupRestoreEvent, CloudBackupRestoreFlow,
+            CloudBackupRestoreReport, CloudBackupVerificationSource, CloudStorageIssue,
             SavedPasskeyConfirmationMode,
         },
         connectivity_manager::CONNECTIVITY_MANAGER,
@@ -48,6 +49,8 @@ pub enum OnboardingStep {
     RestoreOffline,
     RestoreUnavailable,
     Restoring,
+    RestoreComplete,
+    RestoreFailed,
     Welcome,
     BitcoinChoice,
     StorageChoice,
@@ -99,7 +102,19 @@ pub struct OnboardingState {
     pub cloud_restore_provider_hint: Option<CloudRestoreProviderHint>,
     pub should_offer_cloud_restore: bool,
     pub cloud_restore_alert_visible: bool,
+    pub restore_state: OnboardingRestoreState,
     pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, uniffi::Enum)]
+pub enum OnboardingRestoreState {
+    #[default]
+    Idle,
+    Restoring(CloudBackupRestoreFlow),
+    Complete(CloudBackupRestoreReport),
+    Failed {
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -138,10 +153,10 @@ pub enum OnboardingAction {
     OpenCloudRestore,
     DismissCloudRestoreAlert,
     StartRestore,
+    RetryRestore,
     SkipRestore,
     ContinueWithoutCloudRestore,
-    RestoreComplete,
-    RestoreFailed { error: String },
+    ContinueFromRestoreComplete,
     AcceptTerms,
     Back,
     BeginCloudBackupEnable,
@@ -162,6 +177,7 @@ pub enum OnboardingReconcileMessage {
     CloudRestoreProviderHintChanged(Option<CloudRestoreProviderHint>),
     ShouldOfferCloudRestore(bool),
     CloudRestoreAlertVisible(bool),
+    RestoreStateChanged(OnboardingRestoreState),
     ErrorMessageChanged(Option<String>),
     Complete,
 }
@@ -261,6 +277,16 @@ enum FlowState {
     },
     Restoring {
         origin: RestoreOrigin,
+        attempt_id: u64,
+        flow: CloudBackupRestoreFlow,
+    },
+    RestoreComplete {
+        origin: RestoreOrigin,
+        report: CloudBackupRestoreReport,
+    },
+    RestoreFailed {
+        origin: RestoreOrigin,
+        message: String,
     },
     Welcome {
         error_message: Option<String>,
@@ -293,6 +319,7 @@ enum FlowState {
 enum TransitionCommand {
     None,
     CreateWallet(OnboardingBranch),
+    StartRestore { attempt_id: u64 },
     BeginCloudBackupEnable { discovery: CloudRestoreDiscovery },
     CompleteOnboarding(CompletionTarget),
 }
@@ -300,6 +327,9 @@ enum TransitionCommand {
 #[derive(Debug, Clone)]
 enum InternalEvent {
     CloudCheckFinished(CloudCheckOutcome),
+    RestoreProgress { attempt_id: u64, flow: CloudBackupRestoreFlow },
+    RestoreComplete { attempt_id: u64, report: CloudBackupRestoreReport },
+    RestoreFailed { attempt_id: u64, message: String },
     WalletCreated { flow: CreatedWalletFlow },
     WalletCreationFailed { branch: OnboardingBranch, error: String },
     CompletionFailed { error: String },
@@ -341,6 +371,7 @@ struct InternalState {
     cloud_restore_discovery: CloudRestoreDiscovery,
     restore_offer_allowed: bool,
     cloud_restore_alert_dismissed: bool,
+    next_restore_attempt_id: u64,
     ui: OnboardingState,
 }
 
@@ -436,10 +467,21 @@ impl RustOnboardingManager {
         info!("Onboarding: dispatch action={action:?}");
 
         let command = self.mutate_state(|state, deferred| {
+            let restore_attempt_id = if matches!(
+                action,
+                OnboardingAction::StartRestore | OnboardingAction::RetryRestore
+            ) {
+                let attempt_id = state.next_restore_attempt_id;
+                state.next_restore_attempt_id = state.next_restore_attempt_id.wrapping_add(1);
+                Some(attempt_id)
+            } else {
+                None
+            };
             let command = state.flow.apply_user_action(
                 action.clone(),
                 state.cloud_restore_discovery.clone(),
                 &mut state.restore_offer_allowed,
+                restore_attempt_id,
             );
             if matches!(action, OnboardingAction::DismissCloudRestoreAlert)
                 && matches!(
@@ -588,11 +630,76 @@ impl RustOnboardingManager {
         match command {
             TransitionCommand::None => {}
             TransitionCommand::CreateWallet(branch) => self.create_wallet_for_branch(branch),
+            TransitionCommand::StartRestore { attempt_id } => {
+                self.start_restore_attempt(attempt_id);
+            }
             TransitionCommand::BeginCloudBackupEnable { discovery } => {
                 self.begin_cloud_backup_enable(discovery);
             }
             TransitionCommand::CompleteOnboarding(target) => self.complete_onboarding(target),
         }
+    }
+
+    fn start_restore_attempt(&self, attempt_id: u64) {
+        let receiver = CLOUD_BACKUP_MANAGER.restore_from_cloud_backup_with_events();
+        let state = self.state.clone();
+        let reconciler = self.reconciler.clone();
+
+        cove_tokio::task::spawn(async move {
+            while let Ok(event) = receiver.recv_async().await {
+                let internal_event = match event {
+                    CloudBackupRestoreEvent::Progress(flow) => {
+                        InternalEvent::RestoreProgress { attempt_id, flow }
+                    }
+                    CloudBackupRestoreEvent::Complete(report) => {
+                        InternalEvent::RestoreComplete { attempt_id, report }
+                    }
+                    CloudBackupRestoreEvent::Failed(message) => {
+                        InternalEvent::RestoreFailed { attempt_id, message }
+                    }
+                };
+                Self::apply_restore_event(&state, &reconciler, internal_event);
+            }
+        });
+
+        let state = self.state.clone();
+        let reconciler = self.reconciler.clone();
+        cove_tokio::task::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(120)).await;
+
+            if !Self::is_restore_attempt_current(&state, attempt_id) {
+                return;
+            }
+
+            CLOUD_BACKUP_MANAGER.cancel_restore_and_wait().await;
+
+            Self::apply_restore_event(
+                &state,
+                &reconciler,
+                InternalEvent::RestoreFailed { attempt_id, message: "Restore timed out".into() },
+            );
+        });
+    }
+
+    fn is_restore_attempt_current(state: &Arc<RwLock<InternalState>>, attempt_id: u64) -> bool {
+        state.read().flow.is_restore_attempt_current(attempt_id)
+    }
+
+    fn apply_restore_event(
+        state: &Arc<RwLock<InternalState>>,
+        reconciler: &MessageSender<Message>,
+        event: InternalEvent,
+    ) -> bool {
+        Self::mutate_state_fields(state, reconciler, |state, deferred| {
+            let was_current_restore_attempt = state.flow.is_restore_event_current(&event);
+            state.flow.apply_event(
+                event,
+                &mut state.cloud_restore_discovery,
+                state.restore_offer_allowed,
+            );
+            state.sync_ui(deferred);
+            was_current_restore_attempt
+        })
     }
 
     fn begin_cloud_backup_enable(&self, discovery: CloudRestoreDiscovery) {
@@ -675,9 +782,20 @@ impl RustOnboardingManager {
     where
         F: FnOnce(&mut InternalState, &mut DeferredSender<Message>) -> R,
     {
-        let mut deferred = DeferredSender::new(self.reconciler.clone());
+        Self::mutate_state_fields(&self.state, &self.reconciler, mutate)
+    }
+
+    fn mutate_state_fields<F, R>(
+        state: &Arc<RwLock<InternalState>>,
+        reconciler: &MessageSender<Message>,
+        mutate: F,
+    ) -> R
+    where
+        F: FnOnce(&mut InternalState, &mut DeferredSender<Message>) -> R,
+    {
+        let mut deferred = DeferredSender::new(reconciler.clone());
         let (result, progress) = {
-            let mut state = self.state.write();
+            let mut state = state.write();
             let result = mutate(&mut state, &mut deferred);
             let progress = state.flow.persisted_progress();
             (result, progress)
@@ -777,12 +895,14 @@ impl InternalState {
         let cloud_restore_discovery = CloudRestoreDiscovery::Checking;
         let restore_offer_allowed = true;
         let cloud_restore_alert_dismissed = false;
+        let next_restore_attempt_id = 1;
         let ui = flow.ui_state(&cloud_restore_discovery, false, false);
         Self {
             flow,
             cloud_restore_discovery,
             restore_offer_allowed,
             cloud_restore_alert_dismissed,
+            next_restore_attempt_id,
             ui,
         }
     }
@@ -851,6 +971,9 @@ impl InternalState {
         if self.ui.cloud_restore_alert_visible != next_ui.cloud_restore_alert_visible {
             deferred.queue(Message::CloudRestoreAlertVisible(next_ui.cloud_restore_alert_visible));
         }
+        if self.ui.restore_state != next_ui.restore_state {
+            deferred.queue(Message::RestoreStateChanged(next_ui.restore_state.clone()));
+        }
         if self.ui.error_message != next_ui.error_message {
             deferred.queue(Message::ErrorMessageChanged(next_ui.error_message.clone()));
         }
@@ -883,6 +1006,7 @@ impl FlowState {
         action: OnboardingAction,
         cloud_restore_discovery: CloudRestoreDiscovery,
         restore_offer_allowed: &mut bool,
+        restore_attempt_id: Option<u64>,
     ) -> TransitionCommand {
         let current = std::mem::replace(self, Self::Welcome { error_message: None });
 
@@ -1086,7 +1210,12 @@ impl FlowState {
                 OnboardingAction::DismissCloudRestoreAlert,
             ) => (state, TransitionCommand::None),
             (Self::RestoreOffer { origin, .. }, OnboardingAction::StartRestore) => {
-                (Self::Restoring { origin }, TransitionCommand::None)
+                let attempt_id =
+                    restore_attempt_id.expect("restore attempt id required for StartRestore");
+                (
+                    Self::Restoring { origin, attempt_id, flow: CloudBackupRestoreFlow::Finding },
+                    TransitionCommand::StartRestore { attempt_id },
+                )
             }
             (Self::RestoreOffer { origin, .. }, OnboardingAction::SkipRestore) => {
                 *restore_offer_allowed = false;
@@ -1099,11 +1228,24 @@ impl FlowState {
                 Self::RestoreUnavailable { origin },
                 OnboardingAction::ContinueWithoutCloudRestore,
             ) => (origin.flow_state_after_restore_unavailable(), TransitionCommand::None),
-            (Self::Restoring { .. }, OnboardingAction::RestoreComplete) => {
-                (Self::terms(TermsContext::SelectLatestOrNew, None), TransitionCommand::None)
+            (Self::RestoreFailed { origin, .. }, OnboardingAction::RetryRestore) => {
+                let attempt_id =
+                    restore_attempt_id.expect("restore attempt id required for RetryRestore");
+                (
+                    Self::Restoring { origin, attempt_id, flow: CloudBackupRestoreFlow::Finding },
+                    TransitionCommand::StartRestore { attempt_id },
+                )
             }
-            (Self::Restoring { origin }, OnboardingAction::RestoreFailed { error }) => {
-                (Self::RestoreOffer { origin, error_message: Some(error) }, TransitionCommand::None)
+            (Self::RestoreFailed { origin, .. }, OnboardingAction::SkipRestore) => {
+                *restore_offer_allowed = false;
+                (origin.flow_state(), TransitionCommand::None)
+            }
+            (
+                Self::RestoreComplete { origin, .. },
+                OnboardingAction::ContinueFromRestoreComplete,
+            ) => {
+                let _ = origin;
+                (Self::terms(TermsContext::SelectLatestOrNew, None), TransitionCommand::None)
             }
             (mut terms @ Self::Terms { .. }, OnboardingAction::AcceptTerms) => {
                 let command = terms.resolve_terms_acceptance(false);
@@ -1211,6 +1353,21 @@ impl FlowState {
                 Self::RestoreOffer { origin: RestoreOrigin::StorageChoice, error_message: None }
             }
             (state, InternalEvent::CloudCheckFinished(_)) => state,
+            (
+                Self::Restoring { origin, attempt_id, .. },
+                InternalEvent::RestoreProgress { attempt_id: event_attempt_id, flow },
+            ) if attempt_id == event_attempt_id => Self::Restoring { origin, attempt_id, flow },
+            (
+                Self::Restoring { origin, attempt_id, .. },
+                InternalEvent::RestoreComplete { attempt_id: event_attempt_id, report },
+            ) if attempt_id == event_attempt_id => Self::RestoreComplete { origin, report },
+            (
+                Self::Restoring { origin, attempt_id, .. },
+                InternalEvent::RestoreFailed { attempt_id: event_attempt_id, message },
+            ) if attempt_id == event_attempt_id => Self::RestoreFailed { origin, message },
+            (state, InternalEvent::RestoreProgress { .. }) => state,
+            (state, InternalEvent::RestoreComplete { .. }) => state,
+            (state, InternalEvent::RestoreFailed { .. }) => state,
             (Self::BitcoinChoice { .. }, InternalEvent::WalletCreated { flow })
                 if flow.branch == OnboardingBranch::NewUser =>
             {
@@ -1259,6 +1416,21 @@ impl FlowState {
         *self = next;
     }
 
+    fn is_restore_event_current(&self, event: &InternalEvent) -> bool {
+        let event_attempt_id = match event {
+            InternalEvent::RestoreProgress { attempt_id, .. }
+            | InternalEvent::RestoreComplete { attempt_id, .. }
+            | InternalEvent::RestoreFailed { attempt_id, .. } => *attempt_id,
+            _ => return false,
+        };
+
+        self.is_restore_attempt_current(event_attempt_id)
+    }
+
+    fn is_restore_attempt_current(&self, event_attempt_id: u64) -> bool {
+        matches!(self, Self::Restoring { attempt_id, .. } if *attempt_id == event_attempt_id)
+    }
+
     fn ui_state(
         &self,
         cloud_restore_discovery: &CloudRestoreDiscovery,
@@ -1289,8 +1461,19 @@ impl FlowState {
                 state.step = OnboardingStep::RestoreUnavailable;
                 state
             }
-            Self::Restoring { .. } => {
+            Self::Restoring { flow, .. } => {
                 state.step = OnboardingStep::Restoring;
+                state.restore_state = OnboardingRestoreState::Restoring(flow.clone());
+                state
+            }
+            Self::RestoreComplete { report, .. } => {
+                state.step = OnboardingStep::RestoreComplete;
+                state.restore_state = OnboardingRestoreState::Complete(report.clone());
+                state
+            }
+            Self::RestoreFailed { message, .. } => {
+                state.step = OnboardingStep::RestoreFailed;
+                state.restore_state = OnboardingRestoreState::Failed { message: message.clone() };
                 state
             }
             Self::Welcome { error_message } => {
@@ -1488,6 +1671,7 @@ impl FlowState {
             cloud_restore_provider_hint: cloud_restore_discovery.provider_hint(),
             should_offer_cloud_restore,
             cloud_restore_alert_visible,
+            restore_state: OnboardingRestoreState::Idle,
             error_message: None,
         }
     }
@@ -1905,6 +2089,7 @@ mod tests {
             OnboardingAction::ContinueFromBackup,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -1921,6 +2106,7 @@ mod tests {
             OnboardingAction::SoftwareImportCompleted { wallet_id: wallet_id.clone() },
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -1942,6 +2128,7 @@ mod tests {
             OnboardingAction::HardwareImportCompleted { wallet_id: wallet_id.clone() },
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -1965,6 +2152,7 @@ mod tests {
             OnboardingAction::CloudBackupEnabled,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -1988,6 +2176,7 @@ mod tests {
             OnboardingAction::CloudBackupEnabled,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2010,6 +2199,7 @@ mod tests {
             OnboardingAction::CloudBackupEnabled,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2033,6 +2223,7 @@ mod tests {
             OnboardingAction::ContinueFromCloudBackupSuccess,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2054,6 +2245,7 @@ mod tests {
             OnboardingAction::ContinueFromCloudBackupSuccess,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2072,6 +2264,7 @@ mod tests {
             OnboardingAction::ContinueFromCloudBackupSuccess,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2090,6 +2283,7 @@ mod tests {
             OnboardingAction::BeginCloudBackupEnable,
             CloudRestoreDiscovery::BackupFound(None),
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(
@@ -2118,6 +2312,7 @@ mod tests {
             OnboardingAction::BeginCloudBackupEnable,
             CloudRestoreDiscovery::NoBackupFound,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(
@@ -2146,6 +2341,7 @@ mod tests {
             OnboardingAction::BeginCloudBackupEnable,
             CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline),
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(
@@ -2174,6 +2370,7 @@ mod tests {
             OnboardingAction::BeginCloudBackupEnable,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(
@@ -2202,6 +2399,7 @@ mod tests {
             OnboardingAction::SkipCloudBackup,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2232,6 +2430,7 @@ mod tests {
             OnboardingAction::SkipCloudBackup,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2418,6 +2617,7 @@ mod tests {
             OnboardingAction::ContinueFromBackup,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2448,6 +2648,7 @@ mod tests {
             OnboardingAction::ContinueFromExchangeFunding,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2473,6 +2674,7 @@ mod tests {
             OnboardingAction::ContinueFromWelcome,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2489,6 +2691,7 @@ mod tests {
             OnboardingAction::SelectHasBitcoin { has_bitcoin: true },
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2507,6 +2710,7 @@ mod tests {
             },
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2525,6 +2729,7 @@ mod tests {
             },
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2541,6 +2746,7 @@ mod tests {
             OnboardingAction::Back,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert!(matches!(flow, FlowState::BitcoinChoice { error_message: None }));
@@ -2555,6 +2761,7 @@ mod tests {
             OnboardingAction::Back,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
@@ -2569,6 +2776,7 @@ mod tests {
             OnboardingAction::Back,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
@@ -2583,6 +2791,7 @@ mod tests {
             OnboardingAction::ContinueFromBackup,
             CloudRestoreDiscovery::BackupFound(None),
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2591,23 +2800,224 @@ mod tests {
     }
 
     #[test]
-    fn restoring_failure_returns_to_restore_offer_with_error() {
-        let mut flow = FlowState::Restoring { origin: RestoreOrigin::StorageChoice };
+    fn restoring_failure_enters_restore_failed_with_message() {
+        let mut flow = FlowState::Restoring {
+            origin: RestoreOrigin::StorageChoice,
+            attempt_id: 1,
+            flow: CloudBackupRestoreFlow::Finding,
+        };
+        let mut discovery = CloudRestoreDiscovery::BackupFound(None);
+
+        flow.apply_event(
+            InternalEvent::RestoreFailed {
+                attempt_id: 1,
+                message: "passkey verification failed".into(),
+            },
+            &mut discovery,
+            true,
+        );
+
+        assert!(matches!(
+            flow,
+            FlowState::RestoreFailed {
+                origin: RestoreOrigin::StorageChoice,
+                message,
+            } if message == "passkey verification failed"
+        ));
+    }
+
+    #[test]
+    fn start_restore_enters_restoring_finding() {
+        let mut flow =
+            FlowState::RestoreOffer { origin: RestoreOrigin::Startup, error_message: None };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
-            OnboardingAction::RestoreFailed { error: "passkey verification failed".into() },
+            OnboardingAction::StartRestore,
             CloudRestoreDiscovery::BackupFound(None),
             &mut restore_offer_allowed,
+            Some(12),
+        );
+
+        assert_eq!(command, TransitionCommand::StartRestore { attempt_id: 12 });
+        assert!(matches!(
+            flow,
+            FlowState::Restoring {
+                origin: RestoreOrigin::Startup,
+                attempt_id: 12,
+                flow: CloudBackupRestoreFlow::Finding,
+            }
+        ));
+
+        let ui = flow.ui_state(&CloudRestoreDiscovery::BackupFound(None), true, false);
+        assert_eq!(ui.step, OnboardingStep::Restoring);
+        assert_eq!(
+            ui.restore_state,
+            OnboardingRestoreState::Restoring(CloudBackupRestoreFlow::Finding)
+        );
+    }
+
+    #[test]
+    fn restore_progress_keeps_restoring_and_updates_restore_state() {
+        let progress = CloudBackupRestoreFlow::Downloading { completed: 2, total: 5 };
+        let mut flow = FlowState::Restoring {
+            origin: RestoreOrigin::StorageChoice,
+            attempt_id: 7,
+            flow: CloudBackupRestoreFlow::Finding,
+        };
+        let mut discovery = CloudRestoreDiscovery::BackupFound(None);
+
+        flow.apply_event(
+            InternalEvent::RestoreProgress { attempt_id: 7, flow: progress.clone() },
+            &mut discovery,
+            true,
+        );
+
+        assert!(matches!(
+            flow,
+            FlowState::Restoring {
+                origin: RestoreOrigin::StorageChoice,
+                attempt_id: 7,
+                ref flow,
+            } if flow == &progress
+        ));
+
+        let ui = flow.ui_state(&discovery, true, false);
+        assert_eq!(ui.step, OnboardingStep::Restoring);
+        assert_eq!(ui.restore_state, OnboardingRestoreState::Restoring(progress));
+    }
+
+    #[test]
+    fn restore_success_enters_restore_complete_with_report() {
+        let report = preview_restore_report();
+        let mut flow = FlowState::Restoring {
+            origin: RestoreOrigin::Startup,
+            attempt_id: 7,
+            flow: CloudBackupRestoreFlow::Restoring { completed: 1, total: 1 },
+        };
+        let mut discovery = CloudRestoreDiscovery::BackupFound(None);
+
+        flow.apply_event(
+            InternalEvent::RestoreComplete { attempt_id: 7, report: report.clone() },
+            &mut discovery,
+            true,
+        );
+
+        assert!(matches!(
+            flow,
+            FlowState::RestoreComplete {
+                origin: RestoreOrigin::Startup,
+                report: ref stored_report,
+            } if stored_report == &report
+        ));
+
+        let ui = flow.ui_state(&discovery, true, false);
+        assert_eq!(ui.step, OnboardingStep::RestoreComplete);
+        assert_eq!(ui.restore_state, OnboardingRestoreState::Complete(report));
+    }
+
+    #[test]
+    fn done_from_restore_complete_goes_to_startup_recovery_terms() {
+        let mut flow = FlowState::RestoreComplete {
+            origin: RestoreOrigin::Startup,
+            report: preview_restore_report(),
+        };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::ContinueFromRestoreComplete,
+            CloudRestoreDiscovery::BackupFound(None),
+            &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
         assert!(matches!(
             flow,
-            FlowState::RestoreOffer {
-                origin: RestoreOrigin::StorageChoice,
-                error_message: Some(message),
-            } if message == "passkey verification failed"
+            FlowState::Terms {
+                context: TermsContext::SelectLatestOrNew,
+                error_message: None,
+                progress: None,
+                allow_auto_advance: true,
+            }
+        ));
+    }
+
+    #[test]
+    fn retry_restore_starts_new_attempt_and_ignores_stale_old_attempt_events() {
+        let mut flow = FlowState::RestoreFailed {
+            origin: RestoreOrigin::StorageChoice,
+            message: "restore failed".into(),
+        };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::RetryRestore,
+            CloudRestoreDiscovery::BackupFound(None),
+            &mut restore_offer_allowed,
+            Some(2),
+        );
+
+        assert_eq!(command, TransitionCommand::StartRestore { attempt_id: 2 });
+        assert!(matches!(flow, FlowState::Restoring { attempt_id: 2, .. }));
+
+        let mut discovery = CloudRestoreDiscovery::BackupFound(None);
+        flow.apply_event(
+            InternalEvent::RestoreFailed { attempt_id: 1, message: "old failure".into() },
+            &mut discovery,
+            true,
+        );
+
+        assert!(matches!(flow, FlowState::Restoring { attempt_id: 2, .. }));
+    }
+
+    #[test]
+    fn skip_restore_from_failed_follows_original_origin() {
+        let mut flow =
+            FlowState::RestoreFailed { origin: RestoreOrigin::Startup, message: "failed".into() };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::SkipRestore,
+            CloudRestoreDiscovery::BackupFound(None),
+            &mut restore_offer_allowed,
+            None,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(!restore_offer_allowed);
+        assert!(matches!(
+            flow,
+            FlowState::Terms {
+                context: TermsContext::StartupRestoreRecovery,
+                error_message: None,
+                progress: None,
+                allow_auto_advance: true,
+            }
+        ));
+    }
+
+    #[test]
+    fn timeout_failure_enters_restore_failed_with_timeout_message() {
+        let mut flow = FlowState::Restoring {
+            origin: RestoreOrigin::Startup,
+            attempt_id: 3,
+            flow: CloudBackupRestoreFlow::Finding,
+        };
+        let mut discovery = CloudRestoreDiscovery::BackupFound(None);
+
+        flow.apply_event(
+            InternalEvent::RestoreFailed { attempt_id: 3, message: "Restore timed out".into() },
+            &mut discovery,
+            true,
+        );
+
+        assert!(matches!(
+            flow,
+            FlowState::RestoreFailed {
+                origin: RestoreOrigin::Startup,
+                message,
+            } if message == "Restore timed out"
         ));
     }
 
@@ -2620,6 +3030,7 @@ mod tests {
             OnboardingAction::OpenCloudRestore,
             CloudRestoreDiscovery::NoBackupFound,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2638,6 +3049,7 @@ mod tests {
             OnboardingAction::OpenCloudRestore,
             CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline),
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2762,6 +3174,7 @@ mod tests {
             OnboardingAction::OpenCloudRestore,
             CloudRestoreDiscovery::BackupFound(None),
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2774,6 +3187,7 @@ mod tests {
             OnboardingAction::SkipRestore,
             CloudRestoreDiscovery::BackupFound(None),
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -2846,6 +3260,7 @@ mod tests {
                 action,
                 CloudRestoreDiscovery::Checking,
                 &mut restore_offer_allowed,
+                None,
             );
 
             assert_eq!(command, expected_command);
@@ -2881,6 +3296,7 @@ mod tests {
                 OnboardingAction::Back,
                 CloudRestoreDiscovery::Checking,
                 &mut restore_offer_allowed,
+                None,
             );
 
             assert_eq!(command, TransitionCommand::None);
@@ -3005,6 +3421,7 @@ mod tests {
             OnboardingAction::SkipRestore,
             CloudRestoreDiscovery::BackupFound(None),
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -3022,6 +3439,7 @@ mod tests {
             OnboardingAction::SkipRestore,
             CloudRestoreDiscovery::BackupFound(None),
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -3046,6 +3464,7 @@ mod tests {
             OnboardingAction::ContinueWithoutCloudRestore,
             CloudRestoreDiscovery::NoBackupFound,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -3069,6 +3488,7 @@ mod tests {
             OnboardingAction::ContinueWithoutCloudRestore,
             CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline),
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -3092,6 +3512,7 @@ mod tests {
             OnboardingAction::AcceptTerms,
             CloudRestoreDiscovery::Checking,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -3148,6 +3569,7 @@ mod tests {
             OnboardingAction::ContinueWithoutCloudRestore,
             CloudRestoreDiscovery::NoBackupFound,
             &mut restore_offer_allowed,
+            None,
         );
 
         assert_eq!(command, TransitionCommand::None);
@@ -3555,6 +3977,17 @@ mod tests {
             secret_words_saved: false,
         }
     }
+
+    fn preview_restore_report() -> CloudBackupRestoreReport {
+        CloudBackupRestoreReport {
+            wallets_restored: 1,
+            wallets_failed: 0,
+            failed_wallet_errors: Vec::new(),
+            labels_failed_wallet_names: Vec::new(),
+            labels_failed_errors: Vec::new(),
+        }
+    }
+
     fn preview_internal_state(
         flow: FlowState,
         cloud_restore_discovery: CloudRestoreDiscovery,
@@ -3576,6 +4009,7 @@ mod tests {
             cloud_restore_discovery,
             restore_offer_allowed,
             cloud_restore_alert_dismissed,
+            next_restore_attempt_id: 1,
             ui,
         }
     }
@@ -3603,7 +4037,12 @@ mod tests {
 
     fn apply_action(flow: &mut FlowState, action: OnboardingAction) -> TransitionCommand {
         let mut restore_offer_allowed = false;
-        flow.apply_user_action(action, CloudRestoreDiscovery::Checking, &mut restore_offer_allowed)
+        flow.apply_user_action(
+            action,
+            CloudRestoreDiscovery::Checking,
+            &mut restore_offer_allowed,
+            Some(1),
+        )
     }
 
     fn assert_terms_select_wallet(

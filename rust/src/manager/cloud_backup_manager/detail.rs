@@ -4,10 +4,10 @@ use tracing::error;
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
     CLOUD_BACKUP_MANAGER, CloudBackupBackgroundOperation, CloudBackupDetail, CloudBackupError,
-    CloudBackupManagerAction, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreProgress,
-    CloudBackupRestoreReport, CloudBackupWalletItem, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RustCloudBackupManager,
-    SavedPasskeyConfirmationMode, workers::CloudBackupOperation,
+    CloudBackupManagerAction, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreFlow,
+    CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    OtherBackupsOperation, RustCloudBackupManager, SavedPasskeyConfirmationMode,
+    workers::CloudBackupOperation,
 };
 
 type Action = CloudBackupManagerAction;
@@ -158,9 +158,7 @@ pub(crate) enum CloudBackupEnableOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CloudBackupRestoreOutcome {
     ProgressCleared,
-    ProgressReported(CloudBackupRestoreProgress),
-    ReportCleared,
-    ReportRecorded(CloudBackupRestoreReport),
+    ProgressReported(CloudBackupRestoreFlow),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

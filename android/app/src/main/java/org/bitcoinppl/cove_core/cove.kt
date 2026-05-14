@@ -28016,8 +28016,6 @@ data class CloudBackupConfiguredState (
     , 
     var `detail`: CloudBackupDetailState
     , 
-    var `lastRestoreReport`: CloudBackupRestoreReport?
-    , 
     var `rootPrompt`: CloudBackupRootPrompt
     , 
     var `syncHealth`: CloudSyncHealth
@@ -28044,7 +28042,6 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupSyncState.read(buf),
             FfiConverterTypeCloudBackupDestructiveOperationState.read(buf),
             FfiConverterTypeCloudBackupDetailState.read(buf),
-            FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
             FfiConverterTypeCloudBackupRootPrompt.read(buf),
             FfiConverterTypeCloudSyncHealth.read(buf),
             FfiConverterTypeCloudBackupVerificationPresentation.read(buf),
@@ -28057,7 +28054,6 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupSyncState.allocationSize(value.`sync`) +
             FfiConverterTypeCloudBackupDestructiveOperationState.allocationSize(value.`destructiveOperation`) +
             FfiConverterTypeCloudBackupDetailState.allocationSize(value.`detail`) +
-            FfiConverterOptionalTypeCloudBackupRestoreReport.allocationSize(value.`lastRestoreReport`) +
             FfiConverterTypeCloudBackupRootPrompt.allocationSize(value.`rootPrompt`) +
             FfiConverterTypeCloudSyncHealth.allocationSize(value.`syncHealth`) +
             FfiConverterTypeCloudBackupVerificationPresentation.allocationSize(value.`verificationPresentation`)
@@ -28069,7 +28065,6 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupSyncState.write(value.`sync`, buf)
             FfiConverterTypeCloudBackupDestructiveOperationState.write(value.`destructiveOperation`, buf)
             FfiConverterTypeCloudBackupDetailState.write(value.`detail`, buf)
-            FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.`lastRestoreReport`, buf)
             FfiConverterTypeCloudBackupRootPrompt.write(value.`rootPrompt`, buf)
             FfiConverterTypeCloudSyncHealth.write(value.`syncHealth`, buf)
             FfiConverterTypeCloudBackupVerificationPresentation.write(value.`verificationPresentation`, buf)
@@ -28174,8 +28169,6 @@ public object FfiConverterTypeCloudBackupEnableContext: FfiConverterRustBuffer<C
 
 data class CloudBackupFailure (
     var `message`: kotlin.String
-    , 
-    var `restoreReport`: CloudBackupRestoreReport?
     
 ){
     
@@ -28193,18 +28186,15 @@ public object FfiConverterTypeCloudBackupFailure: FfiConverterRustBuffer<CloudBa
     override fun read(buf: ByteBuffer): CloudBackupFailure {
         return CloudBackupFailure(
             FfiConverterString.read(buf),
-            FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudBackupFailure) = (
-            FfiConverterString.allocationSize(value.`message`) +
-            FfiConverterOptionalTypeCloudBackupRestoreReport.allocationSize(value.`restoreReport`)
+            FfiConverterString.allocationSize(value.`message`)
     )
 
     override fun write(value: CloudBackupFailure, buf: ByteBuffer) {
             FfiConverterString.write(value.`message`, buf)
-            FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.`restoreReport`, buf)
     }
 }
 
@@ -28329,87 +28319,6 @@ public object FfiConverterTypeCloudBackupProgress: FfiConverterRustBuffer<CloudB
     override fun write(value: CloudBackupProgress, buf: ByteBuffer) {
             FfiConverterUInt.write(value.`completed`, buf)
             FfiConverterUInt.write(value.`total`, buf)
-    }
-}
-
-
-
-data class CloudBackupRestoreFlow (
-    var `progress`: CloudBackupRestoreProgress?
-    , 
-    var `report`: CloudBackupRestoreReport?
-    
-){
-    
-
-    
-
-    
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeCloudBackupRestoreFlow: FfiConverterRustBuffer<CloudBackupRestoreFlow> {
-    override fun read(buf: ByteBuffer): CloudBackupRestoreFlow {
-        return CloudBackupRestoreFlow(
-            FfiConverterOptionalTypeCloudBackupRestoreProgress.read(buf),
-            FfiConverterOptionalTypeCloudBackupRestoreReport.read(buf),
-        )
-    }
-
-    override fun allocationSize(value: CloudBackupRestoreFlow) = (
-            FfiConverterOptionalTypeCloudBackupRestoreProgress.allocationSize(value.`progress`) +
-            FfiConverterOptionalTypeCloudBackupRestoreReport.allocationSize(value.`report`)
-    )
-
-    override fun write(value: CloudBackupRestoreFlow, buf: ByteBuffer) {
-            FfiConverterOptionalTypeCloudBackupRestoreProgress.write(value.`progress`, buf)
-            FfiConverterOptionalTypeCloudBackupRestoreReport.write(value.`report`, buf)
-    }
-}
-
-
-
-data class CloudBackupRestoreProgress (
-    var `stage`: CloudBackupRestoreStage
-    , 
-    var `completed`: kotlin.UInt
-    , 
-    var `total`: kotlin.UInt?
-    
-){
-    
-
-    
-
-    
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeCloudBackupRestoreProgress: FfiConverterRustBuffer<CloudBackupRestoreProgress> {
-    override fun read(buf: ByteBuffer): CloudBackupRestoreProgress {
-        return CloudBackupRestoreProgress(
-            FfiConverterTypeCloudBackupRestoreStage.read(buf),
-            FfiConverterUInt.read(buf),
-            FfiConverterOptionalUInt.read(buf),
-        )
-    }
-
-    override fun allocationSize(value: CloudBackupRestoreProgress) = (
-            FfiConverterTypeCloudBackupRestoreStage.allocationSize(value.`stage`) +
-            FfiConverterUInt.allocationSize(value.`completed`) +
-            FfiConverterOptionalUInt.allocationSize(value.`total`)
-    )
-
-    override fun write(value: CloudBackupRestoreProgress, buf: ByteBuffer) {
-            FfiConverterTypeCloudBackupRestoreStage.write(value.`stage`, buf)
-            FfiConverterUInt.write(value.`completed`, buf)
-            FfiConverterOptionalUInt.write(value.`total`, buf)
     }
 }
 
@@ -29590,6 +29499,8 @@ data class OnboardingState (
     , 
     var `cloudRestoreAlertVisible`: kotlin.Boolean
     , 
+    var `restoreState`: OnboardingRestoreState
+    , 
     var `errorMessage`: kotlin.String?
     
 ){
@@ -29617,6 +29528,7 @@ public object FfiConverterTypeOnboardingState: FfiConverterRustBuffer<Onboarding
             FfiConverterOptionalTypeCloudRestoreProviderHint.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterTypeOnboardingRestoreState.read(buf),
             FfiConverterOptionalString.read(buf),
         )
     }
@@ -29632,6 +29544,7 @@ public object FfiConverterTypeOnboardingState: FfiConverterRustBuffer<Onboarding
             FfiConverterOptionalTypeCloudRestoreProviderHint.allocationSize(value.`cloudRestoreProviderHint`) +
             FfiConverterBoolean.allocationSize(value.`shouldOfferCloudRestore`) +
             FfiConverterBoolean.allocationSize(value.`cloudRestoreAlertVisible`) +
+            FfiConverterTypeOnboardingRestoreState.allocationSize(value.`restoreState`) +
             FfiConverterOptionalString.allocationSize(value.`errorMessage`)
     )
 
@@ -29646,6 +29559,7 @@ public object FfiConverterTypeOnboardingState: FfiConverterRustBuffer<Onboarding
             FfiConverterOptionalTypeCloudRestoreProviderHint.write(value.`cloudRestoreProviderHint`, buf)
             FfiConverterBoolean.write(value.`shouldOfferCloudRestore`, buf)
             FfiConverterBoolean.write(value.`cloudRestoreAlertVisible`, buf)
+            FfiConverterTypeOnboardingRestoreState.write(value.`restoreState`, buf)
             FfiConverterOptionalString.write(value.`errorMessage`, buf)
     }
 }
@@ -35749,34 +35663,104 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
 
 
 
-
-enum class CloudBackupRestoreStage {
+sealed class CloudBackupRestoreFlow {
     
-    FINDING,
-    DOWNLOADING,
-    RESTORING;
+    object Finding : CloudBackupRestoreFlow()
+    
+    
+    data class Downloading(
+        val `completed`: kotlin.UInt, 
+        val `total`: kotlin.UInt) : CloudBackupRestoreFlow()
+        
+    {
+        
 
+        companion object
+    }
+    
+    data class Restoring(
+        val `completed`: kotlin.UInt, 
+        val `total`: kotlin.UInt) : CloudBackupRestoreFlow()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
     
 
 
     companion object
 }
 
-
 /**
  * @suppress
  */
-public object FfiConverterTypeCloudBackupRestoreStage: FfiConverterRustBuffer<CloudBackupRestoreStage> {
-    override fun read(buf: ByteBuffer) = try {
-        CloudBackupRestoreStage.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+public object FfiConverterTypeCloudBackupRestoreFlow : FfiConverterRustBuffer<CloudBackupRestoreFlow>{
+    override fun read(buf: ByteBuffer): CloudBackupRestoreFlow {
+        return when(buf.getInt()) {
+            1 -> CloudBackupRestoreFlow.Finding
+            2 -> CloudBackupRestoreFlow.Downloading(
+                FfiConverterUInt.read(buf),
+                FfiConverterUInt.read(buf),
+                )
+            3 -> CloudBackupRestoreFlow.Restoring(
+                FfiConverterUInt.read(buf),
+                FfiConverterUInt.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
     }
 
-    override fun allocationSize(value: CloudBackupRestoreStage) = 4UL
+    override fun allocationSize(value: CloudBackupRestoreFlow): ULong = when(value) {
+        is CloudBackupRestoreFlow.Finding -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupRestoreFlow.Downloading -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`completed`)
+                + FfiConverterUInt.allocationSize(value.`total`)
+            )
+        }
+        is CloudBackupRestoreFlow.Restoring -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`completed`)
+                + FfiConverterUInt.allocationSize(value.`total`)
+            )
+        }
+    }
 
-    override fun write(value: CloudBackupRestoreStage, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
+    override fun write(value: CloudBackupRestoreFlow, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupRestoreFlow.Finding -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupRestoreFlow.Downloading -> {
+                buf.putInt(2)
+                FfiConverterUInt.write(value.`completed`, buf)
+                FfiConverterUInt.write(value.`total`, buf)
+                Unit
+            }
+            is CloudBackupRestoreFlow.Restoring -> {
+                buf.putInt(3)
+                FfiConverterUInt.write(value.`completed`, buf)
+                FfiConverterUInt.write(value.`total`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 
@@ -42687,23 +42671,17 @@ sealed class OnboardingAction {
     object StartRestore : OnboardingAction()
     
     
+    object RetryRestore : OnboardingAction()
+    
+    
     object SkipRestore : OnboardingAction()
     
     
     object ContinueWithoutCloudRestore : OnboardingAction()
     
     
-    object RestoreComplete : OnboardingAction()
+    object ContinueFromRestoreComplete : OnboardingAction()
     
-    
-    data class RestoreFailed(
-        val `error`: kotlin.String) : OnboardingAction()
-        
-    {
-        
-
-        companion object
-    }
     
     object AcceptTerms : OnboardingAction()
     
@@ -42758,12 +42736,10 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
             15 -> OnboardingAction.OpenCloudRestore
             16 -> OnboardingAction.DismissCloudRestoreAlert
             17 -> OnboardingAction.StartRestore
-            18 -> OnboardingAction.SkipRestore
-            19 -> OnboardingAction.ContinueWithoutCloudRestore
-            20 -> OnboardingAction.RestoreComplete
-            21 -> OnboardingAction.RestoreFailed(
-                FfiConverterString.read(buf),
-                )
+            18 -> OnboardingAction.RetryRestore
+            19 -> OnboardingAction.SkipRestore
+            20 -> OnboardingAction.ContinueWithoutCloudRestore
+            21 -> OnboardingAction.ContinueFromRestoreComplete
             22 -> OnboardingAction.AcceptTerms
             23 -> OnboardingAction.Back
             24 -> OnboardingAction.BeginCloudBackupEnable
@@ -42879,6 +42855,12 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 4UL
             )
         }
+        is OnboardingAction.RetryRestore -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is OnboardingAction.SkipRestore -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -42891,17 +42873,10 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 4UL
             )
         }
-        is OnboardingAction.RestoreComplete -> {
+        is OnboardingAction.ContinueFromRestoreComplete -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-            )
-        }
-        is OnboardingAction.RestoreFailed -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.`error`)
             )
         }
         is OnboardingAction.AcceptTerms -> {
@@ -43004,21 +42979,20 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 buf.putInt(17)
                 Unit
             }
-            is OnboardingAction.SkipRestore -> {
+            is OnboardingAction.RetryRestore -> {
                 buf.putInt(18)
                 Unit
             }
-            is OnboardingAction.ContinueWithoutCloudRestore -> {
+            is OnboardingAction.SkipRestore -> {
                 buf.putInt(19)
                 Unit
             }
-            is OnboardingAction.RestoreComplete -> {
+            is OnboardingAction.ContinueWithoutCloudRestore -> {
                 buf.putInt(20)
                 Unit
             }
-            is OnboardingAction.RestoreFailed -> {
+            is OnboardingAction.ContinueFromRestoreComplete -> {
                 buf.putInt(21)
-                FfiConverterString.write(value.`error`, buf)
                 Unit
             }
             is OnboardingAction.AcceptTerms -> {
@@ -43210,6 +43184,15 @@ sealed class OnboardingReconcileMessage {
         companion object
     }
     
+    data class RestoreStateChanged(
+        val v1: org.bitcoinppl.cove_core.OnboardingRestoreState) : OnboardingReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class ErrorMessageChanged(
         val v1: kotlin.String?) : OnboardingReconcileMessage()
         
@@ -43268,10 +43251,13 @@ public object FfiConverterTypeOnboardingReconcileMessage : FfiConverterRustBuffe
             10 -> OnboardingReconcileMessage.CloudRestoreAlertVisible(
                 FfiConverterBoolean.read(buf),
                 )
-            11 -> OnboardingReconcileMessage.ErrorMessageChanged(
+            11 -> OnboardingReconcileMessage.RestoreStateChanged(
+                FfiConverterTypeOnboardingRestoreState.read(buf),
+                )
+            12 -> OnboardingReconcileMessage.ErrorMessageChanged(
                 FfiConverterOptionalString.read(buf),
                 )
-            12 -> OnboardingReconcileMessage.Complete
+            13 -> OnboardingReconcileMessage.Complete
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -43347,6 +43333,13 @@ public object FfiConverterTypeOnboardingReconcileMessage : FfiConverterRustBuffe
                 + FfiConverterBoolean.allocationSize(value.v1)
             )
         }
+        is OnboardingReconcileMessage.RestoreStateChanged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeOnboardingRestoreState.allocationSize(value.v1)
+            )
+        }
         is OnboardingReconcileMessage.ErrorMessageChanged -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -43414,13 +43407,139 @@ public object FfiConverterTypeOnboardingReconcileMessage : FfiConverterRustBuffe
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
-            is OnboardingReconcileMessage.ErrorMessageChanged -> {
+            is OnboardingReconcileMessage.RestoreStateChanged -> {
                 buf.putInt(11)
+                FfiConverterTypeOnboardingRestoreState.write(value.v1, buf)
+                Unit
+            }
+            is OnboardingReconcileMessage.ErrorMessageChanged -> {
+                buf.putInt(12)
                 FfiConverterOptionalString.write(value.v1, buf)
                 Unit
             }
             is OnboardingReconcileMessage.Complete -> {
-                buf.putInt(12)
+                buf.putInt(13)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+sealed class OnboardingRestoreState {
+    
+    object Idle : OnboardingRestoreState()
+    
+    
+    data class Restoring(
+        val v1: org.bitcoinppl.cove_core.CloudBackupRestoreFlow) : OnboardingRestoreState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Complete(
+        val v1: org.bitcoinppl.cove_core.CloudBackupRestoreReport) : OnboardingRestoreState()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Failed(
+        val `message`: kotlin.String) : OnboardingRestoreState()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeOnboardingRestoreState : FfiConverterRustBuffer<OnboardingRestoreState>{
+    override fun read(buf: ByteBuffer): OnboardingRestoreState {
+        return when(buf.getInt()) {
+            1 -> OnboardingRestoreState.Idle
+            2 -> OnboardingRestoreState.Restoring(
+                FfiConverterTypeCloudBackupRestoreFlow.read(buf),
+                )
+            3 -> OnboardingRestoreState.Complete(
+                FfiConverterTypeCloudBackupRestoreReport.read(buf),
+                )
+            4 -> OnboardingRestoreState.Failed(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: OnboardingRestoreState): ULong = when(value) {
+        is OnboardingRestoreState.Idle -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OnboardingRestoreState.Restoring -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupRestoreFlow.allocationSize(value.v1)
+            )
+        }
+        is OnboardingRestoreState.Complete -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupRestoreReport.allocationSize(value.v1)
+            )
+        }
+        is OnboardingRestoreState.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+    }
+
+    override fun write(value: OnboardingRestoreState, buf: ByteBuffer) {
+        when(value) {
+            is OnboardingRestoreState.Idle -> {
+                buf.putInt(1)
+                Unit
+            }
+            is OnboardingRestoreState.Restoring -> {
+                buf.putInt(2)
+                FfiConverterTypeCloudBackupRestoreFlow.write(value.v1, buf)
+                Unit
+            }
+            is OnboardingRestoreState.Complete -> {
+                buf.putInt(3)
+                FfiConverterTypeCloudBackupRestoreReport.write(value.v1, buf)
+                Unit
+            }
+            is OnboardingRestoreState.Failed -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`message`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -43439,6 +43558,8 @@ enum class OnboardingStep {
     RESTORE_OFFLINE,
     RESTORE_UNAVAILABLE,
     RESTORING,
+    RESTORE_COMPLETE,
+    RESTORE_FAILED,
     WELCOME,
     BITCOIN_CHOICE,
     STORAGE_CHOICE,
@@ -55048,70 +55169,6 @@ public object FfiConverterOptionalTypeCloudBackupProgress: FfiConverterRustBuffe
         } else {
             buf.put(1)
             FfiConverterTypeCloudBackupProgress.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
-public object FfiConverterOptionalTypeCloudBackupRestoreProgress: FfiConverterRustBuffer<CloudBackupRestoreProgress?> {
-    override fun read(buf: ByteBuffer): CloudBackupRestoreProgress? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterTypeCloudBackupRestoreProgress.read(buf)
-    }
-
-    override fun allocationSize(value: CloudBackupRestoreProgress?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterTypeCloudBackupRestoreProgress.allocationSize(value)
-        }
-    }
-
-    override fun write(value: CloudBackupRestoreProgress?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterTypeCloudBackupRestoreProgress.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
-public object FfiConverterOptionalTypeCloudBackupRestoreReport: FfiConverterRustBuffer<CloudBackupRestoreReport?> {
-    override fun read(buf: ByteBuffer): CloudBackupRestoreReport? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterTypeCloudBackupRestoreReport.read(buf)
-    }
-
-    override fun allocationSize(value: CloudBackupRestoreReport?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterTypeCloudBackupRestoreReport.allocationSize(value)
-        }
-    }
-
-    override fun write(value: CloudBackupRestoreReport?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterTypeCloudBackupRestoreReport.write(value, buf)
         }
     }
 }

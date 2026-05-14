@@ -67,10 +67,14 @@ internal fun OnboardingContainer(
                 onBack = { manager.dispatch(OnboardingAction.Back) },
             )
 
-        OnboardingStep.RESTORING ->
+        OnboardingStep.RESTORING,
+        OnboardingStep.RESTORE_COMPLETE,
+        OnboardingStep.RESTORE_FAILED ->
             OnboardingRestoreView(
-                onComplete = { manager.dispatch(OnboardingAction.RestoreComplete) },
-                onError = { error -> manager.dispatch(OnboardingAction.RestoreFailed(error)) },
+                restoreState = manager.state.restoreState,
+                onDone = { manager.dispatch(OnboardingAction.ContinueFromRestoreComplete) },
+                onRetry = { manager.dispatch(OnboardingAction.RetryRestore) },
+                onContinueWithoutBackup = { manager.dispatch(OnboardingAction.SkipRestore) },
             )
 
         OnboardingStep.WELCOME ->

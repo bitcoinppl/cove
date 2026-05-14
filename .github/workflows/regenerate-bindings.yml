@@ -27,6 +27,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust -> target
+          cache-bin: false
+          prefix-key: v1-rust
 
       - name: Set up just
         uses: taiki-e/install-action@v2
@@ -90,6 +92,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust -> target
+          cache-bin: false
+          prefix-key: v1-rust
 
       - name: Set up just
         uses: taiki-e/install-action@v2

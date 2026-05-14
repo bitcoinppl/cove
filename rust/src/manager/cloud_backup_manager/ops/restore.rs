@@ -17,9 +17,9 @@ use crate::manager::cloud_backup_manager::wallets::{
 use crate::manager::cloud_backup_manager::workers::RestoredPasskeyMaterial;
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupEnableOutcome, CloudBackupError,
-    CloudBackupRestoreOutcome, CloudBackupRestoreProgress, CloudBackupRestoreReport,
-    CloudBackupRestoreStage, CloudBackupStatus, CloudStorageIssue, RestoreOperation,
-    RustCloudBackupManager, current_namespace_wallet_record_ids, is_connectivity_related_issue,
+    CloudBackupRestoreFlow, CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupStatus,
+    CloudStorageIssue, RestoreOperation, RustCloudBackupManager,
+    current_namespace_wallet_record_ids, is_connectivity_related_issue,
 };
 
 struct RestorableNamespace {
@@ -39,17 +39,39 @@ struct RestoreDownloadProgress {
     total: u32,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum RestoreProgressPhase {
+    Downloading,
+    Restoring,
+}
+
+fn restore_progress_flow(
+    phase: RestoreProgressPhase,
+    completed: u32,
+    total: u32,
+) -> CloudBackupRestoreFlow {
+    if total == 0 {
+        return CloudBackupRestoreFlow::Finding;
+    }
+
+    match phase {
+        RestoreProgressPhase::Downloading => {
+            CloudBackupRestoreFlow::Downloading { completed, total }
+        }
+        RestoreProgressPhase::Restoring => CloudBackupRestoreFlow::Restoring { completed, total },
+    }
+}
+
 impl RustCloudBackupManager {
     pub(crate) async fn do_restore_from_cloud_backup(
         &self,
         operation: &RestoreOperation,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<CloudBackupRestoreReport, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Restore)?;
         self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
         self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        self.apply_restore_outcome(CloudBackupRestoreOutcome::ReportCleared);
         self.apply_status_for_restore_operation(operation, CloudBackupStatus::Restoring).await?;
-        self.send_restore_progress(operation, CloudBackupRestoreStage::Finding, 0, None).await?;
+        self.send_restore_progress(operation, CloudBackupRestoreFlow::Finding).await?;
 
         let cloud = CloudStorage::global_explicit_client();
         let keychain = Keychain::global();
@@ -118,9 +140,7 @@ impl RustCloudBackupManager {
 
         self.send_restore_progress(
             operation,
-            CloudBackupRestoreStage::Downloading,
-            0,
-            Some(wallet_count),
+            restore_progress_flow(RestoreProgressPhase::Downloading, 0, wallet_count),
         )
         .await?;
 
@@ -152,9 +172,7 @@ impl RustCloudBackupManager {
 
         self.send_restore_progress(
             operation,
-            CloudBackupRestoreStage::Restoring,
-            0,
-            Some(restore_total),
+            restore_progress_flow(RestoreProgressPhase::Restoring, 0, restore_total),
         )
         .await?;
 
@@ -181,9 +199,11 @@ impl RustCloudBackupManager {
 
             self.send_restore_progress(
                 operation,
-                CloudBackupRestoreStage::Restoring,
-                (index + 1) as u32,
-                Some(restore_total),
+                restore_progress_flow(
+                    RestoreProgressPhase::Restoring,
+                    (index + 1) as u32,
+                    restore_total,
+                ),
             )
             .await?;
         }
@@ -192,11 +212,6 @@ impl RustCloudBackupManager {
             self.apply_restore_outcome_for_restore_operation(
                 operation,
                 CloudBackupRestoreOutcome::ProgressCleared,
-            )
-            .await?;
-            self.apply_restore_outcome_for_restore_operation(
-                operation,
-                CloudBackupRestoreOutcome::ReportRecorded(report),
             )
             .await?;
             return Err(CloudBackupError::Internal("all wallets failed to restore".into()));
@@ -229,31 +244,20 @@ impl RustCloudBackupManager {
             CloudBackupRestoreOutcome::ProgressCleared,
         )
         .await?;
-        self.apply_restore_outcome_for_restore_operation(
-            operation,
-            CloudBackupRestoreOutcome::ReportRecorded(report),
-        )
-        .await?;
         self.apply_status_for_restore_operation(operation, CloudBackupStatus::Enabled).await?;
 
         info!("Cloud backup restore complete");
-        Ok(())
+        Ok(report)
     }
 
     async fn send_restore_progress(
         &self,
         operation: &RestoreOperation,
-        stage: CloudBackupRestoreStage,
-        completed: u32,
-        total: Option<u32>,
+        flow: CloudBackupRestoreFlow,
     ) -> Result<(), CloudBackupError> {
         self.apply_restore_outcome_for_restore_operation(
             operation,
-            CloudBackupRestoreOutcome::ProgressReported(CloudBackupRestoreProgress {
-                stage,
-                completed,
-                total,
-            }),
+            CloudBackupRestoreOutcome::ProgressReported(flow),
         )
         .await
     }
@@ -313,9 +317,11 @@ impl RustCloudBackupManager {
 
             self.send_restore_progress(
                 operation,
-                CloudBackupRestoreStage::Downloading,
-                progress.completed,
-                Some(progress.total),
+                restore_progress_flow(
+                    RestoreProgressPhase::Downloading,
+                    progress.completed,
+                    progress.total,
+                ),
             )
             .await?;
         }
@@ -516,5 +522,22 @@ impl RustCloudBackupManager {
         }
 
         Ok(report)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_total_restore_progress_maps_to_finding() {
+        assert_eq!(
+            restore_progress_flow(RestoreProgressPhase::Downloading, 0, 0),
+            CloudBackupRestoreFlow::Finding
+        );
+        assert_eq!(
+            restore_progress_flow(RestoreProgressPhase::Restoring, 0, 0),
+            CloudBackupRestoreFlow::Finding
+        );
     }
 }

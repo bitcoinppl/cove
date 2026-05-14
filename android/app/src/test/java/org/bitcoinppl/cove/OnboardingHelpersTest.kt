@@ -1,21 +1,15 @@
 package org.bitcoinppl.cove
 
-import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingRestorePhase
 import org.bitcoinppl.cove.flows.OnboardingFlow.combinedRestoreProgress
-import org.bitcoinppl.cove.flows.OnboardingFlow.resolveRestorePhase
 import org.bitcoinppl.cove.flows.OnboardingFlow.shouldCompleteOnboardingCloudBackup
-import org.bitcoinppl.cove.flows.OnboardingFlow.shouldNotifyRestoreError
 import org.bitcoinppl.cove_core.AppInitException
 import org.bitcoinppl.cove_core.CloudBackupConfiguredState
 import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
-import org.bitcoinppl.cove_core.CloudBackupFailure
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
-import org.bitcoinppl.cove_core.CloudBackupRestoreProgress
-import org.bitcoinppl.cove_core.CloudBackupRestoreReport
-import org.bitcoinppl.cove_core.CloudBackupRestoreStage
+import org.bitcoinppl.cove_core.CloudBackupRestoreFlow
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
@@ -25,6 +19,7 @@ import org.bitcoinppl.cove_core.DeepVerificationReport
 import org.bitcoinppl.cove_core.OnboardingBranch
 import org.bitcoinppl.cove_core.OnboardingCloudRestoreState
 import org.bitcoinppl.cove_core.OnboardingReconcileMessage
+import org.bitcoinppl.cove_core.OnboardingRestoreState
 import org.bitcoinppl.cove_core.OnboardingState
 import org.bitcoinppl.cove_core.OnboardingStep
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
@@ -157,69 +152,37 @@ class OnboardingHelpersTest {
     }
 
     @Test
+    fun reduceOnboardingSnapshotAppliesRestoreStateUpdates() {
+        val failedState = OnboardingRestoreState.Failed("restore failed")
+        val initial =
+            OnboardingSnapshot(
+                state = defaultOnboardingState(),
+                isComplete = false,
+            )
+
+        val updated =
+            reduceOnboardingSnapshot(
+                initial,
+                OnboardingReconcileMessage.RestoreStateChanged(failedState),
+            )
+
+        assertEquals(failedState, updated.state.restoreState)
+        assertFalse(updated.isComplete)
+    }
+
+    @Test
     fun combinedRestoreProgressTracksDownloadAndRestoreStages() {
         val downloading =
-            CloudBackupRestoreProgress(
-                stage = CloudBackupRestoreStage.DOWNLOADING,
-                completed = 2u,
-                total = 4u,
+            OnboardingRestoreState.Restoring(
+                CloudBackupRestoreFlow.Downloading(completed = 2u, total = 4u),
             )
         val restoring =
-            CloudBackupRestoreProgress(
-                stage = CloudBackupRestoreStage.RESTORING,
-                completed = 1u,
-                total = 4u,
+            OnboardingRestoreState.Restoring(
+                CloudBackupRestoreFlow.Restoring(completed = 1u, total = 4u),
             )
 
         assertEquals(0.25f, combinedRestoreProgress(downloading), 0.0001f)
         assertEquals(0.625f, combinedRestoreProgress(restoring), 0.0001f)
-    }
-
-    @Test
-    fun resolveRestorePhasePromotesCompletionAndErrors() {
-        val report =
-            CloudBackupRestoreReport(
-                walletsRestored = 1u,
-                walletsFailed = 0u,
-                failedWalletErrors = emptyList(),
-                labelsFailedWalletNames = emptyList(),
-                labelsFailedErrors = emptyList(),
-            )
-
-        val completePhase =
-            resolveRestorePhase(
-                lifecycle = configuredLifecycle(),
-                restoreReport = report,
-                currentPhase = OnboardingRestorePhase.Restoring,
-            )
-        assertTrue(completePhase is OnboardingRestorePhase.Complete)
-
-        val errorPhase =
-            resolveRestorePhase(
-                lifecycle =
-                    CloudBackupLifecycle.Failed(
-                        CloudBackupFailure(
-                            message = "restore failed",
-                            restoreReport = null,
-                        ),
-                    ),
-                restoreReport = null,
-                currentPhase = OnboardingRestorePhase.Restoring,
-            )
-        assertTrue(errorPhase is OnboardingRestorePhase.Error)
-        assertEquals("restore failed", (errorPhase as OnboardingRestorePhase.Error).message)
-    }
-
-    @Test
-    fun shouldNotifyRestoreErrorOnlyForFirstRestoringError() {
-        assertTrue(shouldNotifyRestoreError(OnboardingRestorePhase.Restoring, hasDeliveredError = false))
-        assertFalse(shouldNotifyRestoreError(OnboardingRestorePhase.Restoring, hasDeliveredError = true))
-        assertFalse(
-            shouldNotifyRestoreError(
-                currentPhase = OnboardingRestorePhase.Error("restore failed"),
-                hasDeliveredError = false,
-            ),
-        )
     }
 
     @Test
@@ -342,7 +305,6 @@ class OnboardingHelpersTest {
             sync = sync,
             destructiveOperation = CloudBackupDestructiveOperationState.IDLE,
             detail = CloudBackupDetailState.NotLoaded,
-            lastRestoreReport = null,
             rootPrompt = CloudBackupRootPrompt.None,
             syncHealth = CloudSyncHealth.Unknown,
             verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
@@ -371,6 +333,7 @@ class OnboardingHelpersTest {
             cloudRestoreProviderHint = null,
             shouldOfferCloudRestore = false,
             cloudRestoreAlertVisible = false,
+            restoreState = OnboardingRestoreState.Idle,
             errorMessage = null,
         )
 }

@@ -1,8 +1,7 @@
 use super::{
     CloudBackupDetail, CloudBackupEnableContext, CloudBackupEnableState,
-    CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupRestoreProgress,
-    CloudBackupRestoreReport, CloudBackupRootPrompt, CloudBackupStatus,
-    CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
+    CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupRootPrompt,
+    CloudBackupStatus, CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
     CloudBackupVerificationReason, CloudOnlyOperation, CloudOnlyState, DeepVerificationFailure,
     DeepVerificationReport, OtherBackupsOperation, PendingUploadVerificationState, RecoveryAction,
     RecoveryState, SyncState, VerificationState,
@@ -46,7 +45,6 @@ struct CloudBackupConfiguredModelState {
     destructive_operation: CloudBackupDestructiveOperationState,
     pending_upload_verification: PendingUploadVerificationState,
     detail: CloudBackupDetailState,
-    last_restore_report: Option<CloudBackupRestoreReport>,
     prompt: CloudBackupConfiguredPrompt,
 }
 
@@ -79,7 +77,6 @@ impl Default for CloudBackupConfiguredModelState {
             destructive_operation: CloudBackupDestructiveOperationState::Idle,
             pending_upload_verification: PendingUploadVerificationState::Idle,
             detail: CloudBackupDetailState::NotLoaded,
-            last_restore_report: None,
             prompt: CloudBackupConfiguredPrompt::None,
         }
     }
@@ -115,7 +112,6 @@ impl CloudBackupModelState {
             sync: self.configured.sync.clone(),
             destructive_operation: self.configured.destructive_operation.clone(),
             detail: self.configured.detail.clone(),
-            last_restore_report: self.configured.last_restore_report.clone(),
             root_prompt: self.root_prompt(),
             sync_health: self.sync_health.clone(),
             verification_presentation: self.verification_presentation.clone(),
@@ -235,15 +231,6 @@ impl CloudBackupModelState {
         }
     }
 
-    fn restore_report(&self) -> Option<CloudBackupRestoreReport> {
-        match &self.phase {
-            CloudBackupLifecyclePhase::Restoring(flow) => flow.report.clone(),
-            CloudBackupLifecyclePhase::Configured => self.configured.last_restore_report.clone(),
-            CloudBackupLifecyclePhase::Failed(failure) => failure.restore_report.clone(),
-            CloudBackupLifecyclePhase::Disabled | CloudBackupLifecyclePhase::Enabling(_) => None,
-        }
-    }
-
     fn detail(&self) -> Option<CloudBackupDetail> {
         self.loaded_detail().map(|state| state.detail.clone())
     }
@@ -310,15 +297,13 @@ impl CloudBackupModelState {
                     CloudBackupLifecyclePhase::Enabling(flow) => flow.clone(),
                     _ => CloudBackupEnableFlow::DiscoveringExistingBackup,
                 };
-                self.configured.last_restore_report = None;
                 self.phase = CloudBackupLifecyclePhase::Enabling(flow);
             }
             CloudBackupStatus::Restoring => {
                 let flow = match &self.phase {
                     CloudBackupLifecyclePhase::Restoring(flow) => flow.clone(),
-                    _ => CloudBackupRestoreFlow { progress: None, report: None },
+                    _ => CloudBackupRestoreFlow::Finding,
                 };
-                self.configured.last_restore_report = None;
                 self.phase = CloudBackupLifecyclePhase::Restoring(flow);
             }
             CloudBackupStatus::Enabled => {
@@ -347,10 +332,7 @@ impl CloudBackupModelState {
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
             CloudBackupStatus::Error(message) => {
-                self.phase = CloudBackupLifecyclePhase::Failed(CloudBackupFailure {
-                    message,
-                    restore_report: self.restore_report(),
-                });
+                self.phase = CloudBackupLifecyclePhase::Failed(CloudBackupFailure { message });
             }
         }
     }
@@ -393,28 +375,9 @@ impl CloudBackupModelState {
         }
     }
 
-    fn report_restore_progress(&mut self, progress: Option<CloudBackupRestoreProgress>) {
+    fn report_restore_progress(&mut self, progress: CloudBackupRestoreFlow) {
         if let CloudBackupLifecyclePhase::Restoring(flow) = &mut self.phase {
-            flow.progress = progress;
-        }
-    }
-
-    fn record_restore_report(&mut self, report: Option<CloudBackupRestoreReport>) {
-        if let Some(report) = &report {
-            self.configured.last_restore_report = Some(report.clone());
-        } else {
-            self.configured.last_restore_report = None;
-        }
-
-        match &mut self.phase {
-            CloudBackupLifecyclePhase::Restoring(flow) => flow.report = report,
-            _ if report.is_some() => {
-                self.phase = CloudBackupLifecyclePhase::Restoring(CloudBackupRestoreFlow {
-                    progress: None,
-                    report,
-                });
-            }
-            _ => {}
+            *flow = progress;
         }
     }
 
@@ -679,8 +642,7 @@ pub(crate) enum CloudBackupModelEvent {
     MissingPasskeyDismissalCleared,
     PromptStateCleared,
     EnableProgressReported(Option<super::CloudBackupProgress>),
-    RestoreProgressReported(Option<CloudBackupRestoreProgress>),
-    RestoreReportRecorded(Option<CloudBackupRestoreReport>),
+    RestoreProgressReported(CloudBackupRestoreFlow),
     SyncHealthObserved(CloudSyncHealth),
     EnableFlowAdvanced(CloudBackupEnableState),
     PendingUploadVerificationReconciled(PendingUploadVerificationState),
@@ -721,7 +683,6 @@ pub(crate) enum CloudBackupModelEventKind {
     PromptStateCleared,
     EnableProgressReported,
     RestoreProgressReported,
-    RestoreReportRecorded,
     SyncHealthObserved,
     EnableFlowAdvanced,
     PendingUploadVerificationReconciled,
@@ -763,7 +724,6 @@ impl CloudBackupModelEvent {
             Self::PromptStateCleared => CloudBackupModelEventKind::PromptStateCleared,
             Self::EnableProgressReported(_) => CloudBackupModelEventKind::EnableProgressReported,
             Self::RestoreProgressReported(_) => CloudBackupModelEventKind::RestoreProgressReported,
-            Self::RestoreReportRecorded(_) => CloudBackupModelEventKind::RestoreReportRecorded,
             Self::SyncHealthObserved(_) => CloudBackupModelEventKind::SyncHealthObserved,
             Self::EnableFlowAdvanced(_) => CloudBackupModelEventKind::EnableFlowAdvanced,
             Self::PendingUploadVerificationReconciled(_) => {
@@ -871,7 +831,6 @@ pub struct CloudBackupConfiguredState {
     pub sync: CloudBackupSyncState,
     pub destructive_operation: CloudBackupDestructiveOperationState,
     pub detail: CloudBackupDetailState,
-    pub last_restore_report: Option<CloudBackupRestoreReport>,
     pub root_prompt: CloudBackupRootPrompt,
     pub sync_health: CloudSyncHealth,
     pub verification_presentation: CloudBackupVerificationPresentation,
@@ -890,16 +849,16 @@ pub enum CloudBackupEnableFlow {
     RetryingUploadWithStagedMaterial { progress: Option<super::CloudBackupProgress> },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct CloudBackupRestoreFlow {
-    pub progress: Option<CloudBackupRestoreProgress>,
-    pub report: Option<CloudBackupRestoreReport>,
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupRestoreFlow {
+    Finding,
+    Downloading { completed: u32, total: u32 },
+    Restoring { completed: u32, total: u32 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CloudBackupFailure {
     pub message: String,
-    pub restore_report: Option<CloudBackupRestoreReport>,
 }
 
 #[expect(clippy::large_enum_variant, reason = "exported UniFFI enum keeps payloads inline")]
@@ -1030,9 +989,6 @@ impl CloudBackupModel {
             CloudBackupModelEvent::RestoreProgressReported(progress) => {
                 self.state.report_restore_progress(progress);
             }
-            CloudBackupModelEvent::RestoreReportRecorded(report) => {
-                self.state.record_restore_report(report);
-            }
             CloudBackupModelEvent::SyncHealthObserved(sync_health) => {
                 self.state.sync_health = sync_health;
             }
@@ -1114,7 +1070,6 @@ pub(crate) mod test_support {
                 sync_health: self.state.sync_health.clone(),
                 progress: self.state.progress(),
                 restore_progress: restore_progress(&self.state),
-                restore_report: self.state.restore_report(),
                 enable_state: enable_state(&self.state),
                 pending_upload_verification: pending_upload_verification(&self.state),
                 verification_presentation: self.state.verification_presentation.clone(),
@@ -1124,9 +1079,9 @@ pub(crate) mod test_support {
         }
     }
 
-    fn restore_progress(state: &CloudBackupModelState) -> Option<CloudBackupRestoreProgress> {
+    fn restore_progress(state: &CloudBackupModelState) -> Option<CloudBackupRestoreFlow> {
         match &state.phase {
-            CloudBackupLifecyclePhase::Restoring(flow) => flow.progress.clone(),
+            CloudBackupLifecyclePhase::Restoring(flow) => Some(flow.clone()),
             _ => None,
         }
     }
@@ -1167,9 +1122,8 @@ mod tests {
     use super::*;
     use crate::manager::cloud_backup_manager::{
         CloudBackupEnableContext, CloudBackupPasskeyHint, CloudBackupProgress,
-        CloudBackupRestoreStage, CloudBackupVerificationMetadata,
-        CloudBackupVerificationPresentation, CloudBackupVerificationReason,
-        CloudBackupVerificationSource, DeepVerificationReport,
+        CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
+        CloudBackupVerificationReason, CloudBackupVerificationSource, DeepVerificationReport,
     };
 
     #[test]
@@ -1204,20 +1158,9 @@ mod tests {
     }
 
     #[test]
-    fn enable_started_event_enters_enabling_and_clears_stale_restore_report() {
+    fn enable_started_event_enters_enabling_and_clears_restore_progress() {
         let mut model = CloudBackupModel::default();
         model.apply_event(CloudBackupModelEvent::RestoreStarted).unwrap();
-        model
-            .apply_event(CloudBackupModelEvent::RestoreReportRecorded(Some(
-                CloudBackupRestoreReport {
-                    wallets_restored: 1,
-                    wallets_failed: 0,
-                    failed_wallet_errors: Vec::new(),
-                    labels_failed_wallet_names: Vec::new(),
-                    labels_failed_errors: Vec::new(),
-                },
-            )))
-            .unwrap();
         model
             .apply_event(CloudBackupModelEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled))
             .unwrap();
@@ -1227,7 +1170,6 @@ mod tests {
         assert_eq!(model.status(), CloudBackupStatus::Enabling);
         assert_eq!(model.snapshot().progress, None);
         assert_eq!(model.snapshot().restore_progress, None);
-        assert_eq!(model.snapshot().restore_report, None);
         assert!(effects.status_changed);
         assert_eq!(
             effects.lifecycle,
@@ -1260,28 +1202,19 @@ mod tests {
                 CloudBackupStatus::Disabled,
                 CloudBackupModelEvent::RestoreStarted,
                 CloudBackupStatus::Restoring,
-                CloudBackupLifecycle::Restoring(CloudBackupRestoreFlow {
-                    progress: None,
-                    report: None,
-                }),
+                CloudBackupLifecycle::Restoring(CloudBackupRestoreFlow::Finding),
             ),
             (
                 CloudBackupStatus::Enabled,
                 CloudBackupModelEvent::RestoreStarted,
                 CloudBackupStatus::Restoring,
-                CloudBackupLifecycle::Restoring(CloudBackupRestoreFlow {
-                    progress: None,
-                    report: None,
-                }),
+                CloudBackupLifecycle::Restoring(CloudBackupRestoreFlow::Finding),
             ),
             (
                 CloudBackupStatus::Error("cloud backup failed".into()),
                 CloudBackupModelEvent::RestoreStarted,
                 CloudBackupStatus::Restoring,
-                CloudBackupLifecycle::Restoring(CloudBackupRestoreFlow {
-                    progress: None,
-                    report: None,
-                }),
+                CloudBackupLifecycle::Restoring(CloudBackupRestoreFlow::Finding),
             ),
         ];
 
@@ -1348,7 +1281,6 @@ mod tests {
                 ),
                 destructive_operation: CloudBackupDestructiveOperationState::Idle,
                 detail: CloudBackupDetailState::NotLoaded,
-                last_restore_report: None,
                 root_prompt: CloudBackupRootPrompt::None,
                 sync_health: CloudSyncHealth::Unknown,
                 verification_presentation: CloudBackupVerificationPresentation::Hidden {
@@ -1424,25 +1356,15 @@ mod tests {
 
     #[test]
     fn restoring_carries_restore_progress() {
-        let progress = CloudBackupRestoreProgress {
-            stage: CloudBackupRestoreStage::Downloading,
-            completed: 1,
-            total: Some(3),
-        };
+        let progress = CloudBackupRestoreFlow::Downloading { completed: 1, total: 3 };
         let mut model = CloudBackupModel::default();
 
         model.apply_event(CloudBackupModelEvent::RestoreStarted).unwrap();
         model
-            .apply_event(CloudBackupModelEvent::RestoreProgressReported(Some(progress.clone())))
+            .apply_event(CloudBackupModelEvent::RestoreProgressReported(progress.clone()))
             .unwrap();
 
-        assert_eq!(
-            model.public_state().lifecycle,
-            CloudBackupLifecycle::Restoring(CloudBackupRestoreFlow {
-                progress: Some(progress),
-                report: None,
-            }),
-        );
+        assert_eq!(model.public_state().lifecycle, CloudBackupLifecycle::Restoring(progress));
     }
 
     #[test]
@@ -1465,13 +1387,9 @@ mod tests {
         let mut model = CloudBackupModel::default();
 
         let effects = model
-            .apply_event(CloudBackupModelEvent::RestoreProgressReported(Some(
-                CloudBackupRestoreProgress {
-                    stage: CloudBackupRestoreStage::Downloading,
-                    completed: 1,
-                    total: Some(3),
-                },
-            )))
+            .apply_event(CloudBackupModelEvent::RestoreProgressReported(
+                CloudBackupRestoreFlow::Downloading { completed: 1, total: 3 },
+            ))
             .unwrap();
 
         assert_eq!(model.public_state().lifecycle, CloudBackupLifecycle::Disabled);

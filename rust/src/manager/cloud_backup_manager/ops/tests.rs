@@ -5278,9 +5278,7 @@ async fn restore_counts_unsupported_wallet_versions_as_failures() {
     );
 
     let operation = new_restore_operation_for_test(&manager).await;
-    manager.do_restore_from_cloud_backup(&operation).await.unwrap();
-
-    let report = manager.model_snapshot().restore_report.expect("expected restore report");
+    let report = manager.do_restore_from_cloud_backup(&operation).await.unwrap();
     assert_eq!(report.wallets_restored, 1);
     assert_eq!(report.wallets_failed, 1);
     assert_eq!(report.failed_wallet_errors.len(), 1);
@@ -5372,9 +5370,7 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
     );
 
     let operation = new_restore_operation_for_test(&manager).await;
-    manager.do_restore_from_cloud_backup(&operation).await.unwrap();
-
-    let report = manager.model_snapshot().restore_report.expect("expected restore report");
+    let report = manager.do_restore_from_cloud_backup(&operation).await.unwrap();
     assert_eq!(report.wallets_restored, 2);
     assert_eq!(report.wallets_failed, 0);
     assert!(report.failed_wallet_errors.is_empty(), "{:?}", report.failed_wallet_errors);
@@ -5416,9 +5412,7 @@ async fn restore_retries_platform_authorization_discover_failures() {
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
     let operation = new_restore_operation_for_test(&manager).await;
-    manager.do_restore_from_cloud_backup(&operation).await.unwrap();
-
-    let report = manager.model_snapshot().restore_report.expect("expected restore report");
+    let report = manager.do_restore_from_cloud_backup(&operation).await.unwrap();
     assert_eq!(report.wallets_restored, 1);
     assert_eq!(report.wallets_failed, 0);
 }
@@ -5509,9 +5503,7 @@ async fn restore_counts_listed_missing_wallet_backups_as_failures() {
     );
 
     let operation = new_restore_operation_for_test(&manager).await;
-    manager.do_restore_from_cloud_backup(&operation).await.unwrap();
-
-    let report = manager.model_snapshot().restore_report.expect("expected restore report");
+    let report = manager.do_restore_from_cloud_backup(&operation).await.unwrap();
     assert_eq!(report.wallets_restored, 1);
     assert_eq!(report.wallets_failed, 1);
     assert!(report.failed_wallet_errors[0].contains("was listed but missing from cloud backup"));
@@ -5547,9 +5539,7 @@ async fn restore_reports_label_warning_without_failing_wallet_restore() {
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
     let operation = new_restore_operation_for_test(&manager).await;
-    manager.do_restore_from_cloud_backup(&operation).await.unwrap();
-
-    let report = manager.model_snapshot().restore_report.expect("expected restore report");
+    let report = manager.do_restore_from_cloud_backup(&operation).await.unwrap();
     assert_eq!(report.wallets_restored, 1);
     assert_eq!(report.wallets_failed, 0);
     assert_eq!(report.labels_failed_wallet_names, vec![wallet.name.clone()]);
@@ -5650,10 +5640,6 @@ async fn restore_fails_when_all_wallet_backups_are_unsupported() {
         CloudBackupError::Internal(message) if message == "all wallets failed to restore"
     ));
 
-    let report = manager.model_snapshot().restore_report.expect("expected restore report");
-    assert_eq!(report.wallets_restored, 0);
-    assert_eq!(report.wallets_failed, 1);
-    assert!(report.failed_wallet_errors[0].contains("unsupported wallet backup version 2"));
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Disabled
@@ -5692,8 +5678,8 @@ async fn restore_fails_when_all_listed_wallet_backups_are_missing() {
         CloudBackupError::Internal(message) if message == "all wallets failed to restore"
     ));
 
-    let report = manager.model_snapshot().restore_report.expect("expected restore report");
-    assert_eq!(report.wallets_restored, 0);
-    assert_eq!(report.wallets_failed, 1);
-    assert!(report.failed_wallet_errors[0].contains("was listed but missing from cloud backup"));
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
 }
