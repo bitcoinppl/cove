@@ -23,8 +23,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use super::{
     CloudBackupRecordKey, PersistedBackupSyncState, PersistedBackupVerificationState,
     PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup, PersistedPasskeyState,
-    PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
+    PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup, PersistedDisablingCloudBackup,
+    PersistedPasskeyState, PersistedPendingVerificationCompletion,
+    PersistedPendingVerificationUpload,
 };
 use crate::wallet::metadata::WalletId;
 
@@ -103,7 +104,8 @@ fn legacy_passkey_state(status: PersistedCloudBackupStatus) -> PersistedPasskeyS
         PersistedCloudBackupStatus::PasskeyMissing => PersistedPasskeyState::Missing,
         PersistedCloudBackupStatus::Disabled
         | PersistedCloudBackupStatus::Enabled
-        | PersistedCloudBackupStatus::Unverified => PersistedPasskeyState::Available,
+        | PersistedCloudBackupStatus::Unverified
+        | PersistedCloudBackupStatus::Disabling => PersistedPasskeyState::Available,
     }
 }
 
@@ -178,6 +180,9 @@ impl PersistedCloudBackupDomainRecord {
             PersistedCloudBackupState::Configured(configured) => {
                 PersistedBackupRecord::Configured(configured.clone())
             }
+            PersistedCloudBackupState::Disabling(disabling) => {
+                PersistedBackupRecord::Disabling(disabling.clone())
+            }
         };
 
         Self { version: 1, backup }
@@ -196,6 +201,9 @@ impl PersistedCloudBackupDomainRecord {
             PersistedBackupRecord::Configured(configured) => {
                 Ok(PersistedCloudBackupState::Configured(configured))
             }
+            PersistedBackupRecord::Disabling(disabling) => {
+                Ok(PersistedCloudBackupState::Disabling(disabling))
+            }
         }
     }
 }
@@ -205,6 +213,7 @@ impl PersistedCloudBackupDomainRecord {
 enum PersistedBackupRecord {
     Disabled,
     Configured(PersistedConfiguredCloudBackup),
+    Disabling(PersistedDisablingCloudBackup),
 }
 
 impl Serialize for PersistedCloudBlobSyncState {

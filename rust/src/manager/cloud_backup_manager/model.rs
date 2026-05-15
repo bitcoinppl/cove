@@ -1,5 +1,5 @@
 use super::{
-    CloudBackupDetail, CloudBackupEnableContext, CloudBackupEnableState,
+    CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableState,
     CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupRootPrompt,
     CloudBackupStatus, CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
     CloudBackupVerificationReason, CloudOnlyOperation, CloudOnlyState, DeepVerificationFailure,
@@ -204,6 +204,14 @@ impl CloudBackupModelState {
             CloudBackupLifecyclePhase::Disabled => CloudBackupStatus::Disabled,
             CloudBackupLifecyclePhase::Enabling(_) => CloudBackupStatus::Enabling,
             CloudBackupLifecyclePhase::Restoring(_) => CloudBackupStatus::Restoring,
+            CloudBackupLifecyclePhase::Configured
+                if matches!(
+                    self.configured.destructive_operation,
+                    CloudBackupDestructiveOperationState::Disabling
+                ) =>
+            {
+                CloudBackupStatus::Disabling
+            }
             CloudBackupLifecyclePhase::Configured => match &self.configured.passkey {
                 CloudBackupPasskeyState::Available => CloudBackupStatus::Enabled,
                 CloudBackupPasskeyState::Missing | CloudBackupPasskeyState::NeedsRepair { .. } => {
@@ -259,6 +267,12 @@ impl CloudBackupModelState {
             .unwrap_or(CloudOnlyState::NotFetched)
     }
 
+    fn cloud_only_operation(&self) -> CloudOnlyOperation {
+        self.loaded_detail()
+            .map(|state| state.cloud_only_operation.clone())
+            .unwrap_or(CloudOnlyOperation::Idle)
+    }
+
     fn other_backups_operation(&self) -> OtherBackupsOperation {
         self.loaded_detail()
             .map(|state| state.other_backups_operation.clone())
@@ -279,7 +293,21 @@ impl CloudBackupModelState {
         status: CloudBackupStatus,
     ) -> Result<(), CloudBackupModelEventRejection> {
         let current_status = self.status();
-        if matches!(current_status, CloudBackupStatus::Enabling | CloudBackupStatus::Restoring) {
+        let already_disabling = current_status == CloudBackupStatus::Disabling
+            && status == CloudBackupStatus::Disabling;
+
+        if already_disabling {
+            return Ok(());
+        }
+
+        let background_operation_in_progress = matches!(
+            current_status,
+            CloudBackupStatus::Disabling
+                | CloudBackupStatus::Enabling
+                | CloudBackupStatus::Restoring
+        );
+
+        if background_operation_in_progress {
             return Err(CloudBackupModelEventRejection::Busy(current_status));
         }
 
@@ -291,6 +319,12 @@ impl CloudBackupModelState {
         match status {
             CloudBackupStatus::Disabled => {
                 self.phase = CloudBackupLifecyclePhase::Disabled;
+            }
+            CloudBackupStatus::Disabling => {
+                self.configured.destructive_operation =
+                    CloudBackupDestructiveOperationState::Disabling;
+                self.configured.prompt = CloudBackupConfiguredPrompt::None;
+                self.phase = CloudBackupLifecyclePhase::Configured;
             }
             CloudBackupStatus::Enabling => {
                 let flow = match &self.phase {
@@ -309,6 +343,18 @@ impl CloudBackupModelState {
             CloudBackupStatus::Enabled => {
                 self.configured.passkey = CloudBackupPasskeyState::Available;
                 self.configured.prompt = CloudBackupConfiguredPrompt::None;
+
+                let should_reset_destructive_operation = matches!(
+                    self.configured.destructive_operation,
+                    CloudBackupDestructiveOperationState::Disabling
+                        | CloudBackupDestructiveOperationState::DisableFailed { .. }
+                );
+
+                if should_reset_destructive_operation {
+                    self.configured.destructive_operation =
+                        CloudBackupDestructiveOperationState::Idle;
+                }
+
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
             CloudBackupStatus::PasskeyMissing => {
@@ -518,6 +564,31 @@ impl CloudBackupModelState {
         }
     }
 
+    // reconciles database disable progress with the UI-facing destructive operation state
+    fn resolve_disable(&mut self, outcome: CloudBackupDisableOutcome) {
+        match outcome {
+            CloudBackupDisableOutcome::Started => {
+                self.configured.destructive_operation =
+                    CloudBackupDestructiveOperationState::Disabling;
+                self.configured.sync = CloudBackupSyncState::Idle;
+                self.configured.pending_upload_verification = PendingUploadVerificationState::Idle;
+                self.phase = CloudBackupLifecyclePhase::Configured;
+            }
+            CloudBackupDisableOutcome::Failed { message, can_keep_enabled } => {
+                self.configured.destructive_operation =
+                    CloudBackupDestructiveOperationState::DisableFailed {
+                        message,
+                        can_keep_enabled,
+                    };
+                self.phase = CloudBackupLifecyclePhase::Configured;
+            }
+            CloudBackupDisableOutcome::ReturnedToIdle => {
+                self.configured.destructive_operation = CloudBackupDestructiveOperationState::Idle;
+                self.phase = CloudBackupLifecyclePhase::Configured;
+            }
+        }
+    }
+
     fn apply_detail_refresh(&mut self, detail: Option<CloudBackupDetail>, reset_cloud_only: bool) {
         let previous_loaded = self.loaded_detail().cloned();
         self.configured.detail = match detail {
@@ -659,6 +730,7 @@ pub(crate) enum CloudBackupModelEvent {
     VerificationStateResolved(VerificationState),
     SyncStateResolved(SyncState),
     RecoveryStateResolved(RecoveryState),
+    DisableStateResolved(CloudBackupDisableOutcome),
     DetailRefreshApplied {
         detail: Option<CloudBackupDetail>,
         reset_cloud_only: bool,
@@ -692,6 +764,7 @@ pub(crate) enum CloudBackupModelEventKind {
     VerificationStateResolved,
     SyncStateResolved,
     RecoveryStateResolved,
+    DisableStateResolved,
     DetailRefreshApplied,
     CloudOnlyStateResolved,
     CloudOnlyOperationResolved,
@@ -743,6 +816,7 @@ impl CloudBackupModelEvent {
             }
             Self::SyncStateResolved(_) => CloudBackupModelEventKind::SyncStateResolved,
             Self::RecoveryStateResolved(_) => CloudBackupModelEventKind::RecoveryStateResolved,
+            Self::DisableStateResolved(_) => CloudBackupModelEventKind::DisableStateResolved,
             Self::DetailRefreshApplied { .. } => CloudBackupModelEventKind::DetailRefreshApplied,
             Self::CloudOnlyStateResolved(_) => CloudBackupModelEventKind::CloudOnlyStateResolved,
             Self::CloudOnlyOperationResolved(_) => {
@@ -806,6 +880,8 @@ pub enum CloudBackupDestructiveOperationState {
     Idle,
     RecreatingManifest,
     ReinitializingBackup,
+    Disabling,
+    DisableFailed { message: String, can_keep_enabled: bool },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -894,6 +970,10 @@ impl CloudBackupModel {
 
     pub(crate) fn cloud_only(&self) -> CloudOnlyState {
         self.state.cloud_only()
+    }
+
+    pub(crate) fn cloud_only_operation(&self) -> CloudOnlyOperation {
+        self.state.cloud_only_operation()
     }
 
     pub(crate) fn other_backups_operation(&self) -> OtherBackupsOperation {
@@ -1030,6 +1110,9 @@ impl CloudBackupModel {
             }
             CloudBackupModelEvent::RecoveryStateResolved(recovery) => {
                 self.state.resolve_recovery(recovery);
+            }
+            CloudBackupModelEvent::DisableStateResolved(outcome) => {
+                self.state.resolve_disable(outcome);
             }
             CloudBackupModelEvent::DetailRefreshApplied { detail, reset_cloud_only } => {
                 self.state.apply_detail_refresh(detail, reset_cloud_only);

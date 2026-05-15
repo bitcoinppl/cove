@@ -265,6 +265,8 @@ impl RustCloudBackupManager {
             }
             A::RecoverOtherBackups => CLOUD_BACKUP_MANAGER.clone().spawn_recover_other_backups(),
             A::DeleteOtherBackups => CLOUD_BACKUP_MANAGER.clone().spawn_delete_other_backups(),
+            A::DisableCloudBackup => CLOUD_BACKUP_MANAGER.disable_cloud_backup(),
+            A::KeepCloudBackupEnabled => CLOUD_BACKUP_MANAGER.keep_cloud_backup_enabled(),
             A::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
             A::EnterDetail => CLOUD_BACKUP_MANAGER.clone().spawn_enter_detail(),
         }

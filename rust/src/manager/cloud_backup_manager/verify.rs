@@ -44,6 +44,7 @@ impl IntegrityDowngrade {
                 }
                 PersistedCloudBackupStatus::Unverified => Some(current.clone()),
                 PersistedCloudBackupStatus::PasskeyMissing
+                | PersistedCloudBackupStatus::Disabling
                 | PersistedCloudBackupStatus::Disabled => None,
             },
         }
@@ -140,7 +141,9 @@ impl RustCloudBackupManager {
                     error!("Failed to mark cloud backup unverified after wallet change: {error}");
                 }
             }
-            PersistedCloudBackupStatus::PasskeyMissing | PersistedCloudBackupStatus::Disabled => {}
+            PersistedCloudBackupStatus::PasskeyMissing
+            | PersistedCloudBackupStatus::Disabling
+            | PersistedCloudBackupStatus::Disabled => {}
         }
     }
 

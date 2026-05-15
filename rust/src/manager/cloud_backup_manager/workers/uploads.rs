@@ -73,6 +73,10 @@ impl CloudBackupUploadWorker {
             let mut blocked_on_authorization = false;
 
             loop {
+                if manager.cloud_backup_writes_blocked() {
+                    break;
+                }
+
                 match manager.verify_pending_uploads_once().await {
                     PendingUploadVerificationStatus::Idle => break,
                     PendingUploadVerificationStatus::BlockedOnAuthorization => {
@@ -116,6 +120,10 @@ impl CloudBackupUploadWorker {
 
     fn schedule_wallet_upload_follow_up(&mut self, wallet_id: WalletId) {
         let Some(manager) = self.manager() else { return };
+        if manager.cloud_backup_writes_blocked() {
+            return;
+        };
+
         let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
         let sync_state = match crate::database::Database::global()
             .cloud_blob_sync_states
@@ -168,6 +176,10 @@ impl CloudBackupUploadWorker {
         wallet_id: WalletId,
         immediate: bool,
     ) -> ActorResult<()> {
+        if self.manager().is_some_and(|manager| manager.cloud_backup_writes_blocked()) {
+            return Produces::ok(());
+        }
+
         if immediate {
             let Some(addr) = self.addr() else { return Produces::ok(()) };
             send!(addr.run_wallet_upload(wallet_id));
@@ -190,6 +202,11 @@ impl CloudBackupUploadWorker {
             self.active_wallet_uploads.remove(&wallet_id);
             return Produces::ok(());
         };
+
+        if manager.cloud_backup_writes_blocked() {
+            self.active_wallet_uploads.remove(&wallet_id);
+            return Produces::ok(());
+        }
 
         self.addr.send_fut_with(move |addr| async move {
             let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id).await;
@@ -286,6 +303,9 @@ impl CloudBackupUploadWorker {
 
         let Some(addr) = self.addr() else { return Produces::ok(()) };
         let manager = self.manager();
+        if manager.as_ref().is_some_and(|manager| manager.cloud_backup_writes_blocked()) {
+            return Produces::ok(());
+        }
 
         for sync_state in states {
             let wallet_id = match sync_state.record_key() {
@@ -331,6 +351,9 @@ impl CloudBackupUploadWorker {
         }
 
         let Some(manager) = self.manager() else { return Produces::ok(()) };
+        if manager.cloud_backup_writes_blocked() {
+            return Produces::ok(());
+        }
 
         self.spawn_pending_upload_verification_loop_task(manager);
 

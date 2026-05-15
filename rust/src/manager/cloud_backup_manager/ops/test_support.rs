@@ -285,6 +285,11 @@ impl MockCloudStorage {
             Some(CloudStorageError::DownloadFailed(message.into()));
     }
 
+    pub(crate) fn fail_delete_namespace_not_found(&self, message: &str) {
+        self.state.lock().delete_namespace_error =
+            Some(CloudStorageError::NotFound(message.into()));
+    }
+
     pub(crate) fn set_reflect_uploaded_wallets_in_listing(&self, enabled: bool) {
         self.state.lock().reflect_uploaded_wallets_in_listing = enabled;
     }

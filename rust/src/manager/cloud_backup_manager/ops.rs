@@ -10,6 +10,7 @@ use super::{
 };
 
 mod cloud_only;
+mod disable;
 mod enable;
 mod other_backups;
 mod restore;

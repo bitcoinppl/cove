@@ -41,6 +41,7 @@ pub(crate) enum CloudBackupOperation {
     RepairPasskey { no_discovery: bool },
     Sync,
     FetchCloudOnly,
+    Disable,
     RestoreCloudWallet,
     DeleteCloudWallet,
     RecoverOtherBackups,
@@ -226,6 +227,16 @@ impl CloudBackupSupervisor {
             }
             CloudBackupOperation::FetchCloudOnly => {
                 cove_tokio::task::spawn(async move { manager.handle_fetch_cloud_only().await });
+            }
+            CloudBackupOperation::Disable => {
+                if !manager.begin_background_operation(
+                    CloudBackupBackgroundOperation::Disable,
+                    Some(CloudBackupStatus::Disabling),
+                ) {
+                    return;
+                }
+
+                cove_tokio::task::spawn(async move { manager.handle_disable_cloud_backup().await });
             }
             CloudBackupOperation::RestoreCloudWallet => {
                 let Some(record_id) = record_id else { return };
@@ -679,6 +690,23 @@ impl CloudBackupSupervisor {
         self.pending_enable_session = None;
         call!(self.sync_health.clear_upload_runtime_state()).await?;
         call!(self.uploads.clear_upload_runtime_state()).await?;
+        Produces::ok(())
+    }
+
+    pub async fn clear_disable_runtime_state(&mut self) -> ActorResult<()> {
+        self.pending_enable_session = None;
+        self.pending_verification_completion = None;
+        self.runtime_passkey_authorization = None;
+        call!(self.sync_health.clear_upload_runtime_state()).await?;
+        call!(self.uploads.clear_upload_runtime_state()).await?;
+        Produces::ok(())
+    }
+
+    pub async fn keep_cloud_backup_enabled(&mut self) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        cove_tokio::task::spawn(async move {
+            manager.handle_keep_cloud_backup_enabled().await;
+        });
         Produces::ok(())
     }
 

@@ -20,8 +20,9 @@ use super::*;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
-    CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, PersistedCloudBackupStatus,
-    PersistedCloudBlobState, PersistedCloudBlobSyncState,
+    CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, PersistedCloudBackupState,
+    PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
+    PersistedDisablingCloudBackup,
 };
 use crate::label_manager::LabelManager;
 use crate::manager::cloud_backup_manager::wallets::{NamespaceMatch, WalletRestoreSession};
@@ -2017,6 +2018,234 @@ async fn wrapper_repair_does_not_upload_when_passkey_persistence_fails() {
 
     assert!(error.to_string().contains("save cspp credentials"), "{error}");
     assert!(!globals.cloud.has_master_key_backup(&namespace));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disable_cloud_backup_deletes_active_namespace_and_clears_local_cloud_state() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    Database::global()
+        .cloud_blob_sync_states
+        .set(&PersistedCloudBlobSyncState::master_key_wrapper(
+            namespace.clone(),
+            PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at: 1 }),
+        ))
+        .unwrap();
+
+    manager.do_disable_cloud_backup().await.unwrap();
+
+    assert!(!globals.cloud.has_namespace(&namespace));
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+    assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
+    assert!(CloudBackupKeychain::global().namespace_id().is_none());
+    assert_eq!(globals.cloud.deleted_namespace_policies(), vec![CloudAccessPolicy::ConsentAllowed]);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespace() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals
+        .cloud
+        .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id("cloud-only")]);
+
+    let error = manager.do_disable_cloud_backup().await.unwrap_err();
+
+    assert!(error.to_string().contains("cloud-only wallets"), "{error}");
+    assert!(globals.cloud.has_namespace(&namespace));
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Enabled
+    );
+    assert!(manager.current_disable_generation().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disable_cloud_backup_blocks_other_namespaces_without_deleting_them() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let other_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.set_master_key_backup(other_namespace.clone(), vec![4, 5, 6]);
+
+    let error = manager.do_disable_cloud_backup().await.unwrap_err();
+
+    assert!(error.to_string().contains("other cloud backups"), "{error}");
+    assert!(globals.cloud.has_namespace(&namespace));
+    assert!(globals.cloud.has_namespace(&other_namespace));
+    assert_eq!(globals.cloud.deleted_namespace_policies(), Vec::<CloudAccessPolicy>::new());
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Enabled
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.fail_delete_namespace("delete failed");
+
+    let error = manager.do_disable_cloud_backup().await.unwrap_err();
+
+    assert!(error.to_string().contains("delete failed"), "{error}");
+    let PersistedCloudBackupState::Disabling(disabling) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected persisted disabling state");
+    };
+    assert!(disabling.delete_started_at.is_some());
+    assert!(
+        disabling.last_error.as_deref().is_some_and(|message| message.contains("delete failed"))
+    );
+    assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace.as_str()));
+    assert_eq!(manager.current_disable_generation(), Some(disabling.disable_generation));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disable_cloud_backup_not_found_listing_retries_then_finishes_cleanup() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.fail_list_wallet_files_for_namespace(
+        namespace.clone(),
+        CloudStorageError::NotFound("missing".into()),
+    );
+
+    manager.do_disable_cloud_backup().await.unwrap();
+
+    assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 4);
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+    assert!(CloudBackupKeychain::global().namespace_id().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disable_cloud_backup_delete_not_found_finishes_cleanup() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.fail_delete_namespace_not_found("already deleted");
+
+    manager.do_disable_cloud_backup().await.unwrap();
+
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+    assert!(CloudBackupKeychain::global().namespace_id().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn persisted_disabling_on_restart_resumes_to_disabled() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    let PersistedCloudBackupState::Configured(previous_configured) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected configured cloud backup state");
+    };
+
+    Database::global()
+        .cloud_backup_state
+        .set(&PersistedCloudBackupState::Disabling(PersistedDisablingCloudBackup {
+            previous_configured,
+            namespace_id: namespace.clone(),
+            disable_generation: 42,
+            started_at: 41,
+            delete_started_at: Some(43),
+            last_error: Some("interrupted".into()),
+            retry_after: Some(44),
+        }))
+        .unwrap();
+
+    let restarted_manager = init_manager();
+    for _ in 0..20 {
+        if Database::global().cloud_backup_state.get().unwrap().status()
+            == PersistedCloudBackupStatus::Disabled
+        {
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    assert!(!globals.cloud.has_namespace(&namespace));
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+    assert!(CloudBackupKeychain::global().namespace_id().is_none());
+    assert_eq!(restarted_manager.model_snapshot().status, CloudBackupStatus::Disabled);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn keep_cloud_backup_enabled_after_delete_failure_requires_existing_namespace() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.fail_delete_namespace("delete failed");
+
+    let error = manager.do_disable_cloud_backup().await.unwrap_err();
+    assert!(error.to_string().contains("delete failed"), "{error}");
+
+    manager.handle_keep_cloud_backup_enabled().await;
+
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Enabled
+    );
+    assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace.as_str()));
+    assert!(manager.current_disable_generation().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
