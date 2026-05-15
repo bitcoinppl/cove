@@ -25,6 +25,7 @@ use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup,
 };
 use crate::label_manager::LabelManager;
+use crate::manager::cloud_backup_manager::model::CloudBackupDestructiveOperationState;
 use crate::manager::cloud_backup_manager::wallets::{NamespaceMatch, WalletRestoreSession};
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, StagedPrfKey,
@@ -34,7 +35,7 @@ use crate::manager::cloud_backup_manager::workers::{
 };
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupEnableContext,
-    CloudBackupEnableOutcome, CloudBackupEnableState, CloudBackupKeychain,
+    CloudBackupEnableOutcome, CloudBackupEnableState, CloudBackupKeychain, CloudBackupLifecycle,
     CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
     CloudBackupRootPrompt, CloudBackupVerificationOutcome, CloudBackupVerificationPresentation,
     CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
@@ -2072,6 +2073,46 @@ async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespa
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Enabled
     );
+    assert!(manager.current_disable_generation().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals
+        .cloud
+        .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id("cloud-only")]);
+
+    manager.handle_disable_cloud_backup().await;
+
+    assert!(globals.cloud.has_namespace(&namespace));
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Enabled
+    );
+    assert!(manager.current_disable_generation().is_none());
+    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+        panic!("expected configured cloud backup lifecycle");
+    };
+    assert!(matches!(
+        configured.destructive_operation,
+        CloudBackupDestructiveOperationState::DisableFailed { can_keep_enabled: true, .. }
+    ));
+
+    manager.handle_keep_cloud_backup_enabled().await;
+
+    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+        panic!("expected configured cloud backup lifecycle");
+    };
+    assert_eq!(configured.destructive_operation, CloudBackupDestructiveOperationState::Idle);
+    assert!(globals.cloud.has_namespace(&namespace));
     assert!(manager.current_disable_generation().is_none());
 }
 

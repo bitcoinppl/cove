@@ -330,8 +330,13 @@ impl RustCloudBackupManager {
     }
 
     async fn do_keep_cloud_backup_enabled(&self) -> Result<(), CloudBackupError> {
-        let PersistedCloudBackupState::Disabling(disabling) = Self::load_persisted_state() else {
-            return Ok(());
+        let disabling = match Self::load_persisted_state() {
+            PersistedCloudBackupState::Disabling(disabling) => disabling,
+            PersistedCloudBackupState::Configured(_) => {
+                self.apply_disable_outcome(CloudBackupDisableOutcome::ReturnedToIdle);
+                return Ok(());
+            }
+            PersistedCloudBackupState::Disabled => return Ok(()),
         };
 
         let cloud = CloudStorage::global_explicit_client();
