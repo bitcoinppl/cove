@@ -80,7 +80,8 @@ object RouteHelpers {
     fun sendConfirm(
         id: WalletId,
         details: ConfirmDetails,
-    ): Route = RouteFactory().sendConfirm(id, details)
+        payjoinEndpoint: String? = null,
+    ): Route = RouteFactory().sendConfirm(id, details, payjoinEndpoint)
 
     fun sendConfirmSignedTransaction(
         id: WalletId,
