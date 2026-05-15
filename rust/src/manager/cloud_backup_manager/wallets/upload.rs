@@ -245,33 +245,38 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
-        if let Err(error) = self
+        let upload_result = self
             .run_cloud_backup_write(async {
                 cloud
                     .upload_wallet_backup(namespace.clone(), record_id.clone(), wallet_json)
                     .await
                     .map_err(CloudBackupError::from)
             })
-            .await
-        {
-            let CloudBackupError::CloudStorage(error) = error else {
-                return Err(error);
-            };
-            return self.handle_dirty_wallet_upload_cloud_error(
+            .await;
+
+        match upload_result {
+            Ok(()) => {
+                let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+                let _ = self.mark_blob_uploaded_pending_confirmation_if_current(
+                    &uploading_state,
+                    prepared.revision_hash,
+                    uploaded_at,
+                )?;
+
+                Ok(())
+            }
+            Err(CloudBackupError::CloudStorage(error)) => self
+                .handle_dirty_wallet_upload_cloud_error(
+                    &uploading_state,
+                    Some(prepared.revision_hash.clone()),
+                    error,
+                ),
+            Err(error) => self.handle_dirty_wallet_upload_error(
                 &uploading_state,
-                Some(prepared.revision_hash.clone()),
+                Some(prepared.revision_hash),
                 error,
-            );
+            ),
         }
-
-        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
-        let _ = self.mark_blob_uploaded_pending_confirmation_if_current(
-            &uploading_state,
-            prepared.revision_hash,
-            uploaded_at,
-        )?;
-
-        Ok(())
     }
 
     fn handle_dirty_wallet_upload_cloud_error(
