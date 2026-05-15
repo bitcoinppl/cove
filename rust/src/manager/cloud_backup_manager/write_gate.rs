@@ -42,9 +42,7 @@ impl CloudWriteGate {
     ) -> Result<T, CloudBackupError> {
         let _guard = self.write_lock.lock().await;
         self.ensure_writes_allowed(writes_blocked_by_persisted_state())?;
-        let result = operation.await;
-        self.ensure_writes_allowed(writes_blocked_by_persisted_state())?;
-        result
+        operation.await
     }
 
     pub(crate) async fn run_exclusive_write<T>(&self, operation: impl Future<Output = T>) -> T {
@@ -63,5 +61,50 @@ impl CloudWriteGate {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use super::*;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn run_allowed_write_preserves_success_when_writes_block_after_operation() {
+        let gate = CloudWriteGate::default();
+        let blocked = AtomicBool::new(false);
+
+        let result = gate
+            .run_allowed_write(
+                async {
+                    blocked.store(true, Ordering::Relaxed);
+                    Ok::<_, CloudBackupError>(42)
+                },
+                || blocked.load(Ordering::Relaxed),
+            )
+            .await;
+
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn run_allowed_write_preserves_operation_error_when_writes_block_after_operation() {
+        let gate = CloudWriteGate::default();
+        let blocked = AtomicBool::new(false);
+
+        let result = gate
+            .run_allowed_write(
+                async {
+                    blocked.store(true, Ordering::Relaxed);
+                    Err::<(), _>(CloudBackupError::Internal("operation failed".into()))
+                },
+                || blocked.load(Ordering::Relaxed),
+            )
+            .await;
+
+        assert!(
+            matches!(result, Err(CloudBackupError::Internal(message)) if message == "operation failed")
+        );
     }
 }
