@@ -16,6 +16,7 @@ struct SendFlowConfirmScreen: View {
     @State var manager: WalletManager
     let details: ConfirmDetails
     let input: SendConfirmationInput
+    let payjoinEndpoint: String?
 
     let prices: PriceResponse? = nil
 
@@ -179,8 +180,9 @@ struct SendFlowConfirmScreen: View {
                                     signedTransaction: finalizedTransaction
                                 )
                             case .unsigned:
-                                _ = try await manager.rust.signAndBroadcastTransaction(
-                                    psbt: details.psbt()
+                                _ = try await manager.rust.initiatePayment(
+                                    psbt: details.psbt(),
+                                    payjoinEndpoint: payjoinEndpoint
                                 )
                             }
                             sendState = .sent
@@ -281,7 +283,8 @@ private enum SendConfirmationError: LocalizedError {
                                     id: WalletId(),
                                     manager: manager,
                                     details: confirmDetailsPreviewNew(),
-                                    input: .unsigned
+                                    input: .unsigned,
+                                    payjoinEndpoint: nil
                                 )
                                 .environment(AppManager.shared)
                                 .environment(AuthManager.shared)
@@ -306,7 +309,8 @@ private enum SendConfirmationError: LocalizedError {
             id: WalletId(),
             manager: WalletManager(preview: "preview_only"),
             details: confirmDetailsPreviewNew(),
-            input: .unsigned
+            input: .unsigned,
+            payjoinEndpoint: nil
         )
         .environment(AppManager.shared)
         .environment(AuthManager.shared)

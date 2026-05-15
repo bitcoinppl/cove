@@ -1638,9 +1638,9 @@ impl RustSendFlowManager {
 
         self.reconciler.send(Message::UpdateFocusField(None));
 
-        let (wallet_type, wallet_id) = {
+        let (wallet_type, wallet_id, payjoin_endpoint) = {
             let state = self.state.lock();
-            (state.metadata.wallet_type, state.metadata.id.clone())
+            (state.metadata.wallet_type, state.metadata.id.clone(), state.payjoin_endpoint.clone())
         };
 
         let me = self.clone();
@@ -1687,7 +1687,9 @@ impl RustSendFlowManager {
 
             // update the route send the frontend to the proper next screen
             let next_route = match wallet_type {
-                WalletType::Hot => RouteFactory::new().send_confirm(wallet_id, details),
+                WalletType::Hot => {
+                    RouteFactory::new().send_confirm(wallet_id, details, payjoin_endpoint)
+                }
                 WalletType::Cold | WalletType::XpubOnly => {
                     RouteFactory::new().send_hardware_export(wallet_id, details)
                 }

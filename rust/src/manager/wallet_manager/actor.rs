@@ -589,6 +589,15 @@ impl WalletActor {
         Produces::ok(result)
     }
 
+    pub async fn initiate_payment(
+        &mut self,
+        psbt: Psbt,
+        _payjoin_endpoint: Option<String>,
+    ) -> ActorResult<Result<(), Error>> {
+        let result = self.do_sign_and_broadcast_transaction(psbt).await;
+        Produces::ok(result)
+    }
+
     async fn do_sign_and_broadcast_transaction(&mut self, mut psbt: Psbt) -> Result<(), Error> {
         fn err(s: &str) -> Error {
             Error::SignAndBroadcastError(s.to_string())

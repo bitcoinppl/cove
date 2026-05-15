@@ -104,6 +104,7 @@ pub struct SendRouteConfirmArgs {
     pub id: WalletId,
     pub details: Arc<ConfirmDetails>,
     pub input: SendConfirmationInput,
+    pub payjoin_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -334,8 +335,18 @@ impl RouteFactory {
         Route::Send(send)
     }
 
-    pub const fn send_confirm(&self, id: WalletId, details: Arc<ConfirmDetails>) -> Route {
-        let args = SendRouteConfirmArgs { id, details, input: SendConfirmationInput::Unsigned };
+    pub fn send_confirm(
+        &self,
+        id: WalletId,
+        details: Arc<ConfirmDetails>,
+        payjoin_endpoint: Option<String>,
+    ) -> Route {
+        let args = SendRouteConfirmArgs {
+            id,
+            details,
+            input: SendConfirmationInput::Unsigned,
+            payjoin_endpoint,
+        };
 
         let send = SendRoute::Confirm(args);
         Route::Send(send)
@@ -351,6 +362,7 @@ impl RouteFactory {
             id,
             details,
             input: SendConfirmationInput::SignedTransaction(transaction),
+            payjoin_endpoint: None,
         };
 
         let send = SendRoute::Confirm(args);
@@ -363,8 +375,12 @@ impl RouteFactory {
         details: Arc<ConfirmDetails>,
         psbt: Arc<Psbt>,
     ) -> Route {
-        let args =
-            SendRouteConfirmArgs { id, details, input: SendConfirmationInput::SignedPsbt(psbt) };
+        let args = SendRouteConfirmArgs {
+            id,
+            details,
+            input: SendConfirmationInput::SignedPsbt(psbt),
+            payjoin_endpoint: None,
+        };
 
         let send = SendRoute::Confirm(args);
         Route::Send(send)

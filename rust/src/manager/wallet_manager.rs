@@ -681,6 +681,20 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub async fn initiate_payment(
+        &self,
+        psbt: Arc<Psbt>,
+        payjoin_endpoint: Option<String>,
+    ) -> Result<(), Error> {
+        let psbt = Arc::unwrap_or_clone(psbt);
+        call!(self.actor.initiate_payment(psbt.into(), payjoin_endpoint)).await.unwrap()?;
+
+        self.force_wallet_scan().await;
+
+        Ok(())
+    }
+
+    #[uniffi::method]
     pub async fn broadcast_transaction(
         &self,
         signed_transaction: Arc<BitcoinTransaction>,
