@@ -160,6 +160,7 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         guard case let .disableFailed(message, canKeepEnabled) = destructiveOperationState else {
             return nil
         }
+
         return (message, canKeepEnabled)
     }
 
