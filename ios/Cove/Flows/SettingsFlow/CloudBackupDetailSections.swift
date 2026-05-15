@@ -37,6 +37,8 @@ struct DetailFormContent: View {
         case let .loadFailed(error):
             OtherBackupsLoadFailedSection(error: error)
         }
+
+        DisableCloudBackupSection(manager: manager, detail: detail)
     }
 
     private var wallets: [CloudBackupWalletItem] {
@@ -108,6 +110,121 @@ struct MissingPasskeyContent: View {
                     .foregroundStyle(Color.statusError)
                     .font(.caption)
             }
+        }
+
+        DisableCloudBackupSection(manager: manager, detail: manager.detail)
+    }
+}
+
+private struct DisableCloudBackupSection: View {
+    let manager: CloudBackupManager
+    let detail: CloudBackupDetail?
+    @State private var showingUnavailableAlert = false
+    @State private var showingFirstConfirmation = false
+    @State private var showingFinalConfirmation = false
+
+    private var unavailableMessage: String? {
+        if manager.isDisablingCloudBackup {
+            return "Cove is already disabling Cloud Backup."
+        }
+
+        if manager.isPerformingDestructiveAction, manager.disableFailure == nil {
+            return "Cove is waiting for the current Cloud Backup operation to finish."
+        }
+
+        if case .operating = manager.cloudOnlyOperation {
+            return "Cove is waiting for the current cloud-only wallet operation to finish."
+        }
+
+        switch manager.otherBackupsOperation {
+        case .recovering, .deleting:
+            return "Cove is waiting for the current other-backup operation to finish."
+        default:
+            break
+        }
+
+        if let detail {
+            if detail.cloudOnlyCount > 0 {
+                return "Restore or delete wallets that are only in Cloud Backup before disabling."
+            }
+
+            if case let .loaded(summary) = detail.otherBackups, summary.namespaceCount > 0 {
+                return "Recover or delete other Cloud Backups before disabling."
+            }
+        }
+
+        return nil
+    }
+
+    var body: some View {
+        Section(header: Text("Disable Cloud Backup")) {
+            if manager.isDisablingCloudBackup {
+                HStack {
+                    ProgressView()
+                        .padding(.trailing, 8)
+                    Text("Deleting cloud backups...")
+                }
+            }
+
+            if let failure = manager.disableFailure {
+                Text(failure.message)
+                    .font(.caption)
+                    .foregroundStyle(Color.statusError)
+
+                Button {
+                    manager.dispatch(action: .disableCloudBackup)
+                } label: {
+                    Label("Try Again", systemImage: "arrow.clockwise")
+                }
+
+                if failure.canKeepEnabled {
+                    Button {
+                        manager.dispatch(action: .keepCloudBackupEnabled)
+                    } label: {
+                        Label("Keep Cloud Backup Enabled", systemImage: "icloud")
+                    }
+                }
+            }
+
+            Button(role: .destructive) {
+                if unavailableMessage != nil {
+                    showingUnavailableAlert = true
+                } else {
+                    showingFirstConfirmation = true
+                }
+            } label: {
+                Label("Disable Cloud Backup", systemImage: "icloud.slash")
+            }
+            .disabled(manager.isDisablingCloudBackup)
+
+            Text("Local wallets stay on this device. Current Cove cloud backups will be deleted from cloud storage.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .alert("Cloud Backup Can't Be Disabled Yet", isPresented: $showingUnavailableAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(unavailableMessage ?? "Cove is waiting for Cloud Backup to finish another operation.")
+        }
+        .confirmationDialog(
+            "Disable Cloud Backup?",
+            isPresented: $showingFirstConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Continue", role: .destructive) {
+                showingFinalConfirmation = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage.")
+        }
+        .alert("Delete Cloud Backups?", isPresented: $showingFinalConfirmation) {
+            Button("Delete Cloud Backups and Disable", role: .destructive) {
+                manager.dispatch(action: .disableCloudBackup)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage. Wallets already on this device will stay on this device, but they will no longer be backed up to cloud storage.")
         }
     }
 }

@@ -19209,6 +19209,9 @@ public enum CloudBackupDestructiveOperationState: Equatable, Hashable {
     case idle
     case recreatingManifest
     case reinitializingBackup
+    case disabling
+    case disableFailed(message: String, canKeepEnabled: Bool
+    )
 
 
 
@@ -19236,6 +19239,11 @@ public struct FfiConverterTypeCloudBackupDestructiveOperationState: FfiConverter
         
         case 3: return .reinitializingBackup
         
+        case 4: return .disabling
+        
+        case 5: return .disableFailed(message: try FfiConverterString.read(from: &buf), canKeepEnabled: try FfiConverterBool.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -19255,6 +19263,16 @@ public struct FfiConverterTypeCloudBackupDestructiveOperationState: FfiConverter
         case .reinitializingBackup:
             writeInt(&buf, Int32(3))
         
+        
+        case .disabling:
+            writeInt(&buf, Int32(4))
+        
+        
+        case let .disableFailed(message,canKeepEnabled):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(message, into: &buf)
+            FfiConverterBool.write(canKeepEnabled, into: &buf)
+            
         }
     }
 }
@@ -19624,6 +19642,8 @@ public enum CloudBackupManagerAction: Equatable, Hashable {
     )
     case recoverOtherBackups
     case deleteOtherBackups
+    case disableCloudBackup
+    case keepCloudBackupEnabled
     case refreshDetail
     case enterDetail
 
@@ -19698,9 +19718,13 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
         
         case 22: return .deleteOtherBackups
         
-        case 23: return .refreshDetail
+        case 23: return .disableCloudBackup
         
-        case 24: return .enterDetail
+        case 24: return .keepCloudBackupEnabled
+        
+        case 25: return .refreshDetail
+        
+        case 26: return .enterDetail
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -19805,12 +19829,20 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(22))
         
         
-        case .refreshDetail:
+        case .disableCloudBackup:
             writeInt(&buf, Int32(23))
         
         
-        case .enterDetail:
+        case .keepCloudBackupEnabled:
             writeInt(&buf, Int32(24))
+        
+        
+        case .refreshDetail:
+            writeInt(&buf, Int32(25))
+        
+        
+        case .enterDetail:
+            writeInt(&buf, Int32(26))
         
         }
     }

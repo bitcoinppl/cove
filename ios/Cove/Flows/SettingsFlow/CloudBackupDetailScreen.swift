@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CloudBackupDetailScreen: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(CloudBackupPresentationCoordinator.self)
     private var cloudBackupPresentationCoordinator
     @State private var manager = CloudBackupManager.shared
@@ -53,6 +54,11 @@ struct CloudBackupDetailScreen: View {
         }
         .onChange(of: hasCloudBackupPresentationBlocker, initial: true) { _, active in
             cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: active)
+        }
+        .onChange(of: manager.isLifecycleDisabled) { _, isDisabled in
+            if isDisabled {
+                dismiss()
+            }
         }
         .confirmationDialog(
             "Recreate Backup Index",
