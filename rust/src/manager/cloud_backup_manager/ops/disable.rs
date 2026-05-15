@@ -1,11 +1,12 @@
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use act_zero::call;
 use backon::{BackoffBuilder as _, FibonacciBuilder};
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_util::ResultExt as _;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use super::blocking_cloud_error;
 use crate::database::Database;
@@ -24,6 +25,8 @@ const CLOUD_ONLY_BLOCKER_MESSAGE: &str =
 
 const OTHER_NAMESPACES_BLOCKER_MESSAGE: &str =
     "recover or delete other cloud backups before disabling cloud backup";
+
+static NEXT_DISABLE_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 impl RustCloudBackupManager {
     pub(crate) async fn handle_disable_cloud_backup(&self) {
@@ -60,7 +63,7 @@ impl RustCloudBackupManager {
                 let disabling = PersistedDisablingCloudBackup {
                     previous_configured: configured,
                     namespace_id,
-                    disable_generation: now,
+                    disable_generation: next_disable_generation(),
                     started_at: now,
                     delete_started_at: None,
                     last_error: None,
@@ -111,8 +114,13 @@ impl RustCloudBackupManager {
             }
         }
 
+        if let Err(error) = self.finish_disable_local_cleanup() {
+            let message = error.to_string();
+            self.persist_disabling_failure(disabling, message)?;
+            return Err(error);
+        }
+
         self.persist_disabled_after_remote_delete(&disabling)?;
-        self.finish_disable_local_cleanup(disabling.disable_generation);
         info!("Disabled cloud backup and deleted active namespace");
         Ok(())
     }
@@ -269,12 +277,10 @@ impl RustCloudBackupManager {
         disabling: &PersistedDisablingCloudBackup,
         message: String,
     ) -> Result<(), CloudBackupError> {
-        Database::global()
-            .cloud_backup_state
-            .set(&PersistedCloudBackupState::Configured(disabling.previous_configured.clone()))
-            .map_err_prefix("restore configured cloud backup state", CloudBackupError::Internal)?;
-        self.lift_disable_fence(disabling.disable_generation);
-        self.reconcile_runtime_status(CloudBackupStatus::Enabled);
+        let mut disabling = disabling.clone();
+        disabling.last_error = Some(message.clone());
+        disabling.retry_after = None;
+        self.persist_disabling_state(&disabling, "persist cloud backup disable blocker")?;
         self.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
             message,
             can_keep_enabled: true,
@@ -296,15 +302,16 @@ impl RustCloudBackupManager {
         Ok(())
     }
 
-    fn finish_disable_local_cleanup(&self, generation: u64) {
-        if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
-            warn!("Disable cloud backup failed to clear local keychain state: {error}");
-        }
-        if let Err(error) = Database::global().cloud_blob_sync_states.delete_all() {
-            warn!("Disable cloud backup failed to clear cloud blob sync state: {error}");
-        }
+    fn finish_disable_local_cleanup(&self) -> Result<(), CloudBackupError> {
+        CloudBackupKeychain::global().clear_local_state().map_err_prefix(
+            "clear cloud backup local keychain state",
+            CloudBackupError::Internal,
+        )?;
+        Database::global()
+            .cloud_blob_sync_states
+            .delete_all()
+            .map_err_prefix("clear cloud backup blob sync state", CloudBackupError::Internal)?;
 
-        self.lift_disable_fence(generation);
         self.apply_detail_outcome(
             crate::manager::cloud_backup_manager::CloudBackupDetailOutcome::Cleared,
         );
@@ -317,6 +324,7 @@ impl RustCloudBackupManager {
         self.apply_recovery_outcome(
             crate::manager::cloud_backup_manager::CloudBackupRecoveryOutcome::Idle,
         );
+        Ok(())
     }
 
     fn disable_can_keep_enabled(&self) -> bool {
@@ -324,7 +332,7 @@ impl RustCloudBackupManager {
             PersistedCloudBackupState::Disabling(disabling) => {
                 disabling.delete_started_at.is_none()
             }
-            PersistedCloudBackupState::Configured(_) => true,
+            PersistedCloudBackupState::Configured(_) => false,
             PersistedCloudBackupState::Disabled => false,
         }
     }
@@ -396,4 +404,8 @@ async fn list_active_wallets_for_disable(
 
 fn current_timestamp() -> u64 {
     jiff::Timestamp::now().as_second().try_into().unwrap_or(0)
+}
+
+fn next_disable_generation() -> u64 {
+    NEXT_DISABLE_GENERATION.fetch_add(1, Ordering::Relaxed).wrapping_add(1)
 }

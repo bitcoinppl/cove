@@ -347,7 +347,6 @@ impl CloudBackupModelState {
                 let should_reset_destructive_operation = matches!(
                     self.configured.destructive_operation,
                     CloudBackupDestructiveOperationState::Disabling
-                        | CloudBackupDestructiveOperationState::DisableFailed { .. }
                 );
 
                 if should_reset_destructive_operation {
@@ -570,6 +569,7 @@ impl CloudBackupModelState {
             CloudBackupDisableOutcome::Started => {
                 self.configured.destructive_operation =
                     CloudBackupDestructiveOperationState::Disabling;
+                self.configured.prompt = CloudBackupConfiguredPrompt::None;
                 self.configured.sync = CloudBackupSyncState::Idle;
                 self.configured.pending_upload_verification = PendingUploadVerificationState::Idle;
                 self.phase = CloudBackupLifecyclePhase::Configured;
@@ -1408,6 +1408,89 @@ mod tests {
 
         assert!(effects.status_changed);
         assert!(matches!(effects.lifecycle, Some(CloudBackupLifecycle::Configured(_)),));
+    }
+
+    #[test]
+    fn runtime_enabled_preserves_disable_failed_signal() {
+        let mut model = CloudBackupModel::default();
+        model
+            .apply_event(CloudBackupModelEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled))
+            .unwrap();
+        model
+            .apply_event(CloudBackupModelEvent::DisableStateResolved(
+                CloudBackupDisableOutcome::Failed {
+                    message: "blocked".into(),
+                    can_keep_enabled: true,
+                },
+            ))
+            .unwrap();
+
+        model
+            .apply_event(CloudBackupModelEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled))
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
+            panic!("enabled backup should project configured lifecycle");
+        };
+        assert_eq!(
+            state.destructive_operation,
+            CloudBackupDestructiveOperationState::DisableFailed {
+                message: "blocked".into(),
+                can_keep_enabled: true,
+            }
+        );
+    }
+
+    #[test]
+    fn returned_to_idle_clears_disable_failed_signal() {
+        let mut model = CloudBackupModel::default();
+        model
+            .apply_event(CloudBackupModelEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled))
+            .unwrap();
+        model
+            .apply_event(CloudBackupModelEvent::DisableStateResolved(
+                CloudBackupDisableOutcome::Failed {
+                    message: "blocked".into(),
+                    can_keep_enabled: true,
+                },
+            ))
+            .unwrap();
+
+        model
+            .apply_event(CloudBackupModelEvent::DisableStateResolved(
+                CloudBackupDisableOutcome::ReturnedToIdle,
+            ))
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
+            panic!("enabled backup should project configured lifecycle");
+        };
+        assert_eq!(state.destructive_operation, CloudBackupDestructiveOperationState::Idle);
+    }
+
+    #[test]
+    fn disable_started_clears_configured_prompt() {
+        let mut model = CloudBackupModel::default();
+        model
+            .apply_event(CloudBackupModelEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled))
+            .unwrap();
+        model
+            .apply_event(CloudBackupModelEvent::PasskeyChoicePromptSet(
+                CloudBackupPasskeyChoiceIntent::RepairPasskey,
+            ))
+            .unwrap();
+
+        model
+            .apply_event(CloudBackupModelEvent::DisableStateResolved(
+                CloudBackupDisableOutcome::Started,
+            ))
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
+            panic!("enabled backup should project configured lifecycle");
+        };
+        assert_eq!(state.root_prompt, CloudBackupRootPrompt::None);
+        assert_eq!(state.destructive_operation, CloudBackupDestructiveOperationState::Disabling);
     }
 
     #[test]

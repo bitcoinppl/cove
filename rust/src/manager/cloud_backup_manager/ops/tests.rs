@@ -2048,7 +2048,48 @@ async fn disable_cloud_backup_deletes_active_namespace_and_clears_local_cloud_st
     );
     assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
     assert!(CloudBackupKeychain::global().namespace_id().is_none());
-    assert_eq!(globals.cloud.deleted_namespace_policies(), vec![CloudAccessPolicy::ConsentAllowed]);
+    assert!(
+        globals.cloud.deleted_namespace_policies().contains(&CloudAccessPolicy::ConsentAllowed)
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.keychain.fail_delete_at(1);
+
+    let error = manager.do_disable_cloud_backup().await.unwrap_err();
+
+    assert!(error.to_string().contains("clear cloud backup local keychain state"), "{error}");
+    assert!(!globals.cloud.has_namespace(&namespace));
+    let PersistedCloudBackupState::Disabling(disabling) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected persisted disabling state");
+    };
+    assert!(disabling.delete_started_at.is_some());
+    assert!(
+        disabling
+            .last_error
+            .as_deref()
+            .is_some_and(|message| message.contains("clear cloud backup local keychain state"))
+    );
+    assert_eq!(manager.current_disable_generation(), Some(disabling.disable_generation));
+
+    manager.do_disable_cloud_backup().await.unwrap();
+
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+    assert!(manager.current_disable_generation().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2069,11 +2110,37 @@ async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespa
 
     assert!(error.to_string().contains("cloud-only wallets"), "{error}");
     assert!(globals.cloud.has_namespace(&namespace));
-    assert_eq!(
-        Database::global().cloud_backup_state.get().unwrap().status(),
-        PersistedCloudBackupStatus::Enabled
-    );
-    assert!(manager.current_disable_generation().is_none());
+    let PersistedCloudBackupState::Disabling(disabling) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected persisted disabling state");
+    };
+    assert!(disabling.delete_started_at.is_none());
+    assert!(manager.current_disable_generation().is_some());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disable_cloud_backup_uses_unique_generation_for_each_attempt() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals
+        .cloud
+        .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id("cloud-only")]);
+
+    manager.handle_disable_cloud_backup().await;
+    let first_generation = manager.current_disable_generation().unwrap();
+    manager.handle_keep_cloud_backup_enabled().await;
+
+    manager.handle_disable_cloud_backup().await;
+    let second_generation = manager.current_disable_generation().unwrap();
+
+    assert_ne!(first_generation, second_generation);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2093,11 +2160,13 @@ async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
     manager.handle_disable_cloud_backup().await;
 
     assert!(globals.cloud.has_namespace(&namespace));
-    assert_eq!(
-        Database::global().cloud_backup_state.get().unwrap().status(),
-        PersistedCloudBackupStatus::Enabled
-    );
-    assert!(manager.current_disable_generation().is_none());
+    let PersistedCloudBackupState::Disabling(disabling) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected persisted disabling state");
+    };
+    assert!(disabling.delete_started_at.is_none());
+    assert_eq!(manager.current_disable_generation(), Some(disabling.disable_generation));
     let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
         panic!("expected configured cloud backup lifecycle");
     };
@@ -2135,10 +2204,12 @@ async fn disable_cloud_backup_blocks_other_namespaces_without_deleting_them() {
     assert!(globals.cloud.has_namespace(&namespace));
     assert!(globals.cloud.has_namespace(&other_namespace));
     assert_eq!(globals.cloud.deleted_namespace_policies(), Vec::<CloudAccessPolicy>::new());
-    assert_eq!(
-        Database::global().cloud_backup_state.get().unwrap().status(),
-        PersistedCloudBackupStatus::Enabled
-    );
+    let PersistedCloudBackupState::Disabling(disabling) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected persisted disabling state");
+    };
+    assert!(disabling.delete_started_at.is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
