@@ -149,6 +149,12 @@ fun CloudBackupScreen(
         manager.dispatch(CloudBackupManagerAction.EnterDetail)
     }
 
+    LaunchedEffect(manager.isLifecycleDisabled) {
+        if (manager.isLifecycleDisabled) {
+            app.popRoute()
+        }
+    }
+
     Scaffold(
         modifier =
             modifier
@@ -699,6 +705,8 @@ private fun MissingPasskeyContent(
         repairError?.let {
             ErrorInlineMessage(it)
         }
+        
+        DisableCloudBackupSection(manager = manager, detail = manager.detail)
     }
 }
 
@@ -777,6 +785,163 @@ private fun DetailFormContent(
         onRecreate = onRecreate,
         onReinitialize = onReinitialize,
     )
+
+    DisableCloudBackupSection(manager = manager, detail = detail)
+}
+
+@Composable
+private fun DisableCloudBackupSection(
+    manager: CloudBackupManager,
+    detail: CloudBackupDetail?,
+) {
+    var showUnavailable by remember { mutableStateOf(false) }
+    var showFirstConfirmation by remember { mutableStateOf(false) }
+    var showFinalConfirmation by remember { mutableStateOf(false) }
+    val unavailableMessage = disableUnavailableMessage(manager, detail)
+
+    SectionHeader("Disable Cloud Backup", modifier = Modifier.padding(horizontal = 16.dp))
+    MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
+        Column {
+            if (manager.isDisablingCloudBackup) {
+                LoadingRow("Deleting cloud backups")
+                MaterialDivider()
+            }
+
+            manager.disableFailure?.let { failure ->
+                ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
+                MaterialDivider()
+                MaterialSettingsItem(
+                    title = "Try Again",
+                    onClick = { manager.dispatch(CloudBackupManagerAction.DisableCloudBackup) },
+                    leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                )
+
+                if (failure.canKeepEnabled) {
+                    MaterialDivider()
+                    MaterialSettingsItem(
+                        title = "Keep Cloud Backup Enabled",
+                        onClick = { manager.dispatch(CloudBackupManagerAction.KeepCloudBackupEnabled) },
+                        leadingContent = { Icon(Icons.Default.CloudDone, contentDescription = null) },
+                    )
+                }
+                MaterialDivider()
+            }
+
+            MaterialSettingsItem(
+                title = "Disable Cloud Backup",
+                subtitle = "Delete current Cove cloud backups. Local wallets stay on this device.",
+                onClick =
+                    if (manager.isDisablingCloudBackup) {
+                        null
+                    } else {
+                        {
+                            if (unavailableMessage != null) {
+                                showUnavailable = true
+                            } else {
+                                showFirstConfirmation = true
+                            }
+                        }
+                    },
+                titleColor = MaterialTheme.colorScheme.error,
+                leadingContent = { Icon(Icons.Default.CloudOff, contentDescription = null) },
+            )
+        }
+    }
+
+    if (showUnavailable) {
+        AlertDialog(
+            onDismissRequest = { showUnavailable = false },
+            title = { Text("Cloud Backup Can't Be Disabled Yet") },
+            text = {
+                Text(unavailableMessage ?: "Cove is waiting for Cloud Backup to finish another operation.")
+            },
+            confirmButton = {
+                TextButton(onClick = { showUnavailable = false }) { Text("OK") }
+            },
+        )
+    }
+
+    if (showFirstConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showFirstConfirmation = false },
+            title = { Text("Disable Cloud Backup?") },
+            text = { Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showFirstConfirmation = false
+                        showFinalConfirmation = true
+                    },
+                ) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFirstConfirmation = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showFinalConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showFinalConfirmation = false },
+            title = { Text("Delete Cloud Backups?") },
+            text = {
+                Text(
+                    "Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage. Wallets already on this device will stay on this device, but they will no longer be backed up to cloud storage.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showFinalConfirmation = false
+                        manager.dispatch(CloudBackupManagerAction.DisableCloudBackup)
+                    },
+                ) { Text("Delete Cloud Backups and Disable") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFinalConfirmation = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+private fun disableUnavailableMessage(
+    manager: CloudBackupManager,
+    detail: CloudBackupDetail?,
+): String? {
+    if (manager.isDisablingCloudBackup) {
+        return "Cove is already disabling Cloud Backup."
+    }
+
+    if (manager.isPerformingDestructiveAction && manager.disableFailure == null) {
+        return "Cove is waiting for the current Cloud Backup operation to finish."
+    }
+
+    if (manager.cloudOnlyOperation is CloudOnlyOperation.Operating) {
+        return "Cove is waiting for the current cloud-only wallet operation to finish."
+    }
+
+    when (manager.otherBackupsOperation) {
+        is OtherBackupsOperation.Recovering,
+        is OtherBackupsOperation.Deleting,
+        -> return "Cove is waiting for the current other-backup operation to finish."
+        else -> Unit
+    }
+
+    if (detail != null) {
+        if (detail.cloudOnlyCount.toInt() > 0) {
+            return "Restore or delete wallets that are only in Cloud Backup before disabling."
+        }
+
+        val otherBackups = detail.otherBackups
+        if (
+            otherBackups is CloudBackupOtherBackupsState.Loaded &&
+                otherBackups.summary.namespaceCount.toInt() > 0
+        ) {
+            return "Recover or delete other Cloud Backups before disabling."
+        }
+    }
+
+    return null
 }
 
 @Composable

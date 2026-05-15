@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupDetailState
+import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
@@ -188,6 +189,18 @@ class CloudBackupManager private constructor(
                         ?.otherBackupsOperation ?: OtherBackupsOperation.Idle
                 else -> OtherBackupsOperation.Idle
             }
+
+    val destructiveOperationState: CloudBackupDestructiveOperationState
+        get() = configuredState?.destructiveOperation ?: CloudBackupDestructiveOperationState.Idle
+
+    val isDisablingCloudBackup: Boolean
+        get() = destructiveOperationState is CloudBackupDestructiveOperationState.Disabling
+
+    val disableFailure: CloudBackupDestructiveOperationState.DisableFailed?
+        get() = destructiveOperationState as? CloudBackupDestructiveOperationState.DisableFailed
+
+    val isPerformingDestructiveAction: Boolean
+        get() = destructiveOperationState !is CloudBackupDestructiveOperationState.Idle
 
     val hasPendingUploadVerification: Boolean
         get() = verificationState is CloudBackupVerificationState.AwaitingUploadConfirmation
