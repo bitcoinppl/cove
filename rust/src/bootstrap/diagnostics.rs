@@ -26,11 +26,50 @@ static LAST_KNOWN_WALLET_IDS: Mutex<Option<BTreeSet<String>>> = Mutex::new(None)
 #[derive(Debug, Clone)]
 struct LastBootstrapFailure {
     timestamp: String,
-    category: &'static str,
+    category: ErrorCategory,
     message: String,
     step: BootstrapStep,
     migration_progress: Option<(u32, u32)>,
     wallet_migration_failures: Vec<MigrationFailure>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ErrorCategory {
+    KeyDerivation,
+    MainDatabaseMigration,
+    WalletDatabaseMigration,
+    Cancelled,
+    AlreadyCalled,
+    DatabaseKeyMismatch,
+    DatabaseVerificationFailed,
+}
+
+impl ErrorCategory {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::KeyDerivation => "key_derivation",
+            Self::MainDatabaseMigration => "main_database_migration",
+            Self::WalletDatabaseMigration => "wallet_database_migration",
+            Self::Cancelled => "cancelled",
+            Self::AlreadyCalled => "already_called",
+            Self::DatabaseKeyMismatch => "database_key_mismatch",
+            Self::DatabaseVerificationFailed => "database_verification_failed",
+        }
+    }
+}
+
+impl From<&AppInitError> for ErrorCategory {
+    fn from(error: &AppInitError) -> Self {
+        match error {
+            AppInitError::KeyDerivation(_) => Self::KeyDerivation,
+            AppInitError::MainDatabaseMigration(_) => Self::MainDatabaseMigration,
+            AppInitError::WalletDatabaseMigration(_) => Self::WalletDatabaseMigration,
+            AppInitError::Cancelled(_) => Self::Cancelled,
+            AppInitError::AlreadyCalled(_) => Self::AlreadyCalled,
+            AppInitError::DatabaseKeyMismatch(_) => Self::DatabaseKeyMismatch,
+            AppInitError::DatabaseVerificationFailed(_) => Self::DatabaseVerificationFailed,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -45,7 +84,34 @@ enum TableInventory {
     Unavailable(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WalletDirStatus {
+    Known,
+    Orphan,
+    Unknown,
+}
+
+impl WalletDirStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Known => "known",
+            Self::Orphan => "orphan",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
 pub(crate) fn record_bootstrap_failure(error: &AppInitError) {
+    let category = ErrorCategory::from(error);
+    if category == ErrorCategory::AlreadyCalled
+        && LAST_BOOTSTRAP_FAILURE
+            .lock()
+            .as_ref()
+            .is_some_and(|failure| failure.category != ErrorCategory::AlreadyCalled)
+    {
+        return;
+    }
+
     let progress = super::migration::active_migration()
         .map(|migration| migration.progress())
         .map(|progress| (progress.current, progress.total));
@@ -53,7 +119,7 @@ pub(crate) fn record_bootstrap_failure(error: &AppInitError) {
 
     let failure = LastBootstrapFailure {
         timestamp: timestamp(),
-        category: error_category(error),
+        category,
         message: error.to_string(),
         step: super::bootstrap_progress(),
         migration_progress: progress,
@@ -108,7 +174,7 @@ pub(crate) fn text_report_for_paths(root_dir: &Path, wallet_dir: &Path) -> Strin
 
     if let Some(failure) = last_failure {
         report_line!(report, "Last failure recorded: {}", failure.timestamp);
-        report_line!(report, "Last failure category: {}", failure.category);
+        report_line!(report, "Last failure category: {}", failure.category.as_str());
         report_line!(report, "Last failure step: {:?}", failure.step);
         report_line!(
             report,
@@ -189,17 +255,17 @@ fn append_wallet_dirs(
     for path in entries {
         let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("<invalid>");
         let status = match known_wallet_ids {
-            Some(ids) if ids.contains(name) => "known",
-            Some(_) => "orphan",
-            None => "unknown",
+            Some(ids) if ids.contains(name) => WalletDirStatus::Known,
+            Some(_) => WalletDirStatus::Orphan,
+            None => WalletDirStatus::Unknown,
         };
 
-        report_line!(report, "- {name} ({status})");
+        report_line!(report, "- {name} ({})", status.as_str());
         append_wallet_database_state(report, &path, status);
     }
 }
 
-fn append_wallet_database_state(report: &mut String, wallet_dir: &Path, status: &str) {
+fn append_wallet_database_state(report: &mut String, wallet_dir: &Path, status: WalletDirStatus) {
     let table_classification = wallet_table_classification();
     let state = migration_state(
         wallet_dir,
@@ -207,7 +273,7 @@ fn append_wallet_database_state(report: &mut String, wallet_dir: &Path, status: 
         "wallet_data.encrypted.json.redb",
         "wallet_data.encrypted.json.redb.tmp",
     );
-    if status == "orphan" {
+    if status == WalletDirStatus::Orphan {
         report_line!(report, "  migration state: skipped: orphan wallet dir ({state})");
     } else {
         report_line!(report, "  migration state: {state}");
@@ -546,18 +612,6 @@ fn format_progress(progress: Option<(u32, u32)>) -> String {
     progress.map(|(current, total)| format!("{current}/{total}")).unwrap_or_else(|| "none".into())
 }
 
-fn error_category(error: &AppInitError) -> &'static str {
-    match error {
-        AppInitError::KeyDerivation(_) => "key_derivation",
-        AppInitError::MainDatabaseMigration(_) => "main_database_migration",
-        AppInitError::WalletDatabaseMigration(_) => "wallet_database_migration",
-        AppInitError::Cancelled(_) => "cancelled",
-        AppInitError::AlreadyCalled(_) => "already_called",
-        AppInitError::DatabaseKeyMismatch(_) => "database_key_mismatch",
-        AppInitError::DatabaseVerificationFailed(_) => "database_verification_failed",
-    }
-}
-
 fn timestamp() -> String {
     jiff::Timestamp::now().to_string()
 }
@@ -587,6 +641,70 @@ mod tests {
         }
 
         write_txn.commit()?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn already_called_does_not_replace_actionable_bootstrap_failure() -> eyre::Result<()> {
+        let _guard = TEST_LOCK.lock();
+        let dir = TempDir::new()?;
+        let wallet_dir = dir.path().join("wallets");
+        std::fs::create_dir_all(&wallet_dir)?;
+
+        reset_test_state();
+        record_bootstrap_failure(&AppInitError::MainDatabaseMigration("root cause".into()));
+        record_bootstrap_failure(&AppInitError::AlreadyCalled("second call".into()));
+
+        let report = text_report_for_paths(dir.path(), &wallet_dir);
+
+        assert!(report.contains("Last failure category: main_database_migration"));
+        assert!(
+            report.contains("Last failure message: Main database migration failed: root cause")
+        );
+        assert!(!report.contains("Last failure category: already_called"));
+        assert!(!report.contains("Last failure message: Bootstrap already called: second call"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn already_called_records_when_no_prior_bootstrap_failure() -> eyre::Result<()> {
+        let _guard = TEST_LOCK.lock();
+        let dir = TempDir::new()?;
+        let wallet_dir = dir.path().join("wallets");
+        std::fs::create_dir_all(&wallet_dir)?;
+
+        reset_test_state();
+        record_bootstrap_failure(&AppInitError::AlreadyCalled("second call".into()));
+
+        let report = text_report_for_paths(dir.path(), &wallet_dir);
+
+        assert!(report.contains("Last failure category: already_called"));
+        assert!(report.contains("Last failure message: Bootstrap already called: second call"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn actionable_bootstrap_failure_replaces_already_called() -> eyre::Result<()> {
+        let _guard = TEST_LOCK.lock();
+        let dir = TempDir::new()?;
+        let wallet_dir = dir.path().join("wallets");
+        std::fs::create_dir_all(&wallet_dir)?;
+
+        reset_test_state();
+        record_bootstrap_failure(&AppInitError::AlreadyCalled("first call".into()));
+        record_bootstrap_failure(&AppInitError::WalletDatabaseMigration("root cause".into()));
+
+        let report = text_report_for_paths(dir.path(), &wallet_dir);
+
+        assert!(report.contains("Last failure category: wallet_database_migration"));
+        assert!(
+            report.contains("Last failure message: Wallet database migration failed: root cause")
+        );
+        assert!(!report.contains("Last failure category: already_called"));
+        assert!(!report.contains("Last failure message: Bootstrap already called: first call"));
 
         Ok(())
     }
