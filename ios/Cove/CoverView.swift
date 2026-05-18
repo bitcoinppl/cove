@@ -53,6 +53,9 @@ private struct StorageErrorView: View {
                 Button(copiedDiagnostics ? "Copied" : "Copy Diagnostics") {
                     UIPasteboard.general.string = StartupDiagnostics.report(errorMessage: errorMessage)
                     copiedDiagnostics = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        copiedDiagnostics = false
+                    }
                 }
                 .buttonStyle(.bordered)
 
