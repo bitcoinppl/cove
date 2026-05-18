@@ -9,9 +9,12 @@ The wallet is built on top of the [BDK](https://bitcoindevkit.org/) library.
 
 We provide hot wallet support but one of the main goals is to be the best mobile wallet to use with hardware wallets.
 
-## Available on The Apple AppStore
+## Available on iOS and Android
 
-[![Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917 1](https://github.com/user-attachments/assets/118e679c-a205-4251-988a-107c4ee78076)](https://covebitcoinwallet.com/appstore)
+<p>
+  <a href="https://covebitcoinwallet.com/appstore"><img alt="Download on the App Store" src="https://github.com/user-attachments/assets/118e679c-a205-4251-988a-107c4ee78076" height="60"></a>
+  <a href="https://play.google.com/store/apps/details?id=org.bitcoinppl.cove"><img alt="Get it on Google Play" src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" width="198"></a>
+</p>
 
 ## Build from Source
 
@@ -51,7 +54,6 @@ https://github.com/user-attachments/assets/9c933b90-a991-4c09-be29-2825d535bc1e
 
 - Lock and Unlock individual UTXOs
 - Support for SATSCARD
-- Android version
 
 ## Acknowledgements
 
