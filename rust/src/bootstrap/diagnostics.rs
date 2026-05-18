@@ -66,6 +66,7 @@ pub(crate) fn record_bootstrap_failure(error: &AppInitError) {
 pub(crate) fn clear_bootstrap_failure() {
     *LAST_BOOTSTRAP_FAILURE.lock() = None;
     LAST_WALLET_MIGRATION_FAILURES.lock().clear();
+    *LAST_KNOWN_WALLET_IDS.lock() = None;
 }
 
 pub(crate) fn record_wallet_migration_failures(failures: &[MigrationFailure]) {
@@ -531,6 +532,27 @@ mod tests {
         }
 
         write_txn.commit()?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn clear_bootstrap_failure_clears_known_wallet_ids() -> eyre::Result<()> {
+        let _guard = TEST_LOCK.lock();
+        let dir = TempDir::new()?;
+        let wallet_dir = dir.path().join("wallets");
+        let known_dir = wallet_dir.join("known_wallet");
+        std::fs::create_dir_all(&known_dir)?;
+
+        reset_test_state();
+        *LAST_KNOWN_WALLET_IDS.lock() = Some(BTreeSet::from(["known_wallet".to_string()]));
+
+        clear_bootstrap_failure();
+        let report = text_report_for_paths(dir.path(), &wallet_dir);
+
+        assert!(report.contains("known wallet ids: unavailable"));
+        assert!(report.contains("known_wallet (unknown)"));
+        assert!(!report.contains("known_wallet (known)"));
 
         Ok(())
     }
