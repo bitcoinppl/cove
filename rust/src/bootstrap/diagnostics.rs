@@ -144,19 +144,21 @@ pub(crate) fn text_report_for_paths(root_dir: &Path, wallet_dir: &Path) -> Strin
 }
 
 fn append_main_database_state(report: &mut String, root_dir: &Path) {
-    let known_tables = known_main_tables();
+    let table_classification = main_table_classification();
     report_line!(
         report,
         "Main migration state: {}",
         migration_state(root_dir, "cove.db", "cove.encrypted.db", "cove.encrypted.db.tmp")
     );
 
-    let source = append_database_file(report, root_dir, "cove.db", "", &known_tables);
-    let dest = append_database_file(report, root_dir, "cove.encrypted.db", "", &known_tables);
-    let tmp = append_database_file(report, root_dir, "cove.encrypted.db.tmp", "", &known_tables);
-    append_database_file(report, root_dir, "cove.db.bak", "", &known_tables);
-    append_database_file(report, root_dir, "cove.db.enc.tmp", "", &known_tables);
-    append_database_file(report, root_dir, "cove.encrypted.db.corrupt", "", &known_tables);
+    let source = append_database_file(report, root_dir, "cove.db", "", &table_classification);
+    let dest =
+        append_database_file(report, root_dir, "cove.encrypted.db", "", &table_classification);
+    let tmp =
+        append_database_file(report, root_dir, "cove.encrypted.db.tmp", "", &table_classification);
+    append_database_file(report, root_dir, "cove.db.bak", "", &table_classification);
+    append_database_file(report, root_dir, "cove.db.enc.tmp", "", &table_classification);
+    append_database_file(report, root_dir, "cove.encrypted.db.corrupt", "", &table_classification);
 
     append_table_comparison(report, "cove.db -> cove.encrypted.db", &source, &dest, "");
     append_table_comparison(report, "cove.db -> cove.encrypted.db.tmp", &source, &tmp, "");
@@ -198,7 +200,7 @@ fn append_wallet_dirs(
 }
 
 fn append_wallet_database_state(report: &mut String, wallet_dir: &Path, status: &str) {
-    let known_tables = known_wallet_tables();
+    let table_classification = wallet_table_classification();
     let state = migration_state(
         wallet_dir,
         "wallet_data.json",
@@ -211,29 +213,36 @@ fn append_wallet_database_state(report: &mut String, wallet_dir: &Path, status: 
         report_line!(report, "  migration state: {state}");
     }
 
-    let source = append_database_file(report, wallet_dir, "wallet_data.json", "  ", &known_tables);
+    let source =
+        append_database_file(report, wallet_dir, "wallet_data.json", "  ", &table_classification);
     let dest = append_database_file(
         report,
         wallet_dir,
         "wallet_data.encrypted.json.redb",
         "  ",
-        &known_tables,
+        &table_classification,
     );
     let tmp = append_database_file(
         report,
         wallet_dir,
         "wallet_data.encrypted.json.redb.tmp",
         "  ",
-        &known_tables,
+        &table_classification,
     );
-    append_database_file(report, wallet_dir, "wallet_data.json.bak", "  ", &known_tables);
-    append_database_file(report, wallet_dir, "wallet_data.json.enc.tmp", "  ", &known_tables);
+    append_database_file(report, wallet_dir, "wallet_data.json.bak", "  ", &table_classification);
+    append_database_file(
+        report,
+        wallet_dir,
+        "wallet_data.json.enc.tmp",
+        "  ",
+        &table_classification,
+    );
     append_database_file(
         report,
         wallet_dir,
         "wallet_data.encrypted.json.redb.corrupt",
         "  ",
-        &known_tables,
+        &table_classification,
     );
 
     append_table_comparison(
@@ -257,7 +266,7 @@ fn append_database_file(
     directory: &Path,
     name: &str,
     prefix: &str,
-    known_tables: &BTreeSet<String>,
+    table_classification: &TableClassification,
 ) -> DatabaseFileReport {
     let path = directory.join(name);
     let metadata = match path.metadata() {
@@ -282,7 +291,7 @@ fn append_database_file(
     report_line!(report, "{prefix}{name}: present, bytes={}{}", metadata.len(), encrypted_suffix);
 
     let tables = inspect_tables(&path, encrypted);
-    append_table_inventory(report, &tables, known_tables, prefix);
+    append_table_inventory(report, &tables, table_classification, prefix);
 
     DatabaseFileReport { present_file: true, tables: Some(tables) }
 }
@@ -344,7 +353,7 @@ fn table_names(db: &redb::Database) -> TableInventory {
 fn append_table_inventory(
     report: &mut String,
     inventory: &TableInventory,
-    known_tables: &BTreeSet<String>,
+    table_classification: &TableClassification,
     prefix: &str,
 ) {
     match inventory {
@@ -355,17 +364,31 @@ fn append_table_inventory(
             let labelled = tables
                 .iter()
                 .map(|table| {
-                    let status = if known_tables.contains(table) { "known" } else { "unknown" };
+                    let status = table_classification.label(table);
                     format!("{table} ({status})")
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
             report_line!(report, "{prefix}  schema tables: {labelled}");
 
-            let unknown =
-                tables.difference(known_tables).map(String::as_str).collect::<Vec<_>>().join(", ");
+            let unknown = tables
+                .iter()
+                .filter(|table| !table_classification.current.contains(*table))
+                .filter(|table| !table_classification.historical.contains(*table))
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(", ");
             if !unknown.is_empty() {
                 report_line!(report, "{prefix}  unknown tables: {unknown}");
+            }
+
+            let historical = tables
+                .intersection(&table_classification.historical)
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(", ");
+            if !historical.is_empty() {
+                report_line!(report, "{prefix}  historical skipped tables: {historical}");
             }
         }
         TableInventory::Unavailable(error) => {
@@ -440,8 +463,26 @@ fn migration_state(directory: &Path, source_name: &str, dest_name: &str, tmp_nam
     }
 }
 
-fn known_main_tables() -> BTreeSet<String> {
-    [
+#[derive(Debug)]
+struct TableClassification {
+    current: BTreeSet<String>,
+    historical: BTreeSet<String>,
+}
+
+impl TableClassification {
+    fn label(&self, table: &str) -> &'static str {
+        if self.current.contains(table) {
+            "current"
+        } else if self.historical.contains(table) {
+            "historical"
+        } else {
+            "unknown"
+        }
+    }
+}
+
+fn main_table_classification() -> TableClassification {
+    let current = [
         crate::database::global_flag::TABLE.name(),
         crate::database::global_config::TABLE.name(),
         crate::database::global_cache::TABLE.name(),
@@ -454,11 +495,18 @@ fn known_main_tables() -> BTreeSet<String> {
     ]
     .into_iter()
     .map(str::to_string)
-    .collect()
+    .collect();
+    let historical = crate::database::migration::HISTORICAL_MAIN_REDB_TABLES
+        .iter()
+        .copied()
+        .map(str::to_string)
+        .collect();
+
+    TableClassification { current, historical }
 }
 
-fn known_wallet_tables() -> BTreeSet<String> {
-    [
+fn wallet_table_classification() -> TableClassification {
+    let current = [
         crate::database::wallet_data::TABLE.name(),
         crate::database::wallet_data::label::TXN_TABLE.name(),
         crate::database::wallet_data::label::ADDRESS_TABLE.name(),
@@ -467,7 +515,14 @@ fn known_wallet_tables() -> BTreeSet<String> {
     ]
     .into_iter()
     .map(str::to_string)
-    .collect()
+    .collect();
+    let historical = crate::database::migration::HISTORICAL_WALLET_REDB_TABLES
+        .iter()
+        .copied()
+        .map(str::to_string)
+        .collect();
+
+    TableClassification { current, historical }
 }
 
 fn format_list(items: &[&str]) -> String {
@@ -610,6 +665,29 @@ mod tests {
     }
 
     #[test]
+    fn report_marks_historical_main_tables() -> eyre::Result<()> {
+        let _guard = TEST_LOCK.lock();
+        let dir = TempDir::new()?;
+        let wallet_dir = dir.path().join("wallets");
+        std::fs::create_dir_all(&wallet_dir)?;
+        create_redb_with_tables(
+            &dir.path().join("cove.db"),
+            &["global_flag", "global_bool_config"],
+        )?;
+
+        reset_test_state();
+
+        let report = text_report_for_paths(dir.path(), &wallet_dir);
+
+        assert!(report.contains("global_flag (current)"));
+        assert!(report.contains("global_bool_config (historical)"));
+        assert!(report.contains("historical skipped tables: global_bool_config"));
+        assert!(!report.contains("unknown tables: global_bool_config"));
+
+        Ok(())
+    }
+
+    #[test]
     fn report_marks_unknown_wallet_tables() -> eyre::Result<()> {
         let _guard = TEST_LOCK.lock();
         let dir = TempDir::new()?;
@@ -632,6 +710,31 @@ mod tests {
         assert!(report.contains("unknown tables: old_wallet_table"));
         assert!(!report.contains("seed material key"));
         assert!(!report.contains("secret descriptor address label"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn report_marks_historical_wallet_tables() -> eyre::Result<()> {
+        let _guard = TEST_LOCK.lock();
+        let dir = TempDir::new()?;
+        let wallet_dir = dir.path().join("wallets");
+        let known_dir = wallet_dir.join("known_wallet");
+        std::fs::create_dir_all(&known_dir)?;
+        create_redb_with_tables(
+            &known_dir.join("wallet_data.json"),
+            &["wallet_data.json", "transaction_labels.json"],
+        )?;
+
+        reset_test_state();
+        *LAST_KNOWN_WALLET_IDS.lock() = Some(BTreeSet::from(["known_wallet".to_string()]));
+
+        let report = text_report_for_paths(dir.path(), &wallet_dir);
+
+        assert!(report.contains("wallet_data.json (current)"));
+        assert!(report.contains("transaction_labels.json (historical)"));
+        assert!(report.contains("historical skipped tables: transaction_labels.json"));
+        assert!(!report.contains("unknown tables: transaction_labels.json"));
 
         Ok(())
     }

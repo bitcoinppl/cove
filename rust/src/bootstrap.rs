@@ -343,13 +343,13 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
     crate::database::encrypted_backend::verify_database_key(&encrypted_db)
         .map_err(map_database_key_verification_error)?;
 
-    info!("Recovering interrupted wallet redb migrations");
-    crate::database::migration::recover_interrupted_wallet_migrations()
-        .map_err_display_alt(AppInitError::WalletDatabaseMigration)?;
-
     let known_wallet_ids = crate::database::migration::known_wallet_ids_from_main_database()
         .map_err_display_alt(AppInitError::MainDatabaseMigration)?;
     diagnostics::record_known_wallet_ids(&known_wallet_ids);
+
+    info!("Recovering interrupted wallet redb migrations");
+    crate::database::migration::recover_interrupted_wallet_migrations(&known_wallet_ids)
+        .map_err_display_alt(AppInitError::WalletDatabaseMigration)?;
 
     let redb_count =
         crate::database::migration::count_redb_wallets_needing_migration(&known_wallet_ids);

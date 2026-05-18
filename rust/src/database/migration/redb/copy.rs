@@ -114,51 +114,126 @@ where
     let name = table_def.name();
     let raw_def = TableDefinition::<RawKey<K>, RawValue<V>>::new(name);
 
-    let read_txn = src_db.begin_read().context("failed to begin read on source")?;
+    let read_txn = src_db
+        .begin_read()
+        .with_context(|| format!("failed to begin read on source for {name}"))?;
 
     let src_table = match read_txn.open_table(raw_def) {
         Ok(table) => table,
         // table doesn't exist in source, nothing to copy
         Err(redb::TableError::TableDoesNotExist(_)) => return Ok(0),
-        Err(e) => return Err(e).context("failed to open source table"),
+        Err(e) => return Err(e).with_context(|| format!("failed to open source table {name}")),
     };
 
-    let write_txn = dst_db.begin_write().context("failed to begin write on destination")?;
+    let write_txn = dst_db
+        .begin_write()
+        .with_context(|| format!("failed to begin write on destination for {name}"))?;
     let mut count = 0u64;
 
     {
-        let mut dst_table = write_txn.open_table(raw_def).context("failed to open dest table")?;
+        let mut dst_table = write_txn
+            .open_table(raw_def)
+            .with_context(|| format!("failed to open destination table {name}"))?;
 
-        for entry in src_table.iter().context("failed to iterate source table")? {
-            let (key, value) = entry.context("failed to read entry")?;
-            dst_table.insert(key.value(), value.value()).context("failed to insert entry")?;
+        for entry in
+            src_table.iter().with_context(|| format!("failed to iterate source table {name}"))?
+        {
+            let (key, value) =
+                entry.with_context(|| format!("failed to read entry from {name}"))?;
+            dst_table
+                .insert(key.value(), value.value())
+                .with_context(|| format!("failed to insert entry into {name}"))?;
             count += 1;
         }
     }
 
-    write_txn.commit().context("failed to commit write")?;
+    write_txn.commit().with_context(|| format!("failed to commit write for {name}"))?;
 
     info!("Copied table '{name}': {count} rows");
     Ok(count)
 }
 
-pub(crate) fn verify_all_source_tables_copied(
-    src_db: &redb::Database,
-    dst_db: &redb::Database,
-) -> Result<()> {
-    let source_tables = table_names(src_db).context("failed to list source tables")?;
-    let dest_tables = table_names(dst_db).context("failed to list destination tables")?;
-
-    let missing = source_tables.difference(&dest_tables).map(String::as_str).collect::<Vec<_>>();
-
-    if !missing.is_empty() {
-        bail!("encrypted migration missed source table(s): {}", missing.join(", "));
-    }
-
-    Ok(())
+pub(super) struct TableCopyPolicy {
+    pub(super) database_kind: &'static str,
+    pub(super) source_path: std::path::PathBuf,
+    pub(super) current_tables: BTreeSet<&'static str>,
+    pub(super) known_historical_tables: BTreeSet<&'static str>,
+    pub(super) disposable_skipped_tables: BTreeSet<&'static str>,
 }
 
-fn table_names(db: &redb::Database) -> Result<BTreeSet<String>> {
+#[derive(Debug)]
+pub(super) struct TableCopyReport {
+    pub(super) skipped_known_historical: Vec<String>,
+    pub(super) skipped_unknown: Vec<String>,
+    pub(super) may_remove_source: bool,
+}
+
+impl TableCopyReport {
+    pub(super) fn log_skipped_tables(&self, policy: &TableCopyPolicy) {
+        if self.skipped_known_historical.is_empty() && self.skipped_unknown.is_empty() {
+            return;
+        }
+
+        let source = policy.source_path.display();
+        warn!(
+            "Skipped non-current redb table(s) during {} migration for {source}; known_historical=[{}]; unknown=[{}]",
+            policy.database_kind,
+            self.skipped_known_historical.join(", "),
+            self.skipped_unknown.join(", "),
+        );
+    }
+}
+
+pub(super) fn verify_current_source_tables_copied(
+    src_db: &redb::Database,
+    dst_db: &redb::Database,
+    policy: &TableCopyPolicy,
+) -> Result<TableCopyReport> {
+    let source_tables = table_names(src_db).context("failed to list source tables")?;
+    let dest_tables = table_names(dst_db).context("failed to list destination tables")?;
+    let current_tables =
+        policy.current_tables.iter().map(|table| (*table).to_string()).collect::<BTreeSet<_>>();
+    let known_historical_tables = policy
+        .known_historical_tables
+        .iter()
+        .map(|table| (*table).to_string())
+        .collect::<BTreeSet<_>>();
+
+    let missing_current = source_tables
+        .intersection(&current_tables)
+        .filter(|table| !dest_tables.contains(*table))
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+
+    if !missing_current.is_empty() {
+        let source = policy.source_path.display();
+        bail!(
+            "{} encrypted migration missed current source table(s) at {source}: {}",
+            policy.database_kind,
+            missing_current.join(", ")
+        );
+    }
+
+    let skipped_known_historical =
+        source_tables.intersection(&known_historical_tables).cloned().collect::<Vec<_>>();
+    let skipped_unknown = source_tables
+        .difference(&current_tables)
+        .filter(|table| !known_historical_tables.contains(*table))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let skipped_tables = skipped_known_historical
+        .iter()
+        .chain(skipped_unknown.iter())
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let may_remove_source =
+        skipped_tables.iter().all(|table| policy.disposable_skipped_tables.contains(table));
+
+    Ok(TableCopyReport { skipped_known_historical, skipped_unknown, may_remove_source })
+}
+
+pub(super) fn table_names(db: &redb::Database) -> Result<BTreeSet<String>> {
     let read_txn = db.begin_read().context("failed to begin table listing read")?;
     let tables = read_txn.list_tables().context("failed to list tables")?;
 
