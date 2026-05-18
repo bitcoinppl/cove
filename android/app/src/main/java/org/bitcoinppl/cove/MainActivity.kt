@@ -319,7 +319,10 @@ class MainActivity : FragmentActivity() {
                             val clipboard =
                                 getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clipboard.setPrimaryClip(ClipData.newPlainText("Cove diagnostics", report))
-                            Toast.makeText(this, "Diagnostics copied", Toast.LENGTH_SHORT).show()
+                            // Android 13+ shows its own clipboard confirmation chip
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                                Toast.makeText(this, "Diagnostics copied", Toast.LENGTH_SHORT).show()
+                            }
                         },
                         onShareDiagnostics = {
                             val report = startupDiagnosticsReport(bootstrapError!!)
