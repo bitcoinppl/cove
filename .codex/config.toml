@@ -1,5 +1,10 @@
-[plugins."build-ios-apps@openai-curated"]
-enabled = true
+[mcp_servers.xcodebuildmcp]
+args = [
+    "-y",
+    "xcodebuildmcp@latest",
+    "mcp",
+]
+command = "npx"
 
-[plugins."build-macos-apps@openai-curated"]
-enabled = true
+[mcp_servers.xcodebuildmcp.env]
+XCODEBUILDMCP_ENABLED_WORKFLOWS = "simulator,ui-automation,debugging,logging"
