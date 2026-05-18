@@ -103,15 +103,6 @@ impl WalletDirStatus {
 
 pub(crate) fn record_bootstrap_failure(error: &AppInitError) {
     let category = ErrorCategory::from(error);
-    if category == ErrorCategory::AlreadyCalled
-        && LAST_BOOTSTRAP_FAILURE
-            .lock()
-            .as_ref()
-            .is_some_and(|failure| failure.category != ErrorCategory::AlreadyCalled)
-    {
-        return;
-    }
-
     let progress = super::migration::active_migration()
         .map(|migration| migration.progress())
         .map(|progress| (progress.current, progress.total));
@@ -126,7 +117,16 @@ pub(crate) fn record_bootstrap_failure(error: &AppInitError) {
         wallet_migration_failures,
     };
 
-    *LAST_BOOTSTRAP_FAILURE.lock() = Some(failure);
+    let mut last_failure = LAST_BOOTSTRAP_FAILURE.lock();
+    if category == ErrorCategory::AlreadyCalled
+        && last_failure
+            .as_ref()
+            .is_some_and(|failure| failure.category != ErrorCategory::AlreadyCalled)
+    {
+        return;
+    }
+
+    *last_failure = Some(failure);
 }
 
 pub(crate) fn clear_bootstrap_failure() {

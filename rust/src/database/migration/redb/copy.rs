@@ -14,7 +14,7 @@ use crate::database::encrypted_backend::EncryptedBackend;
 /// needed. This avoids panics from stale enum variants or missing serde fields
 /// that would trigger `expect()` in `Json<T>::from_bytes` / `Cbor<T>::from_bytes`
 #[derive(Debug)]
-pub(super) struct RawValue<V: redb::Value>(PhantomData<V>);
+pub(crate) struct RawValue<V: redb::Value>(PhantomData<V>);
 
 impl<V: redb::Value + 'static> redb::Value for RawValue<V> {
     type SelfType<'a>
@@ -52,7 +52,7 @@ impl<V: redb::Value + 'static> redb::Value for RawValue<V> {
 
 /// Wrapper that reads/writes raw key bytes while matching K's type_name and compare
 #[derive(Debug)]
-pub(super) struct RawKey<K: redb::Key>(PhantomData<K>);
+pub(crate) struct RawKey<K: redb::Key>(PhantomData<K>);
 
 impl<K: redb::Key + 'static> redb::Value for RawKey<K> {
     type SelfType<'a>
@@ -102,7 +102,7 @@ impl<K: redb::Key + 'static> redb::Key for RawKey<K> {
 ///
 /// Uses raw byte wrappers to avoid deserializing keys/values during copy;
 /// this prevents panics from stale records with outdated schema
-pub(super) fn copy_table<K, V>(
+pub(crate) fn copy_table<K, V>(
     src_db: &redb::Database,
     dst_db: &redb::Database,
     table_def: TableDefinition<K, V>,
@@ -153,23 +153,23 @@ where
     Ok(count)
 }
 
-pub(super) struct TableCopyPolicy {
-    pub(super) database_kind: &'static str,
-    pub(super) source_path: std::path::PathBuf,
-    pub(super) current_tables: BTreeSet<&'static str>,
-    pub(super) known_historical_tables: BTreeSet<&'static str>,
-    pub(super) disposable_skipped_tables: BTreeSet<&'static str>,
+pub(crate) struct TableCopyPolicy {
+    pub(crate) database_kind: &'static str,
+    pub(crate) source_path: std::path::PathBuf,
+    pub(crate) current_tables: BTreeSet<&'static str>,
+    pub(crate) known_historical_tables: BTreeSet<&'static str>,
+    pub(crate) disposable_skipped_tables: BTreeSet<&'static str>,
 }
 
 #[derive(Debug)]
-pub(super) struct TableCopyReport {
-    pub(super) skipped_known_historical: Vec<String>,
-    pub(super) skipped_unknown: Vec<String>,
-    pub(super) may_remove_source: bool,
+pub(crate) struct TableCopyReport {
+    pub(crate) skipped_known_historical: Vec<String>,
+    pub(crate) skipped_unknown: Vec<String>,
+    pub(crate) may_remove_source: bool,
 }
 
 impl TableCopyReport {
-    pub(super) fn log_skipped_tables(&self, policy: &TableCopyPolicy) {
+    pub(crate) fn log_skipped_tables(&self, policy: &TableCopyPolicy) {
         if self.skipped_known_historical.is_empty() && self.skipped_unknown.is_empty() {
             return;
         }
@@ -184,7 +184,7 @@ impl TableCopyReport {
     }
 }
 
-pub(super) fn verify_current_source_tables_copied(
+pub(crate) fn verify_current_source_tables_copied(
     src_db: &redb::Database,
     dst_db: &redb::Database,
     policy: &TableCopyPolicy,
@@ -233,7 +233,7 @@ pub(super) fn verify_current_source_tables_copied(
     Ok(TableCopyReport { skipped_known_historical, skipped_unknown, may_remove_source })
 }
 
-pub(super) fn table_names(db: &redb::Database) -> Result<BTreeSet<String>> {
+pub(crate) fn table_names(db: &redb::Database) -> Result<BTreeSet<String>> {
     let read_txn = db.begin_read().context("failed to begin table listing read")?;
     let tables = read_txn.list_tables().context("failed to list tables")?;
 
@@ -243,7 +243,7 @@ pub(super) fn table_names(db: &redb::Database) -> Result<BTreeSet<String>> {
 /// Check whether an encrypted redb database can be opened and read
 ///
 /// Returns `Ok(true)` if verified, `Ok(false)` if corrupt, `Err` for I/O errors
-pub(super) fn verify_encrypted_redb_db(path: &Path) -> Result<bool> {
+pub(crate) fn verify_encrypted_redb_db(path: &Path) -> Result<bool> {
     let path_display = path.display();
 
     let key = crate::database::encrypted_backend::encryption_key().ok_or_else(|| {

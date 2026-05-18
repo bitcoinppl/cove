@@ -70,7 +70,7 @@ pub(crate) const HISTORICAL_WALLET_REDB_TABLES: &[&str] = &[
     "output_records.cbor",
 ];
 
-pub(super) struct DatabasePaths {
+pub(crate) struct DatabasePaths {
     source: PathBuf,
     dest: PathBuf,
     tmp: PathBuf,
@@ -289,11 +289,20 @@ fn migrate_database(
         super::log_remove_file(&paths.source);
     } else {
         let dest = paths.dest.display();
-        let preserved = preserve_plaintext_source(&paths.source)?;
-        let preserved = preserved.display();
-        warn!(
-            "Preserved plaintext redb source at {preserved} after promoting encrypted destination at {dest} because migration skipped non-disposable table(s)"
-        );
+        match preserve_plaintext_source(&paths.source) {
+            Ok(preserved) => {
+                let preserved = preserved.display();
+                warn!(
+                    "Preserved plaintext redb source at {preserved} after promoting encrypted destination at {dest} because migration skipped non-disposable table(s)"
+                );
+            }
+            Err(error) => {
+                let source = paths.source.display();
+                warn!(
+                    "Failed to preserve plaintext redb source at {source} after promoting encrypted destination at {dest}: {error}; migration succeeded because encrypted destination was already promoted"
+                );
+            }
+        }
     }
 
     Ok(())
@@ -856,6 +865,33 @@ mod tests {
 
         assert!(tables.contains(global_flag::TABLE.name()));
         assert!(!tables.contains("future_table"));
+    }
+
+    #[test]
+    fn migrate_main_database_preservation_failure_succeeds_after_promotion() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source_path = create_plaintext_main_db(&dir);
+        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+        let extension = source_path.extension().and_then(std::ffi::OsStr::to_str).unwrap();
+
+        create_legacy_table(&source_path, "future_table");
+
+        for index in 0..1000 {
+            let suffix = if index == 0 {
+                format!("{extension}.preserved")
+            } else {
+                format!("{extension}.preserved.{index}")
+            };
+            let candidate = source_path.with_extension(std::ffi::OsString::from(suffix));
+            std::fs::File::create(candidate).unwrap();
+        }
+
+        assert!(migrate_main_database(&source_path).unwrap());
+        assert!(source_path.exists(), "source remains when preservation path allocation fails");
+        assert!(dest_path.exists());
+        assert!(EncryptedBackend::is_encrypted(&dest_path));
     }
 
     #[test]
