@@ -23,6 +23,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites and build instructions.
 ## Documentation
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Development setup, commands, workflow
+- [SECURITY.md](SECURITY.md) - Private vulnerability reporting
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System design and codebase structure
 - [docs/ios_android_parity.md](docs/ios_android_parity.md) - iOS/Android UI patterns
 - [docs/icloud_drive.md](docs/icloud_drive.md) - iCloud Drive behavior and file coordination notes
