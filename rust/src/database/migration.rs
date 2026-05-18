@@ -4,9 +4,9 @@ mod redb;
 use std::path::Path;
 use tracing::warn;
 
-#[derive(Debug, derive_more::Display)]
+#[derive(Debug, Clone, derive_more::Display)]
 #[display("{db_path}: {error}")]
-pub(super) struct MigrationFailure {
+pub(crate) struct MigrationFailure {
     pub db_path: String,
     pub error: String,
 }

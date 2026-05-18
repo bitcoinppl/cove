@@ -23,14 +23,31 @@ use self::recovery::{
 };
 use super::MigrationFailure;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 enum WalletMigrationError {
-    #[error("wallet migration cancelled")]
     Cancelled,
 
-    #[error("failed to migrate {} wallet database(s)", .failures.len())]
     Failed { failures: Vec<MigrationFailure> },
 }
+
+impl std::fmt::Display for WalletMigrationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Cancelled => write!(f, "wallet migration cancelled"),
+            Self::Failed { failures } => {
+                write!(f, "failed to migrate {} wallet database(s)", failures.len())?;
+
+                for failure in failures {
+                    write!(f, "\n- {failure}")?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
+impl std::error::Error for WalletMigrationError {}
 
 const LEGACY_MAIN_DB: &str = "cove.db";
 const LEGACY_WALLET_DB: &str = "wallet_data.json";
@@ -317,9 +334,11 @@ impl WalletMigration {
         }
 
         if !failures.is_empty() {
+            crate::bootstrap::diagnostics::record_wallet_migration_failures(&failures);
             return Err(WalletMigrationError::Failed { failures }.into());
         }
 
+        crate::bootstrap::diagnostics::record_wallet_migration_failures(&[]);
         Ok(())
     }
 
@@ -1333,5 +1352,9 @@ mod tests {
 
         assert!(result.is_err());
         assert!(bad_db.exists(), "known corrupt source should be preserved");
+
+        let report = crate::bootstrap::diagnostics::text_report_for_paths(dir.path(), dir.path());
+        assert!(report.contains(&bad_db.display().to_string()));
+        assert!(report.contains("failed to open plaintext wallet database"));
     }
 }

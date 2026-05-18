@@ -1,3 +1,4 @@
+pub mod diagnostics;
 pub mod migration;
 pub use migration::Migration;
 
@@ -62,20 +63,27 @@ static BOOTSTRAP_CANCELLED: LazyLock<Arc<AtomicBool>> =
 /// `Err(AlreadyCalled)` if another call is still in progress
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
-    {
+    let already_called = {
         let mut step = BOOTSTRAP_STEP.lock();
         match *step {
-            BootstrapStep::NotStarted => *step = BootstrapStep::Initializing,
+            BootstrapStep::NotStarted => {
+                diagnostics::clear_bootstrap_failure();
+                *step = BootstrapStep::Initializing;
+                None
+            }
             BootstrapStep::Complete => {
                 info!("Bootstrap already complete, returning immediately");
                 return Ok(None);
             }
-            _ => {
-                return Err(AppInitError::AlreadyCalled(
-                    "bootstrap already called — force-quit and restart the app".into(),
-                ));
-            }
+            _ => Some(AppInitError::AlreadyCalled(
+                "bootstrap already called — force-quit and restart the app".into(),
+            )),
         }
+    };
+
+    if let Some(error) = already_called {
+        diagnostics::record_bootstrap_failure(&error);
+        return Err(error);
     }
 
     crate::logging::init();
@@ -90,7 +98,7 @@ pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
     migration::set_active_migration(None);
     info!("Bootstrap: tokio initialized, starting blocking work");
 
-    cove_tokio::unblock::run_blocking(|| {
+    let result = cove_tokio::unblock::run_blocking(|| {
         check_cancelled()?;
 
         // derive encryption key and run redb migrations (idempotent via OnceLock)
@@ -119,10 +127,14 @@ pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
         info!("Bootstrap: blocking work complete");
         Ok(warning)
     })
-    .await
-    .inspect_err(|_| {
+    .await;
+
+    if let Err(error) = &result {
+        diagnostics::record_bootstrap_failure(error);
         migration::set_active_migration(None);
-    })
+    }
+
+    result
 }
 
 /// Signal the bootstrap to stop at the next cancellation check point,
@@ -155,6 +167,7 @@ pub fn reset_bootstrap_for_restore() {
     BOOTSTRAP_CANCELLED.store(false, Ordering::Release);
     cove_cspp::Cspp::<cove_device::keychain::Keychain>::clear_cached_master_key();
     migration::set_active_migration(None);
+    diagnostics::clear_bootstrap_failure();
     info!("Bootstrap state reset for restore");
 }
 
@@ -223,7 +236,13 @@ pub enum AppInitError {
 /// Safe to call multiple times — only the first call performs work, subsequent calls
 /// return `Ok(())` immediately. Failures are not cached, allowing retry on next call
 pub fn ensure_storage_bootstrapped() -> Result<(), AppInitError> {
-    ensure_storage_bootstrapped_internal(false).map(|_| ())
+    let result = ensure_storage_bootstrapped_internal(false).map(|_| ());
+    match &result {
+        Ok(()) => diagnostics::clear_bootstrap_failure(),
+        Err(error) => diagnostics::record_bootstrap_failure(error),
+    }
+
+    result
 }
 
 /// Returns the pre-recovery BDK database count (only meaningful when track_progress is true)
@@ -330,6 +349,7 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
 
     let known_wallet_ids = crate::database::migration::known_wallet_ids_from_main_database()
         .map_err_display_alt(AppInitError::MainDatabaseMigration)?;
+    diagnostics::record_known_wallet_ids(&known_wallet_ids);
 
     let redb_count =
         crate::database::migration::count_redb_wallets_needing_migration(&known_wallet_ids);
@@ -363,6 +383,12 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
 #[uniffi::export]
 pub fn root_data_dir_path() -> String {
     cove_common::consts::ROOT_DATA_DIR.to_string_lossy().to_string()
+}
+
+/// Return a plain text diagnostic report for startup storage failures
+#[uniffi::export]
+pub fn startup_diagnostic_text_report() -> String {
+    diagnostics::text_report()
 }
 
 fn map_database_key_verification_error(
