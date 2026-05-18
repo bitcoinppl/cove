@@ -63,25 +63,27 @@ static BOOTSTRAP_CANCELLED: LazyLock<Arc<AtomicBool>> =
 /// `Err(AlreadyCalled)` if another call is still in progress
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
-    {
+    let already_called = {
         let mut step = BOOTSTRAP_STEP.lock();
         match *step {
             BootstrapStep::NotStarted => {
                 diagnostics::clear_bootstrap_failure();
                 *step = BootstrapStep::Initializing;
+                None
             }
             BootstrapStep::Complete => {
                 info!("Bootstrap already complete, returning immediately");
                 return Ok(None);
             }
-            _ => {
-                let error = AppInitError::AlreadyCalled(
-                    "bootstrap already called — force-quit and restart the app".into(),
-                );
-                diagnostics::record_bootstrap_failure(&error);
-                return Err(error);
-            }
+            _ => Some(AppInitError::AlreadyCalled(
+                "bootstrap already called — force-quit and restart the app".into(),
+            )),
         }
+    };
+
+    if let Some(error) = already_called {
+        diagnostics::record_bootstrap_failure(&error);
+        return Err(error);
     }
 
     crate::logging::init();
@@ -125,13 +127,11 @@ pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
         info!("Bootstrap: blocking work complete");
         Ok(warning)
     })
-    .await
-    .inspect_err(|_| {
-        migration::set_active_migration(None);
-    });
+    .await;
 
     if let Err(error) = &result {
         diagnostics::record_bootstrap_failure(error);
+        migration::set_active_migration(None);
     }
 
     result
