@@ -6,12 +6,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -94,6 +96,7 @@ import org.bitcoinppl.cove_core.bootstrapProgress
 import org.bitcoinppl.cove_core.cancelBootstrap
 import org.bitcoinppl.cove_core.resetBootstrapForRestore
 import org.bitcoinppl.cove_core.resetLocalDataForCatastrophicRecovery
+import org.bitcoinppl.cove_core.startupDiagnosticTextReport
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppInitException
 import org.bitcoinppl.cove_core.BootstrapStep
@@ -115,6 +118,7 @@ import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
+import java.time.Instant
 
 internal enum class StartupMode {
     ONBOARDING,
@@ -157,6 +161,24 @@ internal fun resolveStartupMode(
         StartupMode.ONBOARDING
     } else {
         StartupMode.READY
+    }
+}
+
+private fun startupDiagnosticsReport(errorMessage: String): String {
+    return buildString {
+        appendLine("Cove startup diagnostics")
+        appendLine("Generated: ${Instant.now()}")
+        appendLine()
+        appendLine("App")
+        appendLine("Version: ${BuildConfig.VERSION_NAME}")
+        appendLine("Build: ${BuildConfig.VERSION_CODE}")
+        appendLine("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
+        appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+        appendLine()
+        appendLine("Platform error")
+        appendLine(errorMessage)
+        appendLine()
+        append(startupDiagnosticTextReport())
     }
 }
 
@@ -290,7 +312,30 @@ class MainActivity : FragmentActivity() {
                         },
                     )
                 } else if (bootstrapError != null) {
-                    BootstrapErrorView(errorMessage = bootstrapError!!)
+                    BootstrapErrorView(
+                        errorMessage = bootstrapError!!,
+                        onCopyDiagnostics = {
+                            val report = startupDiagnosticsReport(bootstrapError!!)
+                            val clipboard =
+                                getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Cove diagnostics", report))
+                            Toast.makeText(this, "Diagnostics copied", Toast.LENGTH_SHORT).show()
+                        },
+                        onShareDiagnostics = {
+                            val report = startupDiagnosticsReport(bootstrapError!!)
+                            val intent =
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "Cove startup diagnostics")
+                                    putExtra(Intent.EXTRA_TEXT, report)
+                                }
+                            runCatching {
+                                startActivity(Intent.createChooser(intent, "Share Diagnostics"))
+                            }.onFailure { error ->
+                                Log.w(TAG, "[STARTUP] failed to share diagnostics", error)
+                            }
+                        },
+                    )
                 } else {
                     var showSpinner by remember { mutableStateOf(false) }
                     var splashStatus by remember { mutableStateOf<String?>(null) }
@@ -1242,7 +1287,11 @@ private fun CatastrophicRecoveryView(
 }
 
 @Composable
-private fun BootstrapErrorView(errorMessage: String) {
+private fun BootstrapErrorView(
+    errorMessage: String,
+    onCopyDiagnostics: () -> Unit,
+    onShareDiagnostics: () -> Unit,
+) {
     Box(
         modifier = Modifier.fillMaxSize().background(Color.Black),
         contentAlignment = Alignment.Center,
@@ -1268,6 +1317,13 @@ private fun BootstrapErrorView(errorMessage: String) {
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.5f),
             )
+            Spacer(modifier = Modifier.height(12.dp))
+            TextButton(onClick = onCopyDiagnostics) {
+                Text("Copy Diagnostics", color = Color.White)
+            }
+            TextButton(onClick = onShareDiagnostics) {
+                Text("Share Diagnostics", color = Color.White)
+            }
         }
     }
 }

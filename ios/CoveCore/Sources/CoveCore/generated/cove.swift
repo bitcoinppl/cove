@@ -37716,6 +37716,16 @@ public func rootDataDirPath() -> String  {
 })
 }
 /**
+ * Return a plain text diagnostic report for startup storage failures
+ */
+public func startupDiagnosticTextReport() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_startup_diagnostic_text_report(uniffiCallStatus
+    )
+})
+}
+/**
  * Returns the active migration object if one has been registered,
  * used by the frontend to poll progress
  */
@@ -38108,6 +38118,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_root_data_dir_path() != 42460) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_startup_diagnostic_text_report() != 22563) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_active_migration() != 29388) {

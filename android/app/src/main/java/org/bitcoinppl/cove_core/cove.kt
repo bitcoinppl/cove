@@ -1083,6 +1083,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_root_data_dir_path(
     ): Short
+    external fun uniffi_cove_checksum_func_startup_diagnostic_text_report(
+    ): Short
     external fun uniffi_cove_checksum_func_active_migration(
     ): Short
     external fun uniffi_cove_checksum_func_all_fiat_currencies(
@@ -3349,6 +3351,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_func_root_data_dir_path(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_startup_diagnostic_text_report(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_active_migration(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_all_fiat_currencies(uniffi_out_err: UniffiRustCallStatus, 
@@ -3573,6 +3577,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_root_data_dir_path() != 42460.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_startup_diagnostic_text_report() != 22563.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_active_migration() != 29388.toShort()) {
@@ -56829,6 +56836,19 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_root_data_dir_path(
+    
+        _status)
+}
+    )
+    }
+    
+
+        /**
+         * Return a plain text diagnostic report for startup storage failures
+         */ fun `startupDiagnosticTextReport`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_startup_diagnostic_text_report(
     
         _status)
 }
