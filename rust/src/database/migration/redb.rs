@@ -288,14 +288,44 @@ fn migrate_database(
         // only delete plaintext after encrypted is verified and in place
         super::log_remove_file(&paths.source);
     } else {
-        let source = paths.source.display();
         let dest = paths.dest.display();
+        let preserved = preserve_plaintext_source(&paths.source)?;
+        let preserved = preserved.display();
         warn!(
-            "Preserving plaintext redb source at {source} after promoting encrypted destination at {dest} because migration skipped non-disposable table(s)"
+            "Preserved plaintext redb source at {preserved} after promoting encrypted destination at {dest} because migration skipped non-disposable table(s)"
         );
     }
 
     Ok(())
+}
+
+fn preserve_plaintext_source(source: &Path) -> Result<PathBuf> {
+    let preserved = preserved_plaintext_path(source)?;
+    std::fs::rename(source, &preserved).with_context(|| {
+        format!("failed to preserve plaintext redb source at {}", preserved.to_string_lossy())
+    })?;
+
+    Ok(preserved)
+}
+
+fn preserved_plaintext_path(source: &Path) -> Result<PathBuf> {
+    let extension = source.extension().and_then(std::ffi::OsStr::to_str).unwrap_or_default();
+
+    for index in 0..1000 {
+        let suffix = if index == 0 {
+            format!("{extension}.preserved")
+        } else {
+            format!("{extension}.preserved.{index}")
+        };
+        let candidate = source.with_extension(suffix);
+        if candidate.exists() {
+            continue;
+        }
+
+        return Ok(candidate);
+    }
+
+    eyre::bail!("failed to find a path for preserving plaintext source {}", source.display())
 }
 
 fn main_table_policy(source_path: &Path) -> TableCopyPolicy {
@@ -777,14 +807,21 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_main_db(&dir);
         let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+        let preserved_path = source_path.with_extension("db.preserved");
 
         create_legacy_table(&source_path, "global_bool_config");
 
         migrate_main_database(&source_path).unwrap();
 
-        assert!(source_path.exists(), "source should be retained for historical main tables");
+        assert!(!source_path.exists(), "canonical source should move out of recovery path");
+        assert!(preserved_path.exists(), "source should be retained for historical main tables");
         assert!(dest_path.exists());
         assert!(EncryptedBackend::is_encrypted(&dest_path));
+
+        recover_main_migration(dir.path()).unwrap();
+
+        assert!(!source_path.exists());
+        assert!(preserved_path.exists(), "preserved source should survive recovery");
 
         let key = encrypted_backend::encryption_key().unwrap();
         let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
@@ -802,12 +839,14 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let source_path = create_plaintext_main_db(&dir);
         let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+        let preserved_path = source_path.with_extension("db.preserved");
 
         create_legacy_table(&source_path, "future_table");
 
         migrate_main_database(&source_path).unwrap();
 
-        assert!(source_path.exists(), "source should be retained for unknown skipped tables");
+        assert!(!source_path.exists(), "canonical source should move out of recovery path");
+        assert!(preserved_path.exists(), "source should be retained for unknown skipped tables");
         assert!(dest_path.exists());
 
         let key = encrypted_backend::encryption_key().unwrap();
@@ -826,6 +865,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let source_path = dir.path().join(LEGACY_MAIN_DB);
         let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+        let preserved_path = source_path.with_extension("db.preserved");
         let db = redb::Database::create(&source_path).unwrap();
         let write_txn = db.begin_write().unwrap();
         {
@@ -838,7 +878,8 @@ mod tests {
 
         migrate_main_database(&source_path).unwrap();
 
-        assert!(source_path.exists());
+        assert!(!source_path.exists());
+        assert!(preserved_path.exists());
         assert!(dest_path.exists());
 
         let key = encrypted_backend::encryption_key().unwrap();
@@ -912,14 +953,21 @@ mod tests {
         let source_path = create_plaintext_wallet_db(&dir);
         let wallet_dir = source_path.parent().unwrap();
         let dest_path = wallet_dir.join(ENCRYPTED_WALLET_DB);
+        let preserved_path = source_path.with_extension("json.preserved");
 
         create_legacy_table(&source_path, "transaction_labels.json");
         create_legacy_table(&source_path, "address_labels.json");
 
         migrate_wallet_database(&source_path).unwrap();
 
-        assert!(source_path.exists(), "source should be retained for non-disposable tables");
+        assert!(!source_path.exists(), "canonical source should move out of recovery path");
+        assert!(preserved_path.exists(), "source should be retained for non-disposable tables");
         assert!(dest_path.exists());
+
+        recover_wallet_migration(wallet_dir).unwrap();
+
+        assert!(!source_path.exists());
+        assert!(preserved_path.exists(), "preserved source should survive recovery");
 
         let key = encrypted_backend::encryption_key().unwrap();
         let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
