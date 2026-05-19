@@ -1,12 +1,15 @@
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use eyre::{Context as _, Result};
 use tracing::{info, warn};
 
 use cove_common::consts::{ROOT_DATA_DIR, WALLET_DATA_DIR};
+use cove_types::WalletId;
 
 use super::{
-    DatabasePaths, LEGACY_MAIN_DB, LEGACY_WALLET_DB, main_database_paths, wallet_database_paths,
+    DatabasePaths, LEGACY_MAIN_DB, LEGACY_WALLET_DB, is_known_wallet_dir, main_database_paths,
+    wallet_database_paths,
 };
 
 pub(crate) fn recover_interrupted_main_migration() -> Result<()> {
@@ -14,8 +17,17 @@ pub(crate) fn recover_interrupted_main_migration() -> Result<()> {
     recover_legacy_at_path(&ROOT_DATA_DIR.join(LEGACY_MAIN_DB))
 }
 
-pub(crate) fn recover_interrupted_wallet_migrations() -> Result<()> {
-    let entries = match std::fs::read_dir(&*WALLET_DATA_DIR) {
+pub(crate) fn recover_interrupted_wallet_migrations(
+    known_wallet_ids: &BTreeSet<WalletId>,
+) -> Result<()> {
+    recover_interrupted_wallet_migrations_in(&WALLET_DATA_DIR, known_wallet_ids)
+}
+
+pub(crate) fn recover_interrupted_wallet_migrations_in(
+    wallet_data_dir: &Path,
+    known_wallet_ids: &BTreeSet<WalletId>,
+) -> Result<()> {
+    let entries = match std::fs::read_dir(wallet_data_dir) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => {
@@ -31,11 +43,47 @@ pub(crate) fn recover_interrupted_wallet_migrations() -> Result<()> {
                 continue;
             }
         };
-        recover_wallet_migration(&entry.path())?;
-        recover_legacy_at_path(&entry.path().join(LEGACY_WALLET_DB))?;
+        let wallet_dir = entry.path();
+        if !is_known_wallet_dir(&wallet_dir, known_wallet_ids) {
+            log_skipped_orphan_recovery(&wallet_dir);
+            continue;
+        }
+
+        recover_wallet_migration(&wallet_dir)?;
+        recover_legacy_at_path(&wallet_dir.join(LEGACY_WALLET_DB))?;
     }
 
     Ok(())
+}
+
+fn log_skipped_orphan_recovery(wallet_dir: &Path) {
+    let paths = wallet_database_paths(wallet_dir);
+    let legacy_path = wallet_dir.join(LEGACY_WALLET_DB);
+    let extension = legacy_path.extension().and_then(std::ffi::OsStr::to_str).unwrap_or_default();
+    let legacy_bak = legacy_path.with_extension(format!("{extension}.bak"));
+    let legacy_tmp = legacy_path.with_extension(format!("{extension}.enc.tmp"));
+
+    let artifacts = [
+        paths.source.as_path(),
+        paths.dest.as_path(),
+        paths.tmp.as_path(),
+        legacy_bak.as_path(),
+        legacy_tmp.as_path(),
+    ]
+    .into_iter()
+    .filter(|path| path.exists())
+    .map(|path| path.display().to_string())
+    .collect::<Vec<_>>();
+
+    if artifacts.is_empty() {
+        return;
+    }
+
+    let dir = wallet_dir.display();
+    warn!(
+        "Skipping interrupted redb migration recovery for orphan wallet data directory at {dir}; artifacts=[{}]",
+        artifacts.join(", ")
+    );
 }
 
 pub(crate) fn recover_main_migration(root_dir: &Path) -> Result<()> {

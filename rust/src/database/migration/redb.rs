@@ -15,7 +15,8 @@ use cove_common::consts::{ROOT_DATA_DIR, WALLET_DATA_DIR};
 use cove_types::{WalletId, redb::Json};
 
 use self::copy::{
-    RawKey, RawValue, copy_table, verify_all_source_tables_copied, verify_encrypted_redb_db,
+    RawKey, RawValue, TableCopyPolicy, copy_table, verify_current_source_tables_copied,
+    verify_encrypted_redb_db,
 };
 use self::recovery::{
     recover_interrupted_main_migration as recover_interrupted_main_migration_impl,
@@ -53,8 +54,23 @@ const LEGACY_MAIN_DB: &str = "cove.db";
 const LEGACY_WALLET_DB: &str = "wallet_data.json";
 const ENCRYPTED_MAIN_DB: &str = "cove.encrypted.db";
 const ENCRYPTED_WALLET_DB: &str = "wallet_data.encrypted.json.redb";
+pub(crate) const HISTORICAL_MAIN_REDB_TABLES: &[&str] = &[
+    "global_bool_config",
+    "wallets",
+    "historical_prices.bin",
+    "cloud_backup_upload_verification",
+    "cloud_upload_queue",
+];
+pub(crate) const HISTORICAL_WALLET_REDB_TABLES: &[&str] = &[
+    "transaction_labels.json",
+    "address_labels.json",
+    "input_records.json",
+    "output_records.json",
+    "input_records.cbor",
+    "output_records.cbor",
+];
 
-pub(super) struct DatabasePaths {
+pub(crate) struct DatabasePaths {
     source: PathBuf,
     dest: PathBuf,
     tmp: PathBuf,
@@ -82,8 +98,8 @@ pub fn recover_interrupted_main_migration() -> Result<()> {
     recover_interrupted_main_migration_impl()
 }
 
-pub fn recover_interrupted_wallet_migrations() -> Result<()> {
-    recover_interrupted_wallet_migrations_impl()
+pub fn recover_interrupted_wallet_migrations(known_wallet_ids: &BTreeSet<WalletId>) -> Result<()> {
+    recover_interrupted_wallet_migrations_impl(known_wallet_ids)
 }
 
 /// Check whether the main database needs migration (legacy plaintext exists, encrypted does not)
@@ -251,13 +267,15 @@ fn migrate_database(
     paths: &DatabasePaths,
     open_context: &str,
     rename_context: &str,
+    policy: TableCopyPolicy,
     copy_tables: impl FnOnce(&redb::Database, &redb::Database) -> Result<()>,
 ) -> Result<()> {
     let src_db = redb::Database::open(&paths.source).with_context(|| open_context.to_string())?;
     let dst_db = create_encrypted_dst(&paths.tmp)?;
 
     copy_tables(&src_db, &dst_db)?;
-    verify_all_source_tables_copied(&src_db, &dst_db)?;
+    let copy_report = verify_current_source_tables_copied(&src_db, &dst_db, &policy)?;
+    copy_report.log_skipped_tables(&policy);
 
     drop(src_db);
     drop(dst_db);
@@ -266,10 +284,100 @@ fn migrate_database(
     verify_encrypted_dst(&paths.tmp)?;
     std::fs::rename(&paths.tmp, &paths.dest).with_context(|| rename_context.to_string())?;
 
-    // only delete plaintext after encrypted is verified and in place
-    super::log_remove_file(&paths.source);
+    if copy_report.may_remove_source {
+        // only delete plaintext after encrypted is verified and in place
+        super::log_remove_file(&paths.source);
+        return Ok(());
+    }
+
+    let dest = paths.dest.display();
+    match preserve_plaintext_source(&paths.source) {
+        Ok(preserved) => {
+            let preserved = preserved.display();
+            warn!(
+                "Preserved plaintext redb source at {preserved} after promoting encrypted destination at {dest} because migration skipped non-disposable table(s)"
+            );
+        }
+        Err(error) => {
+            let source = paths.source.display();
+            warn!(
+                "Failed to preserve plaintext redb source at {source} after promoting encrypted destination at {dest}: {error}; migration succeeded because encrypted destination was already promoted"
+            );
+        }
+    }
 
     Ok(())
+}
+
+fn preserve_plaintext_source(source: &Path) -> Result<PathBuf> {
+    let preserved = preserved_plaintext_path(source)?;
+    std::fs::rename(source, &preserved).with_context(|| {
+        format!("failed to preserve plaintext redb source at {}", preserved.to_string_lossy())
+    })?;
+
+    Ok(preserved)
+}
+
+fn preserved_plaintext_path(source: &Path) -> Result<PathBuf> {
+    let extension = source.extension().and_then(std::ffi::OsStr::to_str).unwrap_or_default();
+
+    for index in 0..1000 {
+        let suffix = if index == 0 {
+            format!("{extension}.preserved")
+        } else {
+            format!("{extension}.preserved.{index}")
+        };
+        let candidate = source.with_extension(suffix);
+        if candidate.exists() {
+            continue;
+        }
+
+        return Ok(candidate);
+    }
+
+    eyre::bail!("failed to find a path for preserving plaintext source {}", source.display())
+}
+
+fn main_table_policy(source_path: &Path) -> TableCopyPolicy {
+    TableCopyPolicy {
+        database_kind: "main",
+        source_path: source_path.to_path_buf(),
+        current_tables: [
+            crate::database::global_flag::TABLE.name(),
+            crate::database::global_config::TABLE.name(),
+            crate::database::global_cache::TABLE.name(),
+            crate::database::cloud_backup::CLOUD_BACKUP_STATE_TABLE.name(),
+            crate::database::cloud_backup::CLOUD_BLOB_SYNC_STATE_TABLE.name(),
+            crate::database::wallet::TABLE.name(),
+            crate::database::unsigned_transactions::MAIN_TABLE.name(),
+            crate::database::unsigned_transactions::BY_WALLET_TABLE.name(),
+            crate::database::historical_price::TABLE.name(),
+        ]
+        .into_iter()
+        .collect(),
+        known_historical_tables: HISTORICAL_MAIN_REDB_TABLES.iter().copied().collect(),
+        disposable_skipped_tables: BTreeSet::new(),
+    }
+}
+
+fn wallet_table_policy(source_path: &Path) -> TableCopyPolicy {
+    TableCopyPolicy {
+        database_kind: "wallet",
+        source_path: source_path.to_path_buf(),
+        current_tables: [
+            crate::database::wallet_data::TABLE.name(),
+            crate::database::wallet_data::label::TXN_TABLE.name(),
+            crate::database::wallet_data::label::ADDRESS_TABLE.name(),
+            crate::database::wallet_data::label::INPUT_TABLE.name(),
+            crate::database::wallet_data::label::OUTPUT_TABLE.name(),
+        ]
+        .into_iter()
+        .collect(),
+        known_historical_tables: HISTORICAL_WALLET_REDB_TABLES.iter().copied().collect(),
+        disposable_skipped_tables: ["input_records.cbor", "output_records.cbor"]
+            .into_iter()
+            .collect(),
+    }
 }
 
 fn migrate_main_database(source_path: &Path) -> Result<bool> {
@@ -280,6 +388,7 @@ fn migrate_main_database(source_path: &Path) -> Result<bool> {
         &paths,
         "failed to open plaintext main database",
         "failed to rename encrypted main database into place",
+        main_table_policy(&paths.source),
         |src_db, dst_db| {
             copy_table(src_db, dst_db, crate::database::global_flag::TABLE)?;
             copy_table(src_db, dst_db, crate::database::global_config::TABLE)?;
@@ -417,6 +526,7 @@ fn migrate_wallet_database(source_path: &Path) -> Result<()> {
         &paths,
         "failed to open plaintext wallet database",
         "failed to rename encrypted wallet database into place",
+        wallet_table_policy(&paths.source),
         |src_db, dst_db| {
             copy_table(src_db, dst_db, crate::database::wallet_data::TABLE)?;
             copy_table(src_db, dst_db, crate::database::wallet_data::label::TXN_TABLE)?;
@@ -439,8 +549,10 @@ mod tests {
 
     use redb::{ReadableTableMetadata as _, TableDefinition};
 
+    use super::copy::{table_names, verify_current_source_tables_copied};
     use super::recovery::{
-        recover_legacy_at_path, recover_main_migration, recover_wallet_migration,
+        recover_interrupted_wallet_migrations_in, recover_legacy_at_path, recover_main_migration,
+        recover_wallet_migration,
     };
     use super::*;
     use crate::database::encrypted_backend::tests::set_test_encryption_key;
@@ -555,6 +667,17 @@ mod tests {
 
         drop(db);
         path
+    }
+
+    fn create_legacy_table(path: &Path, table_name: &'static str) {
+        let db = redb::Database::open(path).unwrap();
+        let write_txn = db.begin_write().unwrap();
+        {
+            let table_def = TableDefinition::<&str, &str>::new(table_name);
+            let mut table = write_txn.open_table(table_def).unwrap();
+            table.insert("legacy_key", "legacy_value").unwrap();
+        }
+        write_txn.commit().unwrap();
     }
 
     #[test]
@@ -688,6 +811,123 @@ mod tests {
     }
 
     #[test]
+    fn migrate_main_database_skips_historical_tables_and_preserves_source() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source_path = create_plaintext_main_db(&dir);
+        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+        let preserved_path = source_path.with_extension("db.preserved");
+
+        create_legacy_table(&source_path, "global_bool_config");
+
+        migrate_main_database(&source_path).unwrap();
+
+        assert!(!source_path.exists(), "canonical source should move out of recovery path");
+        assert!(preserved_path.exists(), "source should be retained for historical main tables");
+        assert!(dest_path.exists());
+        assert!(EncryptedBackend::is_encrypted(&dest_path));
+
+        recover_main_migration(dir.path()).unwrap();
+
+        assert!(!source_path.exists());
+        assert!(preserved_path.exists(), "preserved source should survive recovery");
+
+        let key = encrypted_backend::encryption_key().unwrap();
+        let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
+        let db = redb::Database::builder().create_with_backend(backend).unwrap();
+        let tables = table_names(&db).unwrap();
+
+        assert!(tables.contains(global_flag::TABLE.name()));
+        assert!(!tables.contains("global_bool_config"));
+    }
+
+    #[test]
+    fn migrate_main_database_skips_unknown_tables_and_preserves_source() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source_path = create_plaintext_main_db(&dir);
+        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+        let preserved_path = source_path.with_extension("db.preserved");
+
+        create_legacy_table(&source_path, "future_table");
+
+        migrate_main_database(&source_path).unwrap();
+
+        assert!(!source_path.exists(), "canonical source should move out of recovery path");
+        assert!(preserved_path.exists(), "source should be retained for unknown skipped tables");
+        assert!(dest_path.exists());
+
+        let key = encrypted_backend::encryption_key().unwrap();
+        let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
+        let db = redb::Database::builder().create_with_backend(backend).unwrap();
+        let tables = table_names(&db).unwrap();
+
+        assert!(tables.contains(global_flag::TABLE.name()));
+        assert!(!tables.contains("future_table"));
+    }
+
+    #[test]
+    fn migrate_main_database_preservation_failure_succeeds_after_promotion() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source_path = create_plaintext_main_db(&dir);
+        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+        let extension = source_path.extension().and_then(std::ffi::OsStr::to_str).unwrap();
+
+        create_legacy_table(&source_path, "future_table");
+
+        for index in 0..1000 {
+            let suffix = if index == 0 {
+                format!("{extension}.preserved")
+            } else {
+                format!("{extension}.preserved.{index}")
+            };
+            let candidate = source_path.with_extension(std::ffi::OsString::from(suffix));
+            std::fs::File::create(candidate).unwrap();
+        }
+
+        assert!(migrate_main_database(&source_path).unwrap());
+        assert!(source_path.exists(), "source remains when preservation path allocation fails");
+        assert!(dest_path.exists());
+        assert!(EncryptedBackend::is_encrypted(&dest_path));
+    }
+
+    #[test]
+    fn migrate_main_database_with_only_historical_tables_promotes_dest_and_preserves_source() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source_path = dir.path().join(LEGACY_MAIN_DB);
+        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
+        let preserved_path = source_path.with_extension("db.preserved");
+        let db = redb::Database::create(&source_path).unwrap();
+        let write_txn = db.begin_write().unwrap();
+        {
+            let table_def = TableDefinition::<&str, &str>::new("wallets");
+            let mut table = write_txn.open_table(table_def).unwrap();
+            table.insert("legacy_key", "legacy_value").unwrap();
+        }
+        write_txn.commit().unwrap();
+        drop(db);
+
+        migrate_main_database(&source_path).unwrap();
+
+        assert!(!source_path.exists());
+        assert!(preserved_path.exists());
+        assert!(dest_path.exists());
+
+        let key = encrypted_backend::encryption_key().unwrap();
+        let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
+        let db = redb::Database::builder().create_with_backend(backend).unwrap();
+        let tables = table_names(&db).unwrap();
+
+        assert!(tables.is_empty());
+    }
+
+    #[test]
     fn migrate_wallet_database_roundtrip() {
         setup_test_key();
 
@@ -713,6 +953,98 @@ mod tests {
         let read_txn = db.begin_read().unwrap();
         let table = read_txn.open_table(wallet_data::TABLE).unwrap();
         assert!(table.get("scan_state_native_segwit").unwrap().is_some());
+    }
+
+    #[test]
+    fn migrate_wallet_database_skips_disposable_historical_tables_and_removes_source() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source_path = create_plaintext_wallet_db(&dir);
+        let wallet_dir = source_path.parent().unwrap();
+        let dest_path = wallet_dir.join(ENCRYPTED_WALLET_DB);
+
+        create_legacy_table(&source_path, "input_records.cbor");
+        create_legacy_table(&source_path, "output_records.cbor");
+
+        migrate_wallet_database(&source_path).unwrap();
+
+        assert!(!source_path.exists());
+        assert!(dest_path.exists());
+
+        let key = encrypted_backend::encryption_key().unwrap();
+        let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
+        let db = redb::Database::builder().create_with_backend(backend).unwrap();
+        let tables = table_names(&db).unwrap();
+
+        assert!(tables.contains(wallet_data::TABLE.name()));
+        assert!(!tables.contains("input_records.cbor"));
+        assert!(!tables.contains("output_records.cbor"));
+    }
+
+    #[test]
+    fn migrate_wallet_database_skips_json_historical_tables_and_preserves_source() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let source_path = create_plaintext_wallet_db(&dir);
+        let wallet_dir = source_path.parent().unwrap();
+        let dest_path = wallet_dir.join(ENCRYPTED_WALLET_DB);
+        let preserved_path = source_path.with_extension("json.preserved");
+
+        create_legacy_table(&source_path, "transaction_labels.json");
+        create_legacy_table(&source_path, "address_labels.json");
+
+        migrate_wallet_database(&source_path).unwrap();
+
+        assert!(!source_path.exists(), "canonical source should move out of recovery path");
+        assert!(preserved_path.exists(), "source should be retained for non-disposable tables");
+        assert!(dest_path.exists());
+
+        recover_wallet_migration(wallet_dir).unwrap();
+
+        assert!(!source_path.exists());
+        assert!(preserved_path.exists(), "preserved source should survive recovery");
+
+        let key = encrypted_backend::encryption_key().unwrap();
+        let backend = EncryptedBackend::open(&dest_path, &key).unwrap();
+        let db = redb::Database::builder().create_with_backend(backend).unwrap();
+        let tables = table_names(&db).unwrap();
+
+        assert!(tables.contains(wallet_data::TABLE.name()));
+        assert!(!tables.contains("transaction_labels.json"));
+        assert!(!tables.contains("address_labels.json"));
+    }
+
+    #[test]
+    fn wallet_current_table_verifier_fails_if_current_source_table_is_not_copied() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let src_path = dir.path().join("src.db");
+        let dst_path = dir.path().join("dst.db");
+        let src_db = redb::Database::create(&src_path).unwrap();
+        let dst_db = redb::Database::create(&dst_path).unwrap();
+
+        {
+            let write_txn = src_db.begin_write().unwrap();
+            {
+                let mut table = write_txn.open_table(wallet_data::TABLE).unwrap();
+                table
+                    .insert(
+                        "scan_state_native_segwit",
+                        wallet_data::WalletData::ScanState(wallet_data::ScanState::Completed),
+                    )
+                    .unwrap();
+            }
+            write_txn.commit().unwrap();
+        }
+
+        let result =
+            verify_current_source_tables_copied(&src_db, &dst_db, &wallet_table_policy(&src_path));
+
+        assert!(result.is_err(), "migration should fail when a wallet current table is missing");
+        assert!(result.unwrap_err().to_string().contains("wallet_data.json"));
     }
 
     #[test]
@@ -876,6 +1208,55 @@ mod tests {
         assert!(source.exists());
         assert!(!dest.exists());
         assert!(corrupt.exists());
+    }
+
+    #[test]
+    fn recover_interrupted_wallet_migrations_skips_orphan_artifacts() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let orphan_dir = dir.path().join("wallet_orphan");
+        let known_dir = dir.path().join("wallet_known");
+        std::fs::create_dir_all(&orphan_dir).unwrap();
+        std::fs::create_dir_all(&known_dir).unwrap();
+
+        let orphan_source = orphan_dir.join(LEGACY_WALLET_DB);
+        let orphan_dest = orphan_dir.join(ENCRYPTED_WALLET_DB);
+        let orphan_tmp = orphan_dest.with_extension("redb.tmp");
+        std::fs::write(&orphan_source, b"orphan plaintext").unwrap();
+        std::fs::write(&orphan_tmp, b"orphan tmp").unwrap();
+
+        let known_source = known_dir.join(LEGACY_WALLET_DB);
+        let known_dest = known_dir.join(ENCRYPTED_WALLET_DB);
+        let known_tmp = known_dest.with_extension("redb.tmp");
+        std::fs::write(&known_source, b"known plaintext").unwrap();
+        std::fs::write(&known_tmp, b"known tmp").unwrap();
+
+        recover_interrupted_wallet_migrations_in(dir.path(), &wallet_ids(&["wallet_known"]))
+            .unwrap();
+
+        assert!(orphan_source.exists(), "orphan source should be left untouched");
+        assert!(orphan_tmp.exists(), "orphan tmp should be left untouched");
+        assert!(known_source.exists(), "known source should remain for retry");
+        assert!(!known_tmp.exists(), "known interrupted tmp should be recovered strictly");
+    }
+
+    #[test]
+    fn recover_interrupted_wallet_migrations_skips_orphan_legacy_encrypted_rename() {
+        setup_test_key();
+
+        let dir = TempDir::new().unwrap();
+        let orphan_dir = dir.path().join("wallet_orphan");
+        std::fs::create_dir_all(&orphan_dir).unwrap();
+
+        let orphan_source = orphan_dir.join(LEGACY_WALLET_DB);
+        create_encrypted_redb_at(&orphan_source);
+
+        recover_interrupted_wallet_migrations_in(dir.path(), &wallet_ids(&["wallet_known"]))
+            .unwrap();
+
+        assert!(orphan_source.exists(), "orphan legacy encrypted source should be left untouched");
+        assert!(!orphan_dir.join(ENCRYPTED_WALLET_DB).exists());
     }
 
     #[test]
@@ -1088,37 +1469,29 @@ mod tests {
     }
 
     #[test]
-    fn migrate_main_database_fails_if_source_table_is_not_copied() {
+    fn current_table_verifier_fails_if_current_source_table_is_not_copied() {
         setup_test_key();
 
         let dir = TempDir::new().unwrap();
-        let source_path = create_plaintext_main_db(&dir);
-        let dest_path = dir.path().join(ENCRYPTED_MAIN_DB);
-        let tmp_path = dest_path.with_extension("db.tmp");
-        let future_table: TableDefinition<&str, &str> = TableDefinition::new("future_table");
+        let src_path = dir.path().join("src.db");
+        let dst_path = dir.path().join("dst.db");
+        let src_db = redb::Database::create(&src_path).unwrap();
+        let dst_db = redb::Database::create(&dst_path).unwrap();
 
         {
-            let db = redb::Database::open(&source_path).unwrap();
-            let write_txn = db.begin_write().unwrap();
+            let write_txn = src_db.begin_write().unwrap();
             {
-                let mut table = write_txn.open_table(future_table).unwrap();
-                table.insert("key", "value").unwrap();
+                let mut table = write_txn.open_table(global_flag::TABLE).unwrap();
+                table.insert("key", true).unwrap();
             }
             write_txn.commit().unwrap();
         }
 
-        let result = migrate_main_database(&source_path);
-        assert!(result.is_err(), "migration should fail instead of dropping an unknown table");
-        assert!(result.unwrap_err().to_string().contains("future_table"));
-        assert!(source_path.exists());
-        assert!(!dest_path.exists());
-        assert!(tmp_path.exists());
+        let result =
+            verify_current_source_tables_copied(&src_db, &dst_db, &main_table_policy(&src_path));
 
-        recover_main_migration(dir.path()).unwrap();
-
-        assert!(source_path.exists());
-        assert!(!dest_path.exists());
-        assert!(!tmp_path.exists());
+        assert!(result.is_err(), "migration should fail when a current table is missing");
+        assert!(result.unwrap_err().to_string().contains("global_flag"));
     }
 
     #[test]
