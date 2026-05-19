@@ -25,7 +25,9 @@ use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup,
 };
 use crate::label_manager::LabelManager;
-use crate::manager::cloud_backup_manager::model::CloudBackupDestructiveOperationState;
+use crate::manager::cloud_backup_manager::model::{
+    CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
+};
 use crate::manager::cloud_backup_manager::wallets::{NamespaceMatch, WalletRestoreSession};
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, StagedPrfKey,
@@ -2210,6 +2212,35 @@ async fn disable_cloud_backup_blocks_other_namespaces_without_deleting_them() {
         panic!("expected persisted disabling state");
     };
     assert!(disabling.delete_started_at.is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisting_disabling() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    let claim = manager
+        .try_begin_exclusive_operation(CloudBackupExclusiveOperation::RecreateManifest)
+        .unwrap();
+
+    let error = manager.do_disable_cloud_backup().await.unwrap_err();
+
+    assert!(error.to_string().contains("another cloud backup operation"), "{error}");
+    assert!(globals.cloud.has_namespace(&namespace));
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Enabled
+    );
+    assert_eq!(
+        manager.current_exclusive_operation().map(|claim| claim.operation()),
+        Some(CloudBackupExclusiveOperation::RecreateManifest)
+    );
+    manager.finish_exclusive_operation(claim);
 }
 
 #[tokio::test(flavor = "current_thread")]

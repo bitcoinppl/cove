@@ -14,6 +14,7 @@ use crate::manager::cloud_backup_manager::{
 };
 
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
+use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
 
 #[derive(Debug)]
 pub(crate) struct CloudBackupRestoreWorker {
@@ -132,23 +133,27 @@ impl CloudBackupRestoreWorker {
 
     pub(crate) async fn start_restore_from_cloud_backup(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        let status = manager.state.read().status().clone();
-        if matches!(status, CloudBackupStatus::Enabling | CloudBackupStatus::Restoring) {
-            warn!("restore_from_cloud_backup called while {status:?}, ignoring");
+        let Some(claim) =
+            manager.try_begin_exclusive_operation(CloudBackupExclusiveOperation::Restore)
+        else {
+            warn!("restore_from_cloud_backup called while another operation is active, ignoring");
             return Produces::ok(());
-        }
+        };
 
         let operation = RestoreOperation::new(self.restore_operations.clone(), self.addr());
         cove_tokio::task::spawn(async move {
             info!("restore_from_cloud_backup: task started");
             match manager.do_restore_from_cloud_backup(&operation).await {
-                Ok(_) => {}
+                Ok(_) => {
+                    manager.finish_exclusive_operation(claim);
+                }
                 Err(CloudBackupError::Cancelled) => {
                     info!("restore_from_cloud_backup: task cancelled");
+                    manager.finish_exclusive_operation(claim);
                 }
                 Err(error) => {
                     error!("restore_from_cloud_backup failed: {error}");
-                    manager.finish_background_operation_error(&error);
+                    manager.finish_exclusive_operation_error(claim, &error);
                 }
             }
         });
@@ -161,9 +166,10 @@ impl CloudBackupRestoreWorker {
         sender: flume::Sender<CloudBackupRestoreEvent>,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        let status = manager.state.read().status().clone();
-        if matches!(status, CloudBackupStatus::Enabling | CloudBackupStatus::Restoring) {
-            warn!("restore_from_cloud_backup called while {status:?}, ignoring");
+        let Some(claim) =
+            manager.try_begin_exclusive_operation(CloudBackupExclusiveOperation::Restore)
+        else {
+            warn!("restore_from_cloud_backup called while another operation is active, ignoring");
             if let Err(error) = sender
                 .send_async(CloudBackupRestoreEvent::Failed("restore already in progress".into()))
                 .await
@@ -173,7 +179,7 @@ impl CloudBackupRestoreWorker {
                 );
             }
             return Produces::ok(());
-        }
+        };
 
         let operation =
             RestoreOperation::new_with_events(self.restore_operations.clone(), self.addr(), sender);
@@ -184,16 +190,18 @@ impl CloudBackupRestoreWorker {
                     operation
                         .send_event_if_current(CloudBackupRestoreEvent::Complete(report))
                         .await;
+                    manager.finish_exclusive_operation(claim);
                 }
                 Err(CloudBackupError::Cancelled) => {
                     info!("restore_from_cloud_backup: task cancelled");
+                    manager.finish_exclusive_operation(claim);
                 }
                 Err(error) => {
                     error!("restore_from_cloud_backup failed: {error}");
                     operation
                         .send_event_if_current(CloudBackupRestoreEvent::Failed(error.to_string()))
                         .await;
-                    manager.finish_background_operation_error(&error);
+                    manager.finish_exclusive_operation_error(claim, &error);
                 }
             }
         });
@@ -209,6 +217,11 @@ impl CloudBackupRestoreWorker {
         }
 
         self.restore_operations.invalidate();
+        if let Some(claim) = manager.current_exclusive_operation()
+            && claim.operation() == CloudBackupExclusiveOperation::Restore
+        {
+            manager.finish_exclusive_operation(claim);
+        }
         manager.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
         manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(

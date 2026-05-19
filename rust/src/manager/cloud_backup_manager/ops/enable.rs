@@ -827,7 +827,10 @@ impl RustCloudBackupManager {
             }
             Err(error) => {
                 warn!("Confirm saved passkey failed: {error}");
-                self.finish_background_operation_error(&error);
+                self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
+                self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
+                self.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+                self.reconcile_runtime_status(Self::status_for_operation_error(&error));
             }
         }
     }

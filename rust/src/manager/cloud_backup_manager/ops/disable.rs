@@ -11,6 +11,7 @@ use tracing::{error, info};
 use super::blocking_cloud_error;
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedDisablingCloudBackup};
+use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupDisableOutcome, CloudBackupError, CloudBackupKeychain,
     CloudBackupOtherBackupsState, CloudBackupStatus, CloudOnlyOperation, OtherBackupsOperation,
@@ -173,6 +174,12 @@ impl RustCloudBackupManager {
 
     fn ensure_disable_can_start(&self) -> Result<(), CloudBackupError> {
         let state = self.state.read();
+        if let Some(operation) = state.active_operation().map(|claim| claim.operation())
+            && operation != CloudBackupExclusiveOperation::Disable
+        {
+            return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
+        }
+
         match state.status() {
             CloudBackupStatus::Restoring | CloudBackupStatus::Enabling => {
                 return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
