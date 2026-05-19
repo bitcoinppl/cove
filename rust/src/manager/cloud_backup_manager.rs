@@ -8,9 +8,11 @@ mod store;
 mod verify;
 mod wallets;
 pub(crate) mod workers;
+mod write_gate;
 
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
@@ -56,11 +58,11 @@ pub use self::detail::{
     PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
 };
 pub(crate) use self::keychain::CloudBackupKeychain;
-pub use self::model::{CloudBackupLifecycle, CloudBackupRestoreFlow};
 use self::model::{
-    CloudBackupModel, CloudBackupModelEffects, CloudBackupModelEvent,
-    CloudBackupModelEventRejection,
+    CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim, CloudBackupModel,
+    CloudBackupModelEffects, CloudBackupModelEvent, CloudBackupModelEventRejection,
 };
+pub use self::model::{CloudBackupLifecycle, CloudBackupRestoreFlow};
 pub(crate) use self::store::CloudBackupStore;
 use self::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
@@ -71,6 +73,7 @@ pub(crate) use self::workers::CloudBackupRestoreEvent;
 use self::workers::{
     CloudBackupCleanupJob, CloudBackupOperation, CloudBackupSupervisor, RestoreOperation,
 };
+use self::write_gate::{CloudWriteBlocker, CloudWriteGate};
 use super::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
 type LocalWalletSecret = crate::backup::model::WalletSecret;
@@ -81,20 +84,15 @@ pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str =
 pub(super) const CLOUD_BACKUP_IO_CONCURRENCY: usize = 4;
 type Message = CloudBackupReconcileMessage;
 
+static NEXT_EXCLUSIVE_OPERATION_GENERATION: AtomicU64 = AtomicU64::new(0);
+
 pub static CLOUD_BACKUP_MANAGER: LazyLock<Arc<RustCloudBackupManager>> =
     LazyLock::new(RustCloudBackupManager::init);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum CloudBackupBackgroundOperation {
-    Enable,
-    EnableForceNew,
-    EnableNoDiscovery,
-    Reinitialize,
-}
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum CloudBackupStatus {
     Disabled,
+    Disabling,
     Enabling,
     Restoring,
     Enabled,
@@ -172,8 +170,17 @@ pub enum CloudBackupManagerAction {
     DeleteCloudWallet(RecordId),
     RecoverOtherBackups,
     DeleteOtherBackups,
+    DisableCloudBackup,
+    KeepCloudBackupEnabled,
     RefreshDetail,
     EnterDetail,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CloudBackupDisableOutcome {
+    Started,
+    ReturnedToIdle,
+    Failed { message: String, can_keep_enabled: bool },
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -514,6 +521,7 @@ fn offline_message_for_step(step: BlockingCloudStep) -> &'static str {
         B::DeleteOtherBackups => {
             "Reconnect to the internet, then try deleting the other cloud backups again"
         }
+        B::Disable => "Reconnect to the internet, then try disabling cloud backup again",
         B::RecreateManifest => {
             "Reconnect to the internet, then try recreating the cloud backup manifest again"
         }
@@ -535,6 +543,7 @@ pub(crate) enum BlockingCloudStep {
     DeleteCloudWallet,
     RecoverOtherBackups,
     DeleteOtherBackups,
+    Disable,
     RecreateManifest,
     RepairPasskey,
     DetailRefresh,
@@ -1037,6 +1046,7 @@ pub struct RustCloudBackupManager {
     pub reconciler: Sender<Message>,
     pub reconcile_receiver: Arc<Receiver<Message>>,
     cloud_only_detail_snapshot: Arc<RwLock<Option<CloudBackupDetail>>>,
+    cloud_write_gate: Arc<CloudWriteGate>,
     pub(crate) supervisor: Addr<CloudBackupSupervisor>,
 }
 
@@ -1051,6 +1061,7 @@ impl RustCloudBackupManager {
     pub(crate) fn runtime_status_for(state: &PersistedCloudBackupState) -> CloudBackupStatus {
         match state.status() {
             PersistedCloudBackupStatus::Disabled => CloudBackupStatus::Disabled,
+            PersistedCloudBackupStatus::Disabling => CloudBackupStatus::Disabling,
             PersistedCloudBackupStatus::Enabled | PersistedCloudBackupStatus::Unverified => {
                 CloudBackupStatus::Enabled
             }
@@ -1071,8 +1082,81 @@ impl RustCloudBackupManager {
         self.state.read().status().clone()
     }
 
+    pub(crate) fn current_exclusive_operation(&self) -> Option<CloudBackupExclusiveOperationClaim> {
+        self.state.read().active_operation()
+    }
+
+    pub(crate) fn try_begin_exclusive_operation(
+        &self,
+        operation: CloudBackupExclusiveOperation,
+    ) -> Option<CloudBackupExclusiveOperationClaim> {
+        let generation = NEXT_EXCLUSIVE_OPERATION_GENERATION.fetch_add(1, Ordering::Relaxed);
+        let claim = CloudBackupExclusiveOperationClaim::new(operation, generation);
+
+        self.apply_model_event(CloudBackupModelEvent::ExclusiveOperationStarted(claim))
+            .then_some(claim)
+    }
+
+    pub(crate) fn finish_exclusive_operation(&self, claim: CloudBackupExclusiveOperationClaim) {
+        self.apply_model_event(CloudBackupModelEvent::ExclusiveOperationFinished(claim));
+    }
+
     fn has_in_flight_lifecycle(status: &CloudBackupStatus) -> bool {
-        matches!(status, CloudBackupStatus::Enabling | CloudBackupStatus::Restoring)
+        matches!(
+            status,
+            CloudBackupStatus::Disabling
+                | CloudBackupStatus::Enabling
+                | CloudBackupStatus::Restoring
+        )
+    }
+
+    fn has_in_flight_operation(&self) -> bool {
+        self.current_exclusive_operation().is_some()
+            || Self::has_in_flight_lifecycle(&self.current_status())
+    }
+
+    pub(crate) fn install_disable_fence(&self, generation: u64) {
+        self.cloud_write_gate.block(CloudWriteBlocker::Disabling { operation_id: generation });
+    }
+
+    pub(crate) fn lift_disable_fence(&self, generation: u64) {
+        self.cloud_write_gate.unblock(CloudWriteBlocker::Disabling { operation_id: generation });
+    }
+
+    pub(crate) fn current_disable_generation(&self) -> Option<u64> {
+        self.cloud_write_gate
+            .active_blocker()
+            .map(|CloudWriteBlocker::Disabling { operation_id }| operation_id)
+    }
+
+    pub(crate) fn cloud_backup_writes_blocked(&self) -> bool {
+        let disable_active = self
+            .current_exclusive_operation()
+            .is_some_and(|claim| claim.operation() == CloudBackupExclusiveOperation::Disable);
+
+        disable_active
+            || self.current_disable_generation().is_some()
+            || Self::load_persisted_state().is_disabling()
+    }
+
+    pub(crate) fn ensure_cloud_backup_writes_allowed(&self) -> Result<(), CloudBackupError> {
+        self.cloud_write_gate.ensure_writes_allowed(Self::load_persisted_state().is_disabling())
+    }
+
+    pub(crate) async fn run_cloud_backup_write<T>(
+        &self,
+        operation: impl Future<Output = Result<T, CloudBackupError>>,
+    ) -> Result<T, CloudBackupError> {
+        self.cloud_write_gate
+            .run_allowed_write(operation, || Self::load_persisted_state().is_disabling())
+            .await
+    }
+
+    pub(crate) async fn run_exclusive_cloud_backup_write<T>(
+        &self,
+        operation: impl Future<Output = T>,
+    ) -> T {
+        self.cloud_write_gate.run_exclusive_write(operation).await
     }
 
     pub(crate) fn cloud_blob_failure_issue(
@@ -1121,11 +1205,13 @@ impl RustCloudBackupManager {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
             cloud_only_detail_snapshot: Arc::new(RwLock::new(None)),
+            cloud_write_gate: Arc::new(CloudWriteGate::default()),
             supervisor: spawn_actor(CloudBackupSupervisor::new(manager.clone())),
         });
 
         manager.sync_persisted_state();
         manager.start_connectivity_listener();
+        manager.resume_persisted_disable_if_needed();
         manager
     }
 
@@ -1147,8 +1233,11 @@ impl RustCloudBackupManager {
                 self.send_model_effects(effects);
                 true
             }
-            Err(CloudBackupModelEventRejection::Busy(current_status)) => {
-                warn!("Cloud backup model event {event_kind:?} ignored while {current_status:?}");
+            Err(CloudBackupModelEventRejection::BusyOperation(active_operation)) => {
+                warn!(
+                    "Cloud backup model event {event_kind:?} ignored while {:?} is active",
+                    active_operation.operation()
+                );
                 false
             }
         }
@@ -1169,8 +1258,11 @@ impl RustCloudBackupManager {
         let event_kind = event.kind();
         let effects = match self.state.write().apply_event(event) {
             Ok(effects) => effects,
-            Err(CloudBackupModelEventRejection::Busy(current_status)) => {
-                warn!("Cloud backup model event {event_kind:?} ignored while {current_status:?}");
+            Err(CloudBackupModelEventRejection::BusyOperation(active_operation)) => {
+                warn!(
+                    "Cloud backup model event {event_kind:?} ignored while {:?} is active",
+                    active_operation.operation()
+                );
                 return;
             }
         };
@@ -1203,6 +1295,11 @@ impl RustCloudBackupManager {
 
     pub(crate) fn handle_connectivity_change(&self, status: ConnectivityStatus) {
         if status != ConnectivityStatus::Connected {
+            return;
+        }
+
+        if self.cloud_backup_writes_blocked() {
+            self.resume_persisted_disable_if_needed();
             return;
         }
 
@@ -1389,8 +1486,11 @@ impl RustCloudBackupManager {
         let event_kind = event.kind();
         let effects = match self.state.write().apply_event(event) {
             Ok(effects) => effects,
-            Err(CloudBackupModelEventRejection::Busy(current_status)) => {
-                warn!("Cloud backup model event {event_kind:?} ignored while {current_status:?}");
+            Err(CloudBackupModelEventRejection::BusyOperation(active_operation)) => {
+                warn!(
+                    "Cloud backup model event {event_kind:?} ignored while {:?} is active",
+                    active_operation.operation()
+                );
                 return;
             }
         };
@@ -1494,6 +1594,10 @@ impl RustCloudBackupManager {
         }
 
         self.apply_model_event(CloudBackupModelEvent::RecoveryStateResolved(recovery));
+    }
+
+    pub(crate) fn apply_disable_outcome(&self, outcome: CloudBackupDisableOutcome) {
+        self.apply_model_event(CloudBackupModelEvent::DisableStateResolved(outcome));
     }
 
     pub(crate) async fn record_runtime_passkey_authorization(
@@ -2058,6 +2162,9 @@ impl RustCloudBackupManager {
         if !Self::load_persisted_state().is_configured() {
             return;
         }
+        if self.cloud_backup_writes_blocked() {
+            return;
+        }
 
         let Ok(namespace_id) = self.current_namespace_id() else {
             warn!("Cloud backup dirty mark skipped, namespace is unavailable");
@@ -2109,6 +2216,10 @@ impl RustCloudBackupManager {
     }
 
     fn schedule_wallet_upload(&self, wallet_id: WalletId, immediate: bool) {
+        if self.cloud_backup_writes_blocked() {
+            return;
+        }
+
         send!(self.supervisor.schedule_wallet_upload(wallet_id, immediate));
     }
 
@@ -2288,33 +2399,12 @@ impl RustCloudBackupManager {
         Ok(remote_wallet_truth)
     }
 
-    pub(super) fn begin_background_operation(
+    pub(crate) fn finish_exclusive_operation_error(
         &self,
-        operation: CloudBackupBackgroundOperation,
-        entering_status: Option<CloudBackupStatus>,
-    ) -> bool {
-        if let Some(status) = entering_status {
-            let event = match status {
-                CloudBackupStatus::Enabling => CloudBackupModelEvent::EnableStarted,
-                CloudBackupStatus::Restoring => CloudBackupModelEvent::RestoreStarted,
-                status => CloudBackupModelEvent::BackgroundStatusEntered(status),
-            };
-
-            if !self.apply_model_event(event) {
-                return false;
-            }
-        } else {
-            let status = self.state.read().status().clone();
-            if matches!(status, CloudBackupStatus::Enabling | CloudBackupStatus::Restoring) {
-                warn!("Cloud backup operation {operation:?} ignored while {status:?}");
-                return false;
-            }
-        }
-
-        true
-    }
-
-    pub(super) fn finish_background_operation_error(&self, error: &CloudBackupError) {
+        claim: CloudBackupExclusiveOperationClaim,
+        error: &CloudBackupError,
+    ) {
+        self.finish_exclusive_operation(claim);
         self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
         self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
         self.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
@@ -2381,17 +2471,25 @@ impl RustCloudBackupManager {
     /// even before the reconciler has delivered its first message
     pub fn sync_persisted_state(&self) {
         let db_state = Self::load_persisted_state();
-        if !Self::has_in_flight_lifecycle(&self.current_status()) {
+        if let Some(disabling) = db_state.disabling() {
+            self.install_disable_fence(disabling.disable_generation);
+        }
+        if !self.has_in_flight_operation() {
             self.reconcile_runtime_status(Self::runtime_status_for(&db_state));
         }
 
         self.refresh_persisted_flags();
-        if !Self::has_in_flight_lifecycle(&self.current_status()) {
+        if !self.has_in_flight_operation() {
             self.refresh_pending_upload_verification_state();
         }
     }
 
     pub fn cloud_storage_did_change(&self) {
+        if self.cloud_backup_writes_blocked() {
+            self.resume_persisted_disable_if_needed();
+            return;
+        }
+
         send!(self.supervisor.resume_wallet_uploads_from_persisted_state());
         send!(self.supervisor.wake_pending_upload_verifier());
         self.start_pending_upload_verification_loop();
@@ -2424,6 +2522,10 @@ impl RustCloudBackupManager {
     }
 
     pub fn resume_pending_cloud_upload_verification(&self) {
+        if self.cloud_backup_writes_blocked() {
+            return;
+        }
+
         self.sync_persisted_state();
         send!(self.supervisor.resume_wallet_uploads_from_persisted_state());
         self.start_pending_upload_verification_loop();
@@ -2474,6 +2576,9 @@ impl RustCloudBackupManager {
         if !Self::load_persisted_state().is_configured() {
             return;
         }
+        if self.cloud_backup_writes_blocked() {
+            return;
+        }
 
         self.handle_wallet_backup_change_and_reverify(metadata.id);
     }
@@ -2492,6 +2597,20 @@ impl RustCloudBackupManager {
         send!(
             self.supervisor.start_operation(CloudBackupOperation::EnableNoDiscovery(context), None)
         );
+    }
+
+    pub(crate) fn disable_cloud_backup(&self) {
+        send!(self.supervisor.start_operation(CloudBackupOperation::Disable, None));
+    }
+
+    pub(crate) fn keep_cloud_backup_enabled(&self) {
+        send!(self.supervisor.keep_cloud_backup_enabled());
+    }
+
+    fn resume_persisted_disable_if_needed(&self) {
+        if Self::load_persisted_state().is_disabling() {
+            self.disable_cloud_backup();
+        }
     }
 
     /// Dismiss staged enable state for the existing-backup confirmation flow
@@ -3269,17 +3388,16 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn start_background_operation_claims_enabling_synchronously() {
+    async fn exclusive_operation_claims_enabling_synchronously() {
         let _guard = test_lock().lock();
         let manager = init_manager();
         manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
         manager.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
 
-        assert!(manager.begin_background_operation(
-            CloudBackupBackgroundOperation::Enable,
-            Some(CloudBackupStatus::Enabling),
-        ));
+        assert!(
+            manager.try_begin_exclusive_operation(CloudBackupExclusiveOperation::Enable).is_some()
+        );
 
         assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabling);
         manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
@@ -3291,10 +3409,9 @@ mod tests {
         let manager = init_manager();
         Database::global().cloud_backup_state.set(&PersistedCloudBackupState::Disabled).unwrap();
 
-        assert!(manager.begin_background_operation(
-            CloudBackupBackgroundOperation::Enable,
-            Some(CloudBackupStatus::Enabling),
-        ));
+        assert!(
+            manager.try_begin_exclusive_operation(CloudBackupExclusiveOperation::Enable).is_some()
+        );
 
         assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Enabling(_)));
         assert_eq!(manager.model_snapshot().status, CloudBackupStatus::Enabling);
@@ -3309,10 +3426,9 @@ mod tests {
             .set(&PersistedCloudBackupState::mark_enabled_reset_verification(42, 2))
             .unwrap();
 
-        assert!(manager.begin_background_operation(
-            CloudBackupBackgroundOperation::Reinitialize,
-            Some(CloudBackupStatus::Restoring),
-        ));
+        assert!(
+            manager.try_begin_exclusive_operation(CloudBackupExclusiveOperation::Restore).is_some()
+        );
 
         assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Restoring(_)));
         assert_eq!(manager.model_snapshot().status, CloudBackupStatus::Restoring);
@@ -3327,10 +3443,9 @@ mod tests {
             .set(&PersistedCloudBackupState::mark_enabled_reset_verification(42, 2))
             .unwrap();
 
-        assert!(manager.begin_background_operation(
-            CloudBackupBackgroundOperation::Enable,
-            Some(CloudBackupStatus::Enabling),
-        ));
+        assert!(
+            manager.try_begin_exclusive_operation(CloudBackupExclusiveOperation::Enable).is_some()
+        );
         manager.sync_persisted_state();
 
         assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Enabling(_)));

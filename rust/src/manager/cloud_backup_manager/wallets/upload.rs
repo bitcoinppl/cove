@@ -50,6 +50,7 @@ impl RustCloudBackupManager {
         &self,
         wallets: &[crate::wallet::metadata::WalletMetadata],
     ) -> Result<(), CloudBackupError> {
+        self.ensure_cloud_backup_writes_allowed()?;
         if wallets.is_empty() {
             return Ok(());
         }
@@ -103,9 +104,17 @@ impl RustCloudBackupManager {
             let wallet_json =
                 serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
 
-            cloud
-                .upload_wallet_backup(namespace.clone(), prepared.record_id.clone(), wallet_json)
-                .await?;
+            self.run_cloud_backup_write(async {
+                cloud
+                    .upload_wallet_backup(
+                        namespace.clone(),
+                        prepared.record_id.clone(),
+                        wallet_json,
+                    )
+                    .await
+                    .map_err(CloudBackupError::from)
+            })
+            .await?;
 
             let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
             self.mark_wallet_uploaded_pending_confirmation_if_revision_current(
@@ -171,6 +180,7 @@ impl RustCloudBackupManager {
         &self,
         wallet_id: &crate::wallet::metadata::WalletId,
     ) -> Result<(), CloudBackupError> {
+        self.ensure_cloud_backup_writes_allowed()?;
         let record_id = wallet_record_id(wallet_id.as_ref());
         let Some(current_state) = Database::global()
             .cloud_blob_sync_states
@@ -235,24 +245,38 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
-        if let Err(error) =
-            cloud.upload_wallet_backup(namespace.clone(), record_id.clone(), wallet_json).await
-        {
-            return self.handle_dirty_wallet_upload_cloud_error(
+        let upload_result = self
+            .run_cloud_backup_write(async {
+                cloud
+                    .upload_wallet_backup(namespace.clone(), record_id.clone(), wallet_json)
+                    .await
+                    .map_err(CloudBackupError::from)
+            })
+            .await;
+
+        match upload_result {
+            Ok(()) => {
+                let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+                let _ = self.mark_blob_uploaded_pending_confirmation_if_current(
+                    &uploading_state,
+                    prepared.revision_hash,
+                    uploaded_at,
+                )?;
+
+                Ok(())
+            }
+            Err(CloudBackupError::CloudStorage(error)) => self
+                .handle_dirty_wallet_upload_cloud_error(
+                    &uploading_state,
+                    Some(prepared.revision_hash.clone()),
+                    error,
+                ),
+            Err(error) => self.handle_dirty_wallet_upload_error(
                 &uploading_state,
-                Some(prepared.revision_hash.clone()),
+                Some(prepared.revision_hash),
                 error,
-            );
+            ),
         }
-
-        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
-        let _ = self.mark_blob_uploaded_pending_confirmation_if_current(
-            &uploading_state,
-            prepared.revision_hash,
-            uploaded_at,
-        )?;
-
-        Ok(())
     }
 
     fn handle_dirty_wallet_upload_cloud_error(

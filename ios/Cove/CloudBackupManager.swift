@@ -151,6 +151,19 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         destructiveOperationState != .idle
     }
 
+    var isDisablingCloudBackup: Bool {
+        if case .disabling = destructiveOperationState { return true }
+        return false
+    }
+
+    var disableFailure: (message: String, canKeepEnabled: Bool)? {
+        guard case let .disableFailed(message, canKeepEnabled) = destructiveOperationState else {
+            return nil
+        }
+
+        return (message, canKeepEnabled)
+    }
+
     var hasPendingUploadVerification: Bool {
         if case .awaitingUploadConfirmation = verificationState { return true }
         return false

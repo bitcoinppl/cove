@@ -22,13 +22,14 @@ pub(crate) use self::restore::{
 use self::sync_health::CloudBackupSyncHealthWorker;
 use self::uploads::CloudBackupUploadWorker;
 use super::keychain::CloudBackupKeychain;
+use super::model::CloudBackupExclusiveOperation;
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
-    CloudBackupBackgroundOperation, CloudBackupDetailOutcome, CloudBackupDetailResult,
-    CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupOtherBackupsOutcome,
-    CloudBackupStatus, CloudBackupVerificationOutcome, DeepVerificationResult,
-    OtherBackupsOperation, PendingEnableSession, PendingVerificationCompletion, RecoveryAction,
-    RustCloudBackupManager, VerificationState, WalletId,
+    CloudBackupDetailOutcome, CloudBackupDetailResult, CloudBackupEnableContext,
+    CloudBackupEnableOutcome, CloudBackupOtherBackupsOutcome, CloudBackupStatus,
+    CloudBackupVerificationOutcome, DeepVerificationResult, OtherBackupsOperation,
+    PendingEnableSession, PendingVerificationCompletion, RecoveryAction, RustCloudBackupManager,
+    VerificationState, WalletId,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -41,6 +42,7 @@ pub(crate) enum CloudBackupOperation {
     RepairPasskey { no_discovery: bool },
     Sync,
     FetchCloudOnly,
+    Disable,
     RestoreCloudWallet,
     DeleteCloudWallet,
     RecoverOtherBackups,
@@ -168,57 +170,83 @@ impl CloudBackupSupervisor {
 
         match operation {
             CloudBackupOperation::Enable(context) => {
-                if !manager.begin_background_operation(
-                    CloudBackupBackgroundOperation::Enable,
-                    Some(CloudBackupStatus::Enabling),
-                ) {
+                let Some(claim) =
+                    manager.try_begin_exclusive_operation(CloudBackupExclusiveOperation::Enable)
+                else {
                     return;
-                }
+                };
                 cove_tokio::task::spawn(async move {
                     if let Err(error) = manager.do_enable_cloud_backup_with_context(context).await {
                         error!("enable_cloud_backup failed: {error}");
-                        manager.finish_background_operation_error(&error);
+                        manager.finish_exclusive_operation_error(claim, &error);
+                    } else {
+                        manager.finish_exclusive_operation(claim);
                     }
                 });
             }
             CloudBackupOperation::EnableForceNew(context) => {
-                if !manager.begin_background_operation(
-                    CloudBackupBackgroundOperation::EnableForceNew,
-                    Some(CloudBackupStatus::Enabling),
-                ) {
+                let Some(claim) = manager
+                    .try_begin_exclusive_operation(CloudBackupExclusiveOperation::EnableForceNew)
+                else {
                     return;
-                }
+                };
                 cove_tokio::task::spawn(async move {
                     if let Err(error) =
                         manager.do_enable_cloud_backup_force_new_with_context(context).await
                     {
                         error!("enable_cloud_backup_force_new failed: {error}");
-                        manager.finish_background_operation_error(&error);
+                        manager.finish_exclusive_operation_error(claim, &error);
+                    } else {
+                        manager.finish_exclusive_operation(claim);
                     }
                 });
             }
             CloudBackupOperation::EnableNoDiscovery(context) => {
-                if !manager.begin_background_operation(
-                    CloudBackupBackgroundOperation::EnableNoDiscovery,
-                    Some(CloudBackupStatus::Enabling),
-                ) {
+                let Some(claim) = manager.try_begin_exclusive_operation(
+                    CloudBackupExclusiveOperation::EnableNoDiscovery,
+                ) else {
                     return;
-                }
+                };
                 cove_tokio::task::spawn(async move {
                     if let Err(error) =
                         manager.do_enable_cloud_backup_no_discovery_with_context(context).await
                     {
                         error!("enable_cloud_backup_no_discovery failed: {error}");
-                        manager.finish_background_operation_error(&error);
+                        manager.finish_exclusive_operation_error(claim, &error);
+                    } else {
+                        manager.finish_exclusive_operation(claim);
                     }
                 });
             }
             CloudBackupOperation::Recovery(action) => {
-                cove_tokio::task::spawn(async move { manager.handle_recovery(action).await });
+                let operation = match action {
+                    RecoveryAction::RecreateManifest => {
+                        CloudBackupExclusiveOperation::RecreateManifest
+                    }
+                    RecoveryAction::ReinitializeBackup => {
+                        CloudBackupExclusiveOperation::ReinitializeBackup
+                    }
+                    RecoveryAction::RepairPasskey => CloudBackupExclusiveOperation::RepairPasskey,
+                };
+                let Some(claim) = manager.try_begin_exclusive_operation(operation) else {
+                    return;
+                };
+
+                cove_tokio::task::spawn(async move {
+                    manager.handle_recovery(action).await;
+                    manager.finish_exclusive_operation(claim);
+                });
             }
             CloudBackupOperation::RepairPasskey { no_discovery } => {
+                let Some(claim) = manager
+                    .try_begin_exclusive_operation(CloudBackupExclusiveOperation::RepairPasskey)
+                else {
+                    return;
+                };
+
                 cove_tokio::task::spawn(async move {
-                    manager.handle_repair_passkey(no_discovery).await
+                    manager.handle_repair_passkey(no_discovery).await;
+                    manager.finish_exclusive_operation(claim);
                 });
             }
             CloudBackupOperation::Sync => {
@@ -227,47 +255,80 @@ impl CloudBackupSupervisor {
             CloudBackupOperation::FetchCloudOnly => {
                 cove_tokio::task::spawn(async move { manager.handle_fetch_cloud_only().await });
             }
+            CloudBackupOperation::Disable => {
+                let Some(claim) =
+                    manager.try_begin_exclusive_operation(CloudBackupExclusiveOperation::Disable)
+                else {
+                    return;
+                };
+
+                cove_tokio::task::spawn(async move {
+                    manager.handle_disable_cloud_backup().await;
+                    manager.finish_exclusive_operation(claim);
+                });
+            }
             CloudBackupOperation::RestoreCloudWallet => {
                 let Some(record_id) = record_id else { return };
+                let Some(claim) = manager.try_begin_exclusive_operation(
+                    CloudBackupExclusiveOperation::RestoreCloudWallet,
+                ) else {
+                    return;
+                };
+
                 cove_tokio::task::spawn(async move {
-                    manager.handle_restore_cloud_wallet(&record_id).await
+                    manager.handle_restore_cloud_wallet(&record_id).await;
+                    manager.finish_exclusive_operation(claim);
                 });
             }
             CloudBackupOperation::DeleteCloudWallet => {
                 let Some(record_id) = record_id else { return };
+                let Some(claim) = manager.try_begin_exclusive_operation(
+                    CloudBackupExclusiveOperation::DeleteCloudWallet,
+                ) else {
+                    return;
+                };
+
                 cove_tokio::task::spawn(async move {
-                    manager.handle_delete_cloud_wallet(&record_id).await
+                    manager.handle_delete_cloud_wallet(&record_id).await;
+                    manager.finish_exclusive_operation(claim);
                 });
             }
             CloudBackupOperation::RecoverOtherBackups => {
-                if !Self::begin_other_backups_operation(
+                let Some(claim) = Self::begin_other_backups_operation(
                     &manager,
+                    CloudBackupExclusiveOperation::RecoverOtherBackups,
                     CloudBackupOtherBackupsOutcome::Recovering,
-                ) {
+                ) else {
                     return;
-                }
+                };
 
-                cove_tokio::task::spawn(
-                    async move { manager.handle_recover_other_backups().await },
-                );
+                cove_tokio::task::spawn(async move {
+                    manager.handle_recover_other_backups().await;
+                    manager.finish_exclusive_operation(claim);
+                });
             }
             CloudBackupOperation::DeleteOtherBackups => {
-                if !Self::begin_other_backups_operation(
+                let Some(claim) = Self::begin_other_backups_operation(
                     &manager,
+                    CloudBackupExclusiveOperation::DeleteOtherBackups,
                     CloudBackupOtherBackupsOutcome::Deleting,
-                ) {
+                ) else {
                     return;
-                }
+                };
 
-                cove_tokio::task::spawn(async move { manager.handle_delete_other_backups().await });
+                cove_tokio::task::spawn(async move {
+                    manager.handle_delete_other_backups().await;
+                    manager.finish_exclusive_operation(claim);
+                });
             }
         }
     }
 
     fn begin_other_backups_operation(
         manager: &RustCloudBackupManager,
+        operation: CloudBackupExclusiveOperation,
         outcome: CloudBackupOtherBackupsOutcome,
-    ) -> bool {
+    ) -> Option<super::model::CloudBackupExclusiveOperationClaim> {
         if !matches!(
             manager.state.read().other_backups_operation(),
             OtherBackupsOperation::Idle
@@ -275,11 +336,12 @@ impl CloudBackupSupervisor {
                 | OtherBackupsOperation::Deleted
                 | OtherBackupsOperation::Failed { .. }
         ) {
-            return false;
+            return None;
         }
 
+        let claim = manager.try_begin_exclusive_operation(operation)?;
         manager.apply_other_backups_outcome(outcome);
-        true
+        Some(claim)
     }
 
     pub async fn start_operation(
@@ -523,10 +585,17 @@ impl CloudBackupSupervisor {
                 return Produces::ok(());
             }
         };
+        let Some(claim) =
+            manager.try_begin_exclusive_operation(CloudBackupExclusiveOperation::Enable)
+        else {
+            self.pending_enable_session = Some(pending);
+            return Produces::ok(());
+        };
 
         manager.apply_enable_outcome(CloudBackupEnableOutcome::ConfirmingSavedPasskey);
         cove_tokio::task::spawn(async move {
             manager.handle_confirm_saved_passkey_session(pending).await;
+            manager.finish_exclusive_operation(claim);
         });
 
         Produces::ok(())
@@ -682,6 +751,23 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
+    pub async fn clear_disable_runtime_state(&mut self) -> ActorResult<()> {
+        self.pending_enable_session = None;
+        self.pending_verification_completion = None;
+        self.runtime_passkey_authorization = None;
+        call!(self.sync_health.clear_upload_runtime_state()).await?;
+        call!(self.uploads.clear_upload_runtime_state()).await?;
+        Produces::ok(())
+    }
+
+    pub async fn keep_cloud_backup_enabled(&mut self) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        cove_tokio::task::spawn(async move {
+            manager.handle_keep_cloud_backup_enabled().await;
+        });
+        Produces::ok(())
+    }
+
     pub async fn enqueue_cleanup(&mut self, job: CloudBackupCleanupJob) -> ActorResult<()> {
         call!(self.cleanup.enqueue_cleanup(job)).await?;
         Produces::ok(())
@@ -709,6 +795,11 @@ pub(crate) mod test_support {
         pub async fn invalidate_restore_operation(&mut self) -> ActorResult<()> {
             call!(self.restore.invalidate_restore_operation()).await?;
             Produces::ok(())
+        }
+
+        pub async fn cleanup_idle_for_test(&mut self) -> ActorResult<bool> {
+            let idle = call!(self.cleanup.is_idle_for_test()).await?;
+            Produces::ok(idle)
         }
     }
 }

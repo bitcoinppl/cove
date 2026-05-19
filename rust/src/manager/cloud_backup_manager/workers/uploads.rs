@@ -73,6 +73,10 @@ impl CloudBackupUploadWorker {
             let mut blocked_on_authorization = false;
 
             loop {
+                if manager.cloud_backup_writes_blocked() {
+                    break;
+                }
+
                 match manager.verify_pending_uploads_once().await {
                     PendingUploadVerificationStatus::Idle => break,
                     PendingUploadVerificationStatus::BlockedOnAuthorization => {
@@ -116,6 +120,10 @@ impl CloudBackupUploadWorker {
 
     fn schedule_wallet_upload_follow_up(&mut self, wallet_id: WalletId) {
         let Some(manager) = self.manager() else { return };
+        if manager.cloud_backup_writes_blocked() {
+            return;
+        };
+
         let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
         let sync_state = match crate::database::Database::global()
             .cloud_blob_sync_states
@@ -168,6 +176,10 @@ impl CloudBackupUploadWorker {
         wallet_id: WalletId,
         immediate: bool,
     ) -> ActorResult<()> {
+        if self.manager().is_some_and(|manager| manager.cloud_backup_writes_blocked()) {
+            return Produces::ok(());
+        }
+
         if immediate {
             let Some(addr) = self.addr() else { return Produces::ok(()) };
             send!(addr.run_wallet_upload(wallet_id));
@@ -190,6 +202,11 @@ impl CloudBackupUploadWorker {
             self.active_wallet_uploads.remove(&wallet_id);
             return Produces::ok(());
         };
+
+        if manager.cloud_backup_writes_blocked() {
+            self.active_wallet_uploads.remove(&wallet_id);
+            return Produces::ok(());
+        }
 
         self.addr.send_fut_with(move |addr| async move {
             let upload_result = manager.do_upload_wallet_if_dirty(&wallet_id).await;
@@ -286,6 +303,9 @@ impl CloudBackupUploadWorker {
 
         let Some(addr) = self.addr() else { return Produces::ok(()) };
         let manager = self.manager();
+        if manager.as_ref().is_some_and(|manager| manager.cloud_backup_writes_blocked()) {
+            return Produces::ok(());
+        }
 
         for sync_state in states {
             let wallet_id = match sync_state.record_key() {
@@ -331,6 +351,9 @@ impl CloudBackupUploadWorker {
         }
 
         let Some(manager) = self.manager() else { return Produces::ok(()) };
+        if manager.cloud_backup_writes_blocked() {
+            return Produces::ok(());
+        }
 
         self.spawn_pending_upload_verification_loop_task(manager);
 
@@ -358,6 +381,10 @@ impl CloudBackupUploadWorker {
         }
 
         let Some(manager) = self.manager() else { return Produces::ok(()) };
+        if manager.cloud_backup_writes_blocked() {
+            return Produces::ok(());
+        }
+
         if manager.has_pending_cloud_upload_verification() {
             self.spawn_pending_upload_verification_loop_task(manager);
             return Produces::ok(());
@@ -405,6 +432,17 @@ impl PendingUploadRetryBackoff {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::Database;
+    use crate::database::cloud_backup::{
+        CloudBlobUploadedPendingConfirmationState, PersistedBackupSyncState,
+        PersistedBackupVerificationState, PersistedCloudBackupState, PersistedCloudBlobSyncState,
+        PersistedConfiguredCloudBackup, PersistedDisablingCloudBackup, PersistedPasskeyState,
+    };
+    use crate::manager::cloud_backup_manager::CloudBackupKeychain;
+    use crate::manager::cloud_backup_manager::ops::test_support::{
+        configure_enabled_cloud_backup, ensure_cloud_backup_test_tokio_runtime, test_globals,
+        test_lock,
+    };
 
     impl CloudBackupUploadWorker {
         pub(crate) async fn run_wallet_upload_inline_for_test(
@@ -442,5 +480,58 @@ mod tests {
             );
             Produces::ok(())
         }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn pending_upload_verifier_finished_does_not_respawn_while_writes_blocked() {
+        let _guard = test_lock().lock();
+        ensure_cloud_backup_test_tokio_runtime();
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+
+        let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+        let configured = PersistedConfiguredCloudBackup {
+            passkey: PersistedPasskeyState::Available,
+            verification: PersistedBackupVerificationState::NotVerified {
+                requested_at: None,
+                dismissed_at: None,
+            },
+            sync: PersistedBackupSyncState { last_sync: None, wallet_count: None },
+            pending_verification_completion: None,
+        };
+        Database::global()
+            .cloud_backup_state
+            .set(&PersistedCloudBackupState::Disabling(PersistedDisablingCloudBackup {
+                previous_configured: configured,
+                namespace_id: namespace.clone(),
+                disable_generation: 7,
+                started_at: 1,
+                delete_started_at: None,
+                last_error: None,
+                retry_after: None,
+            }))
+            .unwrap();
+        Database::global()
+            .cloud_blob_sync_states
+            .set(&PersistedCloudBlobSyncState::master_key_wrapper(
+                namespace,
+                PersistedCloudBlobState::UploadedPendingConfirmation(
+                    CloudBlobUploadedPendingConfirmationState {
+                        revision_hash: "revision".into(),
+                        uploaded_at: 1,
+                        attempt_count: 0,
+                        last_checked_at: None,
+                    },
+                ),
+            ))
+            .unwrap();
+
+        let mut worker = CloudBackupUploadWorker::new(Arc::downgrade(&manager));
+        worker.pending_upload_verifier_running = true;
+
+        worker.pending_upload_verifier_finished(false).await.unwrap();
+
+        assert!(!worker.pending_upload_verifier_running);
     }
 }

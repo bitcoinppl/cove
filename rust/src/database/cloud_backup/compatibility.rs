@@ -23,8 +23,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use super::{
     CloudBackupRecordKey, PersistedBackupSyncState, PersistedBackupVerificationState,
     PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup, PersistedPasskeyState,
-    PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
+    PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup, PersistedDisablingCloudBackup,
+    PersistedPasskeyState, PersistedPendingVerificationCompletion,
+    PersistedPendingVerificationUpload,
 };
 use crate::wallet::metadata::WalletId;
 
@@ -33,19 +34,16 @@ impl<'de> Deserialize<'de> for PersistedCloudBackupState {
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum PersistedCloudBackupStateShape {
-            Domain(PersistedCloudBackupDomainRecord),
-            Legacy(PersistedLegacyCloudBackupState),
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if value.get("version").is_some() || value.get("backup").is_some() {
+            let record = serde_json::from_value::<PersistedCloudBackupDomainRecord>(value)
+                .map_err(serde::de::Error::custom)?;
+            return record.into_state().map_err(serde::de::Error::custom);
         }
 
-        match PersistedCloudBackupStateShape::deserialize(deserializer)? {
-            PersistedCloudBackupStateShape::Domain(record) => {
-                record.into_state().map_err(serde::de::Error::custom)
-            }
-            PersistedCloudBackupStateShape::Legacy(state) => Ok(state.into()),
-        }
+        serde_json::from_value::<PersistedLegacyCloudBackupState>(value)
+            .map(Into::into)
+            .map_err(serde::de::Error::custom)
     }
 }
 
@@ -103,7 +101,8 @@ fn legacy_passkey_state(status: PersistedCloudBackupStatus) -> PersistedPasskeyS
         PersistedCloudBackupStatus::PasskeyMissing => PersistedPasskeyState::Missing,
         PersistedCloudBackupStatus::Disabled
         | PersistedCloudBackupStatus::Enabled
-        | PersistedCloudBackupStatus::Unverified => PersistedPasskeyState::Available,
+        | PersistedCloudBackupStatus::Unverified
+        | PersistedCloudBackupStatus::Disabling => PersistedPasskeyState::Available,
     }
 }
 
@@ -165,10 +164,40 @@ impl<'de> Deserialize<'de> for PersistedPendingVerificationUpload {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct PersistedCloudBackupDomainRecord {
     version: u16,
     backup: PersistedBackupRecord,
+}
+
+impl<'de> Deserialize<'de> for PersistedCloudBackupDomainRecord {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawRecord {
+            version: u16,
+            backup: serde_json::Value,
+        }
+
+        let record = RawRecord::deserialize(deserializer)?;
+        let backup = match record.version {
+            1 => {
+                let backup = serde_json::from_value::<PersistedBackupRecordV1>(record.backup)
+                    .map_err(serde::de::Error::custom)?;
+                backup.into_current()
+            }
+            2 => serde_json::from_value(record.backup).map_err(serde::de::Error::custom)?,
+            version => {
+                return Err(serde::de::Error::custom(format!(
+                    "unsupported persisted cloud backup record version: {version}"
+                )));
+            }
+        };
+
+        Ok(Self { version: record.version, backup })
+    }
 }
 
 impl PersistedCloudBackupDomainRecord {
@@ -178,13 +207,16 @@ impl PersistedCloudBackupDomainRecord {
             PersistedCloudBackupState::Configured(configured) => {
                 PersistedBackupRecord::Configured(configured.clone())
             }
+            PersistedCloudBackupState::Disabling(disabling) => {
+                PersistedBackupRecord::Disabling(disabling.clone())
+            }
         };
 
-        Self { version: 1, backup }
+        Self { version: 2, backup }
     }
 
     fn into_state(self) -> Result<PersistedCloudBackupState, String> {
-        if self.version != 1 {
+        if self.version != 1 && self.version != 2 {
             return Err(format!(
                 "unsupported persisted cloud backup record version: {}",
                 self.version
@@ -196,6 +228,25 @@ impl PersistedCloudBackupDomainRecord {
             PersistedBackupRecord::Configured(configured) => {
                 Ok(PersistedCloudBackupState::Configured(configured))
             }
+            PersistedBackupRecord::Disabling(disabling) => {
+                Ok(PersistedCloudBackupState::Disabling(disabling))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(tag = "state", content = "data")]
+enum PersistedBackupRecordV1 {
+    Disabled,
+    Configured(PersistedConfiguredCloudBackup),
+}
+
+impl PersistedBackupRecordV1 {
+    fn into_current(self) -> PersistedBackupRecord {
+        match self {
+            Self::Disabled => PersistedBackupRecord::Disabled,
+            Self::Configured(configured) => PersistedBackupRecord::Configured(configured),
         }
     }
 }
@@ -205,6 +256,7 @@ impl PersistedCloudBackupDomainRecord {
 enum PersistedBackupRecord {
     Disabled,
     Configured(PersistedConfiguredCloudBackup),
+    Disabling(PersistedDisablingCloudBackup),
 }
 
 impl Serialize for PersistedCloudBlobSyncState {
@@ -410,7 +462,7 @@ mod tests {
 
         let encoded = serde_json::to_value(&state).unwrap();
 
-        assert_eq!(encoded["version"], 1);
+        assert_eq!(encoded["version"], 2);
         assert_eq!(encoded["backup"]["state"], "Configured");
         assert_eq!(encoded["backup"]["data"]["passkey"], "Missing");
         assert_eq!(encoded["backup"]["data"]["verification"]["state"], "Verified");
@@ -421,7 +473,7 @@ mod tests {
     }
 
     #[test]
-    fn cloud_backup_state_accepts_domain_json() {
+    fn cloud_backup_state_accepts_v1_domain_json() {
         let state: PersistedCloudBackupState = serde_json::from_value(serde_json::json!({
             "version": 1,
             "backup": {
@@ -454,9 +506,73 @@ mod tests {
     }
 
     #[test]
+    fn cloud_backup_state_accepts_v2_disabling_domain_json() {
+        let state: PersistedCloudBackupState = serde_json::from_value(serde_json::json!({
+            "version": 2,
+            "backup": {
+                "state": "Disabling",
+                "data": {
+                    "previous_configured": {
+                        "passkey": "Available",
+                        "verification": {
+                            "state": "Verified",
+                            "data": {
+                                "last_verified_at": 11,
+                                "requested_at": 20,
+                                "dismissed_at": 12
+                            }
+                        },
+                        "sync": {
+                            "last_sync": 10,
+                            "wallet_count": 2
+                        }
+                    },
+                    "namespace_id": "namespace-1",
+                    "disable_generation": 99,
+                    "started_at": 30,
+                    "delete_started_at": null,
+                    "last_error": null,
+                    "retry_after": null
+                }
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(state.status(), PersistedCloudBackupStatus::Disabling);
+        assert_eq!(state.last_sync(), Some(10));
+        assert_eq!(state.wallet_count(), Some(2));
+    }
+
+    #[test]
+    fn cloud_backup_state_rejects_v1_disabling_domain_json() {
+        let error = serde_json::from_value::<PersistedCloudBackupState>(serde_json::json!({
+            "version": 1,
+            "backup": {
+                "state": "Disabling",
+                "data": {
+                    "previous_configured": {
+                        "passkey": "Available",
+                        "verification": {
+                            "state": "NotVerified",
+                            "data": {}
+                        },
+                        "sync": {}
+                    },
+                    "namespace_id": "namespace-1",
+                    "disable_generation": 99,
+                    "started_at": 30
+                }
+            }
+        }))
+        .unwrap_err();
+
+        assert!(error.to_string().contains("unknown variant"), "{error}");
+    }
+
+    #[test]
     fn cloud_backup_state_rejects_unsupported_domain_version() {
         let error = serde_json::from_value::<PersistedCloudBackupState>(serde_json::json!({
-            "version": 2,
+            "version": 3,
             "backup": {
                 "state": "Disabled"
             }
@@ -464,7 +580,7 @@ mod tests {
         .unwrap_err();
 
         assert!(
-            error.to_string().contains("unsupported persisted cloud backup record version: 2"),
+            error.to_string().contains("unsupported persisted cloud backup record version: 3"),
             "{error}"
         );
     }

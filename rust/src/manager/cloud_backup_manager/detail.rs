@@ -3,11 +3,10 @@ use tracing::error;
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
-    CLOUD_BACKUP_MANAGER, CloudBackupBackgroundOperation, CloudBackupDetail, CloudBackupError,
-    CloudBackupManagerAction, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreFlow,
-    CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    OtherBackupsOperation, RustCloudBackupManager, SavedPasskeyConfirmationMode,
-    workers::CloudBackupOperation,
+    CLOUD_BACKUP_MANAGER, CloudBackupDetail, CloudBackupError, CloudBackupManagerAction,
+    CloudBackupPasskeyChoiceIntent, CloudBackupRestoreFlow, CloudBackupWalletItem,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation,
+    RustCloudBackupManager, SavedPasskeyConfirmationMode, workers::CloudBackupOperation,
 };
 
 type Action = CloudBackupManagerAction;
@@ -265,6 +264,8 @@ impl RustCloudBackupManager {
             }
             A::RecoverOtherBackups => CLOUD_BACKUP_MANAGER.clone().spawn_recover_other_backups(),
             A::DeleteOtherBackups => CLOUD_BACKUP_MANAGER.clone().spawn_delete_other_backups(),
+            A::DisableCloudBackup => CLOUD_BACKUP_MANAGER.disable_cloud_backup(),
+            A::KeepCloudBackupEnabled => CLOUD_BACKUP_MANAGER.keep_cloud_backup_enabled(),
             A::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
             A::EnterDetail => CLOUD_BACKUP_MANAGER.clone().spawn_enter_detail(),
         }
@@ -453,9 +454,12 @@ impl RustCloudBackupManager {
             RecoveryAction::RepairPasskey => self.do_repair_passkey_wrapper().await,
         };
         let should_auto_verify = match action {
-            RecoveryAction::ReinitializeBackup => {
-                matches!(self.current_status(), super::CloudBackupStatus::Enabled)
-            }
+            RecoveryAction::ReinitializeBackup => matches!(
+                RustCloudBackupManager::runtime_status_for(
+                    &RustCloudBackupManager::load_persisted_state()
+                ),
+                super::CloudBackupStatus::Enabled
+            ),
             RecoveryAction::RecreateManifest | RecoveryAction::RepairPasskey => true,
         };
 
@@ -525,15 +529,6 @@ impl RustCloudBackupManager {
     }
 
     async fn run_reinitialize_backup(&self) -> Result<(), CloudBackupError> {
-        if !self.begin_background_operation(
-            CloudBackupBackgroundOperation::Reinitialize,
-            Some(super::CloudBackupStatus::Enabling),
-        ) {
-            return Err(CloudBackupError::RecoveryRequired(
-                "cloud backup operation already running".into(),
-            ));
-        }
-
         let result = self.do_enable_cloud_backup().await;
         match result {
             Ok(()) => Ok(()),

@@ -303,7 +303,7 @@ class OnboardingHelpersTest {
             passkey = passkey,
             verification = verification,
             sync = sync,
-            destructiveOperation = CloudBackupDestructiveOperationState.IDLE,
+            destructiveOperation = CloudBackupDestructiveOperationState.Idle,
             detail = CloudBackupDetailState.NotLoaded,
             rootPrompt = CloudBackupRootPrompt.None,
             syncHealth = CloudSyncHealth.Unknown,

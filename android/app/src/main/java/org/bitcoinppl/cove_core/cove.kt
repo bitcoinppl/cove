@@ -34316,34 +34316,118 @@ public object FfiConverterTypeCkTapError : FfiConverterRustBuffer<CkTapException
 
 
 
-
-enum class CloudBackupDestructiveOperationState {
+sealed class CloudBackupDestructiveOperationState {
     
-    IDLE,
-    RECREATING_MANIFEST,
-    REINITIALIZING_BACKUP;
+    object Idle : CloudBackupDestructiveOperationState()
+    
+    
+    object RecreatingManifest : CloudBackupDestructiveOperationState()
+    
+    
+    object ReinitializingBackup : CloudBackupDestructiveOperationState()
+    
+    
+    object Disabling : CloudBackupDestructiveOperationState()
+    
+    
+    data class DisableFailed(
+        val `message`: kotlin.String, 
+        val `canKeepEnabled`: kotlin.Boolean) : CloudBackupDestructiveOperationState()
+        
+    {
+        
 
+        companion object
+    }
+    
+
+    
+
+    
     
 
 
     companion object
 }
 
-
 /**
  * @suppress
  */
-public object FfiConverterTypeCloudBackupDestructiveOperationState: FfiConverterRustBuffer<CloudBackupDestructiveOperationState> {
-    override fun read(buf: ByteBuffer) = try {
-        CloudBackupDestructiveOperationState.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+public object FfiConverterTypeCloudBackupDestructiveOperationState : FfiConverterRustBuffer<CloudBackupDestructiveOperationState>{
+    override fun read(buf: ByteBuffer): CloudBackupDestructiveOperationState {
+        return when(buf.getInt()) {
+            1 -> CloudBackupDestructiveOperationState.Idle
+            2 -> CloudBackupDestructiveOperationState.RecreatingManifest
+            3 -> CloudBackupDestructiveOperationState.ReinitializingBackup
+            4 -> CloudBackupDestructiveOperationState.Disabling
+            5 -> CloudBackupDestructiveOperationState.DisableFailed(
+                FfiConverterString.read(buf),
+                FfiConverterBoolean.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
     }
 
-    override fun allocationSize(value: CloudBackupDestructiveOperationState) = 4UL
+    override fun allocationSize(value: CloudBackupDestructiveOperationState): ULong = when(value) {
+        is CloudBackupDestructiveOperationState.Idle -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupDestructiveOperationState.RecreatingManifest -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupDestructiveOperationState.ReinitializingBackup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupDestructiveOperationState.Disabling -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupDestructiveOperationState.DisableFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+                + FfiConverterBoolean.allocationSize(value.`canKeepEnabled`)
+            )
+        }
+    }
 
     override fun write(value: CloudBackupDestructiveOperationState, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
+        when(value) {
+            is CloudBackupDestructiveOperationState.Idle -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupDestructiveOperationState.RecreatingManifest -> {
+                buf.putInt(2)
+                Unit
+            }
+            is CloudBackupDestructiveOperationState.ReinitializingBackup -> {
+                buf.putInt(3)
+                Unit
+            }
+            is CloudBackupDestructiveOperationState.Disabling -> {
+                buf.putInt(4)
+                Unit
+            }
+            is CloudBackupDestructiveOperationState.DisableFailed -> {
+                buf.putInt(5)
+                FfiConverterString.write(value.`message`, buf)
+                FfiConverterBoolean.write(value.`canKeepEnabled`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 
@@ -34932,6 +35016,12 @@ sealed class CloudBackupManagerAction {
     object DeleteOtherBackups : CloudBackupManagerAction()
     
     
+    object DisableCloudBackup : CloudBackupManagerAction()
+    
+    
+    object KeepCloudBackupEnabled : CloudBackupManagerAction()
+    
+    
     object RefreshDetail : CloudBackupManagerAction()
     
     
@@ -34990,8 +35080,10 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 )
             21 -> CloudBackupManagerAction.RecoverOtherBackups
             22 -> CloudBackupManagerAction.DeleteOtherBackups
-            23 -> CloudBackupManagerAction.RefreshDetail
-            24 -> CloudBackupManagerAction.EnterDetail
+            23 -> CloudBackupManagerAction.DisableCloudBackup
+            24 -> CloudBackupManagerAction.KeepCloudBackupEnabled
+            25 -> CloudBackupManagerAction.RefreshDetail
+            26 -> CloudBackupManagerAction.EnterDetail
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -35136,6 +35228,18 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 4UL
             )
         }
+        is CloudBackupManagerAction.DisableCloudBackup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupManagerAction.KeepCloudBackupEnabled -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is CloudBackupManagerAction.RefreshDetail -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -35247,12 +35351,20 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 buf.putInt(22)
                 Unit
             }
-            is CloudBackupManagerAction.RefreshDetail -> {
+            is CloudBackupManagerAction.DisableCloudBackup -> {
                 buf.putInt(23)
                 Unit
             }
-            is CloudBackupManagerAction.EnterDetail -> {
+            is CloudBackupManagerAction.KeepCloudBackupEnabled -> {
                 buf.putInt(24)
+                Unit
+            }
+            is CloudBackupManagerAction.RefreshDetail -> {
+                buf.putInt(25)
+                Unit
+            }
+            is CloudBackupManagerAction.EnterDetail -> {
+                buf.putInt(26)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
