@@ -287,21 +287,22 @@ fn migrate_database(
     if copy_report.may_remove_source {
         // only delete plaintext after encrypted is verified and in place
         super::log_remove_file(&paths.source);
-    } else {
-        let dest = paths.dest.display();
-        match preserve_plaintext_source(&paths.source) {
-            Ok(preserved) => {
-                let preserved = preserved.display();
-                warn!(
-                    "Preserved plaintext redb source at {preserved} after promoting encrypted destination at {dest} because migration skipped non-disposable table(s)"
-                );
-            }
-            Err(error) => {
-                let source = paths.source.display();
-                warn!(
-                    "Failed to preserve plaintext redb source at {source} after promoting encrypted destination at {dest}: {error}; migration succeeded because encrypted destination was already promoted"
-                );
-            }
+        return Ok(());
+    }
+
+    let dest = paths.dest.display();
+    match preserve_plaintext_source(&paths.source) {
+        Ok(preserved) => {
+            let preserved = preserved.display();
+            warn!(
+                "Preserved plaintext redb source at {preserved} after promoting encrypted destination at {dest} because migration skipped non-disposable table(s)"
+            );
+        }
+        Err(error) => {
+            let source = paths.source.display();
+            warn!(
+                "Failed to preserve plaintext redb source at {source} after promoting encrypted destination at {dest}: {error}; migration succeeded because encrypted destination was already promoted"
+            );
         }
     }
 
