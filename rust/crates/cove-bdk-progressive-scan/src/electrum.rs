@@ -15,7 +15,7 @@ use bdk_wallet::chain::{
 
 use crate::{
     Error, ProgressTracker, ProgressiveScanner, Result, ScanEvent, ScanUpdate,
-    event::{clone_full_scan_response, send_complete, send_progress, send_update},
+    event::{clone_full_scan_response, send_complete_unless_cancelled, send_progress, send_update},
 };
 
 const CHAIN_SUFFIX_LENGTH: u32 = 8;
@@ -116,7 +116,11 @@ where
         };
         let response = FullScanResponse { tx_update, chain_update, last_active_indices };
 
-        send_complete(&parts.events, clone_full_scan_response(&response))?;
+        send_complete_unless_cancelled(
+            &parts.events,
+            &parts.cancel_token,
+            clone_full_scan_response(&response),
+        )?;
 
         Ok(response)
     }

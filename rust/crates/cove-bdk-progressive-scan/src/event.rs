@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use bdk_wallet::chain::{
     CheckPoint, ConfirmationBlockTime, TxUpdate, spk_client::FullScanResponse,
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::{Error, Result, ScanProgress};
 
@@ -73,11 +74,35 @@ pub(crate) fn send_complete<K>(
     events.send(ScanEvent::Complete(response)).map_err(|_| Error::ChannelClosed)
 }
 
+pub(crate) fn send_complete_unless_cancelled<K>(
+    events: &flume::Sender<ScanEvent<K>>,
+    cancel_token: &CancellationToken,
+    response: FullScanResponse<K>,
+) -> Result<()> {
+    if cancel_token.is_cancelled() {
+        return Err(Error::Cancelled);
+    }
+
+    send_complete(events, response)
+}
+
 pub(crate) async fn send_complete_async<K>(
     events: &flume::Sender<ScanEvent<K>>,
     response: FullScanResponse<K>,
 ) -> Result<()> {
     events.send_async(ScanEvent::Complete(response)).await.map_err(|_| Error::ChannelClosed)
+}
+
+pub(crate) async fn send_complete_async_unless_cancelled<K>(
+    events: &flume::Sender<ScanEvent<K>>,
+    cancel_token: &CancellationToken,
+    response: FullScanResponse<K>,
+) -> Result<()> {
+    if cancel_token.is_cancelled() {
+        return Err(Error::Cancelled);
+    }
+
+    send_complete_async(events, response).await
 }
 
 #[cfg(test)]
@@ -89,9 +114,11 @@ mod tests {
     use bdk_wallet::test_utils::{get_test_wpkh_and_change_desc, new_wallet_and_funding_update};
 
     use crate::event::{
-        send_complete, send_complete_async, send_progress, send_update, send_update_async,
+        send_complete, send_complete_async, send_complete_async_unless_cancelled,
+        send_complete_unless_cancelled, send_progress, send_update, send_update_async,
     };
     use crate::{Error, ScanEvent, ScanProgress, ScanUpdate};
+    use tokio_util::sync::CancellationToken;
 
     #[test]
     fn progress_send_failure_does_not_fail_scan() {
@@ -143,6 +170,35 @@ mod tests {
             futures::executor::block_on(send_complete_async(&tx, FullScanResponse::default()));
 
         assert!(matches!(result, Err(Error::ChannelClosed)));
+    }
+
+    #[test]
+    fn complete_send_checks_cancellation_before_sending() {
+        let (tx, rx) = flume::bounded::<ScanEvent<KeychainKind>>(1);
+        let cancel_token = CancellationToken::new();
+        cancel_token.cancel();
+
+        let result =
+            send_complete_unless_cancelled(&tx, &cancel_token, FullScanResponse::default());
+
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert!(rx.try_iter().next().is_none());
+    }
+
+    #[test]
+    fn async_complete_send_checks_cancellation_before_sending() {
+        let (tx, rx) = flume::bounded::<ScanEvent<KeychainKind>>(1);
+        let cancel_token = CancellationToken::new();
+        cancel_token.cancel();
+
+        let result = futures::executor::block_on(send_complete_async_unless_cancelled(
+            &tx,
+            &cancel_token,
+            FullScanResponse::default(),
+        ));
+
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert!(rx.try_iter().next().is_none());
     }
 
     #[test]

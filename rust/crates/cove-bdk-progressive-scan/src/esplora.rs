@@ -13,7 +13,10 @@ use futures::{TryStreamExt as _, future::BoxFuture, stream::FuturesOrdered};
 
 use crate::{
     Error, ProgressTracker, ProgressiveScanner, Result, ScanEvent, ScanUpdate,
-    event::{clone_full_scan_response, send_complete_async, send_progress, send_update_async},
+    event::{
+        clone_full_scan_response, send_complete_async_unless_cancelled, send_progress,
+        send_update_async,
+    },
 };
 
 type EsploraError = Box<esplora_client::Error>;
@@ -171,7 +174,12 @@ where
     };
     let response = FullScanResponse { chain_update, tx_update, last_active_indices };
 
-    send_complete_async(&events, clone_full_scan_response(&response)).await?;
+    send_complete_async_unless_cancelled(
+        &events,
+        &cancel_token,
+        clone_full_scan_response(&response),
+    )
+    .await?;
 
     Ok(response)
 }
