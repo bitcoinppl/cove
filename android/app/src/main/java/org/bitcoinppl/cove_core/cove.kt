@@ -4390,7 +4390,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 56508.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 38191.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571.toShort()) {
@@ -4441,7 +4441,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 13112.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 26740.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 30306.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs() != 4285.toShort()) {
@@ -20957,6 +20957,12 @@ public interface RustWalletManagerInterface {
     
     fun `initialLoadState`(): WalletLoadState
     
+    /**
+     * PayJoin-aware send entry point for unsigned hot wallet PSBTs
+     *
+     * If `payjoin_endpoint` is present, attempts PayJoin negotiation before broadcast.
+     * Falls back to standard sign and broadcast if no endpoint is provided.
+     */
     suspend fun `initiatePayment`(`psbt`: Psbt, `payjoinEndpoint`: kotlin.String?)
     
     fun `labelManager`(): LabelManager
@@ -20999,6 +21005,12 @@ public interface RustWalletManagerInterface {
     
     fun `setWalletType`(`walletType`: WalletType)
     
+    /**
+     * Signs and broadcasts a transaction
+     *
+     * Used by signed PSBT and hardware wallet paths. Unsigned hot wallet payments
+     * go through `initiate_payment` instead.
+     */
     suspend fun `signAndBroadcastTransaction`(`psbt`: Psbt)
     
     suspend fun `splitTransactionOutputs`(`outputs`: List<AddressAndAmount>): SplitOutput
@@ -21814,6 +21826,12 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     
 
     
+    /**
+     * PayJoin-aware send entry point for unsigned hot wallet PSBTs
+     *
+     * If `payjoin_endpoint` is present, attempts PayJoin negotiation before broadcast.
+     * Falls back to standard sign and broadcast if no endpoint is provided.
+     */
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `initiatePayment`(`psbt`: Psbt, `payjoinEndpoint`: kotlin.String?) {
@@ -22109,6 +22127,12 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     
 
     
+    /**
+     * Signs and broadcasts a transaction
+     *
+     * Used by signed PSBT and hardware wallet paths. Unsigned hot wallet payments
+     * go through `initiate_payment` instead.
+     */
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `signAndBroadcastTransaction`(`psbt`: Psbt) {

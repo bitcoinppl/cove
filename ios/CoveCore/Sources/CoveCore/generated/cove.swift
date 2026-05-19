@@ -9077,6 +9077,12 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func initialLoadState()  -> WalletLoadState
     
+    /**
+     * PayJoin-aware send entry point for unsigned hot wallet PSBTs
+     *
+     * If `payjoin_endpoint` is present, attempts PayJoin negotiation before broadcast.
+     * Falls back to standard sign and broadcast if no endpoint is provided.
+     */
     func initiatePayment(psbt: Psbt, payjoinEndpoint: String?) async throws 
     
     func labelManager()  -> LabelManager
@@ -9119,6 +9125,12 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func setWalletType(walletType: WalletType) throws 
     
+    /**
+     * Signs and broadcasts a transaction
+     *
+     * Used by signed PSBT and hardware wallet paths. Unsigned hot wallet payments
+     * go through `initiate_payment` instead.
+     */
     func signAndBroadcastTransaction(psbt: Psbt) async throws 
     
     func splitTransactionOutputs(outputs: [AddressAndAmount]) async throws  -> SplitOutput
@@ -9776,6 +9788,12 @@ open func initialLoadState() -> WalletLoadState  {
 })
 }
     
+    /**
+     * PayJoin-aware send entry point for unsigned hot wallet PSBTs
+     *
+     * If `payjoin_endpoint` is present, attempts PayJoin negotiation before broadcast.
+     * Falls back to standard sign and broadcast if no endpoint is provided.
+     */
 open func initiatePayment(psbt: Psbt, payjoinEndpoint: String?)async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -9994,6 +10012,12 @@ open func setWalletType(walletType: WalletType)throws   {try rustCallWithError(F
 }
 }
     
+    /**
+     * Signs and broadcasts a transaction
+     *
+     * Used by signed PSBT and hardware wallet paths. Unsigned hot wallet payments
+     * go through `initiate_payment` instead.
+     */
 open func signAndBroadcastTransaction(psbt: Psbt)async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -38983,7 +39007,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 56508) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 38191) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571) {
@@ -39034,7 +39058,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 13112) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 26740) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 30306) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs() != 4285) {
