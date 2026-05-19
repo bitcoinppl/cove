@@ -796,5 +796,10 @@ pub(crate) mod test_support {
             call!(self.restore.invalidate_restore_operation()).await?;
             Produces::ok(())
         }
+
+        pub async fn cleanup_idle_for_test(&mut self) -> ActorResult<bool> {
+            let idle = call!(self.cleanup.is_idle_for_test()).await?;
+            Produces::ok(idle)
+        }
     }
 }

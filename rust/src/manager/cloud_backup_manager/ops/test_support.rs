@@ -154,6 +154,7 @@ struct MockCloudState {
     reflect_uploaded_wallets_in_listing: bool,
     uploaded_wallet_backups: Vec<(String, String)>,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
+    delete_namespace_attempts: usize,
     list_wallet_files_attempts: usize,
     list_wallet_files_attempts_by_namespace: HashMap<String, usize>,
     wallet_backup_upload_attempts: usize,
@@ -316,6 +317,10 @@ impl MockCloudStorage {
         self.state.lock().deleted_namespace_policies.clone()
     }
 
+    pub(crate) fn delete_namespace_attempt_count(&self) -> usize {
+        self.state.lock().delete_namespace_attempts
+    }
+
     pub(crate) fn wallet_backup_upload_attempt_count(&self) -> usize {
         self.state.lock().wallet_backup_upload_attempts
     }
@@ -474,6 +479,7 @@ impl CloudStorageAccess for MockCloudStorage {
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
         let mut state = self.state.lock();
+        state.delete_namespace_attempts += 1;
         if let Some(error) = state.delete_namespace_error.clone() {
             return Err(error);
         }
@@ -892,6 +898,7 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
     before_reconnect: impl FnOnce(),
 ) {
     ensure_cloud_backup_test_tokio_runtime();
+    wait_for_cleanup_idle_for_test(manager);
     globals.reset();
     clear_local_wallets();
     let reset_manager = manager.clone();
@@ -910,6 +917,27 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
         .expect("clear upload runtime state");
     before_reconnect();
     CONNECTIVITY_MANAGER.set_connection_state(true);
+}
+
+fn wait_for_cleanup_idle_for_test(manager: &RustCloudBackupManager) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(1);
+    while std::time::Instant::now() < deadline {
+        let supervisor = manager.supervisor.clone();
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let _task = cove_tokio::task::spawn(async move {
+            let result = call!(supervisor.cleanup_idle_for_test()).await;
+            sender.send(result).expect("send cleanup idle result");
+        });
+        let idle =
+            receiver.recv().expect("receive cleanup idle result").expect("check cleanup idle");
+        if idle {
+            return;
+        }
+
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    panic!("cleanup worker should become idle before resetting cloud backup test state");
 }
 
 pub(crate) async fn wait_for_test_condition(

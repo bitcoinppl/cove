@@ -105,6 +105,11 @@ impl CloudBackupCleanupWorker {
 
         Produces::ok(())
     }
+
+    #[cfg(test)]
+    pub(crate) async fn is_idle_for_test(&mut self) -> ActorResult<bool> {
+        Produces::ok(!self.running && self.queue.is_empty())
+    }
 }
 
 async fn run_cleanup_job(mut job: CloudBackupCleanupJob) -> Result<(), CloudBackupError> {
