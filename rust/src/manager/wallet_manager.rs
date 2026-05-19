@@ -1470,6 +1470,7 @@ impl RustWalletManager {
 
 impl Drop for RustWalletManager {
     fn drop(&mut self) {
+        self.shutdown();
         debug!("[DROP] Wallet View manager: {}", self.id);
     }
 }
