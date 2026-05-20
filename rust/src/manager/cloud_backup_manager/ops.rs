@@ -16,6 +16,18 @@ mod other_backups;
 mod restore;
 mod sync;
 
+pub(crate) use cloud_only::CloudBackupPreparedCloudWalletDelete;
+pub(crate) use disable::{CloudBackupDisablePreparation, CloudBackupKeepEnabledPreparation};
+pub(crate) use enable::{
+    CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,
+    CloudBackupEnablePreparation, CloudBackupEnableRecoveryCompletion,
+    CloudBackupEnableRecoveryPreparation, CloudBackupNoDiscoveryEnablePreparation,
+    CloudBackupReadyEnableUpload, CloudBackupRegisteredEnablePasskey,
+    CloudBackupSavedPasskeyConfirmation, CloudBackupUploadedEnableBackup,
+    EnablePasskeyRegistrationFlow,
+};
+pub(crate) use sync::CloudBackupReuploadedWallets;
+
 const CLOUD_ONLY_FETCH_RECOVERY_MESSAGE: &str =
     "Cloud backup needs verification before wallets not on this device can be loaded";
 const CLOUD_ONLY_RESTORE_RECOVERY_MESSAGE: &str =

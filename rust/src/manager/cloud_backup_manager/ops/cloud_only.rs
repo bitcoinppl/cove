@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use cove_device::cloud_storage::CloudStorage;
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
 use futures::stream::{self, StreamExt as _};
 use tracing::{info, warn};
@@ -20,6 +20,12 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupWalletStatus, CloudStorageIssue, RustCloudBackupManager,
     is_connectivity_related_issue,
 };
+
+pub(crate) struct CloudBackupPreparedCloudWalletDelete {
+    pub(crate) cloud: CloudStorageClient,
+    pub(crate) namespace: String,
+    pub(crate) record_id: String,
+}
 
 impl RustCloudBackupManager {
     pub(crate) async fn do_fetch_cloud_only_wallets(
@@ -173,53 +179,18 @@ impl RustCloudBackupManager {
         Ok(outcome)
     }
 
-    pub(crate) async fn do_delete_cloud_wallet(
+    pub(crate) async fn prepare_delete_cloud_wallet(
         &self,
         record_id: &str,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<CloudBackupPreparedCloudWalletDelete, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::DeleteCloudWallet)?;
         let namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global_explicit_client();
 
-        cloud.delete_wallet_backup(namespace.clone(), record_id.to_string()).await.map_err(
-            |error| {
-                blocking_cloud_error(
-                    BlockingCloudStep::DeleteCloudWallet,
-                    CloudBackupError::cloud_storage_context("delete wallet backup", error),
-                )
-            },
-        )?;
-        self.remove_blob_sync_states(std::iter::once(record_id.to_string()))
-            .map_err(|error| blocking_cloud_error(BlockingCloudStep::DeleteCloudWallet, error))?;
-
-        let wallet_record_ids = cloud.list_wallet_backups(namespace).await.map_err(|error| {
-            blocking_cloud_error(
-                BlockingCloudStep::DeleteCloudWallet,
-                CloudBackupError::cloud_storage_context("list wallet backups", error),
-            )
-        })?;
-        let wallet_count = wallet_record_ids.len() as u32;
-        let db = Database::global();
-        match db.cloud_backup_state.get() {
-            Ok(mut current) => {
-                current.set_wallet_count(Some(wallet_count));
-                if let Err(error) = self.persist_cloud_backup_state(
-                    &current,
-                    "persist cloud backup state after deleting cloud wallet",
-                ) {
-                    warn!(
-                        "Failed to persist cloud backup state after deleting cloud wallet: {error}"
-                    );
-                }
-            }
-            Err(error) => {
-                warn!(
-                    "Failed to load cloud backup state after deleting cloud wallet, skipping wallet count update: {error}"
-                );
-            }
-        }
-
-        info!("Deleted cloud wallet {record_id}");
-        Ok(())
+        Ok(CloudBackupPreparedCloudWalletDelete {
+            cloud,
+            namespace,
+            record_id: record_id.to_string(),
+        })
     }
 }

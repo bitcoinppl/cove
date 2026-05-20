@@ -9,7 +9,7 @@ use crate::wallet::metadata::WalletMetadata;
 use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::backup_data::wallet_record_id;
 use cove_cspp::wallet_crypto;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_util::ResultExt as _;
 use tracing::info;
@@ -17,6 +17,10 @@ use zeroize::Zeroizing;
 
 use super::{PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, prepare_wallet_backup};
 use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
+use crate::manager::cloud_backup_manager::workers::{
+    CloudBackupUploadedWallet, CloudBackupWalletCountRefresh, CloudBackupWriteClient,
+    CloudBackupWriteCompletion,
+};
 use crate::manager::cloud_backup_manager::{
     CloudBackupError, CloudBackupStore, CloudStorageIssue, RustCloudBackupManager,
     is_connectivity_related_issue,
@@ -84,6 +88,7 @@ impl RustCloudBackupManager {
             states.into_iter().map(|state| state.record_id().to_string()).collect::<HashSet<_>>()
         });
         let mut uploaded_record_ids = Vec::with_capacity(wallets.len());
+        let mut uploaded_wallets = Vec::with_capacity(wallets.len());
 
         for (index, metadata) in wallets.iter().enumerate() {
             info!("Backup: uploading wallet {}/{} '{}'", index + 1, wallets.len(), metadata.name);
@@ -104,29 +109,20 @@ impl RustCloudBackupManager {
             let wallet_json =
                 serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
 
-            self.run_cloud_backup_write(async {
-                cloud
-                    .upload_wallet_backup(
-                        namespace.clone(),
-                        prepared.record_id.clone(),
-                        wallet_json,
-                    )
-                    .await
-                    .map_err(CloudBackupError::from)
-            })
-            .await?;
-
-            let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
-            self.mark_wallet_uploaded_pending_confirmation_if_revision_current(
-                &namespace,
-                prepared.metadata.id.clone(),
+            self.upload_cloud_wallet_backup(
+                cloud.clone(),
+                namespace.clone(),
                 prepared.record_id.clone(),
-                prepared.revision_hash.clone(),
-                uploaded_at,
+                wallet_json,
             )
             .await?;
 
-            uploaded_record_ids.push(prepared.record_id);
+            uploaded_record_ids.push(prepared.record_id.clone());
+            uploaded_wallets.push(CloudBackupUploadedWallet::new(
+                prepared.metadata.id,
+                prepared.record_id,
+                prepared.revision_hash,
+            ));
             info!("Backup: wallet {}/{} uploaded", index + 1, wallets.len());
         }
 
@@ -154,26 +150,65 @@ impl RustCloudBackupManager {
                 previous_count + new_record_count
             });
 
-        let listed_wallet_count = cloud
-            .list_wallet_backups(namespace)
-            .await
-            .ok()
-            .map(|record_ids| record_ids.len() as u32);
-
-        let wallet_count = [
-            Some(previous_count),
+        let count_refresh = CloudBackupWalletCountRefresh::new(
+            previous_count,
             estimated_wallet_count,
             sync_state_estimated_wallet_count,
-            listed_wallet_count,
-        ]
-        .into_iter()
-        .flatten()
-        .max()
-        .unwrap_or(previous_count);
-        CloudBackupStore::new(&db).persist_enabled(wallet_count)?;
+        );
+        self.complete_cloud_wallet_upload_batch(cloud, namespace, uploaded_wallets, count_refresh)
+            .await?;
 
         info!("Backed up {} wallet(s) to cloud", wallets.len());
         Ok(())
+    }
+
+    pub(crate) async fn upload_wallets_with_writer(
+        &self,
+        writes: &CloudBackupWriteClient,
+        cloud: CloudStorageClient,
+        namespace: &str,
+        wallets: &[WalletMetadata],
+        critical_key: &[u8; 32],
+    ) -> Result<Vec<CloudBackupUploadedWallet>, CloudBackupError> {
+        let mut uploaded_wallets = Vec::with_capacity(wallets.len());
+
+        for (index, metadata) in wallets.iter().enumerate() {
+            info!("Backup: uploading wallet {}/{} '{}'", index + 1, wallets.len(), metadata.name);
+            let prepared = prepare_wallet_backup(metadata, metadata.wallet_mode).await?;
+            let remote_metadata = RemotePayloadMetadata::wallet(
+                namespace,
+                &prepared.record_id,
+                prepared.entry.wallet_id.as_str(),
+                prepared.entry.updated_at,
+            );
+            let encrypted = wallet_crypto::encrypt_wallet_entry_with_remote_metadata(
+                &prepared.entry,
+                critical_key,
+                remote_metadata,
+            )
+            .map_err_str(CloudBackupError::Crypto)?;
+
+            let wallet_json =
+                serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
+
+            writes
+                .upload_wallet_backup(
+                    cloud.clone(),
+                    namespace.to_string(),
+                    prepared.record_id.clone(),
+                    wallet_json,
+                )
+                .await?;
+
+            uploaded_wallets.push(CloudBackupUploadedWallet::new(
+                prepared.metadata.id,
+                prepared.record_id,
+                prepared.revision_hash,
+            ));
+            info!("Backup: wallet {}/{} uploaded", index + 1, wallets.len());
+        }
+
+        Ok(uploaded_wallets)
     }
 
     pub async fn do_upload_wallet_if_dirty(
@@ -245,26 +280,25 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
+        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation_if_current(
+            uploading_state.clone(),
+            prepared.revision_hash.clone(),
+            uploaded_at,
+        );
         let upload_result = self
-            .run_cloud_backup_write(async {
-                cloud
-                    .upload_wallet_backup(namespace.clone(), record_id.clone(), wallet_json)
-                    .await
-                    .map_err(CloudBackupError::from)
-            })
+            .upload_cloud_wallet_backup_with_completion(
+                cloud.clone(),
+                namespace.clone(),
+                record_id.clone(),
+                wallet_json,
+                completion,
+            )
             .await;
 
         match upload_result {
-            Ok(()) => {
-                let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
-                let _ = self.mark_blob_uploaded_pending_confirmation_if_current(
-                    &uploading_state,
-                    prepared.revision_hash,
-                    uploaded_at,
-                )?;
-
-                Ok(())
-            }
+            Ok(()) => Ok(()),
+            Err(error @ CloudBackupError::Deferred(_)) => Err(error),
             Err(CloudBackupError::CloudStorage(error)) => self
                 .handle_dirty_wallet_upload_cloud_error(
                     &uploading_state,
@@ -399,7 +433,7 @@ impl RustCloudBackupManager {
         Ok(PreparedDirtyWalletUpload { prepared, wallet_json })
     }
 
-    async fn mark_wallet_uploaded_pending_confirmation_if_revision_current(
+    pub(crate) async fn mark_wallet_uploaded_pending_confirmation_if_revision_current(
         &self,
         namespace_id: &str,
         wallet_id: crate::wallet::metadata::WalletId,

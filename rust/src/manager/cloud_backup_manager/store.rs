@@ -10,6 +10,7 @@ use strum::IntoEnumIterator as _;
 
 use super::cloud_inventory::LocalWalletSnapshot;
 use super::wallets::{PreparedWalletBackup, prepare_wallet_backup};
+use super::workers::CloudBackupWriteClient;
 use super::{CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, LocalWalletMode};
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBlobSyncState};
@@ -63,6 +64,7 @@ impl CloudBackupStore {
 
     pub(crate) async fn upload_all_wallets(
         &self,
+        writes: &CloudBackupWriteClient,
         cloud: &CloudStorageClient,
         namespace: &str,
         critical_key: &[u8; 32],
@@ -87,8 +89,9 @@ impl CloudBackupStore {
             let wallet_json =
                 serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
 
-            cloud
+            writes
                 .upload_wallet_backup(
+                    cloud.clone(),
                     namespace.to_string(),
                     prepared.record_id.clone(),
                     wallet_json,
