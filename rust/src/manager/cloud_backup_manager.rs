@@ -1123,21 +1123,17 @@ impl RustCloudBackupManager {
             || Self::has_in_flight_lifecycle(&self.current_status())
     }
 
-    pub(crate) fn current_disable_generation(&self) -> Option<u64> {
-        match Self::load_persisted_state() {
-            PersistedCloudBackupState::Disabling(disabling) => Some(disabling.disable_generation),
-            PersistedCloudBackupState::Configured(_) | PersistedCloudBackupState::Disabled => None,
-        }
-    }
-
     pub(crate) fn cloud_backup_writes_blocked(&self) -> bool {
         let disable_active = self
             .projected_exclusive_operation()
             .is_some_and(|claim| claim.operation() == CloudBackupExclusiveOperation::Disable);
 
-        disable_active
-            || self.current_disable_generation().is_some()
-            || Self::load_persisted_state().is_disabling()
+        if disable_active {
+            return true;
+        }
+
+        // persisted disabling state fences writes across manager restarts
+        Self::load_persisted_state().is_disabling()
     }
 
     pub(crate) fn ensure_cloud_backup_writes_allowed(&self) -> Result<(), CloudBackupError> {
@@ -3184,6 +3180,9 @@ mod tests {
         let manager = init_manager();
         let stale_operation = new_restore_operation(&manager);
         let current_operation = new_restore_operation(&manager);
+        let restore_progress_before_stale_outcome =
+            manager.state.read().snapshot().restore_progress;
+        assert_eq!(restore_progress_before_stale_outcome, Some(CloudBackupRestoreFlow::Finding));
         let progress = CloudBackupRestoreFlow::Downloading { completed: 1, total: 3 };
 
         let error = run_on_cloud_backup_runtime({
@@ -3197,7 +3196,10 @@ mod tests {
         });
 
         assert!(matches!(error, CloudBackupError::Cancelled));
-        assert_ne!(manager.state.read().snapshot().restore_progress, Some(progress.clone()));
+        assert_eq!(
+            manager.state.read().snapshot().restore_progress,
+            restore_progress_before_stale_outcome
+        );
 
         run_on_cloud_backup_runtime({
             let progress = progress.clone();

@@ -76,6 +76,13 @@ fn pending_enable_awaiting_confirmation(
     ))
 }
 
+fn current_disable_generation() -> Option<u64> {
+    match RustCloudBackupManager::load_persisted_state() {
+        PersistedCloudBackupState::Disabling(disabling) => Some(disabling.disable_generation),
+        PersistedCloudBackupState::Configured(_) | PersistedCloudBackupState::Disabled => None,
+    }
+}
+
 async fn deep_verify_for_test(
     manager: &RustCloudBackupManager,
     force_discoverable: bool,
@@ -265,7 +272,7 @@ async fn run_disable_cloud_backup(manager: &Arc<RustCloudBackupManager>) {
 async fn run_keep_cloud_backup_enabled(manager: &Arc<RustCloudBackupManager>) {
     call!(manager.supervisor.keep_cloud_backup_enabled()).await.expect("keep cloud backup enabled");
     wait_for_test_condition(Duration::from_secs(2), "keep-enabled recovery finishes", || {
-        manager.current_disable_generation().is_none()
+        current_disable_generation().is_none()
     })
     .await;
 }
@@ -2364,7 +2371,7 @@ async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
             .as_deref()
             .is_some_and(|message| message.contains("clear cloud backup local keychain state"))
     );
-    assert_eq!(manager.current_disable_generation(), Some(disabling.disable_generation));
+    assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
 
     run_disable_cloud_backup(&manager).await;
 
@@ -2372,7 +2379,7 @@ async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Disabled
     );
-    assert!(manager.current_disable_generation().is_none());
+    assert!(current_disable_generation().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2400,7 +2407,7 @@ async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespa
         panic!("expected persisted disabling state");
     };
     assert!(disabling.delete_started_at.is_none());
-    assert!(manager.current_disable_generation().is_some());
+    assert!(current_disable_generation().is_some());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2418,11 +2425,11 @@ async fn disable_cloud_backup_uses_unique_generation_for_each_attempt() {
         .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id("cloud-only")]);
 
     run_disable_cloud_backup(&manager).await;
-    let first_generation = manager.current_disable_generation().unwrap();
+    let first_generation = current_disable_generation().unwrap();
     run_keep_cloud_backup_enabled(&manager).await;
 
     run_disable_cloud_backup(&manager).await;
-    let second_generation = manager.current_disable_generation().unwrap();
+    let second_generation = current_disable_generation().unwrap();
 
     assert_ne!(first_generation, second_generation);
 }
@@ -2450,7 +2457,7 @@ async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
         panic!("expected persisted disabling state");
     };
     assert!(disabling.delete_started_at.is_none());
-    assert_eq!(manager.current_disable_generation(), Some(disabling.disable_generation));
+    assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
     let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
         panic!("expected configured cloud backup lifecycle");
     };
@@ -2466,7 +2473,7 @@ async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
     };
     assert_eq!(configured.destructive_operation, CloudBackupDestructiveOperationState::Idle);
     assert!(globals.cloud.has_namespace(&namespace));
-    assert!(manager.current_disable_generation().is_none());
+    assert!(current_disable_generation().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2594,7 +2601,7 @@ async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain(
         disabling.last_error.as_deref().is_some_and(|message| message.contains("delete failed"))
     );
     assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace.as_str()));
-    assert_eq!(manager.current_disable_generation(), Some(disabling.disable_generation));
+    assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2715,7 +2722,7 @@ async fn keep_cloud_backup_enabled_after_delete_failure_requires_existing_namesp
         PersistedCloudBackupStatus::Enabled
     );
     assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace.as_str()));
-    assert!(manager.current_disable_generation().is_none());
+    assert!(current_disable_generation().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
