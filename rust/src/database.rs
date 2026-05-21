@@ -21,7 +21,9 @@ use cove_util::result_ext::ResultExt as _;
 use std::{path::PathBuf, sync::Arc};
 
 use arc_swap::ArcSwap;
-use cloud_backup::{CloudBackupStateTable, CloudBlobSyncStateTable};
+use cloud_backup::{
+    CloudBackupStateTable, CloudBlobSyncStateTable, ensure_table_type_compatibility,
+};
 use global_cache::GlobalCacheTable;
 use global_config::GlobalConfigTable;
 use global_flag::GlobalFlagTable;
@@ -124,6 +126,7 @@ impl Database {
         let main_db_arc = Arc::new(main_db);
 
         let write_txn = main_db_arc.begin_write()?;
+        ensure_table_type_compatibility(&write_txn)?;
 
         let wallets = WalletsTable::new(main_db_arc.clone(), &write_txn);
         let global_flag = GlobalFlagTable::new(main_db_arc.clone(), &write_txn);

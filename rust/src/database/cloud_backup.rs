@@ -6,10 +6,12 @@ use cove_util::result_ext::ResultExt as _;
 
 use super::Error;
 
+mod compat;
 mod compatibility;
 mod state;
 mod tables;
 
+pub(crate) use compat::ensure_table_type_compatibility;
 pub use state::{
     CloudBackupRecordKey, CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
     CloudBlobFailureIssue, CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState,
