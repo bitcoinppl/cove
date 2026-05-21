@@ -11,8 +11,8 @@ use cove_util::ResultExt as _;
 use tracing::{error, info, warn};
 
 use crate::database::Database;
-use crate::database::cloud_backup::CloudBackupRecordKey;
 use crate::database::cloud_backup::PersistedCloudBackupState;
+use crate::database::cloud_backup::{CloudBackupRecordKey, PersistedDisablingCloudBackup};
 
 use super::super::keychain::CloudBackupKeychain;
 use super::super::model::{CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim};
@@ -183,6 +183,13 @@ fn verification_needs_connectivity_retry(
 }
 
 #[derive(Debug)]
+struct PendingDisableWriteDrain {
+    claim: CloudBackupExclusiveOperationClaim,
+    blocker: CloudBackupWriteBlocker,
+    disabling: PersistedDisablingCloudBackup,
+}
+
+#[derive(Debug)]
 pub(crate) struct CloudBackupSupervisor {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
@@ -196,6 +203,7 @@ pub(crate) struct CloudBackupSupervisor {
     next_request_id: u64,
     active_sync_request: Option<u64>,
     active_cloud_only_fetch_request: Option<u64>,
+    pending_disable_write_drain: Option<PendingDisableWriteDrain>,
     // runtime-only authorization produced by this app session for the active namespace
     // clearing it when the supervisor is recreated makes detail entry re-check passkey availability
     runtime_passkey_authorization: Option<RuntimePasskeyAuthorization>,
@@ -227,6 +235,7 @@ impl CloudBackupSupervisor {
             next_request_id: 0,
             active_sync_request: None,
             active_cloud_only_fetch_request: None,
+            pending_disable_write_drain: None,
             runtime_passkey_authorization: None,
         }
     }
@@ -1630,7 +1639,9 @@ impl CloudBackupSupervisor {
 
         let blocker =
             CloudBackupWriteBlocker::Disabling { operation_id: disabling.disable_generation };
-        if let Err(error) = call!(self.write.block(blocker)).await {
+        if let Err(error) =
+            call!(self.write.block_until_drained(blocker, self.addr.clone(), claim)).await
+        {
             self.fail_disable_operation(
                 &manager,
                 claim,
@@ -1640,12 +1651,40 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
+        self.pending_disable_write_drain =
+            Some(PendingDisableWriteDrain { claim, blocker, disabling });
+
+        Produces::ok(())
+    }
+
+    pub async fn complete_disable_write_drain(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        blocker: CloudBackupWriteBlocker,
+    ) -> ActorResult<()> {
         if self.active_operation != Some(claim) {
             return Produces::ok(());
         }
+        let Some(manager) = self.manager() else {
+            self.active_operation = None;
+            self.pending_disable_write_drain = None;
+            return Produces::ok(());
+        };
+        let Some(pending) = self.pending_disable_write_drain.take() else {
+            return Produces::ok(());
+        };
+        if pending.claim != claim || pending.blocker != blocker {
+            self.pending_disable_write_drain = Some(pending);
+            return Produces::ok(());
+        }
+
+        let Some(disabling) = manager.current_disabling_if_current(&pending.disabling) else {
+            self.finish_disable_operation(&manager, claim);
+            return Produces::ok(());
+        };
 
         manager.apply_disable_outcome(CloudBackupDisableOutcome::Started);
-        if let Err(error) = self.quiesce_disable_runtime(&manager).await {
+        if let Err(error) = self.drain_disable_runtime(&manager).await {
             self.fail_disable_after_delete_started(&manager, claim, disabling, error.to_string());
             return Produces::ok(());
         }
@@ -1663,7 +1702,7 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    async fn quiesce_disable_runtime(
+    async fn drain_disable_runtime(
         &mut self,
         manager: &RustCloudBackupManager,
     ) -> Result<(), CloudBackupError> {
@@ -1708,6 +1747,10 @@ impl CloudBackupSupervisor {
             self.active_operation = None;
             return Produces::ok(());
         };
+        let Some(disabling) = manager.current_disabling_if_current(&disabling) else {
+            self.finish_disable_operation(&manager, claim);
+            return Produces::ok(());
+        };
 
         if let Err(error) = result {
             let message = error.to_string();
@@ -1725,8 +1768,9 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        match manager.mark_disable_delete_started(&disabling) {
-            Ok(disabling) => self.schedule_disable_namespace_delete(claim, disabling),
+        match manager.mark_disable_delete_started_if_current(&disabling) {
+            Ok(Some(disabling)) => self.schedule_disable_namespace_delete(claim, disabling),
+            Ok(None) => self.finish_disable_operation(&manager, claim),
             Err(error) => {
                 self.fail_disable_operation(
                     &manager,
@@ -1877,6 +1921,7 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
+        self.pending_disable_write_drain = None;
         self.active_operation = None;
         manager.project_exclusive_operation_finished(claim);
     }
@@ -3532,6 +3577,13 @@ impl CloudBackupSupervisor {
                 }
 
                 manager.finish_keep_cloud_backup_enabled();
+                if let Some(claim) = self.active_operation
+                    && claim.operation() == CloudBackupExclusiveOperation::Disable
+                {
+                    self.finish_disable_operation(&manager, claim);
+                } else {
+                    self.pending_disable_write_drain = None;
+                }
             }
             Err(error) => {
                 manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
@@ -5049,6 +5101,82 @@ mod tests {
 
         assert_eq!(supervisor.active_operation, None);
         assert_eq!(manager.projected_exclusive_operation(), None);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn supervisor_ignores_disable_blocker_completion_after_keep_enabled_restores_configured()
+    {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        let manager = test_supervisor_manager();
+        let mut supervisor = CloudBackupSupervisor::new(
+            Arc::downgrade(&manager),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+        );
+
+        let claim = supervisor
+            .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
+            .unwrap();
+        let mut disabling = test_disabling_state();
+        disabling.delete_started_at = None;
+        Database::global()
+            .cloud_backup_state
+            .set(&PersistedCloudBackupState::Disabling(disabling.clone()))
+            .unwrap();
+
+        assert!(manager.restore_configured_cloud_backup_after_disable(&disabling).unwrap());
+
+        supervisor.complete_disable_blocker_check(claim, disabling, Ok(())).await.unwrap();
+
+        assert_eq!(supervisor.active_operation, None);
+        assert_eq!(manager.projected_exclusive_operation(), None);
+        assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+        assert!(matches!(
+            Database::global().cloud_backup_state.get().unwrap(),
+            PersistedCloudBackupState::Configured(_)
+        ));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn keep_enabled_finishes_active_disable_operation() {
+        let _guard = async_test_lock().lock().await;
+        let manager = test_supervisor_manager();
+        let mut supervisor = CloudBackupSupervisor::new(
+            Arc::downgrade(&manager),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+        );
+
+        let claim = supervisor
+            .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
+            .unwrap();
+        let mut disabling = test_disabling_state();
+        disabling.delete_started_at = None;
+        Database::global()
+            .cloud_backup_state
+            .set(&PersistedCloudBackupState::Disabling(disabling.clone()))
+            .unwrap();
+        supervisor.pending_disable_write_drain = Some(PendingDisableWriteDrain {
+            claim,
+            blocker: CloudBackupWriteBlocker::Disabling {
+                operation_id: disabling.disable_generation,
+            },
+            disabling: disabling.clone(),
+        });
+
+        supervisor
+            .complete_keep_cloud_backup_enabled(Ok(CloudBackupKeepEnabledPreparation::Ready(
+                Box::new(disabling),
+            )))
+            .await
+            .unwrap();
+
+        assert_eq!(supervisor.active_operation, None);
+        assert!(supervisor.pending_disable_write_drain.is_none());
+        assert_eq!(manager.projected_exclusive_operation(), None);
+        assert!(matches!(
+            Database::global().cloud_backup_state.get().unwrap(),
+            PersistedCloudBackupState::Configured(_)
+        ));
     }
 
     #[tokio::test(flavor = "current_thread")]

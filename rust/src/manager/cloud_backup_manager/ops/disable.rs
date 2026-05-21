@@ -107,16 +107,36 @@ impl RustCloudBackupManager {
         Ok(())
     }
 
-    pub(crate) fn mark_disable_delete_started(
+    pub(crate) fn current_disabling_if_current(
         &self,
         disabling: &PersistedDisablingCloudBackup,
-    ) -> Result<PersistedDisablingCloudBackup, CloudBackupError> {
-        let mut disabling = disabling.clone();
+    ) -> Option<PersistedDisablingCloudBackup> {
+        let PersistedCloudBackupState::Disabling(current) = Self::load_persisted_state() else {
+            return None;
+        };
+
+        if current.disable_generation != disabling.disable_generation
+            || current.namespace_id != disabling.namespace_id
+        {
+            return None;
+        }
+
+        Some(current)
+    }
+
+    pub(crate) fn mark_disable_delete_started_if_current(
+        &self,
+        disabling: &PersistedDisablingCloudBackup,
+    ) -> Result<Option<PersistedDisablingCloudBackup>, CloudBackupError> {
+        let Some(mut disabling) = self.current_disabling_if_current(disabling) else {
+            return Ok(None);
+        };
+
         disabling.delete_started_at = Some(current_timestamp());
         disabling.last_error = None;
         disabling.retry_after = None;
         self.persist_disabling_state(&disabling, "persist cloud backup delete start")?;
-        Ok(disabling)
+        Ok(Some(disabling))
     }
 
     fn ensure_disable_can_start(&self) -> Result<(), CloudBackupError> {

@@ -17,6 +17,7 @@ use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationCl
 use crate::manager::cloud_backup_manager::{CloudBackupStore, RustCloudBackupManager};
 use crate::wallet::metadata::WalletId;
 
+use super::super::supervisor::CloudBackupSupervisor;
 use super::worker::{
     CloudBackupRemoteWriteCommand, CloudBackupRemoteWriteResult, CloudBackupWriteWorker,
 };
@@ -277,6 +278,13 @@ impl CloudBackupInFlightWrite {
 }
 
 #[derive(Debug)]
+struct CloudBackupWriteDrainWaiter {
+    supervisor: WeakAddr<CloudBackupSupervisor>,
+    claim: CloudBackupExclusiveOperationClaim,
+    blocker: CloudBackupWriteBlocker,
+}
+
+#[derive(Debug)]
 pub(crate) struct CloudBackupWriteSupervisor {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
@@ -284,6 +292,7 @@ pub(crate) struct CloudBackupWriteSupervisor {
     active_blocker: Option<CloudBackupWriteBlocker>,
     in_flight_write: Option<CloudBackupInFlightWrite>,
     pending_writes: VecDeque<CloudBackupPendingWrite>,
+    drain_waiters: Vec<CloudBackupWriteDrainWaiter>,
     next_command_id: u64,
 }
 
@@ -305,6 +314,7 @@ impl CloudBackupWriteSupervisor {
             active_blocker: None,
             in_flight_write: None,
             pending_writes: VecDeque::new(),
+            drain_waiters: Vec::new(),
             next_command_id: 0,
         }
     }
@@ -316,10 +326,28 @@ impl CloudBackupWriteSupervisor {
         Produces::ok(())
     }
 
+    pub(crate) async fn block_until_drained(
+        &mut self,
+        blocker: CloudBackupWriteBlocker,
+        supervisor: WeakAddr<CloudBackupSupervisor>,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) -> ActorResult<()> {
+        self.active_blocker = Some(blocker);
+        self.reject_blocked_pending_writes();
+        self.start_next_pending_write();
+        if self.in_flight_write.is_some() {
+            self.drain_waiters.push(CloudBackupWriteDrainWaiter { supervisor, claim, blocker });
+        } else {
+            send!(supervisor.complete_disable_write_drain(claim, blocker));
+        }
+        Produces::ok(())
+    }
+
     pub(crate) async fn unblock(&mut self, blocker: CloudBackupWriteBlocker) -> ActorResult<()> {
         if self.active_blocker == Some(blocker) {
             self.active_blocker = None;
         }
+        self.drain_waiters.retain(|waiter| waiter.blocker != blocker);
         self.start_next_pending_write();
         Produces::ok(())
     }
@@ -420,6 +448,16 @@ impl CloudBackupWriteSupervisor {
         }
     }
 
+    fn complete_drain_waiters_if_idle(&mut self) {
+        if self.in_flight_write.is_some() {
+            return;
+        }
+
+        for waiter in self.drain_waiters.drain(..) {
+            send!(waiter.supervisor.complete_disable_write_drain(waiter.claim, waiter.blocker));
+        }
+    }
+
     fn start_pending_write(&mut self, write: CloudBackupPendingWrite) {
         let context = write.context;
         let (in_flight, remote) = write.in_flight();
@@ -457,6 +495,7 @@ impl CloudBackupWriteSupervisor {
                 context.id()
             ))));
             self.start_next_pending_write();
+            self.complete_drain_waiters_if_idle();
             return Produces::ok(());
         }
 
@@ -466,6 +505,7 @@ impl CloudBackupWriteSupervisor {
         };
         active.complete(result);
         self.start_next_pending_write();
+        self.complete_drain_waiters_if_idle();
         Produces::ok(())
     }
 
@@ -1004,6 +1044,37 @@ mod tests {
             supervisor.in_flight_write.as_ref().map(|write| write.context.id()),
             Some(CloudBackupWriteCommandId(2))
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn block_until_drained_waits_for_in_flight_write() {
+        let mut supervisor = CloudBackupWriteSupervisor::new(Weak::new());
+        let blocker = CloudBackupWriteBlocker::Disabling { operation_id: 7 };
+        supervisor.in_flight_write =
+            Some(in_flight_write(0, CloudBackupWriteAdmission::RequiresWritesAllowed));
+
+        supervisor
+            .block_until_drained(
+                blocker,
+                WeakAddr::<CloudBackupSupervisor>::default(),
+                CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Disable, 42),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(supervisor.active_blocker, Some(blocker));
+        assert_eq!(supervisor.drain_waiters.len(), 1);
+
+        supervisor
+            .complete_remote_write(
+                CloudBackupWriteCommandContext::new(0, None),
+                Ok(CloudBackupRemoteWriteResult::None),
+            )
+            .await
+            .unwrap();
+
+        assert!(supervisor.in_flight_write.is_none());
+        assert!(supervisor.drain_waiters.is_empty());
     }
 
     #[tokio::test(flavor = "current_thread")]
