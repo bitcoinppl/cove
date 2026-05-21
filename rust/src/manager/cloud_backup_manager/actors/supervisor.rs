@@ -111,7 +111,7 @@ enum PendingEnableUploadSelection {
 #[derive(Debug)]
 pub(crate) struct EnableRecoveryFinalization {
     namespace_id: String,
-    active_critical_key: [u8; 32],
+    active_critical_key: zeroize::Zeroizing<[u8; 32]>,
     cleanup_sources: Vec<CleanupSourceNamespace>,
 }
 
@@ -2326,11 +2326,16 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok(()) => {
+                let EnableRecoveryFinalization {
+                    namespace_id,
+                    active_critical_key,
+                    cleanup_sources,
+                } = finalization;
                 call!(self.cleanup.enqueue_cleanup(CloudBackupCleanupJob {
                     cloud: CloudStorage::global_explicit_client(),
-                    active_namespace_id: finalization.namespace_id,
-                    active_critical_key: finalization.active_critical_key,
-                    sources: finalization.cleanup_sources,
+                    active_namespace_id: namespace_id,
+                    active_critical_key: *active_critical_key,
+                    sources: cleanup_sources,
                 }))
                 .await
                 .map_err_str(CloudBackupError::Internal)?;
@@ -2488,6 +2493,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         registered: CloudBackupRegisteredEnablePasskey,
     ) {
+        let saved_passkey_confirmation = registered.context.saved_passkey_confirmation;
         self.pending_enable_session =
             Some(PendingEnableSession::awaiting_saved_passkey_confirmation(
                 registered.master_key,
@@ -2495,10 +2501,7 @@ impl CloudBackupSupervisor {
                 registered.context,
             ));
         manager.apply_enable_outcome(CloudBackupEnableOutcome::CreatingPasskey);
-        self.schedule_enable_saved_passkey_wait(
-            claim,
-            registered.context.saved_passkey_confirmation,
-        );
+        self.schedule_enable_saved_passkey_wait(claim, saved_passkey_confirmation);
     }
 
     fn schedule_enable_saved_passkey_wait(
@@ -4657,7 +4660,7 @@ mod tests {
                 stale,
                 EnableRecoveryFinalization {
                     namespace_id: "stale-namespace".into(),
-                    active_critical_key: [0; 32],
+                    active_critical_key: zeroize::Zeroizing::new([0; 32]),
                     cleanup_sources: Vec::new(),
                 },
                 Err(CloudBackupError::Internal("stale completion".into())),
@@ -4673,7 +4676,7 @@ mod tests {
                 current,
                 EnableRecoveryFinalization {
                     namespace_id: "current-namespace".into(),
-                    active_critical_key: [0; 32],
+                    active_critical_key: zeroize::Zeroizing::new([0; 32]),
                     cleanup_sources: Vec::new(),
                 },
                 Err(CloudBackupError::Internal("current completion".into())),
@@ -4787,8 +4790,8 @@ mod tests {
             .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::EnableForceNew)
             .unwrap();
         let registered = CloudBackupRegisteredEnablePasskey {
-            master_key,
-            passkey: test_staged_passkey(expected_credential_id.clone()),
+            master_key: zeroize::Zeroizing::new(master_key),
+            passkey: zeroize::Zeroizing::new(test_staged_passkey(expected_credential_id.clone())),
             context: CloudBackupEnableContext::settings_manual(),
         };
 

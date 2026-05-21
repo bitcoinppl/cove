@@ -650,11 +650,11 @@ impl PendingEnableSessionMaterial {
 
 impl PendingSavedPasskeySessionMaterial {
     fn new(
-        master_key: cove_cspp::master_key::MasterKey,
-        passkey: StagedPrfKey,
+        master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
+        passkey: Zeroizing<StagedPrfKey>,
         context: CloudBackupEnableContext,
     ) -> Self {
-        Self { master_key: Zeroizing::new(master_key), passkey: Zeroizing::new(passkey), context }
+        Self { master_key, passkey, context }
     }
 
     fn into_parts(self) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<StagedPrfKey>) {
@@ -742,8 +742,8 @@ impl PendingEnableSession {
     }
 
     fn awaiting_saved_passkey_confirmation(
-        master_key: cove_cspp::master_key::MasterKey,
-        passkey: StagedPrfKey,
+        master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
+        passkey: Zeroizing<StagedPrfKey>,
         context: CloudBackupEnableContext,
     ) -> Self {
         Self::AwaitingSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial::new(

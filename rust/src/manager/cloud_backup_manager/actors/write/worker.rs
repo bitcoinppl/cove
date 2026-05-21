@@ -1,5 +1,5 @@
 use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, send};
-use cove_device::cloud_storage::CloudStorageClient;
+use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use tracing::warn;
 
 use super::CloudBackupWriteError;
@@ -42,10 +42,16 @@ impl CloudBackupRemoteWriteCommand {
             }
             Self::DeleteActiveWallet { cloud, namespace, record_id } => {
                 cloud.delete_wallet_backup(namespace.clone(), record_id).await?;
-                let wallet_record_ids =
-                    cloud.list_wallet_backups(namespace).await.map_err(|error| {
-                        CloudBackupWriteError::cloud_storage_context("list wallet backups", error)
-                    })?;
+                let wallet_record_ids = match cloud.list_wallet_backups(namespace).await {
+                    Ok(wallet_record_ids) => wallet_record_ids,
+                    Err(CloudStorageError::NotFound(_)) => Vec::new(),
+                    Err(error) => {
+                        return Err(CloudBackupWriteError::cloud_storage_context(
+                            "list wallet backups",
+                            error,
+                        ));
+                    }
+                };
                 Ok(CloudBackupRemoteWriteResult::WalletRecordIds(wallet_record_ids))
             }
             Self::ListWalletCount { cloud, namespace_id, fallback_count } => {
@@ -100,5 +106,45 @@ impl CloudBackupWriteWorker {
         let result = remote.execute().await;
         send!(self.parent.complete_remote_write(context, result));
         Produces::ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cove_device::cloud_storage::CloudStorage;
+
+    use super::*;
+    use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn delete_active_wallet_treats_missing_listing_as_empty() {
+        let _guard = test_lock().lock();
+        cove_tokio::init();
+        let globals = test_globals();
+        globals.cloud.reset();
+
+        let namespace = "namespace".to_owned();
+        let record_id = "wallet".to_owned();
+        globals.cloud.set_wallet_backup(namespace.clone(), record_id.clone(), vec![1, 2, 3]);
+        globals.cloud.fail_list_wallet_files_for_namespace(
+            namespace.clone(),
+            CloudStorageError::NotFound("wallet files missing".into()),
+        );
+
+        let result = CloudBackupRemoteWriteCommand::DeleteActiveWallet {
+            cloud: CloudStorage::global_explicit_client(),
+            namespace,
+            record_id,
+        }
+        .execute()
+        .await
+        .unwrap();
+
+        match result {
+            CloudBackupRemoteWriteResult::WalletRecordIds(wallet_record_ids) => {
+                assert!(wallet_record_ids.is_empty());
+            }
+            result => panic!("expected wallet record ids, got {result:?}"),
+        }
     }
 }

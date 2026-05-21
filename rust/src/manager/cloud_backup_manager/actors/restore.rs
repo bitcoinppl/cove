@@ -1,5 +1,5 @@
 use act_zero::{Addr, call};
-use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use cove_util::ResultExt as _;
@@ -13,6 +13,7 @@ use crate::manager::cloud_backup_manager::wallets::{
     DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher,
     WalletBackupLookup, WalletBackupReader, WalletRestoreSession,
 };
+
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupEnableOutcome, CloudBackupError,
     CloudBackupRestoreFlow, CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupStatus,
@@ -88,14 +89,14 @@ pub(crate) struct RestoreOperation {
 }
 
 impl RestoreOperation {
-    pub(super) fn new(
+    pub(crate) fn new(
         operation_claim: CloudBackupExclusiveOperationClaim,
         supervisor: Addr<CloudBackupSupervisor>,
     ) -> Self {
         Self { operation_claim, supervisor, event_sender: None }
     }
 
-    pub(super) fn new_with_events(
+    pub(crate) fn new_with_events(
         operation_claim: CloudBackupExclusiveOperationClaim,
         supervisor: Addr<CloudBackupSupervisor>,
         event_sender: flume::Sender<CloudBackupRestoreEvent>,
@@ -146,7 +147,7 @@ impl RestoreOperation {
             .map_err(|_| CloudBackupError::Cancelled)?
     }
 
-    pub(super) async fn send_event_if_current(&self, event: CloudBackupRestoreEvent) {
+    pub(crate) async fn send_event_if_current(&self, event: CloudBackupRestoreEvent) {
         if self.ensure_current().await.is_err() {
             return;
         }
@@ -238,15 +239,17 @@ impl RestoreOperation {
         let mut wallet_count = 0;
 
         for namespace in restorable_namespaces {
-            let wallet_record_ids = cloud
-                .list_wallet_backups(namespace.namespace_id.clone())
-                .await
-                .map_err(|error| {
-                    blocking_cloud_error(
-                        BlockingCloudStep::Restore,
-                        CloudBackupError::cloud_storage_context("list wallet backups", error),
-                    )
-                })?;
+            let wallet_record_ids =
+                match cloud.list_wallet_backups(namespace.namespace_id.clone()).await {
+                    Ok(wallet_record_ids) => wallet_record_ids,
+                    Err(CloudStorageError::NotFound(_)) => Vec::new(),
+                    Err(error) => {
+                        return Err(blocking_cloud_error(
+                            BlockingCloudStep::Restore,
+                            CloudBackupError::cloud_storage_context("list wallet backups", error),
+                        ));
+                    }
+                };
             wallet_count += wallet_record_ids.len() as u32;
             namespace_wallets.push((namespace, wallet_record_ids));
         }
@@ -261,6 +264,7 @@ impl RestoreOperation {
 
         let existing_fingerprints = crate::backup::import::collect_existing_fingerprints()
             .map_err_prefix("collect fingerprints", CloudBackupError::Internal)?;
+
         let mut restore_session = WalletRestoreSession::new(existing_fingerprints);
         let mut downloaded_wallets = Vec::new();
         let mut download_progress = RestoreDownloadProgress { completed: 0, total: wallet_count };
@@ -280,6 +284,7 @@ impl RestoreOperation {
                 namespace.namespace_id.clone(),
                 Zeroizing::new(namespace.master_key.critical_data_key()),
             );
+
             let namespace_downloaded = self
                 .download_wallets_for_restore(
                     &reader,
@@ -296,7 +301,6 @@ impl RestoreOperation {
         }
 
         let restore_total = downloaded_wallets.len() as u32;
-
         self.send_restore_progress(restore_progress_flow(
             RestoreProgressPhase::Restoring,
             0,
@@ -338,14 +342,7 @@ impl RestoreOperation {
             return Err(CloudBackupError::Internal("all wallets failed to restore".into()));
         }
 
-        let now = u64::try_from(jiff::Timestamp::now().as_second())
-            .map_err(|_| CloudBackupError::Internal("invalid system clock".into()))?;
-        let state = PersistedCloudBackupState::default()
-            .mark_enabled_preserving_verification(now, wallet_count);
-        self.persist_cloud_backup_state(state, "persist restored cloud backup state".into())
-            .await?;
-
-        if let Some(active_namespace_index) = first_success_namespace_index
+        let restored_status = if let Some(active_namespace_index) = first_success_namespace_index
             && let Some((active, _)) = namespace_wallets.get(active_namespace_index)
         {
             let master_key =
@@ -354,12 +351,30 @@ impl RestoreOperation {
                 credential_id: passkey.credential_id.clone(),
                 prf_salt: passkey.prf_salt,
             });
+
             self.save_keychain_state(master_key, passkey, active.namespace_id.clone()).await?;
-        }
+            let now = u64::try_from(jiff::Timestamp::now().as_second())
+                .map_err(|_| CloudBackupError::Internal("invalid system clock".into()))?;
+
+            let state = PersistedCloudBackupState::default()
+                .mark_enabled_preserving_verification(now, wallet_count);
+
+            self.persist_cloud_backup_state(state, "persist restored cloud backup state".into())
+                .await?;
+
+            CloudBackupStatus::Enabled
+        } else {
+            self.persist_cloud_backup_state(
+                PersistedCloudBackupState::default(),
+                "persist empty restored cloud backup state".into(),
+            )
+            .await?;
+
+            CloudBackupStatus::Disabled
+        };
 
         self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
-        self.apply_status(CloudBackupStatus::Enabled).await?;
-
+        self.apply_status(restored_status).await?;
         info!("Cloud backup restore complete");
         Ok(report)
     }
@@ -451,6 +466,7 @@ impl RestoreOperation {
                 CloudBackupError::cloud_storage_context("list cloud backup namespaces", error),
             )
         })?;
+
         namespaces.sort();
         if namespaces.is_empty() {
             return Err(CloudBackupError::Internal("no cloud backup namespaces found".into()));
@@ -460,6 +476,7 @@ impl RestoreOperation {
 
         let matcher = NamespacePasskeyMatcher::new(cloud, passkey);
         let match_outcome = matcher.match_namespaces(&namespaces).await?;
+
         match match_outcome {
             NamespaceMatchOutcome::Matched(matches) => {
                 info!("Restore: matched {} namespace(s)", matches.len());
@@ -483,7 +500,7 @@ pub(crate) struct RestoredPasskeyMaterial {
     pub(crate) prf_salt: [u8; 32],
 }
 
-pub(super) fn save_restore_keychain_entries(
+pub(crate) fn save_restore_keychain_entries(
     master_key: cove_cspp::master_key::MasterKey,
     passkey: Option<RestoredPasskeyMaterial>,
     namespace_id: String,

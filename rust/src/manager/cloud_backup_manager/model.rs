@@ -20,7 +20,7 @@ pub(crate) struct CloudBackupStateReducer {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CloudBackupReducerState {
     phase: CloudBackupLifecyclePhase,
-    configured: CloudBackupConfiguredModelState,
+    configured: CloudBackupConfiguredReducerState,
     active_operation: Option<CloudBackupExclusiveOperationClaim>,
     sync_health: CloudSyncHealth,
     missing_passkey_dismissed: bool,
@@ -39,7 +39,7 @@ enum CloudBackupLifecyclePhase {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct CloudBackupConfiguredModelState {
+struct CloudBackupConfiguredReducerState {
     passkey: CloudBackupPasskeyState,
     verification: CloudBackupVerificationState,
     sync: CloudBackupSyncState,
@@ -92,7 +92,7 @@ impl Default for CloudBackupReducerState {
     fn default() -> Self {
         Self {
             phase: CloudBackupLifecyclePhase::Disabled,
-            configured: CloudBackupConfiguredModelState::default(),
+            configured: CloudBackupConfiguredReducerState::default(),
             active_operation: None,
             sync_health: CloudSyncHealth::Unknown,
             missing_passkey_dismissed: false,
@@ -103,7 +103,7 @@ impl Default for CloudBackupReducerState {
     }
 }
 
-impl Default for CloudBackupConfiguredModelState {
+impl Default for CloudBackupConfiguredReducerState {
     fn default() -> Self {
         Self {
             passkey: CloudBackupPasskeyState::Available,

@@ -45,8 +45,8 @@ pub(crate) enum EnablePasskeyRegistrationFlow {
 }
 
 pub(crate) struct CloudBackupRegisteredEnablePasskey {
-    pub(crate) master_key: cove_cspp::master_key::MasterKey,
-    pub(crate) passkey: StagedPrfKey,
+    pub(crate) master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
+    pub(crate) passkey: Zeroizing<StagedPrfKey>,
     pub(crate) context: CloudBackupEnableContext,
 }
 
@@ -82,8 +82,8 @@ pub(crate) struct CloudBackupEnableRecoveryPreparation {
     merge_namespaces: Vec<MergeNamespace>,
     active_index: usize,
     active_namespace_id: String,
-    active_master_key: cove_cspp::master_key::MasterKey,
-    active_critical_key: [u8; 32],
+    active_master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
+    active_critical_key: Zeroizing<[u8; 32]>,
 }
 
 #[derive(Debug)]
@@ -91,7 +91,7 @@ pub(crate) struct CloudBackupEnableRecoveryCompletion {
     pub(crate) namespace_id: String,
     pub(crate) credential_id: Vec<u8>,
     pub(crate) prf_salt: [u8; 32],
-    pub(crate) active_critical_key: [u8; 32],
+    pub(crate) active_critical_key: Zeroizing<[u8; 32]>,
     pub(crate) uploaded_wallets: Vec<CloudBackupUploadedWallet>,
     pub(crate) cleanup_sources: Vec<CleanupSourceNamespace>,
 }
@@ -195,8 +195,8 @@ impl RustCloudBackupManager {
             merge_namespaces,
             active_index,
             active_namespace_id,
-            active_master_key,
-            active_critical_key,
+            active_master_key: Zeroizing::new(active_master_key),
+            active_critical_key: Zeroizing::new(active_critical_key),
         })
     }
 
@@ -229,9 +229,8 @@ impl RustCloudBackupManager {
             info!("Enable: recovered wallet {} from matched namespace", metadata.name);
         }
 
-        let critical_key = Zeroizing::new(active_critical_key);
         let uploaded_wallets = CloudBackupStore::global()
-            .upload_all_wallets(&writes, &cloud, &active_namespace_id, &critical_key)
+            .upload_all_wallets(&writes, &cloud, &active_namespace_id, &active_critical_key)
             .await
             .map_err(|error| blocking_cloud_error(BlockingCloudStep::Enable, error))?;
 
@@ -499,7 +498,11 @@ impl RustCloudBackupManager {
             }
             Ok(PasskeyMaterialOutcome::RegisteredForConfirmation(passkey)) => {
                 Ok(CloudBackupEnablePasskeyPreparation::Registered(
-                    CloudBackupRegisteredEnablePasskey { master_key, passkey, context },
+                    CloudBackupRegisteredEnablePasskey {
+                        master_key: Zeroizing::new(master_key),
+                        passkey: Zeroizing::new(passkey),
+                        context,
+                    },
                 ))
             }
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
@@ -609,8 +612,8 @@ impl RustCloudBackupManager {
 
         info!("{log_context}: passkey registered, confirming availability");
         Ok(CloudBackupEnablePasskeyRegistration::Registered(CloudBackupRegisteredEnablePasskey {
-            master_key,
-            passkey,
+            master_key: Zeroizing::new(master_key),
+            passkey: Zeroizing::new(passkey),
             context,
         }))
     }
@@ -653,8 +656,10 @@ impl RustCloudBackupManager {
             | Err(error @ CloudBackupError::Passkey(_))
             | Err(error @ CloudBackupError::UnsupportedPasskeyProvider) => {
                 let pending = PendingEnableSession::awaiting_saved_passkey_confirmation(
-                    cove_cspp::master_key::MasterKey::from_bytes(*master_key.as_bytes()),
-                    staged_passkey.copy_for_retry(),
+                    Zeroizing::new(cove_cspp::master_key::MasterKey::from_bytes(
+                        *master_key.as_bytes(),
+                    )),
+                    Zeroizing::new(staged_passkey.copy_for_retry()),
                     context,
                 );
                 CloudBackupSavedPasskeyConfirmation::Retry { pending, error }

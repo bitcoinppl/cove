@@ -201,7 +201,7 @@ async fn run_enable_operation(
             .expect("complete enable saved-passkey wait");
         }
 
-        std::thread::sleep(Duration::from_millis(10));
+        tokio::time::sleep(Duration::from_millis(10)).await;
         tokio::task::yield_now().await;
     }
 
@@ -314,7 +314,7 @@ async fn run_repair_passkey_operation(manager: &Arc<RustCloudBackupManager>, no_
 
 async fn confirm_saved_passkey_session(manager: &Arc<RustCloudBackupManager>) {
     call!(manager.supervisor.confirm_saved_passkey()).await.expect("confirm saved passkey");
-    for _ in 0..200 {
+    for _ in 0..500 {
         if !matches!(
             manager.projected_exclusive_operation().map(|claim| claim.operation()),
             Some(CloudBackupExclusiveOperation::Enable)
@@ -322,7 +322,7 @@ async fn confirm_saved_passkey_session(manager: &Arc<RustCloudBackupManager>) {
             return;
         }
 
-        std::thread::sleep(Duration::from_millis(10));
+        tokio::time::sleep(Duration::from_millis(10)).await;
         tokio::task::yield_now().await;
     }
 
@@ -1635,7 +1635,7 @@ async fn registered_passkey_stages_confirmation_without_duplicate_create() {
     assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
 }
 
-#[tokio::test(flavor = "current_thread", start_paused = true)]
+#[tokio::test(flavor = "current_thread")]
 async fn confirm_saved_passkey_reuses_original_credential_id() {
     let _guard = test_lock().lock();
     cove_tokio::init();
@@ -1672,8 +1672,12 @@ async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming
     replace_pending_enable_session_for_test(
         &manager,
         PendingEnableSession::awaiting_saved_passkey_confirmation(
-            master_key,
-            StagedPrfKey { prf_salt: [9; 32], credential_id: vec![1, 2, 3], provider_hint: None },
+            zeroize::Zeroizing::new(master_key),
+            zeroize::Zeroizing::new(StagedPrfKey {
+                prf_salt: [9; 32],
+                credential_id: vec![1, 2, 3],
+                provider_hint: None,
+            }),
             CloudBackupEnableContext::settings_manual(),
         ),
     )
@@ -1705,7 +1709,7 @@ async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming
     assert!(matches!(manager.model_snapshot().verification, VerificationState::Verified(_)));
 }
 
-#[tokio::test(flavor = "current_thread", start_paused = true)]
+#[tokio::test(flavor = "current_thread")]
 async fn cancelled_saved_passkey_confirmation_preserves_pending_session() {
     let _guard = test_lock().lock();
     cove_tokio::init();
@@ -6182,6 +6186,44 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
     assert_eq!(report.wallets_failed, 0);
     assert!(report.failed_wallet_errors.is_empty(), "{:?}", report.failed_wallet_errors);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(2));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restore_treats_missing_wallet_listing_as_empty_without_enabling() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let prf_key = [7u8; 32];
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &prf_key, &[9; 32]).unwrap();
+
+    globals.cloud.set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted).unwrap());
+    globals.cloud.fail_list_wallet_files_for_namespace(
+        namespace,
+        CloudStorageError::NotFound("wallet files missing".into()),
+    );
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(report.wallets_restored, 0);
+    assert_eq!(report.wallets_failed, 0);
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+    assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
 }
 
 #[tokio::test(flavor = "current_thread")]
