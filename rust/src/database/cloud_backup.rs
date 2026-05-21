@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use redb::{ReadableTable as _, TableDefinition};
+use ::redb::{Database as RedbDatabase, ReadableTable as _, WriteTransaction};
 
-use cove_types::redb::Json;
 use cove_util::result_ext::ResultExt as _;
 
 use super::Error;
 
 mod compatibility;
 mod state;
+mod tables;
 
 pub use state::{
     CloudBackupRecordKey, CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
@@ -19,25 +19,17 @@ pub use state::{
     PersistedPasskeyState, PersistedPendingVerificationCompletion,
     PersistedPendingVerificationUpload,
 };
+pub(crate) use tables::{CLOUD_BACKUP_STATE_TABLE, CLOUD_BLOB_SYNC_STATE_TABLE};
 
 const CURRENT_KEY: &str = "current";
 
-pub(crate) const CLOUD_BACKUP_STATE_TABLE: TableDefinition<
-    &'static str,
-    Json<PersistedCloudBackupState>,
-> = TableDefinition::new("cloud_backup_state");
-pub(crate) const CLOUD_BLOB_SYNC_STATE_TABLE: TableDefinition<
-    &'static str,
-    Json<PersistedCloudBlobSyncState>,
-> = TableDefinition::new("cloud_blob_sync_state");
-
 #[derive(Debug, Clone)]
 pub struct CloudBackupStateTable {
-    db: Arc<redb::Database>,
+    db: Arc<RedbDatabase>,
 }
 
 impl CloudBackupStateTable {
-    pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
+    pub fn new(db: Arc<RedbDatabase>, write_txn: &WriteTransaction) -> Self {
         write_txn
             .open_table(CLOUD_BACKUP_STATE_TABLE)
             .expect("failed to create cloud backup state table");
@@ -88,11 +80,11 @@ impl CloudBackupStateTable {
 
 #[derive(Debug, Clone)]
 pub struct CloudBlobSyncStateTable {
-    db: Arc<redb::Database>,
+    db: Arc<RedbDatabase>,
 }
 
 impl CloudBlobSyncStateTable {
-    pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
+    pub fn new(db: Arc<RedbDatabase>, write_txn: &WriteTransaction) -> Self {
         write_txn
             .open_table(CLOUD_BLOB_SYNC_STATE_TABLE)
             .expect("failed to create cloud blob sync state table");
