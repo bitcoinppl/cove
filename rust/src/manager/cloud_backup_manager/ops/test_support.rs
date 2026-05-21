@@ -30,8 +30,8 @@ use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup, PersistedPasskeyState,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, CloudBackupStore, PendingEnableSession,
-    pending::PendingUploadVerificationStatus, workers::RestoreOperation,
+    CloudBackupKeychain, CloudBackupStore, PendingEnableSession, actors::restore::RestoreOperation,
+    pending::PendingUploadVerificationStatus,
 };
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;

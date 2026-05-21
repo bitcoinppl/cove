@@ -1,9 +1,3 @@
-mod cleanup;
-mod restore;
-mod sync_health;
-mod uploads;
-mod write;
-
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -20,23 +14,9 @@ use crate::database::Database;
 use crate::database::cloud_backup::CloudBackupRecordKey;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 
-use self::cleanup::CloudBackupCleanupWorker;
-pub(crate) use self::cleanup::{
-    CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob,
-};
-pub(crate) use self::restore::{
-    CloudBackupRestoreEvent, RestoreOperation, RestoredPasskeyMaterial,
-};
-use self::sync_health::CloudBackupSyncHealthWorker;
-use self::uploads::CloudBackupUploadWorker;
-pub(crate) use self::write::{
-    CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
-    CloudBackupWriteBlocker, CloudBackupWriteClient, CloudBackupWriteCommandResult,
-    CloudBackupWriteCompletion, CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
-};
-use super::keychain::CloudBackupKeychain;
-use super::model::{CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim};
-use super::verify::{
+use super::super::keychain::CloudBackupKeychain;
+use super::super::model::{CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim};
+use super::super::verify::{
     CloudBackupDeepVerificationAutoSyncCompletion, CloudBackupDeepVerificationStep,
     CloudBackupPasskeyRepairFinalization, CloudBackupPendingDeepVerificationAutoSyncResume,
     CloudBackupPendingDeepVerificationResume, CloudBackupPreparedDeepVerificationAutoSync,
@@ -44,8 +24,8 @@ use super::verify::{
     CloudBackupUploadedDeepVerificationAutoSync, CloudBackupUploadedPasskeyWrapperRepair,
     coordinator::CloudBackupVerificationCoordinator,
 };
-use super::wallets::WalletRestoreOutcome;
-use super::{
+use super::super::wallets::WalletRestoreOutcome;
+use super::super::{
     BlockingCloudStep, CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
     CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailOutcome, CloudBackupDetailResult,
     CloudBackupDisableOutcome, CloudBackupDisablePreparation, CloudBackupEnableContext,
@@ -58,11 +38,21 @@ use super::{
     CloudBackupRegisteredEnablePasskey, CloudBackupRestoreOutcome, CloudBackupRestoreReport,
     CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation, CloudBackupStatus,
     CloudBackupSyncOutcome, CloudBackupUploadedEnableBackup, CloudBackupVerificationOutcome,
-    CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    CloudBackupVerificationPresentation, CloudBackupVerificationSource, CloudBackupWalletItem,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
     EnablePasskeyRegistrationFlow, OtherBackupsOperation, PendingEnableSession,
     PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
     RecoveryAction, RustCloudBackupManager, SavedPasskeyConfirmationMode, VerificationState,
     WalletId, blocking_cloud_error,
+};
+use super::cleanup::{CleanupSourceNamespace, CloudBackupCleanupJob, CloudBackupCleanupWorker};
+use super::restore::{self, CloudBackupRestoreEvent, RestoreOperation, RestoredPasskeyMaterial};
+use super::sync_health::CloudBackupSyncHealthWorker;
+use super::uploads::CloudBackupUploadWorker;
+use super::write::{
+    CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteBlocker,
+    CloudBackupWriteClient, CloudBackupWriteCommandResult, CloudBackupWriteCompletion,
+    CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -127,7 +117,7 @@ pub(crate) struct EnableRecoveryFinalization {
 
 pub(crate) struct EnableUploadFinalization {
     master_key: zeroize::Zeroizing<cove_cspp::master_key::MasterKey>,
-    passkey: zeroize::Zeroizing<super::wallets::UnpersistedPrfKey>,
+    passkey: zeroize::Zeroizing<super::super::wallets::UnpersistedPrfKey>,
     context: CloudBackupEnableContext,
     namespace_id: String,
     encrypted_master: cove_cspp::backup_data::EncryptedMasterKeyBackup,
@@ -1019,12 +1009,12 @@ impl CloudBackupSupervisor {
         self.pending_verification_completion = None;
         if matches!(
             manager.state.read().verification_presentation(),
-            super::CloudBackupVerificationPresentation::ManualVerifying { .. }
+            CloudBackupVerificationPresentation::ManualVerifying { .. }
         ) {
             manager.apply_verification_outcome(CloudBackupVerificationOutcome::Started);
         } else {
             manager.apply_verification_effect(CloudBackupVerificationCoordinator::begin_manual(
-                super::CloudBackupVerificationSource::Settings,
+                CloudBackupVerificationSource::Settings,
             ));
         }
         self.schedule_verification(manager, force_discoverable, attempt);
@@ -1533,12 +1523,12 @@ impl CloudBackupSupervisor {
         self.pending_verification_completion = None;
         if matches!(
             manager.state.read().verification_presentation(),
-            super::CloudBackupVerificationPresentation::ManualVerifying { .. }
+            CloudBackupVerificationPresentation::ManualVerifying { .. }
         ) {
             manager.apply_verification_outcome(CloudBackupVerificationOutcome::Started);
         } else {
             manager.apply_verification_effect(CloudBackupVerificationCoordinator::begin_manual(
-                super::CloudBackupVerificationSource::Settings,
+                CloudBackupVerificationSource::Settings,
             ));
         }
         self.schedule_reinitialize_verification(manager, claim, attempt);
@@ -1900,12 +1890,12 @@ impl CloudBackupSupervisor {
         self.pending_verification_completion = None;
         if matches!(
             manager.state.read().verification_presentation(),
-            super::CloudBackupVerificationPresentation::ManualVerifying { .. }
+            CloudBackupVerificationPresentation::ManualVerifying { .. }
         ) {
             manager.apply_verification_outcome(CloudBackupVerificationOutcome::Started);
         } else {
             manager.apply_verification_effect(CloudBackupVerificationCoordinator::begin_manual(
-                super::CloudBackupVerificationSource::Settings,
+                CloudBackupVerificationSource::Settings,
             ));
         }
         self.schedule_recreate_manifest_verification(manager, claim, attempt);

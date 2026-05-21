@@ -25,6 +25,11 @@ use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup,
 };
 use crate::label_manager::LabelManager;
+use crate::manager::cloud_backup_manager::actors::{
+    CloudBackupOperation, CloudBackupWriteClient,
+    cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob},
+    supervisor::VerificationAttempt,
+};
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim,
@@ -32,10 +37,6 @@ use crate::manager::cloud_backup_manager::model::{
 use crate::manager::cloud_backup_manager::wallets::{NamespaceMatch, WalletRestoreSession};
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, StagedPrfKey,
-};
-use crate::manager::cloud_backup_manager::workers::{
-    CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob,
-    CloudBackupOperation, CloudBackupWriteClient, VerificationAttempt,
 };
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupEnableContext,

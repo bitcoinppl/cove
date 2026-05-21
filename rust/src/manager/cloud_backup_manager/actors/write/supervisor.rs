@@ -8,14 +8,18 @@ use cove_util::ResultExt as _;
 use tokio::sync::oneshot;
 use tracing::{error, warn};
 
-use super::super::CloudBackupError;
-use super::super::model::CloudBackupExclusiveOperationClaim;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBackupRecordKey, PersistedCloudBackupState, PersistedCloudBlobSyncState,
 };
+use crate::manager::cloud_backup_manager::CloudBackupError;
+use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 use crate::manager::cloud_backup_manager::{CloudBackupStore, RustCloudBackupManager};
 use crate::wallet::metadata::WalletId;
+
+use super::worker::{
+    CloudBackupRemoteWriteCommand, CloudBackupRemoteWriteResult, CloudBackupWriteWorker,
+};
 
 pub(crate) type CloudBackupWriteResultReceiver<T> =
     oneshot::Receiver<CloudBackupWriteCommandResult<T>>;
@@ -209,78 +213,6 @@ impl CloudBackupWriteAdmission {
 }
 
 #[derive(Debug)]
-enum CloudBackupRemoteWriteCommand {
-    UploadWallet { cloud: CloudStorageClient, namespace: String, record_id: String, data: Vec<u8> },
-    UploadMasterKey { cloud: CloudStorageClient, namespace: String, data: Vec<u8> },
-    DeleteWallet { cloud: CloudStorageClient, namespace: String, record_id: String },
-    DeleteActiveWallet { cloud: CloudStorageClient, namespace: String, record_id: String },
-    ListWalletCount { cloud: CloudStorageClient, namespace_id: String, fallback_count: u32 },
-    ListWalletCountOptional { cloud: CloudStorageClient, namespace_id: String },
-    DeleteNamespace { cloud: CloudStorageClient, namespace: String },
-    None,
-}
-
-#[derive(Debug)]
-enum CloudBackupRemoteWriteResult {
-    None,
-    WalletRecordIds(Vec<String>),
-    WalletCount(u32),
-    ListedWalletCount(Option<u32>),
-}
-
-impl CloudBackupRemoteWriteCommand {
-    async fn execute(self) -> Result<CloudBackupRemoteWriteResult, CloudBackupError> {
-        match self {
-            Self::UploadWallet { cloud, namespace, record_id, data } => {
-                cloud.upload_wallet_backup(namespace, record_id, data).await?;
-                Ok(CloudBackupRemoteWriteResult::None)
-            }
-            Self::UploadMasterKey { cloud, namespace, data } => {
-                cloud.upload_master_key_backup(namespace, data).await?;
-                Ok(CloudBackupRemoteWriteResult::None)
-            }
-            Self::DeleteWallet { cloud, namespace, record_id } => {
-                cloud.delete_wallet_backup(namespace, record_id).await?;
-                Ok(CloudBackupRemoteWriteResult::None)
-            }
-            Self::DeleteActiveWallet { cloud, namespace, record_id } => {
-                cloud.delete_wallet_backup(namespace.clone(), record_id).await?;
-                let wallet_record_ids =
-                    cloud.list_wallet_backups(namespace).await.map_err(|error| {
-                        CloudBackupError::cloud_storage_context("list wallet backups", error)
-                    })?;
-                Ok(CloudBackupRemoteWriteResult::WalletRecordIds(wallet_record_ids))
-            }
-            Self::ListWalletCount { cloud, namespace_id, fallback_count } => {
-                let wallet_count = match cloud.list_wallet_backups(namespace_id.clone()).await {
-                    Ok(ids) => ids.len() as u32,
-                    Err(error) => {
-                        warn!(
-                            "Finalize wallet uploads: failed to list wallet backups for namespace_id={namespace_id}, falling back to uploaded wallet count: {error}"
-                        );
-                        fallback_count
-                    }
-                };
-                Ok(CloudBackupRemoteWriteResult::WalletCount(wallet_count))
-            }
-            Self::ListWalletCountOptional { cloud, namespace_id } => {
-                let listed_wallet_count = cloud
-                    .list_wallet_backups(namespace_id)
-                    .await
-                    .ok()
-                    .map(|record_ids| record_ids.len() as u32);
-                Ok(CloudBackupRemoteWriteResult::ListedWalletCount(listed_wallet_count))
-            }
-            Self::DeleteNamespace { cloud, namespace } => {
-                cloud.delete_namespace(namespace).await?;
-                Ok(CloudBackupRemoteWriteResult::None)
-            }
-            Self::None => Ok(CloudBackupRemoteWriteResult::None),
-        }
-    }
-}
-
-#[derive(Debug)]
 enum CloudBackupWriteLocalCompletion {
     None,
     Apply(CloudBackupWriteCompletion),
@@ -341,32 +273,6 @@ struct CloudBackupInFlightWrite {
 impl CloudBackupInFlightWrite {
     fn complete(self, result: Result<(), CloudBackupError>) {
         let _ = self.sender.send(CloudBackupWriteCommandResult::new(self.context, result));
-    }
-}
-
-#[derive(Debug, Default)]
-struct CloudBackupWriteWorker {
-    parent: WeakAddr<CloudBackupWriteSupervisor>,
-}
-
-#[async_trait::async_trait]
-impl Actor for CloudBackupWriteWorker {
-    async fn started(&mut self, _addr: Addr<Self>) -> ActorResult<()> {
-        Produces::ok(())
-    }
-}
-
-impl CloudBackupWriteWorker {
-    async fn execute(
-        &mut self,
-        parent: WeakAddr<CloudBackupWriteSupervisor>,
-        context: CloudBackupWriteCommandContext,
-        remote: CloudBackupRemoteWriteCommand,
-    ) -> ActorResult<()> {
-        self.parent = parent;
-        let result = remote.execute().await;
-        send!(self.parent.complete_remote_write(context, result));
-        Produces::ok(())
     }
 }
 
@@ -535,7 +441,7 @@ impl CloudBackupWriteSupervisor {
         self.pending_writes = retained;
     }
 
-    async fn complete_remote_write(
+    pub(crate) async fn complete_remote_write(
         &mut self,
         context: CloudBackupWriteCommandContext,
         result: Result<CloudBackupRemoteWriteResult, CloudBackupError>,
@@ -1034,8 +940,8 @@ fn blocked_writes_error() -> CloudBackupError {
 mod tests {
     use std::sync::Arc;
 
-    use super::super::super::model::CloudBackupExclusiveOperation;
     use super::*;
+    use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
     use crate::manager::cloud_backup_manager::ops::test_support::{
         reset_cloud_backup_test_state, test_globals, test_lock,
     };

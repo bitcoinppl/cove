@@ -6,7 +6,7 @@ use super::{
     CLOUD_BACKUP_MANAGER, CloudBackupDetail, CloudBackupManagerAction, CloudBackupRestoreFlow,
     CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
     OtherBackupsOperation, RustCloudBackupManager, SavedPasskeyConfirmationMode,
-    workers::CloudBackupOperation,
+    actors::CloudBackupOperation,
 };
 
 type Action = CloudBackupManagerAction;

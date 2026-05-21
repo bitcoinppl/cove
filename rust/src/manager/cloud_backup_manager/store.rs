@@ -8,9 +8,9 @@ use cove_util::ResultExt as _;
 use futures::stream::{self, StreamExt as _, TryStreamExt as _};
 use strum::IntoEnumIterator as _;
 
+use super::actors::CloudBackupWriteClient;
 use super::cloud_inventory::LocalWalletSnapshot;
 use super::wallets::{PreparedWalletBackup, prepare_wallet_backup};
-use super::workers::CloudBackupWriteClient;
 use super::{CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, LocalWalletMode};
 use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBlobSyncState};

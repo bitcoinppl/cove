@@ -1,3 +1,4 @@
+pub(crate) mod actors;
 mod cloud_inventory;
 mod detail;
 mod keychain;
@@ -7,7 +8,6 @@ mod pending;
 mod store;
 mod verify;
 mod wallets;
-pub(crate) mod workers;
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -43,6 +43,12 @@ use crate::wallet::metadata::{
     WalletId, WalletMetadata, WalletMode as LocalWalletMode, WalletType,
 };
 
+pub(crate) use self::actors::CloudBackupRestoreEvent;
+use self::actors::{
+    CloudBackupOperation, CloudBackupSupervisor, CloudBackupUploadedWallet,
+    CloudBackupWalletCountRefresh, CloudBackupWriteBlocker, CloudBackupWriteClient,
+    CloudBackupWriteCompletion, CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
+};
 use self::cloud_inventory::RemoteWalletTruth;
 pub(crate) use self::detail::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
@@ -77,12 +83,6 @@ use self::verify::coordinator::{
 };
 use self::wallets::wallet_metadata_change_requires_upload;
 use self::wallets::{StagedPrfKey, UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader};
-pub(crate) use self::workers::CloudBackupRestoreEvent;
-use self::workers::{
-    CloudBackupOperation, CloudBackupSupervisor, CloudBackupUploadedWallet,
-    CloudBackupWalletCountRefresh, CloudBackupWriteBlocker, CloudBackupWriteClient,
-    CloudBackupWriteCompletion, CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
-};
 use super::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
 type LocalWalletSecret = crate::backup::model::WalletSecret;
@@ -2831,11 +2831,11 @@ pub(crate) async fn current_namespace_wallet_record_ids(
 
 #[cfg(test)]
 mod tests {
+    use super::actors::restore::RestoreOperation;
     use super::ops::test_support::{
         ensure_cloud_backup_test_tokio_runtime, persisted_enabled_cloud_backup_state, test_globals,
         test_lock,
     };
-    use super::workers::RestoreOperation;
     use super::*;
     use crate::database::cloud_backup::{
         PersistedBackupSyncState, PersistedBackupVerificationState, PersistedConfiguredCloudBackup,

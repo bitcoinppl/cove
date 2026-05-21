@@ -6,10 +6,10 @@ use zeroize::Zeroizing;
 use super::{
     RECREATE_MANIFEST_RECOVERY_MESSAGE, blocking_cloud_error, load_master_key_for_cloud_action,
 };
-use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
-use crate::manager::cloud_backup_manager::workers::{
+use crate::manager::cloud_backup_manager::actors::{
     CloudBackupUploadedWallet, CloudBackupWriteClient,
 };
+use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupStore, RustCloudBackupManager,
 };

@@ -18,11 +18,12 @@ use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupDetail, CloudBackupError, CloudBackupKeychain,
     CloudBackupRetryAction, CloudBackupRetryContext, DeepVerificationFailure,
     DeepVerificationReport, DeepVerificationResult, PASSKEY_RP_ID, PendingVerificationCompletion,
-    PendingVerificationUpload, RustCloudBackupManager, blocking_cloud_error,
+    PendingVerificationUpload, RustCloudBackupManager,
+    actors::CloudBackupUploadedWallet,
+    blocking_cloud_error,
     cloud_inventory::CloudWalletInventory,
     is_connectivity_related_issue, offline_error_for_step,
     wallets::{WalletBackupLookup, WalletBackupReader},
-    workers::CloudBackupUploadedWallet,
 };
 use crate::wallet::metadata::WalletMetadata;
 

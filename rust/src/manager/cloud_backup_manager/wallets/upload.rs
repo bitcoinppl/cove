@@ -16,11 +16,11 @@ use tracing::info;
 use zeroize::Zeroizing;
 
 use super::{PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, prepare_wallet_backup};
-use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
-use crate::manager::cloud_backup_manager::workers::{
+use crate::manager::cloud_backup_manager::actors::{
     CloudBackupUploadedWallet, CloudBackupWalletCountRefresh, CloudBackupWriteClient,
     CloudBackupWriteCompletion,
 };
+use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
 use crate::manager::cloud_backup_manager::{
     CloudBackupError, CloudBackupStore, CloudStorageIssue, RustCloudBackupManager,
     is_connectivity_related_issue,

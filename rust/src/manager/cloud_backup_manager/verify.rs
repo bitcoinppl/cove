@@ -39,7 +39,7 @@ use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBackupRecordKey, PersistedCloudBackupState, PersistedCloudBackupStatus,
 };
-use crate::manager::cloud_backup_manager::workers::{
+use crate::manager::cloud_backup_manager::actors::{
     CloudBackupWriteClient, CloudBackupWriteCompletion,
 };
 

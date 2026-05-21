@@ -8,14 +8,14 @@ use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use super::{BlockingCloudStep, RustCloudBackupManager, blocking_cloud_error};
+use crate::manager::cloud_backup_manager::actors::{
+    CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupUploadedWallet,
+    CloudBackupWriteClient,
+};
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
     PasskeyMaterialOutcome, PreparedWalletBackup, StagedPrfKey, UnpersistedPrfKey,
     WalletBackupLookup, WalletBackupReader, WalletRestoreSession,
-};
-use crate::manager::cloud_backup_manager::workers::{
-    CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupUploadedWallet,
-    CloudBackupWriteClient,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupError, CloudBackupPasskeyHint,
