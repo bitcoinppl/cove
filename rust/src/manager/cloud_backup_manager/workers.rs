@@ -32,7 +32,7 @@ use self::uploads::CloudBackupUploadWorker;
 pub(crate) use self::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
     CloudBackupWriteBlocker, CloudBackupWriteClient, CloudBackupWriteCommandResult,
-    CloudBackupWriteCompletion, CloudBackupWriteResultReceiver, CloudBackupWriteWorker,
+    CloudBackupWriteCompletion, CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
 };
 use super::keychain::CloudBackupKeychain;
 use super::model::{CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim};
@@ -199,7 +199,7 @@ pub(crate) struct CloudBackupSupervisor {
     cleanup: Addr<CloudBackupCleanupWorker>,
     sync_health: Addr<CloudBackupSyncHealthWorker>,
     uploads: Addr<CloudBackupUploadWorker>,
-    write: Addr<CloudBackupWriteWorker>,
+    write: Addr<CloudBackupWriteSupervisor>,
     active_operation: Option<CloudBackupExclusiveOperationClaim>,
     pending_enable_session: Option<PendingEnableSession>,
     pending_verification_completion: Option<PendingVerificationCompletion>,
@@ -222,7 +222,7 @@ impl Actor for CloudBackupSupervisor {
 impl CloudBackupSupervisor {
     pub(crate) fn new(
         manager: Weak<RustCloudBackupManager>,
-        cloud_writes: Addr<CloudBackupWriteWorker>,
+        cloud_writes: Addr<CloudBackupWriteSupervisor>,
     ) -> Self {
         Self {
             addr: WeakAddr::default(),
@@ -255,11 +255,11 @@ impl CloudBackupSupervisor {
     ) -> Result<T, CloudBackupError> {
         let result: CloudBackupWriteCommandResult<T> = receiver
             .await
-            .map_err_prefix("wait for cloud backup write worker", CloudBackupError::Internal)?;
+            .map_err_prefix("wait for cloud backup write supervisor", CloudBackupError::Internal)?;
         let context = result.context();
         if context.origin() != Some(origin) {
             return Err(CloudBackupError::Internal(format!(
-                "cloud backup write worker returned mismatched operation origin for command {:?}",
+                "cloud backup write supervisor returned mismatched operation origin for command {:?}",
                 context.id()
             )));
         }
@@ -268,7 +268,7 @@ impl CloudBackupSupervisor {
     }
 
     async fn delete_prepared_cloud_wallet_for_operation(
-        write: Addr<CloudBackupWriteWorker>,
+        write: Addr<CloudBackupWriteSupervisor>,
         prepared: CloudBackupPreparedCloudWalletDelete,
         origin: CloudBackupExclusiveOperationClaim,
     ) -> Result<(), CloudBackupError> {
@@ -279,7 +279,7 @@ impl CloudBackupSupervisor {
             origin
         ))
         .await
-        .map_err_prefix("start cloud backup write worker", CloudBackupError::Internal)?;
+        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
 
         Self::await_cloud_backup_write_for_operation(receiver, origin).await.map_err(|error| {
             let error = match error {
@@ -297,7 +297,7 @@ impl CloudBackupSupervisor {
     }
 
     async fn delete_cloud_backup_namespace_for_operation(
-        write: Addr<CloudBackupWriteWorker>,
+        write: Addr<CloudBackupWriteSupervisor>,
         namespace: String,
         origin: CloudBackupExclusiveOperationClaim,
     ) -> Result<(), CloudBackupError> {
@@ -307,19 +307,19 @@ impl CloudBackupSupervisor {
             origin
         ))
         .await
-        .map_err_prefix("start cloud backup write worker", CloudBackupError::Internal)?;
+        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
 
         Self::await_cloud_backup_write_for_operation(receiver, origin).await
     }
 
     async fn apply_cloud_backup_write_completion_for_operation(
-        write: Addr<CloudBackupWriteWorker>,
+        write: Addr<CloudBackupWriteSupervisor>,
         completion: CloudBackupWriteCompletion,
         origin: CloudBackupExclusiveOperationClaim,
     ) -> Result<(), CloudBackupError> {
         let receiver = call!(write.apply_completion_for_operation(completion, origin))
             .await
-            .map_err_prefix("start cloud backup write worker", CloudBackupError::Internal)?;
+            .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
 
         Self::await_cloud_backup_write_for_operation(receiver, origin).await
     }
@@ -3656,7 +3656,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let first = supervisor
@@ -3681,7 +3681,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -3709,7 +3709,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -3751,7 +3751,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -3789,7 +3789,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -3829,7 +3829,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -3864,7 +3864,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -3904,7 +3904,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -3932,7 +3932,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -3972,7 +3972,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4012,7 +4012,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
         supervisor.active_sync_request = Some(7);
 
@@ -4037,7 +4037,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
         supervisor.active_sync_request = Some(7);
 
@@ -4056,7 +4056,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
         supervisor.active_cloud_only_fetch_request = Some(7);
 
@@ -4075,7 +4075,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4117,7 +4117,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4163,7 +4163,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4209,7 +4209,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4255,7 +4255,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4301,7 +4301,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4351,7 +4351,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4391,7 +4391,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4433,7 +4433,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4477,7 +4477,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4521,7 +4521,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4567,7 +4567,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4611,7 +4611,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4651,7 +4651,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4701,7 +4701,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4741,7 +4741,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4787,7 +4787,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
         let master_key = cove_cspp::master_key::MasterKey::generate();
         let expected_namespace = master_key.namespace_id();
@@ -4824,7 +4824,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
         let master_key = cove_cspp::master_key::MasterKey::generate();
         let expected_namespace = master_key.namespace_id();
@@ -4852,7 +4852,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
         let master_key = cove_cspp::master_key::MasterKey::generate();
 
@@ -4872,7 +4872,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
         let master_key = cove_cspp::master_key::MasterKey::generate();
         let expected_namespace = master_key.namespace_id();
@@ -4899,7 +4899,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4939,7 +4939,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -4981,7 +4981,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -5021,7 +5021,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -5064,7 +5064,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -5107,7 +5107,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -5150,7 +5150,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = CloudBackupSupervisor::begin_other_backups_operation(
@@ -5193,7 +5193,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = supervisor
@@ -5233,7 +5233,7 @@ mod tests {
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
-            spawn_actor(CloudBackupWriteWorker::new(Weak::new())),
+            spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
         );
 
         let current = CloudBackupSupervisor::begin_other_backups_operation(
@@ -5272,10 +5272,10 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn supervisor_routes_write_blocker_commands_to_write_worker() {
+    async fn supervisor_routes_write_blocker_commands_to_write_supervisor() {
         let _guard = test_lock().lock();
         let manager = test_supervisor_manager();
-        let writes = spawn_actor(CloudBackupWriteWorker::new(Weak::new()));
+        let writes = spawn_actor(CloudBackupWriteSupervisor::new(Weak::new()));
         let mut supervisor = CloudBackupSupervisor::new(Arc::downgrade(&manager), writes.clone());
         let blocker = CloudBackupWriteBlocker::Disabling { operation_id: 9 };
 

@@ -81,7 +81,7 @@ pub(crate) use self::workers::CloudBackupRestoreEvent;
 use self::workers::{
     CloudBackupOperation, CloudBackupSupervisor, CloudBackupUploadedWallet,
     CloudBackupWalletCountRefresh, CloudBackupWriteBlocker, CloudBackupWriteClient,
-    CloudBackupWriteCompletion, CloudBackupWriteResultReceiver, CloudBackupWriteWorker,
+    CloudBackupWriteCompletion, CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
 };
 use super::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
@@ -1053,7 +1053,7 @@ pub struct RustCloudBackupManager {
     pub reconciler: Sender<Message>,
     pub reconcile_receiver: Arc<Receiver<Message>>,
     cloud_only_detail_snapshot: Arc<RwLock<Option<CloudBackupDetail>>>,
-    cloud_writes: Addr<CloudBackupWriteWorker>,
+    cloud_writes: Addr<CloudBackupWriteSupervisor>,
     pub(crate) supervisor: Addr<CloudBackupSupervisor>,
 }
 
@@ -1155,7 +1155,7 @@ impl RustCloudBackupManager {
     ) -> Result<T, CloudBackupError> {
         let result = receiver
             .await
-            .map_err_prefix("wait for cloud backup write worker", CloudBackupError::Internal)?;
+            .map_err_prefix("wait for cloud backup write supervisor", CloudBackupError::Internal)?;
         result.into_result()
     }
 
@@ -1184,7 +1184,7 @@ impl RustCloudBackupManager {
                 cloud, namespace, record_id, data, completion
             ))
             .await
-            .map_err_prefix("start cloud backup write worker", CloudBackupError::Internal)?;
+            .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
 
         Self::await_cloud_backup_write(receiver).await
     }
@@ -1203,7 +1203,7 @@ impl RustCloudBackupManager {
             count_refresh
         ))
         .await
-        .map_err_prefix("start cloud backup write worker", CloudBackupError::Internal)?;
+        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
 
         Self::await_cloud_backup_write(receiver).await
     }
@@ -1250,7 +1250,7 @@ impl RustCloudBackupManager {
         let (sender, receiver) = flume::bounded(1000);
 
         let manager = Arc::new_cyclic(|manager| {
-            let cloud_writes = spawn_actor(CloudBackupWriteWorker::new(manager.clone()));
+            let cloud_writes = spawn_actor(CloudBackupWriteSupervisor::new(manager.clone()));
             Self {
                 state: Arc::new(RwLock::new(CloudBackupStateReducer::default())),
                 reconciler: sender,
