@@ -943,7 +943,7 @@ mod tests {
     use super::*;
     use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
     use crate::manager::cloud_backup_manager::ops::test_support::{
-        reset_cloud_backup_test_state, test_globals, test_lock,
+        async_test_lock, reset_cloud_backup_test_state, test_globals,
     };
 
     #[tokio::test(flavor = "current_thread")]
@@ -1023,7 +1023,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn operation_origin_currentness_rejects_stale_supervisor_operation() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let globals = test_globals();
         let manager = RustCloudBackupManager::init();
         reset_cloud_backup_test_state(&manager, globals);

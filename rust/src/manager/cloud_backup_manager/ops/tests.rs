@@ -407,7 +407,7 @@ fn persist_pending_master_key_confirmation(namespace_id: String, revision_hash: 
 
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_treats_missing_credential_as_no_match() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -434,7 +434,7 @@ async fn passkey_match_treats_missing_credential_as_no_match() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_treats_user_cancel_as_user_declined() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -461,7 +461,7 @@ async fn passkey_match_treats_user_cancel_as_user_declined() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_mixed_supported_and_unsupported_versions_returns_no_match() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -501,7 +501,7 @@ async fn passkey_match_mixed_supported_and_unsupported_versions_returns_no_match
 
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_discovery_propagates_unsupported_provider() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -531,7 +531,7 @@ async fn passkey_match_discovery_propagates_unsupported_provider() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_targeted_auth_propagates_unsupported_provider() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -573,7 +573,7 @@ async fn passkey_match_targeted_auth_propagates_unsupported_provider() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_allows_one_credential_to_match_multiple_namespaces() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -660,7 +660,7 @@ fn persist_xpub_wallets_saves_each_wallet_in_its_own_scope() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn wrapper_repair_discovery_propagates_unsupported_provider() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -678,7 +678,7 @@ async fn wrapper_repair_discovery_propagates_unsupported_provider() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn backup_wallets_uploads_when_cloud_backup_is_enabled() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -699,7 +699,7 @@ async fn backup_wallets_uploads_when_cloud_backup_is_enabled() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn backup_wallets_defers_local_completion_when_disable_starts_after_upload() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -738,13 +738,9 @@ async fn backup_wallets_defers_local_completion_when_disable_starts_after_upload
     manager.debug_reset_cloud_backup_state();
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn backup_new_wallet_marks_verification_required() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -759,13 +755,9 @@ async fn backup_new_wallet_marks_verification_required() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_state_changes_do_not_dismiss_verification_prompt() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -796,13 +788,9 @@ async fn pending_upload_state_changes_do_not_dismiss_verification_prompt() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn verification_prompt_restored_when_pending_upload_idle_hides_persisted_decision() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -829,13 +817,9 @@ async fn verification_prompt_restored_when_pending_upload_idle_hides_persisted_d
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn dismiss_verification_prompt_hides_pending_decision() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -856,13 +840,9 @@ async fn dismiss_verification_prompt_hides_pending_decision() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn start_verification_with_pending_upload_consumes_prompt_decision() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -901,7 +881,7 @@ async fn start_verification_with_pending_upload_consumes_prompt_decision() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -937,7 +917,7 @@ async fn backup_new_wallet_still_tracks_when_runtime_status_is_error() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_downloaded_wallet_does_not_reupload_wallet_or_mutate_backup_counts() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -978,7 +958,7 @@ async fn restore_downloaded_wallet_does_not_reupload_wallet_or_mutate_backup_cou
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_dirty() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1039,7 +1019,7 @@ async fn cloud_action_does_not_create_master_key_when_missing() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn local_master_key_fallback_persists_namespace_id() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -1218,7 +1198,7 @@ fn clear_local_state_attempts_passkey_metadata_after_master_key_delete_failure()
 
 #[tokio::test(flavor = "current_thread")]
 async fn local_master_key_fallback_is_unavailable_after_local_cloud_state_clear() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -1242,7 +1222,7 @@ async fn local_master_key_fallback_is_unavailable_after_local_cloud_state_clear(
 
 #[tokio::test(flavor = "current_thread")]
 async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1272,7 +1252,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
 
 #[tokio::test(flavor = "current_thread")]
 async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1308,7 +1288,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_from_local_master_key_propagates_store_read_errors() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -1351,7 +1331,7 @@ fn blocking_cloud_error_rewrites_unavailable_storage_errors_to_offline() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn failed_create_new_enable_does_not_persist_passkey_metadata() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -1377,7 +1357,7 @@ async fn failed_create_new_enable_does_not_persist_passkey_metadata() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn failed_no_discovery_enable_does_not_persist_passkey_metadata() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -1402,7 +1382,7 @@ async fn failed_no_discovery_enable_does_not_persist_passkey_metadata() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn enable_create_new_succeeds_with_new_passkey_auth() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1436,7 +1416,7 @@ async fn enable_create_new_succeeds_with_new_passkey_auth() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn detail_entry_starts_discoverable_verification_without_runtime_authorization() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1469,7 +1449,7 @@ async fn detail_entry_starts_discoverable_verification_without_runtime_authoriza
 
 #[tokio::test(flavor = "current_thread")]
 async fn detail_entry_does_not_restart_rust_owned_verification_states() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1510,7 +1490,7 @@ async fn detail_entry_does_not_restart_rust_owned_verification_states() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_authenticates_before_loading_wallet_inventory() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1534,7 +1514,7 @@ async fn deep_verify_authenticates_before_loading_wallet_inventory() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn enable_no_discovery_succeeds_with_new_passkey_auth() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1552,7 +1532,7 @@ async fn enable_no_discovery_succeeds_with_new_passkey_auth() {
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn registered_passkey_stages_confirmation_without_automatic_auth() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1580,7 +1560,7 @@ async fn registered_passkey_stages_confirmation_without_automatic_auth() {
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn registered_passkey_confirmation_session_prevents_duplicate_create() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1609,7 +1589,7 @@ async fn registered_passkey_confirmation_session_prevents_duplicate_create() {
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn registered_passkey_stages_confirmation_without_duplicate_create() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1637,7 +1617,7 @@ async fn registered_passkey_stages_confirmation_without_duplicate_create() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn confirm_saved_passkey_reuses_original_credential_id() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1660,7 +1640,7 @@ async fn confirm_saved_passkey_reuses_original_credential_id() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1711,7 +1691,7 @@ async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming
 
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_saved_passkey_confirmation_preserves_pending_session() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1737,7 +1717,7 @@ async fn cancelled_saved_passkey_confirmation_preserves_pending_session() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1862,7 +1842,7 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
 
 #[tokio::test(flavor = "current_thread")]
 async fn enable_treats_missing_wallet_listing_as_empty_during_recovery() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1930,12 +1910,17 @@ async fn enable_treats_missing_wallet_listing_as_empty_during_recovery() {
     assert!(globals.cloud.has_namespace(&wallet_namespace));
 }
 
+struct CleanupTestSource {
+    namespace: String,
+    record_id: String,
+    revision_hash: Option<String>,
+}
+
 async fn enqueue_cleanup_for_test(
     manager: &RustCloudBackupManager,
     active_namespace: &str,
     active_master_key: &cove_cspp::master_key::MasterKey,
-    source_namespace: String,
-    expected_wallet: CleanupExpectedWalletRecord,
+    source: CleanupTestSource,
     wait_message: &str,
     mut wait_condition: impl FnMut() -> bool,
 ) {
@@ -1944,8 +1929,11 @@ async fn enqueue_cleanup_for_test(
         active_namespace_id: active_namespace.to_owned(),
         active_critical_key: active_master_key.critical_data_key(),
         sources: vec![CleanupSourceNamespace {
-            namespace_id: source_namespace,
-            expected_wallets: vec![expected_wallet],
+            namespace_id: source.namespace,
+            expected_wallets: vec![CleanupExpectedWalletRecord {
+                record_id: source.record_id,
+                content_revision_hash: source.revision_hash,
+            }],
         }],
     }))
     .await
@@ -1956,7 +1944,7 @@ async fn enqueue_cleanup_for_test(
 
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_deletes_source_namespace_after_active_record_proof() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -1987,10 +1975,10 @@ async fn cleanup_deletes_source_namespace_after_active_record_proof() {
         &manager,
         &active_namespace,
         &active_master_key,
-        source_namespace.clone(),
-        CleanupExpectedWalletRecord {
+        CleanupTestSource {
+            namespace: source_namespace.clone(),
             record_id,
-            content_revision_hash: Some("matching-revision".into()),
+            revision_hash: Some("matching-revision".into()),
         },
         "cleanup should delete source namespace",
         || !globals.cloud.has_namespace(&source_namespace),
@@ -2002,7 +1990,7 @@ async fn cleanup_deletes_source_namespace_after_active_record_proof() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2023,10 +2011,10 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
         &manager,
         &active_namespace,
         &active_master_key,
-        source_namespace.clone(),
-        CleanupExpectedWalletRecord {
+        CleanupTestSource {
+            namespace: source_namespace.clone(),
             record_id,
-            content_revision_hash: Some("expected-revision".into()),
+            revision_hash: Some("expected-revision".into()),
         },
         "cleanup should inspect active namespace",
         || {
@@ -2041,7 +2029,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2075,10 +2063,10 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
         &manager,
         &active_namespace,
         &active_master_key,
-        source_namespace.clone(),
-        CleanupExpectedWalletRecord {
+        CleanupTestSource {
+            namespace: source_namespace.clone(),
             record_id,
-            content_revision_hash: Some("expected-revision".into()),
+            revision_hash: Some("expected-revision".into()),
         },
         "cleanup should inspect active namespace",
         || {
@@ -2093,7 +2081,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2126,10 +2114,10 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
         &manager,
         &active_namespace,
         &active_master_key,
-        source_namespace.clone(),
-        CleanupExpectedWalletRecord {
+        CleanupTestSource {
+            namespace: source_namespace.clone(),
             record_id,
-            content_revision_hash: Some("expected-revision".into()),
+            revision_hash: Some("expected-revision".into()),
         },
         "cleanup should inspect active namespace",
         || {
@@ -2144,7 +2132,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2177,10 +2165,10 @@ async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
         &manager,
         &active_namespace,
         &active_master_key,
-        source_namespace.clone(),
-        CleanupExpectedWalletRecord {
+        CleanupTestSource {
+            namespace: source_namespace.clone(),
             record_id,
-            content_revision_hash: Some("expected-revision".into()),
+            revision_hash: Some("expected-revision".into()),
         },
         "cleanup should inspect active namespace",
         || {
@@ -2195,7 +2183,7 @@ async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_keeps_source_namespace_when_delete_fails() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2228,10 +2216,10 @@ async fn cleanup_keeps_source_namespace_when_delete_fails() {
         &manager,
         &active_namespace,
         &active_master_key,
-        source_namespace.clone(),
-        CleanupExpectedWalletRecord {
+        CleanupTestSource {
+            namespace: source_namespace.clone(),
             record_id,
-            content_revision_hash: Some("expected-revision".into()),
+            revision_hash: Some("expected-revision".into()),
         },
         "cleanup should attempt source namespace delete",
         || globals.cloud.delete_namespace_attempt_count() > delete_attempt_count,
@@ -2243,7 +2231,7 @@ async fn cleanup_keeps_source_namespace_when_delete_fails() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_repair_finalization_keeps_existing_count_when_wallet_refresh_fails() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2267,7 +2255,7 @@ async fn passkey_repair_finalization_keeps_existing_count_when_wallet_refresh_fa
 
 #[tokio::test(flavor = "current_thread")]
 async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2298,7 +2286,7 @@ async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() 
 
 #[tokio::test(flavor = "current_thread")]
 async fn wrapper_repair_does_not_upload_when_passkey_persistence_fails() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2316,7 +2304,7 @@ async fn wrapper_repair_does_not_upload_when_passkey_persistence_fails() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_deletes_active_namespace_and_clears_local_cloud_state() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2348,7 +2336,7 @@ async fn disable_cloud_backup_deletes_active_namespace_and_clears_local_cloud_st
 
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2388,7 +2376,7 @@ async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespace() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2416,7 +2404,7 @@ async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespa
 
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_uses_unique_generation_for_each_attempt() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2440,7 +2428,7 @@ async fn disable_cloud_backup_uses_unique_generation_for_each_attempt() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2482,7 +2470,7 @@ async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn keep_cloud_backup_enabled_ignores_stale_disabling_generation() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2523,7 +2511,7 @@ async fn keep_cloud_backup_enabled_ignores_stale_disabling_generation() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_blocks_other_namespaces_without_deleting_them() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2552,7 +2540,7 @@ async fn disable_cloud_backup_blocks_other_namespaces_without_deleting_them() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisting_disabling() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2581,7 +2569,7 @@ async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisti
 
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2610,7 +2598,7 @@ async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain(
 
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_not_found_listing_retries_then_finishes_cleanup() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2635,7 +2623,7 @@ async fn disable_cloud_backup_not_found_listing_retries_then_finishes_cleanup() 
 
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_delete_not_found_finishes_cleanup() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2656,7 +2644,7 @@ async fn disable_cloud_backup_delete_not_found_finishes_cleanup() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn persisted_disabling_on_restart_resumes_to_disabled() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2705,7 +2693,7 @@ async fn persisted_disabling_on_restart_resumes_to_disabled() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn keep_cloud_backup_enabled_after_delete_failure_requires_existing_namespace() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2731,7 +2719,7 @@ async fn keep_cloud_backup_enabled_after_delete_failure_requires_existing_namesp
 
 #[tokio::test(flavor = "current_thread")]
 async fn reupload_all_wallets_does_not_create_master_key_for_existing_namespace() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -2754,13 +2742,9 @@ async fn reupload_all_wallets_does_not_create_master_key_for_existing_namespace(
     assert!(cspp.load_master_key_from_store().unwrap().is_none());
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn reupload_all_wallets_persists_full_cloud_wallet_count() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2783,7 +2767,7 @@ async fn reupload_all_wallets_persists_full_cloud_wallet_count() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn fetch_cloud_only_wallets_surfaces_unsupported_versions() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2817,7 +2801,7 @@ async fn fetch_cloud_only_wallets_surfaces_unsupported_versions() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn detail_reports_other_backup_namespaces() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2874,7 +2858,7 @@ async fn detail_reports_other_backup_namespaces() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn other_backup_summary_counts_only_wallets_missing_from_local_wallets() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2916,7 +2900,7 @@ async fn other_backup_summary_counts_only_wallets_missing_from_local_wallets() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn other_backup_summary_counts_empty_namespace_when_wallet_listing_is_missing() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2938,7 +2922,7 @@ async fn other_backup_summary_counts_empty_namespace_when_wallet_listing_is_miss
 
 #[tokio::test(flavor = "current_thread")]
 async fn detail_refresh_marks_other_backups_failed_when_namespace_inspection_fails() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -2971,7 +2955,7 @@ async fn detail_refresh_marks_other_backups_failed_when_namespace_inspection_fai
 
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_keeps_current_passkey_metadata() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3039,7 +3023,7 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_keeps_partially_moved_namespace() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3097,7 +3081,7 @@ async fn recover_other_backups_keeps_partially_moved_namespace() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_keeps_namespace_when_current_upload_fails() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3140,7 +3124,7 @@ async fn recover_other_backups_keeps_namespace_when_current_upload_fails() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_returns_offline_when_wallet_download_is_offline() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3192,7 +3176,7 @@ async fn recover_other_backups_returns_offline_when_wallet_download_is_offline()
 
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_returns_offline_when_namespace_inspection_is_offline() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3230,7 +3214,7 @@ async fn recover_other_backups_returns_offline_when_namespace_inspection_is_offl
 
 #[tokio::test(flavor = "current_thread")]
 async fn delete_other_backups_removes_only_non_current_namespaces() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3266,7 +3250,7 @@ async fn delete_other_backups_removes_only_non_current_namespaces() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn delete_other_backups_returns_offline_when_namespace_inspection_is_offline() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3306,7 +3290,7 @@ async fn delete_other_backups_returns_offline_when_namespace_inspection_is_offli
 
 #[tokio::test(flavor = "current_thread")]
 async fn backup_wallets_does_not_create_master_key_or_upload_when_missing() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -3334,7 +3318,7 @@ async fn backup_wallets_does_not_create_master_key_or_upload_when_missing() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn upload_wallet_if_dirty_does_not_create_master_key_for_existing_namespace() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     globals.reset();
@@ -3383,13 +3367,9 @@ async fn upload_wallet_if_dirty_does_not_create_master_key_for_existing_namespac
     ));
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn deferred_live_wallet_upload_retries_without_restart() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -3438,13 +3418,9 @@ async fn deferred_live_wallet_upload_retries_without_restart() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn failed_blob_states_recover_only_after_last_failed_wallet_upload_recovers() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -3523,7 +3499,7 @@ async fn failed_blob_states_recover_only_after_last_failed_wallet_upload_recover
 
 #[tokio::test(flavor = "current_thread")]
 async fn connectivity_reconnect_preserves_failed_wallet_upload_health() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3558,7 +3534,7 @@ async fn connectivity_reconnect_preserves_failed_wallet_upload_health() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn connectivity_reconnect_reports_clean_health_when_failed_wallet_uploads_are_gone() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3571,7 +3547,7 @@ async fn connectivity_reconnect_reports_clean_health_when_failed_wallet_uploads_
 
 #[tokio::test(flavor = "current_thread")]
 async fn reconnect_retries_verification_after_offline_failure() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3599,7 +3575,7 @@ async fn reconnect_retries_verification_after_offline_failure() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn connected_connectivity_failure_retries_detail_refresh_once() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3619,7 +3595,7 @@ async fn connected_connectivity_failure_retries_detail_refresh_once() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn connected_connectivity_failure_retries_verification_once() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3640,7 +3616,7 @@ async fn connected_connectivity_failure_retries_verification_once() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn unknown_connectivity_does_not_block_verification() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3660,7 +3636,7 @@ async fn unknown_connectivity_does_not_block_verification() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn non_connectivity_verification_failure_does_not_retry_on_reconnect() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3727,13 +3703,9 @@ fn reset_cloud_backup_test_state_clears_state_before_reconnect() {
     assert!(CONNECTIVITY_MANAGER.is_connected());
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn startup_resume_skips_non_retryable_failed_wallet_uploads() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -3769,13 +3741,9 @@ async fn startup_resume_skips_non_retryable_failed_wallet_uploads() {
     globals.cloud.clear_wallet_backup_upload_failure();
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn startup_resume_retries_authorization_failed_wallet_uploads() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -3807,13 +3775,9 @@ async fn startup_resume_retries_authorization_failed_wallet_uploads() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn cloud_storage_change_retries_authorization_failed_wallet_uploads() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -3841,13 +3805,9 @@ async fn cloud_storage_change_retries_authorization_failed_wallet_uploads() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn sync_health_reports_authorization_required_for_persisted_auth_failures() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -3870,13 +3830,9 @@ async fn sync_health_reports_authorization_required_for_persisted_auth_failures(
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn sync_health_reports_uploading_for_fresh_pending_master_key_confirmation() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -3904,13 +3860,9 @@ async fn sync_health_reports_uploading_for_fresh_pending_master_key_confirmation
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_blocks_on_cloud_authorization() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -3934,13 +3886,9 @@ async fn pending_upload_verification_blocks_on_cloud_authorization() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn sync_health_reports_uploading_for_fresh_pending_master_key_with_local_wallets() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -3957,13 +3905,9 @@ async fn sync_health_reports_uploading_for_fresh_pending_master_key_with_local_w
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn force_new_reports_uploading_while_master_key_confirmation_is_pending() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -3994,13 +3938,9 @@ async fn force_new_reports_uploading_while_master_key_confirmation_is_pending() 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn sync_health_reports_missing_master_key_without_pending_confirmation() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -4018,13 +3958,9 @@ async fn sync_health_reports_missing_master_key_without_pending_confirmation() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn sync_health_reports_missing_master_key_before_pending_wallet_uploads() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -4043,13 +3979,9 @@ async fn sync_health_reports_missing_master_key_before_pending_wallet_uploads() 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn sync_health_respects_master_key_upload_confirmation_grace() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -4068,13 +4000,9 @@ async fn sync_health_respects_master_key_upload_confirmation_grace() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 
-#[expect(
-    clippy::await_holding_lock,
-    reason = "tests serialize shared cloud backup globals across awaits"
-)]
 #[tokio::test(flavor = "current_thread")]
 async fn startup_resume_retries_interrupted_uploading_wallets() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -4112,7 +4040,7 @@ async fn startup_resume_retries_interrupted_uploading_wallets() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn validate_metadata_marks_generated_wallet_names_dirty() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
@@ -4164,7 +4092,7 @@ async fn validate_metadata_marks_generated_wallet_names_dirty() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn upload_wallet_if_dirty_removes_deleted_wallet_sync_state() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4192,7 +4120,7 @@ async fn upload_wallet_if_dirty_removes_deleted_wallet_sync_state() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn sync_and_integrity_skip_pending_upload_candidates() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4238,7 +4166,7 @@ async fn sync_and_integrity_skip_pending_upload_candidates() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn integrity_does_not_retry_sync_after_auto_backup_failure() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4265,7 +4193,7 @@ async fn integrity_does_not_retry_sync_after_auto_backup_failure() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn integrity_warns_when_background_wallet_list_fails() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4285,7 +4213,7 @@ async fn integrity_warns_when_background_wallet_list_fails() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn refresh_cloud_backup_detail_uses_interactive_wallet_listing() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4329,7 +4257,7 @@ async fn refresh_cloud_backup_detail_uses_interactive_wallet_listing() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn integrity_preserves_unsupported_remote_wallet_backups() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4366,7 +4294,7 @@ async fn integrity_preserves_unsupported_remote_wallet_backups() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn refresh_cloud_backup_detail_marks_listed_wallet_unknown_when_master_key_is_missing() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4414,7 +4342,7 @@ async fn refresh_cloud_backup_detail_marks_listed_wallet_unknown_when_master_key
 
 #[tokio::test(flavor = "current_thread")]
 async fn sync_skips_wallets_with_unknown_remote_truth() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4437,7 +4365,7 @@ async fn sync_skips_wallets_with_unknown_remote_truth() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn integrity_refreshes_detail_after_auto_backup_success() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4466,7 +4394,7 @@ async fn integrity_refreshes_detail_after_auto_backup_success() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn integrity_auto_backup_continues_when_other_backup_summary_fails() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4492,7 +4420,7 @@ async fn integrity_auto_backup_continues_when_other_backup_summary_fails() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn integrity_does_not_retry_sync_after_auto_backup_success_when_listing_stays_empty() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4514,7 +4442,7 @@ async fn integrity_does_not_retry_sync_after_auto_backup_success_when_listing_st
 
 #[tokio::test(flavor = "current_thread")]
 async fn integrity_refreshes_detail_after_auto_backup_failure() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4541,7 +4469,7 @@ async fn integrity_refreshes_detail_after_auto_backup_failure() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn upload_wallet_if_dirty_preserves_newer_dirty_state() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4578,7 +4506,7 @@ async fn upload_wallet_if_dirty_preserves_newer_dirty_state() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn upload_wallet_if_dirty_recovers_deferred_write_to_dirty() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4622,7 +4550,7 @@ async fn upload_wallet_if_dirty_recovers_deferred_write_to_dirty() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn upload_wallet_if_dirty_retries_stale_uploading_state() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4649,7 +4577,7 @@ async fn upload_wallet_if_dirty_retries_stale_uploading_state() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn upload_wallet_if_dirty_recovers_stale_uploading_state_while_offline() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4673,7 +4601,7 @@ async fn upload_wallet_if_dirty_recovers_stale_uploading_state_while_offline() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn upload_wallet_if_dirty_skips_fresh_uploading_state() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4701,7 +4629,7 @@ async fn upload_wallet_if_dirty_skips_fresh_uploading_state() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn backup_wallets_preserves_newer_dirty_state() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4727,7 +4655,7 @@ async fn backup_wallets_preserves_newer_dirty_state() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_preserves_newer_dirty_state() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4765,7 +4693,7 @@ async fn pending_upload_verification_preserves_newer_dirty_state() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_fails_when_auto_sync_upload_fails() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4793,7 +4721,7 @@ async fn deep_verify_fails_when_auto_sync_upload_fails() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_awaits_upload_confirmation_when_relist_still_misses_uploaded_wallet() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4819,7 +4747,7 @@ async fn deep_verify_awaits_upload_confirmation_when_relist_still_misses_uploade
 
 #[tokio::test(flavor = "current_thread")]
 async fn manual_verification_clears_interactive_state_when_awaiting_upload_confirmation() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4847,7 +4775,7 @@ async fn manual_verification_clears_interactive_state_when_awaiting_upload_confi
 
 #[tokio::test(flavor = "current_thread")]
 async fn manual_verification_repairs_missing_master_key_wrapper_through_supervisor() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4884,7 +4812,7 @@ async fn manual_verification_repairs_missing_master_key_wrapper_through_supervis
 
 #[tokio::test(flavor = "current_thread")]
 async fn start_verification_dispatch_resumes_pending_upload_verification() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4931,7 +4859,7 @@ async fn start_verification_dispatch_resumes_pending_upload_verification() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_finalizes_awaiting_deep_verify() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -4974,7 +4902,7 @@ async fn pending_upload_verification_finalizes_awaiting_deep_verify() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_keeps_master_key_wrapper_hash_mismatch_pending() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5012,7 +4940,7 @@ async fn pending_upload_verification_keeps_master_key_wrapper_hash_mismatch_pend
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5089,7 +5017,7 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_survives_restart() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5129,7 +5057,7 @@ async fn pending_upload_verification_survives_restart() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_retries_until_expected_revision_is_readable() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5198,7 +5126,7 @@ async fn pending_upload_verification_retries_until_expected_revision_is_readable
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_accepts_newer_revision_after_wallet_changes() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5251,7 +5179,7 @@ async fn pending_upload_verification_accepts_newer_revision_after_wallet_changes
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_marks_invalid_wallet_json_failed() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5285,7 +5213,7 @@ async fn pending_upload_verification_marks_invalid_wallet_json_failed() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_marks_terminal_live_upload_failures_failed() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5328,7 +5256,7 @@ async fn pending_upload_verification_marks_terminal_live_upload_failures_failed(
 
 #[tokio::test(flavor = "current_thread")]
 async fn failed_pending_upload_without_remote_backup_remains_pending() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5370,7 +5298,7 @@ async fn failed_pending_upload_without_remote_backup_remains_pending() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_preserves_unsupported_remote_wallet_backups() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5404,7 +5332,7 @@ async fn deep_verify_preserves_unsupported_remote_wallet_backups() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_retries_when_remote_wallet_truth_is_unknown() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5440,7 +5368,7 @@ async fn deep_verify_retries_when_remote_wallet_truth_is_unknown() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_succeeds_after_auto_sync_relist_confirms_wallet() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5473,7 +5401,7 @@ async fn deep_verify_succeeds_after_auto_sync_relist_confirms_wallet() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_awaits_upload_confirmation_when_remote_revision_is_stale() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5516,7 +5444,7 @@ async fn deep_verify_awaits_upload_confirmation_when_remote_revision_is_stale() 
 
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_clears_pending_session_and_local_master_key() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5549,7 +5477,7 @@ async fn discard_pending_enable_clears_pending_session_and_local_master_key() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_retry_upload_deletes_remote_master_key() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5607,7 +5535,7 @@ fn clear_in_process_state_for_local_reset_clears_enable_state() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn enable_preserves_awaiting_force_new_session() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5653,7 +5581,7 @@ async fn enable_preserves_awaiting_force_new_session() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn enable_create_new_preserves_awaiting_force_new_session() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5690,7 +5618,7 @@ async fn enable_create_new_preserves_awaiting_force_new_session() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn enable_no_discovery_preserves_awaiting_force_new_session() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5738,7 +5666,7 @@ async fn enable_no_discovery_preserves_awaiting_force_new_session() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn force_new_after_other_namespace_enter_detail_reuses_runtime_authorization() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5801,7 +5729,7 @@ async fn force_new_after_other_namespace_enter_detail_reuses_runtime_authorizati
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn force_new_after_existing_backup_prompt_registers_without_discovery() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5845,7 +5773,7 @@ async fn force_new_after_existing_backup_prompt_registers_without_discovery() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn existing_backup_prompt_preserves_onboarding_enable_context() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5895,7 +5823,7 @@ async fn existing_backup_prompt_preserves_onboarding_enable_context() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn detail_entry_after_restart_without_active_authorization_prompts_normally() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5928,7 +5856,7 @@ async fn detail_entry_after_restart_without_active_authorization_prompts_normall
 
 #[tokio::test(flavor = "current_thread")]
 async fn enable_force_new_consumes_staged_session() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5959,7 +5887,7 @@ async fn enable_force_new_consumes_staged_session() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_enable_create_new_rolls_back_new_local_master_key() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -5980,7 +5908,7 @@ async fn cancelled_enable_create_new_rolls_back_new_local_master_key() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_enable_no_discovery_rolls_back_new_local_master_key() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -6001,7 +5929,7 @@ async fn cancelled_enable_no_discovery_rolls_back_new_local_master_key() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -6039,7 +5967,7 @@ async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_counts_unsupported_wallet_versions_as_failures() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -6117,7 +6045,7 @@ async fn restore_counts_unsupported_wallet_versions_as_failures() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -6190,7 +6118,7 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_treats_missing_wallet_listing_as_empty_without_enabling() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -6228,7 +6156,7 @@ async fn restore_treats_missing_wallet_listing_as_empty_without_enabling() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_retries_platform_authorization_discover_failures() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -6268,7 +6196,7 @@ async fn restore_retries_platform_authorization_discover_failures() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_does_not_persist_first_passkey_match_before_restore_work_succeeds() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -6313,7 +6241,7 @@ async fn restore_does_not_persist_first_passkey_match_before_restore_work_succee
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_counts_listed_missing_wallet_backups_as_failures() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -6361,7 +6289,7 @@ async fn restore_counts_listed_missing_wallet_backups_as_failures() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_reports_label_warning_without_failing_wallet_restore() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -6408,7 +6336,7 @@ async fn restore_reports_label_warning_without_failing_wallet_restore() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -6454,7 +6382,7 @@ async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_fails_when_all_wallet_backups_are_unsupported() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
@@ -6497,7 +6425,7 @@ async fn restore_fails_when_all_wallet_backups_are_unsupported() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_fails_when_all_listed_wallet_backups_are_missing() {
-    let _guard = test_lock().lock();
+    let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();

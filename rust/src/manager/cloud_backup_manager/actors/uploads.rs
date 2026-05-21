@@ -440,8 +440,8 @@ mod tests {
     };
     use crate::manager::cloud_backup_manager::CloudBackupKeychain;
     use crate::manager::cloud_backup_manager::ops::test_support::{
-        configure_enabled_cloud_backup, ensure_cloud_backup_test_tokio_runtime, test_globals,
-        test_lock,
+        async_test_lock, configure_enabled_cloud_backup, ensure_cloud_backup_test_tokio_runtime,
+        test_globals,
     };
 
     impl CloudBackupUploadWorker {
@@ -482,9 +482,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn pending_upload_verifier_finished_does_not_respawn_while_writes_blocked() {
-        let _guard = test_lock().lock();
+    #[tokio::test(flavor = "current_thread")]
+    async fn pending_upload_verifier_finished_does_not_respawn_while_writes_blocked() {
+        let _guard = async_test_lock().lock().await;
         ensure_cloud_backup_test_tokio_runtime();
         let globals = test_globals();
         let manager = RustCloudBackupManager::init();

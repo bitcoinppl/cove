@@ -812,6 +812,11 @@ pub(crate) fn test_lock() -> &'static parking_lot::Mutex<()> {
     LOCK.get_or_init(parking_lot::Mutex::default)
 }
 
+pub(crate) fn async_test_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(tokio::sync::Mutex::default)
+}
+
 fn clear_local_wallets() {
     let wallets = Database::global().wallets();
     for network in Network::iter() {

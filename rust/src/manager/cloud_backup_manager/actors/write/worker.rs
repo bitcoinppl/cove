@@ -114,11 +114,11 @@ mod tests {
     use cove_device::cloud_storage::CloudStorage;
 
     use super::*;
-    use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
+    use crate::manager::cloud_backup_manager::ops::test_support::{async_test_lock, test_globals};
 
     #[tokio::test(flavor = "current_thread")]
     async fn delete_active_wallet_treats_missing_listing_as_empty() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         cove_tokio::init();
         let globals = test_globals();
         globals.cloud.reset();

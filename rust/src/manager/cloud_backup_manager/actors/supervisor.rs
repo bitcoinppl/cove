@@ -3562,7 +3562,7 @@ mod tests {
     use super::*;
     use crate::database::cloud_backup::PersistedDisablingCloudBackup;
     use crate::manager::cloud_backup_manager::ops::test_support::{
-        reset_cloud_backup_test_state, test_globals, test_lock,
+        async_test_lock, reset_cloud_backup_test_state, test_globals,
     };
     use crate::manager::cloud_backup_manager::wallets::{StagedPrfKey, UnpersistedPrfKey};
     use crate::manager::cloud_backup_manager::{CloudBackupStore, PendingEnableSessionMaterial};
@@ -3645,7 +3645,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_rejects_second_exclusive_operation_while_active() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -3670,7 +3670,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_exclusive_operation_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -3698,7 +3698,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_delete_cloud_wallet_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -3740,7 +3740,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_restore_cloud_wallet_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -3778,7 +3778,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_repair_passkey_wrapper_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -3818,7 +3818,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_repair_passkey_finalization_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -3853,7 +3853,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_repair_passkey_wrapper_upload_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -3893,7 +3893,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_repair_passkey_refresh_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -3921,7 +3921,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_recreate_manifest_recovery_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -3961,7 +3961,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_recreate_manifest_finalization_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4001,7 +4001,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_sync_request_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4026,7 +4026,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_sync_refresh_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4045,7 +4045,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_cloud_only_fetch_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4064,7 +4064,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4106,7 +4106,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4152,7 +4152,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4198,7 +4198,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4244,7 +4244,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4290,7 +4290,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_deep_verification_auto_sync_resume_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4340,7 +4340,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_reinitialize_backup_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4380,7 +4380,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_reinitialize_verification_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4422,7 +4422,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_saved_passkey_confirmation_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4466,7 +4466,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_enable_passkey_registration_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4510,7 +4510,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_enable_preparation_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4556,7 +4556,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_create_new_enable_passkey_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4600,7 +4600,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_enable_recovery_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4640,7 +4640,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_enable_recovery_finalization_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4690,7 +4690,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_enable_recovery_preparation_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4730,7 +4730,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_no_discovery_enable_preparation_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4776,7 +4776,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_accepts_registered_enable_passkey_confirmation() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4813,7 +4813,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_consumes_retry_pending_enable_upload() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4841,7 +4841,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_preserves_force_new_confirmation_for_plain_enable_retry() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4861,7 +4861,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_consumes_force_new_confirmation_upload_for_force_new() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4888,7 +4888,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_enable_upload_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4928,7 +4928,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_enable_upload_finalization_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -4970,7 +4970,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_disable_preparation_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -5010,7 +5010,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_disable_blocker_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -5053,7 +5053,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_disable_delete_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -5096,7 +5096,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_disable_local_cleanup_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -5139,7 +5139,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_recover_other_backups_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -5182,7 +5182,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_delete_cloud_wallet_preparation_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -5222,7 +5222,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_ignores_stale_delete_other_backups_completion() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let mut supervisor = CloudBackupSupervisor::new(
             Arc::downgrade(&manager),
@@ -5266,7 +5266,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_routes_write_blocker_commands_to_write_supervisor() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = test_supervisor_manager();
         let writes = spawn_actor(CloudBackupWriteSupervisor::new(Weak::new()));
         let mut supervisor = CloudBackupSupervisor::new(Arc::downgrade(&manager), writes.clone());
