@@ -482,8 +482,8 @@ mod tests {
         }
     }
 
-    #[tokio::test(flavor = "current_thread")]
-    async fn pending_upload_verifier_finished_does_not_respawn_while_writes_blocked() {
+    #[test]
+    fn pending_upload_verifier_finished_does_not_respawn_while_writes_blocked() {
         let _guard = test_lock().lock();
         ensure_cloud_backup_test_tokio_runtime();
         let globals = test_globals();
@@ -530,7 +530,7 @@ mod tests {
         let mut worker = CloudBackupUploadWorker::new(Arc::downgrade(&manager));
         worker.pending_upload_verifier_running = true;
 
-        worker.pending_upload_verifier_finished(false).await.unwrap();
+        futures::executor::block_on(worker.pending_upload_verifier_finished(false)).unwrap();
 
         assert!(!worker.pending_upload_verifier_running);
     }
