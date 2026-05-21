@@ -180,4 +180,4 @@ jobs:
           cache-bin: false
           prefix-key: v1-rust
 
-      - run: cd rust && cargo clippy -- -D warnings
+      - run: cd rust && cargo clippy --all-targets --all-features -- -D warnings
