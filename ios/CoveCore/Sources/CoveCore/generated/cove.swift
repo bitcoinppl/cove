@@ -6483,7 +6483,7 @@ public protocol RouteFactoryProtocol: AnyObject, Sendable {
     
     func send(send: SendRoute)  -> Route
     
-    func sendConfirm(id: WalletId, details: ConfirmDetails)  -> Route
+    func sendConfirm(id: WalletId, details: ConfirmDetails, payjoinEndpoint: String?)  -> Route
     
     func sendConfirmSignedPsbt(id: WalletId, details: ConfirmDetails, psbt: Psbt)  -> Route
     
@@ -6717,13 +6717,14 @@ open func send(send: SendRoute) -> Route  {
 })
 }
     
-open func sendConfirm(id: WalletId, details: ConfirmDetails) -> Route  {
+open func sendConfirm(id: WalletId, details: ConfirmDetails, payjoinEndpoint: String?) -> Route  {
     return try!  FfiConverterTypeRoute_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_routefactory_send_confirm(
             self.uniffiCloneHandle(),
         FfiConverterTypeWalletId_lower(id),
-        FfiConverterTypeConfirmDetails_lower(details),uniffiCallStatus
+        FfiConverterTypeConfirmDetails_lower(details),
+        FfiConverterOptionString.lower(payjoinEndpoint),uniffiCallStatus
     )
 })
 }
@@ -9076,6 +9077,14 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func initialLoadState()  -> WalletLoadState
     
+    /**
+     * Send entry point for unsigned hot wallet PSBTs
+     *
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
+     */
+    func initiatePayment(psbt: Psbt, payjoinEndpoint: String?) async throws 
+    
     func labelManager()  -> LabelManager
     
     func listenForUpdates(reconciler: WalletManagerReconciler) 
@@ -9115,8 +9124,6 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func setWalletMetadata(metadata: WalletMetadata) 
     
     func setWalletType(walletType: WalletType) throws 
-    
-    func signAndBroadcastTransaction(psbt: Psbt) async throws 
     
     func splitTransactionOutputs(outputs: [AddressAndAmount]) async throws  -> SplitOutput
     
@@ -9773,6 +9780,29 @@ open func initialLoadState() -> WalletLoadState  {
 })
 }
     
+    /**
+     * Send entry point for unsigned hot wallet PSBTs
+     *
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
+     */
+open func initiatePayment(psbt: Psbt, payjoinEndpoint: String?)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_initiate_payment(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypePsbt_lower(psbt),FfiConverterOptionString.lower(payjoinEndpoint)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+    
 open func labelManager() -> LabelManager  {
     return try!  FfiConverterTypeLabelManager_lift(try! rustCall() {
         uniffiCallStatus in
@@ -9972,23 +10002,6 @@ open func setWalletType(walletType: WalletType)throws   {try rustCallWithError(F
         FfiConverterTypeWalletType_lower(walletType),uniffiCallStatus
     )
 }
-}
-    
-open func signAndBroadcastTransaction(psbt: Psbt)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(
-                    self.uniffiCloneHandle(),
-                    FfiConverterTypePsbt_lower(psbt)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_void,
-            completeFunc: ffi_cove_rust_future_complete_void,
-            freeFunc: ffi_cove_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeWalletManagerError_lift
-        )
 }
     
 open func splitTransactionOutputs(outputs: [AddressAndAmount])async throws  -> SplitOutput  {
@@ -15757,13 +15770,15 @@ public struct SendRouteConfirmArgs {
     public var id: WalletId
     public var details: ConfirmDetails
     public var input: SendConfirmationInput
+    public var payjoinEndpoint: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, details: ConfirmDetails, input: SendConfirmationInput) {
+    public init(id: WalletId, details: ConfirmDetails, input: SendConfirmationInput, payjoinEndpoint: String?) {
         self.id = id
         self.details = details
         self.input = input
+        self.payjoinEndpoint = payjoinEndpoint
     }
 
     
@@ -15784,7 +15799,8 @@ public struct FfiConverterTypeSendRouteConfirmArgs: FfiConverterRustBuffer {
             try SendRouteConfirmArgs(
                 id: FfiConverterTypeWalletId.read(from: &buf), 
                 details: FfiConverterTypeConfirmDetails.read(from: &buf), 
-                input: FfiConverterTypeSendConfirmationInput.read(from: &buf)
+                input: FfiConverterTypeSendConfirmationInput.read(from: &buf), 
+                payjoinEndpoint: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -15792,6 +15808,7 @@ public struct FfiConverterTypeSendRouteConfirmArgs: FfiConverterRustBuffer {
         FfiConverterTypeWalletId.write(value.id, into: &buf)
         FfiConverterTypeConfirmDetails.write(value.details, into: &buf)
         FfiConverterTypeSendConfirmationInput.write(value.input, into: &buf)
+        FfiConverterOptionString.write(value.payjoinEndpoint, into: &buf)
     }
 }
 
@@ -38959,6 +38976,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 15850) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -39005,9 +39025,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 13112) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 26740) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs() != 4285) {
@@ -39115,7 +39132,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_routefactory_send() != 19857) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_routefactory_send_confirm() != 13572) {
+    if (uniffi_cove_checksum_method_routefactory_send_confirm() != 6786) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_send_confirm_signed_psbt() != 63483) {

@@ -581,10 +581,12 @@ impl WalletActor {
         Ok(details)
     }
 
-    pub async fn sign_and_broadcast_transaction(
+    pub async fn initiate_payment(
         &mut self,
         psbt: Psbt,
+        _payjoin_endpoint: Option<String>,
     ) -> ActorResult<Result<(), Error>> {
+        // TODO: if payjoin_endpoint is Some, run BIP77 negotiation before broadcast
         let result = self.do_sign_and_broadcast_transaction(psbt).await;
         Produces::ok(result)
     }

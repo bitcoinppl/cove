@@ -293,6 +293,7 @@ mod tests {
     use crate::transaction::Amount;
 
     #[tokio::test]
+    #[ignore] // requires external network connection to fiat price api
     async fn run_all_tests() {
         let _ = rustls::crypto::ring::default_provider().install_default();
         test_get_prices().await;

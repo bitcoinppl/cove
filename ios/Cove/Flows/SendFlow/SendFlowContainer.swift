@@ -70,7 +70,8 @@ public struct SendFlowContainer: View {
             SendFlowConfirmScreen(
                 id: confirm.id, manager: manager,
                 details: confirm.details,
-                input: confirm.input
+                input: confirm.input,
+                payjoinEndpoint: confirm.payjoinEndpoint
             )
         case let .hardwareExport(id: id, details: details):
             SendFlowHardwareScreen(id: id, manager: manager, details: details)

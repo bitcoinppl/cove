@@ -407,6 +407,7 @@ private fun SendFlowRouteToScreen(
         is SendRoute.Confirm -> {
             val details = sendRoute.v1.details
             val input = sendRoute.v1.input
+            val payjoinEndpoint = sendRoute.v1.payjoinEndpoint
 
             var sendState by remember { mutableStateOf<SendState>(SendState.Idle) }
             var finalizedTransaction by remember { mutableStateOf<BitcoinTransaction?>(null) }
@@ -500,7 +501,7 @@ private fun SendFlowRouteToScreen(
                                     walletManager.rust.broadcastTransaction(txnToBroadcast)
                                 }
                                 SendConfirmationInput.Unsigned -> {
-                                    walletManager.rust.signAndBroadcastTransaction(details.psbt())
+                                    walletManager.rust.initiatePayment(details.psbt(), payjoinEndpoint)
                                 }
                             }
                             sendState = SendState.Sent

@@ -1621,6 +1621,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_initial_load_state(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_initiate_payment(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_label_manager(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates(
@@ -1652,8 +1654,6 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs(
     ): Short
@@ -2713,6 +2713,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_initial_load_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustwalletmanager_initiate_payment(`ptr`: Long,`psbt`: Long,`payjoinEndpoint`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_label_manager(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2745,8 +2747,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(`ptr`: Long,`walletType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    external fun uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(`ptr`: Long,`psbt`: Long,
-    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_split_transaction_outputs(`ptr`: Long,`outputs`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_start_wallet_scan(`ptr`: Long,
@@ -2861,7 +2861,7 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_send(`ptr`: Long,`send`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_routefactory_send_confirm(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_fn_method_routefactory_send_confirm(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`payjoinEndpoint`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_send_confirm_signed_psbt(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`psbt`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -4386,6 +4386,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 15850.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4432,9 +4435,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 13112.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 26740.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs() != 4285.toShort()) {
@@ -4542,7 +4542,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_routefactory_send() != 19857.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm() != 13572.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm() != 6786.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_send_confirm_signed_psbt() != 63483.toShort()) {
@@ -16714,7 +16714,7 @@ public interface RouteFactoryInterface {
     
     fun `send`(`send`: SendRoute): Route
     
-    fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails): Route
+    fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails, `payjoinEndpoint`: kotlin.String?): Route
     
     fun `sendConfirmSignedPsbt`(`id`: WalletId, `details`: ConfirmDetails, `psbt`: Psbt): Route
     
@@ -17062,7 +17062,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     }
     
 
-    override fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails): Route {
+    override fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails, `payjoinEndpoint`: kotlin.String?): Route {
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -17070,7 +17070,8 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
         it,
         
         FfiConverterTypeWalletId.lower(`id`),
-        FfiConverterTypeConfirmDetails.lower(`details`),_status)
+        FfiConverterTypeConfirmDetails.lower(`details`),
+        FfiConverterOptionalString.lower(`payjoinEndpoint`),_status)
 }
     }
     )
@@ -20949,6 +20950,14 @@ public interface RustWalletManagerInterface {
     
     fun `initialLoadState`(): WalletLoadState
     
+    /**
+     * Send entry point for unsigned hot wallet PSBTs
+     *
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
+     */
+    suspend fun `initiatePayment`(`psbt`: Psbt, `payjoinEndpoint`: kotlin.String?)
+    
     fun `labelManager`(): LabelManager
     
     fun `listenForUpdates`(`reconciler`: WalletManagerReconciler)
@@ -20988,8 +20997,6 @@ public interface RustWalletManagerInterface {
     fun `setWalletMetadata`(`metadata`: WalletMetadata)
     
     fun `setWalletType`(`walletType`: WalletType)
-    
-    suspend fun `signAndBroadcastTransaction`(`psbt`: Psbt)
     
     suspend fun `splitTransactionOutputs`(`outputs`: List<AddressAndAmount>): SplitOutput
     
@@ -21803,6 +21810,36 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
     
 
+    
+    /**
+     * Send entry point for unsigned hot wallet PSBTs
+     *
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
+     */
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `initiatePayment`(`psbt`: Psbt, `payjoinEndpoint`: kotlin.String?) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_initiate_payment(
+                uniffiHandle,
+                
+        FfiConverterTypePsbt.lower(`psbt`),
+        FfiConverterOptionalString.lower(`payjoinEndpoint`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
     override fun `labelManager`(): LabelManager {
             return FfiConverterTypeLabelManager.lift(
     callWithHandle {
@@ -22073,29 +22110,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
     
     
-
-    
-    @Throws(WalletManagerException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `signAndBroadcastTransaction`(`psbt`: Psbt) {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(
-                uniffiHandle,
-                
-        FfiConverterTypePsbt.lower(`psbt`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
-        // lift function
-        { Unit },
-        
-        // Error FFI converter
-        WalletManagerException.ErrorHandler,
-    )
-    }
 
     
     @Throws(WalletManagerException::class)
@@ -29844,6 +29858,8 @@ data class SendRouteConfirmArgs (
     var `details`: ConfirmDetails
     , 
     var `input`: SendConfirmationInput
+    , 
+    var `payjoinEndpoint`: kotlin.String?
     
 ): Disposable{
     
@@ -29857,7 +29873,8 @@ data class SendRouteConfirmArgs (
     Disposable.destroy(
         this.`id`,
         this.`details`,
-        this.`input`
+        this.`input`,
+        this.`payjoinEndpoint`
     )
     }
     
@@ -29873,19 +29890,22 @@ public object FfiConverterTypeSendRouteConfirmArgs: FfiConverterRustBuffer<SendR
             FfiConverterTypeWalletId.read(buf),
             FfiConverterTypeConfirmDetails.read(buf),
             FfiConverterTypeSendConfirmationInput.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
     override fun allocationSize(value: SendRouteConfirmArgs) = (
             FfiConverterTypeWalletId.allocationSize(value.`id`) +
             FfiConverterTypeConfirmDetails.allocationSize(value.`details`) +
-            FfiConverterTypeSendConfirmationInput.allocationSize(value.`input`)
+            FfiConverterTypeSendConfirmationInput.allocationSize(value.`input`) +
+            FfiConverterOptionalString.allocationSize(value.`payjoinEndpoint`)
     )
 
     override fun write(value: SendRouteConfirmArgs, buf: ByteBuffer) {
             FfiConverterTypeWalletId.write(value.`id`, buf)
             FfiConverterTypeConfirmDetails.write(value.`details`, buf)
             FfiConverterTypeSendConfirmationInput.write(value.`input`, buf)
+            FfiConverterOptionalString.write(value.`payjoinEndpoint`, buf)
     }
 }
 
