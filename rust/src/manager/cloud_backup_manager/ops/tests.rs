@@ -4566,6 +4566,50 @@ async fn upload_wallet_if_dirty_preserves_newer_dirty_state() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn upload_wallet_if_dirty_recovers_deferred_write_to_dirty() {
+    let _guard = test_lock().lock();
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let metadata = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![metadata.clone()]);
+    persist_dirty_blob_state(metadata.id.clone());
+
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let record_id = wallet_record_id(metadata.id.as_ref());
+    let PersistedCloudBackupState::Configured(previous_configured) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected configured cloud backup state");
+    };
+    globals.cloud.persist_disabling_on_next_upload(PersistedDisablingCloudBackup {
+        previous_configured,
+        namespace_id,
+        disable_generation: 42,
+        started_at: 100,
+        delete_started_at: None,
+        last_error: None,
+        retry_after: None,
+    });
+
+    let error = manager.do_upload_wallet_if_dirty(&metadata.id).await.unwrap_err();
+
+    assert!(matches!(error, CloudBackupError::Deferred(_)));
+    assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
+    assert!(matches!(
+        Database::global().cloud_backup_state.get().unwrap(),
+        PersistedCloudBackupState::Disabling(_)
+    ));
+    assert!(matches!(
+        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+        Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+    ));
+    manager.debug_reset_cloud_backup_state();
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn upload_wallet_if_dirty_retries_stale_uploading_state() {
     let _guard = test_lock().lock();
     cove_tokio::init();

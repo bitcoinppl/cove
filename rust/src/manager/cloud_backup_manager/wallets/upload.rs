@@ -298,7 +298,6 @@ impl RustCloudBackupManager {
 
         match upload_result {
             Ok(()) => Ok(()),
-            Err(error @ CloudBackupError::Deferred(_)) => Err(error),
             Err(CloudBackupError::CloudStorage(error)) => self
                 .handle_dirty_wallet_upload_cloud_error(
                     &uploading_state,
