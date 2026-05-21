@@ -1639,6 +1639,9 @@ impl CloudBackupSupervisor {
 
         let blocker =
             CloudBackupWriteBlocker::Disabling { operation_id: disabling.disable_generation };
+
+        // wait for the active write lane to drain before deleting the namespace so an upload
+        // that already started cannot recreate remote data after disable deletes it
         if let Err(error) =
             call!(self.write.block_until_drained(blocker, self.addr.clone(), claim)).await
         {

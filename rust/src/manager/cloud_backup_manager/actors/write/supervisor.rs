@@ -335,11 +335,13 @@ impl CloudBackupWriteSupervisor {
         self.active_blocker = Some(blocker);
         self.reject_blocked_pending_writes();
         self.start_next_pending_write();
+
         if self.in_flight_write.is_some() {
             self.drain_waiters.push(CloudBackupWriteDrainWaiter { supervisor, claim, blocker });
         } else {
             send!(supervisor.complete_disable_write_drain(claim, blocker));
         }
+
         Produces::ok(())
     }
 
