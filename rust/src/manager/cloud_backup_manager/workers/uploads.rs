@@ -483,6 +483,15 @@ mod tests {
     }
 
     #[test]
+    fn pending_upload_retry_backoff_caps_at_max_delay() {
+        let mut backoff = PendingUploadRetryBackoff::new();
+
+        for _ in 0..10 {
+            assert!(backoff.next_delay() <= MAX_PENDING_UPLOAD_VERIFICATION_DELAY);
+        }
+    }
+
+    #[test]
     fn pending_upload_verifier_finished_does_not_respawn_while_writes_blocked() {
         let _guard = test_lock().lock();
         ensure_cloud_backup_test_tokio_runtime();
