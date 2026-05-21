@@ -581,14 +581,6 @@ impl WalletActor {
         Ok(details)
     }
 
-    pub async fn sign_and_broadcast_transaction(
-        &mut self,
-        psbt: Psbt,
-    ) -> ActorResult<Result<(), Error>> {
-        let result = self.do_sign_and_broadcast_transaction(psbt).await;
-        Produces::ok(result)
-    }
-
     pub async fn initiate_payment(
         &mut self,
         psbt: Psbt,

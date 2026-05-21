@@ -9078,10 +9078,10 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func initialLoadState()  -> WalletLoadState
     
     /**
-     * PayJoin-aware send entry point for unsigned hot wallet PSBTs
+     * Send entry point for unsigned hot wallet PSBTs
      *
-     * If `payjoin_endpoint` is present, attempts PayJoin negotiation before broadcast.
-     * Falls back to standard sign and broadcast if no endpoint is provided.
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
      */
     func initiatePayment(psbt: Psbt, payjoinEndpoint: String?) async throws 
     
@@ -9124,14 +9124,6 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func setWalletMetadata(metadata: WalletMetadata) 
     
     func setWalletType(walletType: WalletType) throws 
-    
-    /**
-     * Signs and broadcasts a transaction
-     *
-     * Used by signed PSBT and hardware wallet paths. Unsigned hot wallet payments
-     * go through `initiate_payment` instead.
-     */
-    func signAndBroadcastTransaction(psbt: Psbt) async throws 
     
     func splitTransactionOutputs(outputs: [AddressAndAmount]) async throws  -> SplitOutput
     
@@ -9789,10 +9781,10 @@ open func initialLoadState() -> WalletLoadState  {
 }
     
     /**
-     * PayJoin-aware send entry point for unsigned hot wallet PSBTs
+     * Send entry point for unsigned hot wallet PSBTs
      *
-     * If `payjoin_endpoint` is present, attempts PayJoin negotiation before broadcast.
-     * Falls back to standard sign and broadcast if no endpoint is provided.
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
      */
 open func initiatePayment(psbt: Psbt, payjoinEndpoint: String?)async throws   {
     return
@@ -10010,29 +10002,6 @@ open func setWalletType(walletType: WalletType)throws   {try rustCallWithError(F
         FfiConverterTypeWalletType_lower(walletType),uniffiCallStatus
     )
 }
-}
-    
-    /**
-     * Signs and broadcasts a transaction
-     *
-     * Used by signed PSBT and hardware wallet paths. Unsigned hot wallet payments
-     * go through `initiate_payment` instead.
-     */
-open func signAndBroadcastTransaction(psbt: Psbt)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(
-                    self.uniffiCloneHandle(),
-                    FfiConverterTypePsbt_lower(psbt)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_void,
-            completeFunc: ffi_cove_rust_future_complete_void,
-            freeFunc: ffi_cove_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeWalletManagerError_lift
-        )
 }
     
 open func splitTransactionOutputs(outputs: [AddressAndAmount])async throws  -> SplitOutput  {
@@ -39007,7 +38976,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 38191) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 15850) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571) {
@@ -39056,9 +39025,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 13112) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 30306) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs() != 4285) {

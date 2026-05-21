@@ -1655,8 +1655,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type(
     ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction(
-    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_start_wallet_scan(
@@ -2749,8 +2747,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(`ptr`: Long,`walletType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
-    external fun uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(`ptr`: Long,`psbt`: Long,
-    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_split_transaction_outputs(`ptr`: Long,`outputs`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_start_wallet_scan(`ptr`: Long,
@@ -4390,7 +4386,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 38191.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 15850.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571.toShort()) {
@@ -4439,9 +4435,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 13112.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_sign_and_broadcast_transaction() != 30306.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs() != 4285.toShort()) {
@@ -20958,10 +20951,10 @@ public interface RustWalletManagerInterface {
     fun `initialLoadState`(): WalletLoadState
     
     /**
-     * PayJoin-aware send entry point for unsigned hot wallet PSBTs
+     * Send entry point for unsigned hot wallet PSBTs
      *
-     * If `payjoin_endpoint` is present, attempts PayJoin negotiation before broadcast.
-     * Falls back to standard sign and broadcast if no endpoint is provided.
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
      */
     suspend fun `initiatePayment`(`psbt`: Psbt, `payjoinEndpoint`: kotlin.String?)
     
@@ -21004,14 +20997,6 @@ public interface RustWalletManagerInterface {
     fun `setWalletMetadata`(`metadata`: WalletMetadata)
     
     fun `setWalletType`(`walletType`: WalletType)
-    
-    /**
-     * Signs and broadcasts a transaction
-     *
-     * Used by signed PSBT and hardware wallet paths. Unsigned hot wallet payments
-     * go through `initiate_payment` instead.
-     */
-    suspend fun `signAndBroadcastTransaction`(`psbt`: Psbt)
     
     suspend fun `splitTransactionOutputs`(`outputs`: List<AddressAndAmount>): SplitOutput
     
@@ -21827,10 +21812,10 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
     
     /**
-     * PayJoin-aware send entry point for unsigned hot wallet PSBTs
+     * Send entry point for unsigned hot wallet PSBTs
      *
-     * If `payjoin_endpoint` is present, attempts PayJoin negotiation before broadcast.
-     * Falls back to standard sign and broadcast if no endpoint is provided.
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
      */
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
@@ -22125,35 +22110,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
     
     
-
-    
-    /**
-     * Signs and broadcasts a transaction
-     *
-     * Used by signed PSBT and hardware wallet paths. Unsigned hot wallet payments
-     * go through `initiate_payment` instead.
-     */
-    @Throws(WalletManagerException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `signAndBroadcastTransaction`(`psbt`: Psbt) {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_sign_and_broadcast_transaction(
-                uniffiHandle,
-                
-        FfiConverterTypePsbt.lower(`psbt`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
-        // lift function
-        { Unit },
-        
-        // Error FFI converter
-        WalletManagerException.ErrorHandler,
-    )
-    }
 
     
     @Throws(WalletManagerException::class)

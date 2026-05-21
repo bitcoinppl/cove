@@ -670,24 +670,10 @@ impl RustWalletManager {
         call!(self.actor.balance()).await.unwrap_or_default()
     }
 
-    /// Signs and broadcasts a transaction
+    /// Send entry point for unsigned hot wallet PSBTs
     ///
-    /// Used by signed PSBT and hardware wallet paths. Unsigned hot wallet payments
-    /// go through `initiate_payment` instead.
-    #[uniffi::method]
-    pub async fn sign_and_broadcast_transaction(&self, psbt: Arc<Psbt>) -> Result<(), Error> {
-        let psbt = Arc::unwrap_or_clone(psbt);
-        call!(self.actor.sign_and_broadcast_transaction(psbt.into())).await.unwrap()?;
-
-        self.force_wallet_scan().await;
-
-        Ok(())
-    }
-
-    /// PayJoin-aware send entry point for unsigned hot wallet PSBTs
-    ///
-    /// If `payjoin_endpoint` is present, attempts PayJoin negotiation before broadcast.
-    /// Falls back to standard sign and broadcast if no endpoint is provided.
+    /// Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+    /// PayJoin negotiation is handled in the actor stub.
     #[uniffi::method]
     pub async fn initiate_payment(
         &self,
