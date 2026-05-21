@@ -1689,8 +1689,7 @@ async fn enqueue_cleanup_for_test(
     active_namespace: &str,
     active_master_key: &cove_cspp::master_key::MasterKey,
     source_namespace: String,
-    record_id: String,
-    revision_hash: Option<String>,
+    expected_wallet: CleanupExpectedWalletRecord,
     wait_message: &str,
     mut wait_condition: impl FnMut() -> bool,
 ) {
@@ -1700,10 +1699,7 @@ async fn enqueue_cleanup_for_test(
         active_critical_key: active_master_key.critical_data_key(),
         sources: vec![CleanupSourceNamespace {
             namespace_id: source_namespace,
-            expected_wallets: vec![CleanupExpectedWalletRecord {
-                record_id,
-                content_revision_hash: revision_hash,
-            }],
+            expected_wallets: vec![expected_wallet],
         }],
     });
 
@@ -1744,8 +1740,10 @@ async fn cleanup_deletes_source_namespace_after_active_record_proof() {
         &active_namespace,
         &active_master_key,
         source_namespace.clone(),
-        record_id,
-        Some("matching-revision".into()),
+        CleanupExpectedWalletRecord {
+            record_id,
+            content_revision_hash: Some("matching-revision".into()),
+        },
         "cleanup should delete source namespace",
         || !globals.cloud.has_namespace(&source_namespace),
     )
@@ -1778,8 +1776,10 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
         &active_namespace,
         &active_master_key,
         source_namespace.clone(),
-        record_id,
-        Some("expected-revision".into()),
+        CleanupExpectedWalletRecord {
+            record_id,
+            content_revision_hash: Some("expected-revision".into()),
+        },
         "cleanup should inspect active namespace",
         || {
             globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace)
@@ -1828,8 +1828,10 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
         &active_namespace,
         &active_master_key,
         source_namespace.clone(),
-        record_id,
-        Some("expected-revision".into()),
+        CleanupExpectedWalletRecord {
+            record_id,
+            content_revision_hash: Some("expected-revision".into()),
+        },
         "cleanup should inspect active namespace",
         || {
             globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace)
@@ -1877,8 +1879,10 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
         &active_namespace,
         &active_master_key,
         source_namespace.clone(),
-        record_id,
-        Some("expected-revision".into()),
+        CleanupExpectedWalletRecord {
+            record_id,
+            content_revision_hash: Some("expected-revision".into()),
+        },
         "cleanup should inspect active namespace",
         || {
             globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace)
@@ -1926,8 +1930,10 @@ async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
         &active_namespace,
         &active_master_key,
         source_namespace.clone(),
-        record_id,
-        Some("expected-revision".into()),
+        CleanupExpectedWalletRecord {
+            record_id,
+            content_revision_hash: Some("expected-revision".into()),
+        },
         "cleanup should inspect active namespace",
         || {
             globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace)
@@ -1975,8 +1981,10 @@ async fn cleanup_keeps_source_namespace_when_delete_fails() {
         &active_namespace,
         &active_master_key,
         source_namespace.clone(),
-        record_id,
-        Some("expected-revision".into()),
+        CleanupExpectedWalletRecord {
+            record_id,
+            content_revision_hash: Some("expected-revision".into()),
+        },
         "cleanup should attempt source namespace delete",
         || globals.cloud.delete_namespace_attempt_count() > delete_attempt_count,
     )
