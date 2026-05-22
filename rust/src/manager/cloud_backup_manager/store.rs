@@ -178,7 +178,7 @@ mod tests {
     };
     use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
 
-    fn setup_database_test() -> parking_lot::MutexGuard<'static, ()> {
+    fn setup_database_test() -> tokio::sync::MutexGuard<'static, ()> {
         let guard = test_lock().lock();
         test_globals().reset();
         guard

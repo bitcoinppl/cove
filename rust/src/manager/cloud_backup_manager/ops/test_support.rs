@@ -807,12 +807,24 @@ pub(crate) fn test_globals() -> &'static TestGlobals {
     })
 }
 
-pub(crate) fn test_lock() -> &'static parking_lot::Mutex<()> {
-    static LOCK: OnceLock<parking_lot::Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(parking_lot::Mutex::default)
+pub(crate) struct SyncTestLock(&'static tokio::sync::Mutex<()>);
+
+impl SyncTestLock {
+    pub(crate) fn lock(&self) -> tokio::sync::MutexGuard<'static, ()> {
+        self.0.blocking_lock()
+    }
+}
+
+pub(crate) fn test_lock() -> &'static SyncTestLock {
+    static LOCK: OnceLock<SyncTestLock> = OnceLock::new();
+    LOCK.get_or_init(|| SyncTestLock(shared_test_lock()))
 }
 
 pub(crate) fn async_test_lock() -> &'static tokio::sync::Mutex<()> {
+    shared_test_lock()
+}
+
+fn shared_test_lock() -> &'static tokio::sync::Mutex<()> {
     static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(tokio::sync::Mutex::default)
 }
