@@ -1,3 +1,8 @@
+//! Leaf actor for remote Cloud Backup write commands
+//!
+//! This actor performs cloud-storage calls and returns raw remote results to
+//! the write supervisor. It does not mutate manager state directly
+
 use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, send};
 use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use tracing::warn;
@@ -5,6 +10,7 @@ use tracing::warn;
 use super::CloudBackupWriteError;
 use super::supervisor::{CloudBackupWriteCommandContext, CloudBackupWriteSupervisor};
 
+/// Remote storage operation submitted through the serialized write lane
 #[derive(Debug)]
 pub(crate) enum CloudBackupRemoteWriteCommand {
     UploadWallet { cloud: CloudStorageClient, namespace: String, record_id: String, data: Vec<u8> },
@@ -17,6 +23,7 @@ pub(crate) enum CloudBackupRemoteWriteCommand {
     None,
 }
 
+/// Remote result shape expected by the paired local completion
 #[derive(Debug)]
 pub(crate) enum CloudBackupRemoteWriteResult {
     None,
@@ -83,6 +90,7 @@ impl CloudBackupRemoteWriteCommand {
     }
 }
 
+/// Actor that executes one remote write command and reports back to its parent
 #[derive(Debug, Default)]
 pub(crate) struct CloudBackupWriteWorker {
     parent: WeakAddr<CloudBackupWriteSupervisor>,

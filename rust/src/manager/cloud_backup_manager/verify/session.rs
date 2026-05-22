@@ -1,3 +1,9 @@
+//! Deep Cloud Backup verification session
+//!
+//! A verification session proves that the master key, passkey wrapper, wallet
+//! blobs, and pending uploads agree. Some outcomes prepare follow-up work for
+//! the supervisor, which keeps the continuation tied to the active operation
+
 use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
@@ -68,44 +74,52 @@ enum RepairedMasterKeyResolution {
     Finished(DeepVerificationResult),
 }
 
+/// Result of a verification pass, including supervisor-owned continuations
 pub(crate) enum CloudBackupDeepVerificationStep {
     Complete(DeepVerificationResult),
     PreparedWrapperRepair(Box<CloudBackupPreparedDeepVerificationWrapperRepair>),
     PreparedAutoSync(Box<CloudBackupPreparedDeepVerificationAutoSync>),
 }
 
+/// Prepared passkey-wrapper repair that still belongs to the verification run
 pub(crate) struct CloudBackupPreparedDeepVerificationWrapperRepair {
     session: VerificationSession,
     preparation: CloudBackupPreparedPasskeyWrapperRepair,
     authenticated_master_key: MasterKey,
 }
 
+/// Resume token after wrapper repair upload proves the master key again
 pub(crate) struct CloudBackupPendingDeepVerificationResume {
     session: VerificationSession,
     authenticated_master_key: MasterKey,
 }
 
+/// Prepared auto-sync upload for missing or stale wallet blobs
 pub(crate) struct CloudBackupPreparedDeepVerificationAutoSync {
     session: VerificationSession,
     upload: CloudBackupDeepVerificationAutoSyncUpload,
 }
 
+/// Resume token after auto-sync upload and pending confirmation handling
 pub(crate) struct CloudBackupPendingDeepVerificationAutoSyncResume {
     session: VerificationSession,
 }
 
+/// Wallet upload payload produced by deep verification auto-sync
 pub(crate) struct CloudBackupDeepVerificationAutoSyncUpload {
     namespace_id: String,
     wallets: Vec<WalletMetadata>,
     master_key: MasterKey,
 }
 
+/// Uploaded wallet set returned after deep verification auto-sync
 #[derive(Debug, Clone)]
 pub(crate) struct CloudBackupUploadedDeepVerificationAutoSync {
     namespace_id: String,
     uploaded_wallets: Vec<CloudBackupUploadedWallet>,
 }
 
+/// Final auto-sync verification result and optional pending upload confirmation
 pub(crate) struct CloudBackupDeepVerificationAutoSyncCompletion {
     result: DeepVerificationResult,
     pending_completion: Option<PendingVerificationCompletion>,
@@ -207,6 +221,7 @@ impl CloudBackupDeepVerificationAutoSyncCompletion {
     }
 }
 
+/// One deep verification run with its cloud and keychain dependencies
 pub(crate) struct VerificationSession {
     pub(crate) manager: RustCloudBackupManager,
     pub(crate) cloud_keychain: CloudBackupKeychain,

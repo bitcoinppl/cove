@@ -1,3 +1,9 @@
+//! Pending upload confirmation for Cloud Backup blobs
+//!
+//! Uploaded blobs are not trusted until a later cloud read confirms that the
+//! expected revision is visible remotely. Authorization failures pause this
+//! verifier without rewriting the persisted blob state
+
 use cove_cspp::backup_data::EncryptedWalletBackup;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -48,6 +54,7 @@ impl BlobCheckResult {
     }
 }
 
+/// Summary of one pending upload verifier pass
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingUploadRunOutcome {
     Idle,
@@ -59,6 +66,7 @@ enum PendingUploadRunOutcome {
 
 const MAX_PENDING_WALLET_UPLOAD_CONFIRMATION_ATTEMPTS: u32 = 3;
 
+/// Confirms pending uploaded blobs against remote cloud storage
 pub(crate) struct PendingUploadVerifier(pub(crate) RustCloudBackupManager);
 
 impl PendingUploadVerifier {
@@ -90,6 +98,7 @@ impl PendingUploadVerifier {
                     "Pending upload verification: paused until cloud authorization is restored record_id={} error={error}",
                     sync_state.record_id()
                 );
+                // pause without changing blob state so authorization recovery can resume
                 blocked_on_authorization = true;
                 break;
             }

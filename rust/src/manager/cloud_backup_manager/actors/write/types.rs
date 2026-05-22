@@ -3,6 +3,7 @@ use crate::manager::cloud_backup_manager::CloudBackupError;
 use crate::manager::cloud_backup_manager::RustCloudBackupManager;
 use crate::wallet::metadata::WalletId;
 
+/// Uploaded wallet metadata needed to mark local sync state after remote success
 #[derive(Debug, Clone)]
 pub(crate) struct CloudBackupUploadedWallet {
     wallet_id: WalletId,
@@ -28,12 +29,17 @@ impl CloudBackupUploadedWallet {
     }
 }
 
+/// Whether finalizing uploaded wallets should preserve or reset verification
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum CloudBackupUploadedWalletsStateMode {
     PreserveVerification,
     ResetVerification,
 }
 
+/// Candidate wallet counts used when cloud listing is best-effort
+///
+/// The chosen count never decreases below the previous count because a failed
+/// or stale cloud listing should not make the UI forget known remote wallets
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CloudBackupWalletCountRefresh {
     previous_count: u32,
@@ -64,6 +70,7 @@ impl CloudBackupWalletCountRefresh {
     }
 }
 
+/// Local state mutation that runs only after the paired remote write succeeds
 #[derive(Debug, Clone)]
 pub(crate) enum CloudBackupWriteCompletion {
     MarkUploadedPendingConfirmation {

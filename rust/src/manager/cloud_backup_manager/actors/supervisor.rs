@@ -1,3 +1,9 @@
+//! Top-level Cloud Backup operation supervisor
+//!
+//! This actor owns exclusive operation lifecycles and delegates slow work to
+//! child actors or spawned tasks. Each exclusive operation receives a claim that
+//! every async completion must present before it can update manager state
+
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -58,6 +64,7 @@ use crate::manager::connectivity_manager::ConnectivityStatus;
 
 static NEXT_SUPERVISOR_OPERATION_ID: AtomicU64 = AtomicU64::new(0);
 
+/// User or system operation requested of the Cloud Backup supervisor
 #[derive(Debug, Clone)]
 pub(crate) enum CloudBackupOperation {
     Enable(CloudBackupEnableContext),
@@ -74,6 +81,11 @@ pub(crate) enum CloudBackupOperation {
     DeleteOtherBackups,
 }
 
+/// Passkey proof cached only for the current supervisor session
+///
+/// The cache lets detail entry reuse fresh authorization after enable or repair,
+/// but it is intentionally lost on restart so passkey availability is checked
+/// again through the platform
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RuntimePasskeyAuthorization {
     namespace_id: String,
@@ -90,12 +102,14 @@ enum DetailEntryPlan {
     StartPasskeyVerification { force_discoverable: bool },
 }
 
+/// Refresh attempt kind used to avoid retry loops on connectivity failures
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DetailRefreshAttempt {
     Initial,
     AutomaticConnectivityRetry,
 }
 
+/// Verification attempt kind used to avoid retry loops on connectivity failures
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum VerificationAttempt {
     Initial,
@@ -124,6 +138,7 @@ pub(crate) struct EnableUploadFinalization {
     pending_uploads: Vec<PendingVerificationUpload>,
 }
 
+/// Deep verification follow-up that keeps repair or recovery tied to one claim
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DeepVerificationContinuation {
     Manual { force_discoverable: bool, attempt: VerificationAttempt },
@@ -182,6 +197,7 @@ fn verification_needs_connectivity_retry(
         && should_retry_connectivity_failure(manager.connection_status())
 }
 
+/// Pending disable state held while the write lane drains before namespace delete
 #[derive(Debug)]
 struct PendingDisableWriteDrain {
     claim: CloudBackupExclusiveOperationClaim,
@@ -189,6 +205,7 @@ struct PendingDisableWriteDrain {
     disabling: PersistedDisablingCloudBackup,
 }
 
+/// Actor that owns Cloud Backup operation exclusivity and async completions
 #[derive(Debug)]
 pub(crate) struct CloudBackupSupervisor {
     addr: WeakAddr<Self>,

@@ -1,3 +1,9 @@
+//! Cloud Backup actors and child work lanes
+//!
+//! The supervisor actor owns exclusive operation lifecycles, while child
+//! actors own narrower queued work such as restore progress, wallet uploads,
+//! sync health checks, cleanup, and serialized cloud writes
+
 pub(crate) mod cleanup;
 pub(crate) mod restore;
 pub(crate) mod supervisor;

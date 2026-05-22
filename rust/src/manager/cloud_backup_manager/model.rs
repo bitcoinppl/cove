@@ -1,3 +1,9 @@
+//! Cloud Backup private reducer and public UI state projection
+//!
+//! The reducer keeps impossible intermediate states out of the UniFFI model and
+//! projects a smaller public state for Swift and Kotlin. Exclusive operation
+//! claims are tracked here so stale async completions cannot clear newer work
+
 use super::{
     CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableState,
     CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupRootPrompt,
@@ -12,6 +18,7 @@ use cove_device::cloud_storage::CloudSyncHealth;
 
 const PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE: &str = "cloud authorization required";
 
+/// Private reducer wrapper that projects public Cloud Backup state
 #[derive(Debug, Clone, Default)]
 pub(crate) struct CloudBackupStateReducer {
     state: CloudBackupReducerState,
@@ -55,6 +62,7 @@ enum CloudBackupConfiguredPrompt {
     PasskeyChoice(CloudBackupPasskeyChoiceIntent),
 }
 
+/// Exclusive operation category used to reject overlapping long-running work
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloudBackupExclusiveOperation {
     Enable,
@@ -72,6 +80,10 @@ pub(crate) enum CloudBackupExclusiveOperation {
     DeleteCloudWallet,
 }
 
+/// Generation-tagged ownership proof for an exclusive operation
+///
+/// Async completions must present the claim they started with before the
+/// reducer or supervisor accepts their result
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CloudBackupExclusiveOperationClaim {
     operation: CloudBackupExclusiveOperation,
@@ -789,6 +801,7 @@ impl CloudBackupReducerState {
     }
 }
 
+/// Event accepted by the private reducer
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CloudBackupStateReducerEvent {
     ExclusiveOperationStarted(CloudBackupExclusiveOperationClaim),
@@ -832,9 +845,11 @@ pub(crate) enum CloudBackupStateReducerEvent {
     OtherBackupsOperationResolved(OtherBackupsOperation),
 }
 
+/// Marker for rejected reducer events
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CloudBackupStateReducerEventRejection {}
 
+/// Side effects the manager should emit after applying a reducer event
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct CloudBackupStateReducerEffects {
     pub(crate) lifecycle: Option<CloudBackupLifecycle>,
@@ -843,6 +858,7 @@ pub(crate) struct CloudBackupStateReducerEffects {
     pub(crate) verification_decision_pending: bool,
 }
 
+/// Public passkey health state for the configured backup
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupPasskeyState {
     Available,
@@ -851,6 +867,7 @@ pub enum CloudBackupPasskeyState {
     NeedsRepair { state: CloudBackupPasskeyRepairState },
 }
 
+/// Public repair status for a missing or stale backup passkey
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupPasskeyRepairState {
     Idle,
@@ -858,6 +875,7 @@ pub enum CloudBackupPasskeyRepairState {
     Failed(String),
 }
 
+/// Public backup verification state shown by settings and prompts
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupVerificationState {
     NotVerified,
@@ -868,6 +886,7 @@ pub enum CloudBackupVerificationState {
     Failed(DeepVerificationFailure),
 }
 
+/// Public sync status for background cloud backup work
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupSyncState {
     Idle,
@@ -876,6 +895,7 @@ pub enum CloudBackupSyncState {
     Failed(String),
 }
 
+/// Public status for destructive operations that can affect remote backup data
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupDestructiveOperationState {
     Idle,
@@ -885,6 +905,7 @@ pub enum CloudBackupDestructiveOperationState {
     DisableFailed { message: String, can_keep_enabled: bool },
 }
 
+/// Detail payload shown after remote backup detail has loaded
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct LoadedCloudBackupDetail {
     pub detail: CloudBackupDetail,
@@ -893,6 +914,7 @@ pub struct LoadedCloudBackupDetail {
     pub other_backups_operation: OtherBackupsOperation,
 }
 
+/// Public loading state for the cloud backup detail screen
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupDetailState {
     NotLoaded,
@@ -901,6 +923,7 @@ pub enum CloudBackupDetailState {
     Failed(String),
 }
 
+/// Public configured-backup state projected from the private reducer
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CloudBackupConfiguredState {
     pub passkey: CloudBackupPasskeyState,
@@ -913,6 +936,7 @@ pub struct CloudBackupConfiguredState {
     pub verification_presentation: CloudBackupVerificationPresentation,
 }
 
+/// Public enable flow state for onboarding and settings
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupEnableFlow {
     DiscoveringExistingBackup,
@@ -926,6 +950,7 @@ pub enum CloudBackupEnableFlow {
     RetryingUploadWithStagedMaterial { progress: Option<super::CloudBackupProgress> },
 }
 
+/// Public restore progress state
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupRestoreFlow {
     Finding,
@@ -933,11 +958,13 @@ pub enum CloudBackupRestoreFlow {
     Restoring { completed: u32, total: u32 },
 }
 
+/// Public terminal cloud backup failure
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CloudBackupFailure {
     pub message: String,
 }
 
+/// Public top-level cloud backup lifecycle
 #[expect(clippy::large_enum_variant, reason = "exported UniFFI enum keeps payloads inline")]
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupLifecycle {

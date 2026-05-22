@@ -96,6 +96,7 @@ type Message = CloudBackupReconcileMessage;
 pub static CLOUD_BACKUP_MANAGER: LazyLock<Arc<RustCloudBackupManager>> =
     LazyLock::new(RustCloudBackupManager::init);
 
+/// Runtime cloud backup status persisted or projected for compatibility paths
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum CloudBackupStatus {
     Disabled,
@@ -108,12 +109,14 @@ pub enum CloudBackupStatus {
     Error(String),
 }
 
+/// Whether saved passkey confirmation was user-triggered or flow-triggered
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SavedPasskeyConfirmationMode {
     Automatic,
     Manual,
 }
 
+/// Context carried through enable so prompts and verification attribution stay stable
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct CloudBackupEnableContext {
     pub saved_passkey_confirmation: SavedPasskeyConfirmationMode,
@@ -129,6 +132,7 @@ impl CloudBackupEnableContext {
     }
 }
 
+/// Internal enable status before projection into the public lifecycle
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum CloudBackupEnableState {
     Idle,
@@ -138,12 +142,14 @@ pub enum CloudBackupEnableState {
     UploadingBackup,
 }
 
+/// Prompt intent for choosing between an existing passkey and a new one
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupPasskeyChoiceIntent {
     Enable(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
     RepairPasskey,
 }
 
+/// Root-level prompt the UI should show for the current cloud backup state
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupRootPrompt {
     None,
@@ -153,6 +159,7 @@ pub enum CloudBackupRootPrompt {
     Verification,
 }
 
+/// User intent routed from Swift or Kotlin into the Rust cloud backup manager
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupManagerAction {
     EnableCloudBackup(CloudBackupEnableContext),
@@ -183,6 +190,7 @@ pub enum CloudBackupManagerAction {
     EnterDetail,
 }
 
+/// Result of a disable attempt after the supervisor resolves remote and local work
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CloudBackupDisableOutcome {
     Started,
@@ -190,11 +198,13 @@ pub(crate) enum CloudBackupDisableOutcome {
     Failed { message: String, can_keep_enabled: bool },
 }
 
+/// Typed state delta sent from Rust to Swift and Kotlin reconcilers
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
     Lifecycle(CloudBackupLifecycle),
 }
 
+/// Restore summary shown after cloud backup onboarding restore completes
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CloudBackupRestoreReport {
     pub wallets_restored: u32,
@@ -204,17 +214,20 @@ pub struct CloudBackupRestoreReport {
     pub labels_failed_errors: Vec<String>,
 }
 
+/// Completed and total counts for long-running cloud backup work
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct CloudBackupProgress {
     pub completed: u32,
     pub total: u32,
 }
 
+/// Cloud backup record identifier exposed through UniFFI as an opaque string
 #[derive(Debug, Clone, PartialEq, Eq, Hash, derive_more::From, derive_more::Into)]
 pub struct RecordId(String);
 
 uniffi::custom_newtype!(RecordId, String);
 
+/// Per-wallet cloud backup sync state shown in backup detail
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupWalletStatus {
     Dirty,
@@ -227,6 +240,7 @@ pub enum CloudBackupWalletStatus {
     RemoteStateUnknown,
 }
 
+/// Wallet row in cloud backup detail, combining local wallet metadata and sync state
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct CloudBackupWalletItem {
     pub name: String,
@@ -241,12 +255,14 @@ pub struct CloudBackupWalletItem {
     pub record_id: String,
 }
 
+/// Remote detail fetch result that keeps access errors distinguishable from failed detail state
 #[derive(Debug)]
 pub enum CloudBackupDetailResult {
     Success(CloudBackupDetail),
     AccessError(CloudBackupError),
 }
 
+/// Backup detail grouped by local wallet sync status and remote-only inventory
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CloudBackupDetail {
     pub last_sync: Option<u64>,
@@ -257,12 +273,14 @@ pub struct CloudBackupDetail {
     pub other_backups: CloudBackupOtherBackupsState,
 }
 
+/// Summary state for backup namespaces that do not match the active device
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupOtherBackupsState {
     Loaded { summary: CloudBackupOtherBackupsSummary },
     LoadFailed { error: String },
 }
 
+/// Aggregate count of recoverable backup data in other namespaces
 #[derive(Debug, Clone, PartialEq, Eq, Default, uniffi::Record)]
 pub struct CloudBackupOtherBackupsSummary {
     pub namespace_count: u32,
@@ -270,6 +288,7 @@ pub struct CloudBackupOtherBackupsSummary {
     pub passkey_hints: Vec<CloudBackupPasskeyHint>,
 }
 
+/// User-facing passkey hint that avoids exposing credential bytes
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct CloudBackupPasskeyHint {
     pub provider_name: Option<String>,
@@ -287,6 +306,7 @@ impl CloudBackupPasskeyHint {
     }
 }
 
+/// Operation state for recovering or deleting other backup namespaces
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum OtherBackupsOperation {
     Idle,
@@ -297,6 +317,7 @@ pub enum OtherBackupsOperation {
     Failed { error: String },
 }
 
+/// Outcome of deep verification before projection into UI state
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum DeepVerificationResult {
     Verified(DeepVerificationReport),
@@ -308,6 +329,7 @@ pub enum DeepVerificationResult {
     Failed(DeepVerificationFailure),
 }
 
+/// Counts and repairs observed during a deep verification pass
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct DeepVerificationReport {
     /// Cloud master key PRF wrapping was repaired
@@ -324,6 +346,7 @@ pub struct DeepVerificationReport {
     pub detail: Option<CloudBackupDetail>,
 }
 
+/// Persisted verification metadata projected into prompts and detail state
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupVerificationMetadata {
     NotConfigured,
@@ -332,6 +355,7 @@ pub enum CloudBackupVerificationMetadata {
     NeedsVerification,
 }
 
+/// Trust failure that tells the UI which recovery path is valid
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum DeepVerificationFailure {
     /// Transient iCloud/network/passkey error — safe to retry
@@ -348,23 +372,27 @@ pub enum DeepVerificationFailure {
     UnsupportedVersion { message: String, detail: Option<CloudBackupDetail> },
 }
 
+/// Retry issue category for a user-visible verification retry
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupRetryIssue {
     Connectivity,
 }
 
+/// Retry action the UI should dispatch for a retryable verification failure
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupRetryAction {
     Verify,
     VerifyDiscoverable,
 }
 
+/// Retry instruction attached to a retryable deep verification failure
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct CloudBackupRetryContext {
     pub issue: CloudBackupRetryIssue,
     pub action: CloudBackupRetryAction,
 }
 
+/// Top-level state snapshot exposed to platform managers
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CloudBackupState {
     pub lifecycle: CloudBackupLifecycle,

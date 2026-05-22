@@ -10,6 +10,11 @@ use super::types::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteCompletion,
 };
 
+/// Operation-aware handle for submitting writes to the write supervisor
+///
+/// Background callers use [`CloudBackupWriteClient::new`]. Exclusive operations
+/// use [`CloudBackupWriteClient::for_operation`] so stale operation completions
+/// are rejected before local state is mutated
 #[derive(Clone)]
 pub(crate) struct CloudBackupWriteClient {
     supervisor: Addr<CloudBackupWriteSupervisor>,

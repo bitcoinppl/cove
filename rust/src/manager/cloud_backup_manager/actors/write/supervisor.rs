@@ -1,3 +1,10 @@
+//! Ordered Cloud Backup write supervisor
+//!
+//! This actor serializes cloud writes, rejects writes while disable is active,
+//! and applies local completion after remote success. Operation-owned commands
+//! carry an exclusive-operation claim so stale async completions cannot update
+//! local cloud backup state
+
 use std::collections::VecDeque;
 use std::sync::Weak;
 
@@ -25,9 +32,11 @@ use super::worker::{
 pub(crate) type CloudBackupWriteResultReceiver<T> =
     oneshot::Receiver<CloudBackupWriteCommandResult<T>>;
 
+/// Monotonic identifier for commands accepted by the write supervisor
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CloudBackupWriteCommandId(u64);
 
+/// Write command identity plus the exclusive operation that owns it, if any
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CloudBackupWriteCommandContext {
     id: CloudBackupWriteCommandId,
@@ -48,6 +57,7 @@ impl CloudBackupWriteCommandContext {
     }
 }
 
+/// Result returned to the submitter after remote and local write work finishes
 #[derive(Debug)]
 pub(crate) struct CloudBackupWriteCommandResult<T> {
     context: CloudBackupWriteCommandContext,
@@ -68,6 +78,7 @@ impl<T> CloudBackupWriteCommandResult<T> {
     }
 }
 
+/// Runtime fence that blocks background cloud writes during destructive work
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloudBackupWriteBlocker {
     Disabling { operation_id: u64 },
@@ -156,6 +167,7 @@ struct CloudBackupWriteDrainWaiter {
     blocker: CloudBackupWriteBlocker,
 }
 
+/// Coordinates one-at-a-time remote writes and their local completion
 #[derive(Debug)]
 pub(crate) struct CloudBackupWriteSupervisor {
     addr: WeakAddr<Self>,
@@ -208,6 +220,7 @@ impl CloudBackupWriteSupervisor {
         self.reject_blocked_pending_writes();
         self.start_next_pending_write();
 
+        // wait for the active write to finish before disable deletes the namespace
         if self.in_flight_write.is_some() {
             self.drain_waiters.push(CloudBackupWriteDrainWaiter { supervisor, claim, blocker });
         } else {
@@ -341,6 +354,7 @@ impl CloudBackupWriteSupervisor {
                 continue;
             }
 
+            // operation-owned writes are checked before remote work starts
             self.start_pending_write(write);
             break;
         }
@@ -417,6 +431,7 @@ impl CloudBackupWriteSupervisor {
             self.writes_allowed()?;
         }
 
+        // local state changes must still belong to the active operation
         self.ensure_pending_write_origin_current(active.context)?;
 
         let manager = match &active.completion {
