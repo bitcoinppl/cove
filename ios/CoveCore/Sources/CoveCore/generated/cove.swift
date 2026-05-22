@@ -13437,6 +13437,9 @@ public func FfiConverterTypeBackupWalletSummary_lower(_ value: BackupWalletSumma
 }
 
 
+/**
+ * Public configured-backup state projected from the private reducer
+ */
 public struct CloudBackupConfiguredState: Equatable, Hashable {
     public var passkey: CloudBackupPasskeyState
     public var verification: CloudBackupVerificationState
@@ -13515,6 +13518,9 @@ public func FfiConverterTypeCloudBackupConfiguredState_lower(_ value: CloudBacku
 }
 
 
+/**
+ * Backup detail grouped by local wallet sync status and remote-only inventory
+ */
 public struct CloudBackupDetail: Equatable, Hashable {
     public var lastSync: UInt64?
     public var upToDate: [CloudBackupWalletItem]
@@ -13587,6 +13593,9 @@ public func FfiConverterTypeCloudBackupDetail_lower(_ value: CloudBackupDetail) 
 }
 
 
+/**
+ * Context carried through enable so prompts and verification attribution stay stable
+ */
 public struct CloudBackupEnableContext: Equatable, Hashable {
     public var savedPasskeyConfirmation: SavedPasskeyConfirmationMode
     public var verificationSource: CloudBackupVerificationSource
@@ -13641,6 +13650,9 @@ public func FfiConverterTypeCloudBackupEnableContext_lower(_ value: CloudBackupE
 }
 
 
+/**
+ * Public terminal cloud backup failure
+ */
 public struct CloudBackupFailure: Equatable, Hashable {
     public var message: String
 
@@ -13691,6 +13703,9 @@ public func FfiConverterTypeCloudBackupFailure_lower(_ value: CloudBackupFailure
 }
 
 
+/**
+ * Aggregate count of recoverable backup data in other namespaces
+ */
 public struct CloudBackupOtherBackupsSummary: Equatable, Hashable {
     public var namespaceCount: UInt32
     public var walletCount: UInt32
@@ -13749,6 +13764,9 @@ public func FfiConverterTypeCloudBackupOtherBackupsSummary_lower(_ value: CloudB
 }
 
 
+/**
+ * User-facing passkey hint that avoids exposing credential bytes
+ */
 public struct CloudBackupPasskeyHint: Equatable, Hashable {
     public var providerName: String?
     public var nameSuffix: String
@@ -13807,6 +13825,9 @@ public func FfiConverterTypeCloudBackupPasskeyHint_lower(_ value: CloudBackupPas
 }
 
 
+/**
+ * Completed and total counts for long-running cloud backup work
+ */
 public struct CloudBackupProgress: Equatable, Hashable {
     public var completed: UInt32
     public var total: UInt32
@@ -13861,6 +13882,9 @@ public func FfiConverterTypeCloudBackupProgress_lower(_ value: CloudBackupProgre
 }
 
 
+/**
+ * Restore summary shown after cloud backup onboarding restore completes
+ */
 public struct CloudBackupRestoreReport: Equatable, Hashable {
     public var walletsRestored: UInt32
     public var walletsFailed: UInt32
@@ -13927,6 +13951,9 @@ public func FfiConverterTypeCloudBackupRestoreReport_lower(_ value: CloudBackupR
 }
 
 
+/**
+ * Retry instruction attached to a retryable deep verification failure
+ */
 public struct CloudBackupRetryContext: Equatable, Hashable {
     public var issue: CloudBackupRetryIssue
     public var action: CloudBackupRetryAction
@@ -13981,6 +14008,9 @@ public func FfiConverterTypeCloudBackupRetryContext_lower(_ value: CloudBackupRe
 }
 
 
+/**
+ * Top-level state snapshot exposed to platform managers
+ */
 public struct CloudBackupState: Equatable, Hashable {
     public var lifecycle: CloudBackupLifecycle
 
@@ -14031,6 +14061,9 @@ public func FfiConverterTypeCloudBackupState_lower(_ value: CloudBackupState) ->
 }
 
 
+/**
+ * Wallet row in cloud backup detail, combining local wallet metadata and sync state
+ */
 public struct CloudBackupWalletItem: Equatable, Hashable {
     public var name: String
     public var network: Network?
@@ -14455,6 +14488,9 @@ public func FfiConverterTypeContinueFromInit_lower(_ value: ContinueFromInit) ->
 }
 
 
+/**
+ * Counts and repairs observed during a deep verification pass
+ */
 public struct DeepVerificationReport: Equatable, Hashable {
     /**
      * Cloud master key PRF wrapping was repaired
@@ -15170,6 +15206,9 @@ public func FfiConverterTypeLabelExportResult_lower(_ value: LabelExportResult) 
 }
 
 
+/**
+ * Detail payload shown after remote backup detail has loaded
+ */
 public struct LoadedCloudBackupDetail: Equatable, Hashable {
     public var detail: CloudBackupDetail
     public var cloudOnly: CloudOnlyState
@@ -19220,6 +19259,9 @@ public func FfiConverterTypeCkTapError_lower(_ value: CkTapError) -> RustBuffer 
 }
 
 
+/**
+ * Public status for destructive operations that can affect remote backup data
+ */
 
 public enum CloudBackupDestructiveOperationState: Equatable, Hashable {
     
@@ -19311,6 +19353,9 @@ public func FfiConverterTypeCloudBackupDestructiveOperationState_lower(_ value: 
 
 
 
+/**
+ * Public loading state for the cloud backup detail screen
+ */
 
 public enum CloudBackupDetailState: Equatable, Hashable {
     
@@ -19397,6 +19442,9 @@ public func FfiConverterTypeCloudBackupDetailState_lower(_ value: CloudBackupDet
 
 
 
+/**
+ * Public enable flow state for onboarding and settings
+ */
 
 public enum CloudBackupEnableFlow: Equatable, Hashable {
     
@@ -19528,6 +19576,9 @@ public func FfiConverterTypeCloudBackupEnableFlow_lower(_ value: CloudBackupEnab
 
 
 
+/**
+ * Public top-level cloud backup lifecycle
+ */
 
 public enum CloudBackupLifecycle: Equatable, Hashable {
     
@@ -19627,6 +19678,9 @@ public func FfiConverterTypeCloudBackupLifecycle_lower(_ value: CloudBackupLifec
 
 
 
+/**
+ * User intent routed from Swift or Kotlin into the Rust cloud backup manager
+ */
 
 public enum CloudBackupManagerAction: Equatable, Hashable {
     
@@ -19882,6 +19936,9 @@ public func FfiConverterTypeCloudBackupManagerAction_lower(_ value: CloudBackupM
 
 
 
+/**
+ * Summary state for backup namespaces that do not match the active device
+ */
 
 public enum CloudBackupOtherBackupsState: Equatable, Hashable {
     
@@ -19954,6 +20011,9 @@ public func FfiConverterTypeCloudBackupOtherBackupsState_lower(_ value: CloudBac
 
 
 
+/**
+ * Prompt intent for choosing between an existing passkey and a new one
+ */
 
 public enum CloudBackupPasskeyChoiceIntent: Equatable, Hashable {
     
@@ -20024,6 +20084,9 @@ public func FfiConverterTypeCloudBackupPasskeyChoiceIntent_lower(_ value: CloudB
 
 
 
+/**
+ * Public repair status for a missing or stale backup passkey
+ */
 
 public enum CloudBackupPasskeyRepairState: Equatable, Hashable {
     
@@ -20100,6 +20163,9 @@ public func FfiConverterTypeCloudBackupPasskeyRepairState_lower(_ value: CloudBa
 
 
 
+/**
+ * Public passkey health state for the configured backup
+ */
 
 public enum CloudBackupPasskeyState: Equatable, Hashable {
     
@@ -20183,6 +20249,9 @@ public func FfiConverterTypeCloudBackupPasskeyState_lower(_ value: CloudBackupPa
 
 
 
+/**
+ * Typed state delta sent from Rust to Swift and Kotlin reconcilers
+ */
 
 public enum CloudBackupReconcileMessage: Equatable, Hashable {
     
@@ -20245,6 +20314,9 @@ public func FfiConverterTypeCloudBackupReconcileMessage_lower(_ value: CloudBack
 
 
 
+/**
+ * Public restore progress state
+ */
 
 public enum CloudBackupRestoreFlow: Equatable, Hashable {
     
@@ -20326,6 +20398,9 @@ public func FfiConverterTypeCloudBackupRestoreFlow_lower(_ value: CloudBackupRes
 
 
 
+/**
+ * Retry action the UI should dispatch for a retryable verification failure
+ */
 
 public enum CloudBackupRetryAction: Equatable, Hashable {
     
@@ -20392,6 +20467,9 @@ public func FfiConverterTypeCloudBackupRetryAction_lower(_ value: CloudBackupRet
 
 
 
+/**
+ * Retry issue category for a user-visible verification retry
+ */
 
 public enum CloudBackupRetryIssue: Equatable, Hashable {
     
@@ -20451,6 +20529,9 @@ public func FfiConverterTypeCloudBackupRetryIssue_lower(_ value: CloudBackupRetr
 
 
 
+/**
+ * Root-level prompt the UI should show for the current cloud backup state
+ */
 
 public enum CloudBackupRootPrompt: Equatable, Hashable {
     
@@ -20545,6 +20626,9 @@ public func FfiConverterTypeCloudBackupRootPrompt_lower(_ value: CloudBackupRoot
 
 
 
+/**
+ * Public sync status for background cloud backup work
+ */
 
 public enum CloudBackupSyncState: Equatable, Hashable {
     
@@ -20631,6 +20715,9 @@ public func FfiConverterTypeCloudBackupSyncState_lower(_ value: CloudBackupSyncS
 
 
 
+/**
+ * Persisted verification metadata projected into prompts and detail state
+ */
 
 public enum CloudBackupVerificationMetadata: Equatable, Hashable {
     
@@ -20989,6 +21076,9 @@ public func FfiConverterTypeCloudBackupVerificationSource_lower(_ value: CloudBa
 
 
 
+/**
+ * Public backup verification state shown by settings and prompts
+ */
 
 public enum CloudBackupVerificationState: Equatable, Hashable {
     
@@ -21090,6 +21180,9 @@ public func FfiConverterTypeCloudBackupVerificationState_lower(_ value: CloudBac
 
 
 
+/**
+ * Per-wallet cloud backup sync state shown in backup detail
+ */
 
 public enum CloudBackupWalletStatus: Equatable, Hashable {
     
@@ -22382,6 +22475,9 @@ public func FfiConverterTypeDatabaseError_lower(_ value: DatabaseError) -> RustB
 }
 
 
+/**
+ * Trust failure that tells the UI which recovery path is valid
+ */
 
 public enum DeepVerificationFailure: Equatable, Hashable {
     
@@ -22502,6 +22598,9 @@ public func FfiConverterTypeDeepVerificationFailure_lower(_ value: DeepVerificat
 
 
 
+/**
+ * Outcome of deep verification before projection into UI state
+ */
 
 public enum DeepVerificationResult: Equatable, Hashable {
     
@@ -27063,6 +27162,9 @@ public func FfiConverterTypeOnboardingStorageSelection_lower(_ value: Onboarding
 
 
 
+/**
+ * Operation state for recovering or deleting other backup namespaces
+ */
 
 public enum OtherBackupsOperation: Equatable, Hashable {
     
@@ -27610,6 +27712,9 @@ public func FfiConverterTypeRoute_lower(_ value: Route) -> RustBuffer {
 
 
 
+/**
+ * Whether saved passkey confirmation was user-triggered or flow-triggered
+ */
 
 public enum SavedPasskeyConfirmationMode: Equatable, Hashable {
     
