@@ -35,8 +35,16 @@ import SwiftUI
                     return setInvalidLabels()
                 }
 
-                try LabelManager(id: selectedWallet).import(labels: labels)
-                app.alertState = .init(.importedLabelsSuccessfully)
+                let report = try LabelManager(id: selectedWallet).import(labels: labels)
+                if report.skipped > 0 {
+                    let noun = report.skipped == 1 ? "label" : "labels"
+                    app.alertState = .init(.general(
+                        title: "Labels Imported",
+                        message: "Could not import \(report.skipped) \(noun)"
+                    ))
+                } else {
+                    app.alertState = .init(.importedLabelsSuccessfully)
+                }
                 Task { await manager.rust.getTransactions() }
             }
         } catch {
@@ -97,7 +105,18 @@ import SwiftUI
                 Log.error(panic)
             case let .bip329Labels(labels):
                 if let selectedWallet = Database().globalConfig().selectedWallet() {
-                    return try LabelManager(id: selectedWallet).import(labels: labels)
+                    let report = try LabelManager(id: selectedWallet).import(labels: labels)
+                    if report.skipped > 0 {
+                        let noun = report.skipped == 1 ? "label" : "labels"
+                        app.alertState = TaggedItem(.general(
+                            title: "Labels Imported",
+                            message: "Could not import \(report.skipped) \(noun)"
+                        ))
+                    } else {
+                        app.alertState = TaggedItem(.importedLabelsSuccessfully)
+                    }
+                    Task { await app.walletManager?.rust.getTransactions() }
+                    return
                 }
 
                 app.alertState = TaggedItem(

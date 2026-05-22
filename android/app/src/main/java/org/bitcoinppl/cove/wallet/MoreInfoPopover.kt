@@ -60,21 +60,37 @@ fun rememberWalletExportLaunchers(
                                 }
                             } ?: throw Exception("Unable to read file")
 
-                        // validate import was successful before showing success message
-                        currentManager.rust.labelManager().use { labelManager ->
+                        val result = currentManager.rust.labelManager().use { labelManager ->
                             labelManager.import(fileContents.trim())
                         }
 
                         // refresh transactions with updated labels
-                        try {
+                        val refreshFailed = try {
                             currentManager.rust.getTransactions()
+                            false
                         } catch (refreshError: Exception) {
                             android.util.Log.e(tag, "failed to refresh transactions after label import", refreshError)
-                            snackbarHostState.showSnackbar("Labels imported successfully, but transaction list may need manual refresh")
-                            return@launch
+                            true
                         }
 
-                        snackbarHostState.showSnackbar("Labels imported successfully")
+                        val skippedMsg = if (result.skipped > 0u) {
+                            val noun = if (result.skipped == 1u) "label" else "labels"
+                            "Could not import ${result.skipped} $noun"
+                        } else {
+                            null
+                        }
+
+                        val msg = when {
+                            skippedMsg != null && refreshFailed ->
+                                "Labels imported. $skippedMsg. Transaction list may need manual refresh"
+                            skippedMsg != null ->
+                                "Labels imported. $skippedMsg"
+                            refreshFailed ->
+                                "Labels imported successfully, but transaction list may need manual refresh"
+                            else ->
+                                "Labels imported successfully"
+                        }
+                        snackbarHostState.showSnackbar(msg)
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "error importing labels", e)
                         snackbarHostState.showSnackbar("Unable to import labels: ${e.localizedMessage ?: e.message}")

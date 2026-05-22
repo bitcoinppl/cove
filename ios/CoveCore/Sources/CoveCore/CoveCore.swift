@@ -83,7 +83,7 @@ public extension FiatOrBtc {
 }
 
 public extension LabelManager {
-    func `import`(labels: Bip329Labels) throws {
+    func `import`(labels: Bip329Labels) throws -> LabelParseReport {
         try importLabels(labels: labels)
     }
 }

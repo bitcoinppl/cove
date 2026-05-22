@@ -368,14 +368,24 @@ struct SelectedWalletScreen: View {
             do {
                 let file = try result.get()
                 let fileContents = try FileReader(for: file).read()
-                try labelManager.import(jsonl: fileContents)
+                let result = try labelManager.import(jsonl: fileContents)
 
-                app.alertState = .init(
-                    .general(
-                        title: "Success!",
-                        message: "Labels have been imported successfully."
+                if result.skipped > 0 {
+                    let noun = result.skipped == 1 ? "label" : "labels"
+                    app.alertState = .init(
+                        .general(
+                            title: "Labels Imported",
+                            message: "Could not import \(result.skipped) \(noun)"
+                        )
                     )
-                )
+                } else {
+                    app.alertState = .init(
+                        .general(
+                            title: "Success!",
+                            message: "Labels have been imported successfully."
+                        )
+                    )
+                }
 
                 // when labels are imported, we need to get the transactions again with the updated labels
                 Task { await manager.rust.getTransactions() }
@@ -448,13 +458,25 @@ struct SelectedWalletScreen: View {
         }
 
         do {
-            try labelManager.importLabels(labels: labels)
-            app.alertState = .init(
-                .general(
-                    title: "Success!",
-                    message: "Labels have been imported successfully."
+            let result = try labelManager.importLabels(labels: labels)
+            if result.skipped > 0 {
+                let noun = result.skipped == 1 ? "label" : "labels"
+                app.alertState = .init(
+                    .general(
+                        title: "Labels Imported",
+                        message: "Could not import \(result.skipped) \(noun)"
+                    )
                 )
-            )
+            } else {
+                app.alertState = .init(
+                    .general(
+                        title: "Success!",
+                        message: "Labels have been imported successfully."
+                    )
+                )
+            }
+
+            Task { await manager.rust.getTransactions() }
 
         } catch {
             app.alertState = .init(

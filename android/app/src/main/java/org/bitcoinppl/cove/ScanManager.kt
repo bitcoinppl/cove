@@ -68,8 +68,18 @@ class ScanManager private constructor() {
                     }
 
                     try {
-                        LabelManager(id = selectedWallet).use { it.importLabels(multiFormat.v1) }
-                        app.alertState = TaggedItem(AppAlertState.ImportedLabelsSuccessfully)
+                        val result = LabelManager(id = selectedWallet).use { it.importLabels(multiFormat.v1) }
+                        if (result.skipped > 0u) {
+                            val noun = if (result.skipped == 1u) "label" else "labels"
+                            app.alertState = TaggedItem(
+                                AppAlertState.General(
+                                    title = "Labels Imported",
+                                    message = "Could not import ${result.skipped} $noun"
+                                )
+                            )
+                        } else {
+                            app.alertState = TaggedItem(AppAlertState.ImportedLabelsSuccessfully)
+                        }
 
                         app.walletManager?.let { wm ->
                             mainScope.launch {
