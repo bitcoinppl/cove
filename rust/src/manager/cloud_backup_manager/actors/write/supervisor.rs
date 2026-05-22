@@ -168,7 +168,7 @@ struct CloudBackupWriteDrainWaiter {
 }
 
 /// Coordinates one-at-a-time remote writes and their local completion
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct CloudBackupWriteSupervisor {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
@@ -751,12 +751,6 @@ impl CloudBackupWriteSupervisor {
     }
 }
 
-impl Default for CloudBackupWriteSupervisor {
-    fn default() -> Self {
-        Self::new(Weak::new())
-    }
-}
-
 fn ensure_writes_allowed_with_blocker(
     active_blocker: &Option<CloudBackupWriteBlocker>,
     writes_blocked_by_persisted_state: bool,
@@ -777,6 +771,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::database::cloud_backup::CloudBackupRecordKey;
     use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
     use crate::manager::cloud_backup_manager::ops::test_support::{
         async_test_lock, reset_cloud_backup_test_state, test_globals,
@@ -784,7 +779,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn supervisor_blocker_methods_update_actor_state() {
-        let mut supervisor = CloudBackupWriteSupervisor::new(Weak::new());
+        let mut supervisor = CloudBackupWriteSupervisor::default();
         let blocker = CloudBackupWriteBlocker::Disabling { operation_id: 7 };
 
         supervisor.block(blocker).await.unwrap();
@@ -798,7 +793,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn block_rejects_pending_writes_that_require_admission() {
-        let mut supervisor = CloudBackupWriteSupervisor::new(Weak::new());
+        let mut supervisor = CloudBackupWriteSupervisor::default();
         let blocker = CloudBackupWriteBlocker::Disabling { operation_id: 7 };
         let (pending, receiver) =
             pending_write(CloudBackupWriteAdmission::RequiresWritesAllowed, 1);
@@ -815,7 +810,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn block_keeps_bypass_writes_pending() {
-        let mut supervisor = CloudBackupWriteSupervisor::new(Weak::new());
+        let mut supervisor = CloudBackupWriteSupervisor::default();
         let blocker = CloudBackupWriteBlocker::Disabling { operation_id: 7 };
         let (blocked, blocked_receiver) =
             pending_write(CloudBackupWriteAdmission::RequiresWritesAllowed, 1);
@@ -844,7 +839,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn block_until_drained_waits_for_in_flight_write() {
-        let mut supervisor = CloudBackupWriteSupervisor::new(Weak::new());
+        let mut supervisor = CloudBackupWriteSupervisor::default();
         let blocker = CloudBackupWriteBlocker::Disabling { operation_id: 7 };
         supervisor.in_flight_write =
             Some(in_flight_write(0, CloudBackupWriteAdmission::RequiresWritesAllowed));
@@ -875,7 +870,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn write_command_contexts_carry_identity_and_origin() {
-        let mut supervisor = CloudBackupWriteSupervisor::new(Weak::new());
+        let mut supervisor = CloudBackupWriteSupervisor::default();
         let origin =
             CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Disable, 42);
 
@@ -967,7 +962,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn local_completion_rechecks_write_blocker() {
-        let mut supervisor = CloudBackupWriteSupervisor::new(Weak::new());
+        let mut supervisor = CloudBackupWriteSupervisor::default();
         supervisor.active_blocker = Some(CloudBackupWriteBlocker::Disabling { operation_id: 7 });
         let in_flight = in_flight_completion_write(0);
 
@@ -979,7 +974,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn remote_only_completion_ignores_write_blocker() {
-        let mut supervisor = CloudBackupWriteSupervisor::new(Weak::new());
+        let mut supervisor = CloudBackupWriteSupervisor::default();
         supervisor.active_blocker = Some(CloudBackupWriteBlocker::Disabling { operation_id: 7 });
         let in_flight = in_flight_write(0, CloudBackupWriteAdmission::RequiresWritesAllowed);
 
