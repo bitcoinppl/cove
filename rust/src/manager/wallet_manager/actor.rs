@@ -34,7 +34,7 @@ use ahash::HashMap;
 use bdk_wallet::{
     AddUtxoError, Utxo, WeightedUtxo,
     chain::{
-        BlockId,
+        BlockId, TxGraph,
         bitcoin::Psbt,
         spk_client::{FullScanResponse, SyncRequest, SyncResponse},
     },
@@ -1111,11 +1111,6 @@ impl WalletActor {
         });
 
         Produces::ok(())
-    }
-
-    pub async fn stop_all_transaction_watchers(&mut self) {
-        debug!("stop_all_transaction_watchers");
-        self.transaction_watchers = HashMap::default();
     }
 
     pub async fn shutdown(&mut self) {
