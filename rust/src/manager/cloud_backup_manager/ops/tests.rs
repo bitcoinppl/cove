@@ -975,7 +975,7 @@ async fn restore_downloaded_wallet_does_not_reupload_wallet_or_mutate_backup_cou
         },
     };
 
-    WalletRestoreSession::new(crate::backup::import::ExistingWalletIdentitySet::default())
+    WalletRestoreSession::new(crate::wallet_identity::ExistingWalletIdentitySet::default())
         .restore_downloaded(&wallet)
         .unwrap();
 
@@ -1006,7 +1006,7 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
     };
 
     let outcome =
-        WalletRestoreSession::new(crate::backup::import::ExistingWalletIdentitySet::default())
+        WalletRestoreSession::new(crate::wallet_identity::ExistingWalletIdentitySet::default())
             .restore_downloaded(&wallet)
             .unwrap();
 

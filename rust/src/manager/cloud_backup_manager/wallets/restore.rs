@@ -9,13 +9,13 @@ use zeroize::Zeroizing;
 
 use super::payload::{convert_cloud_secret, descriptor_pair_from_cloud};
 use super::{DownloadedWalletBackup, RemoteWalletBackupSummary, decode_cloud_labels_jsonl};
-use crate::backup::import::{
-    ExistingWalletIdentitySet, LabelRestoreBehavior, LabelRestoreWarning, duplicate_key_for_backup,
-    restore_wallet_labels,
-};
+use crate::backup::import::{LabelRestoreBehavior, LabelRestoreWarning, restore_wallet_labels};
 use crate::backup::model::{WalletBackup, WalletSecret};
 use crate::manager::cloud_backup_manager::{CloudBackupError, LocalWalletSecret};
 use crate::wallet::metadata::WalletMetadata;
+use crate::wallet_identity::{
+    ExistingWalletIdentitySet, WalletIdentityKey, identity_key_for_backup,
+};
 
 pub(crate) enum WalletBackupLookup<T> {
     Found(T),
@@ -197,7 +197,7 @@ impl WalletRestoreSession {
     fn should_skip_duplicate_wallet(
         &self,
         metadata: &WalletMetadata,
-        duplicate_key: &crate::backup::import::RestoredWalletDuplicateKey,
+        duplicate_key: &WalletIdentityKey,
     ) -> bool {
         if self.0.contains(duplicate_key) {
             info!("Skipping duplicate wallet {}", metadata.name);
@@ -209,9 +209,7 @@ impl WalletRestoreSession {
 }
 
 impl DownloadedWalletBackup {
-    fn duplicate_key(
-        &self,
-    ) -> Result<crate::backup::import::RestoredWalletDuplicateKey, CloudBackupError> {
+    fn duplicate_key(&self) -> Result<WalletIdentityKey, CloudBackupError> {
         let backup_model = WalletBackup {
             metadata: self.entry.metadata.clone(),
             secret: WalletSecret::None,
@@ -220,7 +218,7 @@ impl DownloadedWalletBackup {
             labels_jsonl: None,
         };
 
-        duplicate_key_for_backup(&self.metadata, &backup_model)
+        identity_key_for_backup(&self.metadata, &backup_model)
             .map_err_prefix("cloud wallet duplicate identity", CloudBackupError::Internal)
     }
 

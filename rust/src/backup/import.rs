@@ -1,21 +1,20 @@
-use std::collections::HashSet;
 use std::str::FromStr as _;
 
 use bip39::Mnemonic;
-use strum::IntoEnumIterator as _;
-use tracing::{error, info, warn};
-use zeroize::Zeroizing;
-
 use cove_device::keychain::Keychain;
 use cove_types::network::Network;
+use tracing::{error, info, warn};
+use zeroize::Zeroizing;
 
 use crate::database::Database;
 use crate::database::global_config::GlobalConfigKey;
 use crate::label_manager::LabelManager;
 use crate::mnemonic::MnemonicExt as _;
-use crate::wallet::fingerprint::Fingerprint;
-use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
-use crate::wallet::public_identity::PublicWalletIdentity;
+use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
+use crate::wallet_identity::{
+    ExistingWalletIdentitySet, WalletIdentityKey, collect_existing_wallet_identities,
+    identity_key_for_backup,
+};
 
 use super::crypto;
 use super::error::BackupError;
@@ -120,191 +119,12 @@ enum RestoreResult {
         name: String,
         labels_imported: bool,
         labels_failure: Option<(String, String)>,
-        duplicate_key: RestoredWalletDuplicateKey,
+        duplicate_key: WalletIdentityKey,
         degraded: bool,
     },
     Skipped {
         name: String,
     },
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub(crate) enum RestoredWalletDuplicateKey {
-    PublicIdentity { identity: PublicWalletIdentity, network: Network, mode: WalletMode },
-    Fingerprint { fingerprint: Fingerprint, network: Network, mode: WalletMode },
-    WalletId { id: WalletId, network: Network, mode: WalletMode },
-}
-
-#[derive(Debug, Clone, Default)]
-pub(crate) struct ExistingWalletIdentitySet {
-    public_identities: HashSet<(PublicWalletIdentity, Network, WalletMode)>,
-    fingerprints: HashSet<(Fingerprint, Network, WalletMode)>,
-    wallet_ids: HashSet<(WalletId, Network, WalletMode)>,
-}
-
-impl ExistingWalletIdentitySet {
-    #[cfg(test)]
-    pub(crate) fn len(&self) -> usize {
-        self.public_identities.len() + self.fingerprints.len() + self.wallet_ids.len()
-    }
-
-    pub(crate) fn contains(&self, key: &RestoredWalletDuplicateKey) -> bool {
-        match key {
-            RestoredWalletDuplicateKey::PublicIdentity { identity, network, mode } => {
-                self.public_identities.contains(&(identity.clone(), *network, *mode))
-            }
-            RestoredWalletDuplicateKey::Fingerprint { fingerprint, network, mode } => {
-                self.fingerprints.contains(&(*fingerprint, *network, *mode))
-            }
-            RestoredWalletDuplicateKey::WalletId { id, network, mode } => {
-                self.wallet_ids.contains(&(id.clone(), *network, *mode))
-            }
-        }
-    }
-
-    pub(crate) fn insert(&mut self, key: RestoredWalletDuplicateKey) {
-        match key {
-            RestoredWalletDuplicateKey::PublicIdentity { identity, network, mode } => {
-                self.public_identities.insert((identity, network, mode));
-            }
-            RestoredWalletDuplicateKey::Fingerprint { fingerprint, network, mode } => {
-                self.fingerprints.insert((fingerprint, network, mode));
-            }
-            RestoredWalletDuplicateKey::WalletId { id, network, mode } => {
-                self.wallet_ids.insert((id, network, mode));
-            }
-        }
-    }
-}
-
-pub(crate) fn duplicate_key_for_backup(
-    metadata: &WalletMetadata,
-    backup: &WalletBackup,
-) -> Result<RestoredWalletDuplicateKey, BackupError> {
-    if metadata.wallet_type == WalletType::Hot
-        && let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied()
-    {
-        return Ok(RestoredWalletDuplicateKey::Fingerprint {
-            fingerprint,
-            network: metadata.network,
-            mode: metadata.wallet_mode,
-        });
-    }
-
-    if let Some(identity) = public_identity_from_backup(metadata, backup)? {
-        return Ok(RestoredWalletDuplicateKey::PublicIdentity {
-            identity,
-            network: metadata.network,
-            mode: metadata.wallet_mode,
-        });
-    }
-
-    if let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied() {
-        return Ok(RestoredWalletDuplicateKey::Fingerprint {
-            fingerprint,
-            network: metadata.network,
-            mode: metadata.wallet_mode,
-        });
-    }
-
-    Ok(RestoredWalletDuplicateKey::WalletId {
-        id: metadata.id.clone(),
-        network: metadata.network,
-        mode: metadata.wallet_mode,
-    })
-}
-
-pub(crate) fn collect_existing_wallet_identities() -> Result<ExistingWalletIdentitySet, BackupError>
-{
-    let db = Database::global();
-    let keychain = Keychain::global();
-    let mut identities = ExistingWalletIdentitySet::default();
-
-    for network in Network::iter() {
-        for mode in [WalletMode::Main, WalletMode::Decoy] {
-            let wallets = db
-                .wallets
-                .get_all(network, mode)
-                .map_err(|e| BackupError::Database(format!("failed to read wallets: {e}")))?;
-
-            for wallet in wallets {
-                let duplicate_key = existing_wallet_duplicate_key(wallet, keychain)?;
-                identities.insert(duplicate_key);
-            }
-        }
-    }
-
-    Ok(identities)
-}
-
-fn existing_wallet_duplicate_key(
-    metadata: WalletMetadata,
-    keychain: &Keychain,
-) -> Result<RestoredWalletDuplicateKey, BackupError> {
-    if metadata.wallet_type != WalletType::Hot {
-        let identity =
-            PublicWalletIdentity::from_existing_wallet(&metadata, keychain).map_err(|error| {
-                BackupError::Restore(format!(
-                    "public identity for existing wallet {}: {error}",
-                    metadata.id
-                ))
-            })?;
-
-        if let Some(identity) = identity {
-            return Ok(RestoredWalletDuplicateKey::PublicIdentity {
-                identity,
-                network: metadata.network,
-                mode: metadata.wallet_mode,
-            });
-        }
-    }
-
-    if let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied() {
-        return Ok(RestoredWalletDuplicateKey::Fingerprint {
-            fingerprint,
-            network: metadata.network,
-            mode: metadata.wallet_mode,
-        });
-    }
-
-    Ok(RestoredWalletDuplicateKey::WalletId {
-        id: metadata.id,
-        network: metadata.network,
-        mode: metadata.wallet_mode,
-    })
-}
-
-fn public_identity_from_backup(
-    metadata: &WalletMetadata,
-    backup: &WalletBackup,
-) -> Result<Option<PublicWalletIdentity>, BackupError> {
-    if let Some(descriptors) = &backup.descriptors {
-        let identity = PublicWalletIdentity::from_descriptor_strs(
-            &descriptors.external,
-            &descriptors.internal,
-        )
-        .map_err(|error| {
-            BackupError::Restore(format!(
-                "public descriptor identity for {}: {error}",
-                metadata.name
-            ))
-        })?;
-
-        return Ok(Some(identity));
-    }
-
-    if let Some(xpub) = &backup.xpub {
-        let fingerprint = metadata.master_fingerprint.as_deref().copied();
-        let identity =
-            PublicWalletIdentity::from_xpub_str_default_bip84(xpub, fingerprint, metadata.network)
-                .map_err(|error| {
-                    BackupError::Restore(format!("xpub identity for {}: {error}", metadata.name))
-                })?;
-
-        return Ok(Some(identity));
-    }
-
-    Ok(None)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -410,7 +230,7 @@ async fn restore_wallet(
 
     let validation = validate_wallet_type_secret(&metadata.wallet_type, &backup.secret, &name)?;
     let cold_missing_backup = validation == WalletTypeSecretValidation::Degraded;
-    let duplicate_key = duplicate_key_for_backup(&metadata, backup)?;
+    let duplicate_key = identity_key_for_backup(&metadata, backup).map_err(BackupError::from)?;
 
     if existing_identities.contains(&duplicate_key) {
         info!("Skipping wallet {name} - already exists on device");
@@ -738,107 +558,4 @@ fn wallet_name_from_backup(backup: &WalletBackup) -> String {
 
     warn!("wallet backup has no name or id in metadata: {}", backup.metadata);
     "unknown".to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use super::*;
-    use crate::backup::model::DescriptorPair;
-
-    fn descriptors(account: u32) -> DescriptorPair {
-        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
-
-        DescriptorPair {
-            external: format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/0/*)"),
-            internal: format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/1/*)"),
-        }
-    }
-
-    fn metadata(name: &str, wallet_type: WalletType) -> WalletMetadata {
-        let mut metadata = WalletMetadata::preview_new();
-        metadata.id = WalletId::new();
-        metadata.name = name.to_string();
-        metadata.master_fingerprint = Some(Arc::new(Fingerprint::from(
-            bdk_wallet::bitcoin::bip32::Fingerprint::from_str("817e7be0").unwrap(),
-        )));
-        metadata.wallet_type = wallet_type;
-        metadata
-    }
-
-    fn backup(metadata: &WalletMetadata, descriptors: Option<DescriptorPair>) -> WalletBackup {
-        WalletBackup {
-            metadata: serde_json::to_value(metadata).unwrap(),
-            secret: WalletSecret::None,
-            descriptors,
-            xpub: None,
-            labels_jsonl: None,
-        }
-    }
-
-    #[test]
-    fn backup_duplicate_key_allows_same_fingerprint_different_public_identity() {
-        let existing_metadata = metadata("Existing account 0", WalletType::Cold);
-        let existing_backup = backup(&existing_metadata, Some(descriptors(0)));
-        let incoming_metadata = metadata("Incoming account 1", WalletType::Cold);
-        let incoming_backup = backup(&incoming_metadata, Some(descriptors(1)));
-
-        let mut existing = ExistingWalletIdentitySet::default();
-        existing.insert(duplicate_key_for_backup(&existing_metadata, &existing_backup).unwrap());
-
-        let incoming_key = duplicate_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
-
-        assert!(!existing.contains(&incoming_key));
-    }
-
-    #[test]
-    fn backup_duplicate_key_skips_same_public_identity_with_different_name() {
-        let existing_metadata = metadata("Existing name", WalletType::Cold);
-        let existing_backup = backup(&existing_metadata, Some(descriptors(0)));
-        let incoming_metadata = metadata("Incoming renamed", WalletType::Cold);
-        let incoming_backup = backup(&incoming_metadata, Some(descriptors(0)));
-
-        let mut existing = ExistingWalletIdentitySet::default();
-        existing.insert(duplicate_key_for_backup(&existing_metadata, &existing_backup).unwrap());
-
-        let incoming_key = duplicate_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
-
-        assert!(existing.contains(&incoming_key));
-    }
-
-    #[test]
-    fn backup_duplicate_key_preserves_hot_wallet_fingerprint_fallback() {
-        let existing_metadata = metadata("Existing hot", WalletType::Hot);
-        let existing_backup = backup(&existing_metadata, Some(descriptors(0)));
-        let incoming_metadata = metadata("Incoming hot account 1", WalletType::Hot);
-        let incoming_backup = backup(&incoming_metadata, Some(descriptors(1)));
-
-        let mut existing = ExistingWalletIdentitySet::default();
-        existing.insert(duplicate_key_for_backup(&existing_metadata, &existing_backup).unwrap());
-
-        let incoming_key = duplicate_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
-
-        assert!(existing.contains(&incoming_key));
-    }
-
-    #[test]
-    fn backup_duplicate_key_uses_wallet_id_when_no_identity_or_fingerprint() {
-        let mut existing_metadata = WalletMetadata::preview_new();
-        existing_metadata.master_fingerprint = None;
-        existing_metadata.wallet_type = WalletType::WatchOnly;
-
-        let mut incoming_metadata = existing_metadata.clone();
-        incoming_metadata.name = "Renamed no identity".to_string();
-
-        let existing_backup = backup(&existing_metadata, None);
-        let incoming_backup = backup(&incoming_metadata, None);
-
-        let mut existing = ExistingWalletIdentitySet::default();
-        existing.insert(duplicate_key_for_backup(&existing_metadata, &existing_backup).unwrap());
-
-        let incoming_key = duplicate_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
-
-        assert!(existing.contains(&incoming_key));
-    }
 }

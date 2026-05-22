@@ -163,7 +163,7 @@ impl RustCloudBackupManager {
             Zeroizing::new(master_key.critical_data_key()),
         );
 
-        let existing_identities = crate::backup::import::collect_existing_wallet_identities()
+        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
             .map_err_prefix("collect wallet identities", CloudBackupError::Internal)?;
         let mut restore_session = WalletRestoreSession::new(existing_identities);
         let outcome = restore_session

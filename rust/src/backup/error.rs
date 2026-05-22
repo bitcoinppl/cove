@@ -47,3 +47,14 @@ pub enum BackupError {
     #[error("Failed to decompress: {0}")]
     Decompression(String),
 }
+
+impl From<crate::wallet_identity::WalletIdentityError> for BackupError {
+    fn from(error: crate::wallet_identity::WalletIdentityError) -> Self {
+        match error {
+            crate::wallet_identity::WalletIdentityError::Database(error) => {
+                Self::Database(error.to_string())
+            }
+            error => Self::Restore(error.to_string()),
+        }
+    }
+}

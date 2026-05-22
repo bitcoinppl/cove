@@ -2,6 +2,7 @@ use cove_util::ResultExt as _;
 use zeroize::Zeroizing;
 
 use crate::wallet::metadata::WalletMetadata;
+use crate::wallet_identity::{collect_existing_wallet_identities, identity_key_for_backup};
 
 use super::crypto;
 use super::error::BackupError;
@@ -19,14 +20,14 @@ pub async fn verify_backup(
     let mut payload = BackupPayload::decode(&decompressed)?;
 
     // mutable: grows as we process wallets, matching import's progressive dedup
-    let mut existing_identities = import::collect_existing_wallet_identities()?;
+    let mut existing_identities = collect_existing_wallet_identities()?;
 
     let mut wallets = Vec::with_capacity(payload.wallets.len());
     for wallet_backup in &payload.wallets {
         let metadata: WalletMetadata = serde_json::from_value(wallet_backup.metadata.clone())
             .map_err_prefix("wallet metadata", BackupError::Deserialization)?;
 
-        let duplicate_key = import::duplicate_key_for_backup(&metadata, wallet_backup)?;
+        let duplicate_key = identity_key_for_backup(&metadata, wallet_backup)?;
         let already_on_device = existing_identities.contains(&duplicate_key);
 
         if !already_on_device {
