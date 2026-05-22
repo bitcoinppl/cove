@@ -91,6 +91,7 @@ impl RustCloudBackupManager {
             .iter()
             .filter(|record_id| !local_record_ids.contains(*record_id))
             .count();
+
         if cloud_only_count > 0 {
             return Err(CloudBackupError::RecoveryRequired(CLOUD_ONLY_BLOCKER_MESSAGE.into()));
         }
@@ -98,6 +99,7 @@ impl RustCloudBackupManager {
         let other_namespaces = self
             .other_backup_namespaces(cloud, &disabling.namespace_id, BlockingCloudStep::Disable)
             .await?;
+
         if !other_namespaces.is_empty() {
             return Err(CloudBackupError::RecoveryRequired(
                 OTHER_NAMESPACES_BLOCKER_MESSAGE.into(),
@@ -136,6 +138,7 @@ impl RustCloudBackupManager {
         disabling.last_error = None;
         disabling.retry_after = None;
         self.persist_disabling_state(&disabling, "persist cloud backup delete start")?;
+
         Ok(Some(disabling))
     }
 

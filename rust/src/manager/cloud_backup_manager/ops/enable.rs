@@ -313,28 +313,14 @@ impl RustCloudBackupManager {
             let mut restored_wallets = Vec::new();
 
             for record_id in &namespace.wallet_record_ids {
-                match reader.lookup(record_id).await {
+                let wallet = match reader.lookup(record_id).await {
                     Ok(WalletBackupLookup::Found(wallet)) => {
                         expected_wallets.push(CleanupExpectedWalletRecord {
                             record_id: record_id.clone(),
                             content_revision_hash: Some(wallet.entry.content_revision_hash.clone()),
                         });
 
-                        match restore_session.restore_downloaded(&wallet) {
-                            Ok(_) => restored_wallets.push(wallet.metadata),
-                            Err(error) => {
-                                if is_connectivity_related_issue(&error) {
-                                    return Err(blocking_cloud_error(
-                                        BlockingCloudStep::Enable,
-                                        error,
-                                    ));
-                                }
-                                warn!(
-                                    "Enable: failed to restore wallet {}/{} during namespace merge: {error}",
-                                    namespace.matched.namespace_id, record_id
-                                );
-                            }
-                        }
+                        wallet
                     }
                     Ok(WalletBackupLookup::NotFound) => {
                         expected_wallets.push(CleanupExpectedWalletRecord {
@@ -345,6 +331,7 @@ impl RustCloudBackupManager {
                             "Enable: matched namespace {}/{} listed a missing wallet backup",
                             namespace.matched.namespace_id, record_id
                         );
+                        continue;
                     }
                     Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
                         expected_wallets.push(CleanupExpectedWalletRecord {
@@ -355,6 +342,7 @@ impl RustCloudBackupManager {
                             "Enable: matched namespace {}/{} uses unsupported wallet backup version {version}",
                             namespace.matched.namespace_id, record_id
                         );
+                        continue;
                     }
                     Err(error) => {
                         if is_connectivity_related_issue(&error) {
@@ -366,6 +354,20 @@ impl RustCloudBackupManager {
                         });
                         warn!(
                             "Enable: failed to inspect wallet {}/{} during namespace merge: {error}",
+                            namespace.matched.namespace_id, record_id
+                        );
+                        continue;
+                    }
+                };
+
+                match restore_session.restore_downloaded(&wallet) {
+                    Ok(_) => restored_wallets.push(wallet.metadata),
+                    Err(error) => {
+                        if is_connectivity_related_issue(&error) {
+                            return Err(blocking_cloud_error(BlockingCloudStep::Enable, error));
+                        }
+                        warn!(
+                            "Enable: failed to restore wallet {}/{} during namespace merge: {error}",
                             namespace.matched.namespace_id, record_id
                         );
                     }

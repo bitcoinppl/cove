@@ -25,6 +25,7 @@ impl RustCloudBackupManager {
         self.ensure_cloud_connectivity(BlockingCloudStep::Sync)?;
         let namespace = self.current_namespace_id()?;
         info!("Sync: listing cloud wallet backups for namespace {namespace}");
+
         let cloud = CloudStorage::global_explicit_client();
         let wallet_record_ids = cloud.list_wallet_backups(namespace).await.map_err(|error| {
             blocking_cloud_error(
@@ -32,6 +33,7 @@ impl RustCloudBackupManager {
                 CloudBackupError::cloud_storage_context("list wallet backups", error),
             )
         })?;
+
         let remote_wallet_truth =
             self.load_remote_wallet_truth(&wallet_record_ids, cloud.clone()).await?;
         let inventory =
@@ -75,11 +77,11 @@ impl RustCloudBackupManager {
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
         let cloud = CloudStorage::global_explicit_client();
+
         let uploaded_wallets = CloudBackupStore::global()
             .upload_all_wallets(&writes, &cloud, &namespace, &critical_key)
             .await
-            .map_err(|error| blocking_cloud_error(BlockingCloudStep::RecreateManifest, error))?;
-        let uploaded_wallets = uploaded_wallets
+            .map_err(|error| blocking_cloud_error(BlockingCloudStep::RecreateManifest, error))?
             .into_iter()
             .map(|wallet| {
                 CloudBackupUploadedWallet::new(

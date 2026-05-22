@@ -15,6 +15,7 @@ impl RustCloudBackupManager {
         &self,
     ) -> Result<CloudBackupRestoreReport, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RecoverOtherBackups)?;
+
         let current_namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global_explicit_client();
         let passkey = PasskeyAccess::global();
@@ -25,6 +26,7 @@ impl RustCloudBackupManager {
                 BlockingCloudStep::RecoverOtherBackups,
             )
             .await?;
+
         if namespaces.is_empty() {
             return Err(CloudBackupError::Internal("no other cloud backups found".into()));
         }

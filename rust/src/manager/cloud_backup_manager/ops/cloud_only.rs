@@ -74,6 +74,7 @@ impl RustCloudBackupManager {
             namespace.clone(),
             Zeroizing::new(master_key.critical_data_key()),
         );
+
         let mut items = Vec::new();
         let mut lookups = stream::iter(
             orphan_ids
@@ -89,6 +90,7 @@ impl RustCloudBackupManager {
                     warn!(
                         "Cloud-only wallet {record_id} uses unsupported wallet backup version {version}"
                     );
+
                     items.push(CloudBackupWalletItem {
                         name: UNSUPPORTED_CLOUD_ONLY_WALLET_NAME.into(),
                         network: None,
@@ -114,8 +116,8 @@ impl RustCloudBackupManager {
                     continue;
                 }
             };
-            let metadata = wallet.metadata;
 
+            let metadata = wallet.metadata;
             items.push(CloudBackupWalletItem {
                 name: metadata.name,
                 network: Some(metadata.network),
@@ -141,6 +143,7 @@ impl RustCloudBackupManager {
         record_id: &str,
     ) -> Result<WalletRestoreOutcome, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RestoreCloudWallet)?;
+
         let namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global_explicit_client();
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
@@ -152,6 +155,7 @@ impl RustCloudBackupManager {
         })
         .await
         .map_err(|error| blocking_cloud_error(BlockingCloudStep::RestoreCloudWallet, error))?;
+
         let reader = WalletBackupReader::new(
             cloud.clone(),
             namespace.clone(),
@@ -169,12 +173,13 @@ impl RustCloudBackupManager {
                     .map(|fp| (**fp, wallet.network, wallet.wallet_mode))
             })
             .collect();
-        let mut restore_session = WalletRestoreSession::new(existing_fingerprints);
 
+        let mut restore_session = WalletRestoreSession::new(existing_fingerprints);
         let outcome = restore_session
             .restore_record(&reader, record_id)
             .await
             .map_err(|error| blocking_cloud_error(BlockingCloudStep::RestoreCloudWallet, error))?;
+
         info!("Restored cloud wallet {record_id}");
         Ok(outcome)
     }

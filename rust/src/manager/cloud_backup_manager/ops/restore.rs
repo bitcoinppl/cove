@@ -57,6 +57,7 @@ impl RustCloudBackupManager {
                 namespace.namespace_id.clone(),
                 Zeroizing::new(namespace.master_key.critical_data_key()),
             );
+
             let mut restored_wallets = Vec::new();
 
             for record_id in &wallet_record_ids {
@@ -64,34 +65,8 @@ impl RustCloudBackupManager {
                     continue;
                 }
 
-                match reader.lookup(record_id).await {
-                    Ok(WalletBackupLookup::Found(wallet)) => {
-                        match restore_session.restore_downloaded(&wallet) {
-                            Ok(outcome) => {
-                                report.wallets_restored += 1;
-                                if let Some(warning) = outcome.labels_warning {
-                                    report.labels_failed_wallet_names.push(warning.wallet_name);
-                                    report.labels_failed_errors.push(warning.error);
-                                }
-
-                                restored_wallets.push(wallet.metadata);
-                            }
-                            Err(error) => {
-                                if is_connectivity_related_issue(&error) {
-                                    return Err(blocking_cloud_error(
-                                        BlockingCloudStep::RecoverOtherBackups,
-                                        error,
-                                    ));
-                                }
-                                warn!(
-                                    "Failed to recover wallet {}/{} from other backup: {error}",
-                                    namespace.namespace_id, record_id
-                                );
-                                report.wallets_failed += 1;
-                                report.failed_wallet_errors.push(error.to_string());
-                            }
-                        }
-                    }
+                let wallet = match reader.lookup(record_id).await {
+                    Ok(WalletBackupLookup::Found(wallet)) => wallet,
                     Ok(WalletBackupLookup::NotFound) => {
                         warn!(
                             "Failed to recover wallet {}/{} from other backup: listed wallet backup is missing",
@@ -102,7 +77,9 @@ impl RustCloudBackupManager {
                             "{} was listed but missing from cloud backup",
                             record_id
                         ));
+                        continue;
                     }
+
                     Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
                         warn!(
                             "Failed to recover wallet {}/{} from other backup: unsupported wallet backup version {version}",
@@ -112,7 +89,37 @@ impl RustCloudBackupManager {
                         report.failed_wallet_errors.push(format!(
                             "{record_id} uses unsupported wallet backup version {version}"
                         ));
+                        continue;
                     }
+
+                    Err(error) => {
+                        if is_connectivity_related_issue(&error) {
+                            return Err(blocking_cloud_error(
+                                BlockingCloudStep::RecoverOtherBackups,
+                                error,
+                            ));
+                        }
+                        warn!(
+                            "Failed to recover wallet {}/{} from other backup: {error}",
+                            namespace.namespace_id, record_id
+                        );
+                        report.wallets_failed += 1;
+                        report.failed_wallet_errors.push(error.to_string());
+                        continue;
+                    }
+                };
+
+                match restore_session.restore_downloaded(&wallet) {
+                    Ok(outcome) => {
+                        report.wallets_restored += 1;
+                        if let Some(warning) = outcome.labels_warning {
+                            report.labels_failed_wallet_names.push(warning.wallet_name);
+                            report.labels_failed_errors.push(warning.error);
+                        }
+
+                        restored_wallets.push(wallet.metadata);
+                    }
+
                     Err(error) => {
                         if is_connectivity_related_issue(&error) {
                             return Err(blocking_cloud_error(
@@ -127,7 +134,7 @@ impl RustCloudBackupManager {
                         report.wallets_failed += 1;
                         report.failed_wallet_errors.push(error.to_string());
                     }
-                }
+                };
             }
 
             if !restored_wallets.is_empty() {
