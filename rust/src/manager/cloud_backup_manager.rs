@@ -2829,8 +2829,8 @@ pub(crate) async fn current_namespace_wallet_record_ids(
 mod tests {
     use super::actors::restore::RestoreOperation;
     use super::ops::test_support::{
-        ensure_cloud_backup_test_tokio_runtime, persisted_enabled_cloud_backup_state, test_globals,
-        test_lock,
+        async_test_lock, ensure_cloud_backup_test_tokio_runtime,
+        persisted_enabled_cloud_backup_state, test_globals, test_lock,
     };
     use super::*;
     use crate::database::cloud_backup::{
@@ -3311,7 +3311,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn exclusive_operation_claims_enabling_synchronously() {
-        let _guard = test_lock().lock();
+        let _guard = async_test_lock().lock().await;
         let manager = init_manager();
         manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
         manager.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
