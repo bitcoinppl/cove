@@ -28026,6 +28026,9 @@ public object FfiConverterTypeBackupWalletSummary: FfiConverterRustBuffer<Backup
 
 
 
+/**
+ * Public configured-backup state projected from the private reducer
+ */
 data class CloudBackupConfiguredState (
     var `passkey`: CloudBackupPasskeyState
     , 
@@ -28094,6 +28097,9 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
 
 
 
+/**
+ * Backup detail grouped by local wallet sync status and remote-only inventory
+ */
 data class CloudBackupDetail (
     var `lastSync`: kotlin.ULong?
     , 
@@ -28150,6 +28156,9 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
 
 
 
+/**
+ * Context carried through enable so prompts and verification attribution stay stable
+ */
 data class CloudBackupEnableContext (
     var `savedPasskeyConfirmation`: SavedPasskeyConfirmationMode
     , 
@@ -28188,6 +28197,9 @@ public object FfiConverterTypeCloudBackupEnableContext: FfiConverterRustBuffer<C
 
 
 
+/**
+ * Public terminal cloud backup failure
+ */
 data class CloudBackupFailure (
     var `message`: kotlin.String
     
@@ -28221,6 +28233,9 @@ public object FfiConverterTypeCloudBackupFailure: FfiConverterRustBuffer<CloudBa
 
 
 
+/**
+ * Aggregate count of recoverable backup data in other namespaces
+ */
 data class CloudBackupOtherBackupsSummary (
     var `namespaceCount`: kotlin.UInt
     , 
@@ -28264,6 +28279,9 @@ public object FfiConverterTypeCloudBackupOtherBackupsSummary: FfiConverterRustBu
 
 
 
+/**
+ * User-facing passkey hint that avoids exposing credential bytes
+ */
 data class CloudBackupPasskeyHint (
     var `providerName`: kotlin.String?
     , 
@@ -28307,6 +28325,9 @@ public object FfiConverterTypeCloudBackupPasskeyHint: FfiConverterRustBuffer<Clo
 
 
 
+/**
+ * Completed and total counts for long-running cloud backup work
+ */
 data class CloudBackupProgress (
     var `completed`: kotlin.UInt
     , 
@@ -28345,6 +28366,9 @@ public object FfiConverterTypeCloudBackupProgress: FfiConverterRustBuffer<CloudB
 
 
 
+/**
+ * Restore summary shown after cloud backup onboarding restore completes
+ */
 data class CloudBackupRestoreReport (
     var `walletsRestored`: kotlin.UInt
     , 
@@ -28398,6 +28422,9 @@ public object FfiConverterTypeCloudBackupRestoreReport: FfiConverterRustBuffer<C
 
 
 
+/**
+ * Retry instruction attached to a retryable deep verification failure
+ */
 data class CloudBackupRetryContext (
     var `issue`: CloudBackupRetryIssue
     , 
@@ -28436,6 +28463,9 @@ public object FfiConverterTypeCloudBackupRetryContext: FfiConverterRustBuffer<Cl
 
 
 
+/**
+ * Top-level state snapshot exposed to platform managers
+ */
 data class CloudBackupState (
     var `lifecycle`: CloudBackupLifecycle
     
@@ -28469,6 +28499,9 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
 
 
 
+/**
+ * Wallet row in cloud backup detail, combining local wallet metadata and sync state
+ */
 data class CloudBackupWalletItem (
     var `name`: kotlin.String
     , 
@@ -28818,6 +28851,9 @@ public object FfiConverterTypeContinueFromInit: FfiConverterRustBuffer<ContinueF
 
 
 
+/**
+ * Counts and repairs observed during a deep verification pass
+ */
 data class DeepVerificationReport (
     /**
      * Cloud master key PRF wrapping was repaired
@@ -29365,6 +29401,9 @@ public object FfiConverterTypeLabelExportResult: FfiConverterRustBuffer<LabelExp
 
 
 
+/**
+ * Detail payload shown after remote backup detail has loaded
+ */
 data class LoadedCloudBackupDetail (
     var `detail`: CloudBackupDetail
     , 
@@ -34336,6 +34375,9 @@ public object FfiConverterTypeCkTapError : FfiConverterRustBuffer<CkTapException
 
 
 
+/**
+ * Public status for destructive operations that can affect remote backup data
+ */
 sealed class CloudBackupDestructiveOperationState {
     
     object Idle : CloudBackupDestructiveOperationState()
@@ -34455,6 +34497,9 @@ public object FfiConverterTypeCloudBackupDestructiveOperationState : FfiConverte
 
 
 
+/**
+ * Public loading state for the cloud backup detail screen
+ */
 sealed class CloudBackupDetailState {
     
     object NotLoaded : CloudBackupDetailState()
@@ -34566,6 +34611,9 @@ public object FfiConverterTypeCloudBackupDetailState : FfiConverterRustBuffer<Cl
 
 
 
+/**
+ * Public enable flow state for onboarding and settings
+ */
 sealed class CloudBackupEnableFlow {
     
     object DiscoveringExistingBackup : CloudBackupEnableFlow()
@@ -34781,6 +34829,9 @@ public object FfiConverterTypeCloudBackupEnableFlow : FfiConverterRustBuffer<Clo
 
 
 
+/**
+ * Public top-level cloud backup lifecycle
+ */
 sealed class CloudBackupLifecycle {
     
     object Disabled : CloudBackupLifecycle()
@@ -34926,6 +34977,9 @@ public object FfiConverterTypeCloudBackupLifecycle : FfiConverterRustBuffer<Clou
 
 
 
+/**
+ * User intent routed from Swift or Kotlin into the Rust cloud backup manager
+ */
 sealed class CloudBackupManagerAction {
     
     data class EnableCloudBackup(
@@ -35395,6 +35449,9 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
 
 
 
+/**
+ * Summary state for backup namespaces that do not match the active device
+ */
 sealed class CloudBackupOtherBackupsState {
     
     data class Loaded(
@@ -35478,6 +35535,9 @@ public object FfiConverterTypeCloudBackupOtherBackupsState : FfiConverterRustBuf
 
 
 
+/**
+ * Prompt intent for choosing between an existing passkey and a new one
+ */
 sealed class CloudBackupPasskeyChoiceIntent {
     
     data class Enable(
@@ -35555,6 +35615,9 @@ public object FfiConverterTypeCloudBackupPasskeyChoiceIntent : FfiConverterRustB
 
 
 
+/**
+ * Public repair status for a missing or stale backup passkey
+ */
 sealed class CloudBackupPasskeyRepairState {
     
     object Idle : CloudBackupPasskeyRepairState()
@@ -35642,6 +35705,9 @@ public object FfiConverterTypeCloudBackupPasskeyRepairState : FfiConverterRustBu
 
 
 
+/**
+ * Public passkey health state for the configured backup
+ */
 sealed class CloudBackupPasskeyState {
     
     object Available : CloudBackupPasskeyState()
@@ -35743,6 +35809,9 @@ public object FfiConverterTypeCloudBackupPasskeyState : FfiConverterRustBuffer<C
 
 
 
+/**
+ * Typed state delta sent from Rust to Swift and Kotlin reconcilers
+ */
 sealed class CloudBackupReconcileMessage {
     
     data class Lifecycle(
@@ -35802,6 +35871,9 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
 
 
 
+/**
+ * Public restore progress state
+ */
 sealed class CloudBackupRestoreFlow {
     
     object Finding : CloudBackupRestoreFlow()
@@ -35907,6 +35979,9 @@ public object FfiConverterTypeCloudBackupRestoreFlow : FfiConverterRustBuffer<Cl
 
 
 
+/**
+ * Retry action the UI should dispatch for a retryable verification failure
+ */
 
 enum class CloudBackupRetryAction {
     
@@ -35941,6 +36016,9 @@ public object FfiConverterTypeCloudBackupRetryAction: FfiConverterRustBuffer<Clo
 
 
 
+/**
+ * Retry issue category for a user-visible verification retry
+ */
 
 enum class CloudBackupRetryIssue {
     
@@ -35974,6 +36052,9 @@ public object FfiConverterTypeCloudBackupRetryIssue: FfiConverterRustBuffer<Clou
 
 
 
+/**
+ * Root-level prompt the UI should show for the current cloud backup state
+ */
 sealed class CloudBackupRootPrompt {
     
     object None : CloudBackupRootPrompt()
@@ -36103,6 +36184,9 @@ public object FfiConverterTypeCloudBackupRootPrompt : FfiConverterRustBuffer<Clo
 
 
 
+/**
+ * Public sync status for background cloud backup work
+ */
 sealed class CloudBackupSyncState {
     
     object Idle : CloudBackupSyncState()
@@ -36214,6 +36298,9 @@ public object FfiConverterTypeCloudBackupSyncState : FfiConverterRustBuffer<Clou
 
 
 
+/**
+ * Persisted verification metadata projected into prompts and detail state
+ */
 sealed class CloudBackupVerificationMetadata {
     
     object NotConfigured : CloudBackupVerificationMetadata()
@@ -36607,6 +36694,9 @@ public object FfiConverterTypeCloudBackupVerificationSource: FfiConverterRustBuf
 
 
 
+/**
+ * Public backup verification state shown by settings and prompts
+ */
 sealed class CloudBackupVerificationState {
     
     object NotVerified : CloudBackupVerificationState()
@@ -36750,6 +36840,9 @@ public object FfiConverterTypeCloudBackupVerificationState : FfiConverterRustBuf
 
 
 
+/**
+ * Per-wallet cloud backup sync state shown in backup detail
+ */
 
 enum class CloudBackupWalletStatus {
     
@@ -38338,6 +38431,9 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
 
 
 
+/**
+ * Trust failure that tells the UI which recovery path is valid
+ */
 sealed class DeepVerificationFailure {
     
     /**
@@ -38519,6 +38615,9 @@ public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<D
 
 
 
+/**
+ * Outcome of deep verification before projection into UI state
+ */
 sealed class DeepVerificationResult {
     
     data class Verified(
@@ -43775,6 +43874,9 @@ public object FfiConverterTypeOnboardingStorageSelection: FfiConverterRustBuffer
 
 
 
+/**
+ * Operation state for recovering or deleting other backup namespaces
+ */
 sealed class OtherBackupsOperation {
     
     object Idle : OtherBackupsOperation()
@@ -44535,6 +44637,9 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
 
 
 
+/**
+ * Whether saved passkey confirmation was user-triggered or flow-triggered
+ */
 
 enum class SavedPasskeyConfirmationMode {
     
