@@ -32,10 +32,7 @@ struct TransactionsCardView: View {
     }
 
     private var scanProgressFraction: Double {
-        guard let scanProgress, scanProgress.stopGap > 0 else { return 0 }
-
-        let fraction = Double(scanProgress.gap) / Double(scanProgress.stopGap)
-        return min(max(fraction, 0), 1)
+        Double(scanProgress?.progressBasisPoints ?? 0) / 10000
     }
 
     var body: some View {

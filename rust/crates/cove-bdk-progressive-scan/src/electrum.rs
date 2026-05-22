@@ -149,6 +149,7 @@ where
     let mut stop_gap_unused_count = 0_usize;
     let mut last_active_index = Option::<u32>::None;
     let gap_limit = stop_gap.max(1);
+    let mut inserted_txs = HashSet::<Txid>::new();
 
     loop {
         if cancel_token.is_cancelled() {
@@ -187,7 +188,10 @@ where
             );
 
             for tx_res in spk_history {
-                partial_update.txs.push(client.fetch_tx(tx_res.tx_hash)?);
+                if inserted_txs.insert(tx_res.tx_hash) {
+                    partial_update.txs.push(client.fetch_tx(tx_res.tx_hash)?);
+                }
+
                 match tx_res.height.try_into() {
                     Ok(height) if height > 0 => pending_anchors.push((tx_res.tx_hash, height)),
                     _ => {
@@ -417,6 +421,7 @@ mod tests {
         fail_history: bool,
         histories: Arc<Mutex<VecDeque<Vec<GetHistoryRes>>>>,
         transactions: BTreeMap<Txid, Transaction>,
+        fetched_txids: Arc<Mutex<Vec<Txid>>>,
     }
 
     impl FakeElectrum {
@@ -425,6 +430,7 @@ mod tests {
                 fail_history: false,
                 histories: Arc::new(Mutex::new(VecDeque::new())),
                 transactions: BTreeMap::new(),
+                fetched_txids: Arc::new(Mutex::new(Vec::new())),
             }
         }
 
@@ -433,6 +439,7 @@ mod tests {
                 fail_history: true,
                 histories: Arc::new(Mutex::new(VecDeque::new())),
                 transactions: BTreeMap::new(),
+                fetched_txids: Arc::new(Mutex::new(Vec::new())),
             }
         }
 
@@ -446,6 +453,20 @@ mod tests {
                     Vec::new(),
                 ]))),
                 transactions: BTreeMap::from([(txid, tx)]),
+                fetched_txids: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+
+        fn with_duplicate_mempool_transaction(tx: Transaction) -> Self {
+            let txid = tx.compute_txid();
+            Self {
+                fail_history: false,
+                histories: Arc::new(Mutex::new(VecDeque::from([
+                    vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
+                    vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
+                ]))),
+                transactions: BTreeMap::from([(txid, tx)]),
+                fetched_txids: Arc::new(Mutex::new(Vec::new())),
             }
         }
 
@@ -458,7 +479,12 @@ mod tests {
                     Vec::new(),
                 ]))),
                 transactions: BTreeMap::new(),
+                fetched_txids: Arc::new(Mutex::new(Vec::new())),
             }
+        }
+
+        fn fetched_txids(&self) -> Vec<Txid> {
+            self.fetched_txids.lock().expect("fetched txid lock not poisoned").clone()
         }
     }
 
@@ -684,6 +710,8 @@ mod tests {
         }
 
         fn transaction_get(&self, txid: &Txid) -> Result<Transaction, electrum_client::Error> {
+            self.fetched_txids.lock().expect("fetched txid lock not poisoned").push(*txid);
+
             self.transactions
                 .get(txid)
                 .cloned()
@@ -876,6 +904,50 @@ mod tests {
         assert_eq!(updates.len(), 1);
         assert_eq!(updates[0].last_active_indices.get("external"), Some(&0));
         assert!(updates[0].tx_update.seen_ats.contains(&(txid, 7)));
+    }
+
+    #[test]
+    fn duplicate_transaction_history_fetches_and_pushes_transaction_once() {
+        let tx = test_transaction();
+        let txid = tx.compute_txid();
+        let fake = FakeElectrum::with_duplicate_mempool_transaction(tx);
+        let client = BdkElectrumClient::new(fake.clone());
+        let (events, receiver) = flume::unbounded();
+        let cancel_token = CancellationToken::new();
+        let mut progress = ProgressTracker::new(2);
+        let mut tx_update = TxUpdate::default();
+        let spks = (0..2).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+
+        let last_active_index = populate_with_spks(
+            &client,
+            7,
+            &events,
+            None,
+            &cancel_token,
+            &mut progress,
+            "external",
+            &mut tx_update,
+            spks,
+            None,
+            2,
+            2,
+            false,
+        )
+        .expect("scan succeeds");
+        let update = receiver
+            .try_iter()
+            .find_map(|event| match event {
+                ScanEvent::Update(update) => Some(update),
+                _ => None,
+            })
+            .expect("partial update is emitted");
+
+        assert_eq!(last_active_index, Some(1));
+        assert_eq!(fake.fetched_txids(), vec![txid]);
+        assert_eq!(update.tx_update.txs.len(), 1);
+        assert_eq!(tx_update.txs.len(), 1);
+        assert!(update.tx_update.seen_ats.contains(&(txid, 7)));
+        assert!(tx_update.seen_ats.contains(&(txid, 7)));
     }
 
     #[test]

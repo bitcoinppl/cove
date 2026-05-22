@@ -72,6 +72,7 @@ import org.bitcoinppl.cove_core.types.SentAndReceived
 import org.bitcoinppl.cove_core.types.TransactionDirection
 
 private const val SCROLL_THRESHOLD_INDEX = 5
+private const val SCAN_PROGRESS_BASIS_POINTS = 10_000f
 
 enum class TransactionType { SENT, RECEIVED }
 
@@ -83,11 +84,8 @@ private fun WalletScanStatus.progressOrNull(): WalletScanProgress? =
         is WalletScanStatus.Scanning -> v1
     }
 
-private fun WalletScanProgress?.progressFraction(): Float {
-    if (this == null || stopGap == 0u) return 0f
-
-    return (gap.toFloat() / stopGap.toFloat()).coerceIn(0f, 1f)
-}
+private fun WalletScanProgress?.fraction(): Float =
+    (this?.progressBasisPoints?.toFloat() ?: 0f) / SCAN_PROGRESS_BASIS_POINTS
 
 /**
  * Displays the list of transactions with a header
@@ -114,7 +112,7 @@ fun TransactionsCardView(
 
     val hasTransactions = transactions.isNotEmpty() || unsignedTransactions.isNotEmpty()
     val scanProgress = manager.scanStatus.progressOrNull()
-    val scanProgressFraction = scanProgress.progressFraction()
+    val scanProgressFraction = scanProgress.fraction()
 
     // cleanup on disappear - dismiss any active dialogs/popups when leaving
     DisposableEffect(Unit) {
@@ -863,7 +861,7 @@ fun LazyListScope.transactionItems(
     }
 
     val scanProgress = manager.scanStatus.progressOrNull()
-    val scanProgressFraction = scanProgress.progressFraction()
+    val scanProgressFraction = scanProgress.fraction()
 
     if (isScanning && hasTransactions) {
         item(key = "scanning") {

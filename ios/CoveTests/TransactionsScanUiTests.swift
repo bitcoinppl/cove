@@ -13,7 +13,8 @@ final class TransactionsScanUiTests: XCTestCase {
                     phase: .initial,
                     checked: 42,
                     gap: 4,
-                    stopGap: 10
+                    stopGap: 10,
+                    progressBasisPoints: 4000
                 ),
                 progressFraction: 0.4
             )

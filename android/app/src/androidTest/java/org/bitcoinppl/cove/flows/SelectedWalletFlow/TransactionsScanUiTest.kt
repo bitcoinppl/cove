@@ -35,6 +35,7 @@ class TransactionsScanUiTest {
                             checked = 42u,
                             gap = 4u,
                             stopGap = 10u,
+                            progressBasisPoints = 4_000u,
                         ),
                     progressFraction = 0.4f,
                     primaryText = MaterialTheme.colorScheme.onSurface,

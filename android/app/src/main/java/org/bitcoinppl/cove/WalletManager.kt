@@ -247,6 +247,11 @@ class WalletManager :
                         is WalletLoadState.LOADED -> loadState = WalletLoadState.SCANNING(current.txns)
                         is WalletLoadState.LOADING -> loadState = WalletLoadState.SCANNING(listOf())
                     }
+                } else {
+                    when (val current = loadState) {
+                        is WalletLoadState.SCANNING -> loadState = WalletLoadState.LOADED(current.txns)
+                        is WalletLoadState.LOADED, is WalletLoadState.LOADING -> Unit
+                    }
                 }
             }
 

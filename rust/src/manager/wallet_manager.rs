@@ -134,6 +134,7 @@ pub struct WalletScanProgress {
     pub checked: u32,
     pub gap: u32,
     pub stop_gap: u32,
+    pub progress_basis_points: u32,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
