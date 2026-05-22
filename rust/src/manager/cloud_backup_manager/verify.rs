@@ -147,7 +147,7 @@ impl RustCloudBackupManager {
                     return Err(source);
                 }
 
-                if let Err(finalize_error) = writes
+                writes
                     .finalize_uploaded_wallets(
                         CloudStorage::global_explicit_client(),
                         namespace_id.clone(),
@@ -155,11 +155,13 @@ impl RustCloudBackupManager {
                         CloudBackupUploadedWalletsStateMode::PreserveVerification,
                     )
                     .await
-                {
-                    return Err(CloudBackupError::Internal(format!(
-                        "wallet upload failed: {source}; persist partial wallet upload batch failed: {finalize_error}"
-                    )));
-                }
+                    .map_err(|finalize_error| {
+                        let message = format!(
+                            "wallet upload failed: {source}; persist partial wallet upload batch failed: {finalize_error}"
+                        );
+
+                        CloudBackupError::Internal(message)
+                    })?;
 
                 return Err(source);
             }
