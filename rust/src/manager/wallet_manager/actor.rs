@@ -50,6 +50,7 @@ use bdk_wallet::{KeychainKind, LocalOutput, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
+use cove_bdk_progressive_scan::ScanUpdate;
 use cove_common::consts::MIN_SEND_AMOUNT;
 use cove_tokio::{AbortableTask, FutureTimeoutExt as _};
 use cove_types::{
@@ -62,7 +63,6 @@ use eyre::Result;
 use flume::Sender;
 use rand::RngExt as _;
 use std::{
-    collections::BTreeMap,
     sync::Arc,
     time::{Duration, UNIX_EPOCH},
 };
@@ -1351,17 +1351,13 @@ impl WalletActor {
 
     fn apply_progressive_scan_update(
         &mut self,
-        scan_update: cove_bdk_progressive_scan::ScanUpdate<KeychainKind>,
+        scan_update: ScanUpdate<KeychainKind>,
     ) -> Result<()> {
         if scan_update.is_empty() {
             return Ok(());
         }
 
-        self.wallet.bdk.apply_update(FullScanResponse {
-            chain_update: scan_update.chain_update,
-            tx_update: scan_update.tx_update,
-            last_active_indices: BTreeMap::new(),
-        })?;
+        self.wallet.bdk.apply_update(progressive_scan_update_response(scan_update))?;
         self.wallet.persist()?;
 
         Ok(())
@@ -1924,6 +1920,16 @@ fn current_epoch_secs() -> u64 {
     UNIX_EPOCH.elapsed().unwrap_or_default().as_secs()
 }
 
+fn progressive_scan_update_response(
+    scan_update: ScanUpdate<KeychainKind>,
+) -> FullScanResponse<KeychainKind> {
+    FullScanResponse {
+        chain_update: scan_update.chain_update,
+        tx_update: scan_update.tx_update,
+        last_active_indices: scan_update.last_active_indices,
+    }
+}
+
 impl WalletActor {
     fn send(&self, msg: WalletManagerReconcileMessage) {
         self.reconciler.send(msg.into()).unwrap();
@@ -1978,4 +1984,26 @@ async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
         .map_err(|err| err.to_string())?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use bdk_wallet::KeychainKind;
+    use cove_bdk_progressive_scan::ScanUpdate;
+    use std::collections::BTreeMap;
+
+    use super::progressive_scan_update_response;
+
+    #[test]
+    fn progressive_scan_update_response_preserves_last_active_indices() {
+        let scan_update = ScanUpdate {
+            chain_update: None,
+            tx_update: Default::default(),
+            last_active_indices: BTreeMap::from([(KeychainKind::External, 7)]),
+        };
+
+        let response = progressive_scan_update_response(scan_update);
+
+        assert_eq!(response.last_active_indices, BTreeMap::from([(KeychainKind::External, 7)]));
+    }
 }

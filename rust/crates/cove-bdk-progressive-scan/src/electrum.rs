@@ -76,6 +76,7 @@ where
 
         let mut tx_update = TxUpdate::<ConfirmationBlockTime>::default();
         let mut last_active_indices = BTreeMap::<K, u32>::default();
+        let mut inserted_txs = HashSet::<Txid>::new();
         let mut progress = ProgressTracker::new(parts.stop_gap);
         for keychain in request.keychains() {
             if parts.cancel_token.is_cancelled() {
@@ -93,6 +94,7 @@ where
                 &parts.cancel_token,
                 &mut progress,
                 keychain.clone(),
+                &mut inserted_txs,
                 &mut tx_update,
                 spks,
                 parts.last_revealed_indices.get(&keychain).copied(),
@@ -135,6 +137,7 @@ fn populate_with_spks<K, E>(
     cancel_token: &tokio_util::sync::CancellationToken,
     progress: &mut ProgressTracker<K>,
     keychain: K,
+    inserted_txs: &mut HashSet<Txid>,
     tx_update: &mut TxUpdate<ConfirmationBlockTime>,
     mut spks_with_expected_txids: impl Iterator<Item = Indexed<SpkWithExpectedTxids>>,
     last_revealed_index: Option<u32>,
@@ -149,7 +152,6 @@ where
     let mut stop_gap_unused_count = 0_usize;
     let mut last_active_index = Option::<u32>::None;
     let gap_limit = stop_gap.max(1);
-    let mut inserted_txs = HashSet::<Txid>::new();
 
     loop {
         if cancel_token.is_cancelled() {
@@ -387,7 +389,7 @@ fn fetch_tip_and_latest_blocks(
 mod tests {
     use std::{
         borrow::Borrow,
-        collections::{BTreeMap, VecDeque},
+        collections::{BTreeMap, HashSet, VecDeque},
         str::FromStr as _,
         sync::{Arc, Mutex},
     };
@@ -464,6 +466,23 @@ mod tests {
                 histories: Arc::new(Mutex::new(VecDeque::from([
                     vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
                     vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
+                ]))),
+                transactions: BTreeMap::from([(txid, tx)]),
+                fetched_txids: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+
+        fn with_same_mempool_transaction_on_external_and_internal_histories(
+            tx: Transaction,
+        ) -> Self {
+            let txid = tx.compute_txid();
+            Self {
+                fail_history: false,
+                histories: Arc::new(Mutex::new(VecDeque::from([
+                    vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
+                    Vec::new(),
+                    vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
+                    Vec::new(),
                 ]))),
                 transactions: BTreeMap::from([(txid, tx)]),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
@@ -742,6 +761,7 @@ mod tests {
         let (events, receiver) = flume::unbounded();
         let cancel_token = CancellationToken::new();
         let mut progress = ProgressTracker::new(2);
+        let mut inserted_txs = HashSet::new();
         let mut tx_update = TxUpdate::default();
         let spks = (0..5).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
 
@@ -753,6 +773,7 @@ mod tests {
             &cancel_token,
             &mut progress,
             "external",
+            &mut inserted_txs,
             &mut tx_update,
             spks,
             None,
@@ -915,6 +936,7 @@ mod tests {
         let (events, receiver) = flume::unbounded();
         let cancel_token = CancellationToken::new();
         let mut progress = ProgressTracker::new(2);
+        let mut inserted_txs = HashSet::new();
         let mut tx_update = TxUpdate::default();
         let spks = (0..2).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
 
@@ -926,6 +948,7 @@ mod tests {
             &cancel_token,
             &mut progress,
             "external",
+            &mut inserted_txs,
             &mut tx_update,
             spks,
             None,
@@ -948,6 +971,42 @@ mod tests {
         assert_eq!(tx_update.txs.len(), 1);
         assert!(update.tx_update.seen_ats.contains(&(txid, 7)));
         assert!(tx_update.seen_ats.contains(&(txid, 7)));
+    }
+
+    #[test]
+    fn same_transaction_on_external_and_internal_histories_fetches_and_pushes_once() {
+        let tx = test_transaction();
+        let txid = tx.compute_txid();
+        let fake =
+            FakeElectrum::with_same_mempool_transaction_on_external_and_internal_histories(tx);
+        let client = BdkElectrumClient::new(fake.clone());
+        let request = FullScanRequest::builder_at(7)
+            .spks_for_keychain(
+                "external",
+                (0..2).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
+            )
+            .spks_for_keychain(
+                "internal",
+                (0..2).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
+            )
+            .build();
+        let (events, _receiver) = flume::unbounded();
+
+        let response = ProgressiveScanner::builder()
+            .request(request)
+            .stop_gap(1)
+            .events(events)
+            .electrum(client)
+            .expect("scanner builds")
+            .batch_size(1)
+            .run()
+            .expect("scan succeeds");
+
+        assert_eq!(fake.fetched_txids(), vec![txid]);
+        assert_eq!(response.tx_update.txs.len(), 1);
+        assert_eq!(response.last_active_indices.get("external"), Some(&0));
+        assert_eq!(response.last_active_indices.get("internal"), Some(&0));
+        assert!(response.tx_update.seen_ats.contains(&(txid, 7)));
     }
 
     #[test]

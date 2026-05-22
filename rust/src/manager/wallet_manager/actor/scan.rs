@@ -15,10 +15,14 @@ use tracing::debug;
 
 use crate::{
     manager::wallet_manager::{WalletScanPhase, WalletScanProgress, WalletScanStatus},
-    node::client::NodeClient,
+    node::client::{Error as NodeClientError, NodeClient},
 };
 
 use super::WalletActor;
+
+const SCAN_PROGRESS_INTERVAL: Duration = Duration::from_millis(75);
+const SCAN_PARTIAL_FLUSH_INTERVAL: Duration = Duration::from_millis(300);
+const SCAN_PROGRESS_BASIS_POINTS: u32 = 10_000;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum FullScanType {
@@ -62,10 +66,10 @@ pub(crate) enum WalletScanEvent {
     FlushUi,
     FullScanFinished {
         scan_type: FullScanType,
-        result: std::result::Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
+        result: Result<FullScanResponse<KeychainKind>, NodeClientError>,
     },
     IncrementalScanFinished {
-        result: std::result::Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
+        result: Result<FullScanResponse<KeychainKind>, NodeClientError>,
     },
 }
 
@@ -103,10 +107,6 @@ struct ProgressiveFullScanJob {
     cancel_token: CancellationToken,
     prepared: PreparedProgressiveScan,
 }
-
-const SCAN_PROGRESS_INTERVAL: Duration = Duration::from_millis(75);
-const SCAN_PARTIAL_FLUSH_INTERVAL: Duration = Duration::from_millis(300);
-const SCAN_PROGRESS_BASIS_POINTS: u32 = 10_000;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum ScanFlushDecision {
@@ -241,6 +241,7 @@ impl WalletScanActor {
             .await?
             .await
             .map_err(|error| Box::new(error) as ActorError)?;
+
         let now = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
         debug!("done progressive scan in {}s", now - start);
 
@@ -250,10 +251,7 @@ impl WalletScanActor {
     async fn run_progressive_full_scan(
         &mut self,
         job: ProgressiveFullScanJob,
-    ) -> ActorResult<(
-        RunningScan,
-        std::result::Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
-    )> {
+    ) -> ActorResult<(RunningScan, Result<FullScanResponse<KeychainKind>, NodeClientError>)> {
         let (events_tx, events_rx) = flume::bounded(32);
         self.seed_scan_progress(
             job.prepared.full_scan_request.keychains(),
@@ -268,6 +266,7 @@ impl WalletScanActor {
             events_tx,
             job.cancel_token.clone(),
         );
+
         tokio::pin!(scan_future);
         let mut flush_cadence = ScanFlushCadence::default();
         let mut flush_deadline = Option::<tokio::time::Instant>::None;
@@ -328,10 +327,7 @@ impl WalletScanActor {
 
     async fn handle_scan_result(
         &mut self,
-        (scan, result): (
-            RunningScan,
-            std::result::Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
-        ),
+        (scan, result): (RunningScan, Result<FullScanResponse<KeychainKind>, Error>),
     ) -> ActorResult<()> {
         let cancel_token = self.active_cancel_token.as_ref();
         if let Err(error) = &result
@@ -352,11 +348,11 @@ impl WalletScanActor {
                 ))
                 .await;
 
-                if let Err(error) = apply_result {
-                    return Err(Box::new(error));
-                }
-
                 if result_is_ok && scan_type == FullScanType::Initial {
+                    if let Err(error) = apply_result {
+                        return Err(Box::new(error));
+                    }
+
                     self.reserved_follow_up_scan = true;
                     let addr = self.addr.clone();
                     send!(addr.start_expanded_full_scan());
@@ -369,6 +365,10 @@ impl WalletScanActor {
                 } else {
                     self.handle_queued_rescan(queued_rescan_after_successful_full_scan(scan_type))
                         .await?;
+                }
+
+                if let Err(error) = apply_result {
+                    return Err(Box::new(error));
                 }
             }
             RunningScan::Incremental => {
@@ -548,22 +548,20 @@ fn should_forward_scan_progress(
 }
 
 fn is_cancelled_progressive_scan(
-    error: &crate::node::client::Error,
+    error: &NodeClientError,
     cancel_token: Option<&CancellationToken>,
 ) -> bool {
     match error {
-        crate::node::client::Error::ProgressiveScan(
-            cove_bdk_progressive_scan::Error::Cancelled,
-        ) => true,
-        crate::node::client::Error::ProgressiveScan(
-            cove_bdk_progressive_scan::Error::ChannelClosed,
-        ) => cancel_token.is_some_and(CancellationToken::is_cancelled),
+        NodeClientError::ProgressiveScan(cove_bdk_progressive_scan::Error::Cancelled) => true,
+        NodeClientError::ProgressiveScan(cove_bdk_progressive_scan::Error::ChannelClosed) => {
+            cancel_token.is_some_and(CancellationToken::is_cancelled)
+        }
         _ => false,
     }
 }
 
 fn should_flush_pending_after_scan_result(
-    scan_result: &std::result::Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
+    scan_result: &std::result::Result<FullScanResponse<KeychainKind>, NodeClientError>,
     cancel_token: &CancellationToken,
 ) -> bool {
     match scan_result {
@@ -794,6 +792,23 @@ mod tests {
 
     #[test]
     fn failed_scan_flushes_pending_debounced_updates() {
+        let result = Err(crate::node::client::Error::ProgressiveScan(
+            cove_bdk_progressive_scan::Error::ChannelClosed,
+        ));
+        let cancel_token = CancellationToken::new();
+
+        assert!(should_flush_pending_after_scan_result(&result, &cancel_token));
+    }
+
+    #[test]
+    fn drained_update_after_first_flush_is_pending_on_scan_error() {
+        let mut cadence = ScanFlushCadence { sent_first_flush: true };
+        let mut deadline = None;
+        let now = tokio::time::Instant::now();
+
+        assert!(!record_scan_update_flush(&mut cadence, &mut deadline, now));
+        assert_eq!(deadline, Some(now + SCAN_PARTIAL_FLUSH_INTERVAL));
+
         let result = Err(crate::node::client::Error::ProgressiveScan(
             cove_bdk_progressive_scan::Error::ChannelClosed,
         ));
