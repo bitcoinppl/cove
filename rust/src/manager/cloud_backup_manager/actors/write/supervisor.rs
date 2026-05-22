@@ -962,8 +962,10 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn local_completion_rechecks_write_blocker() {
-        let mut supervisor = CloudBackupWriteSupervisor::default();
-        supervisor.active_blocker = Some(CloudBackupWriteBlocker::Disabling { operation_id: 7 });
+        let supervisor = CloudBackupWriteSupervisor {
+            active_blocker: Some(CloudBackupWriteBlocker::Disabling { operation_id: 7 }),
+            ..Default::default()
+        };
         let in_flight = in_flight_completion_write(0);
 
         let result =
@@ -974,8 +976,10 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn remote_only_completion_ignores_write_blocker() {
-        let mut supervisor = CloudBackupWriteSupervisor::default();
-        supervisor.active_blocker = Some(CloudBackupWriteBlocker::Disabling { operation_id: 7 });
+        let supervisor = CloudBackupWriteSupervisor {
+            active_blocker: Some(CloudBackupWriteBlocker::Disabling { operation_id: 7 }),
+            ..Default::default()
+        };
         let in_flight = in_flight_write(0, CloudBackupWriteAdmission::RequiresWritesAllowed);
 
         let result =
