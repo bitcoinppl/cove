@@ -262,10 +262,10 @@ impl RestoreOperation {
             labels_failed_errors: Vec::new(),
         };
 
-        let existing_fingerprints = crate::backup::import::collect_existing_fingerprints()
-            .map_err_prefix("collect fingerprints", CloudBackupError::Internal)?;
+        let existing_identities = crate::backup::import::collect_existing_wallet_identities()
+            .map_err_prefix("collect wallet identities", CloudBackupError::Internal)?;
 
-        let mut restore_session = WalletRestoreSession::new(existing_fingerprints);
+        let mut restore_session = WalletRestoreSession::new(existing_identities);
         let mut downloaded_wallets = Vec::new();
         let mut download_progress =
             RestoreDownloadProgress { completed: 0, total: listed_wallet_count };

@@ -1,9 +1,5 @@
-use std::collections::HashSet;
-
 use cove_util::ResultExt as _;
 use zeroize::Zeroizing;
-
-use cove_types::WalletId;
 
 use crate::wallet::metadata::WalletMetadata;
 
@@ -22,30 +18,19 @@ pub async fn verify_backup(
     let decompressed = crypto::decompress(&decrypted)?;
     let mut payload = BackupPayload::decode(&decompressed)?;
 
-    // mutable — grows as we process wallets, matching import's progressive dedup
-    let mut existing_fingerprints = import::collect_existing_fingerprints()?;
-
-    // track no-fingerprint wallet IDs within this backup to detect intra-backup duplicates
-    let mut seen_no_fp_ids: HashSet<WalletId> = HashSet::new();
+    // mutable: grows as we process wallets, matching import's progressive dedup
+    let mut existing_identities = import::collect_existing_wallet_identities()?;
 
     let mut wallets = Vec::with_capacity(payload.wallets.len());
     for wallet_backup in &payload.wallets {
         let metadata: WalletMetadata = serde_json::from_value(wallet_backup.metadata.clone())
             .map_err_prefix("wallet metadata", BackupError::Deserialization)?;
 
-        let mut already_on_device = import::is_wallet_duplicate(&metadata, &existing_fingerprints)?;
+        let duplicate_key = import::duplicate_key_for_backup(&metadata, wallet_backup)?;
+        let already_on_device = existing_identities.contains(&duplicate_key);
 
-        // intra-backup dedup for no-fingerprint wallets
-        if !already_on_device
-            && metadata.master_fingerprint.is_none()
-            && !seen_no_fp_ids.insert(metadata.id.clone())
-        {
-            already_on_device = true;
-        }
-
-        // track this wallet's fingerprint for intra-backup dedup (mirrors import.rs)
-        if let Some(fp) = metadata.master_fingerprint.as_deref().copied() {
-            existing_fingerprints.push((fp, metadata.network, metadata.wallet_mode));
+        if !already_on_device {
+            existing_identities.insert(duplicate_key);
         }
 
         // validate wallet_type/secret compatibility

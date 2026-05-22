@@ -975,7 +975,9 @@ async fn restore_downloaded_wallet_does_not_reupload_wallet_or_mutate_backup_cou
         },
     };
 
-    WalletRestoreSession::new(Vec::new()).restore_downloaded(&wallet).unwrap();
+    WalletRestoreSession::new(crate::backup::import::ExistingWalletIdentitySet::default())
+        .restore_downloaded(&wallet)
+        .unwrap();
 
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(5));
@@ -1003,7 +1005,10 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
         entry: wallet_entry_with_labels(&metadata, Some(sample_labels_jsonl())),
     };
 
-    let outcome = WalletRestoreSession::new(Vec::new()).restore_downloaded(&wallet).unwrap();
+    let outcome =
+        WalletRestoreSession::new(crate::backup::import::ExistingWalletIdentitySet::default())
+            .restore_downloaded(&wallet)
+            .unwrap();
 
     assert!(outcome.labels_warning.is_none());
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);

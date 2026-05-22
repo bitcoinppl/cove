@@ -298,9 +298,9 @@ impl RustCloudBackupManager {
         cloud: &CloudStorageClient,
         namespaces: &[MergeNamespace],
     ) -> Result<Vec<MergedNamespaceWallets>, CloudBackupError> {
-        let existing_fingerprints = crate::backup::import::collect_existing_fingerprints()
-            .map_err_prefix("collect fingerprints", CloudBackupError::Internal)?;
-        let mut restore_session = WalletRestoreSession::new(existing_fingerprints);
+        let existing_identities = crate::backup::import::collect_existing_wallet_identities()
+            .map_err_prefix("collect wallet identities", CloudBackupError::Internal)?;
+        let mut restore_session = WalletRestoreSession::new(existing_identities);
         let mut merged_namespaces = Vec::with_capacity(namespaces.len());
 
         for namespace in namespaces {

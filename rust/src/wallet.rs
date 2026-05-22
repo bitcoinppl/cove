@@ -2,6 +2,7 @@ pub mod balance;
 pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
+pub mod public_identity;
 
 use std::{str::FromStr as _, sync::Arc};
 
@@ -33,6 +34,7 @@ use metadata::{
     tap_signer_import_birthday,
 };
 use parking_lot::Mutex;
+use public_identity::PublicWalletIdentity;
 use pubport::formats::Format;
 use tracing::{debug, error, warn};
 
@@ -298,14 +300,21 @@ impl Wallet {
             pubport_descriptors.xpub().map_err(Into::into).map_err(WalletError::ParseXpubError)?;
         let descriptors: Descriptors = pubport_descriptors.into();
 
-        // check for existing wallet with same fingerprint, upgrade watch-only → cold
+        let incoming_identity = PublicWalletIdentity::from_descriptors(&descriptors);
+
+        // check for existing wallet with same public identity, upgrade watch-only to cold
         if let Some(fingerprint) = fingerprint.as_ref() {
             let fingerprint: Fingerprint = (*fingerprint).into();
             metadata.master_fingerprint = Some(fingerprint.into());
 
-            let existing = database.wallets.get_all(network, mode)?.into_iter().find(|wm| {
-                wm.master_fingerprint.as_ref().is_some_and(|fp| fp.as_ref() == &fingerprint)
-            });
+            let existing = existing_public_wallet_by_identity(
+                &database,
+                keychain,
+                network,
+                mode,
+                fingerprint,
+                &incoming_identity,
+            )?;
 
             if let Some(existing_metadata) = existing {
                 return Self::upgrade_to_cold(
@@ -703,6 +712,56 @@ fn check_for_duplicate_wallet(
     Ok(())
 }
 
+fn existing_public_wallet_by_identity(
+    database: &Database,
+    keychain: &Keychain,
+    network: Network,
+    mode: metadata::WalletMode,
+    fingerprint: Fingerprint,
+    incoming_identity: &PublicWalletIdentity,
+) -> Result<Option<WalletMetadata>, WalletError> {
+    let wallets = database.wallets.get_all(network, mode)?;
+
+    matching_public_wallet_by_identity(wallets, keychain, fingerprint, incoming_identity)
+}
+
+fn matching_public_wallet_by_identity(
+    wallets: Vec<WalletMetadata>,
+    keychain: &Keychain,
+    fingerprint: Fingerprint,
+    incoming_identity: &PublicWalletIdentity,
+) -> Result<Option<WalletMetadata>, WalletError> {
+    let mut degraded_same_fingerprint_wallets = Vec::new();
+
+    for wallet_metadata in wallets {
+        if !wallet_metadata.matches_fingerprint(fingerprint) {
+            continue;
+        }
+
+        let wallet_identity =
+            PublicWalletIdentity::from_existing_wallet(&wallet_metadata, keychain)
+                .map_err(|error| WalletError::LoadError(error.to_string()))?;
+
+        let Some(wallet_identity) = wallet_identity else {
+            degraded_same_fingerprint_wallets.push(wallet_metadata.id);
+            continue;
+        };
+
+        if &wallet_identity == incoming_identity {
+            return Ok(Some(wallet_metadata));
+        }
+    }
+
+    for wallet_id in degraded_same_fingerprint_wallets {
+        let incoming_identity_hash = incoming_identity.redacted_hash();
+        warn!(
+            "same-fingerprint wallet missing public identity wallet_id={wallet_id} incoming_identity_hash={incoming_identity_hash}"
+        );
+    }
+
+    Ok(None)
+}
+
 #[uniffi::export]
 impl Wallet {
     // Create a dummy wallet for xcode previews
@@ -758,6 +817,57 @@ mod tests {
     use bdk_wallet::test_utils::{
         get_funded_wallet_wpkh, insert_anchor, insert_checkpoint, insert_tx,
     };
+    use cove_device::keychain::{KeychainAccess, KeychainError};
+    use std::{collections::HashMap, sync::Once};
+
+    #[derive(Debug, Default)]
+    struct TestKeychain(parking_lot::Mutex<HashMap<String, String>>);
+
+    impl KeychainAccess for TestKeychain {
+        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+            self.0.lock().insert(key, value);
+            Ok(())
+        }
+
+        fn get(&self, key: String) -> Option<String> {
+            self.0.lock().get(&key).cloned()
+        }
+
+        fn delete(&self, key: String) -> bool {
+            self.0.lock().remove(&key).is_some()
+        }
+    }
+
+    fn test_keychain() -> &'static Keychain {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            Keychain::new(Box::<TestKeychain>::default());
+        });
+
+        Keychain::global()
+    }
+
+    fn public_descriptors(account: u32) -> Descriptors {
+        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+        let descriptor = format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/<0;1>/*)");
+
+        pubport::descriptor::Descriptors::try_from_line(&descriptor).unwrap().into()
+    }
+
+    fn public_wallet_metadata(name: &str, account: u32) -> WalletMetadata {
+        let descriptors = public_descriptors(account);
+        let fingerprint = Fingerprint::from(
+            descriptors.fingerprint().expect("test descriptor has a fingerprint"),
+        );
+
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.id = WalletId::new();
+        metadata.name = name.to_string();
+        metadata.master_fingerprint = Some(Arc::new(fingerprint));
+        metadata.verified = true;
+        metadata.wallet_type = WalletType::Cold;
+        metadata
+    }
 
     fn build_tx_with_change(wallet: &mut bdk_wallet::Wallet) -> bdk_wallet::bitcoin::Psbt {
         let address = BdkAddress::from_str("bcrt1q3qtze4ys45tgdvguj66zrk4fu6hq3a3v9pfly5")
@@ -875,6 +985,79 @@ mod tests {
 
         let _ = delete_wallet_specific_data(&metadata.id);
         assert_eq!("73c5da0a", fingerprint.as_str());
+    }
+
+    #[test]
+    fn public_wallet_identity_matching_skips_same_fingerprint_different_account() {
+        let keychain = test_keychain();
+        let existing = public_wallet_metadata("Existing account 0", 0);
+        let incoming = public_descriptors(1);
+        let incoming_fingerprint =
+            Fingerprint::from(incoming.fingerprint().expect("test descriptor has a fingerprint"));
+
+        keychain
+            .save_public_descriptor(
+                &existing.id,
+                public_descriptors(0).external.extended_descriptor,
+                public_descriptors(0).internal.extended_descriptor,
+            )
+            .unwrap();
+
+        let matched = matching_public_wallet_by_identity(
+            vec![existing],
+            keychain,
+            incoming_fingerprint,
+            &PublicWalletIdentity::from_descriptors(&incoming),
+        )
+        .unwrap();
+
+        assert!(matched.is_none());
+    }
+
+    #[test]
+    fn public_wallet_identity_matching_routes_exact_identity() {
+        let keychain = test_keychain();
+        let existing = public_wallet_metadata("Existing account 0", 0);
+        let incoming = public_descriptors(0);
+        let incoming_fingerprint =
+            Fingerprint::from(incoming.fingerprint().expect("test descriptor has a fingerprint"));
+
+        keychain
+            .save_public_descriptor(
+                &existing.id,
+                public_descriptors(0).external.extended_descriptor,
+                public_descriptors(0).internal.extended_descriptor,
+            )
+            .unwrap();
+
+        let matched = matching_public_wallet_by_identity(
+            vec![existing.clone()],
+            keychain,
+            incoming_fingerprint,
+            &PublicWalletIdentity::from_descriptors(&incoming),
+        )
+        .unwrap();
+
+        assert_eq!(Some(existing.id), matched.map(|metadata| metadata.id));
+    }
+
+    #[test]
+    fn public_wallet_identity_matching_ignores_degraded_same_fingerprint_when_incoming_is_known() {
+        let keychain = test_keychain();
+        let degraded = public_wallet_metadata("Degraded account", 0);
+        let incoming = public_descriptors(1);
+        let incoming_fingerprint =
+            Fingerprint::from(incoming.fingerprint().expect("test descriptor has a fingerprint"));
+
+        let matched = matching_public_wallet_by_identity(
+            vec![degraded],
+            keychain,
+            incoming_fingerprint,
+            &PublicWalletIdentity::from_descriptors(&incoming),
+        )
+        .unwrap();
+
+        assert!(matched.is_none());
     }
 }
 

@@ -21,9 +21,9 @@ impl RustCloudBackupManager {
         namespaces: Vec<NamespaceMatch>,
     ) -> Result<CloudBackupRestoreReport, CloudBackupError> {
         let current_namespace = self.current_namespace_id()?;
-        let existing_fingerprints = crate::backup::import::collect_existing_fingerprints()
-            .map_err_prefix("collect fingerprints", CloudBackupError::Internal)?;
-        let mut restore_session = WalletRestoreSession::new(existing_fingerprints);
+        let existing_identities = crate::backup::import::collect_existing_wallet_identities()
+            .map_err_prefix("collect wallet identities", CloudBackupError::Internal)?;
+        let mut restore_session = WalletRestoreSession::new(existing_identities);
         let mut current_wallet_record_ids: HashSet<_> = current_namespace_wallet_record_ids(
             cloud,
             &current_namespace,
