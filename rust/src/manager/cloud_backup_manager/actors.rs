@@ -9,7 +9,7 @@ pub(crate) use self::cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespa
 pub(crate) use self::restore::CloudBackupRestoreEvent;
 pub(crate) use self::supervisor::{CloudBackupOperation, CloudBackupSupervisor};
 pub(crate) use self::write::{
-    CloudBackupUploadedWallet, CloudBackupWalletCountRefresh, CloudBackupWriteBlocker,
-    CloudBackupWriteClient, CloudBackupWriteCompletion, CloudBackupWriteResultReceiver,
-    CloudBackupWriteSupervisor,
+    CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
+    CloudBackupWriteBlocker, CloudBackupWriteClient, CloudBackupWriteCompletion,
+    CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
 };

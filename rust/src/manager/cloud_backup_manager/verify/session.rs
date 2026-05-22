@@ -261,34 +261,35 @@ impl VerificationSession {
             }
         };
 
-        let authenticated_master =
-            match self.resolve_master_key_step(encrypted_master.as_ref()).await? {
-                MasterKeyResolution::Authenticated(authenticated_master) => {
-                    self.apply_verified_cloud_master_key(&authenticated_master.master_key)?;
-                    authenticated_master
-                }
-
-                MasterKeyResolution::NeedsWrapperRepair { reuse_credential_id } => {
-                    match self.repair_wrapper_from_local_key(reuse_credential_id).await? {
-                        RepairedMasterKeyResolution::PreparedWrapperRepair(prepared) => {
-                            return Ok(CloudBackupDeepVerificationStep::PreparedWrapperRepair(
-                                prepared,
-                            ));
-                        }
-                        RepairedMasterKeyResolution::Finished(result) => {
-                            return Ok(CloudBackupDeepVerificationStep::Complete(result));
-                        }
-                    }
-                }
-
-                MasterKeyResolution::Finished(result) => {
-                    return Ok(CloudBackupDeepVerificationStep::Complete(result));
-                }
-            };
+        let master_key_resolution = self.resolve_master_key_step(encrypted_master.as_ref()).await?;
 
         if let Some(result) = self.ensure_wallet_inventory_or_short_circuit().await {
             return Ok(CloudBackupDeepVerificationStep::Complete(result));
         }
+
+        let authenticated_master = match master_key_resolution {
+            MasterKeyResolution::Authenticated(authenticated_master) => {
+                self.apply_verified_cloud_master_key(&authenticated_master.master_key)?;
+                authenticated_master
+            }
+
+            MasterKeyResolution::NeedsWrapperRepair { reuse_credential_id } => {
+                match self.repair_wrapper_from_local_key(reuse_credential_id).await? {
+                    RepairedMasterKeyResolution::PreparedWrapperRepair(prepared) => {
+                        return Ok(CloudBackupDeepVerificationStep::PreparedWrapperRepair(
+                            prepared,
+                        ));
+                    }
+                    RepairedMasterKeyResolution::Finished(result) => {
+                        return Ok(CloudBackupDeepVerificationStep::Complete(result));
+                    }
+                }
+            }
+
+            MasterKeyResolution::Finished(result) => {
+                return Ok(CloudBackupDeepVerificationStep::Complete(result));
+            }
+        };
 
         Ok(self.verify_wallet_backups_and_autosync(authenticated_master).await)
     }

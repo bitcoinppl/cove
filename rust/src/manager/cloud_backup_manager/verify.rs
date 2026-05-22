@@ -40,7 +40,7 @@ use crate::database::cloud_backup::{
     CloudBackupRecordKey, PersistedCloudBackupState, PersistedCloudBackupStatus,
 };
 use crate::manager::cloud_backup_manager::actors::{
-    CloudBackupWriteClient, CloudBackupWriteCompletion,
+    CloudBackupUploadedWalletsStateMode, CloudBackupWriteClient, CloudBackupWriteCompletion,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,9 +136,34 @@ impl RustCloudBackupManager {
         let (namespace_id, wallets, master_key) = upload.into_parts();
         let critical_key = Zeroizing::new(master_key.critical_data_key());
         let cloud = CloudStorage::global_explicit_client();
-        let uploaded_wallets = self
+        let uploaded_wallets = match self
             .upload_wallets_with_writer(&writes, cloud, &namespace_id, &wallets, &critical_key)
-            .await?;
+            .await
+        {
+            Ok(uploaded_wallets) => uploaded_wallets,
+            Err(error) => {
+                let (uploaded_wallets, source) = error.into_parts();
+                if uploaded_wallets.is_empty() {
+                    return Err(source);
+                }
+
+                if let Err(finalize_error) = writes
+                    .finalize_uploaded_wallets(
+                        CloudStorage::global_explicit_client(),
+                        namespace_id.clone(),
+                        uploaded_wallets,
+                        CloudBackupUploadedWalletsStateMode::PreserveVerification,
+                    )
+                    .await
+                {
+                    return Err(CloudBackupError::Internal(format!(
+                        "wallet upload failed: {source}; persist partial wallet upload batch failed: {finalize_error}"
+                    )));
+                }
+
+                return Err(source);
+            }
+        };
 
         Ok(CloudBackupUploadedDeepVerificationAutoSync::new(namespace_id, uploaded_wallets))
     }

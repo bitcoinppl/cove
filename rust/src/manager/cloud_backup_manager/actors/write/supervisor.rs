@@ -372,15 +372,33 @@ impl CloudBackupWriteSupervisor {
         CloudBackupWriteCommandContext::new(self.next_command_id, origin)
     }
 
-    async fn ensure_operation_origin_current(
+    fn ensure_operation_origin_current(
         manager: &RustCloudBackupManager,
         command: CloudBackupWriteCommandContext,
     ) -> Result<(), CloudBackupError> {
         let Some(origin) = command.origin() else { return Ok(()) };
 
-        call!(manager.supervisor.ensure_exclusive_operation_current(origin))
-            .await
-            .map_err_prefix("check cloud backup operation freshness", CloudBackupError::Internal)?
+        if manager.projected_exclusive_operation() == Some(origin) {
+            Ok(())
+        } else {
+            Err(CloudBackupError::Cancelled)
+        }
+    }
+
+    fn ensure_pending_write_origin_current(
+        &self,
+        context: CloudBackupWriteCommandContext,
+    ) -> Result<(), CloudBackupError> {
+        if context.origin().is_none() {
+            return Ok(());
+        }
+
+        let manager = self
+            .manager
+            .upgrade()
+            .ok_or_else(|| CloudBackupError::Internal("cloud backup manager stopped".into()))?;
+
+        Self::ensure_operation_origin_current(&manager, context)
     }
 
     fn advance_command_id(&mut self) -> CloudBackupWriteCommandContext {
@@ -441,6 +459,11 @@ impl CloudBackupWriteSupervisor {
             if write.admission.requires_writes_allowed()
                 && let Err(error) = self.writes_allowed()
             {
+                write.complete(Err(error));
+                continue;
+            }
+
+            if let Err(error) = self.ensure_pending_write_origin_current(write.context) {
                 write.complete(Err(error));
                 continue;
             }
@@ -520,6 +543,8 @@ impl CloudBackupWriteSupervisor {
             self.writes_allowed()?;
         }
 
+        self.ensure_pending_write_origin_current(active.context)?;
+
         let manager = match &active.completion {
             CloudBackupWriteLocalCompletion::None => return Ok(()),
             _ => self
@@ -527,8 +552,6 @@ impl CloudBackupWriteSupervisor {
                 .upgrade()
                 .ok_or_else(|| CloudBackupError::Internal("cloud backup manager stopped".into()))?,
         };
-
-        Self::ensure_operation_origin_current(&manager, active.context).await?;
 
         match (&active.completion, output) {
             (
@@ -1109,10 +1132,66 @@ mod tests {
         let result = CloudBackupWriteSupervisor::ensure_operation_origin_current(
             &manager,
             supervisor.next_command(Some(stale)),
-        )
-        .await;
+        );
 
         assert!(matches!(result, Err(CloudBackupError::Cancelled)));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn stale_operation_write_is_rejected_before_starting_remote_execution() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        reset_cloud_backup_test_state(&manager, globals);
+        let mut supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
+        let stale = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Enable,
+            u64::MAX,
+        );
+        let command = supervisor.advance_operation_command_id(stale);
+
+        let receiver = supervisor.submit_write(
+            CloudBackupWriteAdmission::RequiresWritesAllowed,
+            CloudBackupRemoteWriteCommand::None,
+            CloudBackupWriteLocalCompletion::None,
+            command,
+        );
+
+        let result = receiver.await.unwrap().into_result();
+        assert!(matches!(result, Err(CloudBackupError::Cancelled)));
+        assert!(supervisor.in_flight_write.is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn stale_queued_operation_write_is_rejected_before_starting_remote_execution() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        reset_cloud_backup_test_state(&manager, globals);
+        let mut supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
+        supervisor.in_flight_write =
+            Some(in_flight_write(0, CloudBackupWriteAdmission::RequiresWritesAllowed));
+        let stale = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Enable,
+            u64::MAX,
+        );
+        let command = supervisor.advance_operation_command_id(stale);
+
+        let receiver = supervisor.submit_write(
+            CloudBackupWriteAdmission::RequiresWritesAllowed,
+            CloudBackupRemoteWriteCommand::None,
+            CloudBackupWriteLocalCompletion::None,
+            command,
+        );
+        assert_eq!(supervisor.pending_writes.len(), 1);
+
+        supervisor.in_flight_write = None;
+        supervisor.start_next_pending_write();
+
+        let result = receiver.await.unwrap().into_result();
+        assert!(matches!(result, Err(CloudBackupError::Cancelled)));
+        assert!(supervisor.in_flight_write.is_none());
+        assert!(supervisor.pending_writes.is_empty());
     }
 
     #[tokio::test(flavor = "current_thread")]

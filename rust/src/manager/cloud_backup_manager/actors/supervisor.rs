@@ -394,17 +394,6 @@ impl CloudBackupSupervisor {
         }
     }
 
-    pub async fn ensure_exclusive_operation_current(
-        &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-    ) -> ActorResult<Result<(), CloudBackupError>> {
-        if self.active_operation == Some(claim) {
-            Produces::ok(Ok(()))
-        } else {
-            Produces::ok(Err(CloudBackupError::Cancelled))
-        }
-    }
-
     pub async fn apply_restore_status(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,

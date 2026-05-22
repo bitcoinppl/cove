@@ -225,8 +225,12 @@ impl RustCloudBackupManager {
         let merged_wallets =
             self.restore_enable_merge_wallets(&cloud, &preparation.merge_namespaces).await?;
 
-        for metadata in merged_wallets.iter().flat_map(|merged| &merged.restored_wallets) {
-            info!("Enable: recovered wallet {} from matched namespace", metadata.name);
+        for merged in &merged_wallets {
+            info!(
+                "Enable: recovered {} wallet(s) from matched namespace {}",
+                merged.restored_wallets.len(),
+                merged.source.namespace_id
+            );
         }
 
         let uploaded_wallets = CloudBackupStore::global()
@@ -653,8 +657,7 @@ impl RustCloudBackupManager {
                 })
             }
             Err(error @ CloudBackupError::PasskeyDiscoveryCancelled)
-            | Err(error @ CloudBackupError::Passkey(_))
-            | Err(error @ CloudBackupError::UnsupportedPasskeyProvider) => {
+            | Err(error @ CloudBackupError::Passkey(_)) => {
                 let pending = PendingEnableSession::awaiting_saved_passkey_confirmation(
                     Zeroizing::new(cove_cspp::master_key::MasterKey::from_bytes(
                         *master_key.as_bytes(),

@@ -39,10 +39,11 @@ use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, StagedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
-    CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupEnableContext,
-    CloudBackupEnableOutcome, CloudBackupEnableState, CloudBackupKeychain, CloudBackupLifecycle,
-    CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
-    CloudBackupRootPrompt, CloudBackupVerificationOutcome, CloudBackupVerificationPresentation,
+    CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupDisableOutcome,
+    CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupEnableState,
+    CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
+    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
+    CloudBackupVerificationOutcome, CloudBackupVerificationPresentation,
     CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
     DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
     PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
@@ -694,6 +695,38 @@ async fn backup_wallets_uploads_when_cloud_backup_is_enabled() {
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(4));
     assert!(Database::global().cloud_blob_sync_states.list().unwrap().into_iter().any(
         |state| matches!(state.state, PersistedCloudBlobState::UploadedPendingConfirmation(_))
+    ));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn backup_wallets_persists_partial_uploads_when_later_wallet_fails() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 3);
+
+    let first_wallet = xpub_only_wallet_metadata();
+    let mut second_wallet = WalletMetadata::preview_new();
+    second_wallet.wallet_type = WalletType::Hot;
+    Keychain::global()
+        .save_wallet_xpub(&first_wallet.id, sample_xpub(&first_wallet).parse().unwrap())
+        .unwrap();
+
+    let error =
+        manager.do_backup_wallets(&[first_wallet.clone(), second_wallet]).await.unwrap_err();
+
+    let record_id = wallet_record_id(first_wallet.id.as_ref());
+    assert!(error.to_string().contains("has no mnemonic"), "{error}");
+    assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(4));
+    assert!(matches!(
+        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+        Some(PersistedCloudBlobSyncState {
+            state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
+                | PersistedCloudBlobState::Confirmed(_),
+            ..
+        })
     ));
 }
 
@@ -1716,6 +1749,38 @@ async fn cancelled_saved_passkey_confirmation_preserves_pending_session() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn unsupported_provider_saved_passkey_confirmation_fails_without_retry() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    replace_pending_enable_session_for_test(
+        &manager,
+        PendingEnableSession::awaiting_saved_passkey_confirmation(
+            zeroize::Zeroizing::new(master_key),
+            zeroize::Zeroizing::new(StagedPrfKey {
+                prf_salt: [9; 32],
+                credential_id: vec![1, 2, 3],
+                provider_hint: None,
+            }),
+            CloudBackupEnableContext::settings_manual(),
+        ),
+    )
+    .await;
+
+    globals.passkey.set_authenticate_result(Err(PasskeyError::PrfUnsupportedProvider));
+    confirm_saved_passkey_session(&manager).await;
+
+    assert_eq!(globals.passkey.authenticate_count(), 1);
+    assert_eq!(manager.current_status(), CloudBackupStatus::UnsupportedPasskeyProvider);
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -2466,6 +2531,33 @@ async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
     assert_eq!(configured.destructive_operation, CloudBackupDestructiveOperationState::Idle);
     assert!(globals.cloud.has_namespace(&namespace));
     assert!(current_disable_generation().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn keep_cloud_backup_enabled_preserves_configured_runtime_status() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 3);
+
+    Database::global()
+        .cloud_backup_state
+        .set(&persisted_passkey_missing_cloud_backup_state(Some(3)))
+        .unwrap();
+    manager.reconcile_runtime_status(CloudBackupStatus::Enabled);
+    manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
+        message: "disable failed".into(),
+        can_keep_enabled: true,
+    });
+
+    manager.finish_keep_cloud_backup_enabled();
+
+    assert_eq!(manager.current_status(), CloudBackupStatus::PasskeyMissing);
+    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+        panic!("expected configured cloud backup lifecycle");
+    };
+    assert_eq!(configured.destructive_operation, CloudBackupDestructiveOperationState::Idle);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4720,6 +4812,48 @@ async fn deep_verify_fails_when_auto_sync_upload_fails() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn deep_verify_persists_partial_auto_sync_upload_before_later_wallet_fails() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    let first_wallet = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+    globals.cloud.fail_wallet_backup_upload_after_successes(1, "upload failed");
+
+    let mut second_wallet = WalletMetadata::preview_new();
+    second_wallet.wallet_type = WalletType::WatchOnly;
+    Database::global()
+        .wallets()
+        .save_all_wallets(
+            first_wallet.network,
+            first_wallet.wallet_mode,
+            vec![first_wallet.clone(), second_wallet],
+        )
+        .unwrap();
+
+    let result = deep_verify_for_test(&manager, true).await;
+
+    let record_id = wallet_record_id(first_wallet.id.as_ref());
+    match result {
+        DeepVerificationResult::Failed(DeepVerificationFailure::Retry { message, .. }) => {
+            assert!(message.contains("upload failed"), "{message}");
+        }
+        other => panic!("expected retry failure, got {other:?}"),
+    }
+    assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(1));
+    assert!(matches!(
+        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+        Some(PersistedCloudBlobSyncState {
+            state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
+                | PersistedCloudBlobState::Confirmed(_),
+            ..
+        })
+    ));
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn deep_verify_awaits_upload_confirmation_when_relist_still_misses_uploaded_wallet() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -4808,6 +4942,42 @@ async fn manual_verification_repairs_missing_master_key_wrapper_through_supervis
             ..
         })
     ));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn manual_verification_loads_wallet_inventory_before_wrapper_repair() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.fail_list_wallet_files("list failed");
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+
+    call!(manager.supervisor.start_verification(true)).await.unwrap();
+
+    wait_for_test_condition(
+        Duration::from_secs(8),
+        "verification fails before wrapper repair",
+        || {
+            matches!(
+                manager.model_snapshot().verification,
+                VerificationState::Failed(DeepVerificationFailure::Retry { .. })
+            )
+        },
+    )
+    .await;
+
+    match manager.model_snapshot().verification {
+        VerificationState::Failed(DeepVerificationFailure::Retry { message, .. }) => {
+            assert!(message.contains("failed to list wallet backups"), "{message}");
+        }
+        other => panic!("expected retry failure, got {other:?}"),
+    }
+    assert_eq!(globals.passkey.create_count(), 0);
+    assert!(!globals.cloud.has_master_key_backup(&namespace));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -6022,7 +6192,7 @@ async fn restore_counts_unsupported_wallet_versions_as_failures() {
     assert_eq!(report.wallets_failed, 1);
     assert_eq!(report.failed_wallet_errors.len(), 1);
     assert!(report.failed_wallet_errors[0].contains("unsupported wallet backup version 2"));
-    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(2));
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(1));
     assert!(
         Database::global()
             .wallets()
@@ -6285,6 +6455,7 @@ async fn restore_counts_listed_missing_wallet_backups_as_failures() {
     assert_eq!(report.wallets_failed, 1);
     assert!(report.failed_wallet_errors[0].contains("was listed but missing from cloud backup"));
     assert!(report.labels_failed_wallet_names.is_empty());
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(1));
 }
 
 #[tokio::test(flavor = "current_thread")]

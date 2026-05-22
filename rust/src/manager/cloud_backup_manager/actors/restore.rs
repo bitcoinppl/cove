@@ -236,7 +236,7 @@ impl RestoreOperation {
 
         self.ensure_current().await?;
         let mut namespace_wallets = Vec::with_capacity(restorable_namespaces.len());
-        let mut wallet_count = 0;
+        let mut listed_wallet_count = 0;
 
         for namespace in restorable_namespaces {
             let wallet_record_ids =
@@ -250,7 +250,7 @@ impl RestoreOperation {
                         ));
                     }
                 };
-            wallet_count += wallet_record_ids.len() as u32;
+            listed_wallet_count += wallet_record_ids.len() as u32;
             namespace_wallets.push((namespace, wallet_record_ids));
         }
 
@@ -267,12 +267,13 @@ impl RestoreOperation {
 
         let mut restore_session = WalletRestoreSession::new(existing_fingerprints);
         let mut downloaded_wallets = Vec::new();
-        let mut download_progress = RestoreDownloadProgress { completed: 0, total: wallet_count };
+        let mut download_progress =
+            RestoreDownloadProgress { completed: 0, total: listed_wallet_count };
 
         self.send_restore_progress(restore_progress_flow(
             RestoreProgressPhase::Downloading,
             0,
-            wallet_count,
+            listed_wallet_count,
         ))
         .await?;
 
@@ -309,12 +310,14 @@ impl RestoreOperation {
         .await?;
 
         let mut first_success_namespace_index = None;
+        let mut restored_wallet_count = 0;
         for (index, (namespace_index, (record_id, wallet))) in downloaded_wallets.iter().enumerate()
         {
             self.ensure_current().await?;
             match restore_session.restore_downloaded(wallet) {
                 Ok(outcome) => {
                     first_success_namespace_index.get_or_insert(*namespace_index);
+                    restored_wallet_count += 1;
                     report.wallets_restored += 1;
                     if let Some(warning) = outcome.labels_warning {
                         report.labels_failed_wallet_names.push(warning.wallet_name);
@@ -357,7 +360,7 @@ impl RestoreOperation {
                 .map_err(|_| CloudBackupError::Internal("invalid system clock".into()))?;
 
             let state = PersistedCloudBackupState::default()
-                .mark_enabled_preserving_verification(now, wallet_count);
+                .mark_enabled_preserving_verification(now, restored_wallet_count);
 
             self.persist_cloud_backup_state(state, "persist restored cloud backup state".into())
                 .await?;
@@ -510,13 +513,29 @@ pub(crate) fn save_restore_keychain_entries(
     let cspp = cove_cspp::Cspp::new(keychain.clone());
 
     if let Some(passkey) = passkey {
-        cloud_keychain
-            .save_passkey_and_namespace(&passkey.credential_id, passkey.prf_salt, &namespace_id)
-            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?
+        if let Err(error) = cloud_keychain.save_passkey_and_namespace(
+            &passkey.credential_id,
+            passkey.prf_salt,
+            &namespace_id,
+        ) {
+            if let Err(rollback) = cloud_keychain.clear_local_state() {
+                return Err(CloudBackupError::Internal(format!(
+                    "save cspp credentials: {error}; rollback failed: {rollback}"
+                )));
+            }
+
+            return Err(CloudBackupError::Internal(format!("save cspp credentials: {error}")));
+        }
     } else {
-        cloud_keychain
-            .save_namespace_id(&namespace_id)
-            .map_err_prefix("save namespace_id", CloudBackupError::Internal)?
+        if let Err(error) = cloud_keychain.save_namespace_id(&namespace_id) {
+            if let Err(rollback) = cloud_keychain.clear_local_state() {
+                return Err(CloudBackupError::Internal(format!(
+                    "save namespace_id: {error}; rollback failed: {rollback}"
+                )));
+            }
+
+            return Err(CloudBackupError::Internal(format!("save namespace_id: {error}")));
+        }
     };
 
     if let Err(error) = cspp.save_master_key(&master_key) {
@@ -554,6 +573,56 @@ mod tests {
         );
 
         assert!(result.is_err());
+        assert!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).is_none());
+        assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_none());
+        assert!(globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).is_none());
+    }
+
+    #[test]
+    fn restore_keychain_save_rolls_back_when_passkey_metadata_save_fails() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        globals.reset();
+        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        cspp.save_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
+        CloudBackupKeychain::global()
+            .save_passkey_and_namespace(&[9, 8, 7], [6; 32], "old-namespace")
+            .unwrap();
+        globals.keychain.fail_save_at(1);
+
+        let result = save_restore_keychain_entries(
+            cove_cspp::master_key::MasterKey::generate(),
+            Some(RestoredPasskeyMaterial { credential_id: vec![1, 2, 3], prf_salt: [4; 32] }),
+            "namespace-id".into(),
+        );
+
+        assert!(result.is_err());
+        assert!(cspp.load_master_key_from_store().unwrap().is_none());
+        assert!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).is_none());
+        assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_none());
+        assert!(globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).is_none());
+    }
+
+    #[test]
+    fn restore_keychain_save_rolls_back_when_namespace_metadata_save_fails() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        globals.reset();
+        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        cspp.save_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
+        CloudBackupKeychain::global()
+            .save_passkey_and_namespace(&[9, 8, 7], [6; 32], "old-namespace")
+            .unwrap();
+        globals.keychain.fail_save_at(1);
+
+        let result = save_restore_keychain_entries(
+            cove_cspp::master_key::MasterKey::generate(),
+            None,
+            "namespace-id".into(),
+        );
+
+        assert!(result.is_err());
+        assert!(cspp.load_master_key_from_store().unwrap().is_none());
         assert!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).is_none());
         assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_none());
         assert!(globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).is_none());

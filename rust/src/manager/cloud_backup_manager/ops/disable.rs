@@ -344,7 +344,12 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn finish_keep_cloud_backup_enabled(&self) {
-        self.reconcile_runtime_status(CloudBackupStatus::Enabled);
+        let runtime_status = match Self::load_persisted_state() {
+            state @ PersistedCloudBackupState::Configured(_) => Self::runtime_status_for(&state),
+            _ => CloudBackupStatus::Enabled,
+        };
+
+        self.reconcile_runtime_status(runtime_status);
         self.apply_disable_outcome(CloudBackupDisableOutcome::ReturnedToIdle);
     }
 

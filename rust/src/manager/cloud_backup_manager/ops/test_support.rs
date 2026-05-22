@@ -149,6 +149,7 @@ struct MockCloudState {
     upload_master_key_error: Option<CloudStorageError>,
     next_upload_wallet_backup_error: Option<CloudStorageError>,
     upload_wallet_backup_error: Option<CloudStorageError>,
+    upload_wallet_backup_error_after_successes: Option<(usize, CloudStorageError)>,
     delete_namespace_error: Option<CloudStorageError>,
     list_namespaces_error: Option<CloudStorageError>,
     reflect_uploaded_wallets_in_listing: bool,
@@ -269,6 +270,15 @@ impl MockCloudStorage {
 
     pub(crate) fn fail_wallet_backup_upload_quota_exceeded(&self) {
         self.state.lock().upload_wallet_backup_error = Some(CloudStorageError::QuotaExceeded);
+    }
+
+    pub(crate) fn fail_wallet_backup_upload_after_successes(
+        &self,
+        success_count: usize,
+        message: &str,
+    ) {
+        self.state.lock().upload_wallet_backup_error_after_successes =
+            Some((success_count, CloudStorageError::UploadFailed(message.into())));
     }
 
     pub(crate) fn fail_next_wallet_backup_upload_offline(&self, message: &str) {
@@ -392,6 +402,13 @@ impl CloudStorageAccess for MockCloudStorage {
             }
 
             if let Some(error) = state.upload_wallet_backup_error.clone() {
+                return Err(error);
+            }
+
+            if let Some((success_count, error)) =
+                state.upload_wallet_backup_error_after_successes.clone()
+                && state.uploaded_wallet_backups.len() >= success_count
+            {
                 return Err(error);
             }
 
