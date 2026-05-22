@@ -1,23 +1,23 @@
 use std::collections::VecDeque;
 use std::sync::Weak;
 
-use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, call, send};
+use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, send};
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_tokio::task::spawn_actor;
-use cove_util::ResultExt as _;
 use tokio::sync::oneshot;
 use tracing::{error, warn};
 
 use crate::database::Database;
-use crate::database::cloud_backup::{
-    CloudBackupRecordKey, PersistedCloudBackupState, PersistedCloudBlobSyncState,
-};
+use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::CloudBackupError;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 use crate::manager::cloud_backup_manager::{CloudBackupStore, RustCloudBackupManager};
-use crate::wallet::metadata::WalletId;
 
 use super::super::supervisor::CloudBackupSupervisor;
+use super::types::{
+    CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
+    CloudBackupWriteCompletion,
+};
 use super::worker::{
     CloudBackupRemoteWriteCommand, CloudBackupRemoteWriteResult, CloudBackupWriteWorker,
 };
@@ -65,134 +65,6 @@ impl<T> CloudBackupWriteCommandResult<T> {
 
     pub(crate) fn into_result(self) -> Result<T, CloudBackupError> {
         self.result
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct CloudBackupWriteClient {
-    supervisor: Addr<CloudBackupWriteSupervisor>,
-    origin: Option<CloudBackupExclusiveOperationClaim>,
-}
-
-impl CloudBackupWriteClient {
-    pub(crate) fn new(supervisor: Addr<CloudBackupWriteSupervisor>) -> Self {
-        Self { supervisor, origin: None }
-    }
-
-    pub(crate) fn for_operation(
-        supervisor: Addr<CloudBackupWriteSupervisor>,
-        origin: CloudBackupExclusiveOperationClaim,
-    ) -> Self {
-        Self { supervisor, origin: Some(origin) }
-    }
-
-    async fn await_result<T>(
-        &self,
-        receiver: CloudBackupWriteResultReceiver<T>,
-    ) -> Result<T, CloudBackupError> {
-        let result = receiver
-            .await
-            .map_err_prefix("wait for cloud backup write supervisor", CloudBackupError::Internal)?;
-        let context = result.context();
-        if context.origin() != self.origin {
-            return Err(CloudBackupError::Internal(format!(
-                "cloud backup write supervisor returned mismatched operation origin for command {:?}",
-                context.id()
-            )));
-        }
-
-        result.into_result()
-    }
-
-    pub(crate) async fn upload_wallet_backup(
-        &self,
-        cloud: CloudStorageClient,
-        namespace: String,
-        record_id: String,
-        data: Vec<u8>,
-    ) -> Result<(), CloudBackupError> {
-        let receiver = if let Some(origin) = self.origin {
-            call!(
-                self.supervisor
-                    .upload_wallet_backup_for_operation(cloud, namespace, record_id, data, origin)
-            )
-            .await
-        } else {
-            call!(self.supervisor.upload_wallet_backup(cloud, namespace, record_id, data)).await
-        }
-        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
-
-        self.await_result(receiver).await
-    }
-
-    pub(crate) async fn upload_master_key_backup(
-        &self,
-        cloud: CloudStorageClient,
-        namespace: String,
-        data: Vec<u8>,
-    ) -> Result<(), CloudBackupError> {
-        let Some(origin) = self.origin else {
-            return Err(CloudBackupError::Internal(
-                "cloud backup master-key upload requires an operation origin".into(),
-            ));
-        };
-
-        let receiver = call!(
-            self.supervisor.upload_master_key_backup_for_operation(cloud, namespace, data, origin)
-        )
-        .await
-        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
-
-        self.await_result(receiver).await
-    }
-
-    pub(crate) async fn upload_master_key_backup_with_completion(
-        &self,
-        cloud: CloudStorageClient,
-        namespace: String,
-        data: Vec<u8>,
-        completion: CloudBackupWriteCompletion,
-    ) -> Result<(), CloudBackupError> {
-        let Some(origin) = self.origin else {
-            return Err(CloudBackupError::Internal(
-                "cloud backup master-key upload completion requires an operation origin".into(),
-            ));
-        };
-
-        let receiver =
-            call!(self.supervisor.upload_master_key_backup_with_completion_for_operation(
-                cloud, namespace, data, completion, origin
-            ))
-            .await
-            .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
-
-        self.await_result(receiver).await
-    }
-
-    pub(crate) async fn finalize_uploaded_wallets(
-        &self,
-        cloud: CloudStorageClient,
-        namespace_id: String,
-        uploaded_wallets: Vec<CloudBackupUploadedWallet>,
-        state_mode: CloudBackupUploadedWalletsStateMode,
-    ) -> Result<(), CloudBackupError> {
-        let Some(origin) = self.origin else {
-            return Err(CloudBackupError::Internal(
-                "cloud backup wallet finalization requires an operation origin".into(),
-            ));
-        };
-
-        let receiver = call!(self.supervisor.finalize_uploaded_wallets_for_operation(
-            cloud,
-            namespace_id,
-            uploaded_wallets,
-            state_mode,
-            origin
-        ))
-        .await
-        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
-
-        self.await_result(receiver).await
     }
 }
 
@@ -437,6 +309,7 @@ impl CloudBackupWriteSupervisor {
         let (sender, receiver) = oneshot::channel();
         let write =
             CloudBackupPendingWrite { context: command, admission, remote, completion, sender };
+
         if write.admission.requires_writes_allowed()
             && let Err(error) = self.writes_allowed()
         {
@@ -531,6 +404,7 @@ impl CloudBackupWriteSupervisor {
         active.complete(result);
         self.start_next_pending_write();
         self.complete_drain_waiters_if_idle();
+
         Produces::ok(())
     }
 
@@ -554,10 +428,13 @@ impl CloudBackupWriteSupervisor {
         };
 
         match (&active.completion, output) {
+            // apply caller-provided local state only after the remote write succeeds
             (
                 CloudBackupWriteLocalCompletion::Apply(completion),
                 CloudBackupRemoteWriteResult::None,
             ) => completion.clone().apply(&manager).await,
+
+            // remove the local active-wallet sync state and refresh the count from cloud
             (
                 CloudBackupWriteLocalCompletion::DeleteActiveWallet { record_id },
                 CloudBackupRemoteWriteResult::WalletRecordIds(wallet_record_ids),
@@ -586,6 +463,8 @@ impl CloudBackupWriteSupervisor {
 
                 Ok(())
             }
+
+            // persist the enabled state before marking the uploaded wallets pending confirmation
             (
                 CloudBackupWriteLocalCompletion::FinalizeUploadedWallets {
                     namespace_id,
@@ -606,6 +485,8 @@ impl CloudBackupWriteSupervisor {
 
                 self.mark_uploaded_wallets(&manager, namespace_id, uploaded_wallets).await
             }
+
+            // complete a background upload batch using the best wallet count available
             (
                 CloudBackupWriteLocalCompletion::CompleteUploadedWalletBatch {
                     namespace_id,
@@ -618,6 +499,7 @@ impl CloudBackupWriteSupervisor {
                 CloudBackupStore::global().persist_enabled(wallet_count)?;
                 self.mark_uploaded_wallets(&manager, namespace_id, uploaded_wallets).await
             }
+
             _ => Err(CloudBackupError::Internal(
                 "cloud backup write supervisor received mismatched write output".into(),
             )),
@@ -635,9 +517,9 @@ impl CloudBackupWriteSupervisor {
             manager
                 .mark_wallet_uploaded_pending_confirmation_if_revision_current(
                     namespace_id,
-                    wallet.wallet_id.clone(),
-                    wallet.record_id.clone(),
-                    wallet.revision_hash.clone(),
+                    wallet.wallet_id().clone(),
+                    wallet.record_id().to_owned(),
+                    wallet.revision_hash().to_owned(),
                     uploaded_at,
                 )
                 .await?;
@@ -857,132 +739,6 @@ impl CloudBackupWriteSupervisor {
 impl Default for CloudBackupWriteSupervisor {
     fn default() -> Self {
         Self::new(Weak::new())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct CloudBackupUploadedWallet {
-    wallet_id: WalletId,
-    record_id: String,
-    revision_hash: String,
-}
-
-impl CloudBackupUploadedWallet {
-    pub(crate) fn new(wallet_id: WalletId, record_id: String, revision_hash: String) -> Self {
-        Self { wallet_id, record_id, revision_hash }
-    }
-
-    pub(crate) fn record_id(&self) -> &str {
-        &self.record_id
-    }
-
-    pub(crate) fn revision_hash(&self) -> &str {
-        &self.revision_hash
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum CloudBackupUploadedWalletsStateMode {
-    PreserveVerification,
-    ResetVerification,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct CloudBackupWalletCountRefresh {
-    previous_count: u32,
-    estimated_wallet_count: Option<u32>,
-    sync_state_estimated_wallet_count: Option<u32>,
-}
-
-impl CloudBackupWalletCountRefresh {
-    pub(crate) fn new(
-        previous_count: u32,
-        estimated_wallet_count: Option<u32>,
-        sync_state_estimated_wallet_count: Option<u32>,
-    ) -> Self {
-        Self { previous_count, estimated_wallet_count, sync_state_estimated_wallet_count }
-    }
-
-    fn wallet_count(self, listed_wallet_count: Option<u32>) -> u32 {
-        [
-            Some(self.previous_count),
-            self.estimated_wallet_count,
-            self.sync_state_estimated_wallet_count,
-            listed_wallet_count,
-        ]
-        .into_iter()
-        .flatten()
-        .max()
-        .unwrap_or(self.previous_count)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum CloudBackupWriteCompletion {
-    MarkUploadedPendingConfirmation {
-        namespace_id: String,
-        record_key: CloudBackupRecordKey,
-        revision_hash: String,
-        uploaded_at: u64,
-    },
-    MarkUploadedPendingConfirmationIfCurrent {
-        current_state: PersistedCloudBlobSyncState,
-        revision_hash: String,
-        uploaded_at: u64,
-    },
-}
-
-impl CloudBackupWriteCompletion {
-    pub(crate) fn mark_uploaded_pending_confirmation(
-        namespace_id: String,
-        record_key: CloudBackupRecordKey,
-        revision_hash: String,
-        uploaded_at: u64,
-    ) -> Self {
-        Self::MarkUploadedPendingConfirmation {
-            namespace_id,
-            record_key,
-            revision_hash,
-            uploaded_at,
-        }
-    }
-
-    pub(crate) fn mark_uploaded_pending_confirmation_if_current(
-        current_state: PersistedCloudBlobSyncState,
-        revision_hash: String,
-        uploaded_at: u64,
-    ) -> Self {
-        Self::MarkUploadedPendingConfirmationIfCurrent { current_state, revision_hash, uploaded_at }
-    }
-
-    async fn apply(self, manager: &RustCloudBackupManager) -> Result<(), CloudBackupError> {
-        match self {
-            Self::MarkUploadedPendingConfirmation {
-                namespace_id,
-                record_key,
-                revision_hash,
-                uploaded_at,
-            } => {
-                manager.mark_blob_uploaded_pending_confirmation(
-                    &namespace_id,
-                    record_key,
-                    revision_hash,
-                    uploaded_at,
-                )?;
-            }
-            Self::MarkUploadedPendingConfirmationIfCurrent {
-                current_state,
-                revision_hash,
-                uploaded_at,
-            } => {
-                let _ = manager.mark_blob_uploaded_pending_confirmation_if_current(
-                    &current_state,
-                    revision_hash,
-                    uploaded_at,
-                )?;
-            }
-        }
-        Ok(())
     }
 }
 

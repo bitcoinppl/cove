@@ -1149,10 +1149,10 @@ impl RustCloudBackupManager {
     async fn await_cloud_backup_write<T>(
         receiver: CloudBackupWriteResultReceiver<T>,
     ) -> Result<T, CloudBackupError> {
-        let result = receiver
+        receiver
             .await
-            .map_err_prefix("wait for cloud backup write supervisor", CloudBackupError::Internal)?;
-        result.into_result()
+            .map_err_prefix("wait for cloud backup write supervisor", CloudBackupError::Internal)?
+            .into_result()
     }
 
     pub(crate) async fn upload_cloud_wallet_backup(

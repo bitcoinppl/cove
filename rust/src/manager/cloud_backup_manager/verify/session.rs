@@ -54,9 +54,13 @@ impl AuthenticatedMasterKey {
 }
 
 enum MasterKeyResolution {
+    Continue(ContinuableMasterKeyResolution),
+    Finished(DeepVerificationResult),
+}
+
+enum ContinuableMasterKeyResolution {
     Authenticated(AuthenticatedMasterKey),
     NeedsWrapperRepair { reuse_credential_id: Option<Vec<u8>> },
-    Finished(DeepVerificationResult),
 }
 
 enum RepairedMasterKeyResolution {
@@ -262,18 +266,24 @@ impl VerificationSession {
         };
 
         let master_key_resolution = self.resolve_master_key_step(encrypted_master.as_ref()).await?;
+        let master_key_resolution = match master_key_resolution {
+            MasterKeyResolution::Finished(result) => {
+                return Ok(CloudBackupDeepVerificationStep::Complete(result));
+            }
+            MasterKeyResolution::Continue(resolution) => resolution,
+        };
 
         if let Some(result) = self.ensure_wallet_inventory_or_short_circuit().await {
             return Ok(CloudBackupDeepVerificationStep::Complete(result));
         }
 
         let authenticated_master = match master_key_resolution {
-            MasterKeyResolution::Authenticated(authenticated_master) => {
+            ContinuableMasterKeyResolution::Authenticated(authenticated_master) => {
                 self.apply_verified_cloud_master_key(&authenticated_master.master_key)?;
                 authenticated_master
             }
 
-            MasterKeyResolution::NeedsWrapperRepair { reuse_credential_id } => {
+            ContinuableMasterKeyResolution::NeedsWrapperRepair { reuse_credential_id } => {
                 match self.repair_wrapper_from_local_key(reuse_credential_id).await? {
                     RepairedMasterKeyResolution::PreparedWrapperRepair(prepared) => {
                         return Ok(CloudBackupDeepVerificationStep::PreparedWrapperRepair(
@@ -284,10 +294,6 @@ impl VerificationSession {
                         return Ok(CloudBackupDeepVerificationStep::Complete(result));
                     }
                 }
-            }
-
-            MasterKeyResolution::Finished(result) => {
-                return Ok(CloudBackupDeepVerificationStep::Complete(result));
             }
         };
 
@@ -401,7 +407,9 @@ impl VerificationSession {
         encrypted_master: Option<&EncryptedMasterKeyBackup>,
     ) -> Result<MasterKeyResolution, CloudBackupError> {
         let Some(encrypted_master) = encrypted_master else {
-            return Ok(MasterKeyResolution::NeedsWrapperRepair { reuse_credential_id: None });
+            return Ok(MasterKeyResolution::Continue(
+                ContinuableMasterKeyResolution::NeedsWrapperRepair { reuse_credential_id: None },
+            ));
         };
 
         let prf_salt = encrypted_master.prf_salt;
@@ -412,9 +420,11 @@ impl VerificationSession {
             }
             PasskeyAuthOutcome::NoCredentialFound => {
                 if self.local_master_key.is_some() {
-                    return Ok(MasterKeyResolution::NeedsWrapperRepair {
-                        reuse_credential_id: None,
-                    });
+                    return Ok(MasterKeyResolution::Continue(
+                        ContinuableMasterKeyResolution::NeedsWrapperRepair {
+                            reuse_credential_id: None,
+                        },
+                    ));
                 }
 
                 return Ok(MasterKeyResolution::Finished(
@@ -436,17 +446,19 @@ impl VerificationSession {
                     ));
                 }
 
-                Ok(MasterKeyResolution::Authenticated(AuthenticatedMasterKey::new(
-                    master_key,
-                    MasterKeyAuthorizationSource::CloudMasterKeyWrapper,
+                Ok(MasterKeyResolution::Continue(ContinuableMasterKeyResolution::Authenticated(
+                    AuthenticatedMasterKey::new(
+                        master_key,
+                        MasterKeyAuthorizationSource::CloudMasterKeyWrapper,
+                    ),
                 )))
             }
             // the passkey worked but the wrapper is stale; use the local key to replace it
-            Err(_) if self.local_master_key.is_some() => {
-                Ok(MasterKeyResolution::NeedsWrapperRepair {
+            Err(_) if self.local_master_key.is_some() => Ok(MasterKeyResolution::Continue(
+                ContinuableMasterKeyResolution::NeedsWrapperRepair {
                     reuse_credential_id: Some(authenticated.credential_id),
-                })
-            }
+                },
+            )),
             // without a local key there is no trusted source left to rebuild the cloud wrapper
             Err(_) => Ok(MasterKeyResolution::Finished(self.reinitialize_result(
                 "could not decrypt cloud master key and no local key available",

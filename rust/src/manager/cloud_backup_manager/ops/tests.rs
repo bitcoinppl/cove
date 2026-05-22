@@ -1275,8 +1275,10 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
     let preparation = manager.prepare_enable_recovery(vec![matched]).await.unwrap();
     manager.save_enable_recovery_master_key(&preparation).unwrap();
     let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
+    manager.project_exclusive_operation_started(claim);
     let writes = operation_write_client_for_test(&manager, claim);
     let error = manager.prepare_enable_recovery_completion(preparation, writes).await.unwrap_err();
+    manager.project_exclusive_operation_finished(claim);
     manager.rollback_enable_recovery_master_key();
 
     assert!(matches!(error, CloudBackupError::CloudStorage(_)));
@@ -1304,8 +1306,10 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
     let preparation = manager.prepare_enable_recovery(vec![matched]).await.unwrap();
     manager.save_enable_recovery_master_key(&preparation).unwrap();
     let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
+    manager.project_exclusive_operation_started(claim);
     let writes = operation_write_client_for_test(&manager, claim);
     let completion = manager.prepare_enable_recovery_completion(preparation, writes).await.unwrap();
+    manager.project_exclusive_operation_finished(claim);
     let error = CloudBackupKeychain::global()
         .save_passkey_and_namespace(
             &completion.credential_id,
