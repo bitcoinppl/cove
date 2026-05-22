@@ -512,31 +512,24 @@ pub(crate) fn save_restore_keychain_entries(
     let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
     let cspp = cove_cspp::Cspp::new(keychain.clone());
 
-    if let Some(passkey) = passkey {
-        if let Err(error) = cloud_keychain.save_passkey_and_namespace(
-            &passkey.credential_id,
-            passkey.prf_salt,
-            &namespace_id,
-        ) {
-            if let Err(rollback) = cloud_keychain.clear_local_state() {
-                return Err(CloudBackupError::Internal(format!(
-                    "save cspp credentials: {error}; rollback failed: {rollback}"
-                )));
-            }
-
-            return Err(CloudBackupError::Internal(format!("save cspp credentials: {error}")));
-        }
-    } else {
-        if let Err(error) = cloud_keychain.save_namespace_id(&namespace_id) {
-            if let Err(rollback) = cloud_keychain.clear_local_state() {
-                return Err(CloudBackupError::Internal(format!(
-                    "save namespace_id: {error}; rollback failed: {rollback}"
-                )));
-            }
-
-            return Err(CloudBackupError::Internal(format!("save namespace_id: {error}")));
-        }
+    let metadata_save_result = match passkey {
+        Some(passkey) => cloud_keychain
+            .save_passkey_and_namespace(&passkey.credential_id, passkey.prf_salt, &namespace_id)
+            .map_err(|error| ("save cspp credentials", error)),
+        None => cloud_keychain
+            .save_namespace_id(&namespace_id)
+            .map_err(|error| ("save namespace_id", error)),
     };
+
+    if let Err((context, error)) = metadata_save_result {
+        if let Err(rollback) = cloud_keychain.clear_local_state() {
+            return Err(CloudBackupError::Internal(format!(
+                "{context}: {error}; rollback failed: {rollback}"
+            )));
+        }
+
+        return Err(CloudBackupError::Internal(format!("{context}: {error}")));
+    }
 
     if let Err(error) = cspp.save_master_key(&master_key) {
         if let Err(rollback) = cloud_keychain.clear_local_state() {

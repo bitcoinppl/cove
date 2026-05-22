@@ -610,7 +610,7 @@ impl CloudStorageAccess for MockCloudStorage {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct MockPasskeyProviderImpl {
     discover_results: Arc<Mutex<VecDeque<MockDiscoverResult>>>,
     create_result: MockPasskeyCreateResult,
@@ -620,21 +620,6 @@ pub(crate) struct MockPasskeyProviderImpl {
     discover_count: Arc<Mutex<usize>>,
     presence_results: MockPasskeyPresenceResults,
     authenticated_credential_ids: Arc<Mutex<Vec<Vec<u8>>>>,
-}
-
-impl Default for MockPasskeyProviderImpl {
-    fn default() -> Self {
-        Self {
-            discover_results: Arc::new(Mutex::new(VecDeque::new())),
-            create_result: Arc::new(Mutex::new(None)),
-            authenticate_result: Arc::new(Mutex::new(None)),
-            create_count: Arc::new(Mutex::new(0)),
-            authenticate_count: Arc::new(Mutex::new(0)),
-            discover_count: Arc::new(Mutex::new(0)),
-            presence_results: Arc::new(Mutex::new(VecDeque::new())),
-            authenticated_credential_ids: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
 }
 
 impl MockPasskeyProviderImpl {
