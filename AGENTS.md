@@ -11,6 +11,8 @@ The role of this file is to describe common mistakes and confusion points that a
 - Prefer `From` implementations for error conversions whenever possible, and avoid standalone conversion functions when `From` would do
 - Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing Rust actors, async manager methods, worker tasks, Rust closure-based orchestration, reconciliation, shared state, locks, dispatch, or UniFFI manager boundaries
 - For topic-specific guidance (passkeys, iCloud Drive, iOS/Android parity), read the docs linked from [ARCHITECTURE.md](ARCHITECTURE.md)
+- Before changing redb `TableDefinition`s, redb `Value::type_name()` implementations, persisted database structs/enums, or module paths containing persisted types, read [docs/redb.md](docs/redb.md) and verify old and new table metadata compatibility
+- redb compatibility must account for every build that could have opened the table, including short-lived internal/TestFlight builds; local startup success is not enough unless the same app data went through the relevant historical build chain
 - prefer structurally correct fixes over temporary workarounds, even when the diff is larger
 - Make impossible states impossible; prefer typed domain models over caller-specific conditionals or UI-side compensation
 - For long-lived UI-facing managers, prefer `dispatch(action:)` for user intents and keep named methods for reads, bootstrap/lifecycle hooks, and special service-style operations, use `state()` for the initial snapshot only, and send typed delta reconcile messages for ongoing UI updates instead of re-sending the whole state after every mutation

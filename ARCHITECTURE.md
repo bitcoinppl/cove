@@ -83,6 +83,8 @@ This pattern is used throughout the codebase for shared resources and is safe to
 
 **Persistence.** Non-sensitive data is stored with [`redb`](https://crates.io/crates/redb) (`rust/src/database.rs`). Database file defaults to `$ROOT_DATA_DIR/cove.db` where `ROOT_DATA_DIR` is defined in `cove-common/src/consts.rs`.
 
+redb stores typed table metadata for each table and validates the key and value `TypeName` on `open_table`. Treat changes to `TableDefinition`, `Value::type_name()`, persisted database type names, and module paths for persisted types as compatibility-sensitive. `std::any::type_name::<T>()` uses the type's defining module path, not a public re-export path, so moving a persisted type into or out of a nested module can change on-disk expectations even when serialized bytes stay identical. Preserve exact historical type names or add a compatibility/migration path, and test every install path that could have created the table, including short-lived beta/internal builds. See [docs/redb.md](docs/redb.md) for the redb compatibility checklist.
+
 **Database tables:**
 
 - `GlobalFlagTable` - Feature flags and terms acceptance status
