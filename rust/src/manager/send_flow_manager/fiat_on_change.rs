@@ -61,7 +61,19 @@ impl FiatOnChangeHandler {
 
     pub fn on_change(&self, old_value: &str, new_value: &str) -> Result<Changeset> {
         let old_value = old_value.trim();
-        let new_value = new_value.trim();
+        let new_value_trimmed = new_value.trim();
+
+        // strip fiat tokens from pasted amounts (e.g. "$12.50", "12.50 USD"); rejects BTC/SATS
+        let Some(new_value) = sanitize::sanitize_fiat_amount(new_value_trimmed) else {
+            return Ok(Changeset {
+                entering_fiat_amount: Some(old_value.to_string()),
+                ..Default::default()
+            });
+        };
+
+        // If sanitization stripped tokens (e.g. "100 CHF" → "100"), early exits must still
+        // emit the cleaned string so the raw pasted text doesn't stay visible in the UI.
+        let sanitization_changed = new_value != new_value_trimmed;
 
         let symbol = self.selected_currency.symbol();
 
@@ -80,11 +92,17 @@ impl FiatOnChangeHandler {
 
         // early exit if same value is passed in
         if old_value == new_value {
-            return Ok(Changeset::default());
+            return Ok(Changeset {
+                entering_fiat_amount: sanitization_changed.then_some(old_value.to_string()),
+                ..Default::default()
+            });
         }
 
         if old_value_raw == new_value_raw {
-            return Ok(Changeset::default());
+            return Ok(Changeset {
+                entering_fiat_amount: sanitization_changed.then_some(old_value.to_string()),
+                ..Default::default()
+            });
         }
 
         // start entering with a period
@@ -97,7 +115,10 @@ impl FiatOnChangeHandler {
 
         // if old value is the same as the new value, then we don't need to do anything
         if old_value == new_value {
-            return Ok(Changeset::default());
+            return Ok(Changeset {
+                entering_fiat_amount: sanitization_changed.then_some(old_value.to_string()),
+                ..Default::default()
+            });
         }
 
         // don't allow adding more than 1 decimal point
@@ -110,7 +131,10 @@ impl FiatOnChangeHandler {
 
         // if the only change was formatting (adding ,) then we don't need to do anything
         if old_value_raw == new_value_raw {
-            return Ok(Changeset::default());
+            return Ok(Changeset {
+                entering_fiat_amount: sanitization_changed.then_some(old_value.to_string()),
+                ..Default::default()
+            });
         }
 
         // convert the fiat amount to btc amount
@@ -169,5 +193,135 @@ impl FiatOnChangeHandler {
         }
 
         Ok(changes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn handler() -> FiatOnChangeHandler {
+        let prices = PriceResponse {
+            time: 0,
+            fetched_at: 0,
+            usd: 100_000,
+            eur: 100_000,
+            gbp: 100_000,
+            cad: 100_000,
+            chf: 100_000,
+            aud: 100_000,
+            jpy: 100_000,
+        };
+        FiatOnChangeHandler::new(prices, FiatCurrency::Usd, None)
+    }
+
+    #[test]
+    fn pasting_bech32_bitcoin_address_is_rejected() {
+        let h = handler();
+        let old = "$100";
+        let new = "$100bc1qxyz0123456789abcdef";
+        let result = h.on_change(old, new).unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$100"));
+        assert!(result.btc_amount.is_none());
+        assert!(result.fiat_value.is_none());
+    }
+
+    #[test]
+    fn pasting_legacy_bitcoin_address_is_rejected() {
+        let h = handler();
+        let old = "$0";
+        let new = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2";
+        let result = h.on_change(old, new).unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$0"));
+        assert!(result.btc_amount.is_none());
+    }
+
+    #[test]
+    fn typing_a_single_letter_is_rejected() {
+        let h = handler();
+        let old = "$1";
+        let new = "$1a";
+        let result = h.on_change(old, new).unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$1"));
+        assert!(result.btc_amount.is_none());
+    }
+
+    #[test]
+    fn plain_digits_are_still_accepted() {
+        let h = handler();
+        let old = "$";
+        let new = "$123";
+        let result = h.on_change(old, new).unwrap();
+        assert!(result.fiat_value.is_some());
+        assert!(result.btc_amount.is_some());
+    }
+
+    #[test]
+    fn decimal_input_still_accepted() {
+        let h = handler();
+        let old = "$1";
+        let new = "$1.5";
+        let result = h.on_change(old, new).unwrap();
+        assert!(result.fiat_value.is_some());
+        assert!(result.btc_amount.is_some());
+    }
+
+    #[test]
+    fn empty_input_still_works() {
+        let h = handler();
+        let result = h.on_change("$100", "").unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$"));
+        assert_eq!(result.fiat_value, Some(0.0));
+    }
+
+    #[test]
+    fn pasting_amount_with_chf_suffix_is_accepted() {
+        let h = handler();
+        let result = h.on_change("$0", "100 CHF").unwrap();
+        // CHF is a fiat token — strips to "100", treated as 100 USD
+        assert_eq!(result.fiat_value, Some(100.0));
+        assert!(result.btc_amount.is_some());
+    }
+
+    #[test]
+    fn pasting_amount_with_btc_suffix_is_rejected() {
+        let h = handler();
+        let result = h.on_change("$0", "0.5 BTC").unwrap();
+        // BTC is not a fiat token — should revert to old value
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$0"));
+        assert!(result.fiat_value.is_none());
+        assert!(result.btc_amount.is_none());
+    }
+
+    #[test]
+    fn pasting_amount_with_sats_suffix_is_rejected() {
+        let h = handler();
+        let result = h.on_change("$0", "1000 SATS").unwrap();
+        // SATS is not a fiat token — should revert to old value
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$0"));
+        assert!(result.fiat_value.is_none());
+        assert!(result.btc_amount.is_none());
+    }
+
+    #[test]
+    fn pasting_fiat_code_over_same_numeric_value_rewrites_field() {
+        let h = handler();
+        // "100 CHF" over "$100" — numeric value unchanged, but display must be rewritten
+        let result = h.on_change("$100", "100 CHF").unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$100"));
+        assert!(result.fiat_value.is_none()); // amount didn't change, no re-parse needed
+
+        // "USD 100" over "$100" — same case with prefix code
+        let result = h.on_change("$100", "USD 100").unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$100"));
+        assert!(result.fiat_value.is_none());
+    }
+
+    #[test]
+    fn pasting_bech32_address_still_rejected_after_suffix_strip() {
+        let h = handler();
+        let result = h.on_change("$0", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").unwrap();
+        assert_eq!(result.entering_fiat_amount.as_deref(), Some("$0"));
+        assert!(result.btc_amount.is_none());
     }
 }

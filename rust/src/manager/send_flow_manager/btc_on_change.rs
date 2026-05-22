@@ -5,7 +5,7 @@ use cove_types::{amount::Amount, unit::BitcoinUnit};
 use cove_util::format::{self, NumberFormatter as _};
 use tracing::debug;
 
-use super::state::State;
+use super::{sanitize, state::State};
 
 #[derive(Debug, Clone)]
 pub struct BtcOnChangeHandler {
@@ -43,11 +43,23 @@ impl BtcOnChangeHandler {
         }
 
         let old = old_value.trim();
-        let new = new_value.trim();
+        let new_value_trimmed = new_value.trim();
+
+        // strip BTC-unit tokens from pasted input (e.g. "100 SATS" → "100"). #314
+        let Some(new) = sanitize::sanitize_btc_amount(new_value_trimmed) else {
+            return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
+        };
+
+        // If sanitization stripped tokens (e.g. "100 BTC" → "100"), early exits must still
+        // emit the cleaned string so the raw pasted text doesn't stay visible in the UI.
+        let sanitization_changed = new != new_value_trimmed;
 
         // early exit if nothing changed
         if old == new {
-            return Changeset::default();
+            return Changeset {
+                entering_amount_btc: sanitization_changed.then_some(old.into()),
+                ..Default::default()
+            };
         }
 
         if new == "00" {
@@ -98,7 +110,10 @@ impl BtcOnChangeHandler {
 
         // if the unformatted is the same as the old value, then we don't need to do anything
         if old.replace(',', "") == unformatted {
-            return Changeset::default();
+            return Changeset {
+                entering_amount_btc: sanitization_changed.then_some(old.into()),
+                ..Default::default()
+            };
         }
 
         // ---------------------------------------------------------------------
