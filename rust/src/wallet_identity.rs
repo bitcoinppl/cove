@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::str::FromStr as _;
 
-use bdk_wallet::bitcoin::bip32::{Fingerprint as BdkFingerprint, Xpub};
+use bdk_wallet::bitcoin::bip32::{ChildNumber, Fingerprint as BdkFingerprint, Xpub};
 use bdk_wallet::descriptor::ExtendedDescriptor;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_device::keychain::{Keychain, KeychainError};
@@ -133,7 +133,8 @@ impl PublicWalletIdentity {
         };
         let fingerprint = BdkFingerprint::from_str(&fingerprint.as_lowercase())
             .map_err(|error| PublicWalletIdentityError::Fingerprint(error.to_string()))?;
-        let descriptors = Descriptors::try_new_bip84(xpub, [84, coin_type, 0], fingerprint)?;
+        let account = bip84_account_from_xpub(&xpub);
+        let descriptors = Descriptors::try_new_bip84(xpub, [84, coin_type, account], fingerprint)?;
 
         Ok(Self::from_descriptors(&descriptors))
     }
@@ -172,16 +173,37 @@ impl PublicWalletIdentity {
     }
 }
 
+fn bip84_account_from_xpub(xpub: &Xpub) -> u32 {
+    match (xpub.depth, xpub.child_number) {
+        (3, ChildNumber::Hardened { index }) => index,
+        _ => 0,
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub(crate) enum WalletIdentityKey {
-    PublicIdentity { identity: PublicWalletIdentity, network: Network, mode: WalletMode },
-    Fingerprint { fingerprint: Fingerprint, network: Network, mode: WalletMode },
-    WalletId { id: WalletId, network: Network, mode: WalletMode },
+    PublicIdentity {
+        identity: PublicWalletIdentity,
+        fingerprint: Option<Fingerprint>,
+        network: Network,
+        mode: WalletMode,
+    },
+    Fingerprint {
+        fingerprint: Fingerprint,
+        network: Network,
+        mode: WalletMode,
+    },
+    WalletId {
+        id: WalletId,
+        network: Network,
+        mode: WalletMode,
+    },
 }
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ExistingWalletIdentitySet {
     public_identities: HashSet<(PublicWalletIdentity, Network, WalletMode)>,
+    public_identity_fingerprints: HashSet<(Fingerprint, Network, WalletMode)>,
     fingerprints: HashSet<(Fingerprint, Network, WalletMode)>,
     wallet_ids: HashSet<(WalletId, Network, WalletMode)>,
 }
@@ -194,11 +216,15 @@ impl ExistingWalletIdentitySet {
 
     pub(crate) fn contains(&self, key: &WalletIdentityKey) -> bool {
         match key {
-            WalletIdentityKey::PublicIdentity { identity, network, mode } => {
+            WalletIdentityKey::PublicIdentity { identity, fingerprint, network, mode } => {
                 self.public_identities.contains(&(identity.clone(), *network, *mode))
+                    || fingerprint.is_some_and(|fingerprint| {
+                        self.fingerprints.contains(&(fingerprint, *network, *mode))
+                    })
             }
             WalletIdentityKey::Fingerprint { fingerprint, network, mode } => {
                 self.fingerprints.contains(&(*fingerprint, *network, *mode))
+                    || self.public_identity_fingerprints.contains(&(*fingerprint, *network, *mode))
             }
             WalletIdentityKey::WalletId { id, network, mode } => {
                 self.wallet_ids.contains(&(id.clone(), *network, *mode))
@@ -208,8 +234,12 @@ impl ExistingWalletIdentitySet {
 
     pub(crate) fn insert(&mut self, key: WalletIdentityKey) {
         match key {
-            WalletIdentityKey::PublicIdentity { identity, network, mode } => {
+            WalletIdentityKey::PublicIdentity { identity, fingerprint, network, mode } => {
                 self.public_identities.insert((identity, network, mode));
+
+                if let Some(fingerprint) = fingerprint {
+                    self.public_identity_fingerprints.insert((fingerprint, network, mode));
+                }
             }
             WalletIdentityKey::Fingerprint { fingerprint, network, mode } => {
                 self.fingerprints.insert((fingerprint, network, mode));
@@ -238,6 +268,7 @@ pub(crate) fn identity_key_for_backup(
     if let Some(identity) = public_identity_from_backup(metadata, backup)? {
         return Ok(WalletIdentityKey::PublicIdentity {
             identity,
+            fingerprint: metadata.master_fingerprint.as_deref().copied(),
             network: metadata.network,
             mode: metadata.wallet_mode,
         });
@@ -294,6 +325,7 @@ fn existing_wallet_identity_key(
         if let Some(identity) = identity {
             return Ok(WalletIdentityKey::PublicIdentity {
                 identity,
+                fingerprint: metadata.master_fingerprint.as_deref().copied(),
                 network: metadata.network,
                 mode: metadata.wallet_mode,
             });
@@ -382,7 +414,7 @@ pub(crate) fn matching_public_wallet_by_identity(
             )?;
 
         let Some(wallet_identity) = wallet_identity else {
-            degraded_same_fingerprint_wallets.push(wallet_metadata.id);
+            degraded_same_fingerprint_wallets.push(wallet_metadata);
             continue;
         };
 
@@ -391,14 +423,16 @@ pub(crate) fn matching_public_wallet_by_identity(
         }
     }
 
-    for wallet_id in degraded_same_fingerprint_wallets {
-        let incoming_identity_hash = incoming_identity.redacted_hash();
-        warn!(
-            "same-fingerprint wallet missing public identity wallet_id={wallet_id} incoming_identity_hash={incoming_identity_hash}"
-        );
-    }
+    let Some(wallet_metadata) = degraded_same_fingerprint_wallets.into_iter().next() else {
+        return Ok(None);
+    };
+    let wallet_id = wallet_metadata.id.clone();
+    let incoming_identity_hash = incoming_identity.redacted_hash();
+    warn!(
+        "same-fingerprint wallet missing public identity wallet_id={wallet_id} incoming_identity_hash={incoming_identity_hash}, falling back to fingerprint match"
+    );
 
-    Ok(None)
+    Ok(Some(wallet_metadata))
 }
 
 #[cfg(test)]
@@ -452,6 +486,33 @@ mod tests {
             external: format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/0/*)"),
             internal: format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/1/*)"),
         }
+    }
+
+    fn account_xpub(account: u32) -> (BdkFingerprint, Xpub) {
+        let mnemonic = bip39::Mnemonic::from_str(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+        let seed = mnemonic.to_seed("");
+        let secp = bdk_wallet::bitcoin::secp256k1::Secp256k1::new();
+        let master = bdk_wallet::bitcoin::bip32::Xpriv::new_master(
+            bdk_wallet::bitcoin::Network::Bitcoin,
+            &seed,
+        )
+        .unwrap();
+        let path =
+            bdk_wallet::bitcoin::bip32::DerivationPath::from_str(&format!("m/84h/0h/{account}h"))
+                .unwrap();
+        let account_key = master.derive_priv(&secp, &path).unwrap();
+
+        (master.fingerprint(&secp), Xpub::from_priv(&secp, &account_key))
+    }
+
+    fn account_descriptor_pair(account: u32) -> Descriptors {
+        let (fingerprint, xpub) = account_xpub(account);
+        let descriptor = format!("wpkh([{fingerprint}/84h/0h/{account}h]{xpub}/<0;1>/*)");
+
+        pubport::descriptor::Descriptors::try_from_line(&descriptor).unwrap().into()
     }
 
     fn metadata(name: &str, wallet_type: WalletType) -> WalletMetadata {
@@ -540,6 +601,20 @@ mod tests {
     }
 
     #[test]
+    fn xpub_default_bip84_uses_account_from_account_xpub() {
+        let descriptors = account_descriptor_pair(1);
+        let xpub = descriptors.external.xpub().unwrap();
+        let fingerprint =
+            Fingerprint::from(descriptors.fingerprint().expect("test descriptor has fingerprint"));
+
+        let identity =
+            PublicWalletIdentity::from_xpub_default_bip84(xpub, fingerprint, Network::Bitcoin)
+                .unwrap();
+
+        assert_eq!(PublicWalletIdentity::from_descriptors(&descriptors), identity);
+    }
+
+    #[test]
     fn backup_duplicate_key_allows_same_fingerprint_different_public_identity() {
         let existing_metadata = metadata("Existing account 0", WalletType::Cold);
         let existing_backup = backup(&existing_metadata, Some(descriptors(0)));
@@ -560,6 +635,36 @@ mod tests {
         let existing_backup = backup(&existing_metadata, Some(descriptors(0)));
         let incoming_metadata = metadata("Incoming renamed", WalletType::Cold);
         let incoming_backup = backup(&incoming_metadata, Some(descriptors(0)));
+
+        let mut existing = ExistingWalletIdentitySet::default();
+        existing.insert(identity_key_for_backup(&existing_metadata, &existing_backup).unwrap());
+
+        let incoming_key = identity_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
+
+        assert!(existing.contains(&incoming_key));
+    }
+
+    #[test]
+    fn backup_duplicate_key_matches_degraded_existing_fingerprint() {
+        let existing_metadata = metadata("Existing degraded", WalletType::Cold);
+        let existing_backup = backup(&existing_metadata, None);
+        let incoming_metadata = metadata("Incoming restored", WalletType::Cold);
+        let incoming_backup = backup(&incoming_metadata, Some(descriptors(0)));
+
+        let mut existing = ExistingWalletIdentitySet::default();
+        existing.insert(identity_key_for_backup(&existing_metadata, &existing_backup).unwrap());
+
+        let incoming_key = identity_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
+
+        assert!(existing.contains(&incoming_key));
+    }
+
+    #[test]
+    fn backup_duplicate_key_matches_degraded_incoming_fingerprint() {
+        let existing_metadata = metadata("Existing public", WalletType::Cold);
+        let existing_backup = backup(&existing_metadata, Some(descriptors(0)));
+        let incoming_metadata = metadata("Incoming degraded", WalletType::Cold);
+        let incoming_backup = backup(&incoming_metadata, None);
 
         let mut existing = ExistingWalletIdentitySet::default();
         existing.insert(identity_key_for_backup(&existing_metadata, &existing_backup).unwrap());
@@ -659,9 +764,10 @@ mod tests {
     }
 
     #[test]
-    fn public_wallet_identity_matching_ignores_degraded_same_fingerprint_when_incoming_is_known() {
+    fn public_wallet_identity_matching_falls_back_to_degraded_same_fingerprint() {
         let keychain = test_keychain();
         let degraded = public_wallet_metadata("Degraded account", 0);
+        let expected_id = degraded.id.clone();
         let incoming = descriptor_pair(1);
         let incoming_fingerprint =
             Fingerprint::from(incoming.fingerprint().expect("test descriptor has a fingerprint"));
@@ -674,6 +780,6 @@ mod tests {
         )
         .unwrap();
 
-        assert!(matched.is_none());
+        assert_eq!(Some(expected_id), matched.map(|metadata| metadata.id));
     }
 }

@@ -119,8 +119,7 @@ impl Descriptors {
         master_fingerprint: Fingerprint,
     ) -> Result<Self, Error> {
         let derivation_path = match path {
-            [84, 0, 0] => "84h/0h/0h",
-            [84, 1, 0] => "84h/1h/0h",
+            [84, coin_type @ (0 | 1), account] => format!("84h/{coin_type}h/{account}h"),
             path => return Err(Error::InvalidBip84Path(path.to_vec())),
         };
 
