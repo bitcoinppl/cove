@@ -1953,14 +1953,29 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
     let first_wallet = WalletMetadata { master_fingerprint: None, ..first_wallet };
     let second_wallet = WalletMetadata { master_fingerprint: None, ..second_wallet };
     let third_wallet = WalletMetadata { master_fingerprint: None, ..third_wallet };
+    let sample_xpub_from_entropy = |metadata: &WalletMetadata, byte| {
+        let entropy = [byte; 16];
+        let mnemonic = Mnemonic::from_entropy(&entropy).unwrap();
+
+        crate::mnemonic::MnemonicExt::xpub(&mnemonic, metadata.network.into()).to_string()
+    };
     Keychain::global()
-        .save_wallet_xpub(&first_wallet.id, sample_xpub(&first_wallet).parse().unwrap())
+        .save_wallet_xpub(
+            &first_wallet.id,
+            sample_xpub_from_entropy(&first_wallet, 1).parse().unwrap(),
+        )
         .unwrap();
     Keychain::global()
-        .save_wallet_xpub(&second_wallet.id, sample_xpub(&second_wallet).parse().unwrap())
+        .save_wallet_xpub(
+            &second_wallet.id,
+            sample_xpub_from_entropy(&second_wallet, 2).parse().unwrap(),
+        )
         .unwrap();
     Keychain::global()
-        .save_wallet_xpub(&third_wallet.id, sample_xpub(&third_wallet).parse().unwrap())
+        .save_wallet_xpub(
+            &third_wallet.id,
+            sample_xpub_from_entropy(&third_wallet, 3).parse().unwrap(),
+        )
         .unwrap();
 
     let first_record_id = cove_cspp::backup_data::wallet_record_id(first_wallet.id.as_ref());

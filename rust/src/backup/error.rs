@@ -1,3 +1,5 @@
+use crate::wallet_identity::WalletIdentityError;
+
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum BackupError {
@@ -48,12 +50,10 @@ pub enum BackupError {
     Decompression(String),
 }
 
-impl From<crate::wallet_identity::WalletIdentityError> for BackupError {
-    fn from(error: crate::wallet_identity::WalletIdentityError) -> Self {
+impl From<WalletIdentityError> for BackupError {
+    fn from(error: WalletIdentityError) -> Self {
         match error {
-            crate::wallet_identity::WalletIdentityError::Database(error) => {
-                Self::Database(error.to_string())
-            }
+            WalletIdentityError::Database(error) => Self::Database(error.to_string()),
             error => Self::Restore(error.to_string()),
         }
     }

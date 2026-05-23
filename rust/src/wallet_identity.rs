@@ -24,8 +24,17 @@ pub(crate) enum PublicWalletIdentity {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub(crate) struct PublicDescriptorIdentity {
-    external: String,
-    internal: String,
+    external: CanonicalDescriptor,
+    internal: CanonicalDescriptor,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+struct CanonicalDescriptor(String);
+
+impl CanonicalDescriptor {
+    fn from_descriptor(descriptor: &ExtendedDescriptor) -> Self {
+        Self(descriptor.to_normalized_string())
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -77,8 +86,8 @@ impl PublicWalletIdentity {
         internal: &ExtendedDescriptor,
     ) -> Self {
         Self::Descriptor(PublicDescriptorIdentity {
-            external: external.to_normalized_string(),
-            internal: internal.to_normalized_string(),
+            external: CanonicalDescriptor::from_descriptor(external),
+            internal: CanonicalDescriptor::from_descriptor(internal),
         })
     }
 
@@ -153,7 +162,7 @@ impl PublicWalletIdentity {
     pub(crate) fn redacted_hash(&self) -> String {
         let identity = match self {
             Self::Descriptor(identity) => {
-                format!("descriptor:{}\n{}", identity.external, identity.internal)
+                format!("descriptor:{}\n{}", identity.external.0, identity.internal.0)
             }
             Self::Xpub(identity) => format!("xpub:{}", identity.0),
         };
