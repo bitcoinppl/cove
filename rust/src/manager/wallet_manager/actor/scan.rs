@@ -327,7 +327,7 @@ impl WalletScanActor {
 
     async fn handle_scan_result(
         &mut self,
-        (scan, result): (RunningScan, Result<FullScanResponse<KeychainKind>, Error>),
+        (scan, result): (RunningScan, Result<FullScanResponse<KeychainKind>, NodeClientError>),
     ) -> ActorResult<()> {
         let cancel_token = self.active_cancel_token.as_ref();
         if let Err(error) = &result
