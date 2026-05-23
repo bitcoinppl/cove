@@ -413,12 +413,7 @@ impl WalletScanActor {
     }
 
     async fn handle_scan_prepare_failed(&mut self) -> ActorResult<()> {
-        self.clear_active_scan();
-
-        if self.queued_rescan_gap_limit.is_some() {
-            self.start_queued_rescan().await?;
-            return Produces::ok(());
-        }
+        self.clear_scan_lifecycle();
 
         self.send_event(WalletScanEvent::StatusChanged(WalletScanStatus::Idle));
         Produces::ok(())
