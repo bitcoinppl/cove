@@ -119,7 +119,13 @@ impl Descriptors {
         master_fingerprint: Fingerprint,
     ) -> Result<Self, Error> {
         let derivation_path = match path {
-            [84, coin_type @ (0 | 1), account] => format!("84h/{coin_type}h/{account}h"),
+            [84, coin_type @ (0 | 1), account] => {
+                if account >= 1_u32 << 31 {
+                    return Err(Error::InvalidBip84Path(path.to_vec()));
+                }
+
+                format!("84h/{coin_type}h/{account}h")
+            }
             path => return Err(Error::InvalidBip84Path(path.to_vec())),
         };
 
@@ -367,6 +373,35 @@ mod tests {
 
     fn test_xpub() -> &'static str {
         "xpub6DM7CYgaTMdMbhTcLTUWmNUE5WLXK5hx8ZMa4sRw8qYJPqtqKYiKnwsmT8A6AijDVAUZRivdBnXdR8QE7Y9vVnqvzPL3fXCmu1WtCRLdAoz"
+    }
+
+    #[test]
+    fn test_try_new_bip84_supports_multiple_accounts() {
+        let xpub = Xpub::from_str(test_xpub()).unwrap();
+        let fingerprint = Fingerprint::from_str("a262308d").unwrap();
+
+        let account_0 = Descriptors::try_new_bip84(xpub, [84, 0, 0], fingerprint);
+        let account_1 = Descriptors::try_new_bip84(xpub, [84, 0, 1], fingerprint);
+
+        assert!(account_0.is_ok());
+        assert!(account_1.is_ok());
+
+        assert_ne!(
+            account_0.unwrap().external.extended_descriptor,
+            account_1.unwrap().external.extended_descriptor
+        );
+    }
+
+    #[test]
+    fn test_try_new_bip84_rejects_invalid_account_index() {
+        let xpub = Xpub::from_str(test_xpub()).unwrap();
+        let fingerprint = Fingerprint::from_str("a262308d").unwrap();
+
+        let result = Descriptors::try_new_bip84(xpub, [84, 0, 1_u32 << 31], fingerprint);
+
+        assert!(
+            matches!(result, Err(Error::InvalidBip84Path(path)) if path == [84, 0, 1_u32 << 31])
+        );
     }
 
     #[test]

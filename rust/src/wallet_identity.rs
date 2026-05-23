@@ -5,7 +5,7 @@ use bdk_wallet::bitcoin::bip32::{ChildNumber, Fingerprint as BdkFingerprint, Xpu
 use bdk_wallet::descriptor::ExtendedDescriptor;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_device::keychain::{Keychain, KeychainError};
-use cove_util::sha256_hash;
+use cove_util::{result_ext::ResultExt as _, sha256_hash};
 use strum::IntoEnumIterator as _;
 use tracing::warn;
 
@@ -96,9 +96,9 @@ impl PublicWalletIdentity {
         internal: &str,
     ) -> Result<Self, PublicWalletIdentityError> {
         let external = ExtendedDescriptor::from_str(external)
-            .map_err(|error| PublicWalletIdentityError::DescriptorParse(error.to_string()))?;
+            .map_err_str(PublicWalletIdentityError::DescriptorParse)?;
         let internal = ExtendedDescriptor::from_str(internal)
-            .map_err(|error| PublicWalletIdentityError::DescriptorParse(error.to_string()))?;
+            .map_err_str(PublicWalletIdentityError::DescriptorParse)?;
 
         Ok(Self::from_descriptor_pair(&external, &internal))
     }
@@ -112,8 +112,7 @@ impl PublicWalletIdentity {
         fingerprint: Option<Fingerprint>,
         network: Network,
     ) -> Result<Self, PublicWalletIdentityError> {
-        let xpub = Xpub::from_str(xpub)
-            .map_err(|error| PublicWalletIdentityError::Xpub(error.to_string()))?;
+        let xpub = Xpub::from_str(xpub).map_err_str(PublicWalletIdentityError::Xpub)?;
 
         let Some(fingerprint) = fingerprint else {
             return Ok(Self::from_xpub(xpub));
@@ -132,7 +131,7 @@ impl PublicWalletIdentity {
             Network::Testnet | Network::Testnet4 | Network::Signet => 1,
         };
         let fingerprint = BdkFingerprint::from_str(&fingerprint.as_lowercase())
-            .map_err(|error| PublicWalletIdentityError::Fingerprint(error.to_string()))?;
+            .map_err_str(PublicWalletIdentityError::Fingerprint)?;
         let account = bip84_account_from_xpub(&xpub);
         let descriptors = Descriptors::try_new_bip84(xpub, [84, coin_type, account], fingerprint)?;
 

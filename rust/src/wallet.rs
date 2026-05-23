@@ -314,7 +314,7 @@ impl Wallet {
                 fingerprint,
                 &incoming_identity,
             )
-            .map_err(|error| WalletError::LoadError(error.to_string()))?;
+            .map_err_str(WalletError::LoadError)?;
 
             if let Some(existing_metadata) = existing {
                 return Self::upgrade_to_cold(
