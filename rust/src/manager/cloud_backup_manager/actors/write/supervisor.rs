@@ -167,6 +167,34 @@ struct CloudBackupWriteDrainWaiter {
     blocker: CloudBackupWriteBlocker,
 }
 
+#[derive(Debug)]
+struct CloudBackupWriteAdmissionCheck {
+    active_blocker: Option<CloudBackupWriteBlocker>,
+    persisted_state_blocks_writes: Option<bool>,
+}
+
+impl CloudBackupWriteAdmissionCheck {
+    fn new(active_blocker: Option<CloudBackupWriteBlocker>) -> Self {
+        Self { active_blocker, persisted_state_blocks_writes: None }
+    }
+
+    fn writes_allowed(&mut self) -> Result<(), CloudBackupError> {
+        if self.active_blocker.is_some() {
+            return Err(blocked_writes_error());
+        }
+
+        let persisted_state_blocks_writes = *self
+            .persisted_state_blocks_writes
+            .get_or_insert_with(CloudBackupWriteSupervisor::persisted_state_blocks_writes);
+
+        if persisted_state_blocks_writes {
+            return Err(blocked_writes_error());
+        }
+
+        Ok(())
+    }
+}
+
 /// Coordinates one-at-a-time remote writes and their local completion
 #[derive(Debug, Default)]
 pub(crate) struct CloudBackupWriteSupervisor {
@@ -301,15 +329,13 @@ impl CloudBackupWriteSupervisor {
         command
     }
 
-    fn writes_allowed(&self) -> Result<(), CloudBackupError> {
-        if self.active_blocker.is_some() {
-            return Err(blocked_writes_error());
-        }
+    fn write_admission_check(&self) -> CloudBackupWriteAdmissionCheck {
+        CloudBackupWriteAdmissionCheck::new(self.active_blocker)
+    }
 
-        ensure_writes_allowed_with_blocker(
-            &self.active_blocker,
-            Self::persisted_state_blocks_writes(),
-        )
+    fn writes_allowed(&self) -> Result<(), CloudBackupError> {
+        let mut admission_check = self.write_admission_check();
+        admission_check.writes_allowed()
     }
 
     fn submit_write(
@@ -322,9 +348,10 @@ impl CloudBackupWriteSupervisor {
         let (sender, receiver) = oneshot::channel();
         let write =
             CloudBackupPendingWrite { context: command, admission, remote, completion, sender };
+        let mut admission_check = self.write_admission_check();
 
         if write.admission.requires_writes_allowed()
-            && let Err(error) = self.writes_allowed()
+            && let Err(error) = admission_check.writes_allowed()
         {
             write.complete(Err(error));
             return receiver;
@@ -341,9 +368,10 @@ impl CloudBackupWriteSupervisor {
             return;
         }
 
+        let mut admission_check = self.write_admission_check();
         while let Some(write) = self.pending_writes.pop_front() {
             if write.admission.requires_writes_allowed()
-                && let Err(error) = self.writes_allowed()
+                && let Err(error) = admission_check.writes_allowed()
             {
                 write.complete(Err(error));
                 continue;
@@ -381,9 +409,12 @@ impl CloudBackupWriteSupervisor {
 
     fn reject_blocked_pending_writes(&mut self) {
         let mut retained = VecDeque::new();
+        let mut admission_check = self.write_admission_check();
         while let Some(write) = self.pending_writes.pop_front() {
-            if write.admission.requires_writes_allowed() {
-                write.complete(Err(blocked_writes_error()));
+            if write.admission.requires_writes_allowed()
+                && let Err(error) = admission_check.writes_allowed()
+            {
+                write.complete(Err(error));
             } else {
                 retained.push_back(write);
             }
@@ -406,6 +437,13 @@ impl CloudBackupWriteSupervisor {
                 "cloud backup write supervisor received mismatched completion for command {:?}",
                 context.id()
             ))));
+            self.start_next_pending_write();
+            self.complete_drain_waiters_if_idle();
+            return Produces::ok(());
+        }
+
+        if let Err(error) = self.ensure_pending_write_origin_current(active.context) {
+            active.complete(Err(error));
             self.start_next_pending_write();
             self.complete_drain_waiters_if_idle();
             return Produces::ok(());
@@ -751,17 +789,6 @@ impl CloudBackupWriteSupervisor {
     }
 }
 
-fn ensure_writes_allowed_with_blocker(
-    active_blocker: &Option<CloudBackupWriteBlocker>,
-    writes_blocked_by_persisted_state: bool,
-) -> Result<(), CloudBackupError> {
-    if active_blocker.is_some() || writes_blocked_by_persisted_state {
-        return Err(blocked_writes_error());
-    }
-
-    Ok(())
-}
-
 fn blocked_writes_error() -> CloudBackupError {
     CloudBackupError::Deferred("cloud backup writes are paused while disabling cloud backup".into())
 }
@@ -958,6 +985,35 @@ mod tests {
         assert!(matches!(result, Err(CloudBackupError::Cancelled)));
         assert!(supervisor.in_flight_write.is_none());
         assert!(supervisor.pending_writes.is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn stale_in_flight_operation_error_reports_cancelled() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        reset_cloud_backup_test_state(&manager, globals);
+        let mut supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
+        let stale = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::Enable,
+            u64::MAX,
+        );
+        let command = supervisor.advance_operation_command_id(stale);
+        let (sender, receiver) = oneshot::channel();
+        supervisor.in_flight_write = Some(CloudBackupInFlightWrite {
+            context: command,
+            completion: CloudBackupWriteLocalCompletion::None,
+            sender,
+        });
+
+        supervisor
+            .complete_remote_write(command, Err(CloudBackupError::Internal("remote error".into())))
+            .await
+            .unwrap();
+
+        let result = receiver.await.unwrap().into_result();
+        assert!(matches!(result, Err(CloudBackupError::Cancelled)));
+        assert!(supervisor.in_flight_write.is_none());
     }
 
     #[tokio::test(flavor = "current_thread")]

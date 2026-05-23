@@ -1160,7 +1160,7 @@ impl RustCloudBackupManager {
             return true;
         }
 
-        // persisted disabling state fences writes across manager restarts
+        // keep this DB read so restarts and direct disable recovery preserve the write fence
         Self::load_persisted_state().is_disabling()
     }
 
@@ -3322,6 +3322,27 @@ mod tests {
             async move { operation.ensure_current().await.unwrap_err() }
         });
         assert!(matches!(error, CloudBackupError::Cancelled));
+    }
+
+    #[test]
+    fn invalidated_restore_operation_cannot_update_restore_progress() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        let operation = new_restore_operation(&manager);
+
+        invalidate_restore_operation(&manager);
+        assert_eq!(manager.state.read().snapshot().restore_progress, None);
+
+        let progress = CloudBackupRestoreFlow::Downloading { completed: 1, total: 3 };
+        let error = run_on_cloud_backup_runtime(async move {
+            operation
+                .apply_outcome(CloudBackupRestoreOutcome::ProgressReported(progress))
+                .await
+                .unwrap_err()
+        });
+
+        assert!(matches!(error, CloudBackupError::Cancelled));
+        assert_eq!(manager.state.read().snapshot().restore_progress, None);
     }
 
     #[test]
