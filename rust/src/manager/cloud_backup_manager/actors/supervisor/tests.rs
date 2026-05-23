@@ -44,6 +44,14 @@ fn test_staged_passkey(credential_id: Vec<u8>) -> StagedPrfKey {
     StagedPrfKey { prf_salt: [9; 32], credential_id, provider_hint: None }
 }
 
+fn test_runtime_passkey_authorization() -> RuntimePasskeyAuthorization {
+    RuntimePasskeyAuthorization {
+        namespace_id: "namespace".into(),
+        credential_id: vec![1, 2, 3],
+        prf_salt: [9; 32],
+    }
+}
+
 fn test_enable_upload_finalization() -> EnableUploadFinalization {
     let master_key = cove_cspp::master_key::MasterKey::generate();
     let namespace_id = master_key.namespace_id();
@@ -304,7 +312,10 @@ async fn supervisor_ignores_stale_repair_passkey_wrapper_upload_completion() {
     supervisor
         .complete_repair_passkey_wrapper_upload(
             stale,
-            Ok(CloudBackupUploadedPasskeyWrapperRepair { namespace_id: "stale".into() }),
+            Ok((
+                CloudBackupUploadedPasskeyWrapperRepair { namespace_id: "stale".into() },
+                test_runtime_passkey_authorization(),
+            )),
         )
         .await
         .unwrap();

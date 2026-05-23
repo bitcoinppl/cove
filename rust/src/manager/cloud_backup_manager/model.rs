@@ -62,7 +62,7 @@ enum CloudBackupConfiguredPrompt {
     PasskeyChoice(CloudBackupPasskeyChoiceIntent),
 }
 
-/// Exclusive operation category used to reject overlapping long-running work
+/// Exclusive operation category where newer claims replace active older claims
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloudBackupExclusiveOperation {
     Enable,
@@ -845,7 +845,7 @@ pub(crate) enum CloudBackupStateReducerEvent {
     OtherBackupsOperationResolved(OtherBackupsOperation),
 }
 
-/// Marker for rejected reducer events
+/// Intentionally uninhabited marker because reducer events are currently total
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CloudBackupStateReducerEventRejection {}
 

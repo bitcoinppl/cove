@@ -154,6 +154,7 @@ struct MockCloudState {
     list_namespaces_error: Option<CloudStorageError>,
     reflect_uploaded_wallets_in_listing: bool,
     uploaded_wallet_backups: Vec<(String, String)>,
+    wallet_backup_success_count: usize,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
     delete_namespace_attempts: usize,
     list_wallet_files_attempts: usize,
@@ -407,7 +408,7 @@ impl CloudStorageAccess for MockCloudStorage {
 
             if let Some((success_count, error)) =
                 state.upload_wallet_backup_error_after_successes.clone()
-                && state.uploaded_wallet_backups.len() >= success_count
+                && state.wallet_backup_success_count >= success_count
             {
                 return Err(error);
             }
@@ -417,6 +418,7 @@ impl CloudStorageAccess for MockCloudStorage {
             let disabling = state.disabling_on_next_upload.take();
             state.wallet_backups.insert((namespace.clone(), record_id.clone()), data);
             state.uploaded_wallet_backups.push((namespace, record_id));
+            state.wallet_backup_success_count += 1;
             (dirty_wallet, changed_wallet, disabling)
         };
         if let Some(wallet_id) = dirty_wallet {

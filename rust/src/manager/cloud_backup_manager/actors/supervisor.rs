@@ -99,7 +99,7 @@ pub(crate) enum CloudBackupOperation {
 /// but it is intentionally lost on restart so passkey availability is checked
 /// again through the platform
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct RuntimePasskeyAuthorization {
+pub(crate) struct RuntimePasskeyAuthorization {
     namespace_id: String,
     credential_id: Vec<u8>,
     prf_salt: [u8; 32],
@@ -901,6 +901,7 @@ impl CloudBackupSupervisor {
 
     pub async fn clear_upload_runtime_state(&mut self) -> ActorResult<()> {
         self.pending_enable_session = None;
+        self.pending_verification_completion = None;
         call!(self.sync_health.clear_upload_runtime_state()).await?;
         call!(self.uploads.clear_upload_runtime_state()).await?;
         Produces::ok(())

@@ -2354,7 +2354,7 @@ async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() 
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn wrapper_repair_does_not_upload_when_passkey_persistence_fails() {
+async fn wrapper_repair_reports_failure_after_upload_when_passkey_persistence_fails() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -2368,7 +2368,9 @@ async fn wrapper_repair_does_not_upload_when_passkey_persistence_fails() {
 
     run_repair_passkey_operation(&manager, true).await;
 
-    assert!(!globals.cloud.has_master_key_backup(&namespace));
+    assert!(globals.cloud.has_master_key_backup(&namespace));
+    assert_eq!(CloudBackupKeychain::global().load_credential_id(), None);
+    assert_eq!(CloudBackupKeychain::global().load_prf_salt(), None);
 }
 
 #[tokio::test(flavor = "current_thread")]

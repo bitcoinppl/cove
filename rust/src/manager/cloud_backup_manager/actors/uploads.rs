@@ -530,7 +530,7 @@ mod tests {
         let mut worker = CloudBackupUploadWorker::new(Arc::downgrade(&manager));
         worker.pending_upload_verifier_running = true;
 
-        futures::executor::block_on(worker.pending_upload_verifier_finished(false)).unwrap();
+        worker.pending_upload_verifier_finished(false).await.unwrap();
 
         assert!(!worker.pending_upload_verifier_running);
     }

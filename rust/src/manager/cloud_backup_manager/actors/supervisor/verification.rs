@@ -180,30 +180,19 @@ impl CloudBackupSupervisor {
         prepared: CloudBackupPreparedDeepVerificationWrapperRepair,
         continuation: DeepVerificationContinuation,
     ) {
-        if let Err(error) = CloudBackupKeychain::new(Keychain::global().clone())
-            .save_passkey(prepared.credential_id(), prepared.prf_salt())
-            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)
-        {
-            self.finish_deep_verification_continuation_with_error(
-                manager,
-                claim,
-                continuation,
-                error,
-            );
-            return;
-        }
-
-        self.runtime_passkey_authorization = Some(RuntimePasskeyAuthorization {
+        let authorization = RuntimePasskeyAuthorization {
             namespace_id: prepared.namespace_id().to_owned(),
             credential_id: prepared.credential_id().to_vec(),
             prf_salt: prepared.prf_salt(),
-        });
+        };
 
         let (resume, upload) = prepared.into_parts();
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         self.addr.send_fut_with(move |addr| async move {
-            let result =
-                manager.upload_passkey_wrapper_repair(upload, writes).await.map(|_| resume);
+            let result = manager
+                .upload_passkey_wrapper_repair(upload, writes)
+                .await
+                .map(|_| (resume, authorization));
             send!(addr.complete_deep_verification_wrapper_repair_upload(
                 claim,
                 continuation,
@@ -216,7 +205,10 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         continuation: DeepVerificationContinuation,
-        result: Result<CloudBackupPendingDeepVerificationResume, CloudBackupError>,
+        result: Result<
+            (CloudBackupPendingDeepVerificationResume, RuntimePasskeyAuthorization),
+            CloudBackupError,
+        >,
     ) -> ActorResult<()> {
         if self.active_operation != Some(claim) {
             return Produces::ok(());
@@ -227,7 +219,21 @@ impl CloudBackupSupervisor {
         };
 
         match result {
-            Ok(resume) => {
+            Ok((resume, authorization)) => {
+                if let Err(error) = CloudBackupKeychain::new(Keychain::global().clone())
+                    .save_passkey(&authorization.credential_id, authorization.prf_salt)
+                    .map_err_prefix("save cspp credentials", CloudBackupError::Internal)
+                {
+                    self.finish_deep_verification_continuation_with_error(
+                        manager,
+                        claim,
+                        continuation,
+                        error,
+                    );
+                    return Produces::ok(());
+                }
+
+                self.runtime_passkey_authorization = Some(authorization);
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager
                         .resume_deep_verify_after_wrapper_repair(
@@ -766,29 +772,19 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok(preparation) => {
-                if let Err(error) = CloudBackupKeychain::new(Keychain::global().clone())
-                    .save_passkey(&preparation.credential_id, preparation.prf_salt)
-                    .map_err_prefix("save cspp credentials", CloudBackupError::Internal)
-                {
-                    manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
-                        action: RecoveryAction::RepairPasskey,
-                        error: error.to_string(),
-                    });
-                    self.active_operation = None;
-                    manager.project_exclusive_operation_finished(claim);
-                    return Produces::ok(());
-                }
-
-                self.runtime_passkey_authorization = Some(RuntimePasskeyAuthorization {
+                let authorization = RuntimePasskeyAuthorization {
                     namespace_id: preparation.namespace_id.clone(),
                     credential_id: preparation.credential_id.clone(),
                     prf_salt: preparation.prf_salt,
-                });
+                };
 
                 let upload = preparation.into_upload();
                 let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
                 self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.upload_passkey_wrapper_repair(upload, writes).await;
+                    let result = manager
+                        .upload_passkey_wrapper_repair(upload, writes)
+                        .await
+                        .map(|uploaded| (uploaded, authorization));
                     send!(addr.complete_repair_passkey_wrapper_upload(claim, result));
                 });
             }
@@ -825,7 +821,10 @@ impl CloudBackupSupervisor {
     pub async fn complete_repair_passkey_wrapper_upload(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        result: Result<CloudBackupUploadedPasskeyWrapperRepair, CloudBackupError>,
+        result: Result<
+            (CloudBackupUploadedPasskeyWrapperRepair, RuntimePasskeyAuthorization),
+            CloudBackupError,
+        >,
     ) -> ActorResult<()> {
         if self.active_operation != Some(claim) {
             return Produces::ok(());
@@ -836,7 +835,21 @@ impl CloudBackupSupervisor {
         };
 
         match result {
-            Ok(uploaded) => {
+            Ok((uploaded, authorization)) => {
+                if let Err(error) = CloudBackupKeychain::new(Keychain::global().clone())
+                    .save_passkey(&authorization.credential_id, authorization.prf_salt)
+                    .map_err_prefix("save cspp credentials", CloudBackupError::Internal)
+                {
+                    manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
+                        action: RecoveryAction::RepairPasskey,
+                        error: error.to_string(),
+                    });
+                    self.active_operation = None;
+                    manager.project_exclusive_operation_finished(claim);
+                    return Produces::ok(());
+                }
+
+                self.runtime_passkey_authorization = Some(authorization);
                 manager.finish_passkey_wrapper_repair(uploaded);
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.prepare_passkey_repair_finalization().await;
