@@ -168,6 +168,11 @@ impl WalletScanActor {
     }
 
     pub(crate) async fn start_incremental_scan(&mut self) -> ActorResult<()> {
+        if self.scan_in_progress() {
+            debug!("scan already in progress, skipping incremental scan");
+            return Produces::ok(());
+        }
+
         self.begin_scan(RunningScan::Incremental)
     }
 
@@ -176,7 +181,7 @@ impl WalletScanActor {
     }
 
     pub(crate) async fn start_rescan(&mut self, gap_limit: u32) -> ActorResult<()> {
-        if self.active_generation.is_some() || self.reserved_follow_up_scan {
+        if self.scan_in_progress() {
             debug!("scan already in progress, queueing rescan gap_limit={gap_limit}");
             self.queued_rescan_gap_limit = Some(gap_limit);
             return Produces::ok(());
@@ -189,6 +194,10 @@ impl WalletScanActor {
         self.clear_scan_lifecycle();
         self.send_event(WalletScanEvent::StatusChanged(WalletScanStatus::Idle));
         Produces::ok(())
+    }
+
+    fn scan_in_progress(&self) -> bool {
+        self.active_generation.is_some() || self.reserved_follow_up_scan
     }
 
     fn begin_scan(&mut self, scan: RunningScan) -> ActorResult<()> {
@@ -915,6 +924,31 @@ mod tests {
             queued_rescan_after_failed_full_scan(FullScanType::Rescan(20)),
             QueuedRescanDisposition::Start
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn incremental_scan_request_is_ignored_while_scan_is_active() {
+        let mut scan_actor = WalletScanActor::new(WeakAddr::default());
+        scan_actor.active_generation = Some(7);
+        scan_actor.next_generation = 11;
+
+        assert!(scan_actor.start_incremental_scan().await.is_ok());
+
+        assert_eq!(scan_actor.active_generation, Some(7));
+        assert_eq!(scan_actor.next_generation, 11);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn incremental_scan_request_is_ignored_before_reserved_follow_up_scan() {
+        let mut scan_actor = WalletScanActor::new(WeakAddr::default());
+        scan_actor.reserved_follow_up_scan = true;
+        scan_actor.next_generation = 11;
+
+        assert!(scan_actor.start_incremental_scan().await.is_ok());
+
+        assert!(scan_actor.active_generation.is_none());
+        assert_eq!(scan_actor.next_generation, 11);
+        assert!(scan_actor.reserved_follow_up_scan);
     }
 
     #[test]
