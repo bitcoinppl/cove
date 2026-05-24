@@ -271,8 +271,11 @@ where
     let proofs = client.inner.batch_transaction_get_merkle(txs_with_heights.iter())?;
 
     for ((txid, height), proof) in txs_with_heights.iter().copied().zip(proofs) {
-        let mut header =
-            *height_to_header.get(&(height as u32)).expect("header already fetched above");
+        let mut header = *height_to_header.get(&(height as u32)).ok_or_else(|| {
+            electrum_client::Error::Message(format!(
+                "block header for height {height} not returned by server"
+            ))
+        })?;
         let mut valid =
             electrum_client::utils::validate_merkle_proof(&txid, &header.merkle_root, &proof);
         if !valid {
@@ -407,7 +410,9 @@ mod tests {
         bitcoin::Network,
         chain::{
             BlockId, CheckPoint, ConfirmationBlockTime, TxGraph, TxUpdate,
-            bitcoin::{BlockHash, Script, ScriptBuf, Transaction, Txid, absolute, transaction},
+            bitcoin::{
+                BlockHash, Script, ScriptBuf, Transaction, Txid, absolute, block, transaction,
+            },
             spk_client::{FullScanRequest, SpkWithExpectedTxids},
         },
         test_utils::get_test_wpkh_and_change_desc,
@@ -416,7 +421,7 @@ mod tests {
 
     use crate::{Error, ProgressTracker, ProgressiveScanner, ScanEvent};
 
-    use super::{chain_update, populate_with_spks};
+    use super::{batch_fetch_anchors, chain_update, populate_with_spks};
 
     #[derive(Debug, Clone)]
     struct FakeElectrum {
@@ -662,6 +667,14 @@ mod tests {
             unreachable!()
         }
 
+        fn batch_block_header<I>(&self, _: I) -> Result<Vec<block::Header>, electrum_client::Error>
+        where
+            I: IntoIterator + Clone,
+            I::Item: Borrow<u32>,
+        {
+            Ok(Vec::new())
+        }
+
         fn batch_estimate_fee<I>(&self, _: I) -> Result<Vec<f64>, electrum_client::Error>
         where
             I: IntoIterator + Clone,
@@ -691,13 +704,19 @@ mod tests {
 
         fn batch_transaction_get_merkle<I>(
             &self,
-            _: I,
+            txs: I,
         ) -> Result<Vec<GetMerkleRes>, electrum_client::Error>
         where
             I: IntoIterator + Clone,
             I::Item: Borrow<(Txid, usize)>,
         {
-            unreachable!()
+            Ok(txs
+                .into_iter()
+                .map(|tx| {
+                    let (_, height) = *tx.borrow();
+                    GetMerkleRes { block_height: height, pos: 0, merkle: Vec::new() }
+                })
+                .collect())
         }
 
         fn txid_from_pos(&self, _: usize, _: usize) -> Result<Txid, electrum_client::Error> {
@@ -753,6 +772,17 @@ mod tests {
 
     fn block_hash(byte: u8) -> BlockHash {
         BlockHash::from_str(&format!("{byte:02x}{}", "00".repeat(31))).expect("valid block hash")
+    }
+
+    #[test]
+    fn missing_batch_header_returns_provider_error() {
+        let client = BdkElectrumClient::new(FakeElectrum::empty_history());
+
+        let result = batch_fetch_anchors(&client, &[(txid(1), 2)]);
+
+        assert!(
+            matches!(result, Err(electrum_client::Error::Message(message)) if message == "block header for height 2 not returned by server")
+        );
     }
 
     #[test]
