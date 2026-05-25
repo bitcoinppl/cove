@@ -80,6 +80,10 @@ impl CloudBackupSupervisor {
             }
         }
 
+        if self.finish_awaiting_saved_passkey_confirmation_if_present(manager.clone(), claim) {
+            return;
+        }
+
         manager.apply_enable_outcome(CloudBackupEnableOutcome::CreatingPasskey);
         self.schedule_enable_passkey_registration(
             manager,
