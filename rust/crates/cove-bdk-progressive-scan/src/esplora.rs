@@ -269,9 +269,11 @@ where
             }
 
             for tx in txs {
-                if inserted_txs.insert(tx.txid) {
-                    partial_update.txs.push(tx.to_tx().into());
+                if !inserted_txs.insert(tx.txid) {
+                    continue;
                 }
+
+                partial_update.txs.push(tx.to_tx().into());
                 insert_anchor_or_seen_at_from_status(
                     &mut partial_update,
                     start_time,
@@ -475,15 +477,26 @@ mod tests {
     #[derive(Clone, Debug)]
     struct FakeEsplora {
         responses: Arc<Mutex<VecDeque<Option<Vec<esplora_client::Tx>>>>>,
+        chain_update_requests: Arc<Mutex<usize>>,
     }
 
     impl FakeEsplora {
         fn with_responses(responses: impl IntoIterator<Item = Vec<esplora_client::Tx>>) -> Self {
-            Self { responses: Arc::new(Mutex::new(responses.into_iter().map(Some).collect())) }
+            Self {
+                responses: Arc::new(Mutex::new(responses.into_iter().map(Some).collect())),
+                chain_update_requests: Arc::new(Mutex::new(0)),
+            }
         }
 
         fn with_history_error() -> Self {
-            Self { responses: Arc::new(Mutex::new(VecDeque::from([None]))) }
+            Self {
+                responses: Arc::new(Mutex::new(VecDeque::from([None]))),
+                chain_update_requests: Arc::new(Mutex::new(0)),
+            }
+        }
+
+        fn chain_update_count(&self) -> usize {
+            *self.chain_update_requests.lock().expect("request count lock not poisoned")
         }
     }
 
@@ -512,7 +525,12 @@ mod tests {
             _: &'a BTreeSet<(ConfirmationBlockTime, Txid)>,
         ) -> BoxFuture<'a, std::result::Result<bdk_wallet::chain::CheckPoint, EsploraError>>
         {
-            Box::pin(async move { Ok(local_tip.clone()) })
+            let chain_update_requests = Arc::clone(&self.chain_update_requests);
+
+            Box::pin(async move {
+                *chain_update_requests.lock().expect("request count lock not poisoned") += 1;
+                Ok(local_tip.clone())
+            })
         }
     }
 
@@ -644,6 +662,61 @@ mod tests {
         assert!(
             updates[0].tx_update.anchors.iter().any(|(_, anchored_txid)| *anchored_txid == txid)
         );
+    }
+
+    #[test]
+    fn duplicate_confirmed_history_does_not_emit_duplicate_update() {
+        let txid = txid(10);
+        let make_tx = || {
+            let mut tx = esplora_tx(txid);
+            tx.status = esplora_client::TxStatus {
+                confirmed: true,
+                block_height: Some(2),
+                block_hash: Some(block_hash(2)),
+                block_time: Some(123),
+            };
+            tx
+        };
+        let fake =
+            FakeEsplora::with_responses([vec![make_tx()], vec![make_tx()], Vec::new(), Vec::new()]);
+        let (events, receiver) = flume::unbounded();
+        let cancel_token = CancellationToken::new();
+        let mut progress = ProgressTracker::new(2);
+        let mut inserted_txs = HashSet::new();
+        let chain_tip = Some(CheckPoint::new(BlockId { height: 1, hash: block_hash(1) }));
+        let latest_blocks = BTreeMap::new();
+        let spks = (0..5).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+
+        let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
+            fake.clone(),
+            7,
+            &events,
+            &chain_tip,
+            Some(&latest_blocks),
+            &cancel_token,
+            &mut progress,
+            &mut inserted_txs,
+            "external",
+            spks,
+            None,
+            2,
+            1,
+        ))
+        .expect("scan succeeds");
+
+        let updates = receiver
+            .try_iter()
+            .filter_map(|event| match event {
+                ScanEvent::Update(update) => Some(update),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(result.last_active_index, Some(1));
+        assert_eq!(result.update.txs.len(), 1);
+        assert_eq!(result.update.anchors.len(), 1);
+        assert_eq!(updates.len(), 1);
+        assert_eq!(fake.chain_update_count(), 1);
     }
 
     #[test]
