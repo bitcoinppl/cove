@@ -108,6 +108,17 @@ struct ProgressiveFullScanJob {
     prepared: PreparedProgressiveScan,
 }
 
+struct ProgressiveFullScanResult {
+    scan: RunningScan,
+    result: Result<FullScanResponse<KeychainKind>, NodeClientError>,
+}
+
+impl ProgressiveFullScanResult {
+    fn scan_succeeded(&self) -> bool {
+        self.result.is_ok()
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum ScanFlushDecision {
     Immediate,
@@ -260,7 +271,7 @@ impl WalletScanActor {
     async fn run_progressive_full_scan(
         &mut self,
         job: ProgressiveFullScanJob,
-    ) -> ActorResult<(RunningScan, Result<FullScanResponse<KeychainKind>, NodeClientError>)> {
+    ) -> ActorResult<ProgressiveFullScanResult> {
         let (events_tx, events_rx) = flume::bounded(32);
         self.seed_scan_progress(
             job.prepared.full_scan_request.keychains(),
@@ -331,15 +342,15 @@ impl WalletScanActor {
             self.send_event(WalletScanEvent::FlushUi);
         }
 
-        Produces::ok((job.scan, scan_result))
+        Produces::ok(ProgressiveFullScanResult { scan: job.scan, result: scan_result })
     }
 
     async fn handle_scan_result(
         &mut self,
-        (scan, result): (RunningScan, Result<FullScanResponse<KeychainKind>, NodeClientError>),
+        scan_result: ProgressiveFullScanResult,
     ) -> ActorResult<()> {
         let cancel_token = self.active_cancel_token.as_ref();
-        if let Err(error) = &result
+        if let Err(error) = &scan_result.result
             && is_cancelled_progressive_scan(error, cancel_token)
         {
             self.clear_scan_lifecycle();
@@ -349,15 +360,15 @@ impl WalletScanActor {
 
         self.clear_active_scan();
 
-        match scan {
+        match scan_result.scan {
             RunningScan::Full(scan_type) => {
-                let result_is_ok = result.is_ok();
+                let scan_succeeded = scan_result.scan_succeeded();
                 let apply_result = call!(self.wallet_addr.handle_wallet_scan_event(
-                    WalletScanEvent::FullScanFinished { scan_type, result }
+                    WalletScanEvent::FullScanFinished { scan_type, result: scan_result.result }
                 ))
                 .await;
 
-                if result_is_ok && scan_type == FullScanType::Initial {
+                if scan_succeeded && scan_type == FullScanType::Initial {
                     if let Err(error) = apply_result {
                         return Err(Box::new(error));
                     }
@@ -368,7 +379,7 @@ impl WalletScanActor {
                     return Produces::ok(());
                 }
 
-                if !result_is_ok {
+                if !scan_succeeded {
                     self.handle_queued_rescan(queued_rescan_after_failed_full_scan(scan_type))
                         .await?;
                 } else {
@@ -376,26 +387,25 @@ impl WalletScanActor {
                         .await?;
                 }
 
-                if let Err(error) = apply_result {
+                if scan_succeeded && let Err(error) = apply_result {
                     return Err(Box::new(error));
                 }
             }
             RunningScan::Incremental => {
-                let result_is_ok = result.is_ok();
-                let apply_result =
-                    call!(self.wallet_addr.handle_wallet_scan_event(
-                        WalletScanEvent::IncrementalScanFinished { result }
-                    ))
-                    .await;
+                let scan_succeeded = scan_result.scan_succeeded();
+                let apply_result = call!(self.wallet_addr.handle_wallet_scan_event(
+                    WalletScanEvent::IncrementalScanFinished { result: scan_result.result }
+                ))
+                .await;
 
                 self.start_queued_rescan().await?;
 
-                if let Err(error) = apply_result {
-                    return Err(Box::new(error));
+                if !scan_succeeded {
+                    return Produces::ok(());
                 }
 
-                if !result_is_ok {
-                    return Produces::ok(());
+                if let Err(error) = apply_result {
+                    return Err(Box::new(error));
                 }
             }
         }

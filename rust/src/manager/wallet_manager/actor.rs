@@ -5,13 +5,12 @@ use crate::{
     },
     historical_price_service::HistoricalPriceService,
     manager::wallet_manager::{
-        Error, SendFlowErrorAlert, WalletManagerError,
+        Error, SendFlowErrorAlert, WalletManagerError, WalletScanStatus,
         receive_address::{
             CACHE_WINDOW, ReceiveAddressPresentation, ReceiveAddressRefreshState,
             ReceiveAddressSession, ReceiveAddressState, ReceiveAddressStatus,
             RefreshExpiredAddressDecision,
         },
-        WalletScanStatus,
     },
     mnemonic,
     node::{
