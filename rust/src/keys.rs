@@ -13,6 +13,7 @@ use bdk_wallet::{
 };
 use bitcoin::bip32::Xpub;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
+use pubport::descriptor::ScriptType;
 
 use crate::tap_card::tap_signer_reader::DeriveInfo;
 use cove_types::Network;
@@ -118,18 +119,45 @@ impl Descriptors {
         path: [u32; 3],
         master_fingerprint: Fingerprint,
     ) -> Result<Self, Error> {
+        Self::try_new_public_standard(xpub, path, master_fingerprint, 84, ScriptType::P2wpkh)
+    }
+
+    pub fn try_new_bip49(
+        xpub: Xpub,
+        path: [u32; 3],
+        master_fingerprint: Fingerprint,
+    ) -> Result<Self, Error> {
+        Self::try_new_public_standard(xpub, path, master_fingerprint, 49, ScriptType::P2shP2wpkh)
+    }
+
+    pub fn try_new_bip44(
+        xpub: Xpub,
+        path: [u32; 3],
+        master_fingerprint: Fingerprint,
+    ) -> Result<Self, Error> {
+        Self::try_new_public_standard(xpub, path, master_fingerprint, 44, ScriptType::P2pkh)
+    }
+
+    fn try_new_public_standard(
+        xpub: Xpub,
+        path: [u32; 3],
+        master_fingerprint: Fingerprint,
+        purpose: u32,
+        script_type: ScriptType,
+    ) -> Result<Self, Error> {
         let derivation_path = match path {
-            [84, coin_type @ (0 | 1), account] => {
+            [path_purpose, coin_type @ (0 | 1), account] if path_purpose == purpose => {
                 if account >= 1_u32 << 31 {
                     return Err(Error::InvalidBip84Path(path.to_vec()));
                 }
 
-                format!("84h/{coin_type}h/{account}h")
+                format!("{purpose}h/{coin_type}h/{account}h")
             }
             path => return Err(Error::InvalidBip84Path(path.to_vec())),
         };
 
-        let desc_string = format!("wpkh([{master_fingerprint}/{derivation_path}]{xpub}/<0;1>/*)");
+        let desc_script = format!("[{master_fingerprint}/{derivation_path}]{xpub}/<0;1>/*");
+        let desc_string = script_type.wrap_with(&desc_script);
         let desc = pubport::descriptor::Descriptors::try_from_line(&desc_string)
             .expect("valid descriptor, because xpub is valid");
 

@@ -14,7 +14,10 @@ use crate::database::{self, Database};
 use crate::keys::{self, Descriptors};
 use crate::network::Network;
 use crate::wallet::fingerprint::Fingerprint;
-use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
+use crate::wallet::{
+    WalletAddressType,
+    metadata::{WalletId, WalletMetadata, WalletMode, WalletType},
+};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub(crate) enum PublicWalletIdentity {
@@ -110,10 +113,11 @@ impl PublicWalletIdentity {
         Self::Xpub(PublicXpubIdentity(xpub.to_string()))
     }
 
-    pub(crate) fn from_xpub_str_default_bip84(
+    pub(crate) fn from_xpub_str_default_address_type(
         xpub: &str,
         fingerprint: Option<Fingerprint>,
         network: Network,
+        address_type: WalletAddressType,
     ) -> Result<Self, PublicWalletIdentityError> {
         let xpub = Xpub::from_str(xpub).map_err_str(PublicWalletIdentityError::Xpub)?;
 
@@ -121,13 +125,14 @@ impl PublicWalletIdentity {
             return Ok(Self::from_xpub(xpub));
         };
 
-        Self::from_xpub_default_bip84(xpub, fingerprint, network)
+        Self::from_xpub_default_address_type(xpub, fingerprint, network, address_type)
     }
 
-    pub(crate) fn from_xpub_default_bip84(
+    pub(crate) fn from_xpub_default_address_type(
         xpub: Xpub,
         fingerprint: Fingerprint,
         network: Network,
+        address_type: WalletAddressType,
     ) -> Result<Self, PublicWalletIdentityError> {
         let coin_type = match network {
             Network::Bitcoin => 0,
@@ -135,8 +140,18 @@ impl PublicWalletIdentity {
         };
         let fingerprint = BdkFingerprint::from_str(&fingerprint.as_lowercase())
             .map_err_str(PublicWalletIdentityError::Fingerprint)?;
-        let account = bip84_account_from_xpub(&xpub);
-        let descriptors = Descriptors::try_new_bip84(xpub, [84, coin_type, account], fingerprint)?;
+        let account = account_from_xpub(&xpub);
+        let descriptors = match address_type {
+            WalletAddressType::NativeSegwit => {
+                Descriptors::try_new_bip84(xpub, [84, coin_type, account], fingerprint)?
+            }
+            WalletAddressType::WrappedSegwit => {
+                Descriptors::try_new_bip49(xpub, [49, coin_type, account], fingerprint)?
+            }
+            WalletAddressType::Legacy => {
+                Descriptors::try_new_bip44(xpub, [44, coin_type, account], fingerprint)?
+            }
+        };
 
         Ok(Self::from_descriptors(&descriptors))
     }
@@ -159,7 +174,13 @@ impl PublicWalletIdentity {
                 WalletType::Cold | WalletType::XpubOnly | WalletType::WatchOnly
             )
         {
-            return Self::from_xpub_default_bip84(xpub, *fingerprint, metadata.network).map(Some);
+            return Self::from_xpub_default_address_type(
+                xpub,
+                *fingerprint,
+                metadata.network,
+                metadata.address_type,
+            )
+            .map(Some);
         }
 
         Ok(Some(Self::from_xpub(xpub)))
@@ -178,7 +199,7 @@ impl PublicWalletIdentity {
     }
 }
 
-fn bip84_account_from_xpub(xpub: &Xpub) -> u32 {
+fn account_from_xpub(xpub: &Xpub) -> u32 {
     match (xpub.depth, xpub.child_number) {
         (3, ChildNumber::Hardened { index }) => index,
         _ => 0,
@@ -190,6 +211,7 @@ pub(crate) enum WalletIdentityKey {
     PublicIdentity {
         identity: PublicWalletIdentity,
         fingerprint: Option<Fingerprint>,
+        wallet_id: Option<WalletId>,
         network: Network,
         mode: WalletMode,
     },
@@ -216,11 +238,20 @@ pub(crate) struct ExistingWalletIdentitySet {
 impl ExistingWalletIdentitySet {
     pub(crate) fn contains(&self, key: &WalletIdentityKey) -> bool {
         match key {
-            WalletIdentityKey::PublicIdentity { identity, fingerprint, network, mode } => {
+            WalletIdentityKey::PublicIdentity {
+                identity,
+                fingerprint,
+                wallet_id,
+                network,
+                mode,
+            } => {
                 self.public_identities.contains(&(identity.clone(), *network, *mode))
                     || fingerprint.is_some_and(|fingerprint| {
                         self.fingerprints.contains(&(fingerprint, *network, *mode))
                     })
+                    || wallet_id
+                        .as_ref()
+                        .is_some_and(|id| self.wallet_ids.contains(&(id.clone(), *network, *mode)))
             }
             WalletIdentityKey::Fingerprint { fingerprint, network, mode } => {
                 self.fingerprints.contains(&(*fingerprint, *network, *mode))
@@ -234,11 +265,21 @@ impl ExistingWalletIdentitySet {
 
     pub(crate) fn insert(&mut self, key: WalletIdentityKey) {
         match key {
-            WalletIdentityKey::PublicIdentity { identity, fingerprint, network, mode } => {
+            WalletIdentityKey::PublicIdentity {
+                identity,
+                fingerprint,
+                wallet_id,
+                network,
+                mode,
+            } => {
                 self.public_identities.insert((identity, network, mode));
 
                 if let Some(fingerprint) = fingerprint {
                     self.public_identity_fingerprints.insert((fingerprint, network, mode));
+                }
+
+                if let Some(wallet_id) = wallet_id {
+                    self.wallet_ids.insert((wallet_id, network, mode));
                 }
             }
             WalletIdentityKey::Fingerprint { fingerprint, network, mode } => {
@@ -269,6 +310,7 @@ pub(crate) fn identity_key_for_backup(
         return Ok(WalletIdentityKey::PublicIdentity {
             identity,
             fingerprint: metadata.master_fingerprint.as_deref().copied(),
+            wallet_id: no_fingerprint_wallet_id(metadata),
             network: metadata.network,
             mode: metadata.wallet_mode,
         });
@@ -287,6 +329,10 @@ pub(crate) fn identity_key_for_backup(
         network: metadata.network,
         mode: metadata.wallet_mode,
     })
+}
+
+fn no_fingerprint_wallet_id(metadata: &WalletMetadata) -> Option<WalletId> {
+    metadata.master_fingerprint.is_none().then(|| metadata.id.clone())
 }
 
 pub(crate) fn collect_existing_wallet_identities()
@@ -326,6 +372,7 @@ fn existing_wallet_identity_key(
             return Ok(WalletIdentityKey::PublicIdentity {
                 identity,
                 fingerprint: metadata.master_fingerprint.as_deref().copied(),
+                wallet_id: no_fingerprint_wallet_id(&metadata),
                 network: metadata.network,
                 mode: metadata.wallet_mode,
             });
@@ -366,12 +413,16 @@ fn public_identity_from_backup(
 
     if let Some(xpub) = &backup.xpub {
         let fingerprint = metadata.master_fingerprint.as_deref().copied();
-        let identity =
-            PublicWalletIdentity::from_xpub_str_default_bip84(xpub, fingerprint, metadata.network)
-                .map_err(|source| WalletIdentityError::BackupXpub {
-                    wallet_name: metadata.name.clone(),
-                    source,
-                })?;
+        let identity = PublicWalletIdentity::from_xpub_str_default_address_type(
+            xpub,
+            fingerprint,
+            metadata.network,
+            metadata.address_type,
+        )
+        .map_err(|source| WalletIdentityError::BackupXpub {
+            wallet_name: metadata.name.clone(),
+            source,
+        })?;
 
         return Ok(Some(identity));
     }
@@ -496,22 +547,72 @@ mod tests {
     }
 
     fn descriptor_pair(account: u32) -> Descriptors {
+        descriptor_pair_for_address_type(WalletAddressType::NativeSegwit, account)
+    }
+
+    fn descriptor_pair_for_address_type(
+        address_type: WalletAddressType,
+        account: u32,
+    ) -> Descriptors {
         let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
-        let descriptor = format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/<0;1>/*)");
+        let descriptor = match address_type {
+            WalletAddressType::NativeSegwit => {
+                format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/<0;1>/*)")
+            }
+            WalletAddressType::WrappedSegwit => {
+                format!("sh(wpkh([817e7be0/49h/0h/{account}h]{xpub}/<0;1>/*))")
+            }
+            WalletAddressType::Legacy => {
+                format!("pkh([817e7be0/44h/0h/{account}h]{xpub}/<0;1>/*)")
+            }
+        };
 
         pubport::descriptor::Descriptors::try_from_line(&descriptor).unwrap().into()
     }
 
     fn descriptors(account: u32) -> DescriptorPair {
-        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+        descriptors_for_address_type(WalletAddressType::NativeSegwit, account)
+    }
 
-        DescriptorPair {
-            external: format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/0/*)"),
-            internal: format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/1/*)"),
-        }
+    fn descriptors_for_address_type(
+        address_type: WalletAddressType,
+        account: u32,
+    ) -> DescriptorPair {
+        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+        let external = match address_type {
+            WalletAddressType::NativeSegwit => {
+                format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/0/*)")
+            }
+            WalletAddressType::WrappedSegwit => {
+                format!("sh(wpkh([817e7be0/49h/0h/{account}h]{xpub}/0/*))")
+            }
+            WalletAddressType::Legacy => {
+                format!("pkh([817e7be0/44h/0h/{account}h]{xpub}/0/*)")
+            }
+        };
+        let internal = match address_type {
+            WalletAddressType::NativeSegwit => {
+                format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/1/*)")
+            }
+            WalletAddressType::WrappedSegwit => {
+                format!("sh(wpkh([817e7be0/49h/0h/{account}h]{xpub}/1/*))")
+            }
+            WalletAddressType::Legacy => {
+                format!("pkh([817e7be0/44h/0h/{account}h]{xpub}/1/*)")
+            }
+        };
+
+        DescriptorPair { external, internal }
     }
 
     fn account_xpub(account: u32) -> (BdkFingerprint, Xpub) {
+        account_xpub_for_address_type(WalletAddressType::NativeSegwit, account)
+    }
+
+    fn account_xpub_for_address_type(
+        address_type: WalletAddressType,
+        account: u32,
+    ) -> (BdkFingerprint, Xpub) {
         let mnemonic = bip39::Mnemonic::from_str(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
         )
@@ -523,9 +624,15 @@ mod tests {
             &seed,
         )
         .unwrap();
-        let path =
-            bdk_wallet::bitcoin::bip32::DerivationPath::from_str(&format!("m/84h/0h/{account}h"))
-                .unwrap();
+        let purpose = match address_type {
+            WalletAddressType::NativeSegwit => 84,
+            WalletAddressType::WrappedSegwit => 49,
+            WalletAddressType::Legacy => 44,
+        };
+        let path = bdk_wallet::bitcoin::bip32::DerivationPath::from_str(&format!(
+            "m/{purpose}h/0h/{account}h"
+        ))
+        .unwrap();
         let account_key = master.derive_priv(&secp, &path).unwrap();
 
         (master.fingerprint(&secp), Xpub::from_priv(&secp, &account_key))
@@ -611,14 +718,52 @@ mod tests {
     }
 
     #[test]
-    fn xpub_default_bip84_synthesizes_descriptor_identity() {
+    fn xpub_default_address_type_synthesizes_native_segwit_descriptor_identity() {
         let descriptors = descriptor_pair(0);
         let xpub = descriptors.external.xpub().unwrap();
         let fingerprint = Fingerprint::from(BdkFingerprint::from_str("817e7be0").unwrap());
 
-        let identity =
-            PublicWalletIdentity::from_xpub_default_bip84(xpub, fingerprint, Network::Bitcoin)
-                .unwrap();
+        let identity = PublicWalletIdentity::from_xpub_default_address_type(
+            xpub,
+            fingerprint,
+            Network::Bitcoin,
+            WalletAddressType::NativeSegwit,
+        )
+        .unwrap();
+
+        assert_eq!(PublicWalletIdentity::from_descriptors(&descriptors), identity);
+    }
+
+    #[test]
+    fn xpub_default_address_type_synthesizes_wrapped_segwit_descriptor_identity() {
+        let descriptors = descriptor_pair_for_address_type(WalletAddressType::WrappedSegwit, 0);
+        let xpub = descriptors.external.xpub().unwrap();
+        let fingerprint = Fingerprint::from(BdkFingerprint::from_str("817e7be0").unwrap());
+
+        let identity = PublicWalletIdentity::from_xpub_default_address_type(
+            xpub,
+            fingerprint,
+            Network::Bitcoin,
+            WalletAddressType::WrappedSegwit,
+        )
+        .unwrap();
+
+        assert_eq!(PublicWalletIdentity::from_descriptors(&descriptors), identity);
+    }
+
+    #[test]
+    fn xpub_default_address_type_synthesizes_legacy_descriptor_identity() {
+        let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy, 0);
+        let xpub = descriptors.external.xpub().unwrap();
+        let fingerprint = Fingerprint::from(BdkFingerprint::from_str("817e7be0").unwrap());
+
+        let identity = PublicWalletIdentity::from_xpub_default_address_type(
+            xpub,
+            fingerprint,
+            Network::Bitcoin,
+            WalletAddressType::Legacy,
+        )
+        .unwrap();
 
         assert_eq!(PublicWalletIdentity::from_descriptors(&descriptors), identity);
     }
@@ -630,9 +775,13 @@ mod tests {
         let fingerprint =
             Fingerprint::from(descriptors.fingerprint().expect("test descriptor has fingerprint"));
 
-        let identity =
-            PublicWalletIdentity::from_xpub_default_bip84(xpub, fingerprint, Network::Bitcoin)
-                .unwrap();
+        let identity = PublicWalletIdentity::from_xpub_default_address_type(
+            xpub,
+            fingerprint,
+            Network::Bitcoin,
+            WalletAddressType::NativeSegwit,
+        )
+        .unwrap();
 
         assert_eq!(PublicWalletIdentity::from_descriptors(&descriptors), identity);
     }
@@ -650,6 +799,25 @@ mod tests {
             PublicWalletIdentity::from_existing_wallet(&metadata, keychain).unwrap().unwrap();
 
         assert_eq!(PublicWalletIdentity::from_descriptors(&descriptors), identity);
+    }
+
+    #[test]
+    fn cold_existing_wallet_xpub_preserves_address_type_identity() {
+        let keychain = test_keychain();
+
+        for address_type in [WalletAddressType::WrappedSegwit, WalletAddressType::Legacy] {
+            let descriptors = descriptor_pair_for_address_type(address_type, 0);
+            let xpub = descriptors.external.xpub().unwrap();
+            let mut metadata = metadata("Existing typed xpub", WalletType::Cold);
+            metadata.address_type = address_type;
+
+            keychain.save_wallet_xpub(&metadata.id, xpub).unwrap();
+
+            let identity =
+                PublicWalletIdentity::from_existing_wallet(&metadata, keychain).unwrap().unwrap();
+
+            assert_eq!(PublicWalletIdentity::from_descriptors(&descriptors), identity);
+        }
     }
 
     #[test]
@@ -745,6 +913,78 @@ mod tests {
         let incoming_key = identity_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
 
         assert!(existing.contains(&incoming_key));
+    }
+
+    #[test]
+    fn backup_duplicate_key_matches_no_fingerprint_wallet_id_with_different_public_identity() {
+        let mut existing_metadata = metadata("Existing no fingerprint account 0", WalletType::Cold);
+        existing_metadata.master_fingerprint = None;
+        let mut incoming_metadata = existing_metadata.clone();
+        incoming_metadata.name = "Incoming no fingerprint account 1".to_string();
+
+        let existing_backup = backup(&existing_metadata, Some(descriptors(0)));
+        let incoming_backup = backup(&incoming_metadata, Some(descriptors(1)));
+
+        let mut existing = ExistingWalletIdentitySet::default();
+        existing.insert(identity_key_for_backup(&existing_metadata, &existing_backup).unwrap());
+
+        let incoming_key = identity_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
+
+        assert!(existing.contains(&incoming_key));
+    }
+
+    #[test]
+    fn backup_duplicate_key_matches_no_fingerprint_public_identity_to_wallet_id() {
+        let mut existing_metadata = metadata("Existing no fingerprint public", WalletType::Cold);
+        existing_metadata.master_fingerprint = None;
+        let mut incoming_metadata = existing_metadata.clone();
+        incoming_metadata.name = "Incoming no fingerprint degraded".to_string();
+
+        let existing_backup = backup(&existing_metadata, Some(descriptors(0)));
+        let incoming_backup = backup(&incoming_metadata, None);
+
+        let mut existing = ExistingWalletIdentitySet::default();
+        existing.insert(identity_key_for_backup(&existing_metadata, &existing_backup).unwrap());
+
+        let incoming_key = identity_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
+
+        assert!(existing.contains(&incoming_key));
+    }
+
+    #[test]
+    fn backup_duplicate_key_matches_no_fingerprint_wallet_id_to_public_identity() {
+        let mut existing_metadata = metadata("Existing no fingerprint degraded", WalletType::Cold);
+        existing_metadata.master_fingerprint = None;
+        let mut incoming_metadata = existing_metadata.clone();
+        incoming_metadata.name = "Incoming no fingerprint public".to_string();
+
+        let existing_backup = backup(&existing_metadata, None);
+        let incoming_backup = backup(&incoming_metadata, Some(descriptors(0)));
+
+        let mut existing = ExistingWalletIdentitySet::default();
+        existing.insert(identity_key_for_backup(&existing_metadata, &existing_backup).unwrap());
+
+        let incoming_key = identity_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
+
+        assert!(existing.contains(&incoming_key));
+    }
+
+    #[test]
+    fn backup_duplicate_key_allows_no_fingerprint_different_id_and_public_identity() {
+        let mut existing_metadata = metadata("Existing no fingerprint account 0", WalletType::Cold);
+        existing_metadata.master_fingerprint = None;
+        let mut incoming_metadata = metadata("Incoming no fingerprint account 1", WalletType::Cold);
+        incoming_metadata.master_fingerprint = None;
+
+        let existing_backup = backup(&existing_metadata, Some(descriptors(0)));
+        let incoming_backup = backup(&incoming_metadata, Some(descriptors(1)));
+
+        let mut existing = ExistingWalletIdentitySet::default();
+        existing.insert(identity_key_for_backup(&existing_metadata, &existing_backup).unwrap());
+
+        let incoming_key = identity_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
+
+        assert!(!existing.contains(&incoming_key));
     }
 
     #[test]
