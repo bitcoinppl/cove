@@ -9,13 +9,17 @@ use crate::wallet::metadata::WalletMetadata;
 use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::backup_data::wallet_record_id;
 use cove_cspp::wallet_crypto;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_util::ResultExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
 use super::{PreparedWalletBackup, UPLOAD_WALLET_RECOVERY_MESSAGE, prepare_wallet_backup};
+use crate::manager::cloud_backup_manager::actors::{
+    CloudBackupUploadedWallet, CloudBackupWalletCountRefresh, CloudBackupWriteClient,
+    CloudBackupWriteCompletion,
+};
 use crate::manager::cloud_backup_manager::ops::load_master_key_for_cloud_action;
 use crate::manager::cloud_backup_manager::{
     CloudBackupError, CloudBackupStore, CloudStorageIssue, RustCloudBackupManager,
@@ -27,6 +31,68 @@ const STALE_UPLOADING_RETRY_THRESHOLD_SECS: u64 = 60;
 struct PreparedDirtyWalletUpload {
     prepared: PreparedWalletBackup,
     wallet_json: Vec<u8>,
+}
+
+struct PreparedCloudWalletUpload {
+    prepared: PreparedWalletBackup,
+    wallet_json: Vec<u8>,
+}
+
+struct CloudWalletUploadBatch {
+    cloud: CloudStorageClient,
+    namespace: String,
+    previous_count: u32,
+    existing_cloud_record_ids: Option<HashSet<String>>,
+    existing_sync_state_record_ids: Option<HashSet<String>>,
+}
+
+impl CloudWalletUploadBatch {
+    fn count_refresh(&self, uploaded_record_ids: &[String]) -> CloudBackupWalletCountRefresh {
+        let uploaded_record_ids =
+            uploaded_record_ids.iter().map(String::as_str).collect::<HashSet<_>>();
+
+        let estimated_wallet_count =
+            self.existing_cloud_record_ids.as_ref().map(|existing_record_ids| {
+                let new_record_count = uploaded_record_ids
+                    .iter()
+                    .filter(|&&record_id| !existing_record_ids.contains(record_id))
+                    .count() as u32;
+
+                existing_record_ids.len() as u32 + new_record_count
+            });
+
+        let sync_state_estimated_wallet_count =
+            self.existing_sync_state_record_ids.as_ref().map(|existing_record_ids| {
+                let new_record_count = uploaded_record_ids
+                    .iter()
+                    .filter(|&&record_id| !existing_record_ids.contains(record_id))
+                    .count() as u32;
+
+                self.previous_count + new_record_count
+            });
+
+        CloudBackupWalletCountRefresh::new(
+            self.previous_count,
+            estimated_wallet_count,
+            sync_state_estimated_wallet_count,
+        )
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct CloudBackupWalletBatchUploadError {
+    uploaded_wallets: Vec<CloudBackupUploadedWallet>,
+    source: CloudBackupError,
+}
+
+impl CloudBackupWalletBatchUploadError {
+    fn new(uploaded_wallets: Vec<CloudBackupUploadedWallet>, source: CloudBackupError) -> Self {
+        Self { uploaded_wallets, source }
+    }
+
+    pub(crate) fn into_parts(self) -> (Vec<CloudBackupUploadedWallet>, CloudBackupError) {
+        (self.uploaded_wallets, self.source)
+    }
 }
 
 struct DirtyWalletUploadPreparationError {
@@ -58,19 +124,13 @@ impl RustCloudBackupManager {
         let namespace = self.current_namespace_id()?;
         let db = Database::global();
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        let master_key = match cspp
-            .load_master_key_from_store()
-            .map_err_prefix("load local master key", CloudBackupError::Internal)?
-        {
-            Some(master_key) => master_key,
-            None => {
-                self.recover_local_master_key_from_cloud_without_discovery(
-                    &namespace,
-                    UPLOAD_WALLET_RECOVERY_MESSAGE,
-                )
-                .await?
-            }
-        };
+        let master_key = load_master_key_for_cloud_action(&cspp, &namespace, || {
+            self.recover_local_master_key_from_cloud_without_discovery(
+                &namespace,
+                UPLOAD_WALLET_RECOVERY_MESSAGE,
+            )
+        })
+        .await?;
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
         let cloud = CloudStorage::global_explicit_client();
@@ -83,97 +143,168 @@ impl RustCloudBackupManager {
         let existing_sync_state_record_ids = db.cloud_blob_sync_states.list().ok().map(|states| {
             states.into_iter().map(|state| state.record_id().to_string()).collect::<HashSet<_>>()
         });
+        let previous_count =
+            db.cloud_backup_state.get().ok().and_then(|state| state.wallet_count()).unwrap_or(0);
+        let batch = CloudWalletUploadBatch {
+            cloud,
+            namespace,
+            previous_count,
+            existing_cloud_record_ids,
+            existing_sync_state_record_ids,
+        };
         let mut uploaded_record_ids = Vec::with_capacity(wallets.len());
+        let mut uploaded_wallets = Vec::with_capacity(wallets.len());
 
         for (index, metadata) in wallets.iter().enumerate() {
             info!("Backup: uploading wallet {}/{} '{}'", index + 1, wallets.len(), metadata.name);
-            let prepared = prepare_wallet_backup(metadata, metadata.wallet_mode).await?;
-            let remote_metadata = RemotePayloadMetadata::wallet(
-                &namespace,
-                &prepared.record_id,
-                prepared.entry.wallet_id.as_str(),
-                prepared.entry.updated_at,
-            );
-            let encrypted = wallet_crypto::encrypt_wallet_entry_with_remote_metadata(
-                &prepared.entry,
+            let prepared_upload = match prepare_cloud_wallet_upload(
+                metadata,
+                &batch.namespace,
                 &critical_key,
-                remote_metadata,
             )
-            .map_err_str(CloudBackupError::Crypto)?;
+            .await
+            {
+                Ok(prepared_upload) => prepared_upload,
+                Err(error) => {
+                    return self
+                        .finish_partial_cloud_wallet_upload_batch(
+                            batch,
+                            uploaded_wallets,
+                            uploaded_record_ids,
+                            error,
+                        )
+                        .await;
+                }
+            };
 
-            let wallet_json =
-                serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
-
-            self.run_cloud_backup_write(async {
-                cloud
-                    .upload_wallet_backup(
-                        namespace.clone(),
-                        prepared.record_id.clone(),
-                        wallet_json,
+            let PreparedCloudWalletUpload { prepared, wallet_json } = prepared_upload;
+            if let Err(error) = self
+                .upload_cloud_wallet_backup(
+                    batch.cloud.clone(),
+                    batch.namespace.clone(),
+                    prepared.record_id.clone(),
+                    wallet_json,
+                )
+                .await
+            {
+                return self
+                    .finish_partial_cloud_wallet_upload_batch(
+                        batch,
+                        uploaded_wallets,
+                        uploaded_record_ids,
+                        error,
                     )
-                    .await
-                    .map_err(CloudBackupError::from)
-            })
-            .await?;
+                    .await;
+            }
 
-            let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
-            self.mark_wallet_uploaded_pending_confirmation_if_revision_current(
-                &namespace,
-                prepared.metadata.id.clone(),
-                prepared.record_id.clone(),
-                prepared.revision_hash.clone(),
-                uploaded_at,
-            )
-            .await?;
-
-            uploaded_record_ids.push(prepared.record_id);
+            uploaded_record_ids.push(prepared.record_id.clone());
+            uploaded_wallets.push(CloudBackupUploadedWallet::new(
+                prepared.metadata.id,
+                prepared.record_id,
+                prepared.revision_hash,
+            ));
             info!("Backup: wallet {}/{} uploaded", index + 1, wallets.len());
         }
 
-        let previous_count =
-            db.cloud_backup_state.get().ok().and_then(|state| state.wallet_count()).unwrap_or(0);
-        let uploaded_record_ids = uploaded_record_ids.into_iter().collect::<HashSet<_>>();
-
-        let estimated_wallet_count =
-            existing_cloud_record_ids.as_ref().map(|existing_record_ids| {
-                let new_record_count = uploaded_record_ids
-                    .iter()
-                    .filter(|record_id| !existing_record_ids.contains(*record_id))
-                    .count() as u32;
-
-                existing_record_ids.len() as u32 + new_record_count
-            });
-
-        let sync_state_estimated_wallet_count =
-            existing_sync_state_record_ids.as_ref().map(|existing_record_ids| {
-                let new_record_count = uploaded_record_ids
-                    .iter()
-                    .filter(|record_id| !existing_record_ids.contains(*record_id))
-                    .count() as u32;
-
-                previous_count + new_record_count
-            });
-
-        let listed_wallet_count = cloud
-            .list_wallet_backups(namespace)
-            .await
-            .ok()
-            .map(|record_ids| record_ids.len() as u32);
-
-        let wallet_count = [
-            Some(previous_count),
-            estimated_wallet_count,
-            sync_state_estimated_wallet_count,
-            listed_wallet_count,
-        ]
-        .into_iter()
-        .flatten()
-        .max()
-        .unwrap_or(previous_count);
-        CloudBackupStore::new(&db).persist_enabled(wallet_count)?;
+        self.complete_cloud_wallet_upload_batch_for_records(
+            batch,
+            uploaded_wallets,
+            uploaded_record_ids,
+        )
+        .await?;
 
         info!("Backed up {} wallet(s) to cloud", wallets.len());
         Ok(())
+    }
+
+    pub(crate) async fn upload_wallets_with_writer(
+        &self,
+        writes: &CloudBackupWriteClient,
+        cloud: CloudStorageClient,
+        namespace: &str,
+        wallets: &[WalletMetadata],
+        critical_key: &[u8; 32],
+    ) -> Result<Vec<CloudBackupUploadedWallet>, CloudBackupWalletBatchUploadError> {
+        let mut uploaded_wallets = Vec::with_capacity(wallets.len());
+
+        for (index, metadata) in wallets.iter().enumerate() {
+            info!("Backup: uploading wallet {}/{} '{}'", index + 1, wallets.len(), metadata.name);
+            let prepared_upload =
+                match prepare_cloud_wallet_upload(metadata, namespace, critical_key).await {
+                    Ok(prepared_upload) => prepared_upload,
+                    Err(error) => {
+                        return Err(CloudBackupWalletBatchUploadError::new(
+                            uploaded_wallets,
+                            error,
+                        ));
+                    }
+                };
+
+            let PreparedCloudWalletUpload { prepared, wallet_json } = prepared_upload;
+            if let Err(error) = writes
+                .upload_wallet_backup(
+                    cloud.clone(),
+                    namespace.to_string(),
+                    prepared.record_id.clone(),
+                    wallet_json,
+                )
+                .await
+            {
+                return Err(CloudBackupWalletBatchUploadError::new(uploaded_wallets, error));
+            }
+
+            uploaded_wallets.push(CloudBackupUploadedWallet::new(
+                prepared.metadata.id,
+                prepared.record_id,
+                prepared.revision_hash,
+            ));
+            info!("Backup: wallet {}/{} uploaded", index + 1, wallets.len());
+        }
+
+        Ok(uploaded_wallets)
+    }
+
+    async fn complete_cloud_wallet_upload_batch_for_records(
+        &self,
+        batch: CloudWalletUploadBatch,
+        uploaded_wallets: Vec<CloudBackupUploadedWallet>,
+        uploaded_record_ids: Vec<String>,
+    ) -> Result<(), CloudBackupError> {
+        let count_refresh = batch.count_refresh(&uploaded_record_ids);
+
+        self.complete_cloud_wallet_upload_batch(
+            batch.cloud,
+            batch.namespace,
+            uploaded_wallets,
+            count_refresh,
+        )
+        .await
+    }
+
+    async fn finish_partial_cloud_wallet_upload_batch(
+        &self,
+        batch: CloudWalletUploadBatch,
+        uploaded_wallets: Vec<CloudBackupUploadedWallet>,
+        uploaded_record_ids: Vec<String>,
+        upload_error: CloudBackupError,
+    ) -> Result<(), CloudBackupError> {
+        if uploaded_wallets.is_empty() {
+            return Err(upload_error);
+        }
+
+        match self
+            .complete_cloud_wallet_upload_batch_for_records(
+                batch,
+                uploaded_wallets,
+                uploaded_record_ids,
+            )
+            .await
+        {
+            Ok(()) => Err(upload_error),
+            Err(persist_error) => Err(CloudBackupError::Internal(format!(
+                "wallet upload failed: {upload_error}; persist partial wallet upload batch failed: {persist_error}"
+            ))),
+        }
     }
 
     pub async fn do_upload_wallet_if_dirty(
@@ -245,26 +376,24 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
+        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation_if_current(
+            uploading_state.clone(),
+            prepared.revision_hash.clone(),
+            uploaded_at,
+        );
         let upload_result = self
-            .run_cloud_backup_write(async {
-                cloud
-                    .upload_wallet_backup(namespace.clone(), record_id.clone(), wallet_json)
-                    .await
-                    .map_err(CloudBackupError::from)
-            })
+            .upload_cloud_wallet_backup_with_completion(
+                cloud.clone(),
+                namespace.clone(),
+                record_id.clone(),
+                wallet_json,
+                completion,
+            )
             .await;
 
         match upload_result {
-            Ok(()) => {
-                let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
-                let _ = self.mark_blob_uploaded_pending_confirmation_if_current(
-                    &uploading_state,
-                    prepared.revision_hash,
-                    uploaded_at,
-                )?;
-
-                Ok(())
-            }
+            Ok(()) => Ok(()),
             Err(CloudBackupError::CloudStorage(error)) => self
                 .handle_dirty_wallet_upload_cloud_error(
                     &uploading_state,
@@ -368,7 +497,7 @@ impl RustCloudBackupManager {
 
         let revision_hash = Some(prepared.revision_hash.clone());
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        let master_key = load_master_key_for_cloud_action(&cspp, || {
+        let master_key = load_master_key_for_cloud_action(&cspp, namespace, || {
             self.recover_local_master_key_from_cloud_without_discovery(
                 namespace,
                 UPLOAD_WALLET_RECOVERY_MESSAGE,
@@ -399,7 +528,7 @@ impl RustCloudBackupManager {
         Ok(PreparedDirtyWalletUpload { prepared, wallet_json })
     }
 
-    async fn mark_wallet_uploaded_pending_confirmation_if_revision_current(
+    pub(crate) async fn mark_wallet_uploaded_pending_confirmation_if_revision_current(
         &self,
         namespace_id: &str,
         wallet_id: crate::wallet::metadata::WalletId,
@@ -486,4 +615,28 @@ impl RustCloudBackupManager {
                 | CloudStorageError::DownloadFailed(_)
         )
     }
+}
+
+async fn prepare_cloud_wallet_upload(
+    metadata: &WalletMetadata,
+    namespace: &str,
+    critical_key: &[u8; 32],
+) -> Result<PreparedCloudWalletUpload, CloudBackupError> {
+    let prepared = prepare_wallet_backup(metadata, metadata.wallet_mode).await?;
+    let remote_metadata = RemotePayloadMetadata::wallet(
+        namespace,
+        &prepared.record_id,
+        prepared.entry.wallet_id.as_str(),
+        prepared.entry.updated_at,
+    );
+    let encrypted = wallet_crypto::encrypt_wallet_entry_with_remote_metadata(
+        &prepared.entry,
+        critical_key,
+        remote_metadata,
+    )
+    .map_err_str(CloudBackupError::Crypto)?;
+
+    let wallet_json = serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
+
+    Ok(PreparedCloudWalletUpload { prepared, wallet_json })
 }

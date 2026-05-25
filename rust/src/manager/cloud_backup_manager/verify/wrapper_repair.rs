@@ -9,13 +9,11 @@ use rand::RngExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
-use crate::database::cloud_backup::CloudBackupRecordKey;
 use crate::manager::cloud_backup_manager::wallets::{
     PasskeyMaterialAcquirer, WalletBackupLookup, WalletBackupReader,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID, RustCloudBackupManager,
-    master_key_wrapper_revision_hash,
+    CloudBackupError, PASSKEY_RP_ID, master_key_wrapper_revision_hash,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,6 +61,40 @@ struct WrapperRepairCredentials {
     prf_salt: [u8; 32],
     credential_id: Vec<u8>,
     provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
+}
+
+#[derive(Debug)]
+pub(crate) struct CloudBackupPreparedPasskeyWrapperRepair {
+    pub(crate) namespace_id: String,
+    pub(crate) credential_id: Vec<u8>,
+    pub(crate) prf_salt: [u8; 32],
+    pub(crate) master_key_wrapper_json: Vec<u8>,
+    pub(crate) master_key_wrapper_revision: String,
+    pub(crate) uploaded_at: u64,
+}
+
+#[derive(Debug)]
+pub(crate) struct CloudBackupPasskeyWrapperRepairUpload {
+    pub(crate) namespace_id: String,
+    pub(crate) master_key_wrapper_json: Vec<u8>,
+    pub(crate) master_key_wrapper_revision: String,
+    pub(crate) uploaded_at: u64,
+}
+
+#[derive(Debug)]
+pub(crate) struct CloudBackupUploadedPasskeyWrapperRepair {
+    pub(crate) namespace_id: String,
+}
+
+impl CloudBackupPreparedPasskeyWrapperRepair {
+    pub(crate) fn into_upload(self) -> CloudBackupPasskeyWrapperRepairUpload {
+        CloudBackupPasskeyWrapperRepairUpload {
+            namespace_id: self.namespace_id,
+            master_key_wrapper_json: self.master_key_wrapper_json,
+            master_key_wrapper_revision: self.master_key_wrapper_revision,
+            uploaded_at: self.uploaded_at,
+        }
+    }
 }
 
 struct LocalKeyVerifier {
@@ -117,8 +149,6 @@ impl LocalKeyVerifier {
 
 /// Repairs the cloud master-key wrapper after proving the local master key is valid
 pub(crate) struct WrapperRepairOperation {
-    manager: RustCloudBackupManager,
-    keychain: CloudBackupKeychain,
     cloud: CloudStorageClient,
     passkey: PasskeyAccess,
     namespace: String,
@@ -126,28 +156,20 @@ pub(crate) struct WrapperRepairOperation {
 
 impl WrapperRepairOperation {
     pub(crate) fn new(
-        manager: &RustCloudBackupManager,
-        keychain: &CloudBackupKeychain,
         cloud: &CloudStorageClient,
         passkey: &PasskeyAccess,
         namespace: &str,
     ) -> Self {
-        Self {
-            manager: manager.clone(),
-            keychain: keychain.clone(),
-            cloud: cloud.clone(),
-            passkey: passkey.clone(),
-            namespace: namespace.to_owned(),
-        }
+        Self { cloud: cloud.clone(), passkey: passkey.clone(), namespace: namespace.to_owned() }
     }
 
-    /// Verifies the local key, persists the selected credential, then uploads a repaired wrapper
-    pub(crate) async fn run(
+    /// Prepares a repaired wrapper after proving the local master key is valid
+    pub(crate) async fn prepare(
         &self,
         local_master_key: &MasterKey,
         wallet_record_ids: &[String],
         strategy: WrapperRepairStrategy,
-    ) -> Result<(), WrapperRepairError> {
+    ) -> Result<CloudBackupPreparedPasskeyWrapperRepair, WrapperRepairError> {
         self.verify_local_key(wallet_record_ids, local_master_key).await?;
 
         let credentials = self.credentials(strategy).await?;
@@ -166,31 +188,14 @@ impl WrapperRepairOperation {
             serde_json::to_vec(&encrypted_backup).map_err_str(CloudBackupError::Internal)?;
         let master_key_wrapper_revision = master_key_wrapper_revision_hash(&backup_json);
 
-        self.keychain
-            .save_passkey(&credentials.credential_id, credentials.prf_salt)
-            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
-
-        self.manager
-            .record_runtime_passkey_authorization(
-                self.namespace.clone(),
-                credentials.credential_id.clone(),
-                credentials.prf_salt,
-            )
-            .await?;
-
-        self.cloud
-            .upload_master_key_backup(self.namespace.clone(), backup_json)
-            .await
-            .map_err(CloudBackupError::from)?;
-
-        self.manager.mark_blob_uploaded_pending_confirmation(
-            self.namespace.as_str(),
-            CloudBackupRecordKey::MasterKeyWrapper,
+        Ok(CloudBackupPreparedPasskeyWrapperRepair {
+            namespace_id: self.namespace.clone(),
+            credential_id: credentials.credential_id,
+            prf_salt: credentials.prf_salt,
+            master_key_wrapper_json: backup_json,
             master_key_wrapper_revision,
             uploaded_at,
-        )?;
-
-        Ok(())
+        })
     }
 
     async fn verify_local_key(

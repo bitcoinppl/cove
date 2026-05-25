@@ -13,20 +13,35 @@ use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use cove_util::ResultExt as _;
 use tracing::{error, info, warn};
+use zeroize::Zeroizing;
 
 use self::passkey_auth::{PasskeyAuthOutcome, PasskeyAuthPolicy, PasskeyAuthenticator};
 use self::session::VerificationSession;
+pub(crate) use self::session::{
+    CloudBackupDeepVerificationAutoSyncCompletion, CloudBackupDeepVerificationAutoSyncUpload,
+    CloudBackupDeepVerificationStep, CloudBackupPendingDeepVerificationAutoSyncResume,
+    CloudBackupPendingDeepVerificationResume, CloudBackupPreparedDeepVerificationAutoSync,
+    CloudBackupPreparedDeepVerificationWrapperRepair, CloudBackupUploadedDeepVerificationAutoSync,
+};
+pub(crate) use self::wrapper_repair::{
+    CloudBackupPasskeyWrapperRepairUpload, CloudBackupPreparedPasskeyWrapperRepair,
+    CloudBackupUploadedPasskeyWrapperRepair,
+};
 use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
 use super::CloudBackupStore;
 use super::{
-    BlockingCloudStep, CloudBackupDetailOutcome, CloudBackupDetailResult, CloudBackupError,
-    CloudBackupKeychain, CloudBackupRetryAction, CloudBackupRetryContext, CloudBackupStatus,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    PendingVerificationCompletion, PendingVerificationUpload, RustCloudBackupManager,
-    is_connectivity_related_issue,
+    BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
+    CloudBackupRetryAction, CloudBackupRetryContext, CloudBackupStatus, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
+    PendingVerificationUpload, RustCloudBackupManager, is_connectivity_related_issue,
 };
 use crate::database::Database;
-use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
+use crate::database::cloud_backup::{
+    CloudBackupRecordKey, PersistedCloudBackupState, PersistedCloudBackupStatus,
+};
+use crate::manager::cloud_backup_manager::actors::{
+    CloudBackupUploadedWalletsStateMode, CloudBackupWriteClient, CloudBackupWriteCompletion,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IntegrityDowngrade {
@@ -51,43 +66,116 @@ impl IntegrityDowngrade {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CloudBackupPasskeyRepairFinalization {
+    pub(crate) wallet_count: u32,
+}
+
 impl RustCloudBackupManager {
     /// Deep verification of cloud backup integrity
     ///
     /// Checks state, runs do_deep_verify, wraps errors, persists result
-    pub(crate) async fn deep_verify_cloud_backup(
+    pub(crate) fn deep_verification_error_result(
+        force_discoverable: bool,
+        error: CloudBackupError,
+    ) -> DeepVerificationResult {
+        error!("Deep verification unexpected error: {error}");
+        let retry_context = is_connectivity_related_issue(&error).then(|| {
+            let action = if force_discoverable {
+                CloudBackupRetryAction::VerifyDiscoverable
+            } else {
+                CloudBackupRetryAction::Verify
+            };
+            CloudBackupRetryContext::connectivity(action)
+        });
+
+        DeepVerificationResult::Failed(DeepVerificationFailure::retry(
+            error.to_string(),
+            None,
+            retry_context,
+        ))
+    }
+
+    pub(crate) async fn prepare_deep_verify_cloud_backup(
         &self,
         force_discoverable: bool,
-    ) -> DeepVerificationResult {
+    ) -> CloudBackupDeepVerificationStep {
         let state = self.state.read().status().clone();
         if !matches!(state, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
-            return DeepVerificationResult::NotEnabled;
+            return CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled);
         }
 
         self.clear_pending_verification_completion();
-        let result = match self.do_deep_verify_cloud_backup(force_discoverable).await {
+        match self.do_deep_verify_cloud_backup(force_discoverable).await {
             Ok(result) => result,
-            Err(error) => {
-                error!("Deep verification unexpected error: {error}");
-                let retry_context = is_connectivity_related_issue(&error).then(|| {
-                    let action = if force_discoverable {
-                        CloudBackupRetryAction::VerifyDiscoverable
-                    } else {
-                        CloudBackupRetryAction::Verify
-                    };
-                    CloudBackupRetryContext::connectivity(action)
-                });
+            Err(error) => CloudBackupDeepVerificationStep::Complete(
+                Self::deep_verification_error_result(force_discoverable, error),
+            ),
+        }
+    }
 
-                DeepVerificationResult::Failed(DeepVerificationFailure::retry(
-                    error.to_string(),
-                    None,
-                    retry_context,
-                ))
+    pub(crate) async fn resume_deep_verify_after_wrapper_repair(
+        &self,
+        resume: CloudBackupPendingDeepVerificationResume,
+        force_discoverable: bool,
+    ) -> CloudBackupDeepVerificationStep {
+        match resume.resume().await {
+            Ok(result) => result,
+            Err(error) => CloudBackupDeepVerificationStep::Complete(
+                Self::deep_verification_error_result(force_discoverable, error),
+            ),
+        }
+    }
+
+    pub(crate) async fn upload_deep_verification_auto_sync(
+        &self,
+        upload: CloudBackupDeepVerificationAutoSyncUpload,
+        writes: CloudBackupWriteClient,
+    ) -> Result<CloudBackupUploadedDeepVerificationAutoSync, CloudBackupError> {
+        self.ensure_cloud_connectivity(BlockingCloudStep::Verify)?;
+        let (namespace_id, wallets, master_key) = upload.into_parts();
+        let critical_key = Zeroizing::new(master_key.critical_data_key());
+        let cloud = CloudStorage::global_explicit_client();
+        let uploaded_wallets = match self
+            .upload_wallets_with_writer(&writes, cloud, &namespace_id, &wallets, &critical_key)
+            .await
+        {
+            Ok(uploaded_wallets) => uploaded_wallets,
+            Err(error) => {
+                let (uploaded_wallets, source) = error.into_parts();
+                if uploaded_wallets.is_empty() {
+                    return Err(source);
+                }
+
+                writes
+                    .finalize_uploaded_wallets(
+                        CloudStorage::global_explicit_client(),
+                        namespace_id.clone(),
+                        uploaded_wallets,
+                        CloudBackupUploadedWalletsStateMode::PreserveVerification,
+                    )
+                    .await
+                    .map_err(|finalize_error| {
+                        let message = format!(
+                            "wallet upload failed: {source}; persist partial wallet upload batch failed: {finalize_error}"
+                        );
+
+                        CloudBackupError::Internal(message)
+                    })?;
+
+                return Err(source);
             }
         };
 
-        self.persist_verification_result(&result);
-        result
+        Ok(CloudBackupUploadedDeepVerificationAutoSync::new(namespace_id, uploaded_wallets))
+    }
+
+    pub(crate) async fn resume_deep_verify_after_auto_sync(
+        &self,
+        resume: CloudBackupPendingDeepVerificationAutoSyncResume,
+        uploaded: CloudBackupUploadedDeepVerificationAutoSync,
+    ) -> CloudBackupDeepVerificationAutoSyncCompletion {
+        resume.resume(uploaded).await
     }
 
     pub(crate) fn persist_verification_result(&self, result: &DeepVerificationResult) {
@@ -147,28 +235,30 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub(crate) async fn do_repair_passkey_wrapper(&self) -> Result<(), CloudBackupError> {
-        self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
-        self.do_repair_passkey_wrapper_with_strategy(WrapperRepairStrategy::DiscoverOrCreate).await
-    }
-
-    pub(crate) async fn do_repair_passkey_wrapper_no_discovery(
+    pub(crate) async fn prepare_passkey_wrapper_repair(
         &self,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<CloudBackupPreparedPasskeyWrapperRepair, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
-        self.do_repair_passkey_wrapper_with_strategy(WrapperRepairStrategy::CreateNew).await
+        self.prepare_passkey_wrapper_repair_with_strategy(WrapperRepairStrategy::DiscoverOrCreate)
+            .await
     }
 
-    async fn do_repair_passkey_wrapper_with_strategy(
+    pub(crate) async fn prepare_passkey_wrapper_repair_no_discovery(
+        &self,
+    ) -> Result<CloudBackupPreparedPasskeyWrapperRepair, CloudBackupError> {
+        self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
+        self.prepare_passkey_wrapper_repair_with_strategy(WrapperRepairStrategy::CreateNew).await
+    }
+
+    async fn prepare_passkey_wrapper_repair_with_strategy(
         &self,
         strategy: WrapperRepairStrategy,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<CloudBackupPreparedPasskeyWrapperRepair, CloudBackupError> {
         let keychain = Keychain::global();
         let cspp = cove_cspp::Cspp::new(keychain.clone());
         let cloud = CloudStorage::global_explicit_client();
         let passkey = PasskeyAccess::global();
         let namespace = self.current_namespace_id()?;
-        let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
 
         let local_master_key = cspp
             .load_master_key_from_store()
@@ -183,13 +273,38 @@ impl RustCloudBackupManager {
             }
         };
 
-        let repair =
-            WrapperRepairOperation::new(self, &cloud_keychain, &cloud, passkey, &namespace);
-        repair
-            .run(&local_master_key, &wallet_record_ids, strategy)
-            .await
-            .map_err(CloudBackupError::from)?;
+        let repair = WrapperRepairOperation::new(&cloud, passkey, &namespace);
+        repair.prepare(&local_master_key, &wallet_record_ids, strategy).await.map_err(Into::into)
+    }
 
+    pub(crate) async fn upload_passkey_wrapper_repair(
+        &self,
+        upload: CloudBackupPasskeyWrapperRepairUpload,
+        writes: CloudBackupWriteClient,
+    ) -> Result<CloudBackupUploadedPasskeyWrapperRepair, CloudBackupError> {
+        self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
+        let completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation(
+            upload.namespace_id.clone(),
+            CloudBackupRecordKey::MasterKeyWrapper,
+            upload.master_key_wrapper_revision,
+            upload.uploaded_at,
+        );
+        writes
+            .upload_master_key_backup_with_completion(
+                CloudStorage::global_explicit_client(),
+                upload.namespace_id.clone(),
+                upload.master_key_wrapper_json,
+                completion,
+            )
+            .await?;
+
+        Ok(CloudBackupUploadedPasskeyWrapperRepair { namespace_id: upload.namespace_id })
+    }
+
+    pub(crate) fn finish_passkey_wrapper_repair(
+        &self,
+        uploaded: CloudBackupUploadedPasskeyWrapperRepair,
+    ) {
         self.replace_pending_verification_completion(PendingVerificationCompletion::new(
             DeepVerificationReport {
                 master_key_wrapper_repaired: true,
@@ -200,20 +315,22 @@ impl RustCloudBackupManager {
                 wallets_unsupported: 0,
                 detail: None,
             },
-            namespace,
+            uploaded.namespace_id,
             vec![PendingVerificationUpload::master_key_wrapper()],
         ));
 
         info!("Repaired cloud master key wrapper with repaired passkey association");
-        Ok(())
     }
 
-    pub(crate) async fn finalize_passkey_repair(&self) -> Result<(), CloudBackupError> {
+    pub(crate) async fn prepare_passkey_repair_finalization(
+        &self,
+    ) -> Result<CloudBackupPasskeyRepairFinalization, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::RepairPasskey)?;
         let namespace = self.current_namespace_id()?;
         let cloud = CloudStorage::global_explicit_client();
         let wallet_count = match cloud.list_wallet_backups(namespace).await {
             Ok(wallet_record_ids) => wallet_record_ids.len() as u32,
+            Err(CloudStorageError::NotFound(_)) => 0,
             Err(error) => {
                 warn!("Repair passkey: failed to refresh wallet backups after repair: {error}");
                 Database::global()
@@ -225,27 +342,22 @@ impl RustCloudBackupManager {
             }
         };
 
-        CloudBackupStore::global().persist_enabled(wallet_count)?;
+        Ok(CloudBackupPasskeyRepairFinalization { wallet_count })
+    }
+
+    pub(crate) fn apply_passkey_repair_finalization(
+        &self,
+        finalization: CloudBackupPasskeyRepairFinalization,
+    ) -> Result<(), CloudBackupError> {
+        CloudBackupStore::global().persist_enabled(finalization.wallet_count)?;
         self.reconcile_runtime_status(CloudBackupStatus::Enabled);
-
-        match self.refresh_cloud_backup_detail().await {
-            Some(CloudBackupDetailResult::Success(detail)) => {
-                self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
-            }
-            Some(CloudBackupDetailResult::AccessError(error)) => {
-                warn!("Failed to refresh detail after passkey repair: {error}");
-            }
-            None => {}
-        }
-
-        self.refresh_sync_health();
         Ok(())
     }
 
     pub(crate) async fn do_deep_verify_cloud_backup(
         &self,
         force_discoverable: bool,
-    ) -> Result<DeepVerificationResult, CloudBackupError> {
+    ) -> Result<CloudBackupDeepVerificationStep, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Verify)?;
         VerificationSession::new(self, force_discoverable)?.run().await
     }

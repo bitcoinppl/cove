@@ -1,3 +1,9 @@
+//! Deep Cloud Backup verification session
+//!
+//! A verification session proves that the master key, passkey wrapper, wallet
+//! blobs, and pending uploads agree. Some outcomes prepare follow-up work for
+//! the supervisor, which keeps the continuation tied to the active operation
+
 use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
@@ -5,22 +11,27 @@ use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageE
 use cove_device::keychain::Keychain;
 use cove_device::passkey::{PasskeyAccess, PasskeyCredentialPresence};
 use cove_util::ResultExt as _;
-use futures::stream::{self, StreamExt as _, TryStreamExt as _};
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use super::passkey_auth::PasskeyAuthOutcome;
-use super::wrapper_repair::{WrapperRepairError, WrapperRepairOperation, WrapperRepairStrategy};
+use super::wrapper_repair::{
+    CloudBackupPasskeyWrapperRepairUpload, CloudBackupPreparedPasskeyWrapperRepair,
+    WrapperRepairError, WrapperRepairOperation, WrapperRepairStrategy,
+};
 use crate::manager::cloud_backup_manager::pending::remote_wallet_revision_matches;
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError,
-    CloudBackupKeychain, CloudBackupRetryAction, CloudBackupRetryContext, DeepVerificationFailure,
+    BlockingCloudStep, CloudBackupDetail, CloudBackupError, CloudBackupKeychain,
+    CloudBackupRetryAction, CloudBackupRetryContext, DeepVerificationFailure,
     DeepVerificationReport, DeepVerificationResult, PASSKEY_RP_ID, PendingVerificationCompletion,
-    PendingVerificationUpload, RustCloudBackupManager, blocking_cloud_error,
+    PendingVerificationUpload, RustCloudBackupManager,
+    actors::CloudBackupUploadedWallet,
+    blocking_cloud_error,
     cloud_inventory::CloudWalletInventory,
     is_connectivity_related_issue, offline_error_for_step,
-    wallets::{WalletBackupLookup, WalletBackupReader, prepare_wallet_backup},
+    wallets::{WalletBackupLookup, WalletBackupReader},
 };
+use crate::wallet::metadata::WalletMetadata;
 
 const RECREATE_WARNING: &str = "Recreating from this device will remove references to wallets that only exist in the cloud backup";
 const REINITIALIZE_WARNING: &str = "This will replace your entire cloud backup set. Wallets that only exist in the cloud backup will be lost";
@@ -49,16 +60,168 @@ impl AuthenticatedMasterKey {
 }
 
 enum MasterKeyResolution {
+    Continue(ContinuableMasterKeyResolution),
+    Finished(DeepVerificationResult),
+}
+
+enum ContinuableMasterKeyResolution {
     Authenticated(AuthenticatedMasterKey),
     NeedsWrapperRepair { reuse_credential_id: Option<Vec<u8>> },
-    Finished(DeepVerificationResult),
 }
 
 enum RepairedMasterKeyResolution {
-    Authenticated(AuthenticatedMasterKey),
+    PreparedWrapperRepair(Box<CloudBackupPreparedDeepVerificationWrapperRepair>),
     Finished(DeepVerificationResult),
 }
 
+/// Result of a verification pass, including supervisor-owned continuations
+pub(crate) enum CloudBackupDeepVerificationStep {
+    Complete(DeepVerificationResult),
+    PreparedWrapperRepair(Box<CloudBackupPreparedDeepVerificationWrapperRepair>),
+    PreparedAutoSync(Box<CloudBackupPreparedDeepVerificationAutoSync>),
+}
+
+/// Prepared passkey-wrapper repair that still belongs to the verification run
+pub(crate) struct CloudBackupPreparedDeepVerificationWrapperRepair {
+    session: VerificationSession,
+    preparation: CloudBackupPreparedPasskeyWrapperRepair,
+    authenticated_master_key: MasterKey,
+}
+
+/// Resume token after wrapper repair upload proves the master key again
+pub(crate) struct CloudBackupPendingDeepVerificationResume {
+    session: VerificationSession,
+    authenticated_master_key: MasterKey,
+}
+
+/// Prepared auto-sync upload for missing or stale wallet blobs
+pub(crate) struct CloudBackupPreparedDeepVerificationAutoSync {
+    session: VerificationSession,
+    upload: CloudBackupDeepVerificationAutoSyncUpload,
+}
+
+/// Resume token after auto-sync upload and pending confirmation handling
+pub(crate) struct CloudBackupPendingDeepVerificationAutoSyncResume {
+    session: VerificationSession,
+}
+
+/// Wallet upload payload produced by deep verification auto-sync
+pub(crate) struct CloudBackupDeepVerificationAutoSyncUpload {
+    namespace_id: String,
+    wallets: Vec<WalletMetadata>,
+    master_key: MasterKey,
+}
+
+/// Uploaded wallet set returned after deep verification auto-sync
+#[derive(Debug, Clone)]
+pub(crate) struct CloudBackupUploadedDeepVerificationAutoSync {
+    namespace_id: String,
+    uploaded_wallets: Vec<CloudBackupUploadedWallet>,
+}
+
+/// Final auto-sync verification result and optional pending upload confirmation
+pub(crate) struct CloudBackupDeepVerificationAutoSyncCompletion {
+    result: DeepVerificationResult,
+    pending_completion: Option<PendingVerificationCompletion>,
+}
+
+impl CloudBackupPreparedDeepVerificationWrapperRepair {
+    pub(crate) fn namespace_id(&self) -> &str {
+        &self.preparation.namespace_id
+    }
+
+    pub(crate) fn credential_id(&self) -> &[u8] {
+        &self.preparation.credential_id
+    }
+
+    pub(crate) fn prf_salt(&self) -> [u8; 32] {
+        self.preparation.prf_salt
+    }
+
+    pub(crate) fn into_parts(
+        self,
+    ) -> (CloudBackupPendingDeepVerificationResume, CloudBackupPasskeyWrapperRepairUpload) {
+        let resume = CloudBackupPendingDeepVerificationResume {
+            session: self.session,
+            authenticated_master_key: self.authenticated_master_key,
+        };
+        let upload = self.preparation.into_upload();
+        (resume, upload)
+    }
+}
+
+impl CloudBackupPendingDeepVerificationResume {
+    pub(crate) async fn resume(self) -> Result<CloudBackupDeepVerificationStep, CloudBackupError> {
+        self.session.resume_after_wrapper_repair(self.authenticated_master_key).await
+    }
+}
+
+impl CloudBackupPreparedDeepVerificationAutoSync {
+    pub(crate) fn into_parts(
+        self,
+    ) -> (CloudBackupPendingDeepVerificationAutoSyncResume, CloudBackupDeepVerificationAutoSyncUpload)
+    {
+        let resume = CloudBackupPendingDeepVerificationAutoSyncResume { session: self.session };
+        (resume, self.upload)
+    }
+}
+
+impl CloudBackupPendingDeepVerificationAutoSyncResume {
+    pub(crate) fn upload_error_result(&self, error: &CloudBackupError) -> DeepVerificationResult {
+        self.session.cloud_backup_retry_result("failed to auto-sync missing wallet backups", error)
+    }
+
+    pub(crate) async fn resume(
+        self,
+        uploaded: CloudBackupUploadedDeepVerificationAutoSync,
+    ) -> CloudBackupDeepVerificationAutoSyncCompletion {
+        self.session.resume_after_auto_sync(uploaded).await
+    }
+}
+
+impl CloudBackupDeepVerificationAutoSyncUpload {
+    pub(crate) fn into_parts(self) -> (String, Vec<WalletMetadata>, MasterKey) {
+        (self.namespace_id, self.wallets, self.master_key)
+    }
+}
+
+impl CloudBackupUploadedDeepVerificationAutoSync {
+    pub(crate) fn new(
+        namespace_id: String,
+        uploaded_wallets: Vec<CloudBackupUploadedWallet>,
+    ) -> Self {
+        Self { namespace_id, uploaded_wallets }
+    }
+
+    pub(crate) fn namespace_id(&self) -> &str {
+        &self.namespace_id
+    }
+
+    pub(crate) fn uploaded_wallets(&self) -> &[CloudBackupUploadedWallet] {
+        &self.uploaded_wallets
+    }
+}
+
+impl CloudBackupDeepVerificationAutoSyncCompletion {
+    pub(crate) fn complete(result: DeepVerificationResult) -> Self {
+        Self { result, pending_completion: None }
+    }
+
+    fn awaiting_upload_confirmation(
+        result: DeepVerificationResult,
+        pending_completion: PendingVerificationCompletion,
+    ) -> Self {
+        Self { result, pending_completion: Some(pending_completion) }
+    }
+
+    pub(crate) fn into_parts(
+        self,
+    ) -> (DeepVerificationResult, Option<PendingVerificationCompletion>) {
+        (self.result, self.pending_completion)
+    }
+}
+
+/// One deep verification run with its cloud and keychain dependencies
 pub(crate) struct VerificationSession {
     pub(crate) manager: RustCloudBackupManager,
     pub(crate) cloud_keychain: CloudBackupKeychain,
@@ -108,41 +271,53 @@ impl VerificationSession {
         })
     }
 
-    pub(crate) async fn run(mut self) -> Result<DeepVerificationResult, CloudBackupError> {
+    pub(crate) async fn run(mut self) -> Result<CloudBackupDeepVerificationStep, CloudBackupError> {
         let encrypted_master = match self.load_encrypted_master_key().await? {
             EncryptedMasterKeyStep::Loaded(encrypted_master) => Some(encrypted_master),
             EncryptedMasterKeyStep::Missing => None,
-            EncryptedMasterKeyStep::Finished(result) => return Ok(result),
+            EncryptedMasterKeyStep::Finished(result) => {
+                return Ok(CloudBackupDeepVerificationStep::Complete(result));
+            }
         };
 
-        let authenticated_master =
-            match self.resolve_master_key_step(encrypted_master.as_ref()).await? {
-                MasterKeyResolution::Authenticated(authenticated_master) => {
-                    self.apply_verified_cloud_master_key(&authenticated_master.master_key)?;
-                    authenticated_master
-                }
+        let master_key_resolution = self.resolve_master_key_step(encrypted_master.as_ref()).await?;
+        let master_key_resolution = match master_key_resolution {
+            MasterKeyResolution::Finished(result) => {
+                return Ok(CloudBackupDeepVerificationStep::Complete(result));
+            }
+            MasterKeyResolution::Continue(resolution) => resolution,
+        };
 
-                MasterKeyResolution::NeedsWrapperRepair { reuse_credential_id } => {
-                    match self.repair_wrapper_from_local_key(reuse_credential_id).await? {
-                        RepairedMasterKeyResolution::Authenticated(authenticated_master) => {
-                            authenticated_master
-                        }
-                        RepairedMasterKeyResolution::Finished(result) => return Ok(result),
-                    }
-                }
-
-                MasterKeyResolution::Finished(result) => return Ok(result),
-            };
+        if let ContinuableMasterKeyResolution::Authenticated(authenticated_master) =
+            &master_key_resolution
+        {
+            self.apply_verified_cloud_master_key(&authenticated_master.master_key)?;
+        }
 
         if let Some(result) = self.ensure_wallet_inventory_or_short_circuit().await {
-            return Ok(result);
+            return Ok(CloudBackupDeepVerificationStep::Complete(result));
         }
 
-        if let Some(result) = self.verify_wallet_backups_and_autosync(&authenticated_master).await {
-            return Ok(result);
-        }
+        let authenticated_master = match master_key_resolution {
+            ContinuableMasterKeyResolution::Authenticated(authenticated_master) => {
+                authenticated_master
+            }
 
-        Ok(self.finish_verified())
+            ContinuableMasterKeyResolution::NeedsWrapperRepair { reuse_credential_id } => {
+                match self.repair_wrapper_from_local_key(reuse_credential_id).await? {
+                    RepairedMasterKeyResolution::PreparedWrapperRepair(prepared) => {
+                        return Ok(CloudBackupDeepVerificationStep::PreparedWrapperRepair(
+                            prepared,
+                        ));
+                    }
+                    RepairedMasterKeyResolution::Finished(result) => {
+                        return Ok(CloudBackupDeepVerificationStep::Complete(result));
+                    }
+                }
+            }
+        };
+
+        Ok(self.verify_wallet_backups_and_autosync(authenticated_master).await)
     }
 
     async fn load_wallet_inventory(&mut self) -> Option<DeepVerificationResult> {
@@ -252,7 +427,9 @@ impl VerificationSession {
         encrypted_master: Option<&EncryptedMasterKeyBackup>,
     ) -> Result<MasterKeyResolution, CloudBackupError> {
         let Some(encrypted_master) = encrypted_master else {
-            return Ok(MasterKeyResolution::NeedsWrapperRepair { reuse_credential_id: None });
+            return Ok(MasterKeyResolution::Continue(
+                ContinuableMasterKeyResolution::NeedsWrapperRepair { reuse_credential_id: None },
+            ));
         };
 
         let prf_salt = encrypted_master.prf_salt;
@@ -263,9 +440,11 @@ impl VerificationSession {
             }
             PasskeyAuthOutcome::NoCredentialFound => {
                 if self.local_master_key.is_some() {
-                    return Ok(MasterKeyResolution::NeedsWrapperRepair {
-                        reuse_credential_id: None,
-                    });
+                    return Ok(MasterKeyResolution::Continue(
+                        ContinuableMasterKeyResolution::NeedsWrapperRepair {
+                            reuse_credential_id: None,
+                        },
+                    ));
                 }
 
                 return Ok(MasterKeyResolution::Finished(
@@ -287,17 +466,19 @@ impl VerificationSession {
                     ));
                 }
 
-                Ok(MasterKeyResolution::Authenticated(AuthenticatedMasterKey::new(
-                    master_key,
-                    MasterKeyAuthorizationSource::CloudMasterKeyWrapper,
+                Ok(MasterKeyResolution::Continue(ContinuableMasterKeyResolution::Authenticated(
+                    AuthenticatedMasterKey::new(
+                        master_key,
+                        MasterKeyAuthorizationSource::CloudMasterKeyWrapper,
+                    ),
                 )))
             }
             // the passkey worked but the wrapper is stale; use the local key to replace it
-            Err(_) if self.local_master_key.is_some() => {
-                Ok(MasterKeyResolution::NeedsWrapperRepair {
+            Err(_) if self.local_master_key.is_some() => Ok(MasterKeyResolution::Continue(
+                ContinuableMasterKeyResolution::NeedsWrapperRepair {
                     reuse_credential_id: Some(authenticated.credential_id),
-                })
-            }
+                },
+            )),
             // without a local key there is no trusted source left to rebuild the cloud wrapper
             Err(_) => Ok(MasterKeyResolution::Finished(self.reinitialize_result(
                 "could not decrypt cloud master key and no local key available",
@@ -309,14 +490,14 @@ impl VerificationSession {
         &mut self,
         master_key: &MasterKey,
     ) -> Result<(), CloudBackupError> {
-        match &self.local_master_key {
+        let repaired = match &self.local_master_key {
             // restore the missing local key from the verified cloud backup
             None => {
                 self.cspp
                     .save_master_key(master_key)
                     .map_err_prefix("repair local master key", CloudBackupError::Internal)?;
-                self.report.local_master_key_repaired = true;
                 info!("Repaired local master key from cloud");
+                true
             }
 
             // replace a stale local key after cloud decryption proves the cloud key is valid
@@ -324,19 +505,24 @@ impl VerificationSession {
                 self.cspp
                     .save_master_key(master_key)
                     .map_err_prefix("repair local master key", CloudBackupError::Internal)?;
-                self.report.local_master_key_repaired = true;
                 info!("Repaired local master key to match cloud");
+                true
             }
 
             // keep the local key when it already matches the verified cloud key
-            Some(_) => {}
+            Some(_) => false,
+        };
+
+        if repaired {
+            self.local_master_key = Some(MasterKey::from_bytes(*master_key.as_bytes()));
+            self.report.local_master_key_repaired = true;
         }
 
         Ok(())
     }
 
     async fn repair_wrapper_from_local_key(
-        &mut self,
+        self,
         reuse_credential_id: Option<Vec<u8>>,
     ) -> Result<RepairedMasterKeyResolution, CloudBackupError> {
         let Some(local_master_key) = self.local_master_key.as_ref() else {
@@ -344,14 +530,9 @@ impl VerificationSession {
                 self.reinitialize_result("no local master key available for wrapper repair"),
             ));
         };
+        let local_master_key = MasterKey::from_bytes(*local_master_key.as_bytes());
 
-        let repair = WrapperRepairOperation::new(
-            &self.manager,
-            &self.cloud_keychain,
-            &self.cloud,
-            &self.passkey,
-            &self.namespace,
-        );
+        let repair = WrapperRepairOperation::new(&self.cloud, &self.passkey, &self.namespace);
 
         let strategy = match reuse_credential_id {
             Some(credential_id) => WrapperRepairStrategy::ReuseExisting(credential_id),
@@ -359,15 +540,14 @@ impl VerificationSession {
         };
 
         let wallet_record_ids = self.wallet_record_ids.as_deref().unwrap_or(&[]);
-        match repair.run(local_master_key, wallet_record_ids, strategy).await {
-            Ok(()) => {
-                self.report.master_key_wrapper_repaired = true;
-                info!("Repaired cloud master key wrapper");
-                Ok(RepairedMasterKeyResolution::Authenticated(AuthenticatedMasterKey::new(
-                    MasterKey::from_bytes(*local_master_key.as_bytes()),
-                    MasterKeyAuthorizationSource::RepairedCloudWrapper,
-                )))
-            }
+        match repair.prepare(&local_master_key, wallet_record_ids, strategy).await {
+            Ok(preparation) => Ok(RepairedMasterKeyResolution::PreparedWrapperRepair(Box::new(
+                CloudBackupPreparedDeepVerificationWrapperRepair {
+                    session: self,
+                    preparation,
+                    authenticated_master_key: local_master_key,
+                },
+            ))),
 
             Err(WrapperRepairError::WrongKey) => {
                 Ok(RepairedMasterKeyResolution::Finished(self.reinitialize_result(
@@ -383,11 +563,32 @@ impl VerificationSession {
         }
     }
 
+    async fn resume_after_wrapper_repair(
+        mut self,
+        authenticated_master_key: MasterKey,
+    ) -> Result<CloudBackupDeepVerificationStep, CloudBackupError> {
+        self.report.master_key_wrapper_repaired = true;
+        info!("Repaired cloud master key wrapper");
+
+        let authenticated_master = AuthenticatedMasterKey::new(
+            authenticated_master_key,
+            MasterKeyAuthorizationSource::RepairedCloudWrapper,
+        );
+
+        if let Some(result) = self.ensure_wallet_inventory_or_short_circuit().await {
+            return Ok(CloudBackupDeepVerificationStep::Complete(result));
+        }
+
+        Ok(self.verify_wallet_backups_and_autosync(authenticated_master).await)
+    }
+
     async fn verify_wallet_backups_and_autosync(
-        &mut self,
-        authenticated_master: &AuthenticatedMasterKey,
-    ) -> Option<DeepVerificationResult> {
-        let wallet_record_ids = self.wallet_record_ids.clone()?;
+        mut self,
+        authenticated_master: AuthenticatedMasterKey,
+    ) -> CloudBackupDeepVerificationStep {
+        let Some(wallet_record_ids) = self.wallet_record_ids.clone() else {
+            return CloudBackupDeepVerificationStep::Complete(self.finish_verified());
+        };
 
         info!(
             "Verification: checking wallet backups with authorization source {:?}",
@@ -404,7 +605,11 @@ impl VerificationSession {
 
         let remote_wallet_truth = match remote_wallet_truth_result {
             Ok(remote_wallet_truth) => remote_wallet_truth,
-            Err(error) => return Some(self.remote_truth_retry_result(&error)),
+            Err(error) => {
+                return CloudBackupDeepVerificationStep::Complete(
+                    self.remote_truth_retry_result(&error),
+                );
+            }
         };
 
         let inventory_result =
@@ -416,7 +621,7 @@ impl VerificationSession {
                 let detail = inventory.build_detail(other_backups.clone());
                 self.report.detail = Some(detail.clone());
                 if inventory.has_unknown_remote_wallets() {
-                    return Some(
+                    return CloudBackupDeepVerificationStep::Complete(
                         self.retry_result("failed to refresh remote wallet truth for some wallets"),
                     );
                 }
@@ -424,52 +629,71 @@ impl VerificationSession {
                 inventory.upload_candidate_wallets()
             }
 
-            Err(error) => return Some(self.local_inventory_retry_result(&error)),
+            Err(error) => {
+                return CloudBackupDeepVerificationStep::Complete(
+                    self.local_inventory_retry_result(&error),
+                );
+            }
         };
 
         if unsynced.is_empty() {
-            return None;
+            return CloudBackupDeepVerificationStep::Complete(self.finish_verified());
         }
 
         let count = unsynced.len() as u32;
         info!("Deep verify: {count} local wallet(s) not in cloud, auto-syncing");
-        if let Err(error) = self.manager.do_backup_wallets(&unsynced).await {
-            warn!("Deep verify: auto-sync failed: {error}");
-            return Some(
-                self.cloud_backup_retry_result(
-                    "failed to auto-sync missing wallet backups",
-                    &error,
-                ),
-            );
-        }
-        let pending_uploads = match stream::iter(unsynced.iter().cloned())
-            .map(|wallet| async move {
-                let prepared = prepare_wallet_backup(&wallet, wallet.wallet_mode).await?;
-                Ok(PendingVerificationUpload::new(prepared.record_id, prepared.revision_hash))
-            })
-            .buffered(CLOUD_BACKUP_IO_CONCURRENCY)
-            .try_collect::<Vec<_>>()
-            .await
-        {
-            Ok(pending_uploads) => pending_uploads,
-            Err(error) => return Some(self.local_inventory_retry_result(&error)),
-        };
+        let namespace_id = self.namespace.clone();
+        let upload_master_key = authenticated_master.master_key;
 
+        CloudBackupDeepVerificationStep::PreparedAutoSync(Box::new(
+            CloudBackupPreparedDeepVerificationAutoSync {
+                session: self,
+                upload: CloudBackupDeepVerificationAutoSyncUpload {
+                    namespace_id,
+                    wallets: unsynced,
+                    master_key: upload_master_key,
+                },
+            },
+        ))
+    }
+
+    async fn resume_after_auto_sync(
+        mut self,
+        uploaded: CloudBackupUploadedDeepVerificationAutoSync,
+    ) -> CloudBackupDeepVerificationAutoSyncCompletion {
+        let pending_uploads = uploaded
+            .uploaded_wallets()
+            .iter()
+            .map(|wallet| {
+                PendingVerificationUpload::new(
+                    wallet.record_id().to_owned(),
+                    wallet.revision_hash().to_owned(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let other_backups = self.manager.other_backup_state(&self.cloud).await;
         let updated_ids = match self.cloud.list_wallet_backups(self.namespace.clone()).await {
             Ok(updated_ids) => updated_ids,
             Err(error) => {
                 warn!("Deep verify: failed to re-check wallet backups after auto-sync: {error}");
-                return Some(self.cloud_storage_retry_result(
-                    "failed to re-check wallet backups after auto-sync",
-                    error,
-                ));
+                return CloudBackupDeepVerificationAutoSyncCompletion::complete(
+                    self.cloud_storage_retry_result(
+                        "failed to re-check wallet backups after auto-sync",
+                        error,
+                    ),
+                );
             }
         };
 
         let remote_wallet_truth =
             match self.manager.load_remote_wallet_truth(&updated_ids, self.cloud.clone()).await {
                 Ok(remote_wallet_truth) => remote_wallet_truth,
-                Err(error) => return Some(self.remote_truth_retry_result(&error)),
+                Err(error) => {
+                    return CloudBackupDeepVerificationAutoSyncCompletion::complete(
+                        self.remote_truth_retry_result(&error),
+                    );
+                }
             };
 
         self.manager.cleanup_confirmed_pending_blobs(&remote_wallet_truth);
@@ -491,7 +715,11 @@ impl VerificationSession {
                 .await
             {
                 Ok(inventory) => inventory,
-                Err(error) => return Some(self.local_inventory_retry_result(&error)),
+                Err(error) => {
+                    return CloudBackupDeepVerificationAutoSyncCompletion::complete(
+                        self.local_inventory_retry_result(&error),
+                    );
+                }
             };
 
         let listed: std::collections::HashSet<_> = updated_ids.iter().cloned().collect();
@@ -501,7 +729,7 @@ impl VerificationSession {
         self.wallet_record_ids = Some(updated_ids);
 
         if inventory.has_unknown_remote_wallets() {
-            return Some(
+            return CloudBackupDeepVerificationAutoSyncCompletion::complete(
                 self.retry_result("failed to refresh remote wallet truth for some wallets"),
             );
         }
@@ -515,7 +743,7 @@ impl VerificationSession {
             && !missing_listed_uploads
             && unconfirmed_pending_uploads == 0
         {
-            return None;
+            return CloudBackupDeepVerificationAutoSyncCompletion::complete(self.finish_verified());
         }
 
         let remaining_count = remaining_unsynced.len();
@@ -530,13 +758,15 @@ impl VerificationSession {
             "Deep verify: auto-sync finished but confirmation is still pending missing_listed={missing_count} stale={stale_count} stale_or_unsynced={remaining_count}"
         );
 
-        self.manager.replace_pending_verification_completion(PendingVerificationCompletion::new(
-            self.report.clone(),
-            self.namespace.clone(),
-            pending_uploads,
-        ));
-
-        Some(DeepVerificationResult::AwaitingUploadConfirmation(self.report.clone()))
+        let result = DeepVerificationResult::AwaitingUploadConfirmation(self.report.clone());
+        CloudBackupDeepVerificationAutoSyncCompletion::awaiting_upload_confirmation(
+            result,
+            PendingVerificationCompletion::new(
+                self.report.clone(),
+                self.namespace.clone(),
+                pending_uploads,
+            ),
+        )
     }
 
     async fn verify_wallet_backups(&self, critical_key: &[u8; 32]) -> (u32, u32, u32) {

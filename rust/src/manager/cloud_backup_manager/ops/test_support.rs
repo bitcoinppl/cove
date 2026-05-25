@@ -27,11 +27,11 @@ use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue, CloudBlobUploadingState,
     PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
     PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
-    PersistedPasskeyState,
+    PersistedDisablingCloudBackup, PersistedPasskeyState,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, CloudBackupStore, pending::PendingUploadVerificationStatus,
-    workers::RestoreOperation,
+    CloudBackupKeychain, CloudBackupStore, PendingEnableSession, actors::restore::RestoreOperation,
+    pending::PendingUploadVerificationStatus,
 };
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
@@ -149,10 +149,12 @@ struct MockCloudState {
     upload_master_key_error: Option<CloudStorageError>,
     next_upload_wallet_backup_error: Option<CloudStorageError>,
     upload_wallet_backup_error: Option<CloudStorageError>,
+    upload_wallet_backup_error_after_successes: Option<(usize, CloudStorageError)>,
     delete_namespace_error: Option<CloudStorageError>,
     list_namespaces_error: Option<CloudStorageError>,
     reflect_uploaded_wallets_in_listing: bool,
     uploaded_wallet_backups: Vec<(String, String)>,
+    wallet_backup_success_count: usize,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
     delete_namespace_attempts: usize,
     list_wallet_files_attempts: usize,
@@ -161,6 +163,7 @@ struct MockCloudState {
     dirty_wallet_on_next_upload: Option<WalletId>,
     changed_wallet_on_next_upload: Option<WalletId>,
     dirty_wallet_on_next_backup_check: Option<WalletId>,
+    disabling_on_next_upload: Option<PersistedDisablingCloudBackup>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -270,6 +273,15 @@ impl MockCloudStorage {
         self.state.lock().upload_wallet_backup_error = Some(CloudStorageError::QuotaExceeded);
     }
 
+    pub(crate) fn fail_wallet_backup_upload_after_successes(
+        &self,
+        success_count: usize,
+        message: &str,
+    ) {
+        self.state.lock().upload_wallet_backup_error_after_successes =
+            Some((success_count, CloudStorageError::UploadFailed(message.into())));
+    }
+
     pub(crate) fn fail_next_wallet_backup_upload_offline(&self, message: &str) {
         self.state.lock().next_upload_wallet_backup_error =
             Some(CloudStorageError::Offline(message.into()));
@@ -349,6 +361,13 @@ impl MockCloudStorage {
     pub(crate) fn dirty_wallet_on_next_backup_check(&self, wallet_id: WalletId) {
         self.state.lock().dirty_wallet_on_next_backup_check = Some(wallet_id);
     }
+
+    pub(crate) fn persist_disabling_on_next_upload(
+        &self,
+        disabling: PersistedDisablingCloudBackup,
+    ) {
+        self.state.lock().disabling_on_next_upload = Some(disabling);
+    }
 }
 
 #[async_trait::async_trait]
@@ -376,7 +395,7 @@ impl CloudStorageAccess for MockCloudStorage {
         data: Vec<u8>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        let (dirty_wallet, changed_wallet) = {
+        let (dirty_wallet, changed_wallet, disabling) = {
             let mut state = self.state.lock();
             state.wallet_backup_upload_attempts += 1;
             if let Some(error) = state.next_upload_wallet_backup_error.take() {
@@ -387,17 +406,32 @@ impl CloudStorageAccess for MockCloudStorage {
                 return Err(error);
             }
 
+            if let Some((success_count, error)) =
+                state.upload_wallet_backup_error_after_successes.clone()
+                && state.wallet_backup_success_count >= success_count
+            {
+                return Err(error);
+            }
+
             let dirty_wallet = state.dirty_wallet_on_next_upload.take();
             let changed_wallet = state.changed_wallet_on_next_upload.take();
+            let disabling = state.disabling_on_next_upload.take();
             state.wallet_backups.insert((namespace.clone(), record_id.clone()), data);
             state.uploaded_wallet_backups.push((namespace, record_id));
-            (dirty_wallet, changed_wallet)
+            state.wallet_backup_success_count += 1;
+            (dirty_wallet, changed_wallet, disabling)
         };
         if let Some(wallet_id) = dirty_wallet {
             persist_dirty_blob_state(wallet_id);
         }
         if let Some(wallet_id) = changed_wallet {
             mutate_wallet_and_persist_dirty(wallet_id);
+        }
+        if let Some(disabling) = disabling {
+            Database::global()
+                .cloud_backup_state
+                .set(&PersistedCloudBackupState::Disabling(disabling))
+                .unwrap();
         }
         Ok(())
     }
@@ -578,7 +612,7 @@ impl CloudStorageAccess for MockCloudStorage {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct MockPasskeyProviderImpl {
     discover_results: Arc<Mutex<VecDeque<MockDiscoverResult>>>,
     create_result: MockPasskeyCreateResult,
@@ -588,21 +622,6 @@ pub(crate) struct MockPasskeyProviderImpl {
     discover_count: Arc<Mutex<usize>>,
     presence_results: MockPasskeyPresenceResults,
     authenticated_credential_ids: Arc<Mutex<Vec<Vec<u8>>>>,
-}
-
-impl Default for MockPasskeyProviderImpl {
-    fn default() -> Self {
-        Self {
-            discover_results: Arc::new(Mutex::new(VecDeque::new())),
-            create_result: Arc::new(Mutex::new(None)),
-            authenticate_result: Arc::new(Mutex::new(None)),
-            create_count: Arc::new(Mutex::new(0)),
-            authenticate_count: Arc::new(Mutex::new(0)),
-            discover_count: Arc::new(Mutex::new(0)),
-            presence_results: Arc::new(Mutex::new(VecDeque::new())),
-            authenticated_credential_ids: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
 }
 
 impl MockPasskeyProviderImpl {
@@ -792,9 +811,26 @@ pub(crate) fn test_globals() -> &'static TestGlobals {
     })
 }
 
-pub(crate) fn test_lock() -> &'static parking_lot::Mutex<()> {
-    static LOCK: OnceLock<parking_lot::Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(parking_lot::Mutex::default)
+pub(crate) struct SyncTestLock(&'static tokio::sync::Mutex<()>);
+
+impl SyncTestLock {
+    pub(crate) fn lock(&self) -> tokio::sync::MutexGuard<'static, ()> {
+        self.0.blocking_lock()
+    }
+}
+
+pub(crate) fn test_lock() -> &'static SyncTestLock {
+    static LOCK: OnceLock<SyncTestLock> = OnceLock::new();
+    LOCK.get_or_init(|| SyncTestLock(shared_test_lock()))
+}
+
+pub(crate) fn async_test_lock() -> &'static tokio::sync::Mutex<()> {
+    shared_test_lock()
+}
+
+fn shared_test_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(tokio::sync::Mutex::default)
 }
 
 fn clear_local_wallets() {
@@ -956,6 +992,31 @@ pub(crate) async fn wait_for_test_condition(
     })
     .await
     .expect(message);
+}
+
+pub(crate) async fn take_pending_enable_session_for_test(
+    manager: &RustCloudBackupManager,
+) -> Option<PendingEnableSession> {
+    call!(manager.supervisor.take_pending_enable_session_for_test())
+        .await
+        .expect("take pending enable session")
+}
+
+pub(crate) async fn replace_pending_enable_session_for_test(
+    manager: &RustCloudBackupManager,
+    session: PendingEnableSession,
+) {
+    call!(manager.supervisor.replace_pending_enable_session_for_test(session))
+        .await
+        .expect("replace pending enable session");
+}
+
+pub(crate) async fn has_awaiting_saved_passkey_confirmation_for_test(
+    manager: &RustCloudBackupManager,
+) -> bool {
+    call!(manager.supervisor.has_awaiting_saved_passkey_confirmation_for_test())
+        .await
+        .expect("check saved passkey confirmation session")
 }
 
 pub(crate) async fn assert_test_condition_stays_true(

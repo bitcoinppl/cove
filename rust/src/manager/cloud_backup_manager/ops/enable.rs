@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
@@ -9,33 +7,29 @@ use cove_util::ResultExt as _;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
-use super::{
-    BlockingCloudStep, RustCloudBackupManager, blocking_cloud_error, sync::FinalizeUploadStateMode,
+use super::{BlockingCloudStep, RustCloudBackupManager, blocking_cloud_error};
+use crate::manager::cloud_backup_manager::actors::{
+    CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupUploadedWallet,
+    CloudBackupWriteClient,
 };
-use crate::database::cloud_backup::CloudBackupRecordKey;
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
     PasskeyMaterialOutcome, PreparedWalletBackup, StagedPrfKey, UnpersistedPrfKey,
     WalletBackupLookup, WalletBackupReader, WalletRestoreSession,
 };
-use crate::manager::cloud_backup_manager::workers::{
-    CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob,
-};
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupError, CloudBackupKeychain,
-    CloudBackupPasskeyChoiceIntent, CloudBackupRestoreOutcome, CloudBackupStatus, CloudBackupStore,
-    CloudBackupVerificationOutcome, PendingEnableSession, PendingVerificationCompletion,
-    PendingVerificationUpload, SavedPasskeyConfirmationMode, is_connectivity_related_issue,
-    master_key_wrapper_revision_hash,
+    CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupError, CloudBackupPasskeyHint,
+    CloudBackupRestoreOutcome, CloudBackupStatus, CloudBackupStore, PendingEnableSession,
+    PendingVerificationUpload, is_connectivity_related_issue, master_key_wrapper_revision_hash,
 };
 use crate::wallet::metadata::WalletMetadata;
 
-struct MergeNamespace {
+pub(crate) struct MergeNamespace {
     matched: NamespaceMatch,
     wallet_record_ids: Vec<String>,
 }
 
-struct MergedNamespaceWallets {
+pub(crate) struct MergedNamespaceWallets {
     source: CleanupSourceNamespace,
     restored_wallets: Vec<WalletMetadata>,
 }
@@ -48,6 +42,92 @@ pub(crate) enum EnablePasskeyAcquisition {
 pub(crate) enum EnablePasskeyRegistrationFlow {
     ForceNew,
     NoDiscovery,
+}
+
+pub(crate) struct CloudBackupRegisteredEnablePasskey {
+    pub(crate) master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
+    pub(crate) passkey: Zeroizing<StagedPrfKey>,
+    pub(crate) context: CloudBackupEnableContext,
+}
+
+pub(crate) enum CloudBackupEnablePasskeyRegistration {
+    Registered(CloudBackupRegisteredEnablePasskey),
+    Cancelled { context: CloudBackupEnableContext },
+}
+
+pub(crate) enum CloudBackupEnablePasskeyPreparation {
+    Ready(CloudBackupReadyEnableUpload),
+    Registered(CloudBackupRegisteredEnablePasskey),
+    Cancelled { context: CloudBackupEnableContext },
+}
+
+pub(crate) enum CloudBackupEnablePreparation {
+    CreateNew {
+        context: CloudBackupEnableContext,
+    },
+    ExistingBackupFound {
+        context: CloudBackupEnableContext,
+        passkey_hint: Option<CloudBackupPasskeyHint>,
+    },
+    PasskeyChoice {
+        context: CloudBackupEnableContext,
+        passkey_hint: Option<CloudBackupPasskeyHint>,
+    },
+    Recover {
+        matches: Vec<NamespaceMatch>,
+    },
+}
+
+pub(crate) struct CloudBackupEnableRecoveryPreparation {
+    merge_namespaces: Vec<MergeNamespace>,
+    active_index: usize,
+    active_namespace_id: String,
+    active_master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
+    active_critical_key: Zeroizing<[u8; 32]>,
+}
+
+#[derive(Debug)]
+pub(crate) struct CloudBackupEnableRecoveryCompletion {
+    pub(crate) namespace_id: String,
+    pub(crate) credential_id: Vec<u8>,
+    pub(crate) prf_salt: [u8; 32],
+    pub(crate) active_critical_key: Zeroizing<[u8; 32]>,
+    pub(crate) uploaded_wallets: Vec<CloudBackupUploadedWallet>,
+    pub(crate) cleanup_sources: Vec<CleanupSourceNamespace>,
+}
+
+pub(crate) enum CloudBackupNoDiscoveryEnablePreparation {
+    RegisterPasskey {
+        context: CloudBackupEnableContext,
+    },
+    ExistingBackupFound {
+        context: CloudBackupEnableContext,
+        passkey_hint: Option<CloudBackupPasskeyHint>,
+    },
+}
+
+pub(crate) struct CloudBackupReadyEnableUpload {
+    pub(crate) master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
+    pub(crate) passkey: Zeroizing<UnpersistedPrfKey>,
+    pub(crate) context: CloudBackupEnableContext,
+}
+
+pub(crate) struct CloudBackupUploadedEnableBackup {
+    pub(crate) master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
+    pub(crate) passkey: Zeroizing<UnpersistedPrfKey>,
+    pub(crate) context: CloudBackupEnableContext,
+    pub(crate) namespace_id: String,
+    pub(crate) encrypted_master: cove_cspp::backup_data::EncryptedMasterKeyBackup,
+    pub(crate) master_key_wrapper_revision: String,
+    pub(crate) uploaded_at: u64,
+    pub(crate) uploaded_wallets: Vec<PreparedWalletBackup>,
+    pub(crate) pending_uploads: Vec<PendingVerificationUpload>,
+}
+
+pub(crate) enum CloudBackupSavedPasskeyConfirmation {
+    Confirmed(CloudBackupReadyEnableUpload),
+    Retry { pending: PendingEnableSession, error: CloudBackupError },
+    Failed(CloudBackupError),
 }
 
 impl EnablePasskeyRegistrationFlow {
@@ -88,61 +168,12 @@ impl RustCloudBackupManager {
             .collect()
     }
 
-    async fn seed_post_enable_verification_from_fresh_passkey_material(
+    pub(crate) async fn prepare_enable_recovery(
         &self,
-        encrypted_master: &cove_cspp::backup_data::EncryptedMasterKeyBackup,
-        master_key: &cove_cspp::master_key::MasterKey,
-        passkey: &UnpersistedPrfKey,
-        namespace_id: &str,
-        pending_uploads: Vec<PendingVerificationUpload>,
-        verification_source: crate::manager::cloud_backup_manager::CloudBackupVerificationSource,
-    ) -> Result<(), CloudBackupError> {
-        let decrypted_master =
-            master_key_crypto::decrypt_master_key(encrypted_master, &passkey.prf_key)
-                .map_err_str(CloudBackupError::Crypto)?;
-        if decrypted_master.as_bytes() != master_key.as_bytes() {
-            return Err(CloudBackupError::Crypto(
-                "fresh passkey material decrypted the wrong master key".into(),
-            ));
-        }
-
-        self.record_runtime_passkey_authorization(
-            namespace_id.to_owned(),
-            passkey.credential_id.clone(),
-            passkey.prf_salt,
-        )
-        .await?;
-
-        let report = crate::manager::cloud_backup_manager::DeepVerificationReport {
-            master_key_wrapper_repaired: false,
-            local_master_key_repaired: false,
-            credential_recovered: false,
-            wallets_verified: 0,
-            wallets_failed: 0,
-            wallets_unsupported: 0,
-            detail: None,
-        };
-        let mut pending_uploads = pending_uploads;
-        pending_uploads.insert(0, PendingVerificationUpload::master_key_wrapper());
-
-        self.replace_pending_verification_completion_for_source(
-            PendingVerificationCompletion::new(report, namespace_id.to_owned(), pending_uploads),
-            verification_source,
-        );
-        self.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
-
-        Ok(())
-    }
-
-    /// Complete recovery from matched cloud namespaces
-    pub(crate) async fn complete_recovery(
-        &self,
-        cloud_keychain: &CloudBackupKeychain,
-        cloud: &CloudStorageClient,
-        cspp: &cove_cspp::Cspp<Keychain>,
         matches: Vec<NamespaceMatch>,
-    ) -> Result<(), CloudBackupError> {
-        let merge_namespaces = self.load_enable_merge_namespaces(cloud, matches).await?;
+    ) -> Result<CloudBackupEnableRecoveryPreparation, CloudBackupError> {
+        let cloud = CloudStorage::global_explicit_client();
+        let merge_namespaces = self.load_enable_merge_namespaces(&cloud, matches).await?;
         let Some(active_index) = active_merge_namespace_index(&merge_namespaces) else {
             return Err(CloudBackupError::Internal(
                 "no matching cloud backup namespaces found".into(),
@@ -160,73 +191,80 @@ impl RustCloudBackupManager {
             active_namespace_id
         );
 
-        cspp.save_master_key(&active_master_key)
-            .map_err_prefix("save recovered master key", CloudBackupError::Internal)?;
+        Ok(CloudBackupEnableRecoveryPreparation {
+            merge_namespaces,
+            active_index,
+            active_namespace_id,
+            active_master_key: Zeroizing::new(active_master_key),
+            active_critical_key: Zeroizing::new(active_critical_key),
+        })
+    }
 
-        let result = async {
-            let merged_wallets =
-                self.restore_enable_merge_wallets(cloud, &merge_namespaces).await?;
+    pub(crate) fn save_enable_recovery_master_key(
+        &self,
+        preparation: &CloudBackupEnableRecoveryPreparation,
+    ) -> Result<(), CloudBackupError> {
+        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        cspp.save_master_key(&preparation.active_master_key)
+            .map_err_prefix("save recovered master key", CloudBackupError::Internal)
+    }
 
-            for metadata in merged_wallets.iter().flat_map(|merged| &merged.restored_wallets) {
-                info!("Enable: recovered wallet {} from matched namespace", metadata.name);
-            }
+    pub(crate) fn rollback_enable_recovery_master_key(&self) {
+        warn!("Enable: rolling back recovered local master key after recovery failure");
+        cove_cspp::Cspp::new(Keychain::global().clone()).delete_master_key();
+    }
 
-            let critical_key = Zeroizing::new(active_critical_key);
-            let uploaded_wallets = CloudBackupStore::global()
-                .upload_all_wallets(cloud, &active_namespace_id, &critical_key)
-                .await
-                .map_err(|error| blocking_cloud_error(BlockingCloudStep::Enable, error))?;
+    pub(crate) async fn prepare_enable_recovery_completion(
+        &self,
+        preparation: CloudBackupEnableRecoveryPreparation,
+        writes: CloudBackupWriteClient,
+    ) -> Result<CloudBackupEnableRecoveryCompletion, CloudBackupError> {
+        let cloud = CloudStorage::global_explicit_client();
+        let active_namespace_id = preparation.active_namespace_id.clone();
+        let active_critical_key = preparation.active_critical_key;
+        let merged_wallets =
+            self.restore_enable_merge_wallets(&cloud, &preparation.merge_namespaces).await?;
 
-            let active_match = &merge_namespaces[active_index].matched;
-            cloud_keychain
-                .save_passkey_and_namespace(
-                    &active_match.credential_id,
-                    active_match.prf_salt,
-                    &active_namespace_id,
+        for merged in &merged_wallets {
+            info!(
+                "Enable: recovered {} wallet(s) from matched namespace {}",
+                merged.restored_wallets.len(),
+                merged.source.namespace_id
+            );
+        }
+
+        let uploaded_wallets = CloudBackupStore::global()
+            .upload_all_wallets(&writes, &cloud, &active_namespace_id, &active_critical_key)
+            .await
+            .map_err(|error| blocking_cloud_error(BlockingCloudStep::Enable, error))?;
+
+        let active_match = &preparation.merge_namespaces[preparation.active_index].matched;
+        let credential_id = active_match.credential_id.clone();
+        let prf_salt = active_match.prf_salt;
+        let uploaded_wallets = uploaded_wallets
+            .into_iter()
+            .map(|wallet| {
+                CloudBackupUploadedWallet::new(
+                    wallet.metadata.id,
+                    wallet.record_id,
+                    wallet.revision_hash,
                 )
-                .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
+            })
+            .collect();
+        let cleanup_sources = merged_wallets
+            .into_iter()
+            .filter(|merged| merged.source.namespace_id != active_namespace_id)
+            .map(|merged| merged.source)
+            .collect::<Vec<_>>();
 
-            self.record_runtime_passkey_authorization(
-                active_namespace_id.clone(),
-                active_match.credential_id.clone(),
-                active_match.prf_salt,
-            )
-            .await?;
-
-            self.finalize_uploaded_wallets(
-                cloud,
-                &active_namespace_id,
-                uploaded_wallets,
-                FinalizeUploadStateMode::ResetVerification,
-            )
-            .await?;
-
-            let cleanup_sources = merged_wallets
-                .into_iter()
-                .filter(|merged| merged.source.namespace_id != active_namespace_id)
-                .map(|merged| merged.source)
-                .collect::<Vec<_>>();
-            self.enqueue_cleanup(CloudBackupCleanupJob {
-                cloud: cloud.clone(),
-                active_namespace_id: active_namespace_id.clone(),
-                active_critical_key,
-                sources: cleanup_sources,
-            });
-
-            Ok(())
-        }
-        .await;
-
-        if let Err(error) = result {
-            warn!("Enable: rolling back recovered local master key after recovery failure");
-            cspp.delete_master_key();
-            return Err(error);
-        }
-
-        self.clear_pending_enable_session();
-        self.clear_enable_progress(CloudBackupStatus::Enabled);
-        info!("Cloud backup enabled (recovered existing namespace)");
-        Ok(())
+        Ok(CloudBackupEnableRecoveryCompletion {
+            namespace_id: active_namespace_id,
+            credential_id,
+            prf_salt,
+            active_critical_key,
+            uploaded_wallets,
+            cleanup_sources,
+        })
     }
 
     async fn load_enable_merge_namespaces(
@@ -275,28 +313,14 @@ impl RustCloudBackupManager {
             let mut restored_wallets = Vec::new();
 
             for record_id in &namespace.wallet_record_ids {
-                match reader.lookup(record_id).await {
+                let wallet = match reader.lookup(record_id).await {
                     Ok(WalletBackupLookup::Found(wallet)) => {
                         expected_wallets.push(CleanupExpectedWalletRecord {
                             record_id: record_id.clone(),
                             content_revision_hash: Some(wallet.entry.content_revision_hash.clone()),
                         });
 
-                        match restore_session.restore_downloaded(&wallet) {
-                            Ok(_) => restored_wallets.push(wallet.metadata),
-                            Err(error) => {
-                                if is_connectivity_related_issue(&error) {
-                                    return Err(blocking_cloud_error(
-                                        BlockingCloudStep::Enable,
-                                        error,
-                                    ));
-                                }
-                                warn!(
-                                    "Enable: failed to restore wallet {}/{} during namespace merge: {error}",
-                                    namespace.matched.namespace_id, record_id
-                                );
-                            }
-                        }
+                        wallet
                     }
                     Ok(WalletBackupLookup::NotFound) => {
                         expected_wallets.push(CleanupExpectedWalletRecord {
@@ -307,6 +331,7 @@ impl RustCloudBackupManager {
                             "Enable: matched namespace {}/{} listed a missing wallet backup",
                             namespace.matched.namespace_id, record_id
                         );
+                        continue;
                     }
                     Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
                         expected_wallets.push(CleanupExpectedWalletRecord {
@@ -317,6 +342,7 @@ impl RustCloudBackupManager {
                             "Enable: matched namespace {}/{} uses unsupported wallet backup version {version}",
                             namespace.matched.namespace_id, record_id
                         );
+                        continue;
                     }
                     Err(error) => {
                         if is_connectivity_related_issue(&error) {
@@ -328,6 +354,20 @@ impl RustCloudBackupManager {
                         });
                         warn!(
                             "Enable: failed to inspect wallet {}/{} during namespace merge: {error}",
+                            namespace.matched.namespace_id, record_id
+                        );
+                        continue;
+                    }
+                };
+
+                match restore_session.restore_downloaded(&wallet) {
+                    Ok(_) => restored_wallets.push(wallet.metadata),
+                    Err(error) => {
+                        if is_connectivity_related_issue(&error) {
+                            return Err(blocking_cloud_error(BlockingCloudStep::Enable, error));
+                        }
+                        warn!(
+                            "Enable: failed to restore wallet {}/{} during namespace merge: {error}",
                             namespace.matched.namespace_id, record_id
                         );
                     }
@@ -346,33 +386,11 @@ impl RustCloudBackupManager {
         Ok(merged_namespaces)
     }
 
-    pub(crate) async fn do_enable_cloud_backup(&self) -> Result<(), CloudBackupError> {
-        self.do_enable_cloud_backup_with_context(CloudBackupEnableContext::settings_manual()).await
-    }
-
-    pub(crate) async fn do_enable_cloud_backup_with_context(
+    pub(crate) async fn prepare_enable(
         &self,
         context: CloudBackupEnableContext,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<CloudBackupEnablePreparation, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
-        if let Some(pending) = self.take_retry_pending_enable_session().await {
-            let context = pending.context();
-            let (master_key, passkey) = pending.into_ready_parts()?;
-            info!("Enable: retrying pending upload with existing passkey material");
-            return self
-                .enable_cloud_backup_with_passkey_material(
-                    Keychain::global(),
-                    master_key,
-                    passkey,
-                    context,
-                )
-                .await;
-        }
-
-        if self.keep_awaiting_force_new_confirmation().await {
-            return Ok(());
-        }
-
         let passkey = PasskeyAccess::global();
         if !passkey.is_prf_supported() {
             return Err(CloudBackupError::NotSupported(
@@ -381,7 +399,6 @@ impl RustCloudBackupManager {
         }
 
         let keychain = Keychain::global();
-        let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
         let cspp = cove_cspp::Cspp::new(keychain.clone());
         let cloud = CloudStorage::global_explicit_client();
 
@@ -391,10 +408,9 @@ impl RustCloudBackupManager {
             .is_some();
 
         if has_local_master_key {
-            return self.do_enable_cloud_backup_create_new_with_context(context).await;
+            return Ok(CloudBackupEnablePreparation::CreateNew { context });
         }
 
-        // no local master key means iCloud may already contain a backup to recover
         let mut namespaces = cloud
             .list_namespaces()
             .await
@@ -410,7 +426,7 @@ impl RustCloudBackupManager {
         namespaces.sort();
 
         if namespaces.is_empty() {
-            return self.do_enable_cloud_backup_create_new_with_context(context).await;
+            return Ok(CloudBackupEnablePreparation::CreateNew { context });
         }
 
         info!("Enable: found {} existing namespace(s), attempting recovery", namespaces.len());
@@ -421,29 +437,29 @@ impl RustCloudBackupManager {
         match match_outcome {
             NamespaceMatchOutcome::Matched(matches) => {
                 if matches.is_empty() {
-                    self.present_existing_backup_found_prompt(context, passkey_hint);
-                    self.clear_enable_progress(CloudBackupStatus::Disabled);
-                    return Ok(());
+                    return Ok(CloudBackupEnablePreparation::ExistingBackupFound {
+                        context,
+                        passkey_hint,
+                    });
                 }
 
-                self.complete_recovery(&cloud_keychain, &cloud, &cspp, matches).await
+                Ok(CloudBackupEnablePreparation::Recover { matches })
             }
 
             NamespaceMatchOutcome::UserDeclined => {
                 info!("Enable: user cancelled passkey picker during namespace matching");
-                self.present_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(
+                Ok(CloudBackupEnablePreparation::PasskeyChoice {
                     context,
                     passkey_hint,
-                ));
-                self.clear_enable_progress(CloudBackupStatus::Disabled);
-                Ok(())
+                })
             }
 
             NamespaceMatchOutcome::NoMatch => {
                 info!("Enable: passkey didn't match existing backups, asking user to confirm");
-                self.present_existing_backup_found_prompt(context, passkey_hint);
-                self.clear_enable_progress(CloudBackupStatus::Disabled);
-                Ok(())
+                Ok(CloudBackupEnablePreparation::ExistingBackupFound {
+                    context,
+                    passkey_hint,
+                })
             }
 
             NamespaceMatchOutcome::Inconclusive => Err(self.offline_error_for_step(
@@ -457,31 +473,11 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub(crate) async fn do_enable_cloud_backup_create_new_with_context(
+    pub(crate) async fn prepare_create_new_enable_passkey(
         &self,
         context: CloudBackupEnableContext,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<CloudBackupEnablePasskeyPreparation, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
-        if let Some(pending) = self.take_retry_pending_enable_session().await {
-            let context = pending.context();
-            let (master_key, passkey) = pending.into_ready_parts()?;
-            info!("Enable: retrying pending upload with existing passkey material");
-            return self
-                .enable_cloud_backup_with_passkey_material(
-                    Keychain::global(),
-                    master_key,
-                    passkey,
-                    context,
-                )
-                .await;
-        }
-        if self.keep_awaiting_force_new_confirmation().await {
-            return Ok(());
-        }
-        if self.keep_awaiting_saved_passkey_confirmation().await {
-            return Ok(());
-        }
-
         let passkey_access = PasskeyAccess::global();
         let keychain = Keychain::global();
 
@@ -497,15 +493,23 @@ impl RustCloudBackupManager {
 
         let namespace_id = master_key.namespace_id();
         info!("Enable: namespace_id={namespace_id}, getting passkey");
-        self.apply_enable_outcome(CloudBackupEnableOutcome::CreatingPasskey);
         let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
-        let passkey = match acquirer.discover_or_register_for_enable().await {
-            Ok(PasskeyMaterialOutcome::Authenticated(passkey)) => passkey,
+        match acquirer.discover_or_register_for_enable().await {
+            Ok(PasskeyMaterialOutcome::Authenticated(passkey)) => {
+                Ok(CloudBackupEnablePasskeyPreparation::Ready(CloudBackupReadyEnableUpload {
+                    master_key: Zeroizing::new(master_key),
+                    passkey: Zeroizing::new(passkey),
+                    context,
+                }))
+            }
             Ok(PasskeyMaterialOutcome::RegisteredForConfirmation(passkey)) => {
-                info!("Enable: passkey registered, confirming availability");
-                return self
-                    .stage_registered_passkey_for_confirmation(master_key, passkey, context)
-                    .await;
+                Ok(CloudBackupEnablePasskeyPreparation::Registered(
+                    CloudBackupRegisteredEnablePasskey {
+                        master_key: Zeroizing::new(master_key),
+                        passkey: Zeroizing::new(passkey),
+                        context,
+                    },
+                ))
             }
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
                 self.rollback_new_local_master_key(
@@ -513,11 +517,7 @@ impl RustCloudBackupManager {
                     had_local_master_key,
                     "Enable cancelled before passkey setup finished",
                 );
-                self.present_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(
-                    context, None,
-                ));
-                self.clear_enable_progress(CloudBackupStatus::Disabled);
-                return Ok(());
+                Ok(CloudBackupEnablePasskeyPreparation::Cancelled { context })
             }
             Err(error) => {
                 self.rollback_new_local_master_key(
@@ -525,74 +525,16 @@ impl RustCloudBackupManager {
                     had_local_master_key,
                     "Enable failed before passkey setup finished",
                 );
-                return Err(error);
+                Err(error)
             }
-        };
-
-        info!("Enable: passkey created, uploading backup");
-        self.apply_enable_outcome(CloudBackupEnableOutcome::UploadingBackup);
-        self.enable_cloud_backup_with_passkey_material(
-            keychain,
-            Zeroizing::new(master_key),
-            Zeroizing::new(passkey),
-            context,
-        )
-        .await
+        }
     }
 
-    pub(crate) async fn do_enable_cloud_backup_force_new_with_context(
+    pub(crate) async fn prepare_no_discovery_enable(
         &self,
         context: CloudBackupEnableContext,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<CloudBackupNoDiscoveryEnablePreparation, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
-        let keychain = Keychain::global();
-
-        if let Some(pending) = self.take_pending_enable_session().await {
-            let pending_context = pending.context();
-            let (master_key, passkey) = pending.into_ready_parts()?;
-            info!("Enable: committing pending create-first cloud backup");
-            return self
-                .enable_cloud_backup_with_passkey_material(
-                    keychain,
-                    master_key,
-                    passkey,
-                    pending_context,
-                )
-                .await;
-        }
-
-        self.register_new_enable_passkey_with_context(
-            context,
-            EnablePasskeyRegistrationFlow::ForceNew,
-        )
-        .await
-    }
-
-    pub(crate) async fn do_enable_cloud_backup_no_discovery_with_context(
-        &self,
-        context: CloudBackupEnableContext,
-    ) -> Result<(), CloudBackupError> {
-        self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
-        if let Some(pending) = self.take_retry_pending_enable_session().await {
-            let context = pending.context();
-            let (master_key, passkey) = pending.into_ready_parts()?;
-            info!("Enable (no discovery): retrying pending upload with existing passkey material");
-            return self
-                .enable_cloud_backup_with_passkey_material(
-                    Keychain::global(),
-                    master_key,
-                    passkey,
-                    context,
-                )
-                .await;
-        }
-        if self.keep_awaiting_force_new_confirmation().await {
-            return Ok(());
-        }
-        if self.keep_awaiting_saved_passkey_confirmation().await {
-            return Ok(());
-        }
-
         let keychain = Keychain::global();
         let cloud = CloudStorage::global_explicit_client();
 
@@ -622,23 +564,20 @@ impl RustCloudBackupManager {
             );
             let passkey_hint =
                 self.best_passkey_hint_for_namespaces(&cloud, &existing_namespaces).await;
-            self.present_existing_backup_found_prompt(context, passkey_hint);
-            self.clear_enable_progress(CloudBackupStatus::Disabled);
-            return Ok(());
+            return Ok(CloudBackupNoDiscoveryEnablePreparation::ExistingBackupFound {
+                context,
+                passkey_hint,
+            });
         }
 
-        self.register_new_enable_passkey_with_context(
-            context,
-            EnablePasskeyRegistrationFlow::NoDiscovery,
-        )
-        .await
+        Ok(CloudBackupNoDiscoveryEnablePreparation::RegisterPasskey { context })
     }
 
-    async fn register_new_enable_passkey_with_context(
+    pub(crate) async fn prepare_new_enable_passkey_for_confirmation(
         &self,
         context: CloudBackupEnableContext,
         flow: EnablePasskeyRegistrationFlow,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<CloudBackupEnablePasskeyRegistration, CloudBackupError> {
         let log_context = flow.log_context();
         let cancelled_context = flow.cancelled_context();
         let failed_context = flow.failed_context();
@@ -658,7 +597,6 @@ impl RustCloudBackupManager {
 
         let namespace_id = master_key.namespace_id();
         info!("{log_context}: namespace_id={namespace_id}, creating passkey");
-        self.apply_enable_outcome(CloudBackupEnableOutcome::CreatingPasskey);
         let passkey = match self
             .acquire_enable_passkey(
                 &cspp,
@@ -674,101 +612,16 @@ impl RustCloudBackupManager {
         {
             EnablePasskeyAcquisition::Ready(passkey) => passkey,
             EnablePasskeyAcquisition::Cancelled => {
-                self.present_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(
-                    context, None,
-                ));
-                self.clear_enable_progress(CloudBackupStatus::Disabled);
-                return Ok(());
+                return Ok(CloudBackupEnablePasskeyRegistration::Cancelled { context });
             }
         };
 
         info!("{log_context}: passkey registered, confirming availability");
-        self.stage_registered_passkey_for_confirmation(master_key, passkey, context).await
-    }
-
-    async fn enable_cloud_backup_with_passkey_material(
-        &self,
-        keychain: &Keychain,
-        master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
-        passkey: Zeroizing<UnpersistedPrfKey>,
-        context: CloudBackupEnableContext,
-    ) -> Result<(), CloudBackupError> {
-        self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
-        self.apply_enable_outcome(CloudBackupEnableOutcome::UploadingBackup);
-        let namespace_id = master_key.namespace_id();
-        let cloud = CloudStorage::global_explicit_client();
-        self.replace_pending_enable_session(PendingEnableSession::retry_upload(
-            cove_cspp::master_key::MasterKey::from_bytes(*master_key.as_bytes()),
-            passkey.copy_for_retry(),
+        Ok(CloudBackupEnablePasskeyRegistration::Registered(CloudBackupRegisteredEnablePasskey {
+            master_key: Zeroizing::new(master_key),
+            passkey: Zeroizing::new(passkey),
             context,
-        ))
-        .await;
-
-        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
-        let encrypted_master = master_key_crypto::encrypt_master_key_with_remote_metadata(
-            &master_key,
-            &passkey.prf_key,
-            &passkey.prf_salt,
-            passkey.provider_hint.clone(),
-            RemotePayloadMetadata::master_key(&namespace_id, uploaded_at),
-        )
-        .map_err_str(CloudBackupError::Crypto)?;
-        let master_json =
-            serde_json::to_vec(&encrypted_master).map_err_str(CloudBackupError::Internal)?;
-        let master_key_wrapper_revision = master_key_wrapper_revision_hash(&master_json);
-
-        info!("Enable: uploading master key");
-        cloud.upload_master_key_backup(namespace_id.clone(), master_json).await.map_err(
-            |error| {
-                blocking_cloud_error(
-                    BlockingCloudStep::Enable,
-                    CloudBackupError::cloud_storage_context("upload master key backup", error),
-                )
-            },
-        )?;
-
-        info!("Enable: uploading wallets");
-        let critical_key = Zeroizing::new(master_key.critical_data_key());
-        let uploaded_wallets = CloudBackupStore::global()
-            .upload_all_wallets(&cloud, &namespace_id, &critical_key)
-            .await
-            .map_err(|error| blocking_cloud_error(BlockingCloudStep::Enable, error))?;
-        let pending_uploads = Self::pending_verification_uploads(&uploaded_wallets);
-
-        info!("Enable: persisting cloud backup state");
-        CloudBackupKeychain::new(keychain.clone())
-            .save_passkey_and_namespace(&passkey.credential_id, passkey.prf_salt, &namespace_id)
-            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
-
-        self.mark_blob_uploaded_pending_confirmation(
-            &namespace_id,
-            CloudBackupRecordKey::MasterKeyWrapper,
-            master_key_wrapper_revision,
-            uploaded_at,
-        )?;
-
-        self.finalize_uploaded_wallets(
-            &cloud,
-            &namespace_id,
-            uploaded_wallets,
-            FinalizeUploadStateMode::ResetVerification,
-        )
-        .await?;
-
-        self.seed_post_enable_verification_from_fresh_passkey_material(
-            &encrypted_master,
-            &master_key,
-            &passkey,
-            &namespace_id,
-            pending_uploads,
-            context.verification_source,
-        )
-        .await?;
-        self.clear_pending_enable_session();
-        self.clear_enable_progress(CloudBackupStatus::Enabled);
-        self.refresh_persisted_flags();
-        info!("Cloud backup enabled successfully");
-        Ok(())
+        }))
     }
 
     pub(crate) fn clear_enable_progress(&self, status: CloudBackupStatus) {
@@ -785,112 +638,97 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub(crate) async fn stage_registered_passkey_for_confirmation(
-        &self,
-        master_key: cove_cspp::master_key::MasterKey,
-        passkey: StagedPrfKey,
-        context: CloudBackupEnableContext,
-    ) -> Result<(), CloudBackupError> {
-        self.replace_pending_enable_session(
-            PendingEnableSession::awaiting_saved_passkey_confirmation(master_key, passkey, context),
-        )
-        .await;
-        self.apply_enable_outcome(CloudBackupEnableOutcome::CreatingPasskey);
-
-        tokio::time::sleep(Duration::from_secs(3)).await;
-
-        // do not poll credential presence here; platform presence checks can show passkey UI
-        // after registration, so confirmation must happen only from an explicit user action
-        self.apply_enable_outcome(CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
-            context.saved_passkey_confirmation,
-        ));
-        Ok(())
-    }
-
-    pub(crate) async fn handle_confirm_saved_passkey_session(&self, pending: PendingEnableSession) {
-        match self.confirm_saved_passkey_from_session(pending).await {
-            Ok(()) => {}
-            Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
-                self.apply_enable_outcome(
-                    CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
-                        SavedPasskeyConfirmationMode::Manual,
-                    ),
-                );
-            }
-            Err(CloudBackupError::Passkey(_))
-            | Err(CloudBackupError::UnsupportedPasskeyProvider) => {
-                self.apply_enable_outcome(
-                    CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
-                        SavedPasskeyConfirmationMode::Manual,
-                    ),
-                );
-            }
-            Err(error) => {
-                warn!("Confirm saved passkey failed: {error}");
-                self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
-                self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-                self.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
-                self.reconcile_runtime_status(Self::status_for_operation_error(&error));
-            }
-        }
-    }
-
-    async fn confirm_saved_passkey_from_session(
+    pub(crate) async fn confirm_saved_passkey_from_session(
         &self,
         pending: PendingEnableSession,
-    ) -> Result<(), CloudBackupError> {
+    ) -> CloudBackupSavedPasskeyConfirmation {
         let context = pending.context();
-        let (master_key, staged_passkey) = pending.into_staged_parts()?;
+        let (master_key, staged_passkey) = match pending.into_staged_parts() {
+            Ok(parts) => parts,
+            Err(error) => return CloudBackupSavedPasskeyConfirmation::Failed(error),
+        };
         let passkey_access = PasskeyAccess::global();
         let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
 
         match acquirer.confirm_registered_for_enable(&staged_passkey).await {
             Ok(passkey) => {
-                self.apply_enable_outcome(CloudBackupEnableOutcome::UploadingBackup);
-                self.enable_cloud_backup_with_passkey_material(
-                    Keychain::global(),
+                CloudBackupSavedPasskeyConfirmation::Confirmed(CloudBackupReadyEnableUpload {
                     master_key,
-                    Zeroizing::new(passkey),
+                    passkey: Zeroizing::new(passkey),
                     context,
-                )
-                .await
+                })
             }
             Err(error @ CloudBackupError::PasskeyDiscoveryCancelled)
-            | Err(error @ CloudBackupError::Passkey(_))
-            | Err(error @ CloudBackupError::UnsupportedPasskeyProvider) => {
-                self.replace_pending_enable_session(
-                    PendingEnableSession::awaiting_saved_passkey_confirmation(
-                        cove_cspp::master_key::MasterKey::from_bytes(*master_key.as_bytes()),
-                        staged_passkey.copy_for_retry(),
-                        context,
-                    ),
-                )
-                .await;
-                Err(error)
+            | Err(error @ CloudBackupError::Passkey(_)) => {
+                let pending = PendingEnableSession::awaiting_saved_passkey_confirmation(
+                    Zeroizing::new(cove_cspp::master_key::MasterKey::from_bytes(
+                        *master_key.as_bytes(),
+                    )),
+                    Zeroizing::new(staged_passkey.copy_for_retry()),
+                    context,
+                );
+                CloudBackupSavedPasskeyConfirmation::Retry { pending, error }
             }
-            Err(error) => Err(error),
+            Err(error) => CloudBackupSavedPasskeyConfirmation::Failed(error),
         }
     }
 
-    pub(crate) async fn keep_awaiting_force_new_confirmation(&self) -> bool {
-        let Some(context) = self.awaiting_force_new_enable_context().await else {
-            return false;
-        };
+    pub(crate) async fn upload_ready_enable_backup(
+        &self,
+        ready: CloudBackupReadyEnableUpload,
+        writes: CloudBackupWriteClient,
+    ) -> Result<CloudBackupUploadedEnableBackup, CloudBackupError> {
+        self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
+        let namespace_id = ready.master_key.namespace_id();
+        let cloud = CloudStorage::global_explicit_client();
 
-        self.present_existing_backup_found_prompt(context, None);
-        self.clear_enable_progress(CloudBackupStatus::Disabled);
-        true
-    }
+        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let encrypted_master = master_key_crypto::encrypt_master_key_with_remote_metadata(
+            &ready.master_key,
+            &ready.passkey.prf_key,
+            &ready.passkey.prf_salt,
+            ready.passkey.provider_hint.clone(),
+            RemotePayloadMetadata::master_key(&namespace_id, uploaded_at),
+        )
+        .map_err_str(CloudBackupError::Crypto)?;
+        let master_json =
+            serde_json::to_vec(&encrypted_master).map_err_str(CloudBackupError::Internal)?;
+        let master_key_wrapper_revision = master_key_wrapper_revision_hash(&master_json);
 
-    pub(crate) async fn keep_awaiting_saved_passkey_confirmation(&self) -> bool {
-        if !self.has_awaiting_saved_passkey_confirmation_session().await {
-            return false;
-        }
+        info!("Enable: uploading master key");
+        writes
+            .upload_master_key_backup(cloud.clone(), namespace_id.clone(), master_json)
+            .await
+            .map_err(|error| {
+                let error = match error {
+                    CloudBackupError::CloudStorage(source) => {
+                        CloudBackupError::cloud_storage_context("upload master key backup", source)
+                    }
+                    error => error,
+                };
 
-        self.apply_enable_outcome(CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
-            SavedPasskeyConfirmationMode::Manual,
-        ));
-        true
+                blocking_cloud_error(BlockingCloudStep::Enable, error)
+            })?;
+
+        info!("Enable: uploading wallets");
+        let critical_key = Zeroizing::new(ready.master_key.critical_data_key());
+        let uploaded_wallets = CloudBackupStore::global()
+            .upload_all_wallets(&writes, &cloud, &namespace_id, &critical_key)
+            .await
+            .map_err(|error| blocking_cloud_error(BlockingCloudStep::Enable, error))?;
+        let pending_uploads = Self::pending_verification_uploads(&uploaded_wallets);
+
+        Ok(CloudBackupUploadedEnableBackup {
+            master_key: ready.master_key,
+            passkey: ready.passkey,
+            context: ready.context,
+            namespace_id,
+            encrypted_master,
+            master_key_wrapper_revision,
+            uploaded_at,
+            uploaded_wallets,
+            pending_uploads,
+        })
     }
 
     pub(crate) fn rollback_new_local_master_key(

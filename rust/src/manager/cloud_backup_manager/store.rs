@@ -8,6 +8,7 @@ use cove_util::ResultExt as _;
 use futures::stream::{self, StreamExt as _, TryStreamExt as _};
 use strum::IntoEnumIterator as _;
 
+use super::actors::CloudBackupWriteClient;
 use super::cloud_inventory::LocalWalletSnapshot;
 use super::wallets::{PreparedWalletBackup, prepare_wallet_backup};
 use super::{CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, LocalWalletMode};
@@ -63,6 +64,7 @@ impl CloudBackupStore {
 
     pub(crate) async fn upload_all_wallets(
         &self,
+        writes: &CloudBackupWriteClient,
         cloud: &CloudStorageClient,
         namespace: &str,
         critical_key: &[u8; 32],
@@ -87,8 +89,9 @@ impl CloudBackupStore {
             let wallet_json =
                 serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
 
-            cloud
+            writes
                 .upload_wallet_backup(
+                    cloud.clone(),
                     namespace.to_string(),
                     prepared.record_id.clone(),
                     wallet_json,
@@ -175,7 +178,7 @@ mod tests {
     };
     use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
 
-    fn setup_database_test() -> parking_lot::MutexGuard<'static, ()> {
+    fn setup_database_test() -> tokio::sync::MutexGuard<'static, ()> {
         let guard = test_lock().lock();
         test_globals().reset();
         guard
