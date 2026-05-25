@@ -35,7 +35,8 @@ use crate::{
     tap_card::tap_signer_reader::DeriveInfo,
     transaction::{
         Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TransactionDirection,
-        TxId, Unit, ffi::BitcoinTransaction, unsigned_transaction::UnsignedTransaction,
+        TransactionLockState, TxId, Unit, ffi::BitcoinTransaction,
+        unsigned_transaction::UnsignedTransaction,
     },
     wallet::{
         Address, AddressInfo, Wallet, WalletAddressType, WalletError,
@@ -583,6 +584,25 @@ impl RustWalletManager {
             .map_err(|_| Error::UnknownError("failed to get first address".to_string()))?;
 
         Ok(address_info)
+    }
+
+    #[uniffi::method]
+    pub async fn transaction_lock_state(
+        &self,
+        tx_id: Arc<TxId>,
+    ) -> Result<TransactionLockState, Error> {
+        let state = call!(self.actor.transaction_lock_state(Arc::unwrap_or_clone(tx_id)))
+            .await
+            .map_err_str(Error::UnknownError)??;
+        Ok(state)
+    }
+
+    #[uniffi::method]
+    pub async fn toggle_transaction_lock(&self, tx_id: Arc<TxId>) -> Result<(), Error> {
+        call!(self.actor.toggle_transaction_lock(Arc::unwrap_or_clone(tx_id)))
+            .await
+            .map_err_str(Error::UnknownError)??;
+        Ok(())
     }
 
     #[uniffi::method]

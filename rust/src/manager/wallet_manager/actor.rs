@@ -8,7 +8,9 @@ use crate::{
         client::{NodeClient, NodeClientOptions},
         client_builder::NodeClientBuilder,
     },
-    transaction::{ConfirmedTransaction, FeeRate, Transaction, TransactionDetails, TxId},
+    transaction::{
+        ConfirmedTransaction, FeeRate, Transaction, TransactionDetails, TransactionLockState, TxId,
+    },
     transaction_watcher::TransactionWatcher,
     wallet::{
         Address, AddressInfo, Wallet, WalletAddressType, balance::Balance, metadata::BlockSizeLast,
@@ -203,7 +205,10 @@ impl WalletActor {
     ) -> Result<Psbt, Error> {
         debug!("build_ephemeral_drain_tx for fee rate {}", fee.sat_per_vb());
         let script_pubkey = address.script_pubkey();
+        let locked_outpoints =
+            self.db.labels.locked_outpoints().map_err_str(Error::BuildTxError)?;
         let mut tx_builder = self.wallet.bdk.build_tx();
+        tx_builder.unspendable(locked_outpoints);
 
         tx_builder.drain_wallet().drain_to(script_pubkey).fee_rate(fee.into());
         let psbt = tx_builder.finish().map_err_str(Error::BuildTxError)?;
@@ -224,8 +229,11 @@ impl WalletActor {
         let fee_rate = fee_rate.into();
         let script_pubkey = address.script_pubkey();
 
+        let locked_outpoints =
+            self.db.labels.locked_outpoints().map_err_str(Error::BuildTxError)?;
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
+        tx_builder.unspendable(locked_outpoints);
 
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(script_pubkey, amount);
@@ -321,6 +329,77 @@ impl WalletActor {
 
         transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
         transactions
+    }
+
+    #[into_actor_result]
+    pub async fn transaction_lock_state(
+        &mut self,
+        txid: TxId,
+    ) -> Result<TransactionLockState, Error> {
+        let outputs = self.wallet_unspent_outputs_for_tx(txid.0);
+        let state = self.compute_lock_state(&outputs).map_err_str(Error::UnknownError)?;
+        Ok(state)
+    }
+
+    #[into_actor_result]
+    pub async fn toggle_transaction_lock(&mut self, txid: TxId) -> Result<(), Error> {
+        let outputs = self.wallet_unspent_outputs_for_tx(txid.0);
+
+        if outputs.is_empty() {
+            return Ok(());
+        }
+
+        let current_state = self.compute_lock_state(&outputs).map_err_str(Error::UnknownError)?;
+
+        // unlocked or mixed -> lock all
+        // locked -> unlock all
+        let spendable = matches!(current_state, TransactionLockState::Locked);
+
+        self.db
+            .labels
+            .set_outputs_spendable(outputs, spendable)
+            .map_err_str(Error::UnknownError)?;
+
+        // notify cloud backup that labels changed
+        crate::manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER
+            .handle_wallet_backup_change(self.wallet.id.clone());
+
+        Ok(())
+    }
+
+    /// Compute the aggregate lock state for the given wallet-owned unspent outputs.
+    fn compute_lock_state(
+        &self,
+        outputs: &[OutPoint],
+    ) -> Result<TransactionLockState, crate::database::wallet_data::label::Error> {
+        if outputs.is_empty() {
+            return Ok(TransactionLockState::None);
+        }
+
+        let mut locked_count = 0;
+        for outpoint in outputs {
+            if self.db.labels.get_output_record(outpoint)?.is_some_and(|r| !r.item.spendable) {
+                locked_count += 1;
+            }
+        }
+
+        if locked_count == 0 {
+            Ok(TransactionLockState::Unlocked)
+        } else if locked_count == outputs.len() {
+            Ok(TransactionLockState::Locked)
+        } else {
+            Ok(TransactionLockState::Mixed)
+        }
+    }
+
+    /// Returns all wallet-owned, still-unspent outpoints created by the given txid.
+    fn wallet_unspent_outputs_for_tx(&self, txid: Txid) -> Vec<OutPoint> {
+        self.wallet
+            .bdk
+            .list_unspent()
+            .filter(|utxo| utxo.outpoint.txid == txid)
+            .map(|utxo| utxo.outpoint)
+            .collect()
     }
 
     pub async fn split_transaction_outputs(

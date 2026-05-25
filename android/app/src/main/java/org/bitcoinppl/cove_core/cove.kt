@@ -1661,7 +1661,11 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_wallet_address_type(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_toggle_transaction_lock(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_transaction_details(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_validate_metadata(
     ): Short
@@ -2753,7 +2757,11 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_switch_to_different_wallet_address_type(`ptr`: Long,`walletAddressType`: RustBuffer.ByValue,
     ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_toggle_transaction_lock(`ptr`: Long,`txId`: Long,
+    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_transaction_details(`ptr`: Long,`txId`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_transaction_lock_state(`ptr`: Long,`txId`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_validate_metadata(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -4446,7 +4454,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_wallet_address_type() != 37401.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_toggle_transaction_lock() != 28985.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_transaction_details() != 34155.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state() != 21929.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 36684.toShort()) {
@@ -21004,7 +21018,11 @@ public interface RustWalletManagerInterface {
     
     suspend fun `switchToDifferentWalletAddressType`(`walletAddressType`: WalletAddressType)
     
+    suspend fun `toggleTransactionLock`(`txId`: TxId)
+    
     suspend fun `transactionDetails`(`txId`: TxId): TransactionDetails
+    
+    suspend fun `transactionLockState`(`txId`: TxId): TransactionLockState
     
     fun `validateMetadata`()
     
@@ -22181,6 +22199,29 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `toggleTransactionLock`(`txId`: TxId) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_toggle_transaction_lock(
+                uniffiHandle,
+                
+        FfiConverterTypeTxId.lower(`txId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `transactionDetails`(`txId`: TxId) : TransactionDetails {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
@@ -22195,6 +22236,28 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeTransactionDetails.lift(it) },
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `transactionLockState`(`txId`: TxId) : TransactionLockState {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_transaction_lock_state(
+                uniffiHandle,
+                
+        FfiConverterTypeTxId.lower(`txId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTransactionLockState.lift(it) },
         // Error FFI converter
         WalletManagerException.ErrorHandler,
     )
@@ -50008,6 +50071,42 @@ public object FfiConverterTypeTransactionDetailError : FfiConverterRustBuffer<Tr
     }
 
 }
+
+
+
+
+enum class TransactionLockState {
+    
+    UNLOCKED,
+    LOCKED,
+    MIXED,
+    NONE;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTransactionLockState: FfiConverterRustBuffer<TransactionLockState> {
+    override fun read(buf: ByteBuffer) = try {
+        TransactionLockState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: TransactionLockState) = 4UL
+
+    override fun write(value: TransactionLockState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 

@@ -9131,7 +9131,11 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func switchToDifferentWalletAddressType(walletAddressType: WalletAddressType) async throws 
     
+    func toggleTransactionLock(txId: TxId) async throws 
+    
     func transactionDetails(txId: TxId) async throws  -> TransactionDetails
+    
+    func transactionLockState(txId: TxId) async throws  -> TransactionLockState
     
     func validateMetadata() 
     
@@ -10055,6 +10059,23 @@ open func switchToDifferentWalletAddressType(walletAddressType: WalletAddressTyp
         )
 }
     
+open func toggleTransactionLock(txId: TxId)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_toggle_transaction_lock(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTxId_lower(txId)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+    
 open func transactionDetails(txId: TxId)async throws  -> TransactionDetails  {
     return
         try  await uniffiRustCallAsync(
@@ -10068,6 +10089,23 @@ open func transactionDetails(txId: TxId)async throws  -> TransactionDetails  {
             completeFunc: ffi_cove_rust_future_complete_u64,
             freeFunc: ffi_cove_rust_future_free_u64,
             liftFunc: FfiConverterTypeTransactionDetails_lift,
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+    
+open func transactionLockState(txId: TxId)async throws  -> TransactionLockState  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_transaction_lock_state(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTxId_lower(txId)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTransactionLockState_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
@@ -31444,6 +31482,86 @@ public func FfiConverterTypeTransactionDetailError_lower(_ value: TransactionDet
 
 
 
+public enum TransactionLockState: Equatable, Hashable {
+    
+    case unlocked
+    case locked
+    case mixed
+    case none
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TransactionLockState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransactionLockState: FfiConverterRustBuffer {
+    typealias SwiftType = TransactionLockState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionLockState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .unlocked
+        
+        case 2: return .locked
+        
+        case 3: return .mixed
+        
+        case 4: return .none
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TransactionLockState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .unlocked:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .locked:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .mixed:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .none:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionLockState_lift(_ buf: RustBuffer) throws -> TransactionLockState {
+    return try FfiConverterTypeTransactionLockState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionLockState_lower(_ value: TransactionLockState) -> RustBuffer {
+    return FfiConverterTypeTransactionLockState.lower(value)
+}
+
+
+
+
 public enum TransactionState: Equatable, Hashable {
     
     case pending
@@ -39141,7 +39259,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_wallet_address_type() != 37401) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_toggle_transaction_lock() != 28985) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_transaction_details() != 34155) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state() != 21929) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 36684) {
