@@ -159,9 +159,10 @@ impl WalletBackupReader {
 
 pub(crate) struct WalletRestoreSession(ExistingWalletIdentitySet);
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) struct WalletRestoreOutcome {
-    pub(crate) labels_warning: Option<LabelRestoreWarning>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WalletRestoreOutcome {
+    Restored { labels_warning: Option<LabelRestoreWarning> },
+    SkippedDuplicate,
 }
 
 impl WalletRestoreSession {
@@ -185,7 +186,7 @@ impl WalletRestoreSession {
         let duplicate_key = wallet.duplicate_key()?;
 
         if self.should_skip_duplicate_wallet(&wallet.metadata, &duplicate_key) {
-            return Ok(WalletRestoreOutcome::default());
+            return Ok(WalletRestoreOutcome::SkippedDuplicate);
         }
 
         let outcome = wallet.restore()?;
@@ -262,7 +263,7 @@ impl DownloadedWalletBackup {
             warn!("Failed to restore labels for wallet {}: {}", self.metadata.name, warning.error);
         }
 
-        Ok(WalletRestoreOutcome { labels_warning: labels_outcome.warning })
+        Ok(WalletRestoreOutcome::Restored { labels_warning: labels_outcome.warning })
     }
 }
 
@@ -344,8 +345,9 @@ mod tests {
         existing_identities.insert(wallet.duplicate_key().unwrap());
         let mut session = WalletRestoreSession::new(existing_identities);
 
-        session.restore_downloaded(&wallet).unwrap();
+        let outcome = session.restore_downloaded(&wallet).unwrap();
 
+        assert_eq!(outcome, WalletRestoreOutcome::SkippedDuplicate);
         assert_eq!(session.0.len(), 1);
     }
 
@@ -364,7 +366,7 @@ mod tests {
     }
 
     #[test]
-    fn restore_session_tracks_restored_wallet_identity() {
+    fn manual_insert_tracks_restored_wallet_identity() {
         let metadata = WalletMetadata::preview_new();
         let wallet = DownloadedWalletBackup {
             metadata: metadata.clone(),

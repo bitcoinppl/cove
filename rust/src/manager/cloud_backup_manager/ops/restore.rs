@@ -7,7 +7,8 @@ use zeroize::Zeroizing;
 
 use super::blocking_cloud_error;
 use crate::manager::cloud_backup_manager::wallets::{
-    NamespaceMatch, WalletBackupLookup, WalletBackupReader, WalletRestoreSession,
+    NamespaceMatch, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
+    WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupRestoreReport, RustCloudBackupManager,
@@ -110,15 +111,16 @@ impl RustCloudBackupManager {
                 };
 
                 match restore_session.restore_downloaded(&wallet) {
-                    Ok(outcome) => {
+                    Ok(WalletRestoreOutcome::Restored { labels_warning }) => {
                         report.wallets_restored += 1;
-                        if let Some(warning) = outcome.labels_warning {
+                        if let Some(warning) = labels_warning {
                             report.labels_failed_wallet_names.push(warning.wallet_name);
                             report.labels_failed_errors.push(warning.error);
                         }
 
                         restored_wallets.push(wallet.metadata);
                     }
+                    Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
 
                     Err(error) => {
                         if is_connectivity_related_issue(&error) {

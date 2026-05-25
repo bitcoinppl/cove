@@ -11,7 +11,7 @@ use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::ops::try_restore_from_local_master_key;
 use crate::manager::cloud_backup_manager::wallets::{
     DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher,
-    WalletBackupLookup, WalletBackupReader, WalletRestoreSession,
+    WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
 
 use crate::manager::cloud_backup_manager::{
@@ -315,15 +315,16 @@ impl RestoreOperation {
         {
             self.ensure_current().await?;
             match restore_session.restore_downloaded(wallet) {
-                Ok(outcome) => {
+                Ok(WalletRestoreOutcome::Restored { labels_warning }) => {
                     first_success_namespace_index.get_or_insert(*namespace_index);
                     restored_wallet_count += 1;
                     report.wallets_restored += 1;
-                    if let Some(warning) = outcome.labels_warning {
+                    if let Some(warning) = labels_warning {
                         report.labels_failed_wallet_names.push(warning.wallet_name);
                         report.labels_failed_errors.push(warning.error);
                     }
                 }
+                Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
                 Err(CloudBackupError::Cancelled) => return Err(CloudBackupError::Cancelled),
                 Err(error) => {
                     warn!("Failed to restore wallet {record_id}: {error}");

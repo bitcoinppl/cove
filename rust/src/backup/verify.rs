@@ -30,22 +30,23 @@ pub async fn verify_backup(
         let duplicate_key = identity_key_for_backup(&metadata, wallet_backup)?;
         let already_on_device = existing_identities.contains(&duplicate_key);
 
-        if !already_on_device {
-            existing_identities.insert(duplicate_key);
-        }
-
-        // validate wallet_type/secret compatibility
-        let warning = match import::validate_wallet_type_secret(
+        let validation = import::validate_wallet_type_secret(
             &metadata.wallet_type,
             &wallet_backup.secret,
             &metadata.name,
-        ) {
+        );
+        let is_importable = validation.is_ok();
+        let warning = match validation {
             Ok(WalletTypeSecretValidation::Valid) => None,
             Ok(WalletTypeSecretValidation::Degraded) => {
                 Some("Will be imported with reduced functionality".to_string())
             }
             Err(e) => Some(format!("Import will fail: {e}")),
         };
+
+        if !already_on_device && is_importable {
+            existing_identities.insert(duplicate_key);
+        }
 
         let label_count = wallet_backup
             .labels_jsonl

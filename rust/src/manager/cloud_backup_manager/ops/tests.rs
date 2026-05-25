@@ -34,7 +34,9 @@ use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim,
 };
-use crate::manager::cloud_backup_manager::wallets::{NamespaceMatch, WalletRestoreSession};
+use crate::manager::cloud_backup_manager::wallets::{
+    NamespaceMatch, WalletRestoreOutcome, WalletRestoreSession,
+};
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, StagedPrfKey,
 };
@@ -1010,7 +1012,10 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
             .restore_downloaded(&wallet)
             .unwrap();
 
-    assert!(outcome.labels_warning.is_none());
+    let WalletRestoreOutcome::Restored { labels_warning } = outcome else {
+        panic!("expected restored wallet");
+    };
+    assert!(labels_warning.is_none());
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(5));
     assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
@@ -6736,7 +6741,10 @@ async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
 
     let outcome = manager.do_restore_cloud_wallet(&record_id).await.unwrap();
 
-    let warning = outcome.labels_warning.expect("expected label warning");
+    let WalletRestoreOutcome::Restored { labels_warning } = outcome else {
+        panic!("expected restored wallet");
+    };
+    let warning = labels_warning.expect("expected label warning");
     assert_eq!(warning.wallet_name, wallet.name);
     assert!(
         warning.error.contains("Failed to parse labels")

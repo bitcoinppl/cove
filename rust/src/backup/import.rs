@@ -228,14 +228,15 @@ async fn restore_wallet(
     let name = metadata.name.clone();
     let wallet_id = metadata.id.clone();
 
-    let validation = validate_wallet_type_secret(&metadata.wallet_type, &backup.secret, &name)?;
-    let cold_missing_backup = validation == WalletTypeSecretValidation::Degraded;
     let duplicate_key = identity_key_for_backup(&metadata, backup).map_err(BackupError::from)?;
 
     if existing_identities.contains(&duplicate_key) {
         info!("Skipping wallet {name} - already exists on device");
         return Ok(RestoreResult::Skipped { name });
     }
+
+    let validation = validate_wallet_type_secret(&metadata.wallet_type, &backup.secret, &name)?;
+    let cold_missing_backup = validation == WalletTypeSecretValidation::Degraded;
 
     let mut labels_failure: Option<(String, String)> = None;
     let mut degraded = cold_missing_backup;
@@ -558,4 +559,46 @@ fn wallet_name_from_backup(backup: &WalletBackup) -> String {
 
     warn!("wallet backup has no name or id in metadata: {}", backup.metadata);
     "unknown".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr as _;
+    use std::sync::Arc;
+
+    use crate::wallet::fingerprint::Fingerprint;
+
+    use super::*;
+
+    fn hot_metadata(name: &str) -> WalletMetadata {
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.name = name.to_string();
+        metadata.wallet_type = WalletType::Hot;
+        metadata.master_fingerprint = Some(Arc::new(Fingerprint::from(
+            bdk_wallet::bitcoin::bip32::Fingerprint::from_str("817e7be0").unwrap(),
+        )));
+
+        metadata
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_wallet_skips_duplicate_before_secret_validation() {
+        let metadata = hot_metadata("Existing hot wallet");
+        let backup = WalletBackup {
+            metadata: serde_json::to_value(&metadata).unwrap(),
+            secret: WalletSecret::Unknown,
+            descriptors: None,
+            xpub: None,
+            labels_jsonl: None,
+        };
+        let duplicate_key = identity_key_for_backup(&metadata, &backup).unwrap();
+        let mut existing_identities = ExistingWalletIdentitySet::default();
+        existing_identities.insert(duplicate_key);
+
+        match restore_wallet(&backup, &existing_identities).await {
+            Ok(RestoreResult::Skipped { name }) => assert_eq!(name, metadata.name),
+            Ok(RestoreResult::Imported { .. }) => panic!("expected duplicate skip"),
+            Err(error) => panic!("expected duplicate skip, got {}", error.error),
+        }
+    }
 }

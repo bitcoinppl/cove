@@ -1716,6 +1716,9 @@ impl RustCloudBackupManager {
             CloudBackupCloudOnlyWalletOutcome::Restored { record_id, warning } => {
                 self.apply_finished_cloud_only_wallet_operation(record_id, warning);
             }
+            CloudBackupCloudOnlyWalletOutcome::SkippedDuplicate { record_id } => {
+                self.apply_finished_cloud_only_wallet_operation(record_id, None);
+            }
             CloudBackupCloudOnlyWalletOutcome::Deleted { record_id } => {
                 self.apply_finished_cloud_only_wallet_operation(record_id, None);
             }

@@ -15,7 +15,7 @@ use crate::manager::cloud_backup_manager::actors::{
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
     PasskeyMaterialOutcome, PreparedWalletBackup, StagedPrfKey, UnpersistedPrfKey,
-    WalletBackupLookup, WalletBackupReader, WalletRestoreSession,
+    WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupError, CloudBackupPasskeyHint,
@@ -361,7 +361,10 @@ impl RustCloudBackupManager {
                 };
 
                 match restore_session.restore_downloaded(&wallet) {
-                    Ok(_) => restored_wallets.push(wallet.metadata),
+                    Ok(WalletRestoreOutcome::Restored { .. }) => {
+                        restored_wallets.push(wallet.metadata)
+                    }
+                    Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
                     Err(error) => {
                         if is_connectivity_related_issue(&error) {
                             return Err(blocking_cloud_error(BlockingCloudStep::Enable, error));

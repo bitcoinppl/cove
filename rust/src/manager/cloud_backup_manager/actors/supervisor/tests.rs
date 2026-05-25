@@ -7,7 +7,9 @@ use crate::database::cloud_backup::PersistedDisablingCloudBackup;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     async_test_lock, reset_cloud_backup_test_state, test_globals,
 };
-use crate::manager::cloud_backup_manager::wallets::{StagedPrfKey, UnpersistedPrfKey};
+use crate::manager::cloud_backup_manager::wallets::{
+    StagedPrfKey, UnpersistedPrfKey, WalletRestoreOutcome,
+};
 use crate::manager::cloud_backup_manager::{CloudBackupStore, PendingEnableSessionMaterial};
 
 fn test_supervisor_manager() -> Arc<RustCloudBackupManager> {
@@ -197,7 +199,11 @@ async fn supervisor_ignores_stale_restore_cloud_wallet_completion() {
     );
 
     supervisor
-        .complete_restore_cloud_wallet(stale, "wallet-record".into(), Ok(Default::default()))
+        .complete_restore_cloud_wallet(
+            stale,
+            "wallet-record".into(),
+            Ok(WalletRestoreOutcome::Restored { labels_warning: None }),
+        )
         .await
         .unwrap();
 
