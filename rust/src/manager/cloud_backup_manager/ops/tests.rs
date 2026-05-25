@@ -1679,6 +1679,42 @@ async fn normal_enable_preserves_registered_passkey_confirmation_session() {
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn reinitialize_preserves_registered_passkey_confirmation_session() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+
+    enable_cloud_backup_no_discovery(&manager).await.unwrap();
+
+    globals.passkey.set_create_result(Ok(vec![4, 5, 6]));
+    run_enable_operation(
+        &manager,
+        CloudBackupOperation::Recovery(RecoveryAction::ReinitializeBackup),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(globals.passkey.create_count(), 1);
+    assert_eq!(globals.passkey.authenticate_count(), 0);
+    assert_eq!(
+        manager.model_snapshot().enable_state,
+        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            SavedPasskeyConfirmationMode::Manual,
+        )
+    );
+
+    let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
+    assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
+    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn registered_passkey_stages_confirmation_without_duplicate_create() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();

@@ -157,6 +157,10 @@ impl CloudBackupSupervisor {
             return;
         }
 
+        if self.finish_awaiting_saved_passkey_confirmation_if_present(manager.clone(), claim) {
+            return;
+        }
+
         addr.send_fut_with(move |addr| async move {
             let result = manager.prepare_enable(CloudBackupEnableContext::settings_manual()).await;
             send!(addr.complete_enable_preparation(claim, result));
