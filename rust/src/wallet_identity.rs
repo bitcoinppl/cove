@@ -66,6 +66,9 @@ pub(crate) enum WalletIdentityError {
     #[error("public identity for existing wallet {wallet_id}: {source}")]
     ExistingWalletPublicIdentity { wallet_id: WalletId, source: PublicWalletIdentityError },
 
+    #[error("same-fingerprint wallet {wallet_id} is missing public identity")]
+    MissingExistingWalletPublicIdentity { wallet_id: WalletId },
+
     #[error("public descriptor identity for {wallet_name}: {source}")]
     BackupDescriptor { wallet_name: String, source: PublicWalletIdentityError },
 
@@ -378,7 +381,7 @@ fn public_identity_from_backup(
     Ok(None)
 }
 
-pub(crate) fn existing_public_wallet_by_identity(
+pub(crate) fn existing_public_wallet_by_identity_strict(
     database: &Database,
     keychain: &Keychain,
     network: Network,
@@ -388,16 +391,17 @@ pub(crate) fn existing_public_wallet_by_identity(
 ) -> Result<Option<WalletMetadata>, WalletIdentityError> {
     let wallets = database.wallets.get_all(network, mode)?;
 
-    matching_public_wallet_by_identity(wallets, keychain, fingerprint, incoming_identity)
+    matching_public_wallet_by_identity(wallets, keychain, fingerprint, incoming_identity, false)
 }
 
-pub(crate) fn matching_public_wallet_by_identity(
+fn matching_public_wallet_by_identity(
     wallets: Vec<WalletMetadata>,
     keychain: &Keychain,
     fingerprint: Fingerprint,
     incoming_identity: &PublicWalletIdentity,
+    allow_degraded_fingerprint_match: bool,
 ) -> Result<Option<WalletMetadata>, WalletIdentityError> {
-    let mut degraded_same_fingerprint_wallets = Vec::new();
+    let mut degraded_same_fingerprint_wallet = None;
 
     for wallet_metadata in wallets {
         if !wallet_metadata.matches_fingerprint(fingerprint) {
@@ -413,7 +417,7 @@ pub(crate) fn matching_public_wallet_by_identity(
             )?;
 
         let Some(wallet_identity) = wallet_identity else {
-            degraded_same_fingerprint_wallets.push(wallet_metadata);
+            degraded_same_fingerprint_wallet.get_or_insert(wallet_metadata);
             continue;
         };
 
@@ -422,9 +426,16 @@ pub(crate) fn matching_public_wallet_by_identity(
         }
     }
 
-    let Some(wallet_metadata) = degraded_same_fingerprint_wallets.into_iter().next() else {
+    let Some(wallet_metadata) = degraded_same_fingerprint_wallet else {
         return Ok(None);
     };
+
+    if !allow_degraded_fingerprint_match {
+        return Err(WalletIdentityError::MissingExistingWalletPublicIdentity {
+            wallet_id: wallet_metadata.id,
+        });
+    }
+
     let wallet_id = wallet_metadata.id.clone();
     let incoming_identity_hash = incoming_identity.redacted_hash();
     warn!(
@@ -729,6 +740,7 @@ mod tests {
             keychain,
             incoming_fingerprint,
             &PublicWalletIdentity::from_descriptors(&incoming),
+            true,
         )
         .unwrap();
 
@@ -756,6 +768,7 @@ mod tests {
             keychain,
             incoming_fingerprint,
             &PublicWalletIdentity::from_descriptors(&incoming),
+            true,
         )
         .unwrap();
 
@@ -776,9 +789,92 @@ mod tests {
             keychain,
             incoming_fingerprint,
             &PublicWalletIdentity::from_descriptors(&incoming),
+            true,
         )
         .unwrap();
 
         assert_eq!(Some(expected_id), matched.map(|metadata| metadata.id));
+    }
+
+    #[test]
+    fn strict_public_wallet_identity_matching_routes_exact_identity() {
+        let keychain = test_keychain();
+        let existing = public_wallet_metadata("Existing account 0", 0);
+        let incoming = descriptor_pair(0);
+        let incoming_fingerprint =
+            Fingerprint::from(incoming.fingerprint().expect("test descriptor has a fingerprint"));
+
+        keychain
+            .save_public_descriptor(
+                &existing.id,
+                descriptor_pair(0).external.extended_descriptor,
+                descriptor_pair(0).internal.extended_descriptor,
+            )
+            .unwrap();
+
+        let matched = matching_public_wallet_by_identity(
+            vec![existing.clone()],
+            keychain,
+            incoming_fingerprint,
+            &PublicWalletIdentity::from_descriptors(&incoming),
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(Some(existing.id), matched.map(|metadata| metadata.id));
+    }
+
+    #[test]
+    fn strict_public_wallet_identity_matching_skips_same_fingerprint_different_account() {
+        let keychain = test_keychain();
+        let existing = public_wallet_metadata("Existing account 0", 0);
+        let incoming = descriptor_pair(1);
+        let incoming_fingerprint =
+            Fingerprint::from(incoming.fingerprint().expect("test descriptor has a fingerprint"));
+
+        keychain
+            .save_public_descriptor(
+                &existing.id,
+                descriptor_pair(0).external.extended_descriptor,
+                descriptor_pair(0).internal.extended_descriptor,
+            )
+            .unwrap();
+
+        let matched = matching_public_wallet_by_identity(
+            vec![existing],
+            keychain,
+            incoming_fingerprint,
+            &PublicWalletIdentity::from_descriptors(&incoming),
+            false,
+        )
+        .unwrap();
+
+        assert!(matched.is_none());
+    }
+
+    #[test]
+    fn strict_public_wallet_identity_matching_errors_on_degraded_same_fingerprint() {
+        let keychain = test_keychain();
+        let degraded = public_wallet_metadata("Degraded account", 0);
+        let expected_id = degraded.id.clone();
+        let incoming = descriptor_pair(1);
+        let incoming_fingerprint =
+            Fingerprint::from(incoming.fingerprint().expect("test descriptor has a fingerprint"));
+
+        let error = matching_public_wallet_by_identity(
+            vec![degraded],
+            keychain,
+            incoming_fingerprint,
+            &PublicWalletIdentity::from_descriptors(&incoming),
+            false,
+        )
+        .unwrap_err();
+
+        match error {
+            WalletIdentityError::MissingExistingWalletPublicIdentity { wallet_id } => {
+                assert_eq!(expected_id, wallet_id);
+            }
+            error => panic!("unexpected error: {error}"),
+        }
     }
 }

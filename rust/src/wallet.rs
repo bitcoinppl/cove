@@ -15,7 +15,7 @@ use crate::{
     mnemonic::MnemonicExt as _,
     multi_format::MultiFormatError,
     tap_card::tap_signer_reader::DeriveInfo,
-    wallet_identity::{PublicWalletIdentity, existing_public_wallet_by_identity},
+    wallet_identity::{PublicWalletIdentity, existing_public_wallet_by_identity_strict},
     xpub::{self, XpubError},
 };
 use balance::Balance;
@@ -306,7 +306,7 @@ impl Wallet {
             let fingerprint: Fingerprint = (*fingerprint).into();
             metadata.master_fingerprint = Some(fingerprint.into());
 
-            let existing = existing_public_wallet_by_identity(
+            let existing = existing_public_wallet_by_identity_strict(
                 &database,
                 keychain,
                 network,
