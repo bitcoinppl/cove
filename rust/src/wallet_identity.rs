@@ -154,7 +154,10 @@ impl PublicWalletIdentity {
         };
 
         if let Some(fingerprint) = metadata.master_fingerprint.as_deref()
-            && matches!(metadata.wallet_type, WalletType::XpubOnly | WalletType::WatchOnly)
+            && matches!(
+                metadata.wallet_type,
+                WalletType::Cold | WalletType::XpubOnly | WalletType::WatchOnly
+            )
         {
             return Self::from_xpub_default_bip84(xpub, *fingerprint, metadata.network).map(Some);
         }
@@ -211,11 +214,6 @@ pub(crate) struct ExistingWalletIdentitySet {
 }
 
 impl ExistingWalletIdentitySet {
-    #[cfg(test)]
-    pub(crate) fn len(&self) -> usize {
-        self.public_identities.len() + self.fingerprints.len() + self.wallet_ids.len()
-    }
-
     pub(crate) fn contains(&self, key: &WalletIdentityKey) -> bool {
         match key {
             WalletIdentityKey::PublicIdentity { identity, fingerprint, network, mode } => {
@@ -446,6 +444,21 @@ fn matching_public_wallet_by_identity(
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use super::ExistingWalletIdentitySet;
+
+    pub(crate) trait ExistingWalletIdentitySetTestExt {
+        fn len(&self) -> usize;
+    }
+
+    impl ExistingWalletIdentitySetTestExt for ExistingWalletIdentitySet {
+        fn len(&self) -> usize {
+            self.public_identities.len() + self.fingerprints.len() + self.wallet_ids.len()
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, Once};
@@ -620,6 +633,21 @@ mod tests {
         let identity =
             PublicWalletIdentity::from_xpub_default_bip84(xpub, fingerprint, Network::Bitcoin)
                 .unwrap();
+
+        assert_eq!(PublicWalletIdentity::from_descriptors(&descriptors), identity);
+    }
+
+    #[test]
+    fn cold_existing_wallet_xpub_synthesizes_default_bip84_identity() {
+        let keychain = test_keychain();
+        let descriptors = descriptor_pair(0);
+        let xpub = descriptors.external.xpub().unwrap();
+        let metadata = metadata("Existing cold xpub", WalletType::Cold);
+
+        keychain.save_wallet_xpub(&metadata.id, xpub).unwrap();
+
+        let identity =
+            PublicWalletIdentity::from_existing_wallet(&metadata, keychain).unwrap().unwrap();
 
         assert_eq!(PublicWalletIdentity::from_descriptors(&descriptors), identity);
     }

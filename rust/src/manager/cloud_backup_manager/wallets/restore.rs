@@ -272,6 +272,8 @@ mod tests {
     use cove_cspp::backup_data::WalletSecret;
     use std::sync::Arc;
 
+    use crate::wallet_identity::test_support::ExistingWalletIdentitySetTestExt as _;
+
     fn public_descriptors(account: u32) -> cove_cspp::backup_data::DescriptorPair {
         let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
 
