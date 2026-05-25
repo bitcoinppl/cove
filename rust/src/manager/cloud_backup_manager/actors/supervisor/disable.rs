@@ -97,7 +97,12 @@ impl CloudBackupSupervisor {
 
         manager.apply_disable_outcome(CloudBackupDisableOutcome::Started);
         if let Err(error) = self.drain_disable_runtime(&manager).await {
-            self.fail_disable_after_delete_started(&manager, claim, disabling, error.to_string());
+            self.fail_disable_before_namespace_delete_started(
+                &manager,
+                claim,
+                disabling,
+                error.to_string(),
+            );
             return Produces::ok(());
         }
 
@@ -235,10 +240,12 @@ impl CloudBackupSupervisor {
                 let message =
                     CloudBackupError::cloud_storage_context("delete cloud backup namespace", error)
                         .to_string();
-                self.fail_disable_after_delete_started(&manager, claim, disabling, message);
+                self.fail_disable_after_namespace_delete_started(
+                    &manager, claim, disabling, message,
+                );
             }
             Err(error) => {
-                self.fail_disable_after_delete_started(
+                self.fail_disable_after_namespace_delete_started(
                     &manager,
                     claim,
                     disabling,
@@ -277,12 +284,22 @@ impl CloudBackupSupervisor {
         };
 
         if let Err(error) = result {
-            self.fail_disable_after_delete_started(&manager, claim, disabling, error.to_string());
+            self.fail_disable_after_namespace_delete_started(
+                &manager,
+                claim,
+                disabling,
+                error.to_string(),
+            );
             return Produces::ok(());
         }
 
         if let Err(error) = manager.persist_disabled_after_remote_delete() {
-            self.fail_disable_after_delete_started(&manager, claim, disabling, error.to_string());
+            self.fail_disable_after_namespace_delete_started(
+                &manager,
+                claim,
+                disabling,
+                error.to_string(),
+            );
             return Produces::ok(());
         }
 
@@ -301,7 +318,26 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    fn fail_disable_after_delete_started(
+    fn fail_disable_before_namespace_delete_started(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        claim: CloudBackupExclusiveOperationClaim,
+        disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
+        message: String,
+    ) {
+        if let Err(error) = manager.rollback_disable_before_delete(&disabling, message) {
+            self.fail_disable_operation(
+                manager,
+                claim,
+                error.to_string(),
+                manager.disable_can_keep_enabled(),
+            );
+        } else {
+            self.finish_disable_operation(manager, claim);
+        }
+    }
+
+    fn fail_disable_after_namespace_delete_started(
         &mut self,
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,

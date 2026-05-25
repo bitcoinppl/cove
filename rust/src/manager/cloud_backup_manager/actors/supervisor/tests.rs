@@ -1543,6 +1543,44 @@ async fn keep_enabled_finishes_active_disable_operation() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn disable_runtime_drain_failure_remains_pre_delete() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    supervisor.sync_health = Addr::detached();
+
+    let claim = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
+        .unwrap();
+    let mut disabling = test_disabling_state();
+    disabling.delete_started_at = None;
+    Database::global()
+        .cloud_backup_state
+        .set(&PersistedCloudBackupState::Disabling(disabling.clone()))
+        .unwrap();
+    let blocker =
+        CloudBackupWriteBlocker::Disabling { operation_id: disabling.disable_generation };
+    supervisor.pending_disable_write_drain =
+        Some(PendingDisableWriteDrain { claim, blocker, disabling });
+
+    supervisor.complete_disable_write_drain(claim, blocker).await.unwrap();
+
+    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(manager.projected_exclusive_operation(), None);
+    let PersistedCloudBackupState::Disabling(disabling) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected persisted disabling state");
+    };
+    assert!(disabling.delete_started_at.is_none());
+    assert!(disabling.last_error.is_some());
+    assert!(manager.disable_can_keep_enabled());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_disable_delete_completion() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
