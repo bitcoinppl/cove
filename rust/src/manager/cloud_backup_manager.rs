@@ -2275,6 +2275,10 @@ impl RustCloudBackupManager {
         completion: PendingVerificationCompletion,
         source: CloudBackupVerificationSource,
     ) {
+        if let Some(detail) = completion.report().detail.clone() {
+            self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
+        }
+
         let persisted_completion = completion.persisted();
 
         let mut state = Self::load_persisted_state();

@@ -8,7 +8,6 @@ use super::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, RustCloudBackupManager,
     blocking_cloud_error,
 };
-
 mod cloud_only;
 mod disable;
 mod enable;
@@ -79,20 +78,38 @@ where
 
 pub(crate) async fn load_master_key_for_cloud_action<S, F, Fut>(
     cspp: &cove_cspp::Cspp<S>,
-    recover_missing: F,
+    namespace: &str,
+    recover_missing_or_stale: F,
 ) -> Result<cove_cspp::master_key::MasterKey, CloudBackupError>
 where
     S: cove_cspp::CsppStore,
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<cove_cspp::master_key::MasterKey, CloudBackupError>>,
 {
-    match cspp
+    let local_master_key = cspp
         .load_master_key_from_store()
-        .map_err_prefix("load local master key", CloudBackupError::Internal)?
-    {
-        Some(master_key) => Ok(master_key),
-        None => recover_missing().await,
+        .map_err_prefix("load local master key", CloudBackupError::Internal)?;
+
+    match local_master_key {
+        Some(master_key) if master_key.namespace_id() == namespace => return Ok(master_key),
+        Some(master_key) => {
+            let local_namespace = master_key.namespace_id();
+            info!(
+                "Local master key namespace_id={local_namespace} does not match active namespace_id={namespace}, recovering from cloud"
+            );
+        }
+        None => {}
     }
+
+    let recovered = recover_missing_or_stale().await?;
+    let recovered_namespace = recovered.namespace_id();
+    if recovered_namespace != namespace {
+        return Err(CloudBackupError::Internal(format!(
+            "recovered master key namespace mismatch: expected {namespace}, got {recovered_namespace}",
+        )));
+    }
+
+    Ok(recovered)
 }
 
 #[cfg(test)]

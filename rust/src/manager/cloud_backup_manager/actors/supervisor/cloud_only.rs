@@ -219,6 +219,7 @@ impl CloudBackupSupervisor {
         if self.active_operation != Some(claim) {
             return Produces::ok(());
         }
+
         let Some(manager) = self.manager() else {
             self.active_operation = None;
             return Produces::ok(());
@@ -258,6 +259,7 @@ impl CloudBackupSupervisor {
         if self.active_operation != Some(claim) {
             return Produces::ok(());
         }
+
         let Some(manager) = self.manager() else {
             self.active_operation = None;
             return Produces::ok(());
@@ -296,6 +298,7 @@ impl CloudBackupSupervisor {
         if self.active_operation != Some(claim) {
             return Produces::ok(());
         }
+
         let Some(manager) = self.manager() else {
             self.active_operation = None;
             return Produces::ok(());
@@ -330,6 +333,7 @@ impl CloudBackupSupervisor {
         if self.active_operation != Some(claim) {
             return Produces::ok(());
         }
+
         let Some(manager) = self.manager() else {
             self.active_operation = None;
             return Produces::ok(());
@@ -361,6 +365,7 @@ impl CloudBackupSupervisor {
         if self.active_operation != Some(claim) {
             return Produces::ok(());
         }
+
         let Some(manager) = self.manager() else {
             self.active_operation = None;
             return Produces::ok(());

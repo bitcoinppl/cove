@@ -124,19 +124,13 @@ impl RustCloudBackupManager {
         let namespace = self.current_namespace_id()?;
         let db = Database::global();
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        let master_key = match cspp
-            .load_master_key_from_store()
-            .map_err_prefix("load local master key", CloudBackupError::Internal)?
-        {
-            Some(master_key) => master_key,
-            None => {
-                self.recover_local_master_key_from_cloud_without_discovery(
-                    &namespace,
-                    UPLOAD_WALLET_RECOVERY_MESSAGE,
-                )
-                .await?
-            }
-        };
+        let master_key = load_master_key_for_cloud_action(&cspp, &namespace, || {
+            self.recover_local_master_key_from_cloud_without_discovery(
+                &namespace,
+                UPLOAD_WALLET_RECOVERY_MESSAGE,
+            )
+        })
+        .await?;
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
         let cloud = CloudStorage::global_explicit_client();
@@ -503,7 +497,7 @@ impl RustCloudBackupManager {
 
         let revision_hash = Some(prepared.revision_hash.clone());
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        let master_key = load_master_key_for_cloud_action(&cspp, || {
+        let master_key = load_master_key_for_cloud_action(&cspp, namespace, || {
             self.recover_local_master_key_from_cloud_without_discovery(
                 namespace,
                 UPLOAD_WALLET_RECOVERY_MESSAGE,

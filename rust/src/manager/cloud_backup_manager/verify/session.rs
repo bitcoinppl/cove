@@ -288,13 +288,18 @@ impl VerificationSession {
             MasterKeyResolution::Continue(resolution) => resolution,
         };
 
+        if let ContinuableMasterKeyResolution::Authenticated(authenticated_master) =
+            &master_key_resolution
+        {
+            self.apply_verified_cloud_master_key(&authenticated_master.master_key)?;
+        }
+
         if let Some(result) = self.ensure_wallet_inventory_or_short_circuit().await {
             return Ok(CloudBackupDeepVerificationStep::Complete(result));
         }
 
         let authenticated_master = match master_key_resolution {
             ContinuableMasterKeyResolution::Authenticated(authenticated_master) => {
-                self.apply_verified_cloud_master_key(&authenticated_master.master_key)?;
                 authenticated_master
             }
 
@@ -485,14 +490,14 @@ impl VerificationSession {
         &mut self,
         master_key: &MasterKey,
     ) -> Result<(), CloudBackupError> {
-        match &self.local_master_key {
+        let repaired = match &self.local_master_key {
             // restore the missing local key from the verified cloud backup
             None => {
                 self.cspp
                     .save_master_key(master_key)
                     .map_err_prefix("repair local master key", CloudBackupError::Internal)?;
-                self.report.local_master_key_repaired = true;
                 info!("Repaired local master key from cloud");
+                true
             }
 
             // replace a stale local key after cloud decryption proves the cloud key is valid
@@ -500,12 +505,17 @@ impl VerificationSession {
                 self.cspp
                     .save_master_key(master_key)
                     .map_err_prefix("repair local master key", CloudBackupError::Internal)?;
-                self.report.local_master_key_repaired = true;
                 info!("Repaired local master key to match cloud");
+                true
             }
 
             // keep the local key when it already matches the verified cloud key
-            Some(_) => {}
+            Some(_) => false,
+        };
+
+        if repaired {
+            self.local_master_key = Some(MasterKey::from_bytes(*master_key.as_bytes()));
+            self.report.local_master_key_repaired = true;
         }
 
         Ok(())

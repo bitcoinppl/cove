@@ -1020,9 +1020,10 @@ async fn cloud_action_uses_existing_master_key_without_recovery() {
     let store = Arc::new(MockStore::default());
     let cspp = cove_cspp::Cspp::new(MockStoreHandle(store));
     let expected = cove_cspp::master_key::MasterKey::generate();
+    let namespace = expected.namespace_id();
     cspp.save_master_key(&expected).unwrap();
 
-    let recovered = load_master_key_for_cloud_action(&cspp, || async {
+    let recovered = load_master_key_for_cloud_action(&cspp, &namespace, || async {
         Err(CloudBackupError::RecoveryRequired("unexpected".into()))
     })
     .await
@@ -1036,8 +1037,9 @@ async fn cloud_action_does_not_create_master_key_when_missing() {
     cove_tokio::init();
     let store = Arc::new(MockStore::default());
     let cspp = cove_cspp::Cspp::new(MockStoreHandle(store.clone()));
+    let namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
 
-    let result = load_master_key_for_cloud_action(&cspp, || async {
+    let result = load_master_key_for_cloud_action(&cspp, &namespace, || async {
         Err(CloudBackupError::RecoveryRequired("needs recovery".into()))
     })
     .await;
@@ -1048,6 +1050,27 @@ async fn cloud_action_does_not_create_master_key_when_missing() {
     ));
     assert!(cspp.load_master_key_from_store().unwrap().is_none());
     assert_eq!(*store.save_count.lock(), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn cloud_action_recovers_when_local_master_key_namespace_mismatches() {
+    cove_tokio::init();
+    let store = Arc::new(MockStore::default());
+    let cspp = cove_cspp::Cspp::new(MockStoreHandle(store));
+    let stale = cove_cspp::master_key::MasterKey::generate();
+    cspp.save_master_key(&stale).unwrap();
+
+    let expected = cove_cspp::master_key::MasterKey::generate();
+    let expected_bytes = *expected.as_bytes();
+    let namespace = expected.namespace_id();
+
+    let recovered = load_master_key_for_cloud_action(&cspp, &namespace, || async move {
+        Ok(cove_cspp::master_key::MasterKey::from_bytes(expected_bytes))
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(recovered.as_bytes(), expected.as_bytes());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1608,6 +1631,37 @@ async fn registered_passkey_confirmation_session_prevents_duplicate_create() {
 
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
+
+    assert_eq!(globals.passkey.create_count(), 1);
+    assert_eq!(globals.passkey.authenticate_count(), 0);
+    assert_eq!(
+        manager.model_snapshot().enable_state,
+        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            SavedPasskeyConfirmationMode::Manual,
+        )
+    );
+
+    let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
+    assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
+    let (_, pending_passkey) = pending.into_staged_parts().unwrap();
+    assert_eq!(pending_passkey.credential_id, vec![1, 2, 3]);
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn normal_enable_preserves_registered_passkey_confirmation_session() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+
+    enable_cloud_backup_no_discovery(&manager).await.unwrap();
+
+    globals.passkey.set_create_result(Ok(vec![4, 5, 6]));
+    enable_cloud_backup_create_new(&manager).await.unwrap();
 
     assert_eq!(globals.passkey.create_count(), 1);
     assert_eq!(globals.passkey.authenticate_count(), 0);
@@ -4984,6 +5038,59 @@ async fn manual_verification_loads_wallet_inventory_before_wrapper_repair() {
     }
     assert_eq!(globals.passkey.create_count(), 0);
     assert!(!globals.cloud.has_master_key_backup(&namespace));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn deep_verify_repairs_stale_local_master_key_before_recreate_manifest() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+
+    let stale_master_key = cove_cspp::master_key::MasterKey::generate();
+    let remote_master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = remote_master_key.namespace_id();
+    let prf_key = [7u8; 32];
+    let prf_salt = [9u8; 32];
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&remote_master_key, &prf_key, &prf_salt)
+            .unwrap();
+
+    globals
+        .cloud
+        .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
+    globals.cloud.fail_list_wallet_files_for_namespace(
+        namespace.clone(),
+        CloudStorageError::NotFound(namespace.clone()),
+    );
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let keychain = Keychain::global().clone();
+    CloudBackupKeychain::new(keychain.clone()).save_namespace_id(&namespace).unwrap();
+    let cspp = cove_cspp::Cspp::new(keychain);
+    cspp.save_master_key(&stale_master_key).unwrap();
+    manager
+        .persist_cloud_backup_state(
+            &persisted_enabled_cloud_backup_state(Some(0)),
+            "set cloud backup enabled for test",
+        )
+        .unwrap();
+    manager.sync_persisted_state();
+
+    let result = deep_verify_for_test(&manager, true).await;
+
+    assert!(matches!(
+        result,
+        DeepVerificationResult::Failed(DeepVerificationFailure::RecreateManifest { .. })
+    ));
+    let repaired = cspp.load_master_key_from_store().unwrap().unwrap();
+    assert_eq!(repaired.as_bytes(), remote_master_key.as_bytes());
 }
 
 #[tokio::test(flavor = "current_thread")]
