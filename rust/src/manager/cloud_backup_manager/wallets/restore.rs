@@ -271,9 +271,40 @@ impl DownloadedWalletBackup {
 mod tests {
     use super::*;
     use cove_cspp::backup_data::WalletSecret;
-    use std::sync::Arc;
+    use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Once},
+    };
 
     use crate::wallet_identity::test_support::ExistingWalletIdentitySetTestExt as _;
+
+    #[derive(Debug, Default)]
+    struct TestKeychain(parking_lot::Mutex<HashMap<String, String>>);
+
+    impl KeychainAccess for TestKeychain {
+        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+            self.0.lock().insert(key, value);
+            Ok(())
+        }
+
+        fn get(&self, key: String) -> Option<String> {
+            self.0.lock().get(&key).cloned()
+        }
+
+        fn delete(&self, key: String) -> bool {
+            self.0.lock().remove(&key).is_some()
+        }
+    }
+
+    fn test_keychain() -> &'static Keychain {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            Keychain::new(Box::<TestKeychain>::default());
+        });
+
+        Keychain::global()
+    }
 
     fn public_descriptors(account: u32) -> cove_cspp::backup_data::DescriptorPair {
         let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
@@ -366,16 +397,32 @@ mod tests {
     }
 
     #[test]
-    fn manual_insert_tracks_restored_wallet_identity() {
+    fn restore_downloaded_tracks_restored_wallet_identity() {
+        crate::database::test_support::init_test_database();
+        test_keychain();
+
         let metadata = WalletMetadata::preview_new();
-        let wallet = DownloadedWalletBackup {
-            metadata: metadata.clone(),
-            entry: test_wallet_entry(&metadata),
-        };
+        let mut entry = test_wallet_entry(&metadata);
+        entry.xpub = Some(
+            "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM"
+                .into(),
+        );
+        let wallet = DownloadedWalletBackup { metadata: metadata.clone(), entry };
         let mut session = WalletRestoreSession::new(ExistingWalletIdentitySet::default());
+        let duplicate_key = wallet.duplicate_key().unwrap();
 
-        session.0.insert(wallet.duplicate_key().unwrap());
+        assert!(!session.0.contains(&duplicate_key));
 
+        let first_outcome = session.restore_downloaded(&wallet).unwrap();
+
+        assert_eq!(first_outcome, WalletRestoreOutcome::Restored { labels_warning: None });
+        assert!(session.0.contains(&duplicate_key));
+        assert_eq!(session.0.len(), 1);
+
+        let second_outcome = session.restore_downloaded(&wallet).unwrap();
+
+        assert_eq!(second_outcome, WalletRestoreOutcome::SkippedDuplicate);
+        assert!(session.0.contains(&duplicate_key));
         assert_eq!(session.0.len(), 1);
     }
 
