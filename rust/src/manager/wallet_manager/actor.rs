@@ -7,7 +7,7 @@ use crate::{
     manager::wallet_manager::{
         Error, SendFlowErrorAlert, WalletManagerError,
         receive_address::{
-            REUSE_WINDOW, ReceiveAddressSession, ReceiveAddressState, ReceiveAddressStatus,
+            CACHE_WINDOW, ReceiveAddressSession, ReceiveAddressState, ReceiveAddressStatus,
             RefreshExpiredAddressDecision,
         },
     },
@@ -754,7 +754,7 @@ impl WalletActor {
             return self.open_fresh_receive_address(request_id, now);
         };
 
-        if !self.receive_address_cache_is_reusable(&cache, now) {
+        if !self.receive_address_cache_is_available(&cache, now) {
             let request_id = self.receive_address.next_request_id();
             return self.open_fresh_receive_address(request_id, now);
         }
@@ -766,7 +766,7 @@ impl WalletActor {
             self.cached_receive_address_has_activity(derivation_index).await,
             Ok(Some(true))
         ) {
-            return self.open_reusable_receive_address(cache, request_id, now).await;
+            return self.open_cached_receive_address(cache, request_id, now).await;
         }
 
         if let Err(error) = self.sync_receive_address_now(derivation_index).await {
@@ -780,12 +780,12 @@ impl WalletActor {
         self.open_fresh_receive_address(request_id, now)
     }
 
-    fn receive_address_cache_is_reusable(
+    fn receive_address_cache_is_available(
         &self,
         cache: &ReceiveAddressCache,
         now_secs: u64,
     ) -> bool {
-        let Some(expires_at_secs) = cache.first_shown_at_secs.checked_add(REUSE_WINDOW.as_secs())
+        let Some(expires_at_secs) = cache.first_shown_at_secs.checked_add(CACHE_WINDOW.as_secs())
         else {
             return false;
         };
@@ -816,7 +816,7 @@ impl WalletActor {
         Produces::ok(state)
     }
 
-    async fn open_reusable_receive_address(
+    async fn open_cached_receive_address(
         &mut self,
         cache: ReceiveAddressCache,
         request_id: u64,
@@ -827,8 +827,12 @@ impl WalletActor {
         self.db.set_receive_address_cache(cache).map_err_str(Error::ReceiveAddressError)?;
 
         let address = self.wallet.receive_address_at_index(derivation_index);
-        let state =
-            ReceiveAddressState::reusable(request_id, address, ReceiveAddressStatus::Reused, now);
+        let state = ReceiveAddressState::cached(
+            request_id,
+            address,
+            ReceiveAddressStatus::CachedUnused,
+            now,
+        );
         self.receive_address.set_visible(state.clone());
         self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
 
@@ -1637,7 +1641,7 @@ impl WalletActor {
 
         self.db.set_receive_address_cache(cache).map_err_str(Error::ReceiveAddressError)?;
 
-        let state = ReceiveAddressState::reusable(request_id, address, status, now);
+        let state = ReceiveAddressState::cached(request_id, address, status, now);
         self.receive_address.set_visible(state.clone());
         self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
 
@@ -1751,7 +1755,7 @@ impl WalletActor {
             derivation_index,
             address,
             client_builder,
-            REUSE_WINDOW,
+            CACHE_WINDOW,
         );
 
         self.receive_address_watcher = Some(spawn_actor(watcher));

@@ -27817,7 +27817,7 @@ public func FfiConverterTypeReceiveAddressCopyPolicy_lower(_ value: ReceiveAddre
 public enum ReceiveAddressStatus: Equatable, Hashable {
     
     case fresh
-    case reused
+    case cachedUnused
     case paymentReceived
 
 
@@ -27842,7 +27842,7 @@ public struct FfiConverterTypeReceiveAddressStatus: FfiConverterRustBuffer {
         
         case 1: return .fresh
         
-        case 2: return .reused
+        case 2: return .cachedUnused
         
         case 3: return .paymentReceived
         
@@ -27858,7 +27858,7 @@ public struct FfiConverterTypeReceiveAddressStatus: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
         
         
-        case .reused:
+        case .cachedUnused:
             writeInt(&buf, Int32(2))
         
         

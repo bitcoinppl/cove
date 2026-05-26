@@ -44572,7 +44572,7 @@ public object FfiConverterTypeReceiveAddressCopyPolicy: FfiConverterRustBuffer<R
 enum class ReceiveAddressStatus {
     
     FRESH,
-    REUSED,
+    CACHED_UNUSED,
     PAYMENT_RECEIVED;
 
     

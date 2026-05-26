@@ -3,12 +3,12 @@ use std::time::Duration;
 
 use cove_types::address::AddressInfoWithDerivation;
 
-pub const REUSE_WINDOW: Duration = Duration::from_secs(5 * 60);
+pub const CACHE_WINDOW: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum ReceiveAddressStatus {
     Fresh,
-    Reused,
+    CachedUnused,
     PaymentReceived,
 }
 
@@ -38,7 +38,7 @@ pub struct ReceiveAddressState {
 }
 
 impl ReceiveAddressState {
-    pub fn reusable(
+    pub fn cached(
         request_id: u64,
         address: AddressInfoWithDerivation,
         status: ReceiveAddressStatus,
@@ -49,7 +49,7 @@ impl ReceiveAddressState {
             address: Arc::new(address),
             status,
             first_shown_at_secs,
-            expires_at_secs: Some(first_shown_at_secs + REUSE_WINDOW.as_secs()),
+            expires_at_secs: Some(first_shown_at_secs + CACHE_WINDOW.as_secs()),
             refresh_error: None,
         }
     }
@@ -237,8 +237,12 @@ mod tests {
 
         let first = session.next_request_id();
         let second = session.next_request_id();
-        let state =
-            ReceiveAddressState::reusable(second, address(0), ReceiveAddressStatus::Reused, 100);
+        let state = ReceiveAddressState::cached(
+            second,
+            address(0),
+            ReceiveAddressStatus::CachedUnused,
+            100,
+        );
         session.set_visible(state);
 
         session.close(first);
@@ -249,17 +253,16 @@ mod tests {
     }
 
     #[test]
-    fn reusable_state_expires_exactly_five_minutes_after_visible_window_start() {
-        let state =
-            ReceiveAddressState::reusable(1, address(0), ReceiveAddressStatus::Fresh, 1_000);
+    fn cached_state_expires_exactly_five_minutes_after_visible_window_start() {
+        let state = ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::Fresh, 1_000);
 
-        assert_eq!(state.expires_at_secs, Some(1_000 + REUSE_WINDOW.as_secs()));
+        assert_eq!(state.expires_at_secs, Some(1_000 + CACHE_WINDOW.as_secs()));
     }
 
     #[test]
-    fn reopened_reusable_state_gets_fresh_visible_window() {
+    fn reopened_cached_state_gets_fresh_visible_window() {
         let state =
-            ReceiveAddressState::reusable(1, address(0), ReceiveAddressStatus::Reused, 2_000);
+            ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 2_000);
 
         let presentation = receive_address_presentation(Some(state), 2_000, false);
 
@@ -270,7 +273,7 @@ mod tests {
     #[test]
     fn payment_received_stops_countdown_and_keeps_address() {
         let state =
-            ReceiveAddressState::reusable(1, address(7), ReceiveAddressStatus::Reused, 1_000);
+            ReceiveAddressState::cached(1, address(7), ReceiveAddressStatus::CachedUnused, 1_000);
 
         let paid = state.payment_received();
 
@@ -283,7 +286,7 @@ mod tests {
     #[test]
     fn refresh_failure_keeps_visible_address() {
         let state =
-            ReceiveAddressState::reusable(1, address(3), ReceiveAddressStatus::Reused, 1_000);
+            ReceiveAddressState::cached(1, address(3), ReceiveAddressStatus::CachedUnused, 1_000);
 
         let failed = state.refresh_failed("node unavailable".to_string());
 
@@ -294,8 +297,7 @@ mod tests {
 
     #[test]
     fn presentation_hides_countdown_before_final_minute() {
-        let state =
-            ReceiveAddressState::reusable(1, address(0), ReceiveAddressStatus::Fresh, 1_000);
+        let state = ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::Fresh, 1_000);
 
         let presentation = receive_address_presentation(Some(state), 1_000, false);
 
@@ -306,7 +308,7 @@ mod tests {
     #[test]
     fn presentation_shows_countdown_from_sixty_to_one_seconds() {
         let state =
-            ReceiveAddressState::reusable(1, address(0), ReceiveAddressStatus::Reused, 1_000);
+            ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 1_000);
 
         let at_sixty = receive_address_presentation(Some(state.clone()), 1_240, false);
         let at_one = receive_address_presentation(Some(state), 1_299, false);
@@ -316,9 +318,9 @@ mod tests {
     }
 
     #[test]
-    fn presentation_expired_reusable_state_should_refresh_now() {
+    fn presentation_expired_cached_state_should_refresh_now() {
         let state =
-            ReceiveAddressState::reusable(1, address(0), ReceiveAddressStatus::Reused, 1_000);
+            ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 1_000);
 
         let presentation = receive_address_presentation(Some(state), 1_300, false);
 
@@ -329,7 +331,7 @@ mod tests {
     #[test]
     fn presentation_expired_refreshing_state_shows_refreshing() {
         let state =
-            ReceiveAddressState::reusable(1, address(0), ReceiveAddressStatus::Reused, 1_000);
+            ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 1_000);
 
         let presentation = receive_address_presentation(Some(state), 1_300, true);
 
@@ -340,7 +342,7 @@ mod tests {
     #[test]
     fn presentation_payment_received_hides_countdown_and_confirms_copy() {
         let state =
-            ReceiveAddressState::reusable(1, address(0), ReceiveAddressStatus::Reused, 1_000)
+            ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 1_000)
                 .payment_received();
 
         let presentation = receive_address_presentation(Some(state), 1_240, false);
@@ -353,7 +355,7 @@ mod tests {
     #[test]
     fn presentation_refresh_error_maps_to_show_refresh_error() {
         let state =
-            ReceiveAddressState::reusable(1, address(0), ReceiveAddressStatus::Reused, 1_000)
+            ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 1_000)
                 .refresh_failed("node unavailable".to_string());
 
         let presentation = receive_address_presentation(Some(state), 1_300, false);
@@ -367,7 +369,7 @@ mod tests {
         let mut session = ReceiveAddressSession::default();
         let request_id = session.next_request_id();
         let state =
-            ReceiveAddressState::reusable(request_id, address(0), ReceiveAddressStatus::Fresh, 100);
+            ReceiveAddressState::cached(request_id, address(0), ReceiveAddressStatus::Fresh, 100);
         session.set_visible(state.clone());
 
         let decision = session.refresh_expired_decision(request_id, 399);
@@ -379,10 +381,10 @@ mod tests {
     fn payment_received_refresh_request_does_not_rotate() {
         let mut session = ReceiveAddressSession::default();
         let request_id = session.next_request_id();
-        let state = ReceiveAddressState::reusable(
+        let state = ReceiveAddressState::cached(
             request_id,
             address(0),
-            ReceiveAddressStatus::Reused,
+            ReceiveAddressStatus::CachedUnused,
             100,
         )
         .payment_received();
@@ -397,10 +399,10 @@ mod tests {
     fn refresh_error_refresh_request_does_not_rotate() {
         let mut session = ReceiveAddressSession::default();
         let request_id = session.next_request_id();
-        let state = ReceiveAddressState::reusable(
+        let state = ReceiveAddressState::cached(
             request_id,
             address(0),
-            ReceiveAddressStatus::Reused,
+            ReceiveAddressStatus::CachedUnused,
             100,
         )
         .refresh_failed("node unavailable".to_string());
@@ -416,7 +418,7 @@ mod tests {
         let mut session = ReceiveAddressSession::default();
         let stale_request_id = session.next_request_id();
         let current_request_id = session.next_request_id();
-        let state = ReceiveAddressState::reusable(
+        let state = ReceiveAddressState::cached(
             current_request_id,
             address(0),
             ReceiveAddressStatus::Fresh,
@@ -433,10 +435,10 @@ mod tests {
     fn expired_current_refresh_request_rotates() {
         let mut session = ReceiveAddressSession::default();
         let request_id = session.next_request_id();
-        let state = ReceiveAddressState::reusable(
+        let state = ReceiveAddressState::cached(
             request_id,
             address(0),
-            ReceiveAddressStatus::Reused,
+            ReceiveAddressStatus::CachedUnused,
             100,
         );
         session.set_visible(state);
@@ -451,7 +453,7 @@ mod tests {
         let mut session = ReceiveAddressSession::default();
         let request_id = session.next_request_id();
         let state =
-            ReceiveAddressState::reusable(request_id, address(7), ReceiveAddressStatus::Fresh, 100);
+            ReceiveAddressState::cached(request_id, address(7), ReceiveAddressStatus::Fresh, 100);
         session.set_visible(state);
 
         let state = session.mark_payment_received(request_id, 7).unwrap();
@@ -466,7 +468,7 @@ mod tests {
         let mut session = ReceiveAddressSession::default();
         let stale_request_id = session.next_request_id();
         let current_request_id = session.next_request_id();
-        let state = ReceiveAddressState::reusable(
+        let state = ReceiveAddressState::cached(
             current_request_id,
             address(7),
             ReceiveAddressStatus::Fresh,
@@ -485,7 +487,7 @@ mod tests {
         let mut session = ReceiveAddressSession::default();
         let request_id = session.next_request_id();
         let state =
-            ReceiveAddressState::reusable(request_id, address(7), ReceiveAddressStatus::Fresh, 100);
+            ReceiveAddressState::cached(request_id, address(7), ReceiveAddressStatus::Fresh, 100);
         session.set_visible(state);
 
         let state = session.mark_payment_received(request_id, 8);
@@ -499,7 +501,7 @@ mod tests {
         let mut session = ReceiveAddressSession::default();
         let request_id = session.next_request_id();
         let state =
-            ReceiveAddressState::reusable(request_id, address(7), ReceiveAddressStatus::Fresh, 100)
+            ReceiveAddressState::cached(request_id, address(7), ReceiveAddressStatus::Fresh, 100)
                 .payment_received();
         session.set_visible(state);
 
