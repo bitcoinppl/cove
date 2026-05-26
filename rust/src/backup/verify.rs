@@ -2,12 +2,16 @@ use cove_util::ResultExt as _;
 use zeroize::Zeroizing;
 
 use crate::wallet::metadata::WalletMetadata;
-use crate::wallet_identity::{collect_existing_wallet_identities, identity_key_for_backup};
+use crate::wallet_identity::{
+    ExistingWalletIdentitySet, collect_existing_wallet_identities, identity_key_for_backup,
+};
 
 use super::crypto;
 use super::error::BackupError;
 use super::import::{self, WalletTypeSecretValidation};
-use super::model::{BackupPayload, BackupVerifyReport, BackupWalletSummary, WalletSecretType};
+use super::model::{
+    BackupPayload, BackupVerifyReport, BackupWalletSummary, WalletBackup, WalletSecretType,
+};
 
 pub async fn verify_backup(
     data: Vec<u8>,
@@ -17,11 +21,18 @@ pub async fn verify_backup(
     let password = crypto::clean_password(&password)?;
     let decrypted = crypto::decrypt(&data, &password)?;
     let decompressed = crypto::decompress(&decrypted)?;
-    let mut payload = BackupPayload::decode(&decompressed)?;
+    let payload = BackupPayload::decode(&decompressed)?;
 
     // mutable: grows as we process wallets, matching import's progressive dedup
-    let mut existing_identities = collect_existing_wallet_identities()?;
+    let existing_identities = collect_existing_wallet_identities()?;
 
+    verify_payload(payload, existing_identities)
+}
+
+fn verify_payload(
+    mut payload: BackupPayload,
+    mut existing_identities: ExistingWalletIdentitySet,
+) -> Result<BackupVerifyReport, BackupError> {
     let mut wallets = Vec::with_capacity(payload.wallets.len());
     for wallet_backup in &payload.wallets {
         let metadata: WalletMetadata = serde_json::from_value(wallet_backup.metadata.clone())
@@ -29,22 +40,9 @@ pub async fn verify_backup(
 
         let duplicate_key = identity_key_for_backup(&metadata, wallet_backup)?;
         let already_on_device = existing_identities.contains(&duplicate_key);
+        let import_preview = WalletImportPreview::new(&metadata, wallet_backup, already_on_device);
 
-        let validation = import::validate_wallet_type_secret(
-            &metadata.wallet_type,
-            &wallet_backup.secret,
-            &metadata.name,
-        );
-        let is_importable = validation.is_ok();
-        let warning = match validation {
-            Ok(WalletTypeSecretValidation::Valid) => None,
-            Ok(WalletTypeSecretValidation::Degraded) => {
-                Some("Will be imported with reduced functionality".to_string())
-            }
-            Err(e) => Some(format!("Import will fail: {e}")),
-        };
-
-        if !already_on_device && is_importable {
+        if import_preview.will_import {
             existing_identities.insert(duplicate_key);
         }
 
@@ -64,7 +62,7 @@ pub async fn verify_backup(
             has_descriptors: wallet_backup.descriptors.is_some(),
             label_count,
             already_on_device,
-            warning,
+            warning: import_preview.warning,
         });
     }
 
@@ -79,4 +77,92 @@ pub async fn verify_backup(
 
     payload.wallets.clear();
     Ok(report)
+}
+
+struct WalletImportPreview {
+    will_import: bool,
+    warning: Option<String>,
+}
+
+impl WalletImportPreview {
+    fn new(
+        metadata: &WalletMetadata,
+        wallet_backup: &WalletBackup,
+        already_on_device: bool,
+    ) -> Self {
+        if already_on_device {
+            return Self { will_import: false, warning: None };
+        }
+
+        match import::validate_wallet_type_secret(
+            &metadata.wallet_type,
+            &wallet_backup.secret,
+            &metadata.name,
+        ) {
+            Ok(WalletTypeSecretValidation::Valid) => Self { will_import: true, warning: None },
+            Ok(WalletTypeSecretValidation::Degraded) => Self {
+                will_import: true,
+                warning: Some("Will be imported with reduced functionality".to_string()),
+            },
+            Err(e) => Self { will_import: false, warning: Some(format!("Import will fail: {e}")) },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr as _;
+    use std::sync::Arc;
+
+    use crate::backup::model::{AppSettings, PAYLOAD_VERSION, WalletBackup, WalletSecret};
+    use crate::wallet::fingerprint::Fingerprint;
+    use crate::wallet::metadata::{WalletMetadata, WalletType};
+
+    use super::*;
+
+    fn hot_metadata(name: &str) -> WalletMetadata {
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.name = name.to_string();
+        metadata.wallet_type = WalletType::Hot;
+        metadata.master_fingerprint = Some(Arc::new(Fingerprint::from(
+            bdk_wallet::bitcoin::bip32::Fingerprint::from_str("817e7be0").unwrap(),
+        )));
+
+        metadata
+    }
+
+    fn payload_with_wallet(wallet: WalletBackup) -> BackupPayload {
+        BackupPayload {
+            version: PAYLOAD_VERSION,
+            created_at: 1700000000,
+            wallets: vec![wallet],
+            settings: AppSettings {
+                selected_network: None,
+                selected_fiat_currency: None,
+                color_scheme: None,
+                selected_nodes: vec![],
+            },
+        }
+    }
+
+    #[test]
+    fn verify_duplicate_wallet_skips_secret_validation_warning() {
+        let metadata = hot_metadata("Existing hot wallet");
+        let wallet = WalletBackup {
+            metadata: serde_json::to_value(&metadata).unwrap(),
+            secret: WalletSecret::Unknown,
+            descriptors: None,
+            xpub: None,
+            labels_jsonl: None,
+        };
+        let duplicate_key = identity_key_for_backup(&metadata, &wallet).unwrap();
+        let mut existing_identities = ExistingWalletIdentitySet::default();
+        existing_identities.insert(duplicate_key);
+
+        let report = verify_payload(payload_with_wallet(wallet), existing_identities).unwrap();
+
+        let summary = report.wallets.first().expect("wallet summary should exist");
+        assert!(summary.already_on_device);
+        assert_eq!(summary.warning, None);
+    }
 }
