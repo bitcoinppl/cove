@@ -398,6 +398,24 @@ mod tests {
     }
 
     #[test]
+    fn closed_refresh_request_returns_missing_visible_state() {
+        let mut session = ReceiveAddressSession::default();
+        let request_id = session.next_request_id();
+        let state = ReceiveAddressState::cached(
+            request_id,
+            address(0),
+            ReceiveAddressStatus::CachedUnused,
+            100,
+        );
+        session.set_visible(state);
+        session.close(request_id);
+
+        let decision = session.refresh_expired_decision(request_id, 400);
+
+        assert_eq!(decision, RefreshExpiredAddressDecision::MissingVisibleState);
+    }
+
+    #[test]
     fn expired_current_refresh_request_rotates() {
         let mut session = ReceiveAddressSession::default();
         let request_id = session.next_request_id();

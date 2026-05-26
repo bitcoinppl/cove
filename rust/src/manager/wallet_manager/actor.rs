@@ -883,40 +883,31 @@ impl WalletActor {
         Ok(state)
     }
 
-    pub async fn refresh_expired_receive_address(
-        &mut self,
-        request_id: u64,
-    ) -> ActorResult<ReceiveAddressState> {
+    pub async fn refresh_expired_receive_address(&mut self, request_id: u64) -> ActorResult<()> {
         let now = current_epoch_secs();
         match self.receive_address.refresh_expired_decision(request_id, now) {
             RefreshExpiredAddressDecision::Rotate => {}
-            RefreshExpiredAddressDecision::ReturnVisible(state) => return Produces::ok(state),
-            RefreshExpiredAddressDecision::MissingVisibleState => {
-                return Err(Error::ReceiveAddressError(
-                    "receive request has no visible address".into(),
-                )
-                .into());
-            }
+            RefreshExpiredAddressDecision::ReturnVisible(_)
+            | RefreshExpiredAddressDecision::MissingVisibleState => return Produces::ok(()),
         }
 
         self.stop_receive_address_refresh_timer();
         self.set_receive_address_refresh_state(ReceiveAddressRefreshState::Refreshing);
 
-        let state =
-            match self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh) {
-                Ok(state) => state,
-                Err(error) => {
-                    let visible = self.receive_address.visible_state().ok_or(
-                        Error::ReceiveAddressError("receive request has no visible address".into()),
-                    )?;
-                    warn!("Failed to refresh receive address request_id={request_id}: {error}");
-                    self.set_receive_address_refresh_state(ReceiveAddressRefreshState::Failed);
-
-                    visible
+        match self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh) {
+            Ok(_) => Produces::ok(()),
+            Err(error) => {
+                if self.receive_address.visible_state().is_none() {
+                    return Err(Error::ReceiveAddressError(
+                        "receive request has no visible address".into(),
+                    )
+                    .into());
                 }
-            };
 
-        Produces::ok(state)
+                warn!("Failed to refresh receive address request_id={request_id}: {error}");
+                self.set_receive_address_refresh_state(ReceiveAddressRefreshState::Failed);
+            }
+        }
     }
 
     pub async fn close_receive_address(&mut self, request_id: u64) {
