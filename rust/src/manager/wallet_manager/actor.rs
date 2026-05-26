@@ -17,6 +17,7 @@ use crate::{
         client::{Error as NodeError, NodeClient, NodeClientOptions},
         client_builder::NodeClientBuilder,
     },
+    receive_address_watcher::ReceiveAddressWatcher,
     transaction::{ConfirmedTransaction, FeeRate, Transaction, TransactionDetails, TxId},
     transaction_watcher::TransactionWatcher,
     wallet::{
@@ -82,6 +83,7 @@ pub struct WalletActor {
 
     seed: u64,
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
+    receive_address_watcher: Option<Addr<ReceiveAddressWatcher>>,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -197,6 +199,7 @@ impl WalletActor {
             state: ActorState::Initial,
             receive_address: ReceiveAddressSession::default(),
             transaction_watchers: HashMap::default(),
+            receive_address_watcher: None,
             db,
         })
     }
@@ -829,6 +832,7 @@ impl WalletActor {
         self.receive_address.set_visible(state.clone());
         self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
 
+        self.stop_receive_address_watcher();
         self.start_delayed_receive_address_activity_check(request_id, derivation_index);
 
         Produces::ok(state)
@@ -877,7 +881,11 @@ impl WalletActor {
     }
 
     pub async fn close_receive_address(&mut self, request_id: u64) {
+        let is_current = self.receive_address.is_current(request_id);
         self.receive_address.close(request_id);
+        if is_current {
+            self.stop_receive_address_watcher();
+        }
         self.send(WalletManagerReconcileMessage::ReceiveAddressClosed(request_id));
     }
 
@@ -1633,6 +1641,12 @@ impl WalletActor {
         self.receive_address.set_visible(state.clone());
         self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
 
+        if status == ReceiveAddressStatus::Fresh {
+            self.start_receive_address_watcher(request_id, state.address.info.index);
+        } else {
+            self.stop_receive_address_watcher();
+        }
+
         Ok(state)
     }
 
@@ -1692,6 +1706,60 @@ impl WalletActor {
         }
 
         Produces::ok(())
+    }
+
+    pub async fn handle_receive_address_watch_activity(
+        &mut self,
+        request_id: u64,
+        derivation_index: u32,
+    ) -> ActorResult<()> {
+        if !self.receive_address.can_mark_payment_received(request_id, derivation_index) {
+            return Produces::ok(());
+        }
+
+        self.stop_receive_address_watcher();
+        self.db.delete_receive_address_cache().map_err_str(Error::ReceiveAddressError)?;
+
+        if self.wallet.receive_address_is_unused(derivation_index) {
+            self.wallet.mark_receive_address_used(derivation_index)?;
+        }
+
+        let Some(state) = self.receive_address.mark_payment_received(request_id, derivation_index)
+        else {
+            return Produces::ok(());
+        };
+
+        self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state));
+        self.start_targeted_receive_address_sync(request_id, derivation_index);
+
+        Produces::ok(())
+    }
+
+    fn start_receive_address_watcher(&mut self, request_id: u64, derivation_index: u32) {
+        self.stop_receive_address_watcher();
+
+        let node = Database::global().global_config.selected_node();
+        let options = NodeClientOptions { batch_size: 1 };
+        let client_builder = NodeClientBuilder { node, options };
+
+        let address =
+            self.wallet.bdk.peek_address(KeychainKind::External, derivation_index).address;
+
+        let watcher = ReceiveAddressWatcher::new(
+            self.addr.clone(),
+            request_id,
+            derivation_index,
+            address,
+            client_builder,
+        );
+
+        self.receive_address_watcher = Some(spawn_actor(watcher));
+    }
+
+    fn stop_receive_address_watcher(&mut self) {
+        if let Some(watcher) = self.receive_address_watcher.take() {
+            send!(watcher.stop_watching());
+        }
     }
 
     fn start_targeted_receive_address_sync(&mut self, request_id: u64, derivation_index: u32) {
@@ -1804,6 +1872,7 @@ impl WalletActor {
 
         let state = state.payment_received();
         self.receive_address.set_visible(state.clone());
+        self.stop_receive_address_watcher();
         self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state));
 
         true

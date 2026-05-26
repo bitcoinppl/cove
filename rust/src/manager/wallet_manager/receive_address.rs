@@ -148,6 +148,31 @@ impl ReceiveAddressSession {
         self.active_request_id == Some(request_id)
     }
 
+    pub fn can_mark_payment_received(&self, request_id: u64, derivation_index: u32) -> bool {
+        let Some(visible_state) = &self.visible_state else {
+            return false;
+        };
+
+        self.is_current(request_id)
+            && visible_state.address.info.index == derivation_index
+            && visible_state.status != ReceiveAddressStatus::PaymentReceived
+    }
+
+    pub fn mark_payment_received(
+        &mut self,
+        request_id: u64,
+        derivation_index: u32,
+    ) -> Option<ReceiveAddressState> {
+        if !self.can_mark_payment_received(request_id, derivation_index) {
+            return None;
+        }
+
+        let state = self.visible_state.as_ref()?.payment_received();
+        self.set_visible(state.clone());
+
+        Some(state)
+    }
+
     pub fn close(&mut self, request_id: u64) {
         if self.is_current(request_id) {
             self.active_request_id = None;
@@ -419,5 +444,68 @@ mod tests {
         let decision = session.refresh_expired_decision(request_id, 400);
 
         assert_eq!(decision, RefreshExpiredAddressDecision::Rotate);
+    }
+
+    #[test]
+    fn current_visible_address_can_be_marked_payment_received() {
+        let mut session = ReceiveAddressSession::default();
+        let request_id = session.next_request_id();
+        let state =
+            ReceiveAddressState::reusable(request_id, address(7), ReceiveAddressStatus::Fresh, 100);
+        session.set_visible(state);
+
+        let state = session.mark_payment_received(request_id, 7).unwrap();
+
+        assert_eq!(state.status, ReceiveAddressStatus::PaymentReceived);
+        assert_eq!(state.expires_at_secs, None);
+        assert_eq!(session.visible_state().unwrap().status, ReceiveAddressStatus::PaymentReceived);
+    }
+
+    #[test]
+    fn stale_request_cannot_be_marked_payment_received() {
+        let mut session = ReceiveAddressSession::default();
+        let stale_request_id = session.next_request_id();
+        let current_request_id = session.next_request_id();
+        let state = ReceiveAddressState::reusable(
+            current_request_id,
+            address(7),
+            ReceiveAddressStatus::Fresh,
+            100,
+        );
+        session.set_visible(state);
+
+        let state = session.mark_payment_received(stale_request_id, 7);
+
+        assert_eq!(state, None);
+        assert_eq!(session.visible_state().unwrap().status, ReceiveAddressStatus::Fresh);
+    }
+
+    #[test]
+    fn wrong_derivation_index_cannot_be_marked_payment_received() {
+        let mut session = ReceiveAddressSession::default();
+        let request_id = session.next_request_id();
+        let state =
+            ReceiveAddressState::reusable(request_id, address(7), ReceiveAddressStatus::Fresh, 100);
+        session.set_visible(state);
+
+        let state = session.mark_payment_received(request_id, 8);
+
+        assert_eq!(state, None);
+        assert_eq!(session.visible_state().unwrap().status, ReceiveAddressStatus::Fresh);
+    }
+
+    #[test]
+    fn already_paid_address_is_not_marked_again() {
+        let mut session = ReceiveAddressSession::default();
+        let request_id = session.next_request_id();
+        let state =
+            ReceiveAddressState::reusable(request_id, address(7), ReceiveAddressStatus::Fresh, 100)
+                .payment_received();
+        session.set_visible(state);
+
+        let state = session.mark_payment_received(request_id, 7);
+
+        assert_eq!(state, None);
+        assert_eq!(session.visible_state().unwrap().status, ReceiveAddressStatus::PaymentReceived);
     }
 }
