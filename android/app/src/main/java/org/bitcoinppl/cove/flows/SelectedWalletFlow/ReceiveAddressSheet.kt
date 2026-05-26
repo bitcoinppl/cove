@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -129,6 +130,8 @@ fun ReceiveAddressSheet(
                     manager.receiveAddressState = refreshState
                     manager.receiveAddressState =
                         manager.rust.refreshExpiredReceiveAddress(refreshState.requestId)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.e(tag, "Unable to refresh receive address", e)
                     val current = manager.receiveAddressState
