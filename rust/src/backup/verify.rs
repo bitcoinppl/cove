@@ -3,7 +3,8 @@ use zeroize::Zeroizing;
 
 use crate::wallet::metadata::WalletMetadata;
 use crate::wallet_identity::{
-    ExistingWalletIdentitySet, collect_existing_wallet_identities, identity_key_for_backup,
+    ExistingWalletIdentitySet, WalletIdentityKey, collect_existing_wallet_identities,
+    identity_key_for_backup,
 };
 
 use super::crypto;
@@ -38,11 +39,19 @@ fn verify_payload(
         let metadata: WalletMetadata = serde_json::from_value(wallet_backup.metadata.clone())
             .map_err_prefix("wallet metadata", BackupError::Deserialization)?;
 
-        let duplicate_key = identity_key_for_backup(&metadata, wallet_backup)?;
-        let already_on_device = existing_identities.contains(&duplicate_key);
-        let import_preview = WalletImportPreview::new(&metadata, wallet_backup, already_on_device);
+        let identity_preview =
+            WalletIdentityPreview::new(&metadata, wallet_backup, &existing_identities);
 
-        if import_preview.will_import {
+        let import_preview = WalletImportPreview::new(
+            &metadata,
+            wallet_backup,
+            identity_preview.already_on_device,
+            identity_preview.import_blocking_error.as_deref(),
+        );
+
+        if import_preview.will_import
+            && let Some(duplicate_key) = identity_preview.duplicate_key
+        {
             existing_identities.insert(duplicate_key);
         }
 
@@ -61,7 +70,7 @@ fn verify_payload(
             has_xpub: wallet_backup.xpub.is_some(),
             has_descriptors: wallet_backup.descriptors.is_some(),
             label_count,
-            already_on_device,
+            already_on_device: identity_preview.already_on_device,
             warning: import_preview.warning,
         });
     }
@@ -84,14 +93,53 @@ struct WalletImportPreview {
     warning: Option<String>,
 }
 
+struct WalletIdentityPreview {
+    duplicate_key: Option<WalletIdentityKey>,
+    already_on_device: bool,
+    import_blocking_error: Option<String>,
+}
+
+impl WalletIdentityPreview {
+    fn new(
+        metadata: &WalletMetadata,
+        wallet_backup: &WalletBackup,
+        existing_identities: &ExistingWalletIdentitySet,
+    ) -> Self {
+        match identity_key_for_backup(metadata, wallet_backup) {
+            Ok(duplicate_key) => {
+                let already_on_device = existing_identities.contains(&duplicate_key);
+
+                Self {
+                    duplicate_key: Some(duplicate_key),
+                    already_on_device,
+                    import_blocking_error: None,
+                }
+            }
+            Err(error) => Self {
+                duplicate_key: None,
+                already_on_device: false,
+                import_blocking_error: Some(error.to_string()),
+            },
+        }
+    }
+}
+
 impl WalletImportPreview {
     fn new(
         metadata: &WalletMetadata,
         wallet_backup: &WalletBackup,
         already_on_device: bool,
+        identity_error: Option<&str>,
     ) -> Self {
         if already_on_device {
             return Self { will_import: false, warning: None };
+        }
+
+        if let Some(error) = identity_error {
+            return Self {
+                will_import: false,
+                warning: Some(format!("Import will fail: {error}")),
+            };
         }
 
         match import::validate_wallet_type_secret(
@@ -114,7 +162,9 @@ mod tests {
     use std::str::FromStr as _;
     use std::sync::Arc;
 
-    use crate::backup::model::{AppSettings, PAYLOAD_VERSION, WalletBackup, WalletSecret};
+    use crate::backup::model::{
+        AppSettings, DescriptorPair, PAYLOAD_VERSION, WalletBackup, WalletSecret,
+    };
     use crate::wallet::fingerprint::Fingerprint;
     use crate::wallet::metadata::{WalletMetadata, WalletType};
 
@@ -131,11 +181,17 @@ mod tests {
         metadata
     }
 
-    fn payload_with_wallet(wallet: WalletBackup) -> BackupPayload {
+    fn cold_metadata(name: &str) -> WalletMetadata {
+        let mut metadata = hot_metadata(name);
+        metadata.wallet_type = WalletType::Cold;
+        metadata
+    }
+
+    fn payload_with_wallets(wallets: Vec<WalletBackup>) -> BackupPayload {
         BackupPayload {
             version: PAYLOAD_VERSION,
             created_at: 1700000000,
-            wallets: vec![wallet],
+            wallets,
             settings: AppSettings {
                 selected_network: None,
                 selected_fiat_currency: None,
@@ -143,6 +199,10 @@ mod tests {
                 selected_nodes: vec![],
             },
         }
+    }
+
+    fn payload_with_wallet(wallet: WalletBackup) -> BackupPayload {
+        payload_with_wallets(vec![wallet])
     }
 
     #[test]
@@ -164,5 +224,53 @@ mod tests {
         let summary = report.wallets.first().expect("wallet summary should exist");
         assert!(summary.already_on_device);
         assert_eq!(summary.warning, None);
+    }
+
+    #[test]
+    fn verify_identity_key_failure_warns_for_wallet_and_continues() {
+        let invalid_metadata = cold_metadata("Broken public wallet");
+        let invalid_wallet = WalletBackup {
+            metadata: serde_json::to_value(&invalid_metadata).unwrap(),
+            secret: WalletSecret::None,
+            descriptors: Some(DescriptorPair {
+                external: "not a descriptor".to_string(),
+                internal: "also not a descriptor".to_string(),
+            }),
+            xpub: None,
+            labels_jsonl: None,
+        };
+        let valid_metadata = hot_metadata("Importable hot wallet");
+        let valid_wallet = WalletBackup {
+            metadata: serde_json::to_value(&valid_metadata).unwrap(),
+            secret: WalletSecret::Mnemonic(
+                "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+                    .to_string(),
+            ),
+            descriptors: None,
+            xpub: None,
+            labels_jsonl: None,
+        };
+
+        let report = verify_payload(
+            payload_with_wallets(vec![invalid_wallet, valid_wallet]),
+            ExistingWalletIdentitySet::default(),
+        )
+        .unwrap();
+
+        assert_eq!(report.wallets.len(), 2);
+        assert_eq!(report.wallets[0].name, invalid_metadata.name);
+        assert!(!report.wallets[0].already_on_device);
+        let warning = report.wallets[0]
+            .warning
+            .as_deref()
+            .expect("invalid public identity should become a wallet warning");
+        assert!(
+            warning
+                .contains("Import will fail: public descriptor identity for Broken public wallet")
+        );
+
+        assert_eq!(report.wallets[1].name, valid_metadata.name);
+        assert!(!report.wallets[1].already_on_device);
+        assert_eq!(report.wallets[1].warning, None);
     }
 }
