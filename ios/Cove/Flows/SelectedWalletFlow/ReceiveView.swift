@@ -18,15 +18,34 @@ struct ReceiveView: View {
     let manager: WalletManager
 
     private let pasteboard = UIPasteboard.general
-    @State private var addressInfo: AddressInfoWithDerivation?
+    @State private var showPaidCopyConfirmation = false
+
+    private var receiveState: ReceiveAddressState? {
+        manager.receiveAddressState
+    }
+
+    private var addressInfo: AddressInfoWithDerivation? {
+        receiveState?.address
+    }
+
+    private var presentation: ReceiveAddressPresentation {
+        manager.receiveAddressPresentation
+    }
 
     var addressLoaded: Bool {
         addressInfo != nil
     }
 
     func copyText() {
-        dismiss()
+        if presentation.copyPolicy == .confirmPaidAddress {
+            showPaidCopyConfirmation = true
+            return
+        }
 
+        copyVisibleAddressAndDismiss()
+    }
+
+    func copyVisibleAddressAndDismiss() {
         if let addressInfo {
             pasteboard.string = addressInfo.addressUnformatted()
             Task { @MainActor in
@@ -35,21 +54,18 @@ struct ReceiveView: View {
                     .present()
             }
         }
+
+        dismiss()
     }
 
     func nextAddressSync() {
-        Task { await nextAddress() }
+        manager.dispatch(.createNewReceiveAddress)
     }
 
-    func nextAddress() async {
-        do {
-            let addressInfo = try await manager.rust.nextAddress()
-            await MainActor.run { self.addressInfo = addressInfo }
-        } catch {
-            Log.error("Unable to get next address: \(error)")
-            dismiss()
-            app.alertState = .init(.unableToGetAddress(error: error.localizedDescription))
-        }
+    func closeReceiveAddress() {
+        guard let requestId = receiveState?.requestId else { return }
+
+        manager.dispatch(.closeReceiveAddress(requestId))
     }
 
     var body: some View {
@@ -76,6 +92,16 @@ struct ReceiveView: View {
 
                         AddressView(addressInfo: addressInfo)
 
+                        if receiveState?.status == .paymentReceived {
+                            Text("Payment Received")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.white)
+                        } else if presentation.refreshState == .refreshing {
+                            Text("Refreshing...")
+                                .font(.footnote)
+                                .foregroundStyle(.white.opacity(0.65))
+                        }
+
                         if let path = addressInfo?.derivationPath() {
                             Text("Derivation: \(path)")
                                 .font(.footnote)
@@ -98,6 +124,13 @@ struct ReceiveView: View {
                                 .font(.system(.body, design: .monospaced))
                                 .foregroundStyle(.white)
                                 .fixedSize(horizontal: false, vertical: true)
+
+                            if addressLoaded, presentation.refreshState == .failed {
+                                Text("Unable to refresh address")
+                                    .font(.footnote)
+                                    .foregroundStyle(.white.opacity(0.65))
+                                    .padding(.top, 4)
+                            }
                         }
                     }
                     .padding()
@@ -123,16 +156,40 @@ struct ReceiveView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .padding(.horizontal)
+                .disabled(!addressLoaded || manager.receiveAddressIsLoading)
 
                 // Secondary action
                 Button("Create New Address", action: nextAddressSync)
-                    .font(.footnote.weight(.semibold))
+                    .font(.headline.weight(.semibold))
                     .padding(.top, 8)
+                    .disabled(manager.receiveAddressIsLoading)
             }
         }
         .background(Color(.systemBackground))
         .task {
-            await nextAddress()
+            manager.dispatch(.openReceiveAddress)
+        }
+        .onDisappear {
+            closeReceiveAddress()
+        }
+        .onChange(of: manager.receiveAddressError) { _, error in
+            guard let error else { return }
+
+            Log.error("Unable to update receive address: \(error.value)")
+            if !addressLoaded {
+                dismiss()
+            }
+            app.alertState = .init(.unableToGetAddress(error: error.value))
+        }
+        .alert("Copy paid address?", isPresented: $showPaidCopyConfirmation) {
+            Button("Create New Address", role: .cancel) {
+                nextAddressSync()
+            }
+            Button("Copy Anyway", role: .destructive) {
+                copyVisibleAddressAndDismiss()
+            }
+        } message: {
+            Text("This address has already received funds. For better privacy, create a new address before sharing.")
         }
     }
 }

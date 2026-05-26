@@ -62,7 +62,6 @@ impl TransactionWatcher {
     pub async fn start_watching(&mut self) -> ActorResult<()> {
         debug!("start_watching for txn {}", self.tx_id);
         let client = Arc::new(self.client_builder.build().await?);
-        let addr = self.addr.clone();
         let manager = self.wallet_actor.clone();
         let tx_id = self.tx_id.clone();
 
@@ -72,7 +71,7 @@ impl TransactionWatcher {
             Network::Signet => Duration::from_secs(10),
         };
 
-        self.addr.send_fut(async move {
+        self.addr.send_fut_with(|addr| async move {
             let client = client;
             loop {
                 debug!("checking txn: {tx_id}");

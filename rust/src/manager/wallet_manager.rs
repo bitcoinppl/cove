@@ -1,4 +1,5 @@
 pub mod actor;
+pub mod receive_address;
 
 use std::{
     sync::Arc,
@@ -9,6 +10,7 @@ use act_zero::{Addr, call, send};
 use actor::WalletActor;
 use flume::Receiver;
 use parking_lot::RwLock;
+use receive_address::{ReceiveAddressPresentation, ReceiveAddressState};
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
@@ -50,10 +52,7 @@ use crate::{
     word_validator::WordValidator,
 };
 
-use cove_types::{
-    address::AddressInfoWithDerivation,
-    confirm::{ConfirmDetails, QrDensity, SplitOutput},
-};
+use cove_types::confirm::{ConfirmDetails, QrDensity, SplitOutput};
 use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
 
 use super::{
@@ -77,7 +76,7 @@ pub enum WalletManagerReconcileMessage {
     UpdatedTransactions(Vec<Transaction>),
 
     NodeConnectionFailed(String),
-    WalletMetadataChanged(WalletMetadata),
+    WalletMetadataChanged(Box<WalletMetadata>),
     WalletBalanceChanged(Arc<Balance>),
 
     WalletError(WalletManagerError),
@@ -88,6 +87,11 @@ pub enum WalletManagerReconcileMessage {
 
     SendFlowError(SendFlowErrorAlert),
     HotWalletKeyMissing(WalletId),
+    ReceiveAddressUpdated(ReceiveAddressState),
+    ReceiveAddressPresentationUpdated(ReceiveAddressPresentation),
+    ReceiveAddressLoadingChanged(bool),
+    ReceiveAddressError(String),
+    ReceiveAddressClosed(u64),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -105,6 +109,9 @@ pub enum WalletManagerAction {
     SelectDifferentWalletAddressType(WalletAddressType),
     SelectedWalletDisappeared,
     StartTransactionWatcher(Arc<TxId>),
+    OpenReceiveAddress,
+    CreateNewReceiveAddress,
+    CloseReceiveAddress(u64),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
@@ -256,6 +263,9 @@ pub enum WalletManagerError {
 
     #[error("Wallet database corrupted for {id}: {error}")]
     DatabaseCorruption { id: WalletId, error: String },
+
+    #[error("Receive address error: {0}")]
+    ReceiveAddressError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -924,15 +934,6 @@ impl RustWalletManager {
         Ok(number_of_confirmations.thousands_int())
     }
 
-    /// Get the next address for the wallet
-    #[uniffi::method]
-    pub async fn next_address(&self) -> Result<AddressInfoWithDerivation, Error> {
-        let address =
-            call!(self.actor.next_address()).await.map_err_str(Error::NextAddressError)?;
-
-        Ok(address)
-    }
-
     /// Get address at the given index
     #[uniffi::method]
     pub async fn address_at(&self, index: u32) -> Result<AddressInfo, Error> {
@@ -995,7 +996,7 @@ impl RustWalletManager {
             .map_err_debug(Error::SetWalletTypeError)?;
 
         *self.metadata.write() = metadata.clone();
-        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
+        self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
 
         CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
 
@@ -1022,7 +1023,7 @@ impl RustWalletManager {
         }
 
         *self.metadata.write() = metadata.clone();
-        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
+        self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
         CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
     }
 
@@ -1068,7 +1069,7 @@ impl RustWalletManager {
 
         Database::global().wallets.mark_wallet_as_verified(&metadata.id)?;
 
-        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
+        self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
 
         Ok(())
     }
@@ -1329,11 +1330,28 @@ impl RustWalletManager {
 
             Action::SelectedWalletDisappeared => {
                 send!(self.actor.stop_all_scans());
+                return;
             }
 
             Action::StartTransactionWatcher(tx_id) => {
                 let tx_id = tx_id.as_ref().0;
                 send!(self.actor.start_transaction_watcher(tx_id));
+                return;
+            }
+
+            Action::OpenReceiveAddress => {
+                send!(self.actor.open_receive_address_intent());
+                return;
+            }
+
+            Action::CreateNewReceiveAddress => {
+                send!(self.actor.create_new_receive_address_intent());
+                return;
+            }
+
+            Action::CloseReceiveAddress(request_id) => {
+                send!(self.actor.close_receive_address(request_id));
+                return;
             }
         }
 
@@ -1343,7 +1361,7 @@ impl RustWalletManager {
         }
 
         *self.metadata.write() = candidate.clone();
-        self.reconciler.send(Message::WalletMetadataChanged(candidate.clone()));
+        self.reconciler.send(Message::WalletMetadataChanged(Box::new(candidate.clone())));
         CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &candidate);
     }
 }

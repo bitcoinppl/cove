@@ -1635,8 +1635,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager(
     ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_next_address(
-    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt(
@@ -2726,8 +2724,6 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustwalletmanager_new_coin_control_manager(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(`ptr`: Long,`balance`: Long,uniffi_out_err: UniffiRustCallStatus, 
-    ): Long
-    external fun uniffi_cove_fn_method_rustwalletmanager_next_address(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations(`ptr`: Long,`blockHeight`: Int,
     ): Long
@@ -4405,9 +4401,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 55235.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_next_address() != 38399.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations() != 6064.toShort()) {
@@ -20970,11 +20963,6 @@ public interface RustWalletManagerInterface {
     
     fun `newSendFlowManager`(`balance`: Balance): RustSendFlowManager
     
-    /**
-     * Get the next address for the wallet
-     */
-    suspend fun `nextAddress`(): AddressInfoWithDerivation
-    
     suspend fun `numberOfConfirmations`(`blockHeight`: kotlin.UInt): kotlin.UInt
     
     suspend fun `numberOfConfirmationsFmt`(`blockHeight`: kotlin.UInt): kotlin.String
@@ -21925,30 +21913,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     )
     }
     
-
-    
-    /**
-     * Get the next address for the wallet
-     */
-    @Throws(WalletManagerException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `nextAddress`() : AddressInfoWithDerivation {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_next_address(
-                uniffiHandle,
-                
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
-        // lift function
-        { FfiConverterTypeAddressInfoWithDerivation.lift(it) },
-        // Error FFI converter
-        WalletManagerException.ErrorHandler,
-    )
-    }
 
     
     @Throws(WalletManagerException::class)
@@ -29748,6 +29712,109 @@ public object FfiConverterTypePendingWalletSaveResult: FfiConverterRustBuffer<Pe
     override fun write(value: PendingWalletSaveResult, buf: ByteBuffer) {
             FfiConverterTypeWalletMetadata.write(value.`metadata`, buf)
             FfiConverterSequenceTypeRoute.write(value.`routes`, buf)
+    }
+}
+
+
+
+data class ReceiveAddressPresentation (
+    var `copyPolicy`: ReceiveAddressCopyPolicy
+    , 
+    var `refreshState`: ReceiveAddressRefreshState
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeReceiveAddressPresentation: FfiConverterRustBuffer<ReceiveAddressPresentation> {
+    override fun read(buf: ByteBuffer): ReceiveAddressPresentation {
+        return ReceiveAddressPresentation(
+            FfiConverterTypeReceiveAddressCopyPolicy.read(buf),
+            FfiConverterTypeReceiveAddressRefreshState.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ReceiveAddressPresentation) = (
+            FfiConverterTypeReceiveAddressCopyPolicy.allocationSize(value.`copyPolicy`) +
+            FfiConverterTypeReceiveAddressRefreshState.allocationSize(value.`refreshState`)
+    )
+
+    override fun write(value: ReceiveAddressPresentation, buf: ByteBuffer) {
+            FfiConverterTypeReceiveAddressCopyPolicy.write(value.`copyPolicy`, buf)
+            FfiConverterTypeReceiveAddressRefreshState.write(value.`refreshState`, buf)
+    }
+}
+
+
+
+data class ReceiveAddressState (
+    var `requestId`: kotlin.ULong
+    , 
+    var `address`: AddressInfoWithDerivation
+    , 
+    var `status`: ReceiveAddressStatus
+    , 
+    var `firstShownAtSecs`: kotlin.ULong
+    , 
+    var `expiresAtSecs`: kotlin.ULong?
+    
+): Disposable{
+    
+
+    
+
+    
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        
+    Disposable.destroy(
+        this.`requestId`,
+        this.`address`,
+        this.`status`,
+        this.`firstShownAtSecs`,
+        this.`expiresAtSecs`
+    )
+    }
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeReceiveAddressState: FfiConverterRustBuffer<ReceiveAddressState> {
+    override fun read(buf: ByteBuffer): ReceiveAddressState {
+        return ReceiveAddressState(
+            FfiConverterULong.read(buf),
+            FfiConverterTypeAddressInfoWithDerivation.read(buf),
+            FfiConverterTypeReceiveAddressStatus.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ReceiveAddressState) = (
+            FfiConverterULong.allocationSize(value.`requestId`) +
+            FfiConverterTypeAddressInfoWithDerivation.allocationSize(value.`address`) +
+            FfiConverterTypeReceiveAddressStatus.allocationSize(value.`status`) +
+            FfiConverterULong.allocationSize(value.`firstShownAtSecs`) +
+            FfiConverterOptionalULong.allocationSize(value.`expiresAtSecs`)
+    )
+
+    override fun write(value: ReceiveAddressState, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`requestId`, buf)
+            FfiConverterTypeAddressInfoWithDerivation.write(value.`address`, buf)
+            FfiConverterTypeReceiveAddressStatus.write(value.`status`, buf)
+            FfiConverterULong.write(value.`firstShownAtSecs`, buf)
+            FfiConverterOptionalULong.write(value.`expiresAtSecs`, buf)
     }
 }
 
@@ -44317,6 +44384,110 @@ public object FfiConverterTypePendingWalletManagerReconcileMessage : FfiConverte
 
 
 
+
+enum class ReceiveAddressCopyPolicy {
+    
+    COPY,
+    CONFIRM_PAID_ADDRESS;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeReceiveAddressCopyPolicy: FfiConverterRustBuffer<ReceiveAddressCopyPolicy> {
+    override fun read(buf: ByteBuffer) = try {
+        ReceiveAddressCopyPolicy.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: ReceiveAddressCopyPolicy) = 4UL
+
+    override fun write(value: ReceiveAddressCopyPolicy, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class ReceiveAddressRefreshState {
+    
+    IDLE,
+    REFRESHING,
+    FAILED;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeReceiveAddressRefreshState: FfiConverterRustBuffer<ReceiveAddressRefreshState> {
+    override fun read(buf: ByteBuffer) = try {
+        ReceiveAddressRefreshState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: ReceiveAddressRefreshState) = 4UL
+
+    override fun write(value: ReceiveAddressRefreshState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class ReceiveAddressStatus {
+    
+    FRESH,
+    CACHED_UNUSED,
+    PAYMENT_RECEIVED;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeReceiveAddressStatus: FfiConverterRustBuffer<ReceiveAddressStatus> {
+    override fun read(buf: ByteBuffer) = try {
+        ReceiveAddressStatus.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: ReceiveAddressStatus) = 4UL
+
+    override fun write(value: ReceiveAddressStatus, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 sealed class Route: Disposable  {
     
     data class LoadAndReset(
@@ -51463,6 +51634,9 @@ sealed class WalletDataKey {
         companion object
     }
     
+    object ReceiveAddressCache : WalletDataKey()
+    
+    
 
     
 
@@ -51482,6 +51656,7 @@ public object FfiConverterTypeWalletDataKey : FfiConverterRustBuffer<WalletDataK
             1 -> WalletDataKey.ScanState(
                 FfiConverterTypeWalletAddressType.read(buf),
                 )
+            2 -> WalletDataKey.ReceiveAddressCache
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -51494,6 +51669,12 @@ public object FfiConverterTypeWalletDataKey : FfiConverterRustBuffer<WalletDataK
                 + FfiConverterTypeWalletAddressType.allocationSize(value.v1)
             )
         }
+        is WalletDataKey.ReceiveAddressCache -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: WalletDataKey, buf: ByteBuffer) {
@@ -51501,6 +51682,10 @@ public object FfiConverterTypeWalletDataKey : FfiConverterRustBuffer<WalletDataK
             is WalletDataKey.ScanState -> {
                 buf.putInt(1)
                 FfiConverterTypeWalletAddressType.write(value.v1, buf)
+                Unit
+            }
+            is WalletDataKey.ReceiveAddressCache -> {
+                buf.putInt(2)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -52081,6 +52266,21 @@ sealed class WalletManagerAction: Disposable  {
         companion object
     }
     
+    object OpenReceiveAddress : WalletManagerAction()
+    
+    
+    object CreateNewReceiveAddress : WalletManagerAction()
+    
+    
+    data class CloseReceiveAddress(
+        val v1: kotlin.ULong) : WalletManagerAction()
+        
+    {
+        
+
+        companion object
+    }
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -52142,6 +52342,17 @@ sealed class WalletManagerAction: Disposable  {
     )
                 
             }
+            is WalletManagerAction.OpenReceiveAddress -> {// Nothing to destroy
+            }
+            is WalletManagerAction.CreateNewReceiveAddress -> {// Nothing to destroy
+            }
+            is WalletManagerAction.CloseReceiveAddress -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -52183,6 +52394,11 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             12 -> WalletManagerAction.SelectedWalletDisappeared
             13 -> WalletManagerAction.StartTransactionWatcher(
                 FfiConverterTypeTxId.read(buf),
+                )
+            14 -> WalletManagerAction.OpenReceiveAddress
+            15 -> WalletManagerAction.CreateNewReceiveAddress
+            16 -> WalletManagerAction.CloseReceiveAddress(
+                FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -52273,6 +52489,25 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
                 + FfiConverterTypeTxId.allocationSize(value.v1)
             )
         }
+        is WalletManagerAction.OpenReceiveAddress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is WalletManagerAction.CreateNewReceiveAddress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is WalletManagerAction.CloseReceiveAddress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: WalletManagerAction, buf: ByteBuffer) {
@@ -52333,6 +52568,19 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             is WalletManagerAction.StartTransactionWatcher -> {
                 buf.putInt(13)
                 FfiConverterTypeTxId.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerAction.OpenReceiveAddress -> {
+                buf.putInt(14)
+                Unit
+            }
+            is WalletManagerAction.CreateNewReceiveAddress -> {
+                buf.putInt(15)
+                Unit
+            }
+            is WalletManagerAction.CloseReceiveAddress -> {
+                buf.putInt(16)
+                FfiConverterULong.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -52569,6 +52817,14 @@ sealed class WalletManagerException: kotlin.Exception() {
             get() = "id=${ `id` }, error=${ `error` }"
     }
     
+    class ReceiveAddressException(
+        
+        val v1: kotlin.String
+        ) : WalletManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
 
     
 
@@ -52675,6 +52931,9 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 )
             28 -> WalletManagerException.DatabaseCorruption(
                 FfiConverterTypeWalletId.read(buf),
+                FfiConverterString.read(buf),
+                )
+            29 -> WalletManagerException.ReceiveAddressException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -52822,6 +53081,11 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 + FfiConverterTypeWalletId.allocationSize(value.`id`)
                 + FfiConverterString.allocationSize(value.`error`)
             )
+            is WalletManagerException.ReceiveAddressException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
         }
     }
 
@@ -52966,6 +53230,11 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 FfiConverterString.write(value.`error`, buf)
                 Unit
             }
+            is WalletManagerException.ReceiveAddressException -> {
+                buf.putInt(29)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
@@ -53024,7 +53293,7 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     }
     
     data class WalletMetadataChanged(
-        val v1: org.bitcoinppl.cove_core.WalletMetadata) : WalletManagerReconcileMessage()
+        val v1: WalletMetadata) : WalletManagerReconcileMessage()
         
     {
         
@@ -53082,6 +53351,51 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     
     data class HotWalletKeyMissing(
         val v1: org.bitcoinppl.cove_core.types.WalletId) : WalletManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ReceiveAddressUpdated(
+        val v1: org.bitcoinppl.cove_core.ReceiveAddressState) : WalletManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ReceiveAddressPresentationUpdated(
+        val v1: org.bitcoinppl.cove_core.ReceiveAddressPresentation) : WalletManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ReceiveAddressLoadingChanged(
+        val v1: kotlin.Boolean) : WalletManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ReceiveAddressError(
+        val v1: kotlin.String) : WalletManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ReceiveAddressClosed(
+        val v1: kotlin.ULong) : WalletManagerReconcileMessage()
         
     {
         
@@ -53182,6 +53496,41 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     )
                 
             }
+            is WalletManagerReconcileMessage.ReceiveAddressUpdated -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressLoadingChanged -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressError -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -53236,6 +53585,21 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 )
             14 -> WalletManagerReconcileMessage.HotWalletKeyMissing(
                 FfiConverterTypeWalletId.read(buf),
+                )
+            15 -> WalletManagerReconcileMessage.ReceiveAddressUpdated(
+                FfiConverterTypeReceiveAddressState.read(buf),
+                )
+            16 -> WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated(
+                FfiConverterTypeReceiveAddressPresentation.read(buf),
+                )
+            17 -> WalletManagerReconcileMessage.ReceiveAddressLoadingChanged(
+                FfiConverterBoolean.read(buf),
+                )
+            18 -> WalletManagerReconcileMessage.ReceiveAddressError(
+                FfiConverterString.read(buf),
+                )
+            19 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
+                FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -53338,6 +53702,41 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
             )
         }
+        is WalletManagerReconcileMessage.ReceiveAddressUpdated -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeReceiveAddressState.allocationSize(value.v1)
+            )
+        }
+        is WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeReceiveAddressPresentation.allocationSize(value.v1)
+            )
+        }
+        is WalletManagerReconcileMessage.ReceiveAddressLoadingChanged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.v1)
+            )
+        }
+        is WalletManagerReconcileMessage.ReceiveAddressError -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+        is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: WalletManagerReconcileMessage, buf: ByteBuffer) {
@@ -53408,6 +53807,31 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
                 buf.putInt(14)
                 FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressUpdated -> {
+                buf.putInt(15)
+                FfiConverterTypeReceiveAddressState.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated -> {
+                buf.putInt(16)
+                FfiConverterTypeReceiveAddressPresentation.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressLoadingChanged -> {
+                buf.putInt(17)
+                FfiConverterBoolean.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressError -> {
+                buf.putInt(18)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
+                buf.putInt(19)
+                FfiConverterULong.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

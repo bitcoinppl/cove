@@ -12,7 +12,10 @@ use redb::{ReadOnlyTable, TableDefinition};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::wallet::{WalletAddressType, metadata::WalletId};
+use crate::{
+    network::Network,
+    wallet::{WalletAddressType, metadata::WalletId},
+};
 use cove_common::consts::WALLET_DATA_DIR;
 use cove_types::redb::Json;
 
@@ -38,11 +41,13 @@ pub(crate) const TABLE: TableDefinition<&'static str, Json<WalletData>> =
 pub enum WalletData {
     /// number of addresses scanned
     ScanState(ScanState),
+    ReceiveAddressCache(ReceiveAddressCache),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, uniffi::Enum)]
 pub enum WalletDataKey {
     ScanState(WalletAddressType),
+    ReceiveAddressCache,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, uniffi::Enum)]
@@ -56,6 +61,22 @@ pub enum ScanState {
 pub struct ScanningInfo {
     pub address_type: WalletAddressType,
     pub count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct ReceiveAddressCache {
+    pub derivation_index: u32,
+    pub first_shown_at_secs: u64,
+    pub wallet_id: WalletId,
+    pub network: Network,
+    pub address_type: WalletAddressType,
+}
+
+impl ReceiveAddressCache {
+    pub fn with_visible_window_start(mut self, now_secs: u64) -> Self {
+        self.first_shown_at_secs = now_secs;
+        self
+    }
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -140,6 +161,24 @@ impl WalletDataDb {
         self.set(key, value)
     }
 
+    pub fn get_receive_address_cache(&self) -> Result<Option<ReceiveAddressCache>> {
+        let value = self.get(WalletDataKey::ReceiveAddressCache)?;
+
+        let Some(WalletData::ReceiveAddressCache(cache)) = value else {
+            return Ok(None);
+        };
+
+        Ok(Some(cache))
+    }
+
+    pub fn set_receive_address_cache(&self, cache: ReceiveAddressCache) -> Result<()> {
+        self.set(WalletDataKey::ReceiveAddressCache, WalletData::ReceiveAddressCache(cache))
+    }
+
+    pub fn delete_receive_address_cache(&self) -> Result<()> {
+        self.delete(WalletDataKey::ReceiveAddressCache)
+    }
+
     fn get(&self, key: WalletDataKey) -> Result<Option<WalletData>> {
         let table = self.read_table()?;
 
@@ -164,6 +203,29 @@ impl WalletDataDb {
             })?;
 
             table.insert(key.as_str(), value).map_err(|error| Error::Save(error.to_string()))?;
+        }
+
+        write_txn.commit().map_err(|error| Error::DatabaseAccess {
+            id: self.id.clone(),
+            error: error.to_string(),
+        })?;
+
+        Ok(())
+    }
+
+    fn delete(&self, key: WalletDataKey) -> Result<()> {
+        let write_txn = self.db.begin_write().map_err(|error| Error::DatabaseAccess {
+            id: self.id.clone(),
+            error: error.to_string(),
+        })?;
+
+        {
+            let mut table = write_txn.open_table(TABLE).map_err(|error| Error::TableAccess {
+                id: self.id.clone(),
+                error: error.to_string(),
+            })?;
+
+            table.remove(key.as_str()).map_err(|error| Error::Save(error.to_string()))?;
         }
 
         write_txn.commit().map_err(|error| Error::DatabaseAccess {
@@ -235,6 +297,7 @@ impl WalletDataKey {
             Self::ScanState(WalletAddressType::NativeSegwit) => "scan_state_native_segwit",
             Self::ScanState(WalletAddressType::WrappedSegwit) => "scan_state_wrapped_segwit",
             Self::ScanState(WalletAddressType::Legacy) => "scan_state_legacy",
+            Self::ReceiveAddressCache => "receive_address_cache",
         }
     }
 }
@@ -262,5 +325,75 @@ pub(crate) mod test_support {
         let db =
             WalletDataDb::new_with_db_location(id, tmp.path()).expect("failed to create test db");
         (db, tmp)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn receive_address_cache_round_trips() {
+        let wallet_id = WalletId::preview_new_random();
+        let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id.clone());
+        let cache = ReceiveAddressCache {
+            derivation_index: 7,
+            first_shown_at_secs: 1_700_000_000,
+            wallet_id,
+            network: Network::Signet,
+            address_type: WalletAddressType::NativeSegwit,
+        };
+
+        db.set_receive_address_cache(cache.clone()).unwrap();
+
+        assert_eq!(db.get_receive_address_cache().unwrap(), Some(cache));
+    }
+
+    #[test]
+    fn receive_address_cache_visible_window_start_updates_timer_only() {
+        let wallet_id = WalletId::preview_new_random();
+        let cache = ReceiveAddressCache {
+            derivation_index: 7,
+            first_shown_at_secs: 1_700_000_000,
+            wallet_id: wallet_id.clone(),
+            network: Network::Signet,
+            address_type: WalletAddressType::NativeSegwit,
+        };
+
+        let reset = cache.with_visible_window_start(1_700_000_300);
+
+        assert_eq!(reset.derivation_index, 7);
+        assert_eq!(reset.first_shown_at_secs, 1_700_000_300);
+        assert_eq!(reset.wallet_id, wallet_id);
+        assert_eq!(reset.network, Network::Signet);
+        assert_eq!(reset.address_type, WalletAddressType::NativeSegwit);
+    }
+
+    #[test]
+    fn delete_receive_address_cache_clears_cache() {
+        let wallet_id = WalletId::preview_new_random();
+        let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id.clone());
+        let cache = ReceiveAddressCache {
+            derivation_index: 7,
+            first_shown_at_secs: 1_700_000_000,
+            wallet_id,
+            network: Network::Signet,
+            address_type: WalletAddressType::NativeSegwit,
+        };
+
+        db.set_receive_address_cache(cache).unwrap();
+        db.delete_receive_address_cache().unwrap();
+
+        assert_eq!(db.get_receive_address_cache().unwrap(), None);
+    }
+
+    #[test]
+    fn delete_missing_receive_address_cache_succeeds() {
+        let wallet_id = WalletId::preview_new_random();
+        let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
+
+        db.delete_receive_address_cache().unwrap();
+
+        assert_eq!(db.get_receive_address_cache().unwrap(), None);
     }
 }

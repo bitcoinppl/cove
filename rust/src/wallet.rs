@@ -608,6 +608,26 @@ impl Wallet {
         Ok(address_info_with_derivation)
     }
 
+    pub fn receive_address_at_index(&self, index: u32) -> AddressInfoWithDerivation {
+        let address_info = AddressInfo::from(self.bdk.peek_address(KeychainKind::External, index));
+        let public_descriptor = self.bdk.public_descriptor(KeychainKind::External);
+        let derivation_path = public_descriptor.derivation_path().ok();
+
+        AddressInfoWithDerivation::new(address_info, derivation_path)
+    }
+
+    pub fn receive_address_is_unused(&self, index: u32) -> bool {
+        self.bdk.list_unused_addresses(KeychainKind::External).any(|address| address.index == index)
+    }
+
+    pub fn mark_receive_address_used(&mut self, index: u32) -> Result<(), WalletError> {
+        if self.bdk.mark_used(KeychainKind::External, index) {
+            self.persist()?;
+        }
+
+        Ok(())
+    }
+
     pub fn persist(&mut self) -> Result<(), WalletError> {
         self.bdk.persist(&mut self.db.lock()).map_err_str(WalletError::PersistError)?;
 

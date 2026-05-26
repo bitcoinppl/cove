@@ -114,7 +114,6 @@ impl EsploraClient {
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {
         let stats = self.client.get_address_stats(&address).await.map_err(Error::EsploraAddress)?;
-
-        Ok(stats.chain_stats.tx_count > 0)
+        Ok(stats.chain_stats.tx_count > 0 || stats.mempool_stats.tx_count > 0)
     }
 }

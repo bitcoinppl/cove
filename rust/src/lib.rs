@@ -57,6 +57,7 @@ mod node_connect;
 mod pending_wallet;
 mod push_tx;
 mod qr_scanner;
+mod receive_address_watcher;
 mod reporting;
 mod seed_qr;
 mod send_flow;
