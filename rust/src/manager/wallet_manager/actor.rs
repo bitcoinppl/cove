@@ -832,6 +832,8 @@ impl WalletActor {
         self.receive_address.set_visible(state.clone());
         self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
 
+        // reused addresses only get an open-time activity check; later payments rotate the cache
+        // through the next open-time check or regular wallet sync instead of a dedicated watcher
         self.stop_receive_address_watcher();
         self.start_delayed_receive_address_activity_check(request_id, derivation_index);
 

@@ -1,3 +1,6 @@
+//! Watches the cached receive address so payment activity can rotate future receive requests to a
+//! fresh address before the next regular wallet sync
+
 use std::{sync::Arc, time::Duration};
 
 use act_zero::{Actor, ActorError, ActorResult, Addr, AddrLike, Produces, WeakAddr, call, send};
