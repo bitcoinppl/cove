@@ -432,6 +432,21 @@ mod tests {
     }
 
     #[test]
+    fn backup_duplicate_key_allows_existing_hot_and_incoming_cold_different_account() {
+        let existing_metadata = metadata("Existing hot account 0", WalletType::Hot);
+        let existing_backup = backup(&existing_metadata, Some(descriptors(0)));
+        let incoming_metadata = metadata("Incoming cold account 1", WalletType::Cold);
+        let incoming_backup = backup(&incoming_metadata, Some(descriptors(1)));
+
+        let mut existing = ExistingWalletIdentitySet::default();
+        existing.insert(identity_key_for_backup(&existing_metadata, &existing_backup).unwrap());
+
+        let incoming_key = identity_key_for_backup(&incoming_metadata, &incoming_backup).unwrap();
+
+        assert!(!existing.contains(&incoming_key));
+    }
+
+    #[test]
     fn backup_duplicate_key_uses_wallet_id_when_no_identity_or_fingerprint() {
         let mut existing_metadata = WalletMetadata::preview_new();
         existing_metadata.master_fingerprint = None;

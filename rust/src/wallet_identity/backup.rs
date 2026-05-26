@@ -10,7 +10,7 @@ pub(crate) fn identity_key_for_backup(
     if metadata.wallet_type == WalletType::Hot
         && let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied()
     {
-        return Ok(WalletIdentityKey::Fingerprint {
+        return Ok(WalletIdentityKey::HotFingerprint {
             fingerprint,
             network: metadata.network,
             mode: metadata.wallet_mode,

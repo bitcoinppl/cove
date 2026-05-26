@@ -20,6 +20,11 @@ pub(crate) enum WalletIdentityKey {
         network: Network,
         mode: WalletMode,
     },
+    HotFingerprint {
+        fingerprint: Fingerprint,
+        network: Network,
+        mode: WalletMode,
+    },
     WalletId {
         id: WalletId,
         network: Network,
@@ -31,7 +36,8 @@ pub(crate) enum WalletIdentityKey {
 pub(crate) struct ExistingWalletIdentitySet {
     public_identities: HashSet<(PublicWalletIdentity, Network, WalletMode)>,
     public_identity_fingerprints: HashSet<(Fingerprint, Network, WalletMode)>,
-    fingerprints: HashSet<(Fingerprint, Network, WalletMode)>,
+    degraded_fingerprints: HashSet<(Fingerprint, Network, WalletMode)>,
+    hot_fingerprints: HashSet<(Fingerprint, Network, WalletMode)>,
     wallet_ids: HashSet<(WalletId, Network, WalletMode)>,
 }
 
@@ -48,25 +54,31 @@ impl ExistingWalletIdentitySet {
                 let public_identity_exists =
                     self.public_identities.contains(&(identity.clone(), *network, *mode));
 
-                let fingerprint_exists = fingerprint.is_some_and(|fingerprint| {
-                    self.fingerprints.contains(&(fingerprint, *network, *mode))
+                let degraded_fingerprint_exists = fingerprint.is_some_and(|fingerprint| {
+                    self.degraded_fingerprints.contains(&(fingerprint, *network, *mode))
                 });
 
                 let wallet_id_exists = wallet_id
                     .as_ref()
                     .is_some_and(|id| self.wallet_ids.contains(&(id.clone(), *network, *mode)));
 
-                public_identity_exists || fingerprint_exists || wallet_id_exists
+                public_identity_exists || degraded_fingerprint_exists || wallet_id_exists
             }
 
-            WalletIdentityKey::Fingerprint { fingerprint, network, mode } => {
-                let fingerprint_exists =
-                    self.fingerprints.contains(&(*fingerprint, *network, *mode));
+            WalletIdentityKey::Fingerprint { fingerprint, network, mode }
+            | WalletIdentityKey::HotFingerprint { fingerprint, network, mode } => {
+                let degraded_fingerprint_exists =
+                    self.degraded_fingerprints.contains(&(*fingerprint, *network, *mode));
 
                 let public_identity_fingerprint_exists =
                     self.public_identity_fingerprints.contains(&(*fingerprint, *network, *mode));
 
-                fingerprint_exists || public_identity_fingerprint_exists
+                let hot_fingerprint_exists =
+                    self.hot_fingerprints.contains(&(*fingerprint, *network, *mode));
+
+                degraded_fingerprint_exists
+                    || public_identity_fingerprint_exists
+                    || hot_fingerprint_exists
             }
 
             WalletIdentityKey::WalletId { id, network, mode } => {
@@ -96,7 +108,11 @@ impl ExistingWalletIdentitySet {
             }
 
             WalletIdentityKey::Fingerprint { fingerprint, network, mode } => {
-                self.fingerprints.insert((fingerprint, network, mode));
+                self.degraded_fingerprints.insert((fingerprint, network, mode));
+            }
+
+            WalletIdentityKey::HotFingerprint { fingerprint, network, mode } => {
+                self.hot_fingerprints.insert((fingerprint, network, mode));
             }
 
             WalletIdentityKey::WalletId { id, network, mode } => {
@@ -116,7 +132,10 @@ pub(crate) mod test_support {
 
     impl ExistingWalletIdentitySetTestExt for ExistingWalletIdentitySet {
         fn len(&self) -> usize {
-            self.public_identities.len() + self.fingerprints.len() + self.wallet_ids.len()
+            self.public_identities.len()
+                + self.degraded_fingerprints.len()
+                + self.hot_fingerprints.len()
+                + self.wallet_ids.len()
         }
     }
 }

@@ -56,6 +56,14 @@ fn existing_wallet_identity_key(
     }
 
     if let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied() {
+        if metadata.wallet_type == WalletType::Hot {
+            return Ok(WalletIdentityKey::HotFingerprint {
+                fingerprint,
+                network: metadata.network,
+                mode: metadata.wallet_mode,
+            });
+        }
+
         return Ok(WalletIdentityKey::Fingerprint {
             fingerprint,
             network: metadata.network,
