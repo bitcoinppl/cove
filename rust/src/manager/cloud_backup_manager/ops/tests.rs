@@ -5044,7 +5044,11 @@ async fn manual_verification_clears_interactive_state_when_awaiting_upload_confi
     wait_for_test_condition(
         Duration::from_secs(2),
         "verification awaits upload confirmation",
-        || manager.pending_verification_completion().is_some(),
+        || {
+            let state = manager.model_snapshot();
+            manager.pending_verification_completion().is_some()
+                && state.pending_upload_verification == PendingUploadVerificationState::Confirming
+        },
     )
     .await;
 
