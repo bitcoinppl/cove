@@ -1778,9 +1778,9 @@ impl WalletActor {
 
     async fn sync_receive_address_now(&mut self, derivation_index: u32) -> Result<(), Error> {
         let (node, graph, sync_request) = self.receive_address_sync_inputs(derivation_index);
-        let node_client = NodeClient::new(&node).await.map_err(|error| {
-            Error::NodeConnectionFailed(format!("failed to create node client: {error}"))
-        })?;
+        let node_client = NodeClient::new(&node)
+            .await
+            .map_err_prefix("failed to create node client", Error::NodeConnectionFailed)?;
 
         let sync_result =
             node_client.sync(&graph, sync_request).await.map_err_str(Error::ReceiveAddressError)?;
@@ -1887,9 +1887,9 @@ impl WalletActor {
         let node_client = self.node_client.as_ref();
         if node_client.is_none() {
             let node = Database::global().global_config.selected_node();
-            let node_client = NodeClient::new(&node).await.map_err(|err| {
-                Error::NodeConnectionFailed(format!("failed to create node client: {err}"))
-            })?;
+            let node_client = NodeClient::new(&node)
+                .await
+                .map_err_prefix("failed to create node client", Error::NodeConnectionFailed)?;
 
             self.node_client = Some(node_client);
         }

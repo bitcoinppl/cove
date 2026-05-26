@@ -470,7 +470,7 @@ impl WalletScanWorker {
                         db.set_scan_state(wallet_type, ScanState::Completed)
                             .expect("save scan state");
 
-                        call!(parent.mark_limit_reached(wallet_type));
+                        call!(parent.mark_limit_reached(wallet_type)).await?;
                         break;
                     }
                 }

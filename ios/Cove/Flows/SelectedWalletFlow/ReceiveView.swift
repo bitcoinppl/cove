@@ -121,16 +121,23 @@ struct ReceiveView: View {
         do {
             await MainActor.run { isRefreshing = true }
             let state = try await manager.rust.refreshExpiredReceiveAddress(requestId: requestId)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                await MainActor.run { isRefreshing = false }
+                return
+            }
 
             await MainActor.run {
                 manager.receiveAddressState = state
                 isRefreshing = false
             }
         } catch is CancellationError {
+            await MainActor.run { isRefreshing = false }
             return
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                await MainActor.run { isRefreshing = false }
+                return
+            }
 
             await MainActor.run { isRefreshing = false }
             Log.error("Unable to refresh receive address: \(error)")

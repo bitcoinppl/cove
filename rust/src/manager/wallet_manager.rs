@@ -258,7 +258,7 @@ pub enum WalletManagerError {
     #[error("Wallet database corrupted for {id}: {error}")]
     DatabaseCorruption { id: WalletId, error: String },
 
-    #[error("Unable to update receive address: {0}")]
+    #[error("Receive address error: {0}")]
     ReceiveAddressError(String),
 }
 
