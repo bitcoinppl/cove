@@ -1823,7 +1823,10 @@ impl WalletActor {
         derivation_index: u32,
         result: Result<SyncResponse, NodeError>,
     ) -> ActorResult<()> {
-        let sync_result = result?;
+        let sync_result = result
+            .inspect_err(|error| warn!("Address sync failed index={derivation_index}: {error}"))
+            .map_err_str(Error::ReceiveAddressError)?;
+
         self.wallet.bdk.apply_update(sync_result)?;
 
         if !self.receive_address.is_current(request_id) {
