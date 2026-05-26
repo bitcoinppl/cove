@@ -61,6 +61,8 @@ class WalletManager :
     // cached transaction details (observable for Compose)
     val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
 
+    var receiveAddressState by mutableStateOf<ReceiveAddressState?>(null)
+
     // scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String? by mutableStateOf(null)
 
@@ -318,6 +320,16 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
                 AppManager.getInstance().alertState = TaggedItem(AppAlertState.HotWalletKeyMissing(message.v1))
+            }
+
+            is WalletManagerReconcileMessage.ReceiveAddressUpdated -> {
+                receiveAddressState = message.v1
+            }
+
+            is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
+                if (receiveAddressState?.requestId == message.v1) {
+                    receiveAddressState = null
+                }
             }
         }
     }

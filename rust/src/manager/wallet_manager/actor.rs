@@ -1,11 +1,20 @@
 use crate::{
-    database::{Database, wallet_data::WalletDataDb},
+    database::{
+        Database,
+        wallet_data::{ReceiveAddressCache, WalletDataDb},
+    },
     historical_price_service::HistoricalPriceService,
-    manager::wallet_manager::{Error, SendFlowErrorAlert, WalletManagerError},
+    manager::wallet_manager::{
+        Error, SendFlowErrorAlert, WalletManagerError,
+        receive_address::{
+            REUSE_WINDOW, ReceiveAddressSession, ReceiveAddressState, ReceiveAddressStatus,
+            RefreshExpiredAddressDecision,
+        },
+    },
     mnemonic,
     node::{
         Node,
-        client::{NodeClient, NodeClientOptions},
+        client::{Error as NodeError, NodeClient, NodeClientOptions},
         client_builder::NodeClientBuilder,
     },
     transaction::{ConfirmedTransaction, FeeRate, Transaction, TransactionDetails, TxId},
@@ -39,7 +48,6 @@ use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_common::consts::{GAP_LIMIT, MIN_SEND_AMOUNT};
 use cove_tokio::FutureTimeoutExt as _;
 use cove_types::{
-    address::AddressInfoWithDerivation,
     confirm::{AddressAndAmount, ConfirmDetails, ExtraItem, InputOutputDetails, SplitOutput},
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
     utxo::{UtxoList, UtxoType},
@@ -59,6 +67,8 @@ use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
 use super::{SingleOrMany, WalletManagerReconcileMessage};
 
+const RECEIVE_ADDRESS_FRESHNESS_TIMEOUT: Duration = Duration::from_millis(400);
+
 #[derive(Debug)]
 pub struct WalletActor {
     pub addr: WeakAddr<Self>,
@@ -68,6 +78,7 @@ pub struct WalletActor {
 
     pub db: WalletDataDb,
     pub state: ActorState,
+    pub receive_address: ReceiveAddressSession,
 
     seed: u64,
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
@@ -171,7 +182,7 @@ impl WalletActor {
     pub fn new(
         wallet: Wallet,
         reconciler: Sender<SingleOrMany>,
-    ) -> std::result::Result<Self, crate::database::wallet_data::WalletDataError> {
+    ) -> Result<Self, crate::database::wallet_data::WalletDataError> {
         let db = WalletDataDb::new_or_existing(wallet.id.clone())?;
         let seed = rand::rng().random();
 
@@ -184,6 +195,7 @@ impl WalletActor {
             last_scan_finished: None,
             last_height_fetched: None,
             state: ActorState::Initial,
+            receive_address: ReceiveAddressSession::default(),
             transaction_watchers: HashMap::default(),
             db,
         })
@@ -731,9 +743,142 @@ impl WalletActor {
         Produces::ok(address.into())
     }
 
-    pub async fn next_address(&mut self) -> ActorResult<AddressInfoWithDerivation> {
-        let address = self.wallet.get_next_address()?;
-        Produces::ok(address)
+    pub async fn open_receive_address(&mut self) -> ActorResult<ReceiveAddressState> {
+        let now = current_epoch_secs();
+
+        let Some(cache) = self.receive_address_cache()? else {
+            let request_id = self.receive_address.next_request_id();
+            return self.open_fresh_receive_address(request_id, now);
+        };
+
+        if !self.receive_address_cache_is_reusable(&cache, now) {
+            let request_id = self.receive_address.next_request_id();
+            return self.open_fresh_receive_address(request_id, now);
+        }
+
+        let derivation_index = cache.derivation_index;
+        let request_id = self.receive_address.next_request_id();
+
+        if !matches!(
+            self.cached_receive_address_has_activity(derivation_index).await,
+            Ok(Some(true))
+        ) {
+            return self.open_reusable_receive_address(cache, request_id, now).await;
+        }
+
+        if let Err(error) = self.sync_receive_address_now(derivation_index).await {
+            warn!("Failed to sync used receive address index={derivation_index}: {error}");
+            self.wallet.mark_receive_address_used(derivation_index)?;
+            self.notify_wallet_balance_and_transactions().await;
+
+            self.start_targeted_receive_address_sync(request_id, derivation_index);
+        }
+
+        self.open_fresh_receive_address(request_id, now)
+    }
+
+    fn receive_address_cache_is_reusable(
+        &self,
+        cache: &ReceiveAddressCache,
+        now_secs: u64,
+    ) -> bool {
+        let Some(expires_at_secs) = cache.first_shown_at_secs.checked_add(REUSE_WINDOW.as_secs())
+        else {
+            return false;
+        };
+
+        cache.address_type == self.wallet.metadata.address_type
+            && cache.first_shown_at_secs <= now_secs
+            && now_secs < expires_at_secs
+            && self.wallet.receive_address_is_unused(cache.derivation_index)
+    }
+
+    fn receive_address_cache(&self) -> Result<Option<ReceiveAddressCache>, Error> {
+        let cache = self.db.get_receive_address_cache().map_err_str(Error::ReceiveAddressError)?;
+
+        Ok(cache.filter(|cache| {
+            cache.wallet_id == self.wallet.id
+                && cache.network == self.wallet.network
+                && cache.address_type == self.wallet.metadata.address_type
+        }))
+    }
+
+    fn open_fresh_receive_address(
+        &mut self,
+        request_id: u64,
+        now: u64,
+    ) -> ActorResult<ReceiveAddressState> {
+        let state = self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh)?;
+
+        Produces::ok(state)
+    }
+
+    async fn open_reusable_receive_address(
+        &mut self,
+        cache: ReceiveAddressCache,
+        request_id: u64,
+        now: u64,
+    ) -> ActorResult<ReceiveAddressState> {
+        let cache = cache.with_visible_window_start(now);
+        let derivation_index = cache.derivation_index;
+        self.db.set_receive_address_cache(cache).map_err_str(Error::ReceiveAddressError)?;
+
+        let address = self.wallet.receive_address_at_index(derivation_index);
+        let state =
+            ReceiveAddressState::reusable(request_id, address, ReceiveAddressStatus::Reused, now);
+        self.receive_address.set_visible(state.clone());
+        self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
+
+        self.start_delayed_receive_address_activity_check(request_id, derivation_index);
+
+        Produces::ok(state)
+    }
+
+    pub async fn create_new_receive_address(&mut self) -> ActorResult<ReceiveAddressState> {
+        let request_id = self.receive_address.next_request_id();
+        let now = current_epoch_secs();
+        let state = self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh)?;
+
+        Produces::ok(state)
+    }
+
+    pub async fn refresh_expired_receive_address(
+        &mut self,
+        request_id: u64,
+    ) -> ActorResult<ReceiveAddressState> {
+        let now = current_epoch_secs();
+        match self.receive_address.refresh_expired_decision(request_id, now) {
+            RefreshExpiredAddressDecision::Rotate => {}
+            RefreshExpiredAddressDecision::ReturnVisible(state) => return Produces::ok(state),
+            RefreshExpiredAddressDecision::MissingVisibleState => {
+                return Err(Error::ReceiveAddressError(
+                    "receive request has no visible address".into(),
+                )
+                .into());
+            }
+        }
+
+        let state =
+            match self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh) {
+                Ok(state) => state,
+                Err(error) => {
+                    let visible = self.receive_address.visible_state().ok_or(
+                        Error::ReceiveAddressError("receive request has no visible address".into()),
+                    )?;
+                    let state = visible.refresh_failed(error.to_string());
+                    self.receive_address.set_visible(state.clone());
+                    self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
+
+                    state
+                }
+            };
+
+        Produces::ok(state)
+    }
+
+    pub async fn close_receive_address(&mut self, request_id: u64) {
+        self.receive_address.close(request_id);
+        self.send(WalletManagerReconcileMessage::ReceiveAddressClosed(request_id));
     }
 
     #[into_actor_result]
@@ -938,8 +1083,7 @@ impl WalletActor {
         // wait 30 seconds run the scan again and then remove the watcher
         // sanity check to make sure the transaction was picked up by the wallet
         // and no extra watchers were created in the meantime
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
+        self.addr.send_fut_with(|addr| async move {
             tokio::time::sleep(Duration::from_secs(30)).await;
             send!(addr.perform_scan_for_single_tx_id(tx_id));
             send!(addr.remove_watcher_for_txn(tx_id));
@@ -973,9 +1117,7 @@ impl WalletActor {
 
         let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
         debug!("done scan for spk in {}s", now - start);
-
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
+        self.addr.send_fut_with(|addr| async move {
             let scan_result = node_client.sync(&graph, sync_request).await;
 
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
@@ -1164,9 +1306,7 @@ impl WalletActor {
         static FULL_SCAN_TYPE: FullScanType = FullScanType::Initial;
 
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
-
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
+        self.addr.send_fut_with(|addr| async move {
             let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
             let full_scan_result = node_client
@@ -1191,9 +1331,7 @@ impl WalletActor {
         static FULL_SCAN_TYPE: FullScanType = FullScanType::Expanded;
 
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
-
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
+        self.addr.send_fut_with(|addr| async move {
             let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
             let full_scan_result = node_client
@@ -1234,9 +1372,7 @@ impl WalletActor {
             .unwrap();
 
         self.state = ActorState::PerformingFullScan(scan_type);
-
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
+        self.addr.send_fut_with(|addr| async move {
             let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
             let full_scan_result = node_client
@@ -1273,9 +1409,7 @@ impl WalletActor {
 
         let full_scan_request = self.wallet.bdk.start_full_scan().build();
         let graph = self.wallet.bdk.tx_graph().clone();
-
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
+        self.addr.send_fut_with(|addr| async move {
             let scan_result =
                 node_client.start_wallet_scan(&graph, full_scan_request, GAP_LIMIT as usize).await;
 
@@ -1291,7 +1425,7 @@ impl WalletActor {
 
     async fn handle_full_scan_complete(
         &mut self,
-        full_scan_result: Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
+        full_scan_result: Result<FullScanResponse<KeychainKind>, NodeError>,
         full_scan_type: FullScanType,
     ) -> ActorResult<()> {
         debug!("applying full scan result for {full_scan_type:?}");
@@ -1328,7 +1462,7 @@ impl WalletActor {
 
     async fn handle_incremental_scan_complete(
         &mut self,
-        scan_result: Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
+        scan_result: Result<FullScanResponse<KeychainKind>, NodeError>,
     ) -> ActorResult<()> {
         if scan_result.is_err() {
             self.state = ActorState::FailedIncrementalScan;
@@ -1346,7 +1480,7 @@ impl WalletActor {
 
     async fn update_sync_state_and_send_transactions(
         &mut self,
-        scan_result: Result<SyncResponse, crate::node::client::Error>,
+        scan_result: Result<SyncResponse, NodeError>,
     ) -> ActorResult<()> {
         if scan_result.is_err() {
             self.state = ActorState::FailedSyncScan;
@@ -1355,6 +1489,7 @@ impl WalletActor {
         let scan_result: SyncResponse = scan_result?;
         self.wallet.bdk.apply_update(scan_result)?;
         self.wallet.persist()?;
+        self.update_visible_receive_address_payment_status(None);
 
         // get and send transactions
         let transactions = self.transactions().await?.await?;
@@ -1373,6 +1508,7 @@ impl WalletActor {
 
         // reload the wallet from the file storage
         self.reload_wallet();
+        self.update_visible_receive_address_payment_status(None);
 
         // get and send wallet balance
         let balance = self.balance().await?.await.map_err_str(Error::WalletBalanceError)?;
@@ -1476,6 +1612,203 @@ impl WalletActor {
         Some(())
     }
 
+    fn new_receive_address_state(
+        &mut self,
+        request_id: u64,
+        now: u64,
+        status: ReceiveAddressStatus,
+    ) -> Result<ReceiveAddressState, Error> {
+        let address = self.wallet.get_next_address()?;
+        let cache = ReceiveAddressCache {
+            derivation_index: address.info.index,
+            first_shown_at_secs: now,
+            wallet_id: self.wallet.id.clone(),
+            network: self.wallet.network,
+            address_type: self.wallet.metadata.address_type,
+        };
+
+        self.db.set_receive_address_cache(cache).map_err_str(Error::ReceiveAddressError)?;
+
+        let state = ReceiveAddressState::reusable(request_id, address, status, now);
+        self.receive_address.set_visible(state.clone());
+        self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
+
+        Ok(state)
+    }
+
+    async fn cached_receive_address_has_activity(
+        &mut self,
+        derivation_index: u32,
+    ) -> Result<Option<bool>, Error> {
+        let node_client = self.node_client().await?.clone();
+        let address =
+            self.wallet.bdk.peek_address(KeychainKind::External, derivation_index).address;
+
+        match node_client
+            .check_address_for_txn(address)
+            .with_timeout(RECEIVE_ADDRESS_FRESHNESS_TIMEOUT)
+            .await
+        {
+            Ok(Ok(has_activity)) => Ok(Some(has_activity)),
+            Ok(Err(error)) => Err(Error::NodeConnectionFailed(error.to_string())),
+            Err(_) => Ok(None),
+        }
+    }
+
+    fn start_delayed_receive_address_activity_check(
+        &mut self,
+        request_id: u64,
+        derivation_index: u32,
+    ) {
+        let node = Database::global().global_config.selected_node();
+        let address =
+            self.wallet.bdk.peek_address(KeychainKind::External, derivation_index).address;
+        self.addr.send_fut_with(|addr| async move {
+            let result = match NodeClient::new(&node).await {
+                Ok(node_client) => node_client.check_address_for_txn(address).await,
+                Err(error) => Err(error),
+            };
+
+            send!(addr.handle_receive_address_activity_result(
+                request_id,
+                derivation_index,
+                result
+            ));
+        });
+    }
+
+    async fn handle_receive_address_activity_result(
+        &mut self,
+        request_id: u64,
+        derivation_index: u32,
+        result: Result<bool, NodeError>,
+    ) -> ActorResult<()> {
+        if !self.receive_address.is_current(request_id) {
+            return Produces::ok(());
+        }
+
+        if result.unwrap_or(false) {
+            self.start_targeted_receive_address_sync(request_id, derivation_index);
+        }
+
+        Produces::ok(())
+    }
+
+    fn start_targeted_receive_address_sync(&mut self, request_id: u64, derivation_index: u32) {
+        let (node, graph, sync_request) = self.receive_address_sync_inputs(derivation_index);
+        self.addr.send_fut_with(|addr| async move {
+            let result = match NodeClient::new(&node).await {
+                Ok(node_client) => node_client.sync(&graph, sync_request).await,
+                Err(error) => Err(error),
+            };
+
+            send!(addr.handle_receive_address_sync_result(request_id, derivation_index, result));
+        });
+    }
+
+    async fn sync_receive_address_now(&mut self, derivation_index: u32) -> Result<(), Error> {
+        let (node, graph, sync_request) = self.receive_address_sync_inputs(derivation_index);
+        let node_client = NodeClient::new(&node).await.map_err(|error| {
+            Error::NodeConnectionFailed(format!("failed to create node client: {error}"))
+        })?;
+
+        let sync_result =
+            node_client.sync(&graph, sync_request).await.map_err_str(Error::ReceiveAddressError)?;
+        self.wallet.bdk.apply_update(sync_result).map_err_str(Error::ReceiveAddressError)?;
+
+        if self.wallet.receive_address_is_unused(derivation_index) {
+            self.wallet.mark_receive_address_used(derivation_index)?;
+        } else {
+            self.wallet.persist()?;
+        }
+
+        self.notify_wallet_balance_and_transactions().await;
+
+        Ok(())
+    }
+
+    fn receive_address_sync_inputs(
+        &mut self,
+        derivation_index: u32,
+    ) -> (Node, TxGraph, SyncRequest<(KeychainKind, u32)>) {
+        let node = Database::global().global_config.selected_node();
+        let address =
+            self.wallet.bdk.peek_address(KeychainKind::External, derivation_index).address;
+        let script_pubkey = address.script_pubkey();
+        let chain_tip = self.wallet.bdk.local_chain().tip();
+
+        let sync_request = SyncRequest::builder()
+            .chain_tip(chain_tip)
+            .spks_with_indexes([((KeychainKind::External, derivation_index), script_pubkey)])
+            .build();
+
+        let graph = self.wallet.bdk.tx_graph().clone();
+
+        (node, graph, sync_request)
+    }
+
+    async fn handle_receive_address_sync_result(
+        &mut self,
+        request_id: u64,
+        derivation_index: u32,
+        result: Result<SyncResponse, NodeError>,
+    ) -> ActorResult<()> {
+        let sync_result = result?;
+        self.wallet.bdk.apply_update(sync_result)?;
+
+        if !self.receive_address.is_current(request_id) {
+            self.wallet.persist()?;
+            self.notify_wallet_balance_and_transactions().await;
+
+            return Produces::ok(());
+        }
+
+        if let Some(state) = self.receive_address.visible_state()
+            && state.address.info.index == derivation_index
+            && state.status != ReceiveAddressStatus::PaymentReceived
+            && self.wallet.receive_address_is_unused(state.address.info.index)
+        {
+            self.wallet.mark_receive_address_used(state.address.info.index)?;
+        }
+
+        self.wallet.persist()?;
+
+        self.update_visible_receive_address_payment_status(Some(derivation_index));
+        self.notify_wallet_balance_and_transactions().await;
+
+        Produces::ok(())
+    }
+
+    async fn notify_wallet_balance_and_transactions(&mut self) {
+        let balance = self.wallet.balance();
+        self.send(WalletManagerReconcileMessage::WalletBalanceChanged(balance.into()));
+
+        let transactions = self.do_transactions().await;
+        self.send(WalletManagerReconcileMessage::UpdatedTransactions(transactions));
+    }
+
+    fn update_visible_receive_address_payment_status(
+        &mut self,
+        derivation_index: Option<u32>,
+    ) -> bool {
+        let Some(state) = self.receive_address.visible_state() else {
+            return false;
+        };
+
+        if state.status == ReceiveAddressStatus::PaymentReceived
+            || derivation_index.is_some_and(|index| state.address.info.index != index)
+            || self.wallet.receive_address_is_unused(state.address.info.index)
+        {
+            return false;
+        }
+
+        let state = state.payment_received();
+        self.receive_address.set_visible(state.clone());
+        self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state));
+
+        true
+    }
+
     async fn node_client(&mut self) -> Result<&NodeClient, Error> {
         let node_client = self.node_client.as_ref();
         if node_client.is_none() {
@@ -1494,6 +1827,10 @@ impl WalletActor {
 fn elapsed_secs_since(earlier: Duration) -> u64 {
     let now = UNIX_EPOCH.elapsed().unwrap_or(earlier);
     now.saturating_sub(earlier).as_secs()
+}
+
+fn current_epoch_secs() -> u64 {
+    UNIX_EPOCH.elapsed().unwrap_or_default().as_secs()
 }
 
 impl WalletActor {

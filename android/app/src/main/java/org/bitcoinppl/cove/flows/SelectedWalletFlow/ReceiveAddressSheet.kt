@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,8 +24,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,7 +46,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.WalletManager
@@ -51,7 +60,11 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.ui.theme.title3
-import org.bitcoinppl.cove_core.types.AddressInfoWithDerivation
+import org.bitcoinppl.cove_core.ReceiveAddressCopyPolicy
+import org.bitcoinppl.cove_core.ReceiveAddressPresentation
+import org.bitcoinppl.cove_core.receiveAddressPresentation
+
+private val receiveAddressCloseScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,15 +77,29 @@ fun ReceiveAddressSheet(
     val scope = rememberCoroutineScope()
     val tag = "ReceiveAddressSheet"
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var addressInfo by remember { mutableStateOf<AddressInfoWithDerivation?>(null) }
+    val receiveState = manager.receiveAddressState
+    val addressInfo = receiveState?.address
     var isLoading by remember { mutableStateOf(true) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    var nowSecs by remember { mutableStateOf(currentEpochSeconds()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showPaidCopyConfirmation by remember { mutableStateOf(false) }
+    val presentation = receiveAddressPresentation(receiveState, nowSecs.toULong(), isRefreshing)
 
-    // load initial address on mount
+    fun closeReceiveAddress() {
+        receiveState?.requestId?.let { requestId ->
+            receiveAddressCloseScope.launch {
+                withContext(NonCancellable) {
+                    manager.rust.closeReceiveAddress(requestId)
+                }
+            }
+        }
+    }
+
     LaunchedEffect(manager) {
         try {
             isLoading = true
-            addressInfo = manager.rust.nextAddress()
+            manager.receiveAddressState = manager.rust.openReceiveAddress()
             errorMessage = null
         } catch (e: Exception) {
             Log.e(tag, "Unable to get next address", e)
@@ -82,12 +109,52 @@ fun ReceiveAddressSheet(
         }
     }
 
-    // function to generate new address
+    LaunchedEffect(
+        receiveState?.requestId,
+        receiveState?.expiresAtSecs,
+        receiveState?.status,
+        receiveState?.refreshError,
+    ) {
+        while (true) {
+            val currentNowSecs = currentEpochSeconds()
+            nowSecs = currentNowSecs
+
+            val state = manager.receiveAddressState
+            val currentPresentation =
+                receiveAddressPresentation(state, currentNowSecs.toULong(), isRefreshing)
+            if (state != null && currentPresentation.shouldRefreshNow) {
+                try {
+                    isRefreshing = true
+                    val refreshState = state.copy(refreshError = null)
+                    manager.receiveAddressState = refreshState
+                    manager.receiveAddressState =
+                        manager.rust.refreshExpiredReceiveAddress(refreshState.requestId)
+                } catch (e: Exception) {
+                    Log.e(tag, "Unable to refresh receive address", e)
+                    val current = manager.receiveAddressState
+                    if (current?.requestId == state.requestId) {
+                        manager.receiveAddressState =
+                            current.copy(refreshError = e.message ?: "Unable to refresh address")
+                    }
+                } finally {
+                    isRefreshing = false
+                }
+            }
+
+            delay(1_000)
+        }
+    }
+
+    DisposableEffect(receiveState?.requestId) {
+        onDispose { closeReceiveAddress() }
+    }
+
     fun createNewAddress() {
         scope.launch {
             try {
                 isLoading = true
-                addressInfo = manager.rust.nextAddress()
+                isRefreshing = false
+                manager.receiveAddressState = manager.rust.createNewReceiveAddress()
                 errorMessage = null
             } catch (e: Exception) {
                 Log.e(tag, "Unable to get next address", e)
@@ -98,8 +165,7 @@ fun ReceiveAddressSheet(
         }
     }
 
-    // function to copy address to clipboard
-    fun copyAddress() {
+    fun copyVisibleAddress() {
         addressInfo?.let { info ->
             val clipboard = context.getSystemService(ClipboardManager::class.java)
             val clip = ClipData.newPlainText("Bitcoin Address", info.addressUnformatted())
@@ -113,7 +179,15 @@ fun ReceiveAddressSheet(
         }
     }
 
-    // if there's an error, show it to the user then dismiss
+    fun copyAddress() {
+        if (presentation.copyPolicy == ReceiveAddressCopyPolicy.CONFIRM_PAID_ADDRESS) {
+            showPaidCopyConfirmation = true
+            return
+        }
+
+        copyVisibleAddress()
+    }
+
     if (errorMessage != null && !isLoading) {
         LaunchedEffect(errorMessage) {
             snackbarHostState.showSnackbar(errorMessage!!)
@@ -123,7 +197,9 @@ fun ReceiveAddressSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            onDismiss()
+        },
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
@@ -133,8 +209,39 @@ fun ReceiveAddressSheet(
             addressRaw = addressInfo?.addressUnformatted(),
             derivationPath = addressInfo?.derivationPath(),
             isLoading = isLoading,
+            presentation = presentation,
             onCopyAddress = ::copyAddress,
             onCreateNewAddress = ::createNewAddress,
+        )
+    }
+
+    if (showPaidCopyConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showPaidCopyConfirmation = false },
+            title = { Text("Copy paid address?") },
+            text = {
+                Text("This address has already received funds. For better privacy, create a new address before sharing.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPaidCopyConfirmation = false
+                        copyVisibleAddress()
+                    },
+                ) {
+                    Text("Copy Anyway", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPaidCopyConfirmation = false
+                        createNewAddress()
+                    },
+                ) {
+                    Text("Create New Address")
+                }
+            },
         )
     }
 }
@@ -146,6 +253,7 @@ private fun ReceiveAddressSheetContent(
     addressRaw: String?,
     derivationPath: String?,
     isLoading: Boolean,
+    presentation: ReceiveAddressPresentation,
     onCopyAddress: () -> Unit,
     onCreateNewAddress: () -> Unit,
 ) {
@@ -231,6 +339,28 @@ private fun ReceiveAddressSheetContent(
                     }
                 }
 
+                when {
+                    presentation.copyPolicy == ReceiveAddressCopyPolicy.CONFIRM_PAID_ADDRESS -> {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Payment Received",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    presentation.countdownRemainingSecs != null || presentation.showRefreshing -> {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = countdownText(presentation),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.65f),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+
                 // derivation path (if available)
                 derivationPath?.let { path ->
                     Spacer(modifier = Modifier.height(12.dp))
@@ -275,6 +405,15 @@ private fun ReceiveAddressSheetContent(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+
+                if (presentation.showRefreshError) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Unable to refresh address",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.65f),
+                    )
+                }
             }
         }
 
@@ -307,7 +446,7 @@ private fun ReceiveAddressSheetContent(
         // create new address button
         Text(
             text = "Create New Address",
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary,
             modifier =
@@ -316,6 +455,17 @@ private fun ReceiveAddressSheetContent(
                     .clickable(enabled = !isLoading) { onCreateNewAddress() },
         )
     }
+}
+
+private fun currentEpochSeconds(): Long = System.currentTimeMillis() / 1_000
+
+private fun countdownText(presentation: ReceiveAddressPresentation): String {
+    if (presentation.showRefreshing) return "Refreshing..."
+
+    val remaining = presentation.countdownRemainingSecs ?: return ""
+    val minutes = remaining / 60UL
+    val seconds = remaining % 60UL
+    return "Auto-refresh in ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
 }
 
 @Preview(showBackground = true, heightDp = 800)
@@ -328,6 +478,14 @@ private fun ReceiveAddressSheetPreview() {
             addressRaw = "bc1qudmkykhhne1w7cn7vg8ma0y7etu0tdvvm2n6zk",
             derivationPath = "84'/0'/0'/0/6",
             isLoading = false,
+            presentation =
+                ReceiveAddressPresentation(
+                    copyPolicy = ReceiveAddressCopyPolicy.COPY,
+                    countdownRemainingSecs = 42UL,
+                    shouldRefreshNow = false,
+                    showRefreshing = false,
+                    showRefreshError = false,
+                ),
             onCopyAddress = {},
             onCreateNewAddress = {},
         )

@@ -1,4 +1,5 @@
 pub mod actor;
+pub mod receive_address;
 
 use std::{
     sync::Arc,
@@ -9,6 +10,7 @@ use act_zero::{Addr, call, send};
 use actor::WalletActor;
 use flume::Receiver;
 use parking_lot::RwLock;
+use receive_address::ReceiveAddressState;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
@@ -50,10 +52,7 @@ use crate::{
     word_validator::WordValidator,
 };
 
-use cove_types::{
-    address::AddressInfoWithDerivation,
-    confirm::{ConfirmDetails, QrDensity, SplitOutput},
-};
+use cove_types::confirm::{ConfirmDetails, QrDensity, SplitOutput};
 use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
 
 use super::{
@@ -77,7 +76,7 @@ pub enum WalletManagerReconcileMessage {
     UpdatedTransactions(Vec<Transaction>),
 
     NodeConnectionFailed(String),
-    WalletMetadataChanged(WalletMetadata),
+    WalletMetadataChanged(Box<WalletMetadata>),
     WalletBalanceChanged(Arc<Balance>),
 
     WalletError(WalletManagerError),
@@ -88,6 +87,8 @@ pub enum WalletManagerReconcileMessage {
 
     SendFlowError(SendFlowErrorAlert),
     HotWalletKeyMissing(WalletId),
+    ReceiveAddressUpdated(ReceiveAddressState),
+    ReceiveAddressClosed(u64),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -256,6 +257,9 @@ pub enum WalletManagerError {
 
     #[error("Wallet database corrupted for {id}: {error}")]
     DatabaseCorruption { id: WalletId, error: String },
+
+    #[error("Unable to update receive address: {0}")]
+    ReceiveAddressError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -924,13 +928,39 @@ impl RustWalletManager {
         Ok(number_of_confirmations.thousands_int())
     }
 
-    /// Get the next address for the wallet
     #[uniffi::method]
-    pub async fn next_address(&self) -> Result<AddressInfoWithDerivation, Error> {
-        let address =
-            call!(self.actor.next_address()).await.map_err_str(Error::NextAddressError)?;
+    pub async fn open_receive_address(&self) -> Result<ReceiveAddressState, Error> {
+        let state = call!(self.actor.open_receive_address())
+            .await
+            .map_err_str(Error::ReceiveAddressError)?;
 
-        Ok(address)
+        Ok(state)
+    }
+
+    #[uniffi::method]
+    pub async fn create_new_receive_address(&self) -> Result<ReceiveAddressState, Error> {
+        let state = call!(self.actor.create_new_receive_address())
+            .await
+            .map_err_str(Error::ReceiveAddressError)?;
+
+        Ok(state)
+    }
+
+    #[uniffi::method]
+    pub async fn refresh_expired_receive_address(
+        &self,
+        request_id: u64,
+    ) -> Result<ReceiveAddressState, Error> {
+        let state = call!(self.actor.refresh_expired_receive_address(request_id))
+            .await
+            .map_err_str(Error::ReceiveAddressError)?;
+
+        Ok(state)
+    }
+
+    #[uniffi::method]
+    pub async fn close_receive_address(&self, request_id: u64) {
+        send!(self.actor.close_receive_address(request_id));
     }
 
     /// Get address at the given index
@@ -995,7 +1025,7 @@ impl RustWalletManager {
             .map_err_debug(Error::SetWalletTypeError)?;
 
         *self.metadata.write() = metadata.clone();
-        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
+        self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
 
         CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
 
@@ -1022,7 +1052,7 @@ impl RustWalletManager {
         }
 
         *self.metadata.write() = metadata.clone();
-        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
+        self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
         CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
     }
 
@@ -1068,7 +1098,7 @@ impl RustWalletManager {
 
         Database::global().wallets.mark_wallet_as_verified(&metadata.id)?;
 
-        self.reconciler.send(Message::WalletMetadataChanged(metadata.clone()));
+        self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
 
         Ok(())
     }
@@ -1343,7 +1373,7 @@ impl RustWalletManager {
         }
 
         *self.metadata.write() = candidate.clone();
-        self.reconciler.send(Message::WalletMetadataChanged(candidate.clone()));
+        self.reconciler.send(Message::WalletMetadataChanged(Box::new(candidate.clone())));
         CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &candidate);
     }
 }

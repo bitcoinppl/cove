@@ -338,7 +338,7 @@ impl WalletScanner {
         metadata.discovery_state = discovery_state;
         db.update_metadata_discovery_state(&metadata)?;
 
-        let msg = WalletManagerReconcileMessage::WalletMetadataChanged(metadata);
+        let msg = WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(metadata));
         self.responder.send(msg.into())?;
         Produces::ok(())
     }
@@ -426,13 +426,12 @@ impl WalletScanWorker {
         let client = self.client_builder.build().await?;
         let wallet_type = self.wallet_type;
 
-        let addr = self.addr.clone();
         let scan_limit = self.scan_limit;
         let current_address = self.scan_info.count;
         let parent = self.parent.clone();
         let db = self.db.clone();
 
-        self.addr.send_fut(async move {
+        self.addr.send_fut_with(|addr| async move {
             let run_with_error = || async move {
                 let mut current_address = current_address;
 

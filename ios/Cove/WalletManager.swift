@@ -27,6 +27,8 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     /// cached transaction details
     var transactionDetails: [TxId: TransactionDetails] = [:]
 
+    var receiveAddressState: ReceiveAddressState?
+
     /// scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String?
 
@@ -228,6 +230,14 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         case let .hotWalletKeyMissing(walletId):
             AppManager.shared.alertState = .init(.hotWalletKeyMissing(walletId: walletId))
+
+        case let .receiveAddressUpdated(state):
+            self.receiveAddressState = state
+
+        case let .receiveAddressClosed(requestId):
+            if receiveAddressState?.requestId == requestId {
+                receiveAddressState = nil
+            }
         }
     }
 
