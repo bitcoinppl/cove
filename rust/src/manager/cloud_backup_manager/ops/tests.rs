@@ -6455,11 +6455,23 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
 
     let first_wallet = xpub_only_wallet_metadata();
     let second_wallet = xpub_only_wallet_metadata();
+    let sample_xpub_from_entropy = |metadata: &WalletMetadata, byte| {
+        let entropy = [byte; 16];
+        let mnemonic = Mnemonic::from_entropy(&entropy).unwrap();
+
+        crate::mnemonic::MnemonicExt::xpub(&mnemonic, metadata.network.into()).to_string()
+    };
     Keychain::global()
-        .save_wallet_xpub(&first_wallet.id, sample_xpub(&first_wallet).parse().unwrap())
+        .save_wallet_xpub(
+            &first_wallet.id,
+            sample_xpub_from_entropy(&first_wallet, 1).parse().unwrap(),
+        )
         .unwrap();
     Keychain::global()
-        .save_wallet_xpub(&second_wallet.id, sample_xpub(&second_wallet).parse().unwrap())
+        .save_wallet_xpub(
+            &second_wallet.id,
+            sample_xpub_from_entropy(&second_wallet, 2).parse().unwrap(),
+        )
         .unwrap();
 
     let first_record_id = cove_cspp::backup_data::wallet_record_id(first_wallet.id.as_ref());
