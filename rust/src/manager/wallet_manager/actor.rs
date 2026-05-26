@@ -906,6 +906,7 @@ impl WalletActor {
 
                 warn!("Failed to refresh receive address request_id={request_id}: {error}");
                 self.set_receive_address_refresh_state(ReceiveAddressRefreshState::Failed);
+                Produces::ok(())
             }
         }
     }
