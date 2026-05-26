@@ -1635,6 +1635,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_non_default_account_number(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt(
@@ -2725,6 +2727,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(`ptr`: Long,`balance`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_non_default_account_number(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations(`ptr`: Long,`blockHeight`: Int,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations_fmt(`ptr`: Long,`blockHeight`: Int,
@@ -4401,6 +4405,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 55235.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_non_default_account_number() != 54959.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations() != 6064.toShort()) {
@@ -20963,6 +20970,8 @@ public interface RustWalletManagerInterface {
     
     fun `newSendFlowManager`(`balance`: Balance): RustSendFlowManager
     
+    fun `nonDefaultAccountNumber`(): kotlin.UInt?
+    
     suspend fun `numberOfConfirmations`(`blockHeight`: kotlin.UInt): kotlin.UInt
     
     suspend fun `numberOfConfirmationsFmt`(`blockHeight`: kotlin.UInt): kotlin.String
@@ -21908,6 +21917,19 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         it,
         
         FfiConverterTypeBalance.lower(`balance`),_status)
+}
+    }
+    )
+    }
+    
+
+    override fun `nonDefaultAccountNumber`(): kotlin.UInt? {
+            return FfiConverterOptionalUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_non_default_account_number(
+        it,
+        _status)
 }
     }
     )

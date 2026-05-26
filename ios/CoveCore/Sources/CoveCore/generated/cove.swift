@@ -9097,6 +9097,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func newSendFlowManager(balance: Balance)  -> RustSendFlowManager
     
+    func nonDefaultAccountNumber()  -> UInt32?
+    
     func numberOfConfirmations(blockHeight: UInt32) async throws  -> UInt32
     
     func numberOfConfirmationsFmt(blockHeight: UInt32) async throws  -> String
@@ -9857,6 +9859,15 @@ open func newSendFlowManager(balance: Balance) -> RustSendFlowManager  {
     uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(
             self.uniffiCloneHandle(),
         FfiConverterTypeBalance_lower(balance),uniffiCallStatus
+    )
+})
+}
+    
+open func nonDefaultAccountNumber() -> UInt32?  {
+    return try!  FfiConverterOptionUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustwalletmanager_non_default_account_number(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -39498,6 +39509,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 55235) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_non_default_account_number() != 54959) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations() != 6064) {

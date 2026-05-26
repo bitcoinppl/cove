@@ -1,5 +1,5 @@
 use bdk_wallet::{
-    bitcoin::bip32::{DerivationPath, Fingerprint, Xpub},
+    bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub},
     keys::DescriptorPublicKey,
     miniscript::{Descriptor, descriptor::DescriptorType, descriptor::checksum::desc_checksum},
 };
@@ -67,6 +67,14 @@ pub trait DescriptorExt {
             Ok(DescriptorPublicKey::XPub(xpub)) => Some(xpub.xkey),
             _ => None,
         }
+    }
+
+    fn account_index(&self) -> Option<u32> {
+        let path = self.derivation_path().ok()?;
+        path.into_iter().last().and_then(|child| match child {
+            ChildNumber::Hardened { index } => Some(*index),
+            ChildNumber::Normal { .. } => None,
+        })
     }
 
     /// Format descriptor with `h` hardened notation and a matching checksum
@@ -233,6 +241,22 @@ mod tests {
             .parse()
             .unwrap();
         (ext, int)
+    }
+
+    #[test]
+    fn account_index_returns_origin_account() {
+        let desc: ExtendedDescriptor = "wpkh([817e7be0/84h/0h/1h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/0/*)"
+            .parse()
+            .unwrap();
+
+        assert_eq!(desc.account_index(), Some(1));
+    }
+
+    #[test]
+    fn account_index_returns_default_origin_account() {
+        let (desc, _) = matching_pair();
+
+        assert_eq!(desc.account_index(), Some(0));
     }
 
     #[test]
