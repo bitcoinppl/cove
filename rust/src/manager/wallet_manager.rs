@@ -960,7 +960,9 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub async fn close_receive_address(&self, request_id: u64) {
-        send!(self.actor.close_receive_address(request_id));
+        if let Err(error) = call!(self.actor.close_receive_address(request_id)).await {
+            error!("Failed to close receive address request_id={request_id}: {error}");
+        }
     }
 
     /// Get address at the given index
