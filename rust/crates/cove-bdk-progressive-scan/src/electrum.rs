@@ -269,6 +269,13 @@ where
     let headers = client.inner.batch_block_header(needed_heights.iter())?;
     let height_to_header = needed_heights.into_iter().zip(headers).collect::<HashMap<u32, _>>();
     let proofs = client.inner.batch_transaction_get_merkle(txs_with_heights.iter())?;
+    if proofs.len() != txs_with_heights.len() {
+        return Err(electrum_client::Error::Message(format!(
+            "merkle proof batch returned {} proofs for {} requested transactions",
+            proofs.len(),
+            txs_with_heights.len()
+        )));
+    }
 
     for ((txid, height), proof) in txs_with_heights.iter().copied().zip(proofs) {
         let mut header = *height_to_header.get(&(height as u32)).ok_or_else(|| {
@@ -429,6 +436,7 @@ mod tests {
         histories: Arc<Mutex<VecDeque<Vec<GetHistoryRes>>>>,
         transactions: BTreeMap<Txid, Transaction>,
         fetched_txids: Arc<Mutex<Vec<Txid>>>,
+        merkle_response_limit: Option<usize>,
     }
 
     impl FakeElectrum {
@@ -438,6 +446,7 @@ mod tests {
                 histories: Arc::new(Mutex::new(VecDeque::new())),
                 transactions: BTreeMap::new(),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                merkle_response_limit: None,
             }
         }
 
@@ -447,6 +456,7 @@ mod tests {
                 histories: Arc::new(Mutex::new(VecDeque::new())),
                 transactions: BTreeMap::new(),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                merkle_response_limit: None,
             }
         }
 
@@ -461,6 +471,7 @@ mod tests {
                 ]))),
                 transactions: BTreeMap::from([(txid, tx)]),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                merkle_response_limit: None,
             }
         }
 
@@ -474,6 +485,7 @@ mod tests {
                 ]))),
                 transactions: BTreeMap::from([(txid, tx)]),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                merkle_response_limit: None,
             }
         }
 
@@ -491,6 +503,7 @@ mod tests {
                 ]))),
                 transactions: BTreeMap::from([(txid, tx)]),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                merkle_response_limit: None,
             }
         }
 
@@ -504,7 +517,12 @@ mod tests {
                 ]))),
                 transactions: BTreeMap::new(),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                merkle_response_limit: None,
             }
+        }
+
+        fn with_merkle_response_limit(limit: usize) -> Self {
+            Self { merkle_response_limit: Some(limit), ..Self::empty_history() }
         }
 
         fn fetched_txids(&self) -> Vec<Txid> {
@@ -712,6 +730,7 @@ mod tests {
         {
             Ok(txs
                 .into_iter()
+                .take(self.merkle_response_limit.unwrap_or(usize::MAX))
                 .map(|tx| {
                     let (_, height) = *tx.borrow();
                     GetMerkleRes { block_height: height, pos: 0, merkle: Vec::new() }
@@ -782,6 +801,17 @@ mod tests {
 
         assert!(
             matches!(result, Err(electrum_client::Error::Message(message)) if message == "block header for height 2 not returned by server")
+        );
+    }
+
+    #[test]
+    fn short_merkle_batch_returns_provider_error() {
+        let client = BdkElectrumClient::new(FakeElectrum::with_merkle_response_limit(0));
+
+        let result = batch_fetch_anchors(&client, &[(txid(1), 2)]);
+
+        assert!(
+            matches!(result, Err(electrum_client::Error::Message(message)) if message == "merkle proof batch returned 0 proofs for 1 requested transactions")
         );
     }
 
