@@ -832,9 +832,7 @@ impl WalletActor {
         self.receive_address.set_visible(state.clone());
         self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
 
-        // reused addresses only get an open-time activity check; later payments rotate the cache
-        // through the next open-time check or regular wallet sync instead of a dedicated watcher
-        self.stop_receive_address_watcher();
+        self.start_receive_address_watcher(request_id, derivation_index);
         self.start_delayed_receive_address_activity_check(request_id, derivation_index);
 
         Produces::ok(state)
@@ -1753,6 +1751,7 @@ impl WalletActor {
             derivation_index,
             address,
             client_builder,
+            REUSE_WINDOW,
         );
 
         self.receive_address_watcher = Some(spawn_actor(watcher));
@@ -1762,6 +1761,17 @@ impl WalletActor {
         if let Some(watcher) = self.receive_address_watcher.take() {
             send!(watcher.stop_watching());
         }
+    }
+
+    pub async fn handle_receive_address_watcher_stopped(
+        &mut self,
+        request_id: u64,
+    ) -> ActorResult<()> {
+        if self.receive_address.is_current(request_id) {
+            self.receive_address_watcher = None;
+        }
+
+        Produces::ok(())
     }
 
     fn start_targeted_receive_address_sync(&mut self, request_id: u64, derivation_index: u32) {
