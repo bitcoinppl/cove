@@ -4,7 +4,7 @@ use zeroize::Zeroizing;
 use crate::wallet::metadata::WalletMetadata;
 use crate::wallet_identity::{
     ExistingWalletIdentitySet, WalletIdentityKey, collect_existing_wallet_identities,
-    identity_key_for_backup,
+    fallback_identity_key_for_backup, identity_key_for_backup,
 };
 
 use super::crypto;
@@ -115,11 +115,16 @@ impl WalletIdentityPreview {
                     import_blocking_error: None,
                 }
             }
-            Err(error) => Self {
-                duplicate_key: None,
-                already_on_device: false,
-                import_blocking_error: Some(error.to_string()),
-            },
+            Err(error) => {
+                let fallback_key = fallback_identity_key_for_backup(metadata);
+                let already_on_device = existing_identities.contains(&fallback_key);
+
+                Self {
+                    duplicate_key: already_on_device.then_some(fallback_key),
+                    already_on_device,
+                    import_blocking_error: (!already_on_device).then(|| error.to_string()),
+                }
+            }
         }
     }
 }
@@ -205,6 +210,19 @@ mod tests {
         payload_with_wallets(vec![wallet])
     }
 
+    fn invalid_descriptor_wallet(metadata: &WalletMetadata) -> WalletBackup {
+        WalletBackup {
+            metadata: serde_json::to_value(metadata).unwrap(),
+            secret: WalletSecret::None,
+            descriptors: Some(DescriptorPair {
+                external: "not a descriptor".to_string(),
+                internal: "also not a descriptor".to_string(),
+            }),
+            xpub: None,
+            labels_jsonl: None,
+        }
+    }
+
     #[test]
     fn verify_duplicate_wallet_skips_secret_validation_warning() {
         let metadata = hot_metadata("Existing hot wallet");
@@ -227,18 +245,23 @@ mod tests {
     }
 
     #[test]
+    fn verify_duplicate_wallet_skips_invalid_public_identity_warning() {
+        let metadata = cold_metadata("Existing malformed public wallet");
+        let wallet = invalid_descriptor_wallet(&metadata);
+        let mut existing_identities = ExistingWalletIdentitySet::default();
+        existing_identities.insert(fallback_identity_key_for_backup(&metadata));
+
+        let report = verify_payload(payload_with_wallet(wallet), existing_identities).unwrap();
+
+        let summary = report.wallets.first().expect("wallet summary should exist");
+        assert!(summary.already_on_device);
+        assert_eq!(summary.warning, None);
+    }
+
+    #[test]
     fn verify_identity_key_failure_warns_for_wallet_and_continues() {
         let invalid_metadata = cold_metadata("Broken public wallet");
-        let invalid_wallet = WalletBackup {
-            metadata: serde_json::to_value(&invalid_metadata).unwrap(),
-            secret: WalletSecret::None,
-            descriptors: Some(DescriptorPair {
-                external: "not a descriptor".to_string(),
-                internal: "also not a descriptor".to_string(),
-            }),
-            xpub: None,
-            labels_jsonl: None,
-        };
+        let invalid_wallet = invalid_descriptor_wallet(&invalid_metadata);
         let valid_metadata = hot_metadata("Importable hot wallet");
         let valid_wallet = WalletBackup {
             metadata: serde_json::to_value(&valid_metadata).unwrap(),

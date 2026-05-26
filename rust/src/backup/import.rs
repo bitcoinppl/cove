@@ -13,7 +13,7 @@ use crate::mnemonic::MnemonicExt as _;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
 use crate::wallet_identity::{
     ExistingWalletIdentitySet, WalletIdentityKey, collect_existing_wallet_identities,
-    identity_key_for_backup,
+    fallback_identity_key_for_backup, identity_key_for_backup,
 };
 
 use super::crypto;
@@ -228,7 +228,18 @@ async fn restore_wallet(
     let name = metadata.name.clone();
     let wallet_id = metadata.id.clone();
 
-    let duplicate_key = identity_key_for_backup(&metadata, backup).map_err(BackupError::from)?;
+    let duplicate_key = match identity_key_for_backup(&metadata, backup) {
+        Ok(duplicate_key) => duplicate_key,
+        Err(error) => {
+            let fallback_key = fallback_identity_key_for_backup(&metadata);
+            if existing_identities.contains(&fallback_key) {
+                info!("Skipping wallet {name} - already exists on device");
+                return Ok(RestoreResult::Skipped { name });
+            }
+
+            return Err(BackupError::from(error).into());
+        }
+    };
 
     if existing_identities.contains(&duplicate_key) {
         info!("Skipping wallet {name} - already exists on device");
@@ -581,6 +592,25 @@ mod tests {
         metadata
     }
 
+    fn cold_metadata(name: &str) -> WalletMetadata {
+        let mut metadata = hot_metadata(name);
+        metadata.wallet_type = WalletType::Cold;
+        metadata
+    }
+
+    fn invalid_descriptor_wallet(metadata: &WalletMetadata) -> WalletBackup {
+        WalletBackup {
+            metadata: serde_json::to_value(metadata).unwrap(),
+            secret: WalletSecret::None,
+            descriptors: Some(crate::backup::model::DescriptorPair {
+                external: "not a descriptor".to_string(),
+                internal: "also not a descriptor".to_string(),
+            }),
+            xpub: None,
+            labels_jsonl: None,
+        }
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn restore_wallet_skips_duplicate_before_secret_validation() {
         let metadata = hot_metadata("Existing hot wallet");
@@ -594,6 +624,20 @@ mod tests {
         let duplicate_key = identity_key_for_backup(&metadata, &backup).unwrap();
         let mut existing_identities = ExistingWalletIdentitySet::default();
         existing_identities.insert(duplicate_key);
+
+        match restore_wallet(&backup, &existing_identities).await {
+            Ok(RestoreResult::Skipped { name }) => assert_eq!(name, metadata.name),
+            Ok(RestoreResult::Imported { .. }) => panic!("expected duplicate skip"),
+            Err(error) => panic!("expected duplicate skip, got {}", error.error),
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_wallet_skips_duplicate_with_invalid_public_identity() {
+        let metadata = cold_metadata("Existing malformed public wallet");
+        let backup = invalid_descriptor_wallet(&metadata);
+        let mut existing_identities = ExistingWalletIdentitySet::default();
+        existing_identities.insert(fallback_identity_key_for_backup(&metadata));
 
         match restore_wallet(&backup, &existing_identities).await {
             Ok(RestoreResult::Skipped { name }) => assert_eq!(name, metadata.name),

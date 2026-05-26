@@ -14,7 +14,8 @@ use crate::backup::model::{WalletBackup, WalletSecret};
 use crate::manager::cloud_backup_manager::{CloudBackupError, LocalWalletSecret};
 use crate::wallet::metadata::WalletMetadata;
 use crate::wallet_identity::{
-    ExistingWalletIdentitySet, WalletIdentityKey, identity_key_for_backup,
+    ExistingWalletIdentitySet, WalletIdentityKey, fallback_identity_key_for_backup,
+    identity_key_for_backup,
 };
 
 pub(crate) enum WalletBackupLookup<T> {
@@ -183,7 +184,17 @@ impl WalletRestoreSession {
         &mut self,
         wallet: &DownloadedWalletBackup,
     ) -> Result<WalletRestoreOutcome, CloudBackupError> {
-        let duplicate_key = wallet.duplicate_key()?;
+        let duplicate_key = match wallet.duplicate_key() {
+            Ok(duplicate_key) => duplicate_key,
+            Err(error) => {
+                let fallback_key = wallet.fallback_duplicate_key();
+                if self.should_skip_duplicate_wallet(&wallet.metadata, &fallback_key) {
+                    return Ok(WalletRestoreOutcome::SkippedDuplicate);
+                }
+
+                return Err(error);
+            }
+        };
 
         if self.should_skip_duplicate_wallet(&wallet.metadata, &duplicate_key) {
             return Ok(WalletRestoreOutcome::SkippedDuplicate);
@@ -221,6 +232,10 @@ impl DownloadedWalletBackup {
 
         identity_key_for_backup(&self.metadata, &backup_model)
             .map_err_prefix("cloud wallet duplicate identity", CloudBackupError::Internal)
+    }
+
+    fn fallback_duplicate_key(&self) -> WalletIdentityKey {
+        fallback_identity_key_for_backup(&self.metadata)
     }
 
     fn restore(&self) -> Result<WalletRestoreOutcome, CloudBackupError> {
@@ -350,6 +365,16 @@ mod tests {
         DownloadedWalletBackup { metadata: metadata.clone(), entry }
     }
 
+    fn test_invalid_public_wallet(metadata: &WalletMetadata) -> DownloadedWalletBackup {
+        let mut entry = test_wallet_entry(metadata);
+        entry.descriptors = Some(cove_cspp::backup_data::DescriptorPair {
+            external: "not a descriptor".to_string(),
+            internal: "also not a descriptor".to_string(),
+        });
+
+        DownloadedWalletBackup { metadata: metadata.clone(), entry }
+    }
+
     #[test]
     fn decrypt_entry_round_trips_encrypted_wallet_entry() {
         let metadata = WalletMetadata::preview_new();
@@ -374,6 +399,20 @@ mod tests {
         let wallet = test_public_wallet(&metadata, 0);
         let mut existing_identities = ExistingWalletIdentitySet::default();
         existing_identities.insert(wallet.duplicate_key().unwrap());
+        let mut session = WalletRestoreSession::new(existing_identities);
+
+        let outcome = session.restore_downloaded(&wallet).unwrap();
+
+        assert_eq!(outcome, WalletRestoreOutcome::SkippedDuplicate);
+        assert_eq!(session.0.len(), 1);
+    }
+
+    #[test]
+    fn restore_session_skips_duplicate_wallet_with_invalid_public_identity() {
+        let metadata = public_metadata("Existing malformed public wallet");
+        let wallet = test_invalid_public_wallet(&metadata);
+        let mut existing_identities = ExistingWalletIdentitySet::default();
+        existing_identities.insert(wallet.fallback_duplicate_key());
         let mut session = WalletRestoreSession::new(existing_identities);
 
         let outcome = session.restore_downloaded(&wallet).unwrap();

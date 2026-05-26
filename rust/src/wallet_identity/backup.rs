@@ -7,14 +7,8 @@ pub(crate) fn identity_key_for_backup(
     metadata: &WalletMetadata,
     backup: &WalletBackup,
 ) -> Result<WalletIdentityKey, WalletIdentityError> {
-    if metadata.wallet_type == WalletType::Hot
-        && let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied()
-    {
-        return Ok(WalletIdentityKey::HotFingerprint {
-            fingerprint,
-            network: metadata.network,
-            mode: metadata.wallet_mode,
-        });
+    if metadata.wallet_type == WalletType::Hot && metadata.master_fingerprint.is_some() {
+        return Ok(fallback_identity_key_for_backup(metadata));
     }
 
     if let Some(identity) = public_identity_from_backup(metadata, backup)? {
@@ -27,19 +21,33 @@ pub(crate) fn identity_key_for_backup(
         });
     }
 
-    if let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied() {
-        return Ok(WalletIdentityKey::Fingerprint {
+    Ok(fallback_identity_key_for_backup(metadata))
+}
+
+pub(crate) fn fallback_identity_key_for_backup(metadata: &WalletMetadata) -> WalletIdentityKey {
+    if metadata.wallet_type == WalletType::Hot
+        && let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied()
+    {
+        return WalletIdentityKey::HotFingerprint {
             fingerprint,
             network: metadata.network,
             mode: metadata.wallet_mode,
-        });
+        };
     }
 
-    Ok(WalletIdentityKey::WalletId {
+    if let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied() {
+        return WalletIdentityKey::Fingerprint {
+            fingerprint,
+            network: metadata.network,
+            mode: metadata.wallet_mode,
+        };
+    }
+
+    WalletIdentityKey::WalletId {
         id: metadata.id.clone(),
         network: metadata.network,
         mode: metadata.wallet_mode,
-    })
+    }
 }
 
 pub(crate) fn no_fingerprint_wallet_id(metadata: &WalletMetadata) -> Option<WalletId> {

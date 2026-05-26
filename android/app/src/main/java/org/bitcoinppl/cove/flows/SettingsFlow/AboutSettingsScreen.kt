@@ -61,6 +61,7 @@ fun AboutSettingsScreen(
     }
     var betaError by remember { mutableStateOf<String?>(null) }
     var accountNumber by remember { mutableStateOf<UInt?>(null) }
+    val selectedWallet = Database().globalConfig().selectedWallet()
 
     LaunchedEffect(buildTapCount) {
         if (buildTapCount > 0) {
@@ -69,8 +70,8 @@ fun AboutSettingsScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        val selectedWallet = Database().globalConfig().selectedWallet()
+    LaunchedEffect(selectedWallet) {
+        accountNumber = null
         accountNumber = selectedWallet?.let { app.getWalletManager(it).rust.nonDefaultAccountNumber() }
     }
 
