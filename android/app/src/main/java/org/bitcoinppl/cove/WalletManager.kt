@@ -62,6 +62,14 @@ class WalletManager :
     val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
 
     var receiveAddressState by mutableStateOf<ReceiveAddressState?>(null)
+    var receiveAddressPresentation by mutableStateOf(
+        ReceiveAddressPresentation(
+            copyPolicy = ReceiveAddressCopyPolicy.COPY,
+            refreshState = ReceiveAddressRefreshState.IDLE,
+        ),
+    )
+    var receiveAddressIsLoading by mutableStateOf(false)
+    var receiveAddressError by mutableStateOf<TaggedItem<String>?>(null)
 
     // scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String? by mutableStateOf(null)
@@ -326,9 +334,28 @@ class WalletManager :
                 receiveAddressState = message.v1
             }
 
+            is WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated -> {
+                receiveAddressPresentation = message.v1
+            }
+
+            is WalletManagerReconcileMessage.ReceiveAddressLoadingChanged -> {
+                receiveAddressIsLoading = message.v1
+            }
+
+            is WalletManagerReconcileMessage.ReceiveAddressError -> {
+                receiveAddressError = TaggedItem(message.v1)
+            }
+
             is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
                 if (receiveAddressState?.requestId == message.v1) {
                     receiveAddressState = null
+                    receiveAddressPresentation =
+                        ReceiveAddressPresentation(
+                            copyPolicy = ReceiveAddressCopyPolicy.COPY,
+                            refreshState = ReceiveAddressRefreshState.IDLE,
+                        )
+                    receiveAddressIsLoading = false
+                    receiveAddressError = null
                 }
             }
         }
@@ -349,6 +376,12 @@ class WalletManager :
     }
 
     fun dispatch(action: WalletManagerAction) {
+        when (action) {
+            is WalletManagerAction.OpenReceiveAddress,
+            is WalletManagerAction.CreateNewReceiveAddress -> receiveAddressError = null
+            else -> Unit
+        }
+
         logDebug("dispatch: $action")
         mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
     }

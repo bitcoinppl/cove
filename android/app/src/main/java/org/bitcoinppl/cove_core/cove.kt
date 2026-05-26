@@ -1115,8 +1115,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_send_flow_alert_state_from_address_error(
     ): Short
-    external fun uniffi_cove_checksum_func_receive_address_presentation(
-    ): Short
     external fun uniffi_cove_checksum_func_grouped_plain_words_of(
     ): Short
     external fun uniffi_cove_checksum_func_numberofwordsingroups(
@@ -1561,15 +1559,11 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction(
     ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_close_receive_address(
-    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat_string(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_convert_to_fiat(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_create_new_receive_address(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_create_transactions_with_fiat_export(
     ): Short
@@ -1644,10 +1638,6 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_open_receive_address(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_refresh_expired_receive_address(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations(
     ): Short
@@ -2659,16 +2649,12 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(`ptr`: Long,`signedTransaction`: Long,
     ): Long
-    external fun uniffi_cove_fn_method_rustwalletmanager_close_receive_address(`ptr`: Long,`requestId`: Long,
-    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_convert_and_display_fiat(`ptr`: Long,`amount`: Long,`prices`: Long,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_convert_from_fiat_string(`ptr`: Long,`fiatAmount`: RustBuffer.ByValue,`prices`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_convert_to_fiat(`ptr`: Long,`amount`: Long,`prices`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Double
-    external fun uniffi_cove_fn_method_rustwalletmanager_create_new_receive_address(`ptr`: Long,
-    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_create_transactions_with_fiat_export(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_current_block_height(`ptr`: Long,
@@ -2742,10 +2728,6 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations(`ptr`: Long,`blockHeight`: Int,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations_fmt(`ptr`: Long,`blockHeight`: Int,
-    ): Long
-    external fun uniffi_cove_fn_method_rustwalletmanager_open_receive_address(`ptr`: Long,
-    ): Long
-    external fun uniffi_cove_fn_method_rustwalletmanager_refresh_expired_receive_address(`ptr`: Long,`requestId`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_required_deletion_confirmations(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
@@ -3397,8 +3379,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_func_send_flow_alert_state_from_address_error(`error`: RustBufferAddressError.ByValue,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_receive_address_presentation(`state`: RustBuffer.ByValue,`nowSecs`: Long,`isRefreshing`: Byte,uniffi_out_err: UniffiRustCallStatus, 
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_grouped_plain_words_of(`mnemonic`: RustBuffer.ByValue,`groups`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_numberofwordsingroups(`me`: RustBuffer.ByValue,`of`: Byte,uniffi_out_err: UniffiRustCallStatus, 
@@ -3641,9 +3621,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 5267.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_receive_address_presentation() != 37869.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_grouped_plain_words_of() != 56420.toShort()) {
@@ -4312,9 +4289,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_close_receive_address() != 45892.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 9223.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4322,9 +4296,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_convert_to_fiat() != 35551.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_create_new_receive_address() != 12812.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_create_transactions_with_fiat_export() != 39040.toShort()) {
@@ -4436,12 +4407,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt() != 60488.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_open_receive_address() != 47149.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_refresh_expired_receive_address() != 18802.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations() != 30427.toShort()) {
@@ -20856,15 +20821,11 @@ public interface RustWalletManagerInterface {
     
     suspend fun `broadcastTransaction`(`signedTransaction`: BitcoinTransaction)
     
-    suspend fun `closeReceiveAddress`(`requestId`: kotlin.ULong)
-    
     fun `convertAndDisplayFiat`(`amount`: Amount, `prices`: PriceResponse, `withSuffix`: kotlin.Boolean = true): kotlin.String
     
     fun `convertFromFiatString`(`fiatAmount`: kotlin.String, `prices`: PriceResponse): Amount
     
     fun `convertToFiat`(`amount`: Amount, `prices`: PriceResponse): kotlin.Double
-    
-    suspend fun `createNewReceiveAddress`(): ReceiveAddressState
     
     suspend fun `createTransactionsWithFiatExport`(): kotlin.String
     
@@ -21005,10 +20966,6 @@ public interface RustWalletManagerInterface {
     suspend fun `numberOfConfirmations`(`blockHeight`: kotlin.UInt): kotlin.UInt
     
     suspend fun `numberOfConfirmationsFmt`(`blockHeight`: kotlin.UInt): kotlin.String
-    
-    suspend fun `openReceiveAddress`(): ReceiveAddressState
-    
-    suspend fun `refreshExpiredReceiveAddress`(`requestId`: kotlin.ULong): ReceiveAddressState
     
     /**
      * Returns the number of confirmation steps required to delete this wallet
@@ -21241,28 +21198,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     )
     }
 
-    
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `closeReceiveAddress`(`requestId`: kotlin.ULong) {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_close_receive_address(
-                uniffiHandle,
-                
-        FfiConverterULong.lower(`requestId`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
-        // lift function
-        { Unit },
-        
-        // Error FFI converter
-        UniffiNullRustCallStatusErrorHandler,
-    )
-    }
-
     override fun `convertAndDisplayFiat`(`amount`: Amount, `prices`: PriceResponse, `withSuffix`: kotlin.Boolean): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
@@ -21308,27 +21243,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     )
     }
     
-
-    
-    @Throws(WalletManagerException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `createNewReceiveAddress`() : ReceiveAddressState {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_create_new_receive_address(
-                uniffiHandle,
-                
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
-        // lift function
-        { FfiConverterTypeReceiveAddressState.lift(it) },
-        // Error FFI converter
-        WalletManagerException.ErrorHandler,
-    )
-    }
 
     
     @Throws(WalletManagerException::class)
@@ -22039,49 +21953,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterString.lift(it) },
-        // Error FFI converter
-        WalletManagerException.ErrorHandler,
-    )
-    }
-
-    
-    @Throws(WalletManagerException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `openReceiveAddress`() : ReceiveAddressState {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_open_receive_address(
-                uniffiHandle,
-                
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
-        // lift function
-        { FfiConverterTypeReceiveAddressState.lift(it) },
-        // Error FFI converter
-        WalletManagerException.ErrorHandler,
-    )
-    }
-
-    
-    @Throws(WalletManagerException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `refreshExpiredReceiveAddress`(`requestId`: kotlin.ULong) : ReceiveAddressState {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_refresh_expired_receive_address(
-                uniffiHandle,
-                
-        FfiConverterULong.lower(`requestId`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
-        // lift function
-        { FfiConverterTypeReceiveAddressState.lift(it) },
         // Error FFI converter
         WalletManagerException.ErrorHandler,
     )
@@ -29849,13 +29720,7 @@ public object FfiConverterTypePendingWalletSaveResult: FfiConverterRustBuffer<Pe
 data class ReceiveAddressPresentation (
     var `copyPolicy`: ReceiveAddressCopyPolicy
     , 
-    var `countdownRemainingSecs`: kotlin.ULong?
-    , 
-    var `shouldRefreshNow`: kotlin.Boolean
-    , 
-    var `showRefreshing`: kotlin.Boolean
-    , 
-    var `showRefreshError`: kotlin.Boolean
+    var `refreshState`: ReceiveAddressRefreshState
     
 ){
     
@@ -29873,27 +29738,18 @@ public object FfiConverterTypeReceiveAddressPresentation: FfiConverterRustBuffer
     override fun read(buf: ByteBuffer): ReceiveAddressPresentation {
         return ReceiveAddressPresentation(
             FfiConverterTypeReceiveAddressCopyPolicy.read(buf),
-            FfiConverterOptionalULong.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
+            FfiConverterTypeReceiveAddressRefreshState.read(buf),
         )
     }
 
     override fun allocationSize(value: ReceiveAddressPresentation) = (
             FfiConverterTypeReceiveAddressCopyPolicy.allocationSize(value.`copyPolicy`) +
-            FfiConverterOptionalULong.allocationSize(value.`countdownRemainingSecs`) +
-            FfiConverterBoolean.allocationSize(value.`shouldRefreshNow`) +
-            FfiConverterBoolean.allocationSize(value.`showRefreshing`) +
-            FfiConverterBoolean.allocationSize(value.`showRefreshError`)
+            FfiConverterTypeReceiveAddressRefreshState.allocationSize(value.`refreshState`)
     )
 
     override fun write(value: ReceiveAddressPresentation, buf: ByteBuffer) {
             FfiConverterTypeReceiveAddressCopyPolicy.write(value.`copyPolicy`, buf)
-            FfiConverterOptionalULong.write(value.`countdownRemainingSecs`, buf)
-            FfiConverterBoolean.write(value.`shouldRefreshNow`, buf)
-            FfiConverterBoolean.write(value.`showRefreshing`, buf)
-            FfiConverterBoolean.write(value.`showRefreshError`, buf)
+            FfiConverterTypeReceiveAddressRefreshState.write(value.`refreshState`, buf)
     }
 }
 
@@ -29909,8 +29765,6 @@ data class ReceiveAddressState (
     var `firstShownAtSecs`: kotlin.ULong
     , 
     var `expiresAtSecs`: kotlin.ULong?
-    , 
-    var `refreshError`: kotlin.String?
     
 ): Disposable{
     
@@ -29926,8 +29780,7 @@ data class ReceiveAddressState (
         this.`address`,
         this.`status`,
         this.`firstShownAtSecs`,
-        this.`expiresAtSecs`,
-        this.`refreshError`
+        this.`expiresAtSecs`
     )
     }
     
@@ -29945,7 +29798,6 @@ public object FfiConverterTypeReceiveAddressState: FfiConverterRustBuffer<Receiv
             FfiConverterTypeReceiveAddressStatus.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterOptionalULong.read(buf),
-            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -29954,8 +29806,7 @@ public object FfiConverterTypeReceiveAddressState: FfiConverterRustBuffer<Receiv
             FfiConverterTypeAddressInfoWithDerivation.allocationSize(value.`address`) +
             FfiConverterTypeReceiveAddressStatus.allocationSize(value.`status`) +
             FfiConverterULong.allocationSize(value.`firstShownAtSecs`) +
-            FfiConverterOptionalULong.allocationSize(value.`expiresAtSecs`) +
-            FfiConverterOptionalString.allocationSize(value.`refreshError`)
+            FfiConverterOptionalULong.allocationSize(value.`expiresAtSecs`)
     )
 
     override fun write(value: ReceiveAddressState, buf: ByteBuffer) {
@@ -29964,7 +29815,6 @@ public object FfiConverterTypeReceiveAddressState: FfiConverterRustBuffer<Receiv
             FfiConverterTypeReceiveAddressStatus.write(value.`status`, buf)
             FfiConverterULong.write(value.`firstShownAtSecs`, buf)
             FfiConverterOptionalULong.write(value.`expiresAtSecs`, buf)
-            FfiConverterOptionalString.write(value.`refreshError`, buf)
     }
 }
 
@@ -44569,6 +44419,41 @@ public object FfiConverterTypeReceiveAddressCopyPolicy: FfiConverterRustBuffer<R
 
 
 
+enum class ReceiveAddressRefreshState {
+    
+    IDLE,
+    REFRESHING,
+    FAILED;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeReceiveAddressRefreshState: FfiConverterRustBuffer<ReceiveAddressRefreshState> {
+    override fun read(buf: ByteBuffer) = try {
+        ReceiveAddressRefreshState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: ReceiveAddressRefreshState) = 4UL
+
+    override fun write(value: ReceiveAddressRefreshState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class ReceiveAddressStatus {
     
     FRESH,
@@ -52381,6 +52266,21 @@ sealed class WalletManagerAction: Disposable  {
         companion object
     }
     
+    object OpenReceiveAddress : WalletManagerAction()
+    
+    
+    object CreateNewReceiveAddress : WalletManagerAction()
+    
+    
+    data class CloseReceiveAddress(
+        val v1: kotlin.ULong) : WalletManagerAction()
+        
+    {
+        
+
+        companion object
+    }
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -52442,6 +52342,17 @@ sealed class WalletManagerAction: Disposable  {
     )
                 
             }
+            is WalletManagerAction.OpenReceiveAddress -> {// Nothing to destroy
+            }
+            is WalletManagerAction.CreateNewReceiveAddress -> {// Nothing to destroy
+            }
+            is WalletManagerAction.CloseReceiveAddress -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -52483,6 +52394,11 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             12 -> WalletManagerAction.SelectedWalletDisappeared
             13 -> WalletManagerAction.StartTransactionWatcher(
                 FfiConverterTypeTxId.read(buf),
+                )
+            14 -> WalletManagerAction.OpenReceiveAddress
+            15 -> WalletManagerAction.CreateNewReceiveAddress
+            16 -> WalletManagerAction.CloseReceiveAddress(
+                FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -52573,6 +52489,25 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
                 + FfiConverterTypeTxId.allocationSize(value.v1)
             )
         }
+        is WalletManagerAction.OpenReceiveAddress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is WalletManagerAction.CreateNewReceiveAddress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is WalletManagerAction.CloseReceiveAddress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: WalletManagerAction, buf: ByteBuffer) {
@@ -52633,6 +52568,19 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             is WalletManagerAction.StartTransactionWatcher -> {
                 buf.putInt(13)
                 FfiConverterTypeTxId.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerAction.OpenReceiveAddress -> {
+                buf.putInt(14)
+                Unit
+            }
+            is WalletManagerAction.CreateNewReceiveAddress -> {
+                buf.putInt(15)
+                Unit
+            }
+            is WalletManagerAction.CloseReceiveAddress -> {
+                buf.putInt(16)
+                FfiConverterULong.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -53419,6 +53367,33 @@ sealed class WalletManagerReconcileMessage: Disposable  {
         companion object
     }
     
+    data class ReceiveAddressPresentationUpdated(
+        val v1: org.bitcoinppl.cove_core.ReceiveAddressPresentation) : WalletManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ReceiveAddressLoadingChanged(
+        val v1: kotlin.Boolean) : WalletManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class ReceiveAddressError(
+        val v1: kotlin.String) : WalletManagerReconcileMessage()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class ReceiveAddressClosed(
         val v1: kotlin.ULong) : WalletManagerReconcileMessage()
         
@@ -53528,6 +53503,27 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     )
                 
             }
+            is WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressLoadingChanged -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressError -> {
+                
+    Disposable.destroy(
+        this.v1
+    )
+                
+            }
             is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
                 
     Disposable.destroy(
@@ -53593,7 +53589,16 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             15 -> WalletManagerReconcileMessage.ReceiveAddressUpdated(
                 FfiConverterTypeReceiveAddressState.read(buf),
                 )
-            16 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
+            16 -> WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated(
+                FfiConverterTypeReceiveAddressPresentation.read(buf),
+                )
+            17 -> WalletManagerReconcileMessage.ReceiveAddressLoadingChanged(
+                FfiConverterBoolean.read(buf),
+                )
+            18 -> WalletManagerReconcileMessage.ReceiveAddressError(
+                FfiConverterString.read(buf),
+                )
+            19 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
                 FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -53704,6 +53709,27 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 + FfiConverterTypeReceiveAddressState.allocationSize(value.v1)
             )
         }
+        is WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeReceiveAddressPresentation.allocationSize(value.v1)
+            )
+        }
+        is WalletManagerReconcileMessage.ReceiveAddressLoadingChanged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.v1)
+            )
+        }
+        is WalletManagerReconcileMessage.ReceiveAddressError -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
         is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -53788,8 +53814,23 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 FfiConverterTypeReceiveAddressState.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
+            is WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated -> {
                 buf.putInt(16)
+                FfiConverterTypeReceiveAddressPresentation.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressLoadingChanged -> {
+                buf.putInt(17)
+                FfiConverterBoolean.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressError -> {
+                buf.putInt(18)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
+                buf.putInt(19)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
@@ -55998,38 +56039,6 @@ public object FfiConverterOptionalTypeFiatAmount: FfiConverterRustBuffer<FiatAmo
 /**
  * @suppress
  */
-public object FfiConverterOptionalTypeReceiveAddressState: FfiConverterRustBuffer<ReceiveAddressState?> {
-    override fun read(buf: ByteBuffer): ReceiveAddressState? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterTypeReceiveAddressState.read(buf)
-    }
-
-    override fun allocationSize(value: ReceiveAddressState?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterTypeReceiveAddressState.allocationSize(value)
-        }
-    }
-
-    override fun write(value: ReceiveAddressState?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterTypeReceiveAddressState.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
 public object FfiConverterOptionalTypeWalletMetadata: FfiConverterRustBuffer<WalletMetadata?> {
     override fun read(buf: ByteBuffer): WalletMetadata? {
         if (buf.get().toInt() == 0) {
@@ -57674,19 +57683,6 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
         
         FfiConverterTypeAddressError.lower(`error`),
         FfiConverterString.lower(`address`),_status)
-}
-    )
-    }
-    
- fun `receiveAddressPresentation`(`state`: ReceiveAddressState?, `nowSecs`: kotlin.ULong, `isRefreshing`: kotlin.Boolean): ReceiveAddressPresentation {
-            return FfiConverterTypeReceiveAddressPresentation.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_receive_address_presentation(
-    
-        
-        FfiConverterOptionalTypeReceiveAddressState.lower(`state`),
-        FfiConverterULong.lower(`nowSecs`),
-        FfiConverterBoolean.lower(`isRefreshing`),_status)
 }
     )
     }

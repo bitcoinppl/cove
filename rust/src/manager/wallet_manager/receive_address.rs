@@ -18,13 +18,27 @@ pub enum ReceiveAddressCopyPolicy {
     ConfirmPaidAddress,
 }
 
+#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum ReceiveAddressRefreshState {
+    #[default]
+    Idle,
+    Refreshing,
+    Failed,
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct ReceiveAddressPresentation {
     pub copy_policy: ReceiveAddressCopyPolicy,
-    pub countdown_remaining_secs: Option<u64>,
-    pub should_refresh_now: bool,
-    pub show_refreshing: bool,
-    pub show_refresh_error: bool,
+    pub refresh_state: ReceiveAddressRefreshState,
+}
+
+impl Default for ReceiveAddressPresentation {
+    fn default() -> Self {
+        Self {
+            copy_policy: ReceiveAddressCopyPolicy::Copy,
+            refresh_state: ReceiveAddressRefreshState::Idle,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -34,7 +48,6 @@ pub struct ReceiveAddressState {
     pub status: ReceiveAddressStatus,
     pub first_shown_at_secs: u64,
     pub expires_at_secs: Option<u64>,
-    pub refresh_error: Option<String>,
 }
 
 impl ReceiveAddressState {
@@ -50,7 +63,6 @@ impl ReceiveAddressState {
             status,
             first_shown_at_secs,
             expires_at_secs: Some(first_shown_at_secs + CACHE_WINDOW.as_secs()),
-            refresh_error: None,
         }
     }
 
@@ -58,59 +70,24 @@ impl ReceiveAddressState {
         Self {
             status: ReceiveAddressStatus::PaymentReceived,
             expires_at_secs: None,
-            refresh_error: None,
             ..self.clone()
         }
     }
 
-    pub fn refresh_failed(&self, error: String) -> Self {
-        Self { refresh_error: Some(error), ..self.clone() }
+    pub fn refresh_delay(&self, now_secs: u64) -> Option<Duration> {
+        if self.status == ReceiveAddressStatus::PaymentReceived {
+            return None;
+        }
+
+        let expires_at_secs = self.expires_at_secs?;
+        let delay_secs = expires_at_secs.saturating_sub(now_secs);
+
+        Some(Duration::from_secs(delay_secs))
     }
 
     fn should_refresh_at(&self, now_secs: u64) -> bool {
         self.status != ReceiveAddressStatus::PaymentReceived
-            && self.refresh_error.is_none()
             && self.expires_at_secs.is_some_and(|expires_at_secs| now_secs >= expires_at_secs)
-    }
-}
-
-#[uniffi::export]
-pub fn receive_address_presentation(
-    state: Option<ReceiveAddressState>,
-    now_secs: u64,
-    is_refreshing: bool,
-) -> ReceiveAddressPresentation {
-    let Some(state) = state else {
-        return ReceiveAddressPresentation {
-            copy_policy: ReceiveAddressCopyPolicy::Copy,
-            countdown_remaining_secs: None,
-            should_refresh_now: false,
-            show_refreshing: false,
-            show_refresh_error: false,
-        };
-    };
-
-    let is_paid = state.status == ReceiveAddressStatus::PaymentReceived;
-    let should_refresh = state.should_refresh_at(now_secs);
-    let countdown_remaining_secs = if is_paid || should_refresh {
-        None
-    } else {
-        state
-            .expires_at_secs
-            .and_then(|expires_at_secs| expires_at_secs.checked_sub(now_secs))
-            .filter(|remaining_secs| (1..=60).contains(remaining_secs))
-    };
-
-    ReceiveAddressPresentation {
-        copy_policy: if is_paid {
-            ReceiveAddressCopyPolicy::ConfirmPaidAddress
-        } else {
-            ReceiveAddressCopyPolicy::Copy
-        },
-        countdown_remaining_secs,
-        should_refresh_now: should_refresh && !is_refreshing,
-        show_refreshing: should_refresh && is_refreshing,
-        show_refresh_error: state.refresh_error.is_some(),
     }
 }
 
@@ -126,6 +103,7 @@ pub struct ReceiveAddressSession {
     active_request_id: Option<u64>,
     next_request_id: u64,
     visible_state: Option<ReceiveAddressState>,
+    refresh_state: ReceiveAddressRefreshState,
 }
 
 impl ReceiveAddressSession {
@@ -142,6 +120,24 @@ impl ReceiveAddressSession {
 
     pub fn visible_state(&self) -> Option<ReceiveAddressState> {
         self.visible_state.clone()
+    }
+
+    pub fn set_refresh_state(&mut self, refresh_state: ReceiveAddressRefreshState) {
+        self.refresh_state = refresh_state;
+    }
+
+    pub fn presentation(&self) -> ReceiveAddressPresentation {
+        let copy_policy = if self
+            .visible_state
+            .as_ref()
+            .is_some_and(|state| state.status == ReceiveAddressStatus::PaymentReceived)
+        {
+            ReceiveAddressCopyPolicy::ConfirmPaidAddress
+        } else {
+            ReceiveAddressCopyPolicy::Copy
+        };
+
+        ReceiveAddressPresentation { copy_policy, refresh_state: self.refresh_state }
     }
 
     pub fn is_current(&self, request_id: u64) -> bool {
@@ -173,11 +169,16 @@ impl ReceiveAddressSession {
         Some(state)
     }
 
-    pub fn close(&mut self, request_id: u64) {
-        if self.is_current(request_id) {
-            self.active_request_id = None;
-            self.visible_state = None;
+    pub fn close(&mut self, request_id: u64) -> bool {
+        if !self.is_current(request_id) {
+            return false;
         }
+
+        self.active_request_id = None;
+        self.visible_state = None;
+        self.refresh_state = ReceiveAddressRefreshState::Idle;
+
+        true
     }
 
     pub fn refresh_expired_decision(
@@ -189,7 +190,10 @@ impl ReceiveAddressSession {
             return RefreshExpiredAddressDecision::MissingVisibleState;
         };
 
-        if !self.is_current(request_id) || !visible_state.should_refresh_at(now_secs) {
+        if !self.is_current(request_id)
+            || self.refresh_state != ReceiveAddressRefreshState::Idle
+            || !visible_state.should_refresh_at(now_secs)
+        {
             return RefreshExpiredAddressDecision::ReturnVisible(visible_state);
         }
 
@@ -248,7 +252,7 @@ mod tests {
         session.close(first);
         assert!(session.visible_state().is_some());
 
-        session.close(second);
+        assert!(session.close(second));
         assert!(session.visible_state().is_none());
     }
 
@@ -260,18 +264,26 @@ mod tests {
     }
 
     #[test]
-    fn reopened_cached_state_gets_fresh_visible_window() {
+    fn refresh_delay_uses_visible_window_expiry() {
         let state =
             ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 2_000);
 
-        let presentation = receive_address_presentation(Some(state), 2_000, false);
-
-        assert_eq!(presentation.countdown_remaining_secs, None);
-        assert!(!presentation.should_refresh_now);
+        assert_eq!(state.refresh_delay(2_000), Some(Duration::from_secs(300)));
+        assert_eq!(state.refresh_delay(2_299), Some(Duration::from_secs(1)));
+        assert_eq!(state.refresh_delay(2_300), Some(Duration::from_secs(0)));
     }
 
     #[test]
-    fn payment_received_stops_countdown_and_keeps_address() {
+    fn payment_received_has_no_refresh_delay() {
+        let state =
+            ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 2_000)
+                .payment_received();
+
+        assert_eq!(state.refresh_delay(2_000), None);
+    }
+
+    #[test]
+    fn payment_received_keeps_address() {
         let state =
             ReceiveAddressState::cached(1, address(7), ReceiveAddressStatus::CachedUnused, 1_000);
 
@@ -284,84 +296,38 @@ mod tests {
     }
 
     #[test]
-    fn refresh_failure_keeps_visible_address() {
-        let state =
-            ReceiveAddressState::cached(1, address(3), ReceiveAddressStatus::CachedUnused, 1_000);
+    fn default_presentation_copies_with_idle_refresh_state() {
+        let session = ReceiveAddressSession::default();
 
-        let failed = state.refresh_failed("node unavailable".to_string());
+        let presentation = session.presentation();
 
-        assert_eq!(failed.request_id, state.request_id);
-        assert_eq!(failed.address.info.index, state.address.info.index);
-        assert_eq!(failed.refresh_error.as_deref(), Some("node unavailable"));
+        assert_eq!(presentation.copy_policy, ReceiveAddressCopyPolicy::Copy);
+        assert_eq!(presentation.refresh_state, ReceiveAddressRefreshState::Idle);
     }
 
     #[test]
-    fn presentation_hides_countdown_before_final_minute() {
-        let state = ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::Fresh, 1_000);
-
-        let presentation = receive_address_presentation(Some(state), 1_000, false);
-
-        assert_eq!(presentation.countdown_remaining_secs, None);
-        assert!(!presentation.should_refresh_now);
-    }
-
-    #[test]
-    fn presentation_shows_countdown_from_sixty_to_one_seconds() {
-        let state =
-            ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 1_000);
-
-        let at_sixty = receive_address_presentation(Some(state.clone()), 1_240, false);
-        let at_one = receive_address_presentation(Some(state), 1_299, false);
-
-        assert_eq!(at_sixty.countdown_remaining_secs, Some(60));
-        assert_eq!(at_one.countdown_remaining_secs, Some(1));
-    }
-
-    #[test]
-    fn presentation_expired_cached_state_should_refresh_now() {
-        let state =
-            ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 1_000);
-
-        let presentation = receive_address_presentation(Some(state), 1_300, false);
-
-        assert!(presentation.should_refresh_now);
-        assert!(!presentation.show_refreshing);
-    }
-
-    #[test]
-    fn presentation_expired_refreshing_state_shows_refreshing() {
-        let state =
-            ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 1_000);
-
-        let presentation = receive_address_presentation(Some(state), 1_300, true);
-
-        assert!(!presentation.should_refresh_now);
-        assert!(presentation.show_refreshing);
-    }
-
-    #[test]
-    fn presentation_payment_received_hides_countdown_and_confirms_copy() {
+    fn presentation_payment_received_confirms_copy() {
+        let mut session = ReceiveAddressSession::default();
         let state =
             ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 1_000)
                 .payment_received();
+        session.set_visible(state);
 
-        let presentation = receive_address_presentation(Some(state), 1_240, false);
+        let presentation = session.presentation();
 
         assert_eq!(presentation.copy_policy, ReceiveAddressCopyPolicy::ConfirmPaidAddress);
-        assert_eq!(presentation.countdown_remaining_secs, None);
-        assert!(!presentation.should_refresh_now);
+        assert_eq!(presentation.refresh_state, ReceiveAddressRefreshState::Idle);
     }
 
     #[test]
-    fn presentation_refresh_error_maps_to_show_refresh_error() {
-        let state =
-            ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 1_000)
-                .refresh_failed("node unavailable".to_string());
+    fn presentation_uses_session_refresh_state() {
+        let mut session = ReceiveAddressSession::default();
 
-        let presentation = receive_address_presentation(Some(state), 1_300, false);
+        session.set_refresh_state(ReceiveAddressRefreshState::Refreshing);
+        assert_eq!(session.presentation().refresh_state, ReceiveAddressRefreshState::Refreshing);
 
-        assert!(presentation.show_refresh_error);
-        assert!(!presentation.should_refresh_now);
+        session.set_refresh_state(ReceiveAddressRefreshState::Failed);
+        assert_eq!(session.presentation().refresh_state, ReceiveAddressRefreshState::Failed);
     }
 
     #[test]
@@ -396,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn refresh_error_refresh_request_does_not_rotate() {
+    fn failed_refresh_request_does_not_rotate() {
         let mut session = ReceiveAddressSession::default();
         let request_id = session.next_request_id();
         let state = ReceiveAddressState::cached(
@@ -404,9 +370,9 @@ mod tests {
             address(0),
             ReceiveAddressStatus::CachedUnused,
             100,
-        )
-        .refresh_failed("node unavailable".to_string());
+        );
         session.set_visible(state.clone());
+        session.set_refresh_state(ReceiveAddressRefreshState::Failed);
 
         let decision = session.refresh_expired_decision(request_id, 500);
 

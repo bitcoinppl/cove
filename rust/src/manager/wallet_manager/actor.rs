@@ -7,7 +7,8 @@ use crate::{
     manager::wallet_manager::{
         Error, SendFlowErrorAlert, WalletManagerError,
         receive_address::{
-            CACHE_WINDOW, ReceiveAddressSession, ReceiveAddressState, ReceiveAddressStatus,
+            CACHE_WINDOW, ReceiveAddressPresentation, ReceiveAddressRefreshState,
+            ReceiveAddressSession, ReceiveAddressState, ReceiveAddressStatus,
             RefreshExpiredAddressDecision,
         },
     },
@@ -47,7 +48,7 @@ use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_common::consts::{GAP_LIMIT, MIN_SEND_AMOUNT};
-use cove_tokio::FutureTimeoutExt as _;
+use cove_tokio::{AbortableTask, FutureTimeoutExt as _};
 use cove_types::{
     confirm::{AddressAndAmount, ConfirmDetails, ExtraItem, InputOutputDetails, SplitOutput},
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
@@ -84,6 +85,7 @@ pub struct WalletActor {
     seed: u64,
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
     receive_address_watcher: Option<Addr<ReceiveAddressWatcher>>,
+    receive_address_refresh_timer: Option<AbortableTask<()>>,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -200,6 +202,7 @@ impl WalletActor {
             receive_address: ReceiveAddressSession::default(),
             transaction_watchers: HashMap::default(),
             receive_address_watcher: None,
+            receive_address_refresh_timer: None,
             db,
         })
     }
@@ -746,7 +749,21 @@ impl WalletActor {
         Produces::ok(address.into())
     }
 
-    pub async fn open_receive_address(&mut self) -> ActorResult<ReceiveAddressState> {
+    pub async fn open_receive_address_intent(&mut self) -> ActorResult<()> {
+        self.set_receive_address_loading(true);
+
+        match self.do_open_receive_address().await {
+            Ok(_) => self.set_receive_address_loading(false),
+            Err(error) => {
+                self.set_receive_address_loading(false);
+                self.send(WalletManagerReconcileMessage::ReceiveAddressError(error.to_string()));
+            }
+        }
+
+        Produces::ok(())
+    }
+
+    async fn do_open_receive_address(&mut self) -> Result<ReceiveAddressState, Error> {
         let now = current_epoch_secs();
 
         let Some(cache) = self.receive_address_cache()? else {
@@ -810,10 +827,10 @@ impl WalletActor {
         &mut self,
         request_id: u64,
         now: u64,
-    ) -> ActorResult<ReceiveAddressState> {
+    ) -> Result<ReceiveAddressState, Error> {
         let state = self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh)?;
 
-        Produces::ok(state)
+        Ok(state)
     }
 
     async fn open_cached_receive_address(
@@ -821,7 +838,7 @@ impl WalletActor {
         cache: ReceiveAddressCache,
         request_id: u64,
         now: u64,
-    ) -> ActorResult<ReceiveAddressState> {
+    ) -> Result<ReceiveAddressState, Error> {
         let cache = cache.with_visible_window_start(now);
         let derivation_index = cache.derivation_index;
         self.db.set_receive_address_cache(cache).map_err_str(Error::ReceiveAddressError)?;
@@ -834,20 +851,36 @@ impl WalletActor {
             now,
         );
         self.receive_address.set_visible(state.clone());
-        self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
+        self.receive_address.set_refresh_state(ReceiveAddressRefreshState::Idle);
+        self.send_receive_address_state(state.clone());
 
         self.start_receive_address_watcher(request_id, derivation_index);
+        self.schedule_receive_address_refresh(&state, now);
         self.start_delayed_receive_address_activity_check(request_id, derivation_index);
 
-        Produces::ok(state)
+        Ok(state)
     }
 
-    pub async fn create_new_receive_address(&mut self) -> ActorResult<ReceiveAddressState> {
+    pub async fn create_new_receive_address_intent(&mut self) -> ActorResult<()> {
+        self.set_receive_address_loading(true);
+
+        match self.do_create_new_receive_address() {
+            Ok(_) => self.set_receive_address_loading(false),
+            Err(error) => {
+                self.set_receive_address_loading(false);
+                self.send(WalletManagerReconcileMessage::ReceiveAddressError(error.to_string()));
+            }
+        }
+
+        Produces::ok(())
+    }
+
+    fn do_create_new_receive_address(&mut self) -> Result<ReceiveAddressState, Error> {
         let request_id = self.receive_address.next_request_id();
         let now = current_epoch_secs();
         let state = self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh)?;
 
-        Produces::ok(state)
+        Ok(state)
     }
 
     pub async fn refresh_expired_receive_address(
@@ -866,6 +899,9 @@ impl WalletActor {
             }
         }
 
+        self.stop_receive_address_refresh_timer();
+        self.set_receive_address_refresh_state(ReceiveAddressRefreshState::Refreshing);
+
         let state =
             match self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh) {
                 Ok(state) => state,
@@ -873,11 +909,10 @@ impl WalletActor {
                     let visible = self.receive_address.visible_state().ok_or(
                         Error::ReceiveAddressError("receive request has no visible address".into()),
                     )?;
-                    let state = visible.refresh_failed(error.to_string());
-                    self.receive_address.set_visible(state.clone());
-                    self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
+                    warn!("Failed to refresh receive address request_id={request_id}: {error}");
+                    self.set_receive_address_refresh_state(ReceiveAddressRefreshState::Failed);
 
-                    state
+                    visible
                 }
             };
 
@@ -885,11 +920,13 @@ impl WalletActor {
     }
 
     pub async fn close_receive_address(&mut self, request_id: u64) {
-        let is_current = self.receive_address.is_current(request_id);
-        self.receive_address.close(request_id);
-        if is_current {
+        if self.receive_address.close(request_id) {
             self.stop_receive_address_watcher();
+            self.stop_receive_address_refresh_timer();
+            self.set_receive_address_loading(false);
+            self.send_receive_address_presentation();
         }
+
         self.send(WalletManagerReconcileMessage::ReceiveAddressClosed(request_id));
     }
 
@@ -1643,7 +1680,8 @@ impl WalletActor {
 
         let state = ReceiveAddressState::cached(request_id, address, status, now);
         self.receive_address.set_visible(state.clone());
-        self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state.clone()));
+        self.receive_address.set_refresh_state(ReceiveAddressRefreshState::Idle);
+        self.send_receive_address_state(state.clone());
 
         if status == ReceiveAddressStatus::Fresh {
             self.start_receive_address_watcher(request_id, state.address.info.index);
@@ -1651,7 +1689,47 @@ impl WalletActor {
             self.stop_receive_address_watcher();
         }
 
+        self.schedule_receive_address_refresh(&state, now);
+
         Ok(state)
+    }
+
+    fn set_receive_address_loading(&self, is_loading: bool) {
+        self.send(WalletManagerReconcileMessage::ReceiveAddressLoadingChanged(is_loading));
+    }
+
+    fn set_receive_address_refresh_state(&mut self, refresh_state: ReceiveAddressRefreshState) {
+        self.receive_address.set_refresh_state(refresh_state);
+        self.send_receive_address_presentation();
+    }
+
+    fn send_receive_address_state(&self, state: ReceiveAddressState) {
+        self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state));
+        self.send_receive_address_presentation();
+    }
+
+    fn send_receive_address_presentation(&self) {
+        let presentation: ReceiveAddressPresentation = self.receive_address.presentation();
+        self.send(WalletManagerReconcileMessage::ReceiveAddressPresentationUpdated(presentation));
+    }
+
+    fn schedule_receive_address_refresh(&mut self, state: &ReceiveAddressState, now_secs: u64) {
+        self.stop_receive_address_refresh_timer();
+
+        let Some(delay) = state.refresh_delay(now_secs) else {
+            return;
+        };
+
+        let request_id = state.request_id;
+        let addr = self.addr.clone();
+        self.receive_address_refresh_timer = Some(AbortableTask::spawn(async move {
+            tokio::time::sleep(delay).await;
+            send!(addr.refresh_expired_receive_address(request_id));
+        }));
+    }
+
+    fn stop_receive_address_refresh_timer(&mut self) {
+        self.receive_address_refresh_timer = None;
     }
 
     async fn cached_receive_address_has_activity(
@@ -1733,7 +1811,9 @@ impl WalletActor {
             return Produces::ok(());
         };
 
-        self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state));
+        self.stop_receive_address_refresh_timer();
+        self.receive_address.set_refresh_state(ReceiveAddressRefreshState::Idle);
+        self.send_receive_address_state(state);
         self.start_targeted_receive_address_sync(request_id, derivation_index);
 
         Produces::ok(())
@@ -1770,8 +1850,14 @@ impl WalletActor {
     pub async fn handle_receive_address_watcher_stopped(
         &mut self,
         request_id: u64,
+        derivation_index: u32,
     ) -> ActorResult<()> {
-        if self.receive_address.is_current(request_id) {
+        if self.receive_address.is_current(request_id)
+            && self.receive_address.visible_state().is_some_and(|state| {
+                state.status == ReceiveAddressStatus::PaymentReceived
+                    || state.address.info.index == derivation_index
+            })
+        {
             self.receive_address_watcher = None;
         }
 
@@ -1891,8 +1977,10 @@ impl WalletActor {
 
         let state = state.payment_received();
         self.receive_address.set_visible(state.clone());
+        self.receive_address.set_refresh_state(ReceiveAddressRefreshState::Idle);
         self.stop_receive_address_watcher();
-        self.send(WalletManagerReconcileMessage::ReceiveAddressUpdated(state));
+        self.stop_receive_address_refresh_timer();
+        self.send_receive_address_state(state);
 
         true
     }

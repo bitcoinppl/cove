@@ -10,7 +10,7 @@ use act_zero::{Addr, call, send};
 use actor::WalletActor;
 use flume::Receiver;
 use parking_lot::RwLock;
-use receive_address::ReceiveAddressState;
+use receive_address::{ReceiveAddressPresentation, ReceiveAddressState};
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
@@ -88,6 +88,9 @@ pub enum WalletManagerReconcileMessage {
     SendFlowError(SendFlowErrorAlert),
     HotWalletKeyMissing(WalletId),
     ReceiveAddressUpdated(ReceiveAddressState),
+    ReceiveAddressPresentationUpdated(ReceiveAddressPresentation),
+    ReceiveAddressLoadingChanged(bool),
+    ReceiveAddressError(String),
     ReceiveAddressClosed(u64),
 }
 
@@ -106,6 +109,9 @@ pub enum WalletManagerAction {
     SelectDifferentWalletAddressType(WalletAddressType),
     SelectedWalletDisappeared,
     StartTransactionWatcher(Arc<TxId>),
+    OpenReceiveAddress,
+    CreateNewReceiveAddress,
+    CloseReceiveAddress(u64),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
@@ -928,43 +934,6 @@ impl RustWalletManager {
         Ok(number_of_confirmations.thousands_int())
     }
 
-    #[uniffi::method]
-    pub async fn open_receive_address(&self) -> Result<ReceiveAddressState, Error> {
-        let state = call!(self.actor.open_receive_address())
-            .await
-            .map_err_str(Error::ReceiveAddressError)?;
-
-        Ok(state)
-    }
-
-    #[uniffi::method]
-    pub async fn create_new_receive_address(&self) -> Result<ReceiveAddressState, Error> {
-        let state = call!(self.actor.create_new_receive_address())
-            .await
-            .map_err_str(Error::ReceiveAddressError)?;
-
-        Ok(state)
-    }
-
-    #[uniffi::method]
-    pub async fn refresh_expired_receive_address(
-        &self,
-        request_id: u64,
-    ) -> Result<ReceiveAddressState, Error> {
-        let state = call!(self.actor.refresh_expired_receive_address(request_id))
-            .await
-            .map_err_str(Error::ReceiveAddressError)?;
-
-        Ok(state)
-    }
-
-    #[uniffi::method]
-    pub async fn close_receive_address(&self, request_id: u64) {
-        if let Err(error) = call!(self.actor.close_receive_address(request_id)).await {
-            error!("Failed to close receive address request_id={request_id}: {error}");
-        }
-    }
-
     /// Get address at the given index
     #[uniffi::method]
     pub async fn address_at(&self, index: u32) -> Result<AddressInfo, Error> {
@@ -1361,11 +1330,28 @@ impl RustWalletManager {
 
             Action::SelectedWalletDisappeared => {
                 send!(self.actor.stop_all_scans());
+                return;
             }
 
             Action::StartTransactionWatcher(tx_id) => {
                 let tx_id = tx_id.as_ref().0;
                 send!(self.actor.start_transaction_watcher(tx_id));
+                return;
+            }
+
+            Action::OpenReceiveAddress => {
+                send!(self.actor.open_receive_address_intent());
+                return;
+            }
+
+            Action::CreateNewReceiveAddress => {
+                send!(self.actor.create_new_receive_address_intent());
+                return;
+            }
+
+            Action::CloseReceiveAddress(request_id) => {
+                send!(self.actor.close_receive_address(request_id));
+                return;
             }
         }
 

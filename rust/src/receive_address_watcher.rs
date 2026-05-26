@@ -85,7 +85,10 @@ impl ReceiveAddressWatcher {
     pub async fn stop_watching(&mut self) -> ActorResult<()> {
         self.poll_timer.clear();
         self.expiry_timer.clear();
-        send!(self.wallet_actor.handle_receive_address_watcher_stopped(self.request_id));
+        send!(
+            self.wallet_actor
+                .handle_receive_address_watcher_stopped(self.request_id, self.derivation_index)
+        );
 
         Produces::ok(())
     }

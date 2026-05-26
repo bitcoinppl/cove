@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,15 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -63,9 +56,8 @@ import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove_core.ReceiveAddressCopyPolicy
 import org.bitcoinppl.cove_core.ReceiveAddressPresentation
-import org.bitcoinppl.cove_core.receiveAddressPresentation
-
-private val receiveAddressCloseScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+import org.bitcoinppl.cove_core.ReceiveAddressRefreshState
+import org.bitcoinppl.cove_core.WalletManagerAction
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,96 +68,30 @@ fun ReceiveAddressSheet(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val tag = "ReceiveAddressSheet"
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val receiveState = manager.receiveAddressState
     val addressInfo = receiveState?.address
-    var isLoading by remember { mutableStateOf(true) }
-    var isRefreshing by remember { mutableStateOf(false) }
-    var nowSecs by remember { mutableStateOf(currentEpochSeconds()) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val isLoading = manager.receiveAddressIsLoading || addressInfo == null
+    val currentRequestId = rememberUpdatedState(receiveState?.requestId)
     var showPaidCopyConfirmation by remember { mutableStateOf(false) }
-    val presentation = receiveAddressPresentation(receiveState, nowSecs.toULong(), isRefreshing)
+    val presentation = manager.receiveAddressPresentation
 
     fun closeReceiveAddress() {
-        receiveState?.requestId?.let { requestId ->
-            receiveAddressCloseScope.launch {
-                withContext(NonCancellable) {
-                    manager.rust.closeReceiveAddress(requestId)
-                }
-            }
+        currentRequestId.value?.let { requestId ->
+            manager.dispatch(WalletManagerAction.CloseReceiveAddress(requestId))
         }
     }
 
     LaunchedEffect(manager) {
-        try {
-            isLoading = true
-            manager.receiveAddressState = manager.rust.openReceiveAddress()
-            errorMessage = null
-        } catch (e: Exception) {
-            Log.e(tag, "Unable to get next address", e)
-            errorMessage = e.message ?: "Unable to get address"
-        } finally {
-            isLoading = false
-        }
+        manager.dispatch(WalletManagerAction.OpenReceiveAddress)
     }
 
-    LaunchedEffect(
-        receiveState?.requestId,
-        receiveState?.expiresAtSecs,
-        receiveState?.status,
-        receiveState?.refreshError,
-    ) {
-        while (true) {
-            val currentNowSecs = currentEpochSeconds()
-            nowSecs = currentNowSecs
-
-            val state = manager.receiveAddressState
-            val currentPresentation =
-                receiveAddressPresentation(state, currentNowSecs.toULong(), isRefreshing)
-            if (state != null && currentPresentation.shouldRefreshNow) {
-                try {
-                    isRefreshing = true
-                    val refreshState = state.copy(refreshError = null)
-                    manager.receiveAddressState = refreshState
-                    manager.receiveAddressState =
-                        manager.rust.refreshExpiredReceiveAddress(refreshState.requestId)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e(tag, "Unable to refresh receive address", e)
-                    val current = manager.receiveAddressState
-                    if (current?.requestId == state.requestId) {
-                        manager.receiveAddressState =
-                            current.copy(refreshError = e.message ?: "Unable to refresh address")
-                    }
-                } finally {
-                    isRefreshing = false
-                }
-            }
-
-            delay(1_000)
-        }
-    }
-
-    DisposableEffect(receiveState?.requestId) {
+    DisposableEffect(manager) {
         onDispose { closeReceiveAddress() }
     }
 
     fun createNewAddress() {
-        scope.launch {
-            try {
-                isLoading = true
-                isRefreshing = false
-                manager.receiveAddressState = manager.rust.createNewReceiveAddress()
-                errorMessage = null
-            } catch (e: Exception) {
-                Log.e(tag, "Unable to get next address", e)
-                errorMessage = e.message ?: "Unable to get address"
-            } finally {
-                isLoading = false
-            }
-        }
+        manager.dispatch(WalletManagerAction.CreateNewReceiveAddress)
     }
 
     fun copyVisibleAddress() {
@@ -191,12 +117,12 @@ fun ReceiveAddressSheet(
         copyVisibleAddress()
     }
 
-    if (errorMessage != null && !isLoading) {
-        LaunchedEffect(errorMessage) {
-            snackbarHostState.showSnackbar(errorMessage!!)
+    LaunchedEffect(manager.receiveAddressError) {
+        val error = manager.receiveAddressError ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(error.item)
+        if (addressInfo == null) {
             onDismiss()
         }
-        return
     }
 
     ModalBottomSheet(
@@ -353,10 +279,10 @@ private fun ReceiveAddressSheetContent(
                             textAlign = TextAlign.Center,
                         )
                     }
-                    presentation.countdownRemainingSecs != null || presentation.showRefreshing -> {
+                    presentation.refreshState == ReceiveAddressRefreshState.REFRESHING -> {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = countdownText(presentation),
+                            text = "Refreshing...",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.65f),
                             textAlign = TextAlign.Center,
@@ -409,7 +335,7 @@ private fun ReceiveAddressSheetContent(
                     )
                 }
 
-                if (presentation.showRefreshError) {
+                if (presentation.refreshState == ReceiveAddressRefreshState.FAILED) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Unable to refresh address",
@@ -460,17 +386,6 @@ private fun ReceiveAddressSheetContent(
     }
 }
 
-private fun currentEpochSeconds(): Long = System.currentTimeMillis() / 1_000
-
-private fun countdownText(presentation: ReceiveAddressPresentation): String {
-    if (presentation.showRefreshing) return "Refreshing..."
-
-    val remaining = presentation.countdownRemainingSecs ?: return ""
-    val minutes = remaining / 60UL
-    val seconds = remaining % 60UL
-    return "Auto-refresh in ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
-}
-
 @Preview(showBackground = true, heightDp = 800)
 @Composable
 private fun ReceiveAddressSheetPreview() {
@@ -484,10 +399,7 @@ private fun ReceiveAddressSheetPreview() {
             presentation =
                 ReceiveAddressPresentation(
                     copyPolicy = ReceiveAddressCopyPolicy.COPY,
-                    countdownRemainingSecs = 42UL,
-                    shouldRefreshNow = false,
-                    showRefreshing = false,
-                    showRefreshError = false,
+                    refreshState = ReceiveAddressRefreshState.IDLE,
                 ),
             onCopyAddress = {},
             onCreateNewAddress = {},

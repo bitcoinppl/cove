@@ -18,11 +18,7 @@ struct ReceiveView: View {
     let manager: WalletManager
 
     private let pasteboard = UIPasteboard.general
-    @State private var isLoading = true
-    @State private var isRefreshing = false
-    @State private var now = Date()
     @State private var showPaidCopyConfirmation = false
-    @State private var createAddressTask: Task<Void, Never>?
 
     private var receiveState: ReceiveAddressState? {
         manager.receiveAddressState
@@ -33,11 +29,7 @@ struct ReceiveView: View {
     }
 
     private var presentation: ReceiveAddressPresentation {
-        receiveAddressPresentation(
-            state: receiveState,
-            nowSecs: UInt64(now.timeIntervalSince1970),
-            isRefreshing: isRefreshing
-        )
+        manager.receiveAddressPresentation
     }
 
     var addressLoaded: Bool {
@@ -67,99 +59,13 @@ struct ReceiveView: View {
     }
 
     func nextAddressSync() {
-        createAddressTask?.cancel()
-        createAddressTask = Task { await createNewAddress() }
-    }
-
-    func openReceiveAddress() async {
-        do {
-            let state = try await manager.rust.openReceiveAddress()
-            guard !Task.isCancelled else { return }
-
-            await MainActor.run {
-                manager.receiveAddressState = state
-                isLoading = false
-            }
-        } catch is CancellationError {
-            return
-        } catch {
-            guard !Task.isCancelled else { return }
-
-            Log.error("Unable to get next address: \(error)")
-            dismiss()
-            app.alertState = .init(.unableToGetAddress(error: error.localizedDescription))
-        }
-    }
-
-    func createNewAddress() async {
-        do {
-            await MainActor.run {
-                isLoading = true
-                isRefreshing = false
-            }
-            let state = try await manager.rust.createNewReceiveAddress()
-            guard !Task.isCancelled else { return }
-
-            await MainActor.run {
-                manager.receiveAddressState = state
-                isLoading = false
-            }
-        } catch is CancellationError {
-            return
-        } catch {
-            guard !Task.isCancelled else { return }
-
-            await MainActor.run { isLoading = false }
-            Log.error("Unable to create new receive address: \(error)")
-            app.alertState = .init(.unableToGetAddress(error: error.localizedDescription))
-        }
-    }
-
-    func refreshExpiredAddress(requestId: UInt64) async {
-        guard !isRefreshing else { return }
-
-        do {
-            await MainActor.run { isRefreshing = true }
-            let state = try await manager.rust.refreshExpiredReceiveAddress(requestId: requestId)
-            guard !Task.isCancelled else {
-                await MainActor.run { isRefreshing = false }
-                return
-            }
-
-            await MainActor.run {
-                manager.receiveAddressState = state
-                isRefreshing = false
-            }
-        } catch is CancellationError {
-            await MainActor.run { isRefreshing = false }
-            return
-        } catch {
-            guard !Task.isCancelled else {
-                await MainActor.run { isRefreshing = false }
-                return
-            }
-
-            await MainActor.run { isRefreshing = false }
-            Log.error("Unable to refresh receive address: \(error)")
-        }
+        manager.dispatch(.createNewReceiveAddress)
     }
 
     func closeReceiveAddress() {
         guard let requestId = receiveState?.requestId else { return }
 
-        Task { await manager.rust.closeReceiveAddress(requestId: requestId) }
-    }
-
-    var countdownText: String? {
-        if presentation.showRefreshing {
-            return "Refreshing..."
-        }
-
-        guard let remaining = presentation.countdownRemainingSecs else { return nil }
-
-        let minutes = Int(remaining / 60)
-        let seconds = Int(remaining % 60)
-        return "Auto-refresh in \(String(format: "%02d", minutes)):\(String(format: "%02d", seconds))"
+        manager.dispatch(.closeReceiveAddress(requestId))
     }
 
     var body: some View {
@@ -190,8 +96,8 @@ struct ReceiveView: View {
                             Text("Payment Received")
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(.white)
-                        } else if let countdownText {
-                            Text(countdownText)
+                        } else if presentation.refreshState == .refreshing {
+                            Text("Refreshing...")
                                 .font(.footnote)
                                 .foregroundStyle(.white.opacity(0.65))
                         }
@@ -219,7 +125,7 @@ struct ReceiveView: View {
                                 .foregroundStyle(.white)
                                 .fixedSize(horizontal: false, vertical: true)
 
-                            if addressLoaded, presentation.showRefreshError {
+                            if addressLoaded, presentation.refreshState == .failed {
                                 Text("Unable to refresh address")
                                     .font(.footnote)
                                     .foregroundStyle(.white.opacity(0.65))
@@ -250,33 +156,30 @@ struct ReceiveView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .padding(.horizontal)
-                .disabled(!addressLoaded)
+                .disabled(!addressLoaded || manager.receiveAddressIsLoading)
 
                 // Secondary action
                 Button("Create New Address", action: nextAddressSync)
                     .font(.headline.weight(.semibold))
                     .padding(.top, 8)
+                    .disabled(manager.receiveAddressIsLoading)
             }
         }
         .background(Color(.systemBackground))
         .task {
-            await openReceiveAddress()
-        }
-        .task(id: receiveState?.requestId) {
-            while !Task.isCancelled {
-                await MainActor.run { now = Date() }
-
-                if let receiveState, presentation.shouldRefreshNow {
-                    await refreshExpiredAddress(requestId: receiveState.requestId)
-                }
-
-                try? await Task.sleep(for: .seconds(1))
-            }
+            manager.dispatch(.openReceiveAddress)
         }
         .onDisappear {
-            createAddressTask?.cancel()
-            createAddressTask = nil
             closeReceiveAddress()
+        }
+        .onChange(of: manager.receiveAddressError) { _, error in
+            guard let error else { return }
+
+            Log.error("Unable to update receive address: \(error.value)")
+            if !addressLoaded {
+                dismiss()
+            }
+            app.alertState = .init(.unableToGetAddress(error: error.value))
         }
         .alert("Copy paid address?", isPresented: $showPaidCopyConfirmation) {
             Button("Create New Address", role: .cancel) {

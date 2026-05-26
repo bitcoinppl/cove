@@ -28,6 +28,12 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     var transactionDetails: [TxId: TransactionDetails] = [:]
 
     var receiveAddressState: ReceiveAddressState?
+    var receiveAddressPresentation = ReceiveAddressPresentation(
+        copyPolicy: .copy,
+        refreshState: .idle
+    )
+    var receiveAddressIsLoading = false
+    var receiveAddressError: TaggedString?
 
     /// scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String?
@@ -234,9 +240,24 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         case let .receiveAddressUpdated(state):
             self.receiveAddressState = state
 
+        case let .receiveAddressPresentationUpdated(presentation):
+            self.receiveAddressPresentation = presentation
+
+        case let .receiveAddressLoadingChanged(isLoading):
+            self.receiveAddressIsLoading = isLoading
+
+        case let .receiveAddressError(error):
+            self.receiveAddressError = TaggedString(error)
+
         case let .receiveAddressClosed(requestId):
             if receiveAddressState?.requestId == requestId {
                 receiveAddressState = nil
+                receiveAddressPresentation = ReceiveAddressPresentation(
+                    copyPolicy: .copy,
+                    refreshState: .idle
+                )
+                receiveAddressIsLoading = false
+                receiveAddressError = nil
             }
         }
     }
@@ -272,6 +293,14 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     }
 
     func dispatch(_ action: Action) {
+        if case .openReceiveAddress = action {
+            receiveAddressError = nil
+        }
+
+        if case .createNewReceiveAddress = action {
+            receiveAddressError = nil
+        }
+
         rustBridge.async { [weak self] in
             self?.logger.debug("dispatch: \(action)")
             self?.rust.dispatch(action: action)

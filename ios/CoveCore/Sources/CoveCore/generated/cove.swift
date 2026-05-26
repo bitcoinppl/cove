@@ -8955,15 +8955,11 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func broadcastTransaction(signedTransaction: BitcoinTransaction) async throws 
     
-    func closeReceiveAddress(requestId: UInt64) async 
-    
     func convertAndDisplayFiat(amount: Amount, prices: PriceResponse, withSuffix: Bool)  -> String
     
     func convertFromFiatString(fiatAmount: String, prices: PriceResponse)  -> Amount
     
     func convertToFiat(amount: Amount, prices: PriceResponse)  -> Double
-    
-    func createNewReceiveAddress() async throws  -> ReceiveAddressState
     
     func createTransactionsWithFiatExport() async throws  -> String
     
@@ -9104,10 +9100,6 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func numberOfConfirmations(blockHeight: UInt32) async throws  -> UInt32
     
     func numberOfConfirmationsFmt(blockHeight: UInt32) async throws  -> String
-    
-    func openReceiveAddress() async throws  -> ReceiveAddressState
-    
-    func refreshExpiredReceiveAddress(requestId: UInt64) async throws  -> ReceiveAddressState
     
     /**
      * Returns the number of confirmation steps required to delete this wallet
@@ -9311,24 +9303,6 @@ open func broadcastTransaction(signedTransaction: BitcoinTransaction)async throw
         )
 }
     
-open func closeReceiveAddress(requestId: UInt64)async   {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_close_receive_address(
-                    self.uniffiCloneHandle(),
-                    FfiConverterUInt64.lower(requestId)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_void,
-            completeFunc: ffi_cove_rust_future_complete_void,
-            freeFunc: ffi_cove_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: nil
-            
-        )
-}
-    
 open func convertAndDisplayFiat(amount: Amount, prices: PriceResponse, withSuffix: Bool = true) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -9361,23 +9335,6 @@ open func convertToFiat(amount: Amount, prices: PriceResponse) -> Double  {
         FfiConverterTypePriceResponse_lower(prices),uniffiCallStatus
     )
 })
-}
-    
-open func createNewReceiveAddress()async throws  -> ReceiveAddressState  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_create_new_receive_address(
-                    self.uniffiCloneHandle()
-                    
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
-            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
-            freeFunc: ffi_cove_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeReceiveAddressState_lift,
-            errorHandler: FfiConverterTypeWalletManagerError_lift
-        )
 }
     
 open func createTransactionsWithFiatExport()async throws  -> String  {
@@ -9934,40 +9891,6 @@ open func numberOfConfirmationsFmt(blockHeight: UInt32)async throws  -> String  
             completeFunc: ffi_cove_rust_future_complete_rust_buffer,
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeWalletManagerError_lift
-        )
-}
-    
-open func openReceiveAddress()async throws  -> ReceiveAddressState  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_open_receive_address(
-                    self.uniffiCloneHandle()
-                    
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
-            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
-            freeFunc: ffi_cove_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeReceiveAddressState_lift,
-            errorHandler: FfiConverterTypeWalletManagerError_lift
-        )
-}
-    
-open func refreshExpiredReceiveAddress(requestId: UInt64)async throws  -> ReceiveAddressState  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_refresh_expired_receive_address(
-                    self.uniffiCloneHandle(),
-                    FfiConverterUInt64.lower(requestId)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
-            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
-            freeFunc: ffi_cove_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeReceiveAddressState_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
@@ -15693,19 +15616,13 @@ public func FfiConverterTypePendingWalletSaveResult_lower(_ value: PendingWallet
 
 public struct ReceiveAddressPresentation: Equatable, Hashable {
     public var copyPolicy: ReceiveAddressCopyPolicy
-    public var countdownRemainingSecs: UInt64?
-    public var shouldRefreshNow: Bool
-    public var showRefreshing: Bool
-    public var showRefreshError: Bool
+    public var refreshState: ReceiveAddressRefreshState
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(copyPolicy: ReceiveAddressCopyPolicy, countdownRemainingSecs: UInt64?, shouldRefreshNow: Bool, showRefreshing: Bool, showRefreshError: Bool) {
+    public init(copyPolicy: ReceiveAddressCopyPolicy, refreshState: ReceiveAddressRefreshState) {
         self.copyPolicy = copyPolicy
-        self.countdownRemainingSecs = countdownRemainingSecs
-        self.shouldRefreshNow = shouldRefreshNow
-        self.showRefreshing = showRefreshing
-        self.showRefreshError = showRefreshError
+        self.refreshState = refreshState
     }
 
     
@@ -15725,19 +15642,13 @@ public struct FfiConverterTypeReceiveAddressPresentation: FfiConverterRustBuffer
         return
             try ReceiveAddressPresentation(
                 copyPolicy: FfiConverterTypeReceiveAddressCopyPolicy.read(from: &buf), 
-                countdownRemainingSecs: FfiConverterOptionUInt64.read(from: &buf), 
-                shouldRefreshNow: FfiConverterBool.read(from: &buf), 
-                showRefreshing: FfiConverterBool.read(from: &buf), 
-                showRefreshError: FfiConverterBool.read(from: &buf)
+                refreshState: FfiConverterTypeReceiveAddressRefreshState.read(from: &buf)
         )
     }
 
     public static func write(_ value: ReceiveAddressPresentation, into buf: inout [UInt8]) {
         FfiConverterTypeReceiveAddressCopyPolicy.write(value.copyPolicy, into: &buf)
-        FfiConverterOptionUInt64.write(value.countdownRemainingSecs, into: &buf)
-        FfiConverterBool.write(value.shouldRefreshNow, into: &buf)
-        FfiConverterBool.write(value.showRefreshing, into: &buf)
-        FfiConverterBool.write(value.showRefreshError, into: &buf)
+        FfiConverterTypeReceiveAddressRefreshState.write(value.refreshState, into: &buf)
     }
 }
 
@@ -15763,17 +15674,15 @@ public struct ReceiveAddressState {
     public var status: ReceiveAddressStatus
     public var firstShownAtSecs: UInt64
     public var expiresAtSecs: UInt64?
-    public var refreshError: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(requestId: UInt64, address: AddressInfoWithDerivation, status: ReceiveAddressStatus, firstShownAtSecs: UInt64, expiresAtSecs: UInt64?, refreshError: String?) {
+    public init(requestId: UInt64, address: AddressInfoWithDerivation, status: ReceiveAddressStatus, firstShownAtSecs: UInt64, expiresAtSecs: UInt64?) {
         self.requestId = requestId
         self.address = address
         self.status = status
         self.firstShownAtSecs = firstShownAtSecs
         self.expiresAtSecs = expiresAtSecs
-        self.refreshError = refreshError
     }
 
     
@@ -15796,8 +15705,7 @@ public struct FfiConverterTypeReceiveAddressState: FfiConverterRustBuffer {
                 address: FfiConverterTypeAddressInfoWithDerivation.read(from: &buf), 
                 status: FfiConverterTypeReceiveAddressStatus.read(from: &buf), 
                 firstShownAtSecs: FfiConverterUInt64.read(from: &buf), 
-                expiresAtSecs: FfiConverterOptionUInt64.read(from: &buf), 
-                refreshError: FfiConverterOptionString.read(from: &buf)
+                expiresAtSecs: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
@@ -15807,7 +15715,6 @@ public struct FfiConverterTypeReceiveAddressState: FfiConverterRustBuffer {
         FfiConverterTypeReceiveAddressStatus.write(value.status, into: &buf)
         FfiConverterUInt64.write(value.firstShownAtSecs, into: &buf)
         FfiConverterOptionUInt64.write(value.expiresAtSecs, into: &buf)
-        FfiConverterOptionString.write(value.refreshError, into: &buf)
     }
 }
 
@@ -27814,6 +27721,79 @@ public func FfiConverterTypeReceiveAddressCopyPolicy_lower(_ value: ReceiveAddre
 
 
 
+public enum ReceiveAddressRefreshState: Equatable, Hashable {
+    
+    case idle
+    case refreshing
+    case failed
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ReceiveAddressRefreshState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReceiveAddressRefreshState: FfiConverterRustBuffer {
+    typealias SwiftType = ReceiveAddressRefreshState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReceiveAddressRefreshState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .idle
+        
+        case 2: return .refreshing
+        
+        case 3: return .failed
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ReceiveAddressRefreshState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .idle:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .refreshing:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .failed:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReceiveAddressRefreshState_lift(_ buf: RustBuffer) throws -> ReceiveAddressRefreshState {
+    return try FfiConverterTypeReceiveAddressRefreshState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReceiveAddressRefreshState_lower(_ value: ReceiveAddressRefreshState) -> RustBuffer {
+    return FfiConverterTypeReceiveAddressRefreshState.lower(value)
+}
+
+
+
+
 public enum ReceiveAddressStatus: Equatable, Hashable {
     
     case fresh
@@ -33383,6 +33363,10 @@ public enum WalletManagerAction {
     case selectedWalletDisappeared
     case startTransactionWatcher(TxId
     )
+    case openReceiveAddress
+    case createNewReceiveAddress
+    case closeReceiveAddress(UInt64
+    )
 
 
 
@@ -33434,6 +33418,13 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
         case 12: return .selectedWalletDisappeared
         
         case 13: return .startTransactionWatcher(try FfiConverterTypeTxId.read(from: &buf)
+        )
+        
+        case 14: return .openReceiveAddress
+        
+        case 15: return .createNewReceiveAddress
+        
+        case 16: return .closeReceiveAddress(try FfiConverterUInt64.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -33500,6 +33491,19 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
         case let .startTransactionWatcher(v1):
             writeInt(&buf, Int32(13))
             FfiConverterTypeTxId.write(v1, into: &buf)
+            
+        
+        case .openReceiveAddress:
+            writeInt(&buf, Int32(14))
+        
+        
+        case .createNewReceiveAddress:
+            writeInt(&buf, Int32(15))
+        
+        
+        case let .closeReceiveAddress(v1):
+            writeInt(&buf, Int32(16))
+            FfiConverterUInt64.write(v1, into: &buf)
             
         }
     }
@@ -33911,6 +33915,12 @@ public enum WalletManagerReconcileMessage {
     )
     case receiveAddressUpdated(ReceiveAddressState
     )
+    case receiveAddressPresentationUpdated(ReceiveAddressPresentation
+    )
+    case receiveAddressLoadingChanged(Bool
+    )
+    case receiveAddressError(String
+    )
     case receiveAddressClosed(UInt64
     )
 
@@ -33977,7 +33987,16 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case 15: return .receiveAddressUpdated(try FfiConverterTypeReceiveAddressState.read(from: &buf)
         )
         
-        case 16: return .receiveAddressClosed(try FfiConverterUInt64.read(from: &buf)
+        case 16: return .receiveAddressPresentationUpdated(try FfiConverterTypeReceiveAddressPresentation.read(from: &buf)
+        )
+        
+        case 17: return .receiveAddressLoadingChanged(try FfiConverterBool.read(from: &buf)
+        )
+        
+        case 18: return .receiveAddressError(try FfiConverterString.read(from: &buf)
+        )
+        
+        case 19: return .receiveAddressClosed(try FfiConverterUInt64.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -34061,8 +34080,23 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
             FfiConverterTypeReceiveAddressState.write(v1, into: &buf)
             
         
-        case let .receiveAddressClosed(v1):
+        case let .receiveAddressPresentationUpdated(v1):
             writeInt(&buf, Int32(16))
+            FfiConverterTypeReceiveAddressPresentation.write(v1, into: &buf)
+            
+        
+        case let .receiveAddressLoadingChanged(v1):
+            writeInt(&buf, Int32(17))
+            FfiConverterBool.write(v1, into: &buf)
+            
+        
+        case let .receiveAddressError(v1):
+            writeInt(&buf, Int32(18))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .receiveAddressClosed(v1):
+            writeInt(&buf, Int32(19))
             FfiConverterUInt64.write(v1, into: &buf)
             
         }
@@ -36911,30 +36945,6 @@ fileprivate struct FfiConverterOptionTypeFiatAmount: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeReceiveAddressState: FfiConverterRustBuffer {
-    typealias SwiftType = ReceiveAddressState?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeReceiveAddressState.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeReceiveAddressState.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeWalletMetadata: FfiConverterRustBuffer {
     typealias SwiftType = WalletMetadata?
 
@@ -38395,16 +38405,6 @@ public func sendFlowAlertStateFromAddressError(error: AddressError, address: Str
     )
 })
 }
-public func receiveAddressPresentation(state: ReceiveAddressState?, nowSecs: UInt64, isRefreshing: Bool) -> ReceiveAddressPresentation  {
-    return try!  FfiConverterTypeReceiveAddressPresentation_lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_func_receive_address_presentation(
-        FfiConverterOptionTypeReceiveAddressState.lower(state),
-        FfiConverterUInt64.lower(nowSecs),
-        FfiConverterBool.lower(isRefreshing),uniffiCallStatus
-    )
-})
-}
 public func groupedPlainWordsOf(mnemonic: String, groups: UInt8)throws  -> [[String]]  {
     return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMnemonicParseError_lift) {
         uniffiCallStatus in
@@ -38718,9 +38718,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 5267) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_receive_address_presentation() != 37869) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_grouped_plain_words_of() != 56420) {
@@ -39389,9 +39386,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_close_receive_address() != 45892) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 9223) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -39399,9 +39393,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_convert_to_fiat() != 35551) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_create_new_receive_address() != 12812) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_create_transactions_with_fiat_export() != 39040) {
@@ -39513,12 +39504,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt() != 60488) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_open_receive_address() != 47149) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_refresh_expired_receive_address() != 18802) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations() != 30427) {
