@@ -10,7 +10,7 @@ final class TransactionsScanUiTests: XCTestCase {
         let image = try render(
             EmptyWalletScanState(
                 scanProgress: WalletScanProgress(
-                    phase: .initial,
+                    phase: .full,
                     checked: 42,
                     gap: 4,
                     stopGap: 10,

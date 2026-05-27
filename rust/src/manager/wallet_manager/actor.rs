@@ -71,8 +71,8 @@ use tracing::{debug, error, info, warn};
 use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
 use self::scan::{
-    FullScanCompletionEffect, FullScanType, PreparedProgressiveScan, ScanRequestOrder,
-    WalletScanActor, WalletScanEvent, successful_full_scan_completion_effect,
+    FullScanType, PreparedProgressiveScan, ScanRequestOrder, WalletScanActor, WalletScanEvent,
+    should_update_full_scan_metadata,
 };
 use super::{SingleOrMany, WalletManagerReconcileMessage};
 
@@ -1156,9 +1156,6 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    // perform full scan in 2 steps:
-    // 1. do a full scan of the first 20 addresses, return results
-    // 2. do a full scan of the next 150 addresses, return results
     async fn perform_full_scan(&mut self) -> ActorResult<()> {
         if self.state != ActorState::Initial {
             debug!("already performing scanning or scanned skipping ({:?})", self.state);
@@ -1166,9 +1163,9 @@ impl WalletActor {
             return Produces::ok(());
         }
 
-        debug!("starting initial full scan");
+        debug!("starting full scan");
         let scan_actor = self.scan_actor();
-        send!(scan_actor.start_initial_full_scan());
+        send!(scan_actor.start_full_scan());
 
         Produces::ok(())
     }
@@ -1415,18 +1412,10 @@ impl WalletActor {
             }
         }
 
-        match successful_full_scan_completion_effect(full_scan_type) {
-            FullScanCompletionEffect::DeferUserCompletion => {
-                self.state = ActorState::FullScanComplete(full_scan_type);
-                return Produces::ok(());
-            }
-            FullScanCompletionEffect::CompleteUserScan { update_full_scan_metadata } => {
-                if update_full_scan_metadata {
-                    let now = jiff::Timestamp::now().as_second() as u64;
-                    self.wallet.metadata.internal.performed_full_scan_at = Some(now);
-                    Database::global().wallets.update_internal_metadata(&self.wallet.metadata)?;
-                }
-            }
+        if should_update_full_scan_metadata(full_scan_type) {
+            let now = jiff::Timestamp::now().as_second() as u64;
+            self.wallet.metadata.internal.performed_full_scan_at = Some(now);
+            Database::global().wallets.update_internal_metadata(&self.wallet.metadata)?;
         }
 
         self.save_last_scan_finished();
@@ -2063,11 +2052,7 @@ mod tests {
     #[test]
     fn prepare_failure_before_first_full_scan_returns_to_initial_state() {
         assert_eq!(
-            super::state_after_full_scan_prepare_failed(FullScanType::Initial, false),
-            ActorState::Initial
-        );
-        assert_eq!(
-            super::state_after_full_scan_prepare_failed(FullScanType::Expanded, false),
+            super::state_after_full_scan_prepare_failed(FullScanType::Full, false),
             ActorState::Initial
         );
     }

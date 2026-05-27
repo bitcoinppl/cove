@@ -124,8 +124,7 @@ pub enum WalletLoadState {
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletScanPhase {
-    Initial,
-    Expanded,
+    Full,
     Rescan,
     Incremental,
 }

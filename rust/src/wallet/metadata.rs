@@ -68,14 +68,14 @@ pub struct InternalOnlyMetadata {
     pub address_index: Option<cove_types::AddressIndex>,
 
     #[serde(default)]
-    /// this is the last time the wallet was scanned, this includes the initial scna, expanded scan, and incremental scan
+    /// This is the last time the wallet was scanned, including full, rescan, and incremental scans
     pub last_scan_finished: Option<Duration>,
 
     #[serde(default)]
     pub last_height_fetched: Option<cove_types::BlockSizeLast>,
 
     #[serde(default)]
-    /// this is the time that a full expanded scan was completed, this should only happen once
+    /// This is the time that a full scan was completed, this should only happen once
     pub performed_full_scan_at: Option<u64>,
 
     // the type of store used for the wallet

@@ -31,7 +31,7 @@ class TransactionsScanUiTest {
                 EmptyWalletScanState(
                     scanProgress =
                         WalletScanProgress(
-                            phase = WalletScanPhase.INITIAL,
+                            phase = WalletScanPhase.FULL,
                             checked = 42u,
                             gap = 4u,
                             stopGap = 10u,
