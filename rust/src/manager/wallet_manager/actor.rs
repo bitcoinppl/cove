@@ -1328,6 +1328,15 @@ impl WalletActor {
             WalletScanEvent::IncrementalScanStarted => {
                 self.state = ActorState::PerformingIncrementalScan;
             }
+            WalletScanEvent::FullScanPrepareFailed(scan_type) => {
+                self.state = state_after_full_scan_prepare_failed(
+                    scan_type,
+                    self.wallet.metadata.internal.performed_full_scan_at.is_some(),
+                );
+            }
+            WalletScanEvent::IncrementalScanPrepareFailed => {
+                self.state = ActorState::FailedIncrementalScan;
+            }
             WalletScanEvent::StatusChanged(status) => {
                 self.send_scan_status(status);
             }
@@ -1936,6 +1945,17 @@ fn progressive_scan_update_response(
     }
 }
 
+fn state_after_full_scan_prepare_failed(
+    scan_type: FullScanType,
+    completed_full_scan: bool,
+) -> ActorState {
+    if !completed_full_scan {
+        return ActorState::Initial;
+    }
+
+    ActorState::FailedFullScan(scan_type)
+}
+
 impl WalletActor {
     fn send(&self, msg: WalletManagerReconcileMessage) {
         self.reconciler.send(msg.into()).unwrap();
@@ -2017,7 +2037,7 @@ mod tests {
     use cove_bdk_progressive_scan::ScanUpdate;
     use std::collections::BTreeMap;
 
-    use super::progressive_scan_update_response;
+    use super::{ActorState, FullScanType, progressive_scan_update_response};
 
     #[test]
     fn progressive_scan_update_response_preserves_last_active_indices() {
@@ -2030,5 +2050,25 @@ mod tests {
         let response = progressive_scan_update_response(scan_update);
 
         assert_eq!(response.last_active_indices, BTreeMap::from([(KeychainKind::External, 7)]));
+    }
+
+    #[test]
+    fn prepare_failure_before_first_full_scan_returns_to_initial_state() {
+        assert_eq!(
+            super::state_after_full_scan_prepare_failed(FullScanType::Initial, false),
+            ActorState::Initial
+        );
+        assert_eq!(
+            super::state_after_full_scan_prepare_failed(FullScanType::Expanded, false),
+            ActorState::Initial
+        );
+    }
+
+    #[test]
+    fn prepare_failure_after_completed_full_scan_records_failed_scan() {
+        assert_eq!(
+            super::state_after_full_scan_prepare_failed(FullScanType::Rescan(50), true),
+            ActorState::FailedFullScan(FullScanType::Rescan(50))
+        );
     }
 }

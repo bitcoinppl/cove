@@ -61,6 +61,8 @@ pub(crate) struct PreparedProgressiveScan {
 pub(crate) enum WalletScanEvent {
     FullScanStarted(FullScanType),
     IncrementalScanStarted,
+    FullScanPrepareFailed(FullScanType),
+    IncrementalScanPrepareFailed,
     StatusChanged(WalletScanStatus),
     PartialUpdate(ScanUpdate<KeychainKind>),
     FlushUi,
@@ -246,7 +248,7 @@ impl WalletScanActor {
                 }
                 Err(error) => {
                     debug!("failed to prepare progressive scan: {error:?}");
-                    send!(addr.handle_scan_prepare_failed());
+                    send!(addr.handle_scan_prepare_failed(scan));
                 }
             }
         });
@@ -431,8 +433,17 @@ impl WalletScanActor {
         self.begin_scan(RunningScan::Full(FullScanType::Rescan(gap_limit)))
     }
 
-    async fn handle_scan_prepare_failed(&mut self) -> ActorResult<()> {
+    async fn handle_scan_prepare_failed(&mut self, scan: RunningScan) -> ActorResult<()> {
         self.clear_scan_lifecycle();
+
+        match scan {
+            RunningScan::Full(scan_type) => {
+                self.send_event(WalletScanEvent::FullScanPrepareFailed(scan_type));
+            }
+            RunningScan::Incremental => {
+                self.send_event(WalletScanEvent::IncrementalScanPrepareFailed);
+            }
+        }
 
         self.send_event(WalletScanEvent::StatusChanged(WalletScanStatus::Idle));
         Produces::ok(())
