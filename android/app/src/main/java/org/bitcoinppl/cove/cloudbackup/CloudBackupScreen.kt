@@ -562,6 +562,13 @@ private fun CloudBackupDetailContent(
                 onReinitialize = onReinitialize,
             )
         }
+
+        if (
+            bodyState == CloudBackupDetailBodyState.DETAIL ||
+                bodyState == CloudBackupDetailBodyState.MISSING_PASSKEY
+        ) {
+            DisableCloudBackupSection(manager = manager, detail = manager.detail)
+        }
     }
 }
 
@@ -705,8 +712,6 @@ private fun MissingPasskeyContent(
         repairError?.let {
             ErrorInlineMessage(it)
         }
-        
-        DisableCloudBackupSection(manager = manager, detail = manager.detail)
     }
 }
 
@@ -785,8 +790,6 @@ private fun DetailFormContent(
         onRecreate = onRecreate,
         onReinitialize = onReinitialize,
     )
-
-    DisableCloudBackupSection(manager = manager, detail = detail)
 }
 
 @Composable

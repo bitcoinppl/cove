@@ -96,6 +96,7 @@ struct CloudBackupDetailScreen: View {
             UnsupportedPasskeyProviderContent(manager: manager)
         } else if isPasskeyMissing {
             MissingPasskeyContent(manager: manager)
+            DisableCloudBackupSection(manager: manager, detail: manager.detail)
         } else {
             pendingUploadConfirmationSection
 
@@ -105,6 +106,9 @@ struct CloudBackupDetailScreen: View {
                 onRecreate: { showRecreateConfirmation = true },
                 onReinitialize: { showReinitializeConfirmation = true }
             )
+            if manager.detail != nil {
+                DisableCloudBackupSection(manager: manager, detail: manager.detail)
+            }
         }
     }
 

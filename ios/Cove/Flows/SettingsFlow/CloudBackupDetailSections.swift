@@ -37,8 +37,6 @@ struct DetailFormContent: View {
         case let .loadFailed(error):
             OtherBackupsLoadFailedSection(error: error)
         }
-
-        DisableCloudBackupSection(manager: manager, detail: detail)
     }
 
     private var wallets: [CloudBackupWalletItem] {
@@ -111,12 +109,10 @@ struct MissingPasskeyContent: View {
                     .font(.caption)
             }
         }
-
-        DisableCloudBackupSection(manager: manager, detail: manager.detail)
     }
 }
 
-private struct DisableCloudBackupSection: View {
+struct DisableCloudBackupSection: View {
     let manager: CloudBackupManager
     let detail: CloudBackupDetail?
     @State private var showingUnavailableAlert = false
