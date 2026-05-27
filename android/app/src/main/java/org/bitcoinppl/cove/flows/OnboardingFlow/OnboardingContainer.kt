@@ -3,9 +3,13 @@ package org.bitcoinppl.cove.flows.OnboardingFlow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import org.bitcoinppl.cove.OnboardingManager
+import org.bitcoinppl.cove_core.CloudBackupEnableContext
+import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingCloudRestoreState
 import org.bitcoinppl.cove_core.OnboardingStep
+import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 
 @Composable
 internal fun OnboardingContainer(
@@ -119,7 +123,7 @@ internal fun OnboardingContainer(
         OnboardingStep.CLOUD_BACKUP ->
             OnboardingCloudBackupStepView(
                 branch = manager.state.branch,
-                onEnable = { manager.dispatch(OnboardingAction.BeginCloudBackupEnable) },
+                onEnable = { manager.beginCloudBackupEnable() },
                 onEnabled = { manager.dispatch(OnboardingAction.CloudBackupEnabled) },
                 onSkip = { manager.dispatch(OnboardingAction.SkipCloudBackup) },
             )
@@ -172,4 +176,20 @@ internal fun OnboardingContainer(
             )
     }
     stepContent
+}
+
+private fun OnboardingManager.beginCloudBackupEnable() {
+    if (state.cloudRestoreState == OnboardingCloudRestoreState.BACKUP_FOUND) {
+        dispatch(OnboardingAction.BeginCloudBackupEnable)
+        return
+    }
+
+    app.cloudBackupManager.dispatch(
+        CloudBackupManagerAction.EnableCloudBackupNoDiscovery(
+            CloudBackupEnableContext(
+                SavedPasskeyConfirmationMode.AUTOMATIC,
+                CloudBackupVerificationSource.ONBOARDING,
+            ),
+        ),
+    )
 }

@@ -72,6 +72,7 @@ import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
+import org.bitcoinppl.cove_core.CloudBackupRetryAction
 import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
@@ -183,7 +184,7 @@ fun CloudBackupScreen(
                         modifier = Modifier.fillMaxSize(),
                         message = null,
                         isBusy = false,
-                        onEnable = { manager.dispatch(manualEnableCloudBackup(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
+                        onEnable = { manager.dispatch(manualEnableCloudBackupNoDiscovery(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
                     )
                 }
 
@@ -211,7 +212,7 @@ fun CloudBackupScreen(
                             modifier = Modifier.fillMaxSize(),
                             message = lifecycle.v1.message,
                             isBusy = false,
-                            onEnable = { manager.dispatch(manualEnableCloudBackup(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
+                            onEnable = { manager.dispatch(manualEnableCloudBackupNoDiscovery(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
                         )
                     }
                 }
@@ -1593,7 +1594,7 @@ private fun CancelledVerificationActions(
     MaterialDivider()
     MaterialSettingsItem(
         title = "Create New Passkey",
-        onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskey) },
+        onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery) },
         leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
     )
 }
@@ -1659,9 +1660,7 @@ private fun VerificationFailureContent(
                 title = "Try Again",
                 onClick = {
                     manager.dispatch(
-                        CloudBackupManagerAction.StartVerification(
-                            CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
-                        ),
+                        verificationRetryAction(failure),
                     )
                 },
                 leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
@@ -1669,7 +1668,7 @@ private fun VerificationFailureContent(
             MaterialDivider()
             MaterialSettingsItem(
                 title = "Create New Passkey",
-                onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskey) },
+                onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery) },
                 leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
             )
         }
@@ -1707,6 +1706,17 @@ private fun VerificationFailureContent(
         ErrorInlineMessage(repairState.v1, modifier = Modifier.padding(16.dp))
     }
 }
+
+private fun verificationRetryAction(failure: DeepVerificationFailure.Retry): CloudBackupManagerAction =
+    if (failure.retryContext?.action == CloudBackupRetryAction.VERIFY_DISCOVERABLE) {
+        CloudBackupManagerAction.StartVerificationDiscoverable(
+            CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+        )
+    } else {
+        CloudBackupManagerAction.StartVerification(
+            CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+        )
+    }
 
 @Composable
 private fun LoadingRow(

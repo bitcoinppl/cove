@@ -145,8 +145,8 @@ struct VerificationSection: View {
     private func failureSection(_ failure: DeepVerificationFailure) -> some View {
         Section {
             switch failure {
-            case let .retry(message, _, _):
-                retryFailureContent(message)
+            case let .retry(message, _, retryContext):
+                retryFailureContent(message, retryContext: retryContext)
             case let .recreateManifest(message, warning, _):
                 recreateManifestContent(message: message, warning: warning)
             case let .reinitializeBackup(message, warning, _):
@@ -166,11 +166,11 @@ struct VerificationSection: View {
     }
 
     @ViewBuilder
-    private func retryFailureContent(_ message: String) -> some View {
+    private func retryFailureContent(_ message: String, retryContext: CloudBackupRetryContext?) -> some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(Color.statusWarning)
 
-        retryButton
+        retryButton(retryContext: retryContext)
         repairPasskeyButton
     }
 
@@ -284,9 +284,13 @@ struct VerificationSection: View {
         }
     }
 
-    private var retryButton: some View {
+    private func retryButton(retryContext: CloudBackupRetryContext?) -> some View {
         Button {
-            manager.startVerification()
+            if retryContext?.action == .verifyDiscoverable {
+                manager.dispatch(action: .startVerificationDiscoverable(.cloudBackupDetail))
+            } else {
+                manager.startVerification(source: .cloudBackupDetail)
+            }
         } label: {
             Label("Try Again", systemImage: "arrow.clockwise")
         }
@@ -295,7 +299,7 @@ struct VerificationSection: View {
 
     private var repairPasskeyButton: some View {
         Button {
-            manager.dispatch(action: .repairPasskey)
+            manager.dispatch(action: .repairPasskeyNoDiscovery)
         } label: {
             if manager.passkeyRepairState.isRecovering {
                 HStack {
