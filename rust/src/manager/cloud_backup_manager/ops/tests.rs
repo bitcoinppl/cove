@@ -1388,7 +1388,7 @@ async fn restore_from_local_master_key_propagates_store_read_errors() {
 }
 
 #[test]
-fn blocking_cloud_error_rewrites_unavailable_storage_errors_to_offline() {
+fn blocking_cloud_error_keeps_unavailable_storage_errors_visible() {
     let error = blocking_cloud_error(
         BlockingCloudStep::Enable,
         CloudBackupError::CloudStorage(CloudStorageError::NotAvailable(
@@ -1396,7 +1396,25 @@ fn blocking_cloud_error_rewrites_unavailable_storage_errors_to_offline() {
         )),
     );
 
-    assert!(matches!(error, CloudBackupError::Offline(_)));
+    assert!(matches!(
+        error,
+        CloudBackupError::CloudStorage(CloudStorageError::NotAvailable(message))
+            if message == "iCloud Drive is not available"
+    ));
+}
+
+#[test]
+fn blocking_cloud_error_rewrites_offline_storage_errors_to_step_message() {
+    let error = blocking_cloud_error(
+        BlockingCloudStep::Enable,
+        CloudBackupError::CloudStorage(CloudStorageError::Offline("offline".into())),
+    );
+
+    assert!(matches!(
+        error,
+        CloudBackupError::Offline(message)
+            if message == "Reconnect to the internet, then try enabling cloud backup again"
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]

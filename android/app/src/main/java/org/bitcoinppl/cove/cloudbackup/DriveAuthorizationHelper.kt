@@ -2,13 +2,13 @@ package org.bitcoinppl.cove.cloudbackup
 
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import androidx.activity.result.IntentSenderRequest
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.ClearTokenRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.tasks.await
 
@@ -75,19 +75,25 @@ internal class DriveAuthorizationHelper(
                 IntentSenderRequest.Builder(pendingIntent.intentSender).build(),
             )
 
-        if (activityResult.resultCode != Activity.RESULT_OK) {
-            throw AuthorizationRequiredException("google drive authorization was cancelled")
-        }
+        val resultIntent = activityResult.data
+        if (resultIntent == null) {
+            if (activityResult.resultCode != Activity.RESULT_OK) {
+                throw AuthorizationRequiredException("google drive authorization was cancelled")
+            }
 
-        val resultIntent =
-            activityResult.data ?: Intent()
+            throw IllegalStateException("google drive authorization result is missing intent data")
+        }
 
         return try {
             client.getAuthorizationResultFromIntent(resultIntent)
         } catch (error: ApiException) {
-            throw AuthorizationRequiredException("google drive authorization result could not be parsed", error)
+            if (error.statusCode == CommonStatusCodes.CANCELED) {
+                throw AuthorizationRequiredException("google drive authorization was cancelled", error)
+            }
+
+            throw error
         } catch (error: RuntimeException) {
-            throw AuthorizationRequiredException("google drive authorization result could not be parsed", error)
+            throw IllegalStateException("google drive authorization result could not be parsed", error)
         }
     }
 

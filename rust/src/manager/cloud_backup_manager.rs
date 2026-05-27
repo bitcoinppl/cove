@@ -460,7 +460,7 @@ pub(crate) fn blocking_cloud_error(
     step: BlockingCloudStep,
     error: CloudBackupError,
 ) -> CloudBackupError {
-    if is_connectivity_related_issue(&error) {
+    if CloudStorageIssue::from(&error) == CloudStorageIssue::Offline {
         return offline_error_for_step(step);
     }
 

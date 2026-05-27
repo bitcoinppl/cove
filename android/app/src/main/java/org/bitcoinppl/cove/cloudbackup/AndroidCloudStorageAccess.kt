@@ -98,36 +98,111 @@ internal enum class DriveQuotaReason {
     }
 }
 
-internal fun driveQuotaReasons(body: String): Set<DriveQuotaReason> {
-    val root = runCatching { JSONObject(body) }.getOrNull() ?: return emptySet()
-    val error = root.optJSONObject("error") ?: return emptySet()
-    val reasons = mutableSetOf<DriveQuotaReason>()
+internal data class DriveErrorInfo(
+    val message: String?,
+    val reasons: Set<String>,
+) {
+    fun hasReason(vararg expected: String): Boolean =
+        expected.any(reasons::contains)
+}
 
-    DriveQuotaReason.from(error.optString("reason"))?.let(reasons::add)
+internal fun driveErrorInfo(body: String): DriveErrorInfo {
+    val root = runCatching { JSONObject(body) }.getOrNull()
+    val error = root?.optJSONObject("error")
+        ?: return DriveErrorInfo(message = body.takeIf(String::isNotBlank), reasons = emptySet())
+    val reasons = mutableSetOf<String>()
+
+    error.optString("reason").takeIf(String::isNotBlank)?.let(reasons::add)
 
     val errors = error.optJSONArray("errors")
     if (errors != null) {
         for (index in 0 until errors.length()) {
             val reason = errors.optJSONObject(index)?.optString("reason") ?: continue
-            DriveQuotaReason.from(reason)?.let(reasons::add)
+            reason.takeIf(String::isNotBlank)?.let(reasons::add)
         }
     }
 
-    return reasons
+    val details = error.optJSONArray("details")
+    if (details != null) {
+        for (index in 0 until details.length()) {
+            val detail = details.optJSONObject(index) ?: continue
+            detail.optString("reason").takeIf(String::isNotBlank)?.let(reasons::add)
+        }
+    }
+
+    return DriveErrorInfo(
+        message = error.optString("message").takeIf(String::isNotBlank),
+        reasons = reasons,
+    )
+}
+
+internal fun driveQuotaReasons(body: String): Set<DriveQuotaReason> {
+    return driveErrorInfo(body).reasons.mapNotNullTo(mutableSetOf(), DriveQuotaReason::from)
 }
 
 private fun DriveHttpException.isQuotaExceeded(): Boolean =
     driveQuotaReasons(body).isNotEmpty()
 
+private fun DriveHttpException.isGoogleDriveApiDisabled(): Boolean {
+    val info = driveErrorInfo(body)
+    return info.hasReason("accessNotConfigured", "serviceDisabled", "SERVICE_DISABLED") ||
+        info.message?.contains("Google Drive API has not been used", ignoreCase = true) == true ||
+        info.message?.contains("Google Drive API is disabled", ignoreCase = true) == true
+}
+
+private fun DriveHttpException.isAuthorizationRejected(): Boolean {
+    val info = driveErrorInfo(body)
+    return info.hasReason(
+        "insufficientPermissions",
+        "insufficientFilePermissions",
+        "appNotAuthorizedToFile",
+    )
+}
+
+private fun DriveHttpException.driveMessage(fallback: String): String =
+    driveErrorInfo(body).message?.takeIf(String::isNotBlank) ?: body.ifBlank { fallback }
+
+private fun DriveHttpException.forbiddenError(fallback: String): CloudStorageException =
+    when {
+        isQuotaExceeded() -> CloudStorageException.QuotaExceeded()
+        isGoogleDriveApiDisabled() ->
+            CloudStorageException.NotAvailable(
+                "google drive API is not enabled for this Google Cloud project",
+            )
+        isAuthorizationRejected() ->
+            CloudStorageException.AuthorizationRequired("google drive access was rejected")
+        else -> CloudStorageException.NotAvailable(driveMessage(fallback))
+    }
+
+private fun AuthorizationRequiredException.cloudStorageMessage(): String =
+    message?.takeIf(String::isNotBlank) ?: "google drive authorization is required"
+
+private fun ApiException.cloudStorageMessage(prefix: String): String {
+    val status = CommonStatusCodes.getStatusCodeString(statusCode)
+    val details = message
+        ?.trim()
+        ?.takeIf { it.isNotBlank() && it != status && it != "$statusCode:" }
+
+    if (details?.contains("UNREGISTERED_ON_API_CONSOLE") == true) {
+        return "$prefix: google drive OAuth client is not registered for this app"
+    }
+
+    return if (details == null) "$prefix: $status" else "$prefix: $status: $details"
+}
+
+private fun logDriveWarning(message: String, error: Throwable) {
+    runCatching { Log.w("AndroidCloudStorage", message, error) }
+}
+
 internal fun mapDriveUploadError(error: Throwable, target: String): CloudStorageException =
     when (error) {
         is AuthorizationRequiredException ->
-            CloudStorageException.AuthorizationRequired("google drive authorization is required")
+            CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is ApiException ->
             if (error.statusCode == CommonStatusCodes.CANCELED) {
                 CloudStorageException.AuthorizationRequired("google drive authorization was cancelled")
             } else {
-                CloudStorageException.NotAvailable(error.message ?: "google drive is unavailable")
+                CloudStorageException.NotAvailable(error.cloudStorageMessage("google drive is unavailable"))
             }
         is DriveHttpException ->
             when (error.statusCode) {
@@ -136,11 +211,7 @@ internal fun mapDriveUploadError(error: Throwable, target: String): CloudStorage
                 HttpURLConnection.HTTP_NOT_FOUND -> CloudStorageException.NotFound(target)
                 HTTP_TOO_MANY_REQUESTS -> CloudStorageException.QuotaExceeded()
                 HttpURLConnection.HTTP_FORBIDDEN ->
-                    if (error.isQuotaExceeded()) {
-                        CloudStorageException.QuotaExceeded()
-                    } else {
-                        CloudStorageException.AuthorizationRequired("google drive access was rejected")
-                    }
+                    error.forbiddenError("drive upload was rejected")
                 else -> CloudStorageException.UploadFailed(error.body.ifBlank { "drive upload failed" })
             }
         is UnknownHostException, is SocketTimeoutException, is IOException ->
@@ -165,12 +236,12 @@ internal fun mapDriveDeleteError(error: Throwable, target: String): CloudStorage
 internal fun mapDriveListError(error: Throwable): CloudStorageException =
     when (error) {
         is AuthorizationRequiredException ->
-            CloudStorageException.AuthorizationRequired("google drive authorization is required")
+            CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is ApiException ->
             if (error.statusCode == CommonStatusCodes.CANCELED) {
                 CloudStorageException.AuthorizationRequired("google drive authorization was cancelled")
             } else {
-                CloudStorageException.NotAvailable(error.message ?: "google drive is unavailable")
+                CloudStorageException.NotAvailable(error.cloudStorageMessage("google drive is unavailable"))
             }
         is DriveHttpException ->
             when (error.statusCode) {
@@ -179,11 +250,7 @@ internal fun mapDriveListError(error: Throwable): CloudStorageException =
                 HTTP_TOO_MANY_REQUESTS -> CloudStorageException.QuotaExceeded()
                 HttpURLConnection.HTTP_NOT_FOUND -> CloudStorageException.NotFound("drive file")
                 HttpURLConnection.HTTP_FORBIDDEN ->
-                    if (error.isQuotaExceeded()) {
-                        CloudStorageException.QuotaExceeded()
-                    } else {
-                        CloudStorageException.AuthorizationRequired("google drive access was rejected")
-                    }
+                    error.forbiddenError("drive listing was rejected")
                 else -> CloudStorageException.NotAvailable(error.body.ifBlank { "drive listing failed" })
             }
         is UnknownHostException, is SocketTimeoutException, is IOException ->
@@ -837,6 +904,7 @@ class AndroidCloudStorageAccess internal constructor(
                 driveAuthorization.accessToken(interactive)
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
+                logDriveWarning("failed to get google drive access token", error)
                 throw onError(error)
             }
 
@@ -856,6 +924,7 @@ class AndroidCloudStorageAccess internal constructor(
                         driveAuthorization.accessToken(interactive)
                     } catch (retryTokenError: Throwable) {
                         if (retryTokenError is CancellationException) throw retryTokenError
+                        logDriveWarning("failed to refresh google drive access token", retryTokenError)
                         throw onError(retryTokenError)
                     }
 
@@ -905,7 +974,12 @@ class AndroidCloudStorageAccess internal constructor(
             val responseBody = stream?.use { input -> input.readBytes() } ?: ByteArray(0)
 
             if (statusCode !in 200..299) {
-                throw DriveHttpException(statusCode, responseBody.toString(Charsets.UTF_8))
+                val responseText = responseBody.toString(Charsets.UTF_8)
+                Log.w(
+                    "AndroidCloudStorage",
+                    "google drive request failed method=$method url=$url status=$statusCode body=$responseText",
+                )
+                throw DriveHttpException(statusCode, responseText)
             }
 
             DriveResponse(statusCode, responseBody)
