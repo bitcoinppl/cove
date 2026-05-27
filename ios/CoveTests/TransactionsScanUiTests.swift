@@ -27,7 +27,7 @@ final class TransactionsScanUiTests: XCTestCase {
         XCTAssertFalse(recognizedText.contains("no transactions"), recognizedText)
     }
 
-    func testTransactionsVisibleScanStateOmitsProgressCopy() throws {
+    func testTransactionsVisibleScanStateShowsStripCopy() throws {
         let image = try render(
             VStack(spacing: 12) {
                 Text("Preview transaction")
@@ -39,6 +39,7 @@ final class TransactionsScanUiTests: XCTestCase {
         let recognizedText = try normalizedRecognizedText(in: image)
 
         XCTAssertTrue(recognizedText.contains("preview transaction"), recognizedText)
+        XCTAssertTrue(recognizedText.contains("scanning for transactions"), recognizedText)
         XCTAssertFalse(recognizedText.contains("checking wallet history"), recognizedText)
         XCTAssertFalse(recognizedText.contains("addresses checked"), recognizedText)
     }

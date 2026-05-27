@@ -126,10 +126,16 @@ struct TransactionsScanProgressStrip: View {
     let progressFraction: Double
 
     var body: some View {
-        ProgressView(value: progressFraction)
-            .progressViewStyle(.linear)
-            .tint(.primary.opacity(0.45))
-            .frame(height: 2)
+        VStack(alignment: .leading, spacing: 5) {
+            ProgressView(value: progressFraction)
+                .progressViewStyle(.linear)
+                .tint(.primary.opacity(0.45))
+                .frame(height: 2)
+
+            Text("Scanning for transactions...")
+                .foregroundStyle(.secondary.opacity(0.7))
+                .font(.caption2)
+        }
     }
 }
 

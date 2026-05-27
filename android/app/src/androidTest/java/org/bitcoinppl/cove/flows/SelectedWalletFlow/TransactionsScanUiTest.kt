@@ -51,7 +51,7 @@ class TransactionsScanUiTest {
     }
 
     @Test
-    fun transactionsVisibleScanStateUsesStripWithoutProgressCopy() {
+    fun transactionsVisibleScanStateShowsStripCopy() {
         setScanTestContent {
             CoveTheme {
                 Column {
@@ -66,6 +66,7 @@ class TransactionsScanUiTest {
         }
 
         compose.onNodeWithText("Preview transaction").assertIsDisplayed()
+        compose.onNodeWithText("Scanning for transactions...").assertIsDisplayed()
         compose.onAllNodes(hasProgressBar()).assertCountEquals(1)
         compose.onAllNodes(hasText("Checking wallet history")).assertCountEquals(0)
         compose.onAllNodes(hasText("42 addresses checked")).assertCountEquals(0)

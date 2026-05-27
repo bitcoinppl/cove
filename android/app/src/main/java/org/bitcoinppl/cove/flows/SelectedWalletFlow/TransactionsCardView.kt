@@ -279,15 +279,26 @@ internal fun TransactionsScanProgressStrip(
     secondaryText: Color,
     modifier: Modifier = Modifier,
 ) {
-    LinearProgressIndicator(
-        progress = { progressFraction },
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .height(2.dp),
-        color = primaryText.copy(alpha = 0.45f),
-        trackColor = secondaryText.copy(alpha = 0.12f),
-    )
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        LinearProgressIndicator(
+            progress = { progressFraction },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(2.dp),
+            color = primaryText.copy(alpha = 0.45f),
+            trackColor = secondaryText.copy(alpha = 0.12f),
+        )
+
+        Text(
+            text = "Scanning for transactions...",
+            color = secondaryText.copy(alpha = 0.7f),
+            fontSize = 12.sp,
+        )
+    }
 }
 
 @Composable
