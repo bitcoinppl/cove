@@ -167,6 +167,22 @@ impl ScanProgressPlan {
         self.progress_range(phase).scale_basis_points(basis_points)
     }
 
+    fn display_progress(
+        self,
+        progress: KeychainProgress,
+        progress_basis_points: u32,
+    ) -> KeychainProgress {
+        match self {
+            Self::Single => progress,
+            Self::InitialThenExpanded => {
+                let stop_gap = EXPANDED_SCAN_STOP_GAP as u32;
+                let checked = checked_count_from_basis_points(progress_basis_points, stop_gap);
+
+                KeychainProgress { checked, gap: checked.min(stop_gap), stop_gap }
+            }
+        }
+    }
+
     fn progress_range(self, phase: WalletScanPhase) -> ScanProgressRange {
         match (self, phase) {
             (Self::InitialThenExpanded, WalletScanPhase::Initial) => {
@@ -292,6 +308,10 @@ impl WalletScanActor {
 
         let (scan_generation, cancel_token) = self.start_scan_generation();
         let progress_basis_points = self.record_visible_progress(scan.phase(), 0);
+        let display_progress = self.progress_plan.display_progress(
+            KeychainProgress { checked: 0, gap: 0, stop_gap: scan.stop_gap() as u32 },
+            progress_basis_points,
+        );
         match scan {
             RunningScan::Full(scan_type) => {
                 self.send_event(WalletScanEvent::FullScanStarted(scan_type));
@@ -303,9 +323,9 @@ impl WalletScanActor {
         self.send_event(WalletScanEvent::StatusChanged(WalletScanStatus::Scanning(
             WalletScanProgress {
                 phase: scan.phase(),
-                checked: 0,
-                gap: 0,
-                stop_gap: scan.stop_gap() as u32,
+                checked: display_progress.checked,
+                gap: display_progress.gap,
+                stop_gap: display_progress.stop_gap,
                 progress_basis_points,
             },
         )));
@@ -573,12 +593,13 @@ impl WalletScanActor {
             });
         let progress_basis_points = scan_progress_basis_points(total);
         let progress_basis_points = self.record_visible_progress(phase, progress_basis_points);
+        let display_progress = self.progress_plan.display_progress(total, progress_basis_points);
 
         WalletScanStatus::Scanning(WalletScanProgress {
             phase,
-            checked: total.checked,
-            gap: total.gap,
-            stop_gap: total.stop_gap,
+            checked: display_progress.checked,
+            gap: display_progress.gap,
+            stop_gap: display_progress.stop_gap,
             progress_basis_points,
         })
     }
@@ -724,9 +745,18 @@ fn scan_progress_basis_points(progress: KeychainProgress) -> u32 {
 
 fn initial_expanded_progress_split() -> u32 {
     let initial_weight = INITIAL_SCAN_STOP_GAP as u64;
-    let total_weight = initial_weight.saturating_add(EXPANDED_SCAN_STOP_GAP as u64);
+    let total_weight = EXPANDED_SCAN_STOP_GAP as u64;
 
     (u64::from(SCAN_PROGRESS_BASIS_POINTS).saturating_mul(initial_weight) / total_weight) as u32
+}
+
+fn checked_count_from_basis_points(basis_points: u32, stop_gap: u32) -> u32 {
+    let checked = u64::from(basis_points)
+        .saturating_mul(u64::from(stop_gap))
+        .saturating_add(u64::from(SCAN_PROGRESS_BASIS_POINTS / 2))
+        / u64::from(SCAN_PROGRESS_BASIS_POINTS);
+
+    checked.min(u64::from(stop_gap)) as u32
 }
 
 pub(crate) fn successful_full_scan_completion_effect(
@@ -768,10 +798,11 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::{
-        FullScanCompletionEffect, FullScanType, QueuedRescanDisposition, RunningScan,
-        SCAN_PARTIAL_FLUSH_INTERVAL, SCAN_PROGRESS_BASIS_POINTS, SCAN_PROGRESS_INTERVAL,
-        ScanFlushCadence, ScanFlushDecision, ScanProgressPlan, ScanRequestOrder, WalletScanActor,
-        WalletScanPhase, WalletScanProgress, WalletScanStatus, initial_expanded_progress_split,
+        EXPANDED_SCAN_STOP_GAP, FullScanCompletionEffect, FullScanType, QueuedRescanDisposition,
+        RunningScan, SCAN_PARTIAL_FLUSH_INTERVAL, SCAN_PROGRESS_BASIS_POINTS,
+        SCAN_PROGRESS_INTERVAL, ScanFlushCadence, ScanFlushDecision, ScanProgressPlan,
+        ScanRequestOrder, WalletScanActor, WalletScanPhase, WalletScanProgress, WalletScanStatus,
+        checked_count_from_basis_points, initial_expanded_progress_split,
         is_cancelled_progressive_scan, queued_rescan_after_failed_full_scan,
         queued_rescan_after_successful_full_scan, record_scan_update_flush,
         scan_progress_basis_points, should_accept_scan_generation,
@@ -881,7 +912,7 @@ mod tests {
     fn initial_then_expanded_progress_splits_one_visible_range() {
         let split = initial_expanded_progress_split();
 
-        assert_eq!(split, 1_176);
+        assert_eq!(split, 1_333);
         assert_eq!(
             ScanProgressPlan::for_new_scan(RunningScan::Full(FullScanType::Initial)),
             ScanProgressPlan::InitialThenExpanded
@@ -899,6 +930,31 @@ mod tests {
             ScanProgressPlan::InitialThenExpanded
                 .scale_basis_points(WalletScanPhase::Expanded, SCAN_PROGRESS_BASIS_POINTS),
             SCAN_PROGRESS_BASIS_POINTS
+        );
+    }
+
+    #[test]
+    fn initial_then_expanded_progress_displays_coverage_count() {
+        let split = initial_expanded_progress_split();
+        let initial_complete = ScanProgressPlan::InitialThenExpanded
+            .display_progress(KeychainProgress { checked: 40, gap: 40, stop_gap: 40 }, split);
+        let expanded_complete = ScanProgressPlan::InitialThenExpanded.display_progress(
+            KeychainProgress { checked: 300, gap: 300, stop_gap: 300 },
+            SCAN_PROGRESS_BASIS_POINTS,
+        );
+
+        assert_eq!(checked_count_from_basis_points(split, EXPANDED_SCAN_STOP_GAP as u32), 20);
+        assert_eq!(
+            initial_complete,
+            KeychainProgress { checked: 20, gap: 20, stop_gap: EXPANDED_SCAN_STOP_GAP as u32 }
+        );
+        assert_eq!(
+            expanded_complete,
+            KeychainProgress {
+                checked: EXPANDED_SCAN_STOP_GAP as u32,
+                gap: EXPANDED_SCAN_STOP_GAP as u32,
+                stop_gap: EXPANDED_SCAN_STOP_GAP as u32,
+            }
         );
     }
 
@@ -921,9 +977,10 @@ mod tests {
         let expanded_start = scan_actor.record_visible_progress(WalletScanPhase::Expanded, 0);
 
         assert_eq!(
-            scanning_progress_basis_points(initial_complete),
+            scanning_progress_basis_points(&initial_complete),
             initial_expanded_progress_split()
         );
+        assert_eq!(scanning_checked(&initial_complete), 20);
         assert_eq!(expanded_start, initial_expanded_progress_split());
     }
 
@@ -1165,9 +1222,16 @@ mod tests {
         assert!(scan_actor.queued_rescan_gap_limit.is_none());
     }
 
-    fn scanning_progress_basis_points(status: WalletScanStatus) -> u32 {
+    fn scanning_progress_basis_points(status: &WalletScanStatus) -> u32 {
         match status {
             WalletScanStatus::Scanning(progress) => progress.progress_basis_points,
+            WalletScanStatus::Idle => panic!("expected scanning status"),
+        }
+    }
+
+    fn scanning_checked(status: &WalletScanStatus) -> u32 {
+        match status {
+            WalletScanStatus::Scanning(progress) => progress.checked,
             WalletScanStatus::Idle => panic!("expected scanning status"),
         }
     }
