@@ -15143,12 +15143,12 @@ public func FfiConverterTypeImportWalletManagerState_lower(_ value: ImportWallet
 public struct InternalOnlyMetadata: Equatable, Hashable {
     public var addressIndex: AddressIndex?
     /**
-     * this is the last time the wallet was scanned, this includes the initial scna, expanded scan, and incremental scan
+     * This is the last time the wallet was scanned, including full, rescan, and incremental scans
      */
     public var lastScanFinished: TimeInterval?
     public var lastHeightFetched: BlockSizeLast?
     /**
-     * this is the time that a full expanded scan was completed, this should only happen once
+     * This is the time that a full scan was completed, this should only happen once
      */
     public var performedFullScanAt: UInt64?
     public var storeType: StoreType
@@ -15157,10 +15157,10 @@ public struct InternalOnlyMetadata: Equatable, Hashable {
     // declare one manually.
     public init(addressIndex: AddressIndex?,
         /**
-         * this is the last time the wallet was scanned, this includes the initial scna, expanded scan, and incremental scan
+         * This is the last time the wallet was scanned, including full, rescan, and incremental scans
          */lastScanFinished: TimeInterval?, lastHeightFetched: BlockSizeLast?,
         /**
-         * this is the time that a full expanded scan was completed, this should only happen once
+         * This is the time that a full scan was completed, this should only happen once
          */performedFullScanAt: UInt64?, storeType: StoreType) {
         self.addressIndex = addressIndex
         self.lastScanFinished = lastScanFinished
@@ -34339,8 +34339,7 @@ public func FfiConverterTypeWalletMode_lower(_ value: WalletMode) -> RustBuffer 
 
 public enum WalletScanPhase: Equatable, Hashable {
 
-    case initial
-    case expanded
+    case full
     case rescan
     case incremental
 
@@ -34364,13 +34363,11 @@ public struct FfiConverterTypeWalletScanPhase: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        case 1: return .initial
+        case 1: return .full
 
-        case 2: return .expanded
+        case 2: return .rescan
 
-        case 3: return .rescan
-
-        case 4: return .incremental
+        case 3: return .incremental
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -34380,20 +34377,16 @@ public struct FfiConverterTypeWalletScanPhase: FfiConverterRustBuffer {
         switch value {
 
 
-        case .initial:
+        case .full:
             writeInt(&buf, Int32(1))
 
 
-        case .expanded:
+        case .rescan:
             writeInt(&buf, Int32(2))
 
 
-        case .rescan:
-            writeInt(&buf, Int32(3))
-
-
         case .incremental:
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(3))
 
         }
     }

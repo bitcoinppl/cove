@@ -3221,6 +3221,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_labeldberror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_walletscannererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_fiatcurrency_emojistring(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_fiatcurrency_suffixstring(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3328,8 +3330,6 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_wallettype_display_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_wallettype_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_walletscannererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_descriptorerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -29381,14 +29381,14 @@ data class InternalOnlyMetadata (
     var `addressIndex`: AddressIndex?
     ,
     /**
-     * this is the last time the wallet was scanned, this includes the initial scna, expanded scan, and incremental scan
+     * This is the last time the wallet was scanned, including full, rescan, and incremental scans
      */
     var `lastScanFinished`: java.time.Duration?
     ,
     var `lastHeightFetched`: BlockSizeLast?
     ,
     /**
-     * this is the time that a full expanded scan was completed, this should only happen once
+     * This is the time that a full scan was completed, this should only happen once
      */
     var `performedFullScanAt`: kotlin.ULong?
     ,
@@ -54025,8 +54025,7 @@ public object FfiConverterTypeWalletMode: FfiConverterRustBuffer<WalletMode> {
 
 enum class WalletScanPhase {
 
-    INITIAL,
-    EXPANDED,
+    FULL,
     RESCAN,
     INCREMENTAL;
 
