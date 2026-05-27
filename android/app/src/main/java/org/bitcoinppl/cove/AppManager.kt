@@ -34,6 +34,7 @@ class AppManager private constructor() : FfiReconcile {
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val navigationGenerations = GenerationTracker()
     private var pendingSidebarNavigationJob: Job? = null
+    private var navigationSettleJob: Job? = null
 
     // rust bridge - not observable
     internal var rust: FfiApp = FfiApp()
@@ -51,6 +52,9 @@ class AppManager private constructor() : FfiReconcile {
 
     var isSidebarVisible by mutableStateOf(false)
         internal set
+
+    var isNavigationSettled by mutableStateOf(true)
+        private set
 
     var isLoading by mutableStateOf(false)
 
@@ -202,6 +206,9 @@ class AppManager private constructor() : FfiReconcile {
     fun reset() {
         pendingSidebarNavigationJob?.cancel()
         pendingSidebarNavigationJob = null
+        navigationSettleJob?.cancel()
+        navigationSettleJob = null
+        isNavigationSettled = true
         advanceNavigationGeneration()
 
         // close managers before clearing them
@@ -426,7 +433,28 @@ class AppManager private constructor() : FfiReconcile {
         rust.resetAfterLoading(nextRoutes)
     }
 
-    private fun advanceNavigationGeneration(): GenerationToken = navigationGenerations.advance()
+    private fun advanceNavigationGeneration(): GenerationToken {
+        val generation = navigationGenerations.advance()
+        scheduleNavigationSettled(generation)
+        return generation
+    }
+
+    private fun scheduleNavigationSettledForCurrentGeneration() {
+        scheduleNavigationSettled(navigationGenerations.capture())
+    }
+
+    private fun scheduleNavigationSettled(generation: GenerationToken) {
+        navigationSettleJob?.cancel()
+        isNavigationSettled = false
+
+        navigationSettleJob =
+            mainScope.launch {
+                kotlinx.coroutines.delay(NAVIGATION_SETTLE_DELAY_MS)
+                if (!isNavigationGenerationCurrent(generation)) return@launch
+                isNavigationSettled = true
+                navigationSettleJob = null
+            }
+    }
 
     private fun isNavigationGenerationCurrent(generation: GenerationToken): Boolean =
         navigationGenerations.isCurrent(generation)
@@ -441,12 +469,17 @@ class AppManager private constructor() : FfiReconcile {
         mainScope.launch {
             when (message) {
                 is AppStateReconcileMessage.RouteUpdated -> {
+                    val didChangeRoute = router.routes != message.v1.toList()
                     router.updateRoutes(message.v1.toList())
+                    if (didChangeRoute) {
+                        scheduleNavigationSettledForCurrentGeneration()
+                    }
                 }
 
                 is AppStateReconcileMessage.PushedRoute -> {
                     val newRoutes = (router.routes + message.v1).toList()
                     router.updateRoutes(newRoutes)
+                    scheduleNavigationSettledForCurrentGeneration()
                 }
 
                 is AppStateReconcileMessage.DatabaseUpdated -> {
@@ -470,6 +503,7 @@ class AppManager private constructor() : FfiReconcile {
                     router.default = message.v1
                     router.updateRoutes(message.v2.toList())
                     routeId = UUID.randomUUID().toString()
+                    scheduleNavigationSettledForCurrentGeneration()
                     Log.d(tag, "Route ID changed to: $routeId")
                 }
 
@@ -543,6 +577,8 @@ class AppManager private constructor() : FfiReconcile {
          * allows sidebar dismiss animation to complete to avoid visual jump
          */
         private const val SIDEBAR_NAVIGATION_DELAY_MS = 250L
+
+        private const val NAVIGATION_SETTLE_DELAY_MS = 800L
 
         /**
          * minimum loading indicator visibility duration
