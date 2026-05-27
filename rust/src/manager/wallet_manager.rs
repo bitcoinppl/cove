@@ -24,6 +24,7 @@ use crate::{
     app::FfiApp,
     converter::{Converter, ConverterError},
     database::{Database, error::DatabaseError},
+    discovery_scanner::{ScannerResponse, WalletDiscoveryScanner},
     fee_client::{FEE_CLIENT, FEES, FeeResponse},
     fiat::{
         FiatCurrency,
@@ -50,7 +51,6 @@ use crate::{
             WalletType,
         },
     },
-    wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
 };
 
@@ -197,7 +197,7 @@ pub struct RustWalletManager {
     initial_load_state: WalletLoadState,
 
     #[allow(dead_code)]
-    scanner: Option<Addr<WalletScanner>>,
+    discovery_scanner: Option<Addr<WalletDiscoveryScanner>>,
 }
 
 pub type Error = WalletManagerError;
@@ -337,8 +337,9 @@ impl RustWalletManager {
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
         let actor = task::spawn_actor(wallet_actor);
 
-        // will only create the scanner if its not already complete
-        let scanner = WalletScanner::try_new(metadata.clone(), sender).ok().map(spawn_actor);
+        // will only create the discovery scanner if it is not already complete
+        let discovery_scanner =
+            WalletDiscoveryScanner::try_new(metadata.clone(), sender).ok().map(spawn_actor);
 
         let label_manager = LabelManager::new(id.clone()).into();
 
@@ -350,7 +351,7 @@ impl RustWalletManager {
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             initial_load_state,
-            scanner,
+            discovery_scanner,
         })
     }
 
@@ -413,8 +414,8 @@ impl RustWalletManager {
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
-        let scanner =
-            WalletScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
+        let discovery_scanner =
+            WalletDiscoveryScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
 
         let wallet_actor = WalletActor::new(wallet, sender.clone())
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
@@ -429,7 +430,7 @@ impl RustWalletManager {
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             initial_load_state: WalletLoadState::Loading,
-            scanner,
+            discovery_scanner,
         })
     }
 
@@ -464,7 +465,7 @@ impl RustWalletManager {
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             initial_load_state: WalletLoadState::Loading,
-            scanner: None,
+            discovery_scanner: None,
         })
     }
 
@@ -1474,7 +1475,7 @@ impl RustWalletManager {
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             initial_load_state: WalletLoadState::Loading,
-            scanner: None,
+            discovery_scanner: None,
         }
     }
 }
