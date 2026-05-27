@@ -327,6 +327,7 @@ struct SelectedWalletScreen: View {
         VStack(spacing: 0) {
             WalletBalanceHeaderView(
                 balance: manager.balance.spendable(),
+                balancePresentation: manager.balancePresentation,
                 metadata: manager.walletMetadata,
                 updater: updater,
                 showReceiveSheet: showReceiveSheet

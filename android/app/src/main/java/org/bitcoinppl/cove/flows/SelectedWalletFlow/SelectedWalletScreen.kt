@@ -421,6 +421,7 @@ fun SelectedWalletScreen(
                                     primaryAmount = primaryAmount,
                                     secondaryAmount = secondaryAmount,
                                     pendingAmount = pendingAmount,
+                                    balancePresentation = manager.balancePresentation,
                                     onToggleUnit = { manager.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
                                     onToggleSensitive = { manager.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
                                     onSend = onSend,

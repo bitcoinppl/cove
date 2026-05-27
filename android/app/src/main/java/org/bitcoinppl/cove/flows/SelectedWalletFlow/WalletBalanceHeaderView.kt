@@ -38,6 +38,9 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.BalancePresentation
+import org.bitcoinppl.cove_core.RustWalletManager
+import org.bitcoinppl.cove_core.WalletScanStatus
 
 /**
  * Displays the wallet balance header with primary/secondary amounts and send/receive buttons
@@ -50,6 +53,7 @@ fun WalletBalanceHeaderView(
     primaryAmount: String?,
     secondaryAmount: String?,
     pendingAmount: String? = null,
+    balancePresentation: BalancePresentation,
     onToggleUnit: () -> Unit,
     onToggleSensitive: () -> Unit,
     onSend: () -> Unit,
@@ -96,6 +100,7 @@ fun WalletBalanceHeaderView(
                 primaryAmount = primaryAmount,
                 secondaryAmount = secondaryAmount,
                 pendingAmount = pendingAmount,
+                balancePresentation = balancePresentation,
                 onToggleUnit = onToggleUnit,
                 onToggleSensitive = onToggleSensitive,
             )
@@ -115,6 +120,7 @@ internal fun BalanceWidget(
     primaryAmount: String?,
     secondaryAmount: String?,
     pendingAmount: String? = null,
+    balancePresentation: BalancePresentation,
     onToggleUnit: () -> Unit,
     onToggleSensitive: () -> Unit,
 ) {
@@ -130,14 +136,14 @@ internal fun BalanceWidget(
             textContent = { text ->
                 Text(
                     text = text,
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = Color.White.copy(alpha = balancePresentation.secondaryOpacity.toFloat()),
                     fontSize = 13.sp,
                 )
             },
             loadingContent = {
                 CircularProgressIndicator(
                     modifier = Modifier.size(12.dp),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = Color.White.copy(alpha = balancePresentation.secondaryOpacity.toFloat()),
                     strokeWidth = 1.5.dp,
                 )
             },
@@ -155,7 +161,7 @@ internal fun BalanceWidget(
                         BalanceAutoSizeText(
                             text = text,
                             modifier = Modifier.padding(end = 12.dp),
-                            color = Color.White,
+                            color = Color.White.copy(alpha = balancePresentation.primaryOpacity.toFloat()),
                             baseFontSize = 34.sp,
                             minimumScaleFactor = 0.5f,
                             fontWeight = FontWeight.Bold,
@@ -164,7 +170,7 @@ internal fun BalanceWidget(
                     loadingContent = {
                         CircularProgressIndicator(
                             modifier = Modifier.size(28.dp),
-                            color = Color.White,
+                            color = Color.White.copy(alpha = balancePresentation.primaryOpacity.toFloat()),
                             strokeWidth = 2.dp,
                         )
                     },
@@ -189,7 +195,7 @@ internal fun BalanceWidget(
                 textContent = { text ->
                     Text(
                         text = text,
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = Color.White.copy(alpha = balancePresentation.pendingOpacity.toFloat()),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                     )
@@ -197,7 +203,7 @@ internal fun BalanceWidget(
                 loadingContent = {
                     CircularProgressIndicator(
                         modifier = Modifier.size(12.dp),
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = Color.White.copy(alpha = balancePresentation.pendingOpacity.toFloat()),
                         strokeWidth = 1.5.dp,
                     )
                 },
@@ -260,6 +266,7 @@ private fun WalletBalanceHeaderViewPreview() {
         sensitiveVisible = true,
         primaryAmount = "1,166,369 SATS",
         secondaryAmount = "$1,351.93",
+        balancePresentation = RustWalletManager.previewNewWallet().balancePresentation(WalletScanStatus.Idle),
         onToggleUnit = {},
         onToggleSensitive = {},
         onSend = {},
@@ -274,6 +281,7 @@ private fun WalletBalanceHeaderViewHiddenPreview() {
         sensitiveVisible = false,
         primaryAmount = "1,166,369 SATS",
         secondaryAmount = "$1,351.93",
+        balancePresentation = RustWalletManager.previewNewWallet().balancePresentation(WalletScanStatus.Idle),
         onToggleUnit = {},
         onToggleSensitive = {},
         onSend = {},

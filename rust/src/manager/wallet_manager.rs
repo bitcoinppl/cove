@@ -1,4 +1,5 @@
 pub mod actor;
+pub mod balance_presentation;
 pub mod receive_address;
 
 use std::{
@@ -8,6 +9,7 @@ use std::{
 
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
+pub use balance_presentation::BalancePresentation;
 use flume::Receiver;
 use parking_lot::RwLock;
 use receive_address::{ReceiveAddressPresentation, ReceiveAddressState};
@@ -355,6 +357,14 @@ impl RustWalletManager {
     #[uniffi::method]
     pub fn initial_load_state(&self) -> WalletLoadState {
         self.initial_load_state.clone()
+    }
+
+    #[uniffi::method]
+    pub fn balance_presentation(&self, scan_status: WalletScanStatus) -> BalancePresentation {
+        BalancePresentation::for_scan(
+            self.metadata.read().internal.last_scan_finished,
+            &scan_status,
+        )
     }
 
     #[uniffi::method]

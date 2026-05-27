@@ -18,6 +18,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState
     var scanStatus: WalletScanStatus = .idle
+    var balancePresentation: BalancePresentation
     var balance: Balance = .zero()
     var foundAddresses: [FoundAddress] = []
     var unsignedTransactions: [UnsignedTransaction] = []
@@ -48,6 +49,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         self.rust = rust
         self.loadState = rust.initialLoadState()
+        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
 
         walletMetadata = rust.walletMetadata()
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
@@ -74,6 +76,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         self.rust = rust
         self.loadState = .loading
+        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         walletMetadata = metadata
         id = metadata.id
 
@@ -97,6 +100,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         self.rust = rust
         self.loadState = .loading
+        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         walletMetadata = metadata
         id = metadata.id
 
@@ -184,6 +188,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         switch message {
         case let .walletScanStatusChanged(status):
             self.scanStatus = status
+            self.balancePresentation = rust.balancePresentation(scanStatus: status)
             if case .scanning = status {
                 switch self.loadState {
                 case .scanning:
@@ -231,6 +236,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         case let .walletMetadataChanged(metadata):
             withAnimation { self.walletMetadata = metadata }
             setWalletMetadata(metadata)
+            self.balancePresentation = rust.balancePresentation(scanStatus: scanStatus)
 
         case let .walletScannerResponse(scannerResponse):
             self.logger.debug("walletScannerResponse: \(scannerResponse)")
@@ -340,6 +346,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         self.rust = rust
         self.loadState = .loading
+        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         self.walletMetadata = rust.walletMetadata()
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))

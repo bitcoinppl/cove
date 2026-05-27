@@ -48,6 +48,11 @@ class WalletManager :
     var scanStatus by mutableStateOf<WalletScanStatus>(WalletScanStatus.Idle)
         private set
 
+    private var balancePresentationState by mutableStateOf<BalancePresentation?>(null)
+
+    val balancePresentation: BalancePresentation
+        get() = checkNotNull(balancePresentationState)
+
     var balance by mutableStateOf(Balance.zero())
         private set
 
@@ -113,6 +118,7 @@ class WalletManager :
         this.id = walletId
         this.rust = rustManager
         this.walletMetadata = metadata
+        this.balancePresentationState = rustManager.balancePresentation(WalletScanStatus.Idle)
         this.unsignedTransactions = runCatching { rustManager.getUnsignedTransactions() }.getOrElse { emptyList() }
 
         // set initial load state from Rust cached data
@@ -241,6 +247,7 @@ class WalletManager :
         when (message) {
             is WalletManagerReconcileMessage.WalletScanStatusChanged -> {
                 scanStatus = message.v1
+                balancePresentationState = rust.balancePresentation(message.v1)
                 if (message.v1 is WalletScanStatus.Scanning) {
                     when (val current = loadState) {
                         is WalletLoadState.SCANNING -> Unit
@@ -302,6 +309,7 @@ class WalletManager :
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
                 walletMetadata = message.v1
                 persistWalletMetadata(message.v1)
+                balancePresentationState = rust.balancePresentation(scanStatus)
             }
 
             is WalletManagerReconcileMessage.WalletScannerResponse -> {

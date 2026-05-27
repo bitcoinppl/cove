@@ -15,6 +15,7 @@ struct WalletBalanceHeaderView: View {
     // args
     // trusted spendable balance
     let balance: Amount
+    let balancePresentation: BalancePresentation
     @State var fiatBalance: Double? = nil
     @State var fiatPendingBalance: Double? = nil
     let metadata: WalletMetadata
@@ -63,7 +64,7 @@ struct WalletBalanceHeaderView: View {
         {
             HStack {
                 Text(pendingStr)
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(.white.opacity(balancePresentation.pendingOpacity))
                     .font(.footnote)
                     .padding(.leading, 2)
                 Spacer()
@@ -71,7 +72,7 @@ struct WalletBalanceHeaderView: View {
         } else if let pendingStr = manager.rust.displayAmountPendingFmt(amount: pending) {
             HStack {
                 Text(pendingStr)
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(.white.opacity(balancePresentation.pendingOpacity))
                     .font(.footnote)
                     .padding(.leading, 2)
                 Spacer()
@@ -104,7 +105,7 @@ struct WalletBalanceHeaderView: View {
             VStack(spacing: 6) {
                 HStack {
                     secondaryBalanceView
-                        .foregroundColor(.white.opacity(0.75))
+                        .foregroundColor(.white.opacity(balancePresentation.secondaryOpacity))
                         .font(.footnote)
                         .padding(.leading, 2)
                         .contentTransition(.numericText())
@@ -114,7 +115,7 @@ struct WalletBalanceHeaderView: View {
 
                 HStack {
                     primaryBalanceView
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.white.opacity(balancePresentation.primaryOpacity))
                         .font(.system(size: fontSize, weight: .bold))
                         .contentTransition(.numericText())
 
@@ -227,6 +228,8 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance: Amount.fromSat(sats: 1_000_738),
+                balancePresentation: RustWalletManager.previewNewWallet()
+                    .balancePresentation(scanStatus: .idle),
                 fiatBalance: 1835.00,
                 metadata: metadata,
                 updater: { _ in () },
@@ -247,6 +250,8 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance: Amount.fromSat(sats: 1_000_738),
+                balancePresentation: RustWalletManager.previewNewWallet()
+                    .balancePresentation(scanStatus: .idle),
                 fiatBalance: 1835.00,
                 metadata: metadata,
                 updater: { _ in () },
@@ -266,6 +271,8 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance: Amount.fromSat(sats: 1_000_738),
+                balancePresentation: RustWalletManager.previewNewWallet()
+                    .balancePresentation(scanStatus: .idle),
                 fiatBalance: 1835.00,
                 metadata: metadata,
                 updater: { _ in () },
@@ -285,6 +292,8 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance: Amount.fromSat(sats: 10_000_000_738),
+                balancePresentation: RustWalletManager.previewNewWallet()
+                    .balancePresentation(scanStatus: .idle),
                 fiatBalance: 1835.00,
                 metadata: metadata,
                 updater: { _ in () },
@@ -305,6 +314,8 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance: Amount.fromSat(sats: 10_000_000_738),
+                balancePresentation: RustWalletManager.previewNewWallet()
+                    .balancePresentation(scanStatus: .idle),
                 fiatBalance: 1835.00,
                 metadata: metadata,
                 updater: { _ in () },
@@ -324,6 +335,8 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance: Amount.fromSat(sats: 10_000_000_738),
+                balancePresentation: RustWalletManager.previewNewWallet()
+                    .balancePresentation(scanStatus: .idle),
                 fiatBalance: 1835.00,
                 metadata: metadata,
                 updater: { _ in () },

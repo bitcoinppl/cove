@@ -8953,6 +8953,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func balance() async  -> Balance
 
+    func balancePresentation(scanStatus: WalletScanStatus)  -> BalancePresentation
+
     func broadcastTransaction(signedTransaction: BitcoinTransaction) async throws
 
     func convertAndDisplayFiat(amount: Amount, prices: PriceResponse, withSuffix: Bool)  -> String
@@ -9288,6 +9290,16 @@ open func balance()async  -> Balance  {
             errorHandler: nil
 
         )
+}
+
+open func balancePresentation(scanStatus: WalletScanStatus) -> BalancePresentation  {
+    return try!  FfiConverterTypeBalancePresentation_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustwalletmanager_balance_presentation(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWalletScanStatus_lower(scanStatus),uniffiCallStatus
+    )
+})
 }
 
 open func broadcastTransaction(signedTransaction: BitcoinTransaction)async throws   {
@@ -13430,6 +13442,64 @@ public func FfiConverterTypeBackupWalletSummary_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeBackupWalletSummary_lower(_ value: BackupWalletSummary) -> RustBuffer {
     return FfiConverterTypeBackupWalletSummary.lower(value)
+}
+
+
+public struct BalancePresentation: Equatable, Hashable {
+    public var primaryOpacity: Double
+    public var secondaryOpacity: Double
+    public var pendingOpacity: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(primaryOpacity: Double, secondaryOpacity: Double, pendingOpacity: Double) {
+        self.primaryOpacity = primaryOpacity
+        self.secondaryOpacity = secondaryOpacity
+        self.pendingOpacity = pendingOpacity
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension BalancePresentation: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBalancePresentation: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BalancePresentation {
+        return
+            try BalancePresentation(
+                primaryOpacity: FfiConverterDouble.read(from: &buf),
+                secondaryOpacity: FfiConverterDouble.read(from: &buf),
+                pendingOpacity: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BalancePresentation, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.primaryOpacity, into: &buf)
+        FfiConverterDouble.write(value.secondaryOpacity, into: &buf)
+        FfiConverterDouble.write(value.pendingOpacity, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBalancePresentation_lift(_ buf: RustBuffer) throws -> BalancePresentation {
+    return try FfiConverterTypeBalancePresentation.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBalancePresentation_lower(_ value: BalancePresentation) -> RustBuffer {
+    return FfiConverterTypeBalancePresentation.lower(value)
 }
 
 
@@ -39610,6 +39680,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_balance() != 14970) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_balance_presentation() != 31926) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937) {

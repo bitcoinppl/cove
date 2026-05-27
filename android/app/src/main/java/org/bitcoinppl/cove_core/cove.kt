@@ -1557,6 +1557,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_balance(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_balance_presentation(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat(
@@ -2651,6 +2653,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_balance(`ptr`: Long,
     ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_balance_presentation(`ptr`: Long,`scanStatus`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(`ptr`: Long,`signedTransaction`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_convert_and_display_fiat(`ptr`: Long,`amount`: Long,`prices`: Long,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus,
@@ -4292,6 +4296,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance() != 14970.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance_presentation() != 31926.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937.toShort()) {
@@ -20833,6 +20840,8 @@ public interface RustWalletManagerInterface {
 
     suspend fun `balance`(): Balance
 
+    fun `balancePresentation`(`scanStatus`: WalletScanStatus): BalancePresentation
+
     suspend fun `broadcastTransaction`(`signedTransaction`: BitcoinTransaction)
 
     fun `convertAndDisplayFiat`(`amount`: Amount, `prices`: PriceResponse, `withSuffix`: kotlin.Boolean = true): kotlin.String
@@ -21192,6 +21201,20 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         UniffiNullRustCallStatusErrorHandler,
     )
     }
+
+    override fun `balancePresentation`(`scanStatus`: WalletScanStatus): BalancePresentation {
+            return FfiConverterTypeBalancePresentation.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_balance_presentation(
+        it,
+
+        FfiConverterTypeWalletScanStatus.lower(`scanStatus`),_status)
+}
+    }
+    )
+    }
+
 
 
     @Throws(WalletManagerException::class)
@@ -28028,6 +28051,49 @@ public object FfiConverterTypeBackupWalletSummary: FfiConverterRustBuffer<Backup
             FfiConverterUInt.write(value.`labelCount`, buf)
             FfiConverterBoolean.write(value.`alreadyOnDevice`, buf)
             FfiConverterOptionalString.write(value.`warning`, buf)
+    }
+}
+
+
+
+data class BalancePresentation (
+    var `primaryOpacity`: kotlin.Double
+    ,
+    var `secondaryOpacity`: kotlin.Double
+    ,
+    var `pendingOpacity`: kotlin.Double
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBalancePresentation: FfiConverterRustBuffer<BalancePresentation> {
+    override fun read(buf: ByteBuffer): BalancePresentation {
+        return BalancePresentation(
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BalancePresentation) = (
+            FfiConverterDouble.allocationSize(value.`primaryOpacity`) +
+            FfiConverterDouble.allocationSize(value.`secondaryOpacity`) +
+            FfiConverterDouble.allocationSize(value.`pendingOpacity`)
+    )
+
+    override fun write(value: BalancePresentation, buf: ByteBuffer) {
+            FfiConverterDouble.write(value.`primaryOpacity`, buf)
+            FfiConverterDouble.write(value.`secondaryOpacity`, buf)
+            FfiConverterDouble.write(value.`pendingOpacity`, buf)
     }
 }
 
