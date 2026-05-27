@@ -71,7 +71,7 @@ fun NodeSettingsScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val nodeList = remember { nodeSelector.nodeList() }
+    var nodeList by remember { mutableStateOf(nodeSelector.nodeList()) }
     var selectedNodeSelection by remember { mutableStateOf(nodeSelector.selectedNode()) }
     var selectedNodeName by remember {
         mutableStateOf(selectedNodeSelection.toNode().name)
@@ -102,6 +102,14 @@ fun NodeSettingsScreen(
         selectedNodeSelection is NodeSelection.Custom ||
             selectedNodeName == customElectrum ||
             selectedNodeName == customEsplora
+
+    fun refreshNodeState() {
+        NodeSelector().use { refreshedNodeSelector ->
+            nodeList = refreshedNodeSelector.nodeList()
+            selectedNodeSelection = refreshedNodeSelector.selectedNode()
+        }
+        selectedNodeName = selectedNodeSelection.toNode().name
+    }
 
     // pre-fill custom fields if a custom node was previously saved
     LaunchedEffect(showCustomFields, selectedNodeSelection) {
@@ -139,7 +147,7 @@ fun NodeSettingsScreen(
                 withContext(Dispatchers.IO) {
                     nodeSelector.checkSelectedNode(node)
                 }
-                selectedNodeSelection = NodeSelection.Preset(node)
+                refreshNodeState()
 
                 // launch snackbar in separate coroutine so it doesn't block finally
                 scope.launch {
@@ -188,8 +196,7 @@ fun NodeSettingsScreen(
                 withContext(Dispatchers.IO) {
                     nodeSelector.checkAndSaveNode(node)
                 }
-                selectedNodeSelection = NodeSelection.Custom(node)
-                selectedNodeName = node.name
+                refreshNodeState()
 
                 // launch snackbar in separate coroutine so it doesn't block finally
                 scope.launch {
