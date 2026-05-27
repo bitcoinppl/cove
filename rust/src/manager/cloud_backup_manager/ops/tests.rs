@@ -34,7 +34,9 @@ use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim,
 };
-use crate::manager::cloud_backup_manager::wallets::{NamespaceMatch, WalletRestoreSession};
+use crate::manager::cloud_backup_manager::wallets::{
+    NamespaceMatch, WalletRestoreOutcome, WalletRestoreSession,
+};
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, StagedPrfKey,
 };
@@ -975,7 +977,9 @@ async fn restore_downloaded_wallet_does_not_reupload_wallet_or_mutate_backup_cou
         },
     };
 
-    WalletRestoreSession::new(Vec::new()).restore_downloaded(&wallet).unwrap();
+    WalletRestoreSession::new(crate::wallet_identity::ExistingWalletIdentitySet::default())
+        .restore_downloaded(&wallet)
+        .unwrap();
 
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(5));
@@ -1003,9 +1007,15 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
         entry: wallet_entry_with_labels(&metadata, Some(sample_labels_jsonl())),
     };
 
-    let outcome = WalletRestoreSession::new(Vec::new()).restore_downloaded(&wallet).unwrap();
+    let outcome =
+        WalletRestoreSession::new(crate::wallet_identity::ExistingWalletIdentitySet::default())
+            .restore_downloaded(&wallet)
+            .unwrap();
 
-    assert!(outcome.labels_warning.is_none());
+    let WalletRestoreOutcome::Restored { labels_warning } = outcome else {
+        panic!("expected restored wallet");
+    };
+    assert!(labels_warning.is_none());
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(5));
     assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
@@ -1948,14 +1958,29 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
     let first_wallet = WalletMetadata { master_fingerprint: None, ..first_wallet };
     let second_wallet = WalletMetadata { master_fingerprint: None, ..second_wallet };
     let third_wallet = WalletMetadata { master_fingerprint: None, ..third_wallet };
+    let sample_xpub_from_entropy = |metadata: &WalletMetadata, byte| {
+        let entropy = [byte; 16];
+        let mnemonic = Mnemonic::from_entropy(&entropy).unwrap();
+
+        crate::mnemonic::MnemonicExt::xpub(&mnemonic, metadata.network.into()).to_string()
+    };
     Keychain::global()
-        .save_wallet_xpub(&first_wallet.id, sample_xpub(&first_wallet).parse().unwrap())
+        .save_wallet_xpub(
+            &first_wallet.id,
+            sample_xpub_from_entropy(&first_wallet, 1).parse().unwrap(),
+        )
         .unwrap();
     Keychain::global()
-        .save_wallet_xpub(&second_wallet.id, sample_xpub(&second_wallet).parse().unwrap())
+        .save_wallet_xpub(
+            &second_wallet.id,
+            sample_xpub_from_entropy(&second_wallet, 2).parse().unwrap(),
+        )
         .unwrap();
     Keychain::global()
-        .save_wallet_xpub(&third_wallet.id, sample_xpub(&third_wallet).parse().unwrap())
+        .save_wallet_xpub(
+            &third_wallet.id,
+            sample_xpub_from_entropy(&third_wallet, 3).parse().unwrap(),
+        )
         .unwrap();
 
     let first_record_id = cove_cspp::backup_data::wallet_record_id(first_wallet.id.as_ref());
@@ -5019,7 +5044,11 @@ async fn manual_verification_clears_interactive_state_when_awaiting_upload_confi
     wait_for_test_condition(
         Duration::from_secs(2),
         "verification awaits upload confirmation",
-        || manager.pending_verification_completion().is_some(),
+        || {
+            let state = manager.model_snapshot();
+            manager.pending_verification_completion().is_some()
+                && state.pending_upload_verification == PendingUploadVerificationState::Confirming
+        },
     )
     .await;
 
@@ -6430,11 +6459,23 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
 
     let first_wallet = xpub_only_wallet_metadata();
     let second_wallet = xpub_only_wallet_metadata();
+    let sample_xpub_from_entropy = |metadata: &WalletMetadata, byte| {
+        let entropy = [byte; 16];
+        let mnemonic = Mnemonic::from_entropy(&entropy).unwrap();
+
+        crate::mnemonic::MnemonicExt::xpub(&mnemonic, metadata.network.into()).to_string()
+    };
     Keychain::global()
-        .save_wallet_xpub(&first_wallet.id, sample_xpub(&first_wallet).parse().unwrap())
+        .save_wallet_xpub(
+            &first_wallet.id,
+            sample_xpub_from_entropy(&first_wallet, 1).parse().unwrap(),
+        )
         .unwrap();
     Keychain::global()
-        .save_wallet_xpub(&second_wallet.id, sample_xpub(&second_wallet).parse().unwrap())
+        .save_wallet_xpub(
+            &second_wallet.id,
+            sample_xpub_from_entropy(&second_wallet, 2).parse().unwrap(),
+        )
         .unwrap();
 
     let first_record_id = cove_cspp::backup_data::wallet_record_id(first_wallet.id.as_ref());
@@ -6716,7 +6757,10 @@ async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
 
     let outcome = manager.do_restore_cloud_wallet(&record_id).await.unwrap();
 
-    let warning = outcome.labels_warning.expect("expected label warning");
+    let WalletRestoreOutcome::Restored { labels_warning } = outcome else {
+        panic!("expected restored wallet");
+    };
+    let warning = labels_warning.expect("expected label warning");
     assert_eq!(warning.wallet_name, wallet.name);
     assert!(
         warning.error.contains("Failed to parse labels")

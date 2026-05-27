@@ -226,12 +226,22 @@ impl CloudBackupSupervisor {
         };
 
         match result {
-            Ok(outcome) => {
+            Ok(WalletRestoreOutcome::Restored { labels_warning }) => {
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::Restored {
                         record_id,
-                        warning: cloud_only_restore_warning(outcome),
+                        warning: labels_warning.map(cloud_only_restore_warning),
                     },
+                );
+                manager.refresh_sync_health();
+                self.addr.send_fut_with(move |addr| async move {
+                    let result = manager.refresh_cloud_backup_detail().await;
+                    send!(addr.complete_operation_refresh_detail(claim, result));
+                });
+            }
+            Ok(WalletRestoreOutcome::SkippedDuplicate) => {
+                manager.apply_cloud_only_wallet_outcome(
+                    CloudBackupCloudOnlyWalletOutcome::SkippedDuplicate { record_id },
                 );
                 manager.refresh_sync_health();
                 self.addr.send_fut_with(move |addr| async move {
@@ -383,13 +393,13 @@ impl CloudBackupSupervisor {
 }
 
 fn cloud_only_restore_warning(
-    outcome: WalletRestoreOutcome,
-) -> Option<CloudBackupCloudOnlyOperationWarning> {
-    outcome.labels_warning.map(|warning| CloudBackupCloudOnlyOperationWarning {
+    warning: crate::backup::import::LabelRestoreWarning,
+) -> CloudBackupCloudOnlyOperationWarning {
+    CloudBackupCloudOnlyOperationWarning {
         message: format!(
             "{} was restored, but its labels could not be imported",
             warning.wallet_name
         ),
         error: warning.error,
-    })
+    }
 }

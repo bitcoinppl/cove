@@ -60,12 +60,19 @@ fun AboutSettingsScreen(
         )
     }
     var betaError by remember { mutableStateOf<String?>(null) }
+    var accountNumber by remember { mutableStateOf<UInt?>(null) }
+    val selectedWallet = Database().globalConfig().selectedWallet()
 
     LaunchedEffect(buildTapCount) {
         if (buildTapCount > 0) {
             delay(2000)
             buildTapCount = 0
         }
+    }
+
+    LaunchedEffect(selectedWallet) {
+        accountNumber = null
+        accountNumber = selectedWallet?.let { app.getWalletManager(it).rust.nonDefaultAccountNumber() }
     }
 
     Scaffold(
@@ -123,6 +130,13 @@ fun AboutSettingsScreen(
                             label = "Git Commit",
                             value = app.rust.gitShortHash(),
                         )
+                        accountNumber?.let { number ->
+                            MaterialDivider()
+                            AboutRow(
+                                label = "Account Number",
+                                value = number.toString(),
+                            )
+                        }
                     }
                 }
 

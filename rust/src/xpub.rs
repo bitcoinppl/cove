@@ -1,4 +1,18 @@
+use bdk_wallet::bitcoin::bip32::{ChildNumber, Xpub};
 use pubport::descriptor;
+
+pub(crate) trait XpubExt {
+    fn account_index(&self) -> u32;
+}
+
+impl XpubExt for Xpub {
+    fn account_index(&self) -> u32 {
+        match (self.depth, self.child_number) {
+            (3, ChildNumber::Hardened { index }) => index,
+            _ => 0,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]

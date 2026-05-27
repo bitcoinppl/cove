@@ -1079,6 +1079,11 @@ impl RustWalletManager {
         self.metadata.read().clone()
     }
 
+    #[uniffi::method]
+    pub fn non_default_account_number(&self) -> Option<u32> {
+        wallet_account_number(&self.id).filter(|account| *account != 0)
+    }
+
     /// Returns the number of confirmation steps required to delete this wallet
     /// - 2: Cold wallets, xpub-only wallets, or verified hot wallets
     /// - 3: Hot wallets that are NOT verified (highest risk)
@@ -1505,6 +1510,21 @@ fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
 
             Err(Error::UnknownError(format!("failed to load wallet: {load_error}")))
         }
+    }
+}
+
+fn wallet_account_number(id: &WalletId) -> Option<u32> {
+    use cove_bdk::descriptor_ext::DescriptorExt as _;
+
+    match Wallet::try_load_persisted(id.clone()) {
+        Ok(wallet) => {
+            wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::External).account_index()
+        }
+        Err(_) => Keychain::global()
+            .get_public_descriptor(id)
+            .ok()
+            .flatten()
+            .and_then(|(external, _)| external.account_index()),
     }
 }
 

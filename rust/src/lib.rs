@@ -67,6 +67,7 @@ mod transaction;
 mod transaction_watcher;
 mod ur;
 mod wallet;
+mod wallet_identity;
 mod wallet_scanner;
 mod word_validator;
 mod word_verify_state_machine;

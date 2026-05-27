@@ -15,6 +15,7 @@ use crate::{
     mnemonic::MnemonicExt as _,
     multi_format::MultiFormatError,
     tap_card::tap_signer_reader::DeriveInfo,
+    wallet_identity::{PublicWalletIdentity, existing_public_wallet_by_identity_strict},
     xpub::{self, XpubError},
 };
 use balance::Balance;
@@ -298,14 +299,22 @@ impl Wallet {
             pubport_descriptors.xpub().map_err(Into::into).map_err(WalletError::ParseXpubError)?;
         let descriptors: Descriptors = pubport_descriptors.into();
 
-        // check for existing wallet with same fingerprint, upgrade watch-only → cold
+        let incoming_identity = PublicWalletIdentity::from_descriptors(&descriptors);
+
+        // check for existing wallet with same public identity, upgrade watch-only to cold
         if let Some(fingerprint) = fingerprint.as_ref() {
             let fingerprint: Fingerprint = (*fingerprint).into();
             metadata.master_fingerprint = Some(fingerprint.into());
 
-            let existing = database.wallets.get_all(network, mode)?.into_iter().find(|wm| {
-                wm.master_fingerprint.as_ref().is_some_and(|fp| fp.as_ref() == &fingerprint)
-            });
+            let existing = existing_public_wallet_by_identity_strict(
+                &database,
+                keychain,
+                network,
+                mode,
+                fingerprint,
+                &incoming_identity,
+            )
+            .map_err_str(WalletError::LoadError)?;
 
             if let Some(existing_metadata) = existing {
                 return Self::upgrade_to_cold(
@@ -758,7 +767,6 @@ mod tests {
     use bdk_wallet::test_utils::{
         get_funded_wallet_wpkh, insert_anchor, insert_checkpoint, insert_tx,
     };
-
     fn build_tx_with_change(wallet: &mut bdk_wallet::Wallet) -> bdk_wallet::bitcoin::Psbt {
         let address = BdkAddress::from_str("bcrt1q3qtze4ys45tgdvguj66zrk4fu6hq3a3v9pfly5")
             .unwrap()

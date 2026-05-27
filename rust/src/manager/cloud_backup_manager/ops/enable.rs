@@ -15,7 +15,7 @@ use crate::manager::cloud_backup_manager::actors::{
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
     PasskeyMaterialOutcome, PreparedWalletBackup, StagedPrfKey, UnpersistedPrfKey,
-    WalletBackupLookup, WalletBackupReader, WalletRestoreSession,
+    WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupError, CloudBackupPasskeyHint,
@@ -298,9 +298,9 @@ impl RustCloudBackupManager {
         cloud: &CloudStorageClient,
         namespaces: &[MergeNamespace],
     ) -> Result<Vec<MergedNamespaceWallets>, CloudBackupError> {
-        let existing_fingerprints = crate::backup::import::collect_existing_fingerprints()
-            .map_err_prefix("collect fingerprints", CloudBackupError::Internal)?;
-        let mut restore_session = WalletRestoreSession::new(existing_fingerprints);
+        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
+            .map_err_prefix("collect wallet identities", CloudBackupError::Internal)?;
+        let mut restore_session = WalletRestoreSession::new(existing_identities);
         let mut merged_namespaces = Vec::with_capacity(namespaces.len());
 
         for namespace in namespaces {
@@ -361,7 +361,10 @@ impl RustCloudBackupManager {
                 };
 
                 match restore_session.restore_downloaded(&wallet) {
-                    Ok(_) => restored_wallets.push(wallet.metadata),
+                    Ok(WalletRestoreOutcome::Restored { .. }) => {
+                        restored_wallets.push(wallet.metadata)
+                    }
+                    Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
                     Err(error) => {
                         if is_connectivity_related_issue(&error) {
                             return Err(blocking_cloud_error(BlockingCloudStep::Enable, error));

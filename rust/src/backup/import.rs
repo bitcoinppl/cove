@@ -1,19 +1,20 @@
 use std::str::FromStr as _;
 
 use bip39::Mnemonic;
-use strum::IntoEnumIterator as _;
-use tracing::{error, info, warn};
-use zeroize::Zeroizing;
-
 use cove_device::keychain::Keychain;
 use cove_types::network::Network;
+use tracing::{error, info, warn};
+use zeroize::Zeroizing;
 
 use crate::database::Database;
 use crate::database::global_config::GlobalConfigKey;
 use crate::label_manager::LabelManager;
 use crate::mnemonic::MnemonicExt as _;
-use crate::wallet::fingerprint::Fingerprint;
-use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
+use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
+use crate::wallet_identity::{
+    ExistingWalletIdentitySet, WalletIdentityKey, collect_existing_wallet_identities,
+    fallback_identity_key_for_backup, identity_key_for_backup,
+};
 
 use super::crypto;
 use super::error::BackupError;
@@ -34,16 +35,15 @@ pub async fn import_all(
 
     let mut report = BackupImportReport::default();
 
-    // collect existing (fingerprint, network, mode) tuples to detect duplicates (including within this import)
-    let mut existing_fingerprints = collect_existing_fingerprints()?;
+    let mut existing_identities = collect_existing_wallet_identities()?;
 
     for wallet_backup in &payload.wallets {
-        match restore_wallet(wallet_backup, &existing_fingerprints).await {
+        match restore_wallet(wallet_backup, &existing_identities).await {
             Ok(RestoreResult::Imported {
                 name,
                 labels_imported,
                 labels_failure,
-                fingerprint,
+                duplicate_key,
                 degraded,
             }) => {
                 report.imported_wallet_names.push(name);
@@ -54,9 +54,7 @@ pub async fn import_all(
                     report.labels_failed_wallet_names.push(name);
                     report.labels_failed_errors.push(error);
                 }
-                if let Some(entry) = fingerprint {
-                    existing_fingerprints.push(entry);
-                }
+                existing_identities.insert(duplicate_key);
                 if degraded {
                     let name = wallet_name_from_backup(wallet_backup);
                     report.degraded_wallet_names.push(name);
@@ -121,65 +119,12 @@ enum RestoreResult {
         name: String,
         labels_imported: bool,
         labels_failure: Option<(String, String)>,
-        fingerprint: Option<(Fingerprint, Network, WalletMode)>,
+        duplicate_key: WalletIdentityKey,
         degraded: bool,
     },
     Skipped {
         name: String,
     },
-}
-
-/// Check if a wallet already exists on the device
-///
-/// Matches import's exact behavior: fingerprint+network+mode first,
-/// falls back to wallet ID for wallets without fingerprints
-pub(crate) fn is_wallet_duplicate(
-    metadata: &WalletMetadata,
-    existing_fingerprints: &[(Fingerprint, Network, WalletMode)],
-) -> Result<bool, BackupError> {
-    if let Some(fp) = &metadata.master_fingerprint
-        && existing_fingerprints.contains(&(**fp, metadata.network, metadata.wallet_mode))
-    {
-        return Ok(true);
-    }
-
-    if metadata.master_fingerprint.is_none() {
-        let db = Database::global();
-        let already_exists = db
-            .wallets
-            .get_all(metadata.network, metadata.wallet_mode)
-            .map_err(|e| {
-                BackupError::Database(format!("duplicate check for {}: {e}", metadata.name))
-            })?
-            .iter()
-            .any(|w| w.id == metadata.id);
-        return Ok(already_exists);
-    }
-
-    Ok(false)
-}
-
-pub(crate) fn collect_existing_fingerprints()
--> Result<Vec<(Fingerprint, Network, WalletMode)>, BackupError> {
-    let db = Database::global();
-    let mut fingerprints = Vec::new();
-
-    for network in Network::iter() {
-        for mode in [WalletMode::Main, WalletMode::Decoy] {
-            let wallets = db
-                .wallets
-                .get_all(network, mode)
-                .map_err(|e| BackupError::Database(format!("failed to read wallets: {e}")))?;
-
-            for wallet in wallets {
-                if let Some(fp) = &wallet.master_fingerprint {
-                    fingerprints.push((**fp, network, mode));
-                }
-            }
-        }
-    }
-
-    Ok(fingerprints)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -275,30 +220,37 @@ pub(crate) struct LabelRestoreOutcome {
 
 async fn restore_wallet(
     backup: &WalletBackup,
-    existing_fingerprints: &[(Fingerprint, Network, WalletMode)],
+    existing_identities: &ExistingWalletIdentitySet,
 ) -> Result<RestoreResult, RestoreError> {
     let metadata: WalletMetadata = serde_json::from_value(backup.metadata.clone())
         .map_err(|e| BackupError::Deserialization(format!("wallet metadata: {e}")))?;
 
     let name = metadata.name.clone();
     let wallet_id = metadata.id.clone();
-    let network = metadata.network;
+
+    let duplicate_key = match identity_key_for_backup(&metadata, backup) {
+        Ok(duplicate_key) => duplicate_key,
+        Err(error) => {
+            let fallback_key = fallback_identity_key_for_backup(&metadata);
+            if existing_identities.contains(&fallback_key) {
+                info!("Skipping wallet {name} - already exists on device");
+                return Ok(RestoreResult::Skipped { name });
+            }
+
+            return Err(BackupError::from(error).into());
+        }
+    };
+
+    if existing_identities.contains(&duplicate_key) {
+        info!("Skipping wallet {name} - already exists on device");
+        return Ok(RestoreResult::Skipped { name });
+    }
 
     let validation = validate_wallet_type_secret(&metadata.wallet_type, &backup.secret, &name)?;
     let cold_missing_backup = validation == WalletTypeSecretValidation::Degraded;
 
-    if is_wallet_duplicate(&metadata, existing_fingerprints)? {
-        info!("Skipping wallet {name} — already exists on device");
-        return Ok(RestoreResult::Skipped { name });
-    }
-
     let mut labels_failure: Option<(String, String)> = None;
     let mut degraded = cold_missing_backup;
-    let fingerprint = metadata
-        .master_fingerprint
-        .as_deref()
-        .copied()
-        .map(|fp| (fp, network, metadata.wallet_mode));
 
     match &backup.secret {
         // NOTE: Mnemonic doesn't implement Zeroize (upstream), so the parsed
@@ -335,7 +287,7 @@ async fn restore_wallet(
         labels_failure = Some((warning.wallet_name, warning.error));
     }
 
-    Ok(RestoreResult::Imported { name, labels_imported, labels_failure, fingerprint, degraded })
+    Ok(RestoreResult::Imported { name, labels_imported, labels_failure, duplicate_key, degraded })
 }
 
 /// Run a restore operation, cleaning up on failure
@@ -618,4 +570,79 @@ fn wallet_name_from_backup(backup: &WalletBackup) -> String {
 
     warn!("wallet backup has no name or id in metadata: {}", backup.metadata);
     "unknown".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr as _;
+    use std::sync::Arc;
+
+    use crate::wallet::fingerprint::Fingerprint;
+
+    use super::*;
+
+    fn hot_metadata(name: &str) -> WalletMetadata {
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.name = name.to_string();
+        metadata.wallet_type = WalletType::Hot;
+        metadata.master_fingerprint = Some(Arc::new(Fingerprint::from(
+            bdk_wallet::bitcoin::bip32::Fingerprint::from_str("817e7be0").unwrap(),
+        )));
+
+        metadata
+    }
+
+    fn cold_metadata(name: &str) -> WalletMetadata {
+        let mut metadata = hot_metadata(name);
+        metadata.wallet_type = WalletType::Cold;
+        metadata
+    }
+
+    fn invalid_descriptor_wallet(metadata: &WalletMetadata) -> WalletBackup {
+        WalletBackup {
+            metadata: serde_json::to_value(metadata).unwrap(),
+            secret: WalletSecret::None,
+            descriptors: Some(crate::backup::model::DescriptorPair {
+                external: "not a descriptor".to_string(),
+                internal: "also not a descriptor".to_string(),
+            }),
+            xpub: None,
+            labels_jsonl: None,
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_wallet_skips_duplicate_before_secret_validation() {
+        let metadata = hot_metadata("Existing hot wallet");
+        let backup = WalletBackup {
+            metadata: serde_json::to_value(&metadata).unwrap(),
+            secret: WalletSecret::Unknown,
+            descriptors: None,
+            xpub: None,
+            labels_jsonl: None,
+        };
+        let duplicate_key = identity_key_for_backup(&metadata, &backup).unwrap();
+        let mut existing_identities = ExistingWalletIdentitySet::default();
+        existing_identities.insert(duplicate_key);
+
+        match restore_wallet(&backup, &existing_identities).await {
+            Ok(RestoreResult::Skipped { name }) => assert_eq!(name, metadata.name),
+            Ok(RestoreResult::Imported { .. }) => panic!("expected duplicate skip"),
+            Err(error) => panic!("expected duplicate skip, got {}", error.error),
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_wallet_skips_duplicate_with_invalid_public_identity() {
+        let metadata = cold_metadata("Existing malformed public wallet");
+        let backup = invalid_descriptor_wallet(&metadata);
+        let mut existing_identities = ExistingWalletIdentitySet::default();
+        existing_identities.insert(fallback_identity_key_for_backup(&metadata));
+
+        match restore_wallet(&backup, &existing_identities).await {
+            Ok(RestoreResult::Skipped { name }) => assert_eq!(name, metadata.name),
+            Ok(RestoreResult::Imported { .. }) => panic!("expected duplicate skip"),
+            Err(error) => panic!("expected duplicate skip, got {}", error.error),
+        }
+    }
 }

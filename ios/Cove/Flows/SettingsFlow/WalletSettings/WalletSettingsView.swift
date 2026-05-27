@@ -13,6 +13,7 @@ struct WalletSettingsView: View {
     @State private var showingSecondDeleteConfirmation = false
     @State private var showingFinalDeleteConfirmation = false
     @State private var requiredConfirmations: UInt8 = 1
+    @State private var accountNumber: UInt32? = nil
 
     init(manager: WalletManager) {
         self.manager = manager
@@ -65,6 +66,16 @@ struct WalletSettingsView: View {
                         Text("Birthday")
                         Spacer()
                         Text(birthday.displayValue)
+                            .foregroundColor(.secondary)
+                    }
+                    .font(.subheadline)
+                }
+
+                if let accountNumber {
+                    HStack {
+                        Text("Account Number")
+                        Spacer()
+                        Text("\(accountNumber)")
                             .foregroundColor(.secondary)
                     }
                     .font(.subheadline)
@@ -234,6 +245,9 @@ struct WalletSettingsView: View {
         .foregroundColor(.primary)
         .onDisappear { manager.validateMetadata() }
         .onAppear { manager.validateMetadata() }
+        .task {
+            accountNumber = manager.rust.nonDefaultAccountNumber()
+        }
         .scrollContentBackground(.hidden)
     }
 }

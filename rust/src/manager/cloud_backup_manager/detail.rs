@@ -130,6 +130,7 @@ pub(crate) struct CloudBackupCloudOnlyOperationWarning {
 pub(crate) enum CloudBackupCloudOnlyWalletOutcome {
     Started { record_id: String },
     Restored { record_id: String, warning: Option<CloudBackupCloudOnlyOperationWarning> },
+    SkippedDuplicate { record_id: String },
     Deleted { record_id: String },
     Failed(String),
 }

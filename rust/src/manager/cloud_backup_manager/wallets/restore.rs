@@ -10,17 +10,19 @@ use zeroize::Zeroizing;
 use super::payload::{convert_cloud_secret, descriptor_pair_from_cloud};
 use super::{DownloadedWalletBackup, RemoteWalletBackupSummary, decode_cloud_labels_jsonl};
 use crate::backup::import::{LabelRestoreBehavior, LabelRestoreWarning, restore_wallet_labels};
-use crate::manager::cloud_backup_manager::{CloudBackupError, LocalWalletMode, LocalWalletSecret};
-use crate::wallet::fingerprint::Fingerprint;
+use crate::backup::model::{WalletBackup, WalletSecret};
+use crate::manager::cloud_backup_manager::{CloudBackupError, LocalWalletSecret};
 use crate::wallet::metadata::WalletMetadata;
+use crate::wallet_identity::{
+    ExistingWalletIdentitySet, WalletIdentityKey, fallback_identity_key_for_backup,
+    identity_key_for_backup,
+};
 
 pub(crate) enum WalletBackupLookup<T> {
     Found(T),
     NotFound,
     UnsupportedVersion(u32),
 }
-
-type ExistingFingerprints = Vec<(Fingerprint, cove_types::network::Network, LocalWalletMode)>;
 
 #[derive(Clone)]
 pub(crate) struct WalletBackupReader {
@@ -156,16 +158,17 @@ impl WalletBackupReader {
     }
 }
 
-pub(crate) struct WalletRestoreSession(ExistingFingerprints);
+pub(crate) struct WalletRestoreSession(ExistingWalletIdentitySet);
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) struct WalletRestoreOutcome {
-    pub(crate) labels_warning: Option<LabelRestoreWarning>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WalletRestoreOutcome {
+    Restored { labels_warning: Option<LabelRestoreWarning> },
+    SkippedDuplicate,
 }
 
 impl WalletRestoreSession {
-    pub(crate) fn new(existing_fingerprints: ExistingFingerprints) -> Self {
-        Self(existing_fingerprints)
+    pub(crate) fn new(existing_identities: ExistingWalletIdentitySet) -> Self {
+        Self(existing_identities)
     }
 
     pub(crate) async fn restore_record(
@@ -181,40 +184,62 @@ impl WalletRestoreSession {
         &mut self,
         wallet: &DownloadedWalletBackup,
     ) -> Result<WalletRestoreOutcome, CloudBackupError> {
-        if self.should_skip_duplicate_wallet(&wallet.metadata) {
-            return Ok(WalletRestoreOutcome::default());
+        let duplicate_key = match wallet.duplicate_key() {
+            Ok(duplicate_key) => duplicate_key,
+            Err(error) => {
+                let fallback_key = wallet.fallback_duplicate_key();
+                if self.should_skip_duplicate_wallet(&wallet.metadata, &fallback_key) {
+                    return Ok(WalletRestoreOutcome::SkippedDuplicate);
+                }
+
+                return Err(error);
+            }
+        };
+
+        if self.should_skip_duplicate_wallet(&wallet.metadata, &duplicate_key) {
+            return Ok(WalletRestoreOutcome::SkippedDuplicate);
         }
 
         let outcome = wallet.restore()?;
-        self.remember_restored_wallet_fingerprint(&wallet.metadata);
+        self.0.insert(duplicate_key);
 
         Ok(outcome)
     }
 
-    fn should_skip_duplicate_wallet(&self, metadata: &WalletMetadata) -> bool {
-        if crate::backup::import::is_wallet_duplicate(metadata, &self.0)
-            .inspect_err(|error| {
-                warn!("is_wallet_duplicate check failed for {}: {error}", metadata.name)
-            })
-            .unwrap_or(false)
-        {
+    fn should_skip_duplicate_wallet(
+        &self,
+        metadata: &WalletMetadata,
+        duplicate_key: &WalletIdentityKey,
+    ) -> bool {
+        if self.0.contains(duplicate_key) {
             info!("Skipping duplicate wallet {}", metadata.name);
             true
         } else {
             false
         }
     }
-
-    fn remember_restored_wallet_fingerprint(&mut self, metadata: &WalletMetadata) {
-        if let Some(fingerprint) = &metadata.master_fingerprint {
-            self.0.push((**fingerprint, metadata.network, metadata.wallet_mode));
-        }
-    }
 }
 
 impl DownloadedWalletBackup {
+    fn duplicate_key(&self) -> Result<WalletIdentityKey, CloudBackupError> {
+        let backup_model = WalletBackup {
+            metadata: self.entry.metadata.clone(),
+            secret: WalletSecret::None,
+            descriptors: descriptor_pair_from_cloud(&self.entry.descriptors),
+            xpub: self.entry.xpub.clone(),
+            labels_jsonl: None,
+        };
+
+        identity_key_for_backup(&self.metadata, &backup_model)
+            .map_err_prefix("cloud wallet duplicate identity", CloudBackupError::Internal)
+    }
+
+    fn fallback_duplicate_key(&self) -> WalletIdentityKey {
+        fallback_identity_key_for_backup(&self.metadata)
+    }
+
     fn restore(&self) -> Result<WalletRestoreOutcome, CloudBackupError> {
-        let backup_model = crate::backup::model::WalletBackup {
+        let backup_model = WalletBackup {
             metadata: self.entry.metadata.clone(),
             secret: convert_cloud_secret(&self.entry.secret),
             descriptors: descriptor_pair_from_cloud(&self.entry.descriptors),
@@ -253,7 +278,7 @@ impl DownloadedWalletBackup {
             warn!("Failed to restore labels for wallet {}: {}", self.metadata.name, warning.error);
         }
 
-        Ok(WalletRestoreOutcome { labels_warning: labels_outcome.warning })
+        Ok(WalletRestoreOutcome::Restored { labels_warning: labels_outcome.warning })
     }
 }
 
@@ -261,6 +286,60 @@ impl DownloadedWalletBackup {
 mod tests {
     use super::*;
     use cove_cspp::backup_data::WalletSecret;
+    use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Once},
+    };
+
+    use crate::wallet_identity::test_support::ExistingWalletIdentitySetTestExt as _;
+
+    #[derive(Debug, Default)]
+    struct TestKeychain(parking_lot::Mutex<HashMap<String, String>>);
+
+    impl KeychainAccess for TestKeychain {
+        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+            self.0.lock().insert(key, value);
+            Ok(())
+        }
+
+        fn get(&self, key: String) -> Option<String> {
+            self.0.lock().get(&key).cloned()
+        }
+
+        fn delete(&self, key: String) -> bool {
+            self.0.lock().remove(&key).is_some()
+        }
+    }
+
+    fn test_keychain() -> &'static Keychain {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            Keychain::new(Box::<TestKeychain>::default());
+        });
+
+        Keychain::global()
+    }
+
+    fn public_descriptors(account: u32) -> cove_cspp::backup_data::DescriptorPair {
+        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+
+        cove_cspp::backup_data::DescriptorPair {
+            external: format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/0/*)"),
+            internal: format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/1/*)"),
+        }
+    }
+
+    fn public_metadata(name: &str) -> WalletMetadata {
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.name = name.to_string();
+        metadata.wallet_type = crate::wallet::metadata::WalletType::Cold;
+        metadata.master_fingerprint =
+            Some(Arc::new(crate::wallet::fingerprint::Fingerprint::from(
+                bdk_wallet::bitcoin::bip32::Fingerprint::from_str("817e7be0").unwrap(),
+            )));
+        metadata
+    }
 
     fn test_wallet_entry(metadata: &WalletMetadata) -> WalletEntry {
         WalletEntry {
@@ -277,6 +356,23 @@ mod tests {
             content_revision_hash: "test-revision".into(),
             updated_at: 42,
         }
+    }
+
+    fn test_public_wallet(metadata: &WalletMetadata, account: u32) -> DownloadedWalletBackup {
+        let mut entry = test_wallet_entry(metadata);
+        entry.descriptors = Some(public_descriptors(account));
+
+        DownloadedWalletBackup { metadata: metadata.clone(), entry }
+    }
+
+    fn test_invalid_public_wallet(metadata: &WalletMetadata) -> DownloadedWalletBackup {
+        let mut entry = test_wallet_entry(metadata);
+        entry.descriptors = Some(cove_cspp::backup_data::DescriptorPair {
+            external: "not a descriptor".to_string(),
+            internal: "also not a descriptor".to_string(),
+        });
+
+        DownloadedWalletBackup { metadata: metadata.clone(), entry }
     }
 
     #[test]
@@ -299,32 +395,74 @@ mod tests {
 
     #[test]
     fn restore_session_skips_duplicate_wallet() {
-        let metadata = WalletMetadata::preview_new();
-        let wallet = DownloadedWalletBackup {
-            metadata: metadata.clone(),
-            entry: test_wallet_entry(&metadata),
-        };
-        let existing_fingerprints = vec![(
-            *metadata.master_fingerprint.as_ref().unwrap().as_ref(),
-            metadata.network,
-            metadata.wallet_mode,
-        )];
-        let mut session = WalletRestoreSession::new(existing_fingerprints);
+        let metadata = public_metadata("Existing account 0");
+        let wallet = test_public_wallet(&metadata, 0);
+        let mut existing_identities = ExistingWalletIdentitySet::default();
+        existing_identities.insert(wallet.duplicate_key().unwrap());
+        let mut session = WalletRestoreSession::new(existing_identities);
 
-        session.restore_downloaded(&wallet).unwrap();
+        let outcome = session.restore_downloaded(&wallet).unwrap();
 
+        assert_eq!(outcome, WalletRestoreOutcome::SkippedDuplicate);
         assert_eq!(session.0.len(), 1);
     }
 
     #[test]
-    fn remember_restored_wallet_fingerprint_tracks_restored_wallet() {
-        let metadata = WalletMetadata::preview_new();
-        let mut session = WalletRestoreSession::new(Vec::new());
+    fn restore_session_skips_duplicate_wallet_with_invalid_public_identity() {
+        let metadata = public_metadata("Existing malformed public wallet");
+        let wallet = test_invalid_public_wallet(&metadata);
+        let mut existing_identities = ExistingWalletIdentitySet::default();
+        existing_identities.insert(wallet.fallback_duplicate_key());
+        let mut session = WalletRestoreSession::new(existing_identities);
 
-        session.remember_restored_wallet_fingerprint(&metadata);
+        let outcome = session.restore_downloaded(&wallet).unwrap();
 
+        assert_eq!(outcome, WalletRestoreOutcome::SkippedDuplicate);
         assert_eq!(session.0.len(), 1);
-        assert_eq!(session.0[0].0, *metadata.master_fingerprint.unwrap().as_ref());
+    }
+
+    #[test]
+    fn restore_session_does_not_skip_same_fingerprint_different_cloud_identity() {
+        let existing_metadata = public_metadata("Existing account 0");
+        let existing_wallet = test_public_wallet(&existing_metadata, 0);
+        let incoming_metadata = public_metadata("Incoming account 1");
+        let incoming_wallet = test_public_wallet(&incoming_metadata, 1);
+        let mut existing_identities = ExistingWalletIdentitySet::default();
+        existing_identities.insert(existing_wallet.duplicate_key().unwrap());
+        let session = WalletRestoreSession::new(existing_identities);
+        let incoming_key = incoming_wallet.duplicate_key().unwrap();
+
+        assert!(!session.should_skip_duplicate_wallet(&incoming_wallet.metadata, &incoming_key));
+    }
+
+    #[test]
+    fn restore_downloaded_tracks_restored_wallet_identity() {
+        crate::database::test_support::init_test_database();
+        test_keychain();
+
+        let metadata = WalletMetadata::preview_new();
+        let mut entry = test_wallet_entry(&metadata);
+        entry.xpub = Some(
+            "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM"
+                .into(),
+        );
+        let wallet = DownloadedWalletBackup { metadata: metadata.clone(), entry };
+        let mut session = WalletRestoreSession::new(ExistingWalletIdentitySet::default());
+        let duplicate_key = wallet.duplicate_key().unwrap();
+
+        assert!(!session.0.contains(&duplicate_key));
+
+        let first_outcome = session.restore_downloaded(&wallet).unwrap();
+
+        assert_eq!(first_outcome, WalletRestoreOutcome::Restored { labels_warning: None });
+        assert!(session.0.contains(&duplicate_key));
+        assert_eq!(session.0.len(), 1);
+
+        let second_outcome = session.restore_downloaded(&wallet).unwrap();
+
+        assert_eq!(second_outcome, WalletRestoreOutcome::SkippedDuplicate);
+        assert!(session.0.contains(&duplicate_key));
+        assert_eq!(session.0.len(), 1);
     }
 
     #[test]
