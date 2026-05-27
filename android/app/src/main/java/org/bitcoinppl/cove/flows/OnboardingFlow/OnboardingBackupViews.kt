@@ -736,6 +736,7 @@ internal fun OnboardingCloudBackupSuccessView(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .navigationBarsPadding()
                     .padding(horizontal = 24.dp, vertical = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

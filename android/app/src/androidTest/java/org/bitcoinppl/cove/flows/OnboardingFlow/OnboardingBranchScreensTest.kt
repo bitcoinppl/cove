@@ -133,6 +133,22 @@ class OnboardingBranchScreensTest {
         compose.button("Continue").assertIsEnabled()
         compose.button("Continue").performClick()
         assertEquals("continue", selected)
+
+        compose.setOnboardingContent {
+            OnboardingBackupWalletView(
+                branch = OnboardingBranch.NEW_USER,
+                secretWordsSaved = false,
+                cloudBackupEnabled = true,
+                wordCount = 12,
+                onShowWords = {},
+                onEnableCloudBackup = {},
+                onContinue = {},
+            )
+        }
+
+        compose.onNodeWithText("Back up your wallet").assertIsDisplayed()
+        compose.onNodeWithText("Choose at least one backup method before continuing.").assertIsDisplayed()
+        compose.button("Enabled").assertIsDisplayed()
     }
 
     @Test
@@ -469,7 +485,7 @@ class OnboardingBranchScreensTest {
             .performClick()
         compose.cardContaining("I have read and agree").performScrollTo()
             .performClick()
-        compose.button("Agree and Continue").performScrollTo().assertIsEnabled()
+        compose.button("Agree and Continue").assertIsEnabled()
         compose.button("Agree and Continue").performClick()
 
         assertEquals(true, agreed)

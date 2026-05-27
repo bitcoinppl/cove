@@ -130,74 +130,81 @@ internal fun OnboardingTermsScreen(
                     .fillMaxSize()
                     .statusBarsPadding()
                     .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 26.dp, vertical = 22.dp),
+                    .padding(horizontal = 26.dp)
+                    .padding(top = 22.dp, bottom = 24.dp),
         ) {
-            Text(
-                text = "Terms & Conditions",
-                color = Color.White,
-                fontSize = 34.sp,
-                lineHeight = 38.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            Column(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = "Terms & Conditions",
+                    color = Color.White,
+                    fontSize = 34.sp,
+                    lineHeight = 38.sp,
+                    fontWeight = FontWeight.Bold,
+                )
 
-            Spacer(modifier = Modifier.size(12.dp))
+                Spacer(modifier = Modifier.size(12.dp))
 
-            Text(
-                text = "By continuing, you agree to the following:",
-                color = OnboardingTextSecondary,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+                Text(
+                    text = "By continuing, you agree to the following:",
+                    color = OnboardingTextSecondary,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
 
-            Spacer(modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.size(20.dp))
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OnboardingTermsCheckboxCard(
-                    checked = checks[0],
-                    onCheckedChange = { checks[0] = it },
-                    text = "I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.",
-                    modifier = Modifier.testTag("onboarding.terms.check.backup"),
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OnboardingTermsCheckboxCard(
+                        checked = checks[0],
+                        onCheckedChange = { checks[0] = it },
+                        text = "I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.",
+                        modifier = Modifier.testTag("onboarding.terms.check.backup"),
+                    )
+                    OnboardingTermsCheckboxCard(
+                        checked = checks[1],
+                        onCheckedChange = { checks[1] = it },
+                        text = "I understand that any unlawful use of Cove is strictly prohibited.",
+                        modifier = Modifier.testTag("onboarding.terms.check.legal"),
+                    )
+                    OnboardingTermsCheckboxCard(
+                        checked = checks[2],
+                        onCheckedChange = { checks[2] = it },
+                        text = "I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.",
+                        modifier = Modifier.testTag("onboarding.terms.check.financial"),
+                    )
+                    OnboardingTermsCheckboxCard(
+                        checked = checks[3],
+                        onCheckedChange = { checks[3] = it },
+                        text = "I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.",
+                        modifier = Modifier.testTag("onboarding.terms.check.recovery"),
+                    )
+                    OnboardingTermsAgreementCard(
+                        checked = checks[4],
+                        onCheckedChange = { checks[4] = it },
+                        onOpenUrl = { uriHandler.openUri(it) },
+                        modifier = Modifier.testTag("onboarding.terms.check.agreement"),
+                    )
+                }
+
+                Spacer(modifier = Modifier.size(16.dp))
+
+                if (errorMessage != null) {
+                    OnboardingInlineMessage(text = errorMessage)
+                    Spacer(modifier = Modifier.size(8.dp))
+                }
+
+                Text(
+                    text = "By checking these boxes, you accept and agree to the above terms.",
+                    color = CoveColor.coveLightGray.copy(alpha = 0.50f),
+                    style = MaterialTheme.typography.bodySmall,
                 )
-                OnboardingTermsCheckboxCard(
-                    checked = checks[1],
-                    onCheckedChange = { checks[1] = it },
-                    text = "I understand that any unlawful use of Cove is strictly prohibited.",
-                    modifier = Modifier.testTag("onboarding.terms.check.legal"),
-                )
-                OnboardingTermsCheckboxCard(
-                    checked = checks[2],
-                    onCheckedChange = { checks[2] = it },
-                    text = "I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.",
-                    modifier = Modifier.testTag("onboarding.terms.check.financial"),
-                )
-                OnboardingTermsCheckboxCard(
-                    checked = checks[3],
-                    onCheckedChange = { checks[3] = it },
-                    text = "I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.",
-                    modifier = Modifier.testTag("onboarding.terms.check.recovery"),
-                )
-                OnboardingTermsAgreementCard(
-                    checked = checks[4],
-                    onCheckedChange = { checks[4] = it },
-                    onOpenUrl = { uriHandler.openUri(it) },
-                    modifier = Modifier.testTag("onboarding.terms.check.agreement"),
-                )
+
+                Spacer(modifier = Modifier.size(20.dp))
             }
-
-            Spacer(modifier = Modifier.size(16.dp))
-
-            if (errorMessage != null) {
-                OnboardingInlineMessage(text = errorMessage)
-                Spacer(modifier = Modifier.size(8.dp))
-            }
-
-            Text(
-                text = "By checking these boxes, you accept and agree to the above terms.",
-                color = CoveColor.coveLightGray.copy(alpha = 0.50f),
-                style = MaterialTheme.typography.bodySmall,
-            )
-
-            Spacer(modifier = Modifier.size(20.dp))
 
             OnboardingPrimaryButton(
                 text = "Agree and Continue",
@@ -205,8 +212,6 @@ internal fun OnboardingTermsScreen(
                 modifier = Modifier.testTag("onboarding.terms.agree"),
                 enabled = allChecked,
             )
-
-            Spacer(modifier = Modifier.size(24.dp))
         }
     }
 }
