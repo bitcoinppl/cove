@@ -58,6 +58,12 @@ pub(crate) struct PreparedProgressiveScan {
     pub(crate) last_revealed_indices: BTreeMap<KeychainKind, u32>,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum ScanRequestOrder {
+    Standard,
+    ReceivePriority,
+}
+
 pub(crate) enum WalletScanEvent {
     FullScanStarted(FullScanType),
     IncrementalScanStarted,
@@ -99,6 +105,13 @@ impl RunningScan {
         match self {
             Self::Full(scan_type) => scan_type.stop_gap(),
             Self::Incremental => GAP_LIMIT as usize,
+        }
+    }
+
+    const fn request_order(self) -> ScanRequestOrder {
+        match self {
+            Self::Full(_) => ScanRequestOrder::Standard,
+            Self::Incremental => ScanRequestOrder::ReceivePriority,
         }
     }
 }
@@ -237,10 +250,11 @@ impl WalletScanActor {
             },
         )));
 
+        let request_order = scan.request_order();
         let addr = self.addr.clone();
         let wallet_addr = self.wallet_addr.clone();
         self.addr.send_fut(async move {
-            match call!(wallet_addr.prepare_progressive_scan()).await {
+            match call!(wallet_addr.prepare_progressive_scan(request_order)).await {
                 Ok(prepared) => {
                     let job =
                         ProgressiveFullScanJob { scan, scan_generation, cancel_token, prepared };
@@ -674,12 +688,12 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::{
-        FullScanCompletionEffect, FullScanType, QueuedRescanDisposition,
+        FullScanCompletionEffect, FullScanType, QueuedRescanDisposition, RunningScan,
         SCAN_PARTIAL_FLUSH_INTERVAL, SCAN_PROGRESS_BASIS_POINTS, SCAN_PROGRESS_INTERVAL,
-        ScanFlushCadence, ScanFlushDecision, WalletScanActor, WalletScanPhase, WalletScanProgress,
-        WalletScanStatus, is_cancelled_progressive_scan, queued_rescan_after_failed_full_scan,
-        queued_rescan_after_successful_full_scan, record_scan_update_flush,
-        scan_progress_basis_points, should_accept_scan_generation,
+        ScanFlushCadence, ScanFlushDecision, ScanRequestOrder, WalletScanActor, WalletScanPhase,
+        WalletScanProgress, WalletScanStatus, is_cancelled_progressive_scan,
+        queued_rescan_after_failed_full_scan, queued_rescan_after_successful_full_scan,
+        record_scan_update_flush, scan_progress_basis_points, should_accept_scan_generation,
         should_flush_pending_after_scan_result, should_forward_scan_progress,
         successful_full_scan_completion_effect,
     };
@@ -952,6 +966,23 @@ mod tests {
             queued_rescan_after_failed_full_scan(FullScanType::Rescan(20)),
             QueuedRescanDisposition::Start
         );
+    }
+
+    #[test]
+    fn scan_request_order_is_receive_prioritized_only_for_incremental_scans() {
+        assert_eq!(
+            RunningScan::Full(FullScanType::Initial).request_order(),
+            ScanRequestOrder::Standard
+        );
+        assert_eq!(
+            RunningScan::Full(FullScanType::Expanded).request_order(),
+            ScanRequestOrder::Standard
+        );
+        assert_eq!(
+            RunningScan::Full(FullScanType::Rescan(20)).request_order(),
+            ScanRequestOrder::Standard
+        );
+        assert_eq!(RunningScan::Incremental.request_order(), ScanRequestOrder::ReceivePriority);
     }
 
     #[tokio::test(flavor = "current_thread")]

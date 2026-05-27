@@ -71,8 +71,8 @@ use tracing::{debug, error, info, warn};
 use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
 use self::scan::{
-    FullScanCompletionEffect, FullScanType, PreparedProgressiveScan, WalletScanActor,
-    WalletScanEvent, successful_full_scan_completion_effect,
+    FullScanCompletionEffect, FullScanType, PreparedProgressiveScan, ScanRequestOrder,
+    WalletScanActor, WalletScanEvent, successful_full_scan_completion_effect,
 };
 use super::{SingleOrMany, WalletManagerReconcileMessage};
 
@@ -1298,10 +1298,16 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    async fn prepare_progressive_scan(&mut self) -> ActorResult<PreparedProgressiveScan> {
+    async fn prepare_progressive_scan(
+        &mut self,
+        request_order: ScanRequestOrder,
+    ) -> ActorResult<PreparedProgressiveScan> {
         let node_client = self.node_client().await?.clone();
 
-        let full_scan_request = self.wallet.bdk.start_full_scan().build();
+        let full_scan_request = match request_order {
+            ScanRequestOrder::Standard => self.wallet.bdk.start_full_scan().build(),
+            ScanRequestOrder::ReceivePriority => self.wallet.start_receive_prioritized_full_scan(),
+        };
         let graph = self.wallet.bdk.tx_graph().clone();
         let last_revealed_indices = self.wallet.bdk.spk_index().last_revealed_indices();
 

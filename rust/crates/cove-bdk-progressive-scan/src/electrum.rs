@@ -180,7 +180,7 @@ where
                     stop_gap_unused_count = stop_gap_unused_count.saturating_add(1);
                 }
             } else {
-                last_active_index = Some(spk_index);
+                last_active_index = Some(last_active_index.unwrap_or(spk_index).max(spk_index));
                 stop_gap_unused_count = 0;
             }
 
@@ -985,6 +985,61 @@ mod tests {
         assert_eq!(updates.len(), 1);
         assert_eq!(updates[0].last_active_indices.get("external"), Some(&0));
         assert!(updates[0].tx_update.seen_ats.contains(&(txid, 7)));
+    }
+
+    #[test]
+    fn out_of_order_active_indexes_report_max_last_active_index() {
+        let tx = test_transaction();
+        let txid = tx.compute_txid();
+        let fake = FakeElectrum {
+            fail_history: false,
+            histories: Arc::new(Mutex::new(VecDeque::from([
+                vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
+                vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
+                Vec::new(),
+                Vec::new(),
+            ]))),
+            transactions: BTreeMap::from([(txid, tx)]),
+            fetched_txids: Arc::new(Mutex::new(Vec::new())),
+            merkle_response_limit: None,
+        };
+        let client = BdkElectrumClient::new(fake);
+        let (events, receiver) = flume::unbounded();
+        let cancel_token = CancellationToken::new();
+        let mut progress = ProgressTracker::new(2);
+        let mut inserted_txs = HashSet::new();
+        let mut tx_update = TxUpdate::default();
+        let spks = [4, 1, 5, 6]
+            .into_iter()
+            .map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+
+        let last_active_index = populate_with_spks(
+            &client,
+            7,
+            &events,
+            None,
+            &cancel_token,
+            &mut progress,
+            "external",
+            &mut inserted_txs,
+            &mut tx_update,
+            spks,
+            None,
+            2,
+            2,
+            false,
+        )
+        .expect("scan succeeds");
+        let update = receiver
+            .try_iter()
+            .find_map(|event| match event {
+                ScanEvent::Update(update) => Some(update),
+                _ => None,
+            })
+            .expect("partial update is emitted");
+
+        assert_eq!(last_active_index, Some(4));
+        assert_eq!(update.last_active_indices.get("external"), Some(&4));
     }
 
     #[test]

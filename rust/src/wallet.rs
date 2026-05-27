@@ -22,6 +22,7 @@ use balance::Balance;
 use bdk_wallet::KeychainKind;
 use bdk_wallet::bitcoin::bip32::Xpub;
 use bdk_wallet::chain::rusqlite::Connection;
+use bdk_wallet::chain::spk_client::FullScanRequest;
 use bip39::Mnemonic;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_common::consts::GAP_LIMIT;
@@ -547,6 +548,10 @@ impl Wallet {
         self.bdk.balance().into()
     }
 
+    pub(crate) fn start_receive_prioritized_full_scan(&self) -> FullScanRequest<KeychainKind> {
+        receive_prioritized_full_scan_request(&self.bdk)
+    }
+
     /// Read cached transactions from the BDK wallet
     pub fn transactions(&self) -> Vec<crate::transaction::Transaction> {
         use crate::transaction::{Amount, Transaction};
@@ -712,6 +717,39 @@ fn check_for_duplicate_wallet(
     Ok(())
 }
 
+/// Builds an incremental scan request that checks revealed-unused receive addresses first
+///
+/// The request still uses unbounded BDK SPK iterators. The progressive scanner owns stop-gap
+/// enforcement, so the normal external iterator resumes from index `0` with prioritized indexes
+/// filtered out instead of being capped to the gap limit
+fn receive_prioritized_full_scan_request(
+    wallet: &bdk_wallet::Wallet,
+) -> FullScanRequest<KeychainKind> {
+    let mut builder = FullScanRequest::builder().chain_tip(wallet.local_chain().tip());
+
+    let priority_spks = wallet
+        .list_unused_addresses(KeychainKind::External)
+        .take(GAP_LIMIT as usize)
+        .map(|address| (address.index, address.address.script_pubkey()))
+        .collect::<Vec<_>>();
+
+    let priority_indices = priority_spks.iter().map(|(index, _)| *index).collect::<Vec<_>>();
+
+    if let Some(external_spks) = wallet.spk_index().unbounded_spk_iter(KeychainKind::External) {
+        let external_spks = priority_spks
+            .into_iter()
+            .chain(external_spks.filter(move |(index, _)| !priority_indices.contains(index)));
+
+        builder = builder.spks_for_keychain(KeychainKind::External, external_spks);
+    }
+
+    if let Some(internal_spks) = wallet.spk_index().unbounded_spk_iter(KeychainKind::Internal) {
+        builder = builder.spks_for_keychain(KeychainKind::Internal, internal_spks);
+    }
+
+    builder.build()
+}
+
 #[uniffi::export]
 impl Wallet {
     // Create a dummy wallet for xcode previews
@@ -765,8 +803,27 @@ mod tests {
     };
     use bdk_wallet::chain::{BlockId, ConfirmationBlockTime};
     use bdk_wallet::test_utils::{
-        get_funded_wallet_wpkh, insert_anchor, insert_checkpoint, insert_tx,
+        get_funded_wallet_wpkh, get_test_wpkh_and_change_desc, insert_anchor, insert_checkpoint,
+        insert_tx,
     };
+
+    fn test_bdk_wallet() -> bdk_wallet::Wallet {
+        let (external_descriptor, internal_descriptor) = get_test_wpkh_and_change_desc();
+
+        bdk_wallet::Wallet::create(external_descriptor, internal_descriptor)
+            .network(Network::Regtest)
+            .create_wallet_no_persist()
+            .expect("wallet is created")
+    }
+
+    fn scan_indexes(
+        request: &mut FullScanRequest<KeychainKind>,
+        keychain: KeychainKind,
+        count: usize,
+    ) -> Vec<u32> {
+        request.iter_spks(keychain).take(count).map(|(index, _)| index).collect()
+    }
+
     fn build_tx_with_change(wallet: &mut bdk_wallet::Wallet) -> bdk_wallet::bitcoin::Psbt {
         let address = BdkAddress::from_str("bcrt1q3qtze4ys45tgdvguj66zrk4fu6hq3a3v9pfly5")
             .unwrap()
@@ -864,6 +921,90 @@ mod tests {
         unreserve_tx_change_addresses(&mut wallet, &psbt.unsigned_tx);
 
         assert!(!unused_addresses_contain(&wallet, KeychainKind::External, receive_index));
+    }
+
+    #[test]
+    fn receive_prioritized_scan_checks_revealed_unused_external_indexes_first() {
+        let mut wallet = test_bdk_wallet();
+        let _ = wallet.reveal_addresses_to(KeychainKind::External, 4).last();
+        assert!(wallet.mark_used(KeychainKind::External, 0));
+        assert!(wallet.mark_used(KeychainKind::External, 2));
+        let mut request = receive_prioritized_full_scan_request(&wallet);
+
+        let indexes = scan_indexes(&mut request, KeychainKind::External, 7);
+
+        assert_eq!(indexes, vec![1, 3, 4, 0, 2, 5, 6]);
+    }
+
+    #[test]
+    fn receive_prioritized_scan_deduplicates_priority_indexes_from_normal_external_scan() {
+        let mut wallet = test_bdk_wallet();
+        let _ = wallet.reveal_addresses_to(KeychainKind::External, 4).last();
+        assert!(wallet.mark_used(KeychainKind::External, 0));
+        assert!(wallet.mark_used(KeychainKind::External, 2));
+        let mut request = receive_prioritized_full_scan_request(&wallet);
+
+        let indexes = scan_indexes(&mut request, KeychainKind::External, 10);
+        let unique_indexes = indexes.iter().copied().collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(indexes.len(), unique_indexes.len());
+    }
+
+    #[test]
+    fn receive_prioritized_scan_prefix_is_capped_at_gap_limit() {
+        let mut wallet = test_bdk_wallet();
+        let gap_limit = u32::from(GAP_LIMIT);
+        let _ = wallet.reveal_addresses_to(KeychainKind::External, gap_limit + 2).last();
+        let mut request = receive_prioritized_full_scan_request(&wallet);
+
+        let indexes = scan_indexes(&mut request, KeychainKind::External, GAP_LIMIT as usize + 2);
+        let expected_prefix = (0..gap_limit).collect::<Vec<_>>();
+
+        assert_eq!(&indexes[..GAP_LIMIT as usize], expected_prefix.as_slice());
+        assert_eq!(indexes[GAP_LIMIT as usize], gap_limit);
+    }
+
+    #[test]
+    fn receive_prioritized_scan_prefix_does_not_fill_with_unrevealed_external_indexes() {
+        let mut wallet = test_bdk_wallet();
+        let _ = wallet.reveal_addresses_to(KeychainKind::External, 2).last();
+        assert!(wallet.mark_used(KeychainKind::External, 0));
+        let mut request = receive_prioritized_full_scan_request(&wallet);
+
+        let indexes = scan_indexes(&mut request, KeychainKind::External, 4);
+
+        assert_eq!(indexes, vec![1, 2, 0, 3]);
+    }
+
+    #[test]
+    fn receive_prioritized_scan_keeps_internal_keychain_after_external_keychain() {
+        let wallet = test_bdk_wallet();
+        let request = receive_prioritized_full_scan_request(&wallet);
+
+        assert_eq!(request.keychains(), vec![KeychainKind::External, KeychainKind::Internal]);
+    }
+
+    #[test]
+    fn receive_prioritized_scan_construction_does_not_reveal_or_mark_addresses_used() {
+        let mut wallet = test_bdk_wallet();
+        let _ = wallet.reveal_addresses_to(KeychainKind::External, 2).last();
+        assert!(wallet.mark_used(KeychainKind::External, 0));
+        let last_revealed_before = wallet.spk_index().last_revealed_indices();
+        let unused_before = wallet
+            .list_unused_addresses(KeychainKind::External)
+            .map(|address| address.index)
+            .collect::<Vec<_>>();
+
+        let _request = receive_prioritized_full_scan_request(&wallet);
+
+        let last_revealed_after = wallet.spk_index().last_revealed_indices();
+        let unused_after = wallet
+            .list_unused_addresses(KeychainKind::External)
+            .map(|address| address.index)
+            .collect::<Vec<_>>();
+
+        assert_eq!(last_revealed_after, last_revealed_before);
+        assert_eq!(unused_after, unused_before);
     }
 
     #[test]

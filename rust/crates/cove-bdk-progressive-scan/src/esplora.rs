@@ -265,7 +265,7 @@ where
                 }
             } else {
                 stop_gap_unused_count = 0;
-                last_active_index = Some(index);
+                last_active_index = Some(last_active_index.unwrap_or(index).max(index));
             }
 
             for tx in txs {
@@ -610,6 +610,54 @@ mod tests {
         assert_eq!(updates.len(), 1);
         assert_eq!(updates[0].last_active_indices.get("external"), Some(&0));
         assert!(updates[0].tx_update.seen_ats.contains(&(txid, 7)));
+    }
+
+    #[test]
+    fn out_of_order_active_indexes_report_max_last_active_index() {
+        let higher_txid = txid(8);
+        let lower_txid = txid(9);
+        let fake = FakeEsplora::with_responses([
+            vec![esplora_tx(higher_txid)],
+            vec![esplora_tx(lower_txid)],
+            Vec::new(),
+            Vec::new(),
+        ]);
+        let (events, receiver) = flume::unbounded();
+        let cancel_token = CancellationToken::new();
+        let mut progress = ProgressTracker::new(2);
+        let mut inserted_txs = HashSet::new();
+        let chain_tip = None;
+        let spks = [4, 1, 5, 6]
+            .into_iter()
+            .map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+
+        let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
+            fake,
+            7,
+            &events,
+            &chain_tip,
+            None,
+            &cancel_token,
+            &mut progress,
+            &mut inserted_txs,
+            "external",
+            spks,
+            None,
+            2,
+            2,
+        ))
+        .expect("scan succeeds");
+
+        let update = receiver
+            .try_iter()
+            .find_map(|event| match event {
+                ScanEvent::Update(update) => Some(update),
+                _ => None,
+            })
+            .expect("partial update is emitted");
+
+        assert_eq!(result.last_active_index, Some(4));
+        assert_eq!(update.last_active_indices.get("external"), Some(&4));
     }
 
     #[test]
