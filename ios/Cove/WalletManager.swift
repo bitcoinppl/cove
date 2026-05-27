@@ -1,3 +1,4 @@
+import os
 import SwiftUI
 
 extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletManager {}
@@ -11,6 +12,8 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     let id: WalletId
     @ObservationIgnored
     let rust: RustWalletManager
+    @ObservationIgnored
+    private let closeState = OSAllocatedUnfairLock(initialState: false)
 
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState
@@ -53,7 +56,16 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     }
 
     func close() {
+        guard markClosedIfNeeded() else { return }
         rust.shutdown()
+    }
+
+    private func markClosedIfNeeded() -> Bool {
+        closeState.withLock { isClosed in
+            guard !isClosed else { return false }
+            isClosed = true
+            return true
+        }
     }
 
     init(xpub: String) throws {

@@ -1114,8 +1114,10 @@ impl WalletActor {
 
     pub async fn shutdown(&mut self) {
         debug!("shutdown wallet actor");
-        let scan_actor = self.scan_actor();
-        send!(scan_actor.shutdown());
+        if let Some(scan_actor) = &self.scan_actor {
+            send!(scan_actor.shutdown());
+        }
+
         self.stop_receive_address_watcher();
         self.stop_receive_address_refresh_timer();
         self.transaction_watchers = HashMap::default();
