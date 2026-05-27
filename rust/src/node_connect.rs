@@ -10,10 +10,16 @@ pub const BITCOIN_ESPLORA: [(&str, &str); 2] = [
     ("mempool.space", "https://mempool.space/api/"),
 ];
 
-pub const BITCOIN_ELECTRUM: [(&str, &str); 3] = [
+pub const BITCOIN_ELECTRUM: [(&str, &str); 9] = [
     ("electrum.blockstream.info", "ssl://electrum.blockstream.info:50002"),
     ("mempool.space electrum", "ssl://mempool.space:50002"),
     ("electrum.diynodes.com", "ssl://electrum.diynodes.com:50022"),
+    ("electrum.emzy.de", "ssl://electrum.emzy.de:50002"),
+    ("electrum.bitaroo.net", "ssl://electrum.bitaroo.net:50002"),
+    ("fulcrum.sethforprivacy.com", "ssl://fulcrum.sethforprivacy.com:50002"),
+    ("electrum1.bluewallet.io", "ssl://electrum1.bluewallet.io:443"),
+    ("mainnet.nunchuk.io", "tcp://mainnet.nunchuk.io:51001"),
+    ("fulcrum.bullbitcoin.com", "ssl://fulcrum.bullbitcoin.com:50002"),
 ];
 
 pub const TESTNET_ESPLORA: [(&str, &str); 2] = [
@@ -298,4 +304,49 @@ fn default_node_selection() -> NodeSelection {
     };
 
     NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node::ApiType;
+
+    #[test]
+    fn bitcoin_node_list_keeps_mempool_presets() {
+        let nodes = node_list(Network::Bitcoin);
+
+        assert!(
+            nodes
+                .iter()
+                .any(|node| { node.name == "mempool.space" && node.api_type == ApiType::Esplora })
+        );
+        assert!(nodes.iter().any(|node| {
+            node.name == "mempool.space electrum" && node.api_type == ApiType::Electrum
+        }));
+    }
+
+    #[test]
+    fn bitcoin_node_list_includes_added_electrum_presets() {
+        let nodes = node_list(Network::Bitcoin);
+
+        let expected_nodes = [
+            ("electrum.emzy.de", "ssl://electrum.emzy.de:50002"),
+            ("electrum.bitaroo.net", "ssl://electrum.bitaroo.net:50002"),
+            ("fulcrum.sethforprivacy.com", "ssl://fulcrum.sethforprivacy.com:50002"),
+            ("electrum1.bluewallet.io", "ssl://electrum1.bluewallet.io:443"),
+            ("mainnet.nunchuk.io", "tcp://mainnet.nunchuk.io:51001"),
+            ("fulcrum.bullbitcoin.com", "ssl://fulcrum.bullbitcoin.com:50002"),
+        ];
+
+        for (name, url) in expected_nodes {
+            let matches = nodes
+                .iter()
+                .filter(|node| {
+                    node.name == name && node.url == url && node.api_type == ApiType::Electrum
+                })
+                .count();
+
+            assert_eq!(matches, 1, "{name}");
+        }
+    }
 }
