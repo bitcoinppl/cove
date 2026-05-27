@@ -9,13 +9,13 @@ pub const BITCOIN_ESPLORA: [(&str, &str); 1] =
     [("blockstream.info", "https://blockstream.info/api/")];
 
 pub const BITCOIN_ELECTRUM: [(&str, &str); 7] = [
+    ("fulcrum.bullbitcoin.com", "ssl://fulcrum.bullbitcoin.com:50002"),
     ("electrum.blockstream.info", "ssl://electrum.blockstream.info:50002"),
     ("electrum.diynodes.com", "ssl://electrum.diynodes.com:50022"),
     ("electrum.emzy.de", "ssl://electrum.emzy.de:50002"),
     ("electrum.bitaroo.net", "ssl://electrum.bitaroo.net:50002"),
     ("fulcrum.sethforprivacy.com", "ssl://fulcrum.sethforprivacy.com:50002"),
     ("electrum1.bluewallet.io", "ssl://electrum1.bluewallet.io:443"),
-    ("fulcrum.bullbitcoin.com", "ssl://fulcrum.bullbitcoin.com:50002"),
 ];
 
 pub const TESTNET_ESPLORA: [(&str, &str); 2] = [
@@ -292,12 +292,29 @@ impl NodeSelection {
 fn default_node_selection() -> NodeSelection {
     let network = Database::global().global_config.selected_network();
 
-    let (name, url) = match network {
-        Network::Bitcoin => BITCOIN_ESPLORA[0],
-        Network::Testnet => TESTNET_ESPLORA[0],
-        Network::Signet => SIGNET_ESPLORA[0],
-        Network::Testnet4 => TESTNET4_ESPLORA[0],
-    };
+    match network {
+        Network::Bitcoin => {
+            let (name, url) = BITCOIN_ELECTRUM[0];
 
-    NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
+            NodeSelection::Preset(Node::new_electrum(name.to_string(), url.to_string(), network))
+        }
+
+        Network::Testnet => {
+            let (name, url) = TESTNET_ESPLORA[0];
+
+            NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
+        }
+
+        Network::Signet => {
+            let (name, url) = SIGNET_ESPLORA[0];
+
+            NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
+        }
+
+        Network::Testnet4 => {
+            let (name, url) = TESTNET4_ESPLORA[0];
+
+            NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
+        }
+    }
 }
