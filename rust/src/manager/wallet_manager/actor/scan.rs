@@ -11,7 +11,7 @@ use bdk_wallet::{
 use cove_bdk_progressive_scan::{KeychainProgress, ScanEvent, ScanProgress, ScanUpdate};
 use cove_common::consts::GAP_LIMIT;
 use tokio_util::sync::CancellationToken;
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::{
     manager::wallet_manager::{WalletScanPhase, WalletScanProgress, WalletScanStatus},
@@ -543,6 +543,13 @@ impl Actor for WalletScanActor {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
         Produces::ok(())
+    }
+
+    async fn error(&mut self, error: ActorError) -> bool {
+        error!("WalletScanActor error: {error:?}");
+        self.clear_scan_lifecycle();
+        self.send_event(WalletScanEvent::StatusChanged(WalletScanStatus::Idle));
+        false
     }
 }
 

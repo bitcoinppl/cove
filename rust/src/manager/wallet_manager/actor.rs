@@ -119,7 +119,7 @@ pub enum ActorState {
 impl Actor for WalletActor {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
-        self.scan_actor = Some(spawn_actor(WalletScanActor::new(self.addr.clone())));
+        self.spawn_scan_actor();
         send!(addr.check_node_connection());
         Produces::ok(())
     }
@@ -1332,10 +1332,10 @@ impl WalletActor {
                 self.send_scan_status(status);
             }
             WalletScanEvent::PartialUpdate(scan_update) => {
-                self.apply_progressive_scan_update(scan_update)?;
+                self.handle_progressive_scan_update(scan_update);
             }
             WalletScanEvent::FlushUi => {
-                self.flush_progressive_scan_ui().await?;
+                self.flush_progressive_scan_ui().await;
             }
             WalletScanEvent::FullScanFinished { scan_type, result } => {
                 self.handle_full_scan_complete(result, scan_type).await?;
@@ -1346,6 +1346,15 @@ impl WalletActor {
         }
 
         Produces::ok(())
+    }
+
+    fn handle_progressive_scan_update(&mut self, scan_update: ScanUpdate<KeychainKind>) {
+        if let Err(error) = self.apply_progressive_scan_update(scan_update) {
+            error!("Failed to apply progressive scan update: {error}");
+            self.send(WalletManagerReconcileMessage::WalletError(Error::WalletScanError(format!(
+                "failed to apply progressive scan update: {error}"
+            ))));
+        }
     }
 
     fn apply_progressive_scan_update(
@@ -1362,14 +1371,12 @@ impl WalletActor {
         Ok(())
     }
 
-    async fn flush_progressive_scan_ui(&mut self) -> ActorResult<()> {
+    async fn flush_progressive_scan_ui(&mut self) {
         let balance = self.wallet.balance();
         self.send(WalletManagerReconcileMessage::WalletBalanceChanged(balance.into()));
 
-        let transactions = self.transactions().await?.await?;
+        let transactions = self.do_transactions().await;
         self.send(WalletManagerReconcileMessage::UpdatedTransactions(transactions));
-
-        Produces::ok(())
     }
 
     async fn handle_full_scan_complete(
@@ -1943,9 +1950,28 @@ impl WalletActor {
             return scan_actor.clone();
         }
 
+        self.spawn_scan_actor()
+    }
+
+    fn spawn_scan_actor(&mut self) -> Addr<WalletScanActor> {
         let scan_actor = spawn_actor(WalletScanActor::new(self.addr.clone()));
+        self.watch_scan_actor_termination(scan_actor.clone());
         self.scan_actor = Some(scan_actor.clone());
         scan_actor
+    }
+
+    fn watch_scan_actor_termination(&self, scan_actor: Addr<WalletScanActor>) {
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            scan_actor.termination().await;
+            send!(addr.clear_scan_actor_if_stopped(scan_actor));
+        });
+    }
+
+    async fn clear_scan_actor_if_stopped(&mut self, stopped_scan_actor: Addr<WalletScanActor>) {
+        if self.scan_actor.as_ref().is_some_and(|scan_actor| scan_actor == &stopped_scan_actor) {
+            self.scan_actor = None;
+        }
     }
 }
 
