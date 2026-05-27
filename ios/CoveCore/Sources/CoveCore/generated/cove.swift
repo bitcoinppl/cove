@@ -39682,7 +39682,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_balance() != 14970) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_balance_presentation() != 31926) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_balance_presentation() != 27753) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937) {
