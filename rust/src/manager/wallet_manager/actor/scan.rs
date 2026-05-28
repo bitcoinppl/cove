@@ -125,6 +125,7 @@ struct ProgressiveFullScanJob {
 
 struct ProgressiveFullScanResult {
     scan: RunningScan,
+    scan_generation: u64,
     result: Result<FullScanResponse<KeychainKind>, NodeClientError>,
 }
 
@@ -262,7 +263,7 @@ impl WalletScanActor {
                 }
                 Err(error) => {
                     debug!("failed to prepare progressive scan: {error:?}");
-                    send!(addr.handle_scan_prepare_failed(scan));
+                    send!(addr.handle_scan_prepare_failed(scan_generation, scan));
                 }
             }
         });
@@ -271,6 +272,11 @@ impl WalletScanActor {
     }
 
     async fn run_progressive_scan_job(&mut self, job: ProgressiveFullScanJob) -> ActorResult<()> {
+        if !should_accept_scan_generation(self.active_generation, job.scan_generation) {
+            debug!("ignoring stale progressive scan job");
+            return Produces::ok(());
+        }
+
         let start = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
         let scan_result = self
             .run_progressive_full_scan(job)
@@ -358,13 +364,22 @@ impl WalletScanActor {
             self.send_event(WalletScanEvent::FlushUi);
         }
 
-        Produces::ok(ProgressiveFullScanResult { scan: job.scan, result: scan_result })
+        Produces::ok(ProgressiveFullScanResult {
+            scan: job.scan,
+            scan_generation: job.scan_generation,
+            result: scan_result,
+        })
     }
 
     async fn handle_scan_result(
         &mut self,
         scan_result: ProgressiveFullScanResult,
     ) -> ActorResult<()> {
+        if !should_accept_scan_generation(self.active_generation, scan_result.scan_generation) {
+            debug!("ignoring stale progressive scan result");
+            return Produces::ok(());
+        }
+
         let cancel_token = self.active_cancel_token.as_ref();
         if let Err(error) = &scan_result.result
             && is_cancelled_progressive_scan(error, cancel_token)
@@ -445,7 +460,15 @@ impl WalletScanActor {
         Produces::ok(())
     }
 
-    async fn handle_scan_prepare_failed(&mut self, scan: RunningScan) -> ActorResult<()> {
+    async fn handle_scan_prepare_failed(
+        &mut self,
+        scan_generation: u64,
+        scan: RunningScan,
+    ) -> ActorResult<()> {
+        if !should_accept_scan_generation(self.active_generation, scan_generation) {
+            return Produces::ok(());
+        }
+
         self.clear_scan_lifecycle();
 
         match scan {
@@ -546,6 +569,10 @@ impl WalletScanActor {
     }
 
     fn start_scan_generation(&mut self) -> (u64, CancellationToken) {
+        if let Some(cancel_token) = self.active_cancel_token.take() {
+            cancel_token.cancel();
+        }
+
         let cancel_token = CancellationToken::new();
         let scan_generation = self.next_generation;
         self.next_generation = self.next_generation.saturating_add(1);
@@ -1042,6 +1069,21 @@ mod tests {
         assert!(should_accept_scan_generation(Some(7), 7));
         assert!(!should_accept_scan_generation(Some(7), 6));
         assert!(!should_accept_scan_generation(None, 7));
+    }
+
+    #[test]
+    fn starting_new_scan_generation_cancels_previous_token() {
+        let mut scan_actor = WalletScanActor::new(WeakAddr::default());
+        let (first_generation, first_cancel_token) = scan_actor.start_scan_generation();
+        let first_token_observer = first_cancel_token.clone();
+
+        let (second_generation, second_cancel_token) = scan_actor.start_scan_generation();
+
+        assert_eq!(first_generation, 0);
+        assert_eq!(second_generation, 1);
+        assert!(first_token_observer.is_cancelled());
+        assert!(!second_cancel_token.is_cancelled());
+        assert_eq!(scan_actor.active_generation, Some(1));
     }
 
     #[test]

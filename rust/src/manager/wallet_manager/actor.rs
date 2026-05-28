@@ -1169,7 +1169,7 @@ impl WalletActor {
     }
 
     async fn perform_full_scan(&mut self) -> ActorResult<()> {
-        if self.state != ActorState::Initial {
+        if !matches!(self.state, ActorState::Initial | ActorState::FailedFullScan(_)) {
             debug!("already performing scanning or scanned skipping ({:?})", self.state);
 
             return Produces::ok(());
@@ -1986,7 +1986,9 @@ fn wallet_scan_progress_start(
 
 impl WalletActor {
     fn send(&self, msg: WalletManagerReconcileMessage) {
-        self.reconciler.send(msg.into()).unwrap();
+        if self.reconciler.send(msg.into()).is_err() {
+            warn!("wallet manager reconciler dropped");
+        }
     }
 
     fn send_scan_status(&self, status: WalletScanStatus) {
