@@ -112,12 +112,7 @@ fun WalletSettingsScreen(
 
     fun firstDeleteConfirmationMessage(): String = manager.rust.deletionWarningMessage()
 
-    fun requiredDeleteConfirmations(): UByte =
-        if (app.cloudBackupManager.isCloudBackupEnabled) {
-            2.toUByte()
-        } else {
-            manager.rust.requiredDeletionConfirmations()
-        }
+    fun requiredDeleteConfirmations(): UByte = manager.rust.requiredDeletionConfirmations()
 
     // validate metadata on appear and disappear
     LaunchedEffect(manager) {
