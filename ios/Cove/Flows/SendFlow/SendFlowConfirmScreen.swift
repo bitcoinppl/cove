@@ -234,6 +234,13 @@ struct SendFlowConfirmScreen: View {
                 isShowingAlert = true
                 auth.unlock()
             }
+            .onChange(of: manager.sendFlowErrorAlert) { _, alert in
+                // payjoin broadcast failure arrives via reconcile (not the catch block),
+                // so we must handle it here to unblock the UI from .sending
+                guard alert != nil, case .sending = sendState else { return }
+                sendState = .idle
+                isShowingErrorAlert = true
+            }
             .alert(
                 "Sent!",
                 isPresented: $isShowingAlert,
