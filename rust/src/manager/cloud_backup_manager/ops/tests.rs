@@ -5208,6 +5208,75 @@ async fn deep_verify_repairs_stale_local_master_key_before_recreate_manifest() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn deep_verify_reads_each_wallet_backup_once() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    configure_enabled_cloud_backup(&manager, globals, 1);
+    seed_verifiable_cloud_master_key(globals);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .unwrap()
+        .unwrap();
+    let metadata = xpub_only_wallet_metadata();
+    let record_id = wallet_record_id(metadata.id.as_ref());
+    persist_xpub_wallets(vec![metadata.clone()]);
+
+    let prepared = crate::manager::cloud_backup_manager::wallets::prepare_wallet_backup(
+        &metadata,
+        metadata.wallet_mode,
+    )
+    .await
+    .unwrap();
+
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        record_id.clone(),
+        encrypted_wallet_backup_bytes(&metadata, &master_key, &prepared.revision_hash, 1).await,
+    );
+    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+
+    let downloads_before = globals.cloud.wallet_backup_download_attempt_count();
+
+    let step = manager.prepare_deep_verify_cloud_backup(true).await;
+
+    assert_eq!(globals.cloud.wallet_backup_download_attempt_count() - downloads_before, 1);
+
+    call!(manager.supervisor.complete_verification(step, true, VerificationAttempt::Initial))
+        .await
+        .unwrap();
+    wait_for_test_condition(Duration::from_secs(8), "deep verification completes", || {
+        matches!(manager.model_snapshot().verification, VerificationState::Verified(_))
+    })
+    .await;
+
+    let result = match manager.model_snapshot().verification {
+        VerificationState::Verified(report) => DeepVerificationResult::Verified(report),
+        other => panic!("expected verified result, got {other:?}"),
+    };
+
+    match result {
+        DeepVerificationResult::Verified(report) => {
+            assert_eq!(report.wallets_verified, 1);
+            assert_eq!(report.wallets_failed, 0);
+            assert_eq!(report.wallets_unsupported, 0);
+
+            let detail = report.detail.expect("expected verification detail");
+            assert_eq!(detail.up_to_date.len(), 1);
+            assert!(detail.needs_sync.is_empty());
+            assert_eq!(detail.up_to_date[0].record_id, record_id);
+        }
+        other => panic!("expected verified result, got {other:?}"),
+    }
+
+    assert_eq!(globals.cloud.wallet_backup_download_attempt_count() - downloads_before, 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn start_verification_dispatch_resumes_pending_upload_verification() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();

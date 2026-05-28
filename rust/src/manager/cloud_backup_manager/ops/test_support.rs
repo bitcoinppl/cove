@@ -159,6 +159,7 @@ struct MockCloudState {
     delete_namespace_attempts: usize,
     list_wallet_files_attempts: usize,
     list_wallet_files_attempts_by_namespace: HashMap<String, usize>,
+    wallet_backup_download_attempts: usize,
     wallet_backup_upload_attempts: usize,
     dirty_wallet_on_next_upload: Option<WalletId>,
     changed_wallet_on_next_upload: Option<WalletId>,
@@ -337,6 +338,10 @@ impl MockCloudStorage {
         self.state.lock().wallet_backup_upload_attempts
     }
 
+    pub(crate) fn wallet_backup_download_attempt_count(&self) -> usize {
+        self.state.lock().wallet_backup_download_attempts
+    }
+
     pub(crate) fn list_wallet_files_attempt_count(&self) -> usize {
         self.state.lock().list_wallet_files_attempts
     }
@@ -461,7 +466,11 @@ impl CloudStorageAccess for MockCloudStorage {
         _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        let dirty_wallet = self.state.lock().dirty_wallet_on_next_backup_check.take();
+        let dirty_wallet = {
+            let mut state = self.state.lock();
+            state.wallet_backup_download_attempts += 1;
+            state.dirty_wallet_on_next_backup_check.take()
+        };
         if let Some(wallet_id) = dirty_wallet {
             persist_dirty_blob_state(wallet_id);
         }
