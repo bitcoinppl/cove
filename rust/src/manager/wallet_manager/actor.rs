@@ -782,21 +782,24 @@ impl WalletActor {
         proposal_psbt: Psbt,
         fallback_tx: BdkTransaction,
     ) -> ActorResult<()> {
-        match self.do_sign_original_psbt(proposal_psbt).await {
-            Ok((_, proposal_tx)) => {
-                self.do_broadcast_transaction(proposal_tx.clone())
-                    .await
-                    .tap_err(|error| error!("failed to broadcast payjoin proposal tx: {error}"))?;
-            }
+        let broadcast_result = match self.do_sign_original_psbt(proposal_psbt).await {
+            Ok((_, proposal_tx)) => self.do_broadcast_transaction(proposal_tx).await,
             Err(error) => {
                 error!("failed to sign payjoin proposal, falling back to original tx: {error:?}");
-                self.do_broadcast_transaction(fallback_tx.clone())
-                    .await
-                    .tap_err(|error| error!("payjoin fallback broadcast also failed: {error}"))?;
+                self.do_broadcast_transaction(fallback_tx).await
+            }
+        };
+
+        match broadcast_result {
+            Ok(()) => self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast),
+            Err(error) => {
+                error!("payjoin broadcast failed: {error}");
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
+                ));
             }
         }
 
-        self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast);
         Produces::ok(())
     }
 
@@ -806,11 +809,16 @@ impl WalletActor {
         &mut self,
         fallback_tx: BdkTransaction,
     ) -> ActorResult<()> {
-        self.do_broadcast_transaction(fallback_tx.clone())
-            .await
-            .tap_err(|error| error!("payjoin fallback broadcast failed: {error}"))?;
+        match self.do_broadcast_transaction(fallback_tx).await {
+            Ok(()) => self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast),
+            Err(error) => {
+                error!("payjoin fallback broadcast failed: {error}");
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
+                ));
+            }
+        }
 
-        self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast);
         Produces::ok(())
     }
 
@@ -2244,7 +2252,7 @@ async fn payjoin_http_flow(
     for attempt in 0..PAYJOIN_MAX_POLL_ATTEMPTS {
         tokio::time::sleep(PAYJOIN_POLL_INTERVAL).await;
 
-        let (poll_response, poll_ctx) = {
+        let poll_result = {
             let mut last_err: eyre::Error = eyre::eyre!("no OHTTP relays configured");
             let mut success = None;
             for relay in ohttp_relays() {
@@ -2267,7 +2275,16 @@ async fn payjoin_http_flow(
                     }
                 }
             }
-            success.ok_or(last_err)?
+            success.ok_or(last_err)
+        };
+
+        // all relays failed this tick; skip and retry on the next tick
+        let (poll_response, poll_ctx) = match poll_result {
+            Ok(pair) => pair,
+            Err(e) => {
+                warn!("payjoin poll attempt {attempt}: all relays failed, retrying: {e}");
+                continue;
+            }
         };
 
         match polling_sender
