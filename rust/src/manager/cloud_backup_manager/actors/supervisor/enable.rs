@@ -801,15 +801,16 @@ impl CloudBackupSupervisor {
                     Some(session @ PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)) => {
                         session
                     }
-                    other => {
-                        self.pending_enable_session = other;
+                    _ => {
                         warn!("Automatic saved-passkey confirmation missing pending session");
+                        self.clear_abandoned_enable_progress(&manager, claim);
                         self.finish_enable_operation(manager, claim);
                         return Produces::ok(());
                     }
                 };
 
                 if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending, retry) {
+                    self.clear_abandoned_enable_progress(&manager, claim);
                     self.finish_enable_operation(manager, claim);
                 }
             }
@@ -1135,6 +1136,22 @@ impl CloudBackupSupervisor {
 
         self.active_operation = None;
         manager.project_exclusive_operation_finished(claim);
+    }
+
+    fn clear_abandoned_enable_progress(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) {
+        self.pending_enable_session = None;
+        let status = if claim.operation() == CloudBackupExclusiveOperation::ReinitializeBackup {
+            RustCloudBackupManager::runtime_status_for(
+                &RustCloudBackupManager::load_persisted_state(),
+            )
+        } else {
+            CloudBackupStatus::Disabled
+        };
+        manager.clear_enable_progress(status);
     }
 
     pub async fn clear_pending_enable_session(&mut self) -> ActorResult<()> {
