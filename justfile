@@ -10,7 +10,7 @@ list:
 # Run an xtask command
 [group('utils')]
 xtask *args:
-    cd rust && cargo xtask {{args}}
+    cd rust && cargo xtask {{ args }}
 
 # Sign a PSBT and output all formats (base64, hex, binary, bbqr-gif, ur-gif)
 # Requires MNEMONIC env var (set in .envrc or pass directly)
@@ -26,17 +26,16 @@ sign-psbt psbt:
     mkdir -p "$OUTPUT_DIR"
     echo "Signing PSBT and outputting to: $OUTPUT_DIR"
     cd rust
-    cargo xtask util sign-psbt --psbt "{{psbt}}" -f base64 -O "$OUTPUT_DIR/signed.base64.txt"
-    cargo xtask util sign-psbt --psbt "{{psbt}}" -f hex -O "$OUTPUT_DIR/signed.hex.txt"
-    cargo xtask util sign-psbt --psbt "{{psbt}}" -f binary -O "$OUTPUT_DIR/signed.psbt"
-    cargo xtask util sign-psbt --psbt "{{psbt}}" -f bbqr-gif -O "$OUTPUT_DIR/signed-bbqr.gif"
-    cargo xtask util sign-psbt --psbt "{{psbt}}" -f ur-gif -O "$OUTPUT_DIR/signed-ur.gif"
+    cargo xtask util sign-psbt --psbt "{{ psbt }}" -f base64 -O "$OUTPUT_DIR/signed.base64.txt"
+    cargo xtask util sign-psbt --psbt "{{ psbt }}" -f hex -O "$OUTPUT_DIR/signed.hex.txt"
+    cargo xtask util sign-psbt --psbt "{{ psbt }}" -f binary -O "$OUTPUT_DIR/signed.psbt"
+    cargo xtask util sign-psbt --psbt "{{ psbt }}" -f bbqr-gif -O "$OUTPUT_DIR/signed-bbqr.gif"
+    cargo xtask util sign-psbt --psbt "{{ psbt }}" -f ur-gif -O "$OUTPUT_DIR/signed-ur.gif"
     echo ""
     echo "All formats saved to: $OUTPUT_DIR"
     ls -la "$OUTPUT_DIR"
     open "$OUTPUT_DIR"
 
-[private]
 alias sp := sign-psbt
 
 # ------------------------------------------------------------------------------
@@ -48,13 +47,12 @@ alias sp := sign-psbt
 full:
     just bidd && just ba && just ci && just compile
 
-[private]
 alias f := full
 
 # Run all CI checks
 [group('ci')]
 [script('bash')]
-[working-directory: 'rust']
+[working-directory('rust')]
 ci:
     set -e
     just fmt
@@ -68,7 +66,6 @@ ci:
 regenerate-bindings:
     just xtask regenerate-bindings
 
-[private]
 alias rb := regenerate-bindings
 
 # ------------------------------------------------------------------------------
@@ -80,7 +77,6 @@ alias rb := regenerate-bindings
 build-android:
     just xtask build-android debug && just say "done android"
 
-[private]
 alias ba := build-android
 
 # Build Android release APK
@@ -88,23 +84,21 @@ alias ba := build-android
 build-android-release:
     just xtask build-android release-speed && just say "done android release"
 
-[private]
 alias bar := build-android-release
 
 # Build signed AAB for Google Play, copy to Downloads
 [group('build')]
 bundle-android: build-android-release
+    cd android && ./gradlew --stop"
     just xtask bundle-android && just say "done android bundle"
 
-[private]
 alias bua := bundle-android
 
 # Build iOS debug for simulator
 [group('build')]
 build-ios profile="debug" *flags="":
-    just xtask build-ios {{profile}} {{flags}} && just say "done ios"
+    just xtask build-ios {{ profile }} {{ flags }} && just say "done ios"
 
-[private]
 alias bi := build-ios
 
 # Build iOS release for device
@@ -112,7 +106,6 @@ alias bi := build-ios
 build-ios-release:
     just xtask build-ios release-speed --device && just say "done ios release"
 
-[private]
 alias bir := build-ios-release
 
 # Bump iOS build, build release bindings, then upload to TestFlight
@@ -125,10 +118,8 @@ testflight:
 build-ios-debug-device:
     just xtask build-ios debug --device && just say "done ios device"
 
-[private]
 alias bidd := build-ios-debug-device
 
-[private]
 alias gen-swift := build-ios
 
 # Compile both iOS and Android
@@ -138,13 +129,13 @@ alias gen-swift := build-ios
 
 # Compile iOS for simulator
 [group('build')]
-[working-directory: 'ios']
+[working-directory('ios')]
 compile-ios:
     xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build && just notf "done compile ios"
 
 # Compile Android debug
 [group('build')]
-[working-directory: 'android']
+[working-directory('android')]
 compile-android:
     ./gradlew assembleDevDebug && just notf "done compile android"
 
@@ -154,8 +145,8 @@ compile-android:
 
 # Run manual Android full-launch onboarding UI tests
 [group('test')]
-[working-directory: 'android']
 [script('bash')]
+[working-directory('android')]
 android-ui-manual:
     set -e
 
@@ -169,59 +160,54 @@ android-ui-manual:
     ./gradlew :app:connectedUiTestDebugAndroidTest \
         -Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.ManualFullLaunchTest
 
-[private]
 alias aum := android-ui-manual
 
 # Run manual iOS full-launch UI tests without opening Simulator
 [group('test')]
 [script('bash')]
 ios-ui-background device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITests":
-    cd rust && cargo build --package xtask -q && ./target/debug/xtask ios-ui --device "{{device}}" --test "{{test}}"
+    cd rust && cargo build --package xtask -q && ./target/debug/xtask ios-ui --device "{{ device }}" --test "{{ test }}"
 
-[private]
 alias iub := ios-ui-background
 
 # Run manual iOS full-launch UI tests with Simulator visible
 [group('test')]
 [script('bash')]
 ios-ui-foreground device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITests":
-    cd rust && cargo build --package xtask -q && ./target/debug/xtask ios-ui --foreground --device "{{device}}" --test "{{test}}"
+    cd rust && cargo build --package xtask -q && ./target/debug/xtask ios-ui --foreground --device "{{ device }}" --test "{{ test }}"
 
-[private]
 alias iuf := ios-ui-foreground
 
 # Run all tests
 [group('test')]
-[working-directory: 'rust']
+[working-directory('rust')]
 test test="" flags="":
-    cargo nextest run {{test}} --workspace {{flags}}
+    cargo nextest run {{ test }} --workspace {{ flags }}
 
 # Run tests the same way as GitHub Actions
 [group('test')]
-[working-directory: 'rust']
+[working-directory('rust')]
 test-gh test="" flags="":
-    cargo test {{test}} --workspace {{flags}}
+    cargo test {{ test }} --workspace {{ flags }}
 
 # Run tests with cargo test
 [group('test')]
-[working-directory: 'rust']
+[working-directory('rust')]
 ctest test="" flags="":
-    cargo test {{test}} --workspace -- {{flags}}
+    cargo test {{ test }} --workspace -- {{ flags }}
 
 # Run tests with bacon
 [group('test')]
-[working-directory: 'rust']
+[working-directory('rust')]
 btest test="":
-    bacon nextest -- {{test}} --workspace
+    bacon nextest -- {{ test }} --workspace
 
 # Watch and re-run tests on file changes
 [group('test')]
 watch-test test="" flags="":
-    watchexec --exts rs just test {{test}} {{flags}}
+    watchexec --exts rs just test {{ test }} {{ flags }}
 
-[private]
 alias wt := watch-test
-[private]
 alias wtest := watch-test
 
 # ------------------------------------------------------------------------------
@@ -231,34 +217,34 @@ alias wtest := watch-test
 # Lint all platforms
 [group('lint')]
 @lint *flags="":
-    just lint-rust {{flags}} && just lint-swift {{flags}} && just lint-android {{flags}}
+    just lint-rust {{ flags }} && just lint-swift {{ flags }} && just lint-android {{ flags }}
 
 # Lint Rust code
 [group('lint')]
-[working-directory: 'rust']
+[working-directory('rust')]
 lint-rust *flags="":
-    cargo clippy --all-targets --all-features -- -D warnings {{flags}}
+    cargo clippy --all-targets --all-features -- -D warnings {{ flags }}
 
 # Lint Android code
 [group('lint')]
-[working-directory: 'android']
+[working-directory('android')]
 lint-android *flags="":
-    ./gradlew ktlintCheck {{flags}}
+    ./gradlew ktlintCheck {{ flags }}
 
 # Lint Swift code
 [group('lint')]
 lint-swift *flags="":
-    swiftformat --lint ios --swiftversion 6 {{flags}}
+    swiftformat --lint ios --swiftversion 6 {{ flags }}
 
 # Run clippy
 [group('lint')]
-[working-directory: 'rust']
+[working-directory('rust')]
 clippy *flags="":
-    cargo clippy {{flags}}
+    cargo clippy {{ flags }}
 
 # Run pedantic clippy checks (excluding must_use, truncation, single_match, if_not_else, needless_continue, option_if_let_else)
 [group('lint')]
-[working-directory: 'rust']
+[working-directory('rust')]
 pedantic *flags="":
     cargo clippy -- -D clippy::pedantic -D clippy::nursery \
         -A clippy::must_use_candidate \
@@ -272,13 +258,13 @@ pedantic *flags="":
         -A clippy::significant_drop_tightening \
         -A clippy::missing_const_for_fn \
         -A clippy::needless_pass_by_value \
-        {{flags}}
+        {{ flags }}
 
 # Run full pedantic clippy checks without any allows
 [group('lint')]
-[working-directory: 'rust']
+[working-directory('rust')]
 pedantic-all *flags="":
-    cargo clippy -- -D clippy::pedantic -D clippy::nursery {{flags}}
+    cargo clippy -- -D clippy::pedantic -D clippy::nursery {{ flags }}
 
 # ------------------------------------------------------------------------------
 # format
@@ -290,23 +276,25 @@ pedantic-all *flags="":
     just fmt-rust && just fmt-swift && just fmt-android
 
 # Format Rust code
-[group('format'), private]
-[working-directory: 'rust']
+[group('format')]
+[private]
+[working-directory('rust')]
 fmt-rust:
     cargo fmt --all
 
 # Format Swift code
-[private]
 alias fmt-ios := fmt-swift
 alias fi := fmt-swift
 
-[group('format'), private]
+[group('format')]
+[private]
 fmt-swift:
     swiftformat ios --swiftversion 6
 
 # Format Android code
-[group('format'), private]
-[working-directory: 'android']
+[group('format')]
+[private]
+[working-directory('android')]
 fmt-android:
     ./gradlew ktlintFormat
 
@@ -316,35 +304,34 @@ fmt-android:
 
 # Run bacon clippy watcher
 [group('dev')]
-[working-directory: 'rust']
+[working-directory('rust')]
 bacon:
     bacon clippy
 
 # Run bacon check watcher
 [group('dev')]
-[working-directory: 'rust']
+[working-directory('rust')]
 bcheck:
     bacon check
 
 # Run cargo check
 [group('dev')]
-[working-directory: 'rust']
+[working-directory('rust')]
 check *flags="--workspace --all-targets --all-features":
-    cargo check {{flags}}
+    cargo check {{ flags }}
 
 # Watch and rebuild iOS on file changes
 [group('dev')]
 watch-build profile="debug" *flags="":
-    watchexec --exts rs just build-ios {{profile}} {{flags}}
+    watchexec --exts rs just build-ios {{ profile }} {{ flags }}
 
-[private]
 alias wb := watch-build
 
 # Apply cargo fix
 [group('dev')]
-[working-directory: 'rust']
+[working-directory('rust')]
 fix *flags="":
-    cargo fix --workspace {{flags}}
+    cargo fix --workspace {{ flags }}
 
 # ------------------------------------------------------------------------------
 # release
@@ -353,7 +340,7 @@ fix *flags="":
 # Bump version (type: major, minor, patch, build)
 [group('release')]
 bump type targets="":
-    just xtask bump-version {{type}} {{ if targets != "" { "--targets " + targets } else { "" } }}
+    just xtask bump-version {{ type }} {{ if targets != "" { "--targets " + targets } else { "" } }}
 
 # ------------------------------------------------------------------------------
 # xcode
@@ -361,19 +348,18 @@ bump type targets="":
 
 # Clean Xcode caches
 [group('xcode')]
-[working-directory: 'ios']
+[working-directory('ios')]
 xcode-clean:
     rm -rf ~/Library/Caches/org.swift.swiftpm
     xcodebuild clean
 
-[private]
 alias xc := xcode-clean
 
 # Reset Xcode completely
-[group('xcode')]
 [confirm("This will kill Xcode and delete caches. Continue?")]
+[group('xcode')]
 [script('bash')]
-[working-directory: 'ios']
+[working-directory('ios')]
 xcode-reset:
     killAll Xcode || true
     rm -rf Cove.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
@@ -384,7 +370,6 @@ xcode-reset:
     xcode-build-server config -project *.xcodeproj -scheme Cove
     open Cove.xcodeproj
 
-[private]
 alias xr := xcode-reset
 
 # ------------------------------------------------------------------------------
@@ -392,10 +377,10 @@ alias xr := xcode-reset
 # ------------------------------------------------------------------------------
 
 # Clean all build artifacts
-[group('util')]
 [confirm("Delete all build artifacts?")]
+[group('util')]
 [script('bash')]
-[working-directory: 'rust']
+[working-directory('rust')]
 clean:
     cargo clean
     rm -rf ../ios/Cove.xcframework
@@ -404,40 +389,36 @@ clean:
 
 # Update cargo dependencies
 [group('util')]
-[working-directory: 'rust']
+[working-directory('rust')]
 update pkg="":
-    cargo update {{pkg}}
+    cargo update {{ pkg }}
 
 # Run Android app
 [group('util')]
 run-android profile="debug":
-    just xtask run-android {{profile}} && just notf "done run android"
+    just xtask run-android {{ profile }} && just notf "done run android"
 
-[private]
 alias ra := run-android
 
 # Build and clean install Android (rebuilds native libs, clears Gradle cache)
 [group('util')]
-[working-directory: 'android']
+[working-directory('android')]
 install-android-clean:
     just ba && ./gradlew --stop && ./gradlew clean installDebug && just notf "done install android clean"
 
-[private]
 alias iac := install-android-clean
 
 # Run iOS app
 [group('util')]
 run-ios *args:
-    just xtask run-ios {{args}} && just notf "done run ios"
+    just xtask run-ios {{ args }} && just notf "done run ios"
 
-[private]
 alias ri := run-ios
 
 [group('util')]
 build-run-ios:
     just bidd && just ri
 
-[private]
 alias bri := build-run-ios
 
 # Show logcat for cove process
@@ -458,9 +439,9 @@ logcat:
 # text-to-speech helper
 [private]
 say *args:
-    @say {{args}} 2>/dev/null || echo {{args}} || true
-    @just notf {{args}} || true
+    @say {{ args }} 2>/dev/null || echo {{ args }} || true
+    @just notf {{ args }} || true
 
 [private]
 notf *args:
-    @command -v notf >/dev/null && notf "{{args}}" -t "Cove" -T bell,macos || true
+    @command -v notf >/dev/null && notf "{{ args }}" -t "Cove" -T bell,macos || true
