@@ -930,7 +930,7 @@ impl WalletActor {
                 self.transactions().await?.await.map_err_str(Error::TransactionsRetrievalError)?;
 
             let progress_start = wallet_scan_progress_start(
-                self.wallet.metadata.internal.performed_full_scan_at.is_some(),
+                self.completed_initial_scan(),
                 initial_transactions.is_empty(),
             );
 
@@ -969,7 +969,7 @@ impl WalletActor {
 
         // perform that scanning in a background task
         let addr = self.addr.clone();
-        if self.wallet.metadata.internal.performed_full_scan_at.is_some() {
+        if self.completed_initial_scan() {
             send!(addr.perform_incremental_scan(progress_start));
         } else {
             send!(addr.perform_full_scan());
@@ -1350,10 +1350,8 @@ impl WalletActor {
                 self.state = ActorState::PerformingIncrementalScan;
             }
             WalletScanEvent::FullScanPrepareFailed(scan_type) => {
-                self.state = state_after_full_scan_prepare_failed(
-                    scan_type,
-                    self.wallet.metadata.internal.performed_full_scan_at.is_some(),
-                );
+                self.state =
+                    state_after_full_scan_prepare_failed(scan_type, self.completed_initial_scan());
             }
             WalletScanEvent::IncrementalScanPrepareFailed => {
                 self.state = ActorState::FailedIncrementalScan;
@@ -1555,6 +1553,11 @@ impl WalletActor {
         self.wallet.metadata = metadata;
 
         Some(())
+    }
+
+    fn completed_initial_scan(&mut self) -> bool {
+        self.wallet.metadata.internal.performed_full_scan_at.is_some()
+            || self.last_scan_finished().is_some()
     }
 
     fn last_height_fetched(&mut self) -> Option<(Duration, usize)> {
@@ -1961,9 +1964,9 @@ fn progressive_scan_update_response(
 
 fn state_after_full_scan_prepare_failed(
     scan_type: FullScanType,
-    completed_full_scan: bool,
+    completed_initial_scan: bool,
 ) -> ActorState {
-    if !completed_full_scan {
+    if !completed_initial_scan {
         return ActorState::Initial;
     }
 
@@ -1971,10 +1974,10 @@ fn state_after_full_scan_prepare_failed(
 }
 
 fn wallet_scan_progress_start(
-    completed_full_scan: bool,
+    completed_initial_scan: bool,
     cached_transactions_empty: bool,
 ) -> ScanProgressStart {
-    if !completed_full_scan {
+    if !completed_initial_scan {
         return ScanProgressStart::Immediate;
     }
 
