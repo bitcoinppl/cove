@@ -1200,6 +1200,10 @@ impl FlowState {
                 Self::CloudBackup(CloudBackupFlow::HardwareImport { wallet_id }),
                 TransitionCommand::None,
             ),
+            (Self::BitcoinChoice { .. }, OnboardingAction::OpenCloudRestore) => (
+                Self::restore_entry_for(cloud_restore_discovery, RestoreOrigin::BitcoinChoice),
+                TransitionCommand::None,
+            ),
             (Self::StorageChoice { .. }, OnboardingAction::OpenCloudRestore) => (
                 Self::restore_entry_for(cloud_restore_discovery, RestoreOrigin::StorageChoice),
                 TransitionCommand::None,
@@ -3044,6 +3048,25 @@ mod tests {
         assert!(matches!(
             flow,
             FlowState::RestoreUnavailable { origin: RestoreOrigin::StorageChoice }
+        ));
+    }
+
+    #[test]
+    fn explicit_restore_from_bitcoin_choice_can_try_when_cloud_is_unavailable() {
+        let mut flow = FlowState::BitcoinChoice { error_message: None };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::OpenCloudRestore,
+            CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::CloudUnavailable),
+            &mut restore_offer_allowed,
+            None,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(
+            flow,
+            FlowState::RestoreOffer { origin: RestoreOrigin::BitcoinChoice, error_message: None }
         ));
     }
 

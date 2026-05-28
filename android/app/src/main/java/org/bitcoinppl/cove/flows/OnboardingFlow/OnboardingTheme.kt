@@ -547,9 +547,10 @@ internal fun OnboardingInlineMessage(
 internal fun OnboardingCloudRestoreChoiceCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    title: String? = null,
 ) {
     OnboardingChoiceCard(
-        title = stringResource(R.string.onboarding_restore_card_title),
+        title = title ?: stringResource(R.string.onboarding_restore_card_title),
         subtitle = stringResource(R.string.onboarding_restore_card_subtitle),
         icon = Icons.Default.CloudDownload,
         onClick = onClick,

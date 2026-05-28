@@ -90,6 +90,7 @@ internal fun OnboardingContainer(
         OnboardingStep.BITCOIN_CHOICE ->
             OnboardingBitcoinChoiceScreen(
                 errorMessage = manager.state.errorMessage,
+                onRestoreFromCoveBackup = { manager.dispatch(OnboardingAction.OpenCloudRestore) },
                 onNewHere = { manager.dispatch(OnboardingAction.SelectHasBitcoin(false)) },
                 onHasBitcoin = { manager.dispatch(OnboardingAction.SelectHasBitcoin(true)) },
             )

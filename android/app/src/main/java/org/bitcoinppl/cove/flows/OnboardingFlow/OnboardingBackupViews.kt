@@ -1179,7 +1179,8 @@ internal fun OnboardingExchangeFundingView(
                 modifier =
                     Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .statusBarsPadding(),
             ) {
                 Column(
                     modifier =

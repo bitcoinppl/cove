@@ -800,6 +800,7 @@ internal fun OnboardingWelcomeScreen(
 @Composable
 internal fun OnboardingBitcoinChoiceScreen(
     errorMessage: String?,
+    onRestoreFromCoveBackup: () -> Unit,
     onNewHere: () -> Unit,
     onHasBitcoin: () -> Unit,
 ) {
@@ -814,6 +815,12 @@ internal fun OnboardingBitcoinChoiceScreen(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            OnboardingCloudRestoreChoiceCard(
+                onClick = onRestoreFromCoveBackup,
+                title = "Restore From Cove Backup",
+                modifier = Modifier.testTag("onboarding.bitcoinChoice.restore"),
+            )
+
             OnboardingChoiceCard(
                 title = "No, I'm new here",
                 subtitle = "Create a new wallet and learn the basics",

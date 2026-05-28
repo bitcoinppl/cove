@@ -51,22 +51,26 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
-    fun bitcoinChoiceExposesNewAndExistingBranches() {
-        var selected: Boolean? = null
+    fun bitcoinChoiceExposesRestoreNewAndExistingBranches() {
+        var selected = ""
 
         compose.setOnboardingContent {
             OnboardingBitcoinChoiceScreen(
                 errorMessage = null,
-                onNewHere = { selected = false },
-                onHasBitcoin = { selected = true },
+                onRestoreFromCoveBackup = { selected = "restore" },
+                onNewHere = { selected = "new" },
+                onHasBitcoin = { selected = "existing" },
             )
         }
 
+        compose.card("Restore From Cove Backup").performClick()
+        assertEquals("restore", selected)
+
         compose.card("No, I'm new here").performClick()
-        assertEquals(false, selected)
+        assertEquals("new", selected)
 
         compose.card("Yes, I have Bitcoin").performClick()
-        assertEquals(true, selected)
+        assertEquals("existing", selected)
     }
 
     @Test
