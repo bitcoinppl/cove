@@ -947,11 +947,27 @@ class AndroidCloudStorageAccess internal constructor(
                     }
                 } catch (retryError: Throwable) {
                     if (retryError is CancellationException) throw retryError
+                    clearRejectedAuthorizationToken(retryToken, retryError)
                     throw onError(retryError)
                 }
             }
 
+            clearRejectedAuthorizationToken(firstToken, error)
             throw onError(error)
+        }
+    }
+
+    private suspend fun clearRejectedAuthorizationToken(token: String, error: Throwable) {
+        if (
+            error is DriveHttpException &&
+                error.statusCode == HttpURLConnection.HTTP_FORBIDDEN &&
+                error.isAuthorizationRejected()
+        ) {
+            runCatching {
+                driveAuthorization.clearToken(token)
+            }.onFailure { tokenError ->
+                Log.w("AndroidCloudStorage", "failed to clear rejected drive token", tokenError)
+            }
         }
     }
 
