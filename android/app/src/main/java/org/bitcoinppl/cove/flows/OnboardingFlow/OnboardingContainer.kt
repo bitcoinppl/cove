@@ -22,13 +22,6 @@ internal fun OnboardingContainer(
         onComplete()
     }
 
-    val onOpenCloudRestore =
-        if (manager.state.shouldOfferCloudRestore) {
-            { manager.dispatch(OnboardingAction.OpenCloudRestore) }
-        } else {
-            null
-        }
-
     val restoreWarningMessage =
         if (manager.state.step == OnboardingStep.RESTORE_OFFER &&
             manager.state.cloudRestoreState == OnboardingCloudRestoreState.INCONCLUSIVE
@@ -98,7 +91,7 @@ internal fun OnboardingContainer(
         OnboardingStep.STORAGE_CHOICE ->
             OnboardingStorageChoiceScreen(
                 errorMessage = manager.state.errorMessage,
-                onRestoreFromCoveBackup = onOpenCloudRestore,
+                onRestoreFromCoveBackup = { manager.dispatch(OnboardingAction.OpenCloudRestore) },
                 onSelectStorage = { selection ->
                     manager.dispatch(OnboardingAction.SelectStorage(selection))
                 },

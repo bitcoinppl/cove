@@ -367,7 +367,7 @@ internal fun OnboardingRestoreOfferView(
         if (warningMessage == null) {
             "A previous Google Drive backup was found. Restore your wallet securely using your passkey."
         } else {
-            "We couldn't confirm whether a Google Drive backup is available. If you're reinstalling this device, you can still try restoring with your passkey."
+            null
     }
 
     OnboardingBackground {
@@ -404,24 +404,21 @@ internal fun OnboardingRestoreOfferView(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Spacer(modifier = Modifier.size(16.dp))
+                if (body != null) {
+                    Spacer(modifier = Modifier.size(16.dp))
 
-                Text(
-                    text = body,
-                    color = OnboardingTextSecondary,
-                    style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                    Text(
+                        text = body,
+                        color = OnboardingTextSecondary,
+                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
                 Spacer(modifier = Modifier.size(28.dp))
 
                 OnboardingPasskeyCard(providerHint = providerHint)
-
-                if (warningMessage != null) {
-                    Spacer(modifier = Modifier.size(14.dp))
-                    OnboardingRestoreWarningCard(text = warningMessage)
-                }
 
                 if (errorMessage != null) {
                     Spacer(modifier = Modifier.size(14.dp))
@@ -614,7 +611,7 @@ private fun OnboardingCloudSearchHero() {
             imageVector = Icons.Outlined.Cloud,
             contentDescription = null,
             tint = OnboardingGradientLight,
-            modifier = Modifier.size(54.dp),
+            modifier = Modifier.size(34.dp),
         )
 
         Icon(
@@ -717,17 +714,6 @@ private fun OnboardingRestoreOfferWithProviderDatePreview() {
 }
 
 @Composable
-private fun OnboardingRestoreWarningCard(text: String) {
-    OnboardingRestoreMessageCard(
-        text = text,
-        icon = Icons.Default.Warning,
-        foreground = OnboardingGradientLight.copy(alpha = 0.95f),
-        background = OnboardingGradientLight.copy(alpha = 0.08f),
-        border = OnboardingGradientLight.copy(alpha = 0.22f),
-    )
-}
-
-@Composable
 private fun OnboardingRestoreErrorCard(text: String) {
     OnboardingRestoreMessageCard(
         text = text,
@@ -815,12 +801,6 @@ internal fun OnboardingBitcoinChoiceScreen(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            OnboardingCloudRestoreChoiceCard(
-                onClick = onRestoreFromCoveBackup,
-                title = "Restore From Cove Backup",
-                modifier = Modifier.testTag("onboarding.bitcoinChoice.restore"),
-            )
-
             OnboardingChoiceCard(
                 title = "No, I'm new here",
                 subtitle = "Create a new wallet and learn the basics",
@@ -834,6 +814,12 @@ internal fun OnboardingBitcoinChoiceScreen(
                 icon = Icons.Default.Download,
                 onClick = onHasBitcoin,
                 modifier = Modifier.testTag("onboarding.bitcoinChoice.existing"),
+            )
+
+            OnboardingCloudRestoreChoiceSection(
+                onClick = onRestoreFromCoveBackup,
+                dividerModifier = Modifier.testTag("onboarding.bitcoinChoice.restoreDivider"),
+                cardModifier = Modifier.testTag("onboarding.bitcoinChoice.restore"),
             )
         }
     }
@@ -901,9 +887,6 @@ internal fun OnboardingStorageChoiceScreen(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (onRestoreFromCoveBackup != null) {
-                OnboardingCloudRestoreChoiceCard(onClick = onRestoreFromCoveBackup)
-            }
             OnboardingChoiceCard(
                 title = "On an exchange",
                 subtitle = "Move funds into a wallet you control",
@@ -925,6 +908,15 @@ internal fun OnboardingStorageChoiceScreen(
                 onClick = { onSelectStorage(OnboardingStorageSelection.SOFTWARE_WALLET) },
                 modifier = Modifier.testTag("onboarding.storage.software"),
             )
+            if (onRestoreFromCoveBackup != null) {
+                OnboardingCloudRestoreChoiceSection(
+                    onClick = onRestoreFromCoveBackup,
+                    showDivider = false,
+                    title = "I'm already using Cove",
+                    subtitle = "Restore your Cove backup from Google Drive, secured by passkeys",
+                    cardModifier = Modifier.testTag("onboarding.storage.restore"),
+                )
+            }
         }
 
         Spacer(modifier = Modifier.size(14.dp))
@@ -935,4 +927,38 @@ internal fun OnboardingStorageChoiceScreen(
             modifier = Modifier.testTag("onboarding.back"),
         )
     }
+}
+
+@Composable
+private fun OnboardingCloudRestoreChoiceSection(
+    onClick: () -> Unit,
+    dividerModifier: Modifier = Modifier,
+    cardModifier: Modifier = Modifier,
+    showDivider: Boolean = true,
+    title: String? = null,
+    subtitle: String? = null,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (showDivider) {
+            OnboardingChoiceDivider(modifier = dividerModifier)
+        }
+
+        OnboardingCloudRestoreChoiceCard(
+            onClick = onClick,
+            modifier = cardModifier,
+            title = title,
+            subtitle = subtitle,
+        )
+    }
+}
+
+@Composable
+private fun OnboardingChoiceDivider(modifier: Modifier = Modifier) {
+    Box(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(CoveColor.coveLightGray.copy(alpha = 0.16f)),
+    )
 }
