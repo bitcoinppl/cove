@@ -459,6 +459,15 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
+            // show success UI when the payjoin tx has been broadcast (success or fallback)
+            LaunchedEffect(walletManager.payjoinTxBroadcast) {
+                if (walletManager.payjoinTxBroadcast) {
+                    sendState = SendState.Sent
+                    showSuccessAlert = true
+                    Auth.unlock()
+                }
+            }
+
             // timed unlock on disappear
             DisposableEffect(Unit) {
                 onDispose {
@@ -538,6 +547,9 @@ private fun SendFlowRouteToScreen(
                                 }
                                 SendConfirmationInput.Unsigned -> {
                                     walletManager.rust.initiatePayment(details.psbt(), payjoinEndpoint)
+                                    // for payjoin, stay in Sending state — the PayjoinTxBroadcast
+                                    // reconcile will trigger success UI when the tx is broadcast
+                                    if (payjoinEndpoint != null) return@launch
                                 }
                             }
                             sendState = SendState.Sent

@@ -96,6 +96,8 @@ pub enum WalletManagerReconcileMessage {
     ReceiveAddressLoadingChanged(bool),
     ReceiveAddressError(String),
     ReceiveAddressClosed(u64),
+
+    PayjoinTxBroadcast,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -767,10 +769,8 @@ impl RustWalletManager {
         call!(self.actor.balance()).await.unwrap_or_default()
     }
 
-    /// Send entry point for unsigned hot wallet PSBTs
-    ///
-    /// Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
-    /// PayJoin negotiation is handled in the actor stub.
+    /// Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
+    /// direct broadcast otherwise.
     #[uniffi::method]
     pub async fn initiate_payment(
         &self,
