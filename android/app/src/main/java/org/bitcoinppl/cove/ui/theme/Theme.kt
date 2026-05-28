@@ -33,6 +33,7 @@ fun ForceLightStatusBarIcons() {
 
         // force light icons (white) for dark backgrounds
         insetsController.isAppearanceLightStatusBars = false
+        insetsController.isAppearanceLightNavigationBars = false
     }
 }
 
@@ -54,6 +55,7 @@ fun ResetStatusBarToTheme() {
         // light mode = dark icons (isAppearanceLightStatusBars = true)
         // dark mode = light icons (isAppearanceLightStatusBars = false)
         insetsController.isAppearanceLightStatusBars = !isDark
+        insetsController.isAppearanceLightNavigationBars = !isDark
     }
 }
 
@@ -116,7 +118,9 @@ fun CoveTheme(
         SideEffect {
             view.context.findActivity()?.let { activity ->
                 val window = activity.window
-                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+                val insetsController = WindowCompat.getInsetsController(window, view)
+                insetsController.isAppearanceLightStatusBars = !darkTheme
+                insetsController.isAppearanceLightNavigationBars = !darkTheme
             }
         }
     }

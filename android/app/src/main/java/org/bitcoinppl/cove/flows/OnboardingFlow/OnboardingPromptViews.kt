@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CurrencyBitcoin
@@ -44,8 +45,6 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -239,16 +238,8 @@ private fun OnboardingTermsCheckboxCard(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Checkbox(
+        OnboardingTermsCheckIndicator(
             checked = checked,
-            onCheckedChange = null,
-            colors =
-                CheckboxDefaults.colors(
-                    checkedColor = OnboardingGradientLight,
-                    uncheckedColor = OnboardingTextSecondary,
-                    checkmarkColor = Color.White,
-                ),
-            modifier = Modifier.size(22.dp),
         )
         Text(
             text = text,
@@ -312,16 +303,8 @@ private fun OnboardingTermsAgreementCard(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Checkbox(
+        OnboardingTermsCheckIndicator(
             checked = checked,
-            onCheckedChange = null,
-            colors =
-                CheckboxDefaults.colors(
-                    checkedColor = OnboardingGradientLight,
-                    uncheckedColor = OnboardingTextSecondary,
-                    checkmarkColor = Color.White,
-                ),
-            modifier = Modifier.size(22.dp),
         )
 
         ClickableText(
@@ -340,6 +323,34 @@ private fun OnboardingTermsAgreementCard(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun OnboardingTermsCheckIndicator(checked: Boolean) {
+    Box(
+        modifier =
+            Modifier
+                .size(22.dp)
+                .background(
+                    color = if (checked) OnboardingGradientLight else Color.Transparent,
+                    shape = CircleShape,
+                )
+                .border(
+                    width = 2.dp,
+                    color = if (checked) OnboardingGradientLight else OnboardingTextSecondary,
+                    shape = CircleShape,
+                ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (checked) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(14.dp),
+            )
+        }
     }
 }
 
