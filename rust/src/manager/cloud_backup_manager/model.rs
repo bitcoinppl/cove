@@ -265,6 +265,11 @@ impl CloudBackupReducerState {
         };
 
         if accepted.is_some() {
+            // accept_enable_prompt deliberately routes every accepted choice through
+            // the CloudBackupLifecyclePhase::Enabling state with
+            // the CloudBackupEnableFlow::DiscoveringExistingBackup flow
+            // and CloudBackupConfiguredPrompt::None so discovery/preparation can choose
+            // the use-existing, force-new, or no-discovery follow-up
             self.phase = CloudBackupLifecyclePhase::Enabling(
                 CloudBackupEnableFlow::DiscoveringExistingBackup,
             );
