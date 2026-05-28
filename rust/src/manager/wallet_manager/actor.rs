@@ -782,25 +782,19 @@ impl WalletActor {
         proposal_psbt: Psbt,
         fallback_tx: BdkTransaction,
     ) -> ActorResult<()> {
+        // do_broadcast_transaction handles both the network broadcast and local wallet insert;
+        // use ? so a broadcast failure surfaces as an actor error rather than a silent success
         match self.do_sign_original_psbt(proposal_psbt).await {
             Ok((_, proposal_tx)) => {
                 self.do_broadcast_transaction(proposal_tx.clone())
                     .await
-                    .tap_err(|error| error!("failed to broadcast payjoin proposal tx: {error:?}"))
-                    .ok();
-
-                // insert into local wallet and update UI immediately
-                self.insert_broadcast_transaction(proposal_tx).await;
+                    .tap_err(|error| error!("failed to broadcast payjoin proposal tx: {error:?}"))?;
             }
             Err(error) => {
                 error!("failed to sign payjoin proposal, falling back to original tx: {error:?}");
                 self.do_broadcast_transaction(fallback_tx.clone())
                     .await
-                    .tap_err(|error| error!("payjoin fallback broadcast also failed: {error:?}"))
-                    .ok();
-
-                // insert into local wallet and update UI immediately
-                self.insert_broadcast_transaction(fallback_tx).await;
+                    .tap_err(|error| error!("payjoin fallback broadcast also failed: {error:?}"))?;
             }
         }
 
@@ -814,13 +808,11 @@ impl WalletActor {
         &mut self,
         fallback_tx: BdkTransaction,
     ) -> ActorResult<()> {
+        // do_broadcast_transaction handles both the network broadcast and local wallet insert;
+        // use ? so a broadcast failure surfaces as an actor error rather than a silent success
         self.do_broadcast_transaction(fallback_tx.clone())
             .await
-            .tap_err(|error| error!("payjoin fallback broadcast failed: {error:?}"))
-            .ok();
-
-        // insert into local wallet and update UI immediately
-        self.insert_broadcast_transaction(fallback_tx).await;
+            .tap_err(|error| error!("payjoin fallback broadcast failed: {error:?}"))?;
 
         self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast);
         Produces::ok(())
