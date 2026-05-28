@@ -18,6 +18,9 @@ struct EnterAddressView: View {
 
     /// private
     @FocusState private var focusField: SendFlowPresenter.FocusField?
+    @State private var showingWalletPicker: Bool = false
+    @State private var selectedWallet: WalletMetadata?
+    @State private var showRawAddress: Bool = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -27,6 +30,11 @@ struct EnterAddressView: View {
                     .fontWeight(.bold)
 
                 Spacer()
+
+                Button(action: { showingWalletPicker = true }) {
+                    Image(systemName: "wallet.bifold")
+                }
+                .foregroundStyle(.secondary)
 
                 Button(action: { presenter.sheetState = TaggedItem(.qr) }) {
                     Image(systemName: "qrcode")
@@ -43,15 +51,75 @@ struct EnterAddressView: View {
                 Spacer()
             }
 
-            HStack {
-                AddressTextEditor(text: $address)
-                    .focused($focusField, equals: .address)
-                    .foregroundStyle(.primary.opacity(0.9))
-                    .autocorrectionDisabled(true)
-                    .keyboardType(.asciiCapable)
+            if let dest = selectedWallet {
+                VStack(alignment: .leading) {
+                    HStack {
+                        Image(systemName: "wallet.bifold")
+                        Text(dest.name).font(.headline).fontWeight(.semibold)
+                        Spacer()
+                        Button(action: {
+                            selectedWallet = nil
+                            address = ""
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding()
+                    .background(Color.secondary.opacity(0.2))
+                    .cornerRadius(8)
+
+                    if showRawAddress {
+                        Text(address)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Button("Show address") {
+                            showRawAddress = true
+                        }
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    }
+                }
+            } else {
+                HStack {
+                    AddressTextEditor(text: $address)
+                        .focused($focusField, equals: .address)
+                        .foregroundStyle(.primary.opacity(0.9))
+                        .autocorrectionDisabled(true)
+                        .keyboardType(.asciiCapable)
+                }
             }
         }
         .contentShape(Rectangle())
+        .sheet(isPresented: $showingWalletPicker) {
+            NavigationView {
+                List {
+                    let wallets = (try? Database().wallets().allSortedActive()) ?? []
+                    ForEach(wallets.filter { $0.id != presenter.manager.id }, id: \.id) { wallet in
+                        Button(action: {
+                            Task {
+                                if let wm = try? WalletManager(id: wallet.id),
+                                   let addrInfo = try? await wm.firstAddress()
+                                {
+                                    address = addrInfo.addressUnformatted()
+                                    selectedWallet = wallet
+                                    showRawAddress = false
+                                    showingWalletPicker = false
+                                }
+                            }
+                        }) {
+                            HStack {
+                                Text(wallet.name)
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Select Wallet")
+                .navigationBarItems(trailing: Button("Cancel") { showingWalletPicker = false })
+            }
+        }
         .onTapGesture {
             presenter.focusField = .address
         }
