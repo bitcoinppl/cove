@@ -40,6 +40,9 @@ private extension WalletScanStatus {
     /// errors in SendFlow
     var sendFlowErrorAlert: TaggedItem<SendFlowErrorAlert>? = nil
 
+    /// set to true when a payjoin transaction has been broadcast (success or fallback)
+    var payjoinTxBroadcast: Bool = false
+
     /// cached transaction details
     var transactionDetails: [TxId: TransactionDetails] = [:]
 
@@ -299,6 +302,9 @@ private extension WalletScanStatus {
                 receiveAddressIsLoading = false
                 receiveAddressError = nil
             }
+
+        case .payjoinTxBroadcast:
+            self.payjoinTxBroadcast = true
         }
     }
 

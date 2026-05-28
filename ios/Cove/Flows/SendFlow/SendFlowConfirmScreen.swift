@@ -184,6 +184,14 @@ struct SendFlowConfirmScreen: View {
                                     psbt: details.psbt(),
                                     payjoinEndpoint: payjoinEndpoint
                                 )
+                                // for payjoin, stay in .sending — the PayjoinTxBroadcast
+                                // reconcile will fire sendState = .sent when done
+                                if payjoinEndpoint == nil {
+                                    sendState = .sent
+                                    isShowingAlert = true
+                                    auth.unlock()
+                                }
+                                return
                             }
                             sendState = .sent
                             isShowingAlert = true
@@ -216,6 +224,12 @@ struct SendFlowConfirmScreen: View {
                 guard let lockedAt = auth.lockedAt else { return }
                 let sinceLocked = Date.now.timeIntervalSince(lockedAt)
                 if sinceLocked < 5 { auth.lockState = .unlocked }
+            }
+            .onChange(of: manager.payjoinTxBroadcast) { _, isBroadcast in
+                guard isBroadcast else { return }
+                sendState = .sent
+                isShowingAlert = true
+                auth.unlock()
             }
             .alert(
                 "Sent!",
