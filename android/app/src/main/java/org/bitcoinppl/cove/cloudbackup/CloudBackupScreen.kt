@@ -2290,6 +2290,7 @@ private fun VerifiedSectionContent(
     report: DeepVerificationReport,
 ) {
     val colors = cloudBackupVisualColors()
+    val summaryItems = buildVerifiedSummaryItems(report)
 
     CloudBackupGlassCard(
         modifier =
@@ -2321,9 +2322,8 @@ private fun VerifiedSectionContent(
                 )
             }
 
-            CloudBackupIconText(
-                icon = Icons.Default.Security,
-                text = buildVerifiedSummary(report),
+            VerifiedSummary(
+                items = summaryItems,
                 color = colors.secondaryText,
             )
 
@@ -2338,7 +2338,36 @@ private fun VerifiedSectionContent(
     }
 }
 
-private fun buildVerifiedSummary(report: DeepVerificationReport): String =
+@Composable
+private fun VerifiedSummary(
+    items: List<String>,
+    color: Color,
+) {
+    if (items.size > 2) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items.forEach { item ->
+                Text(
+                    item,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = color,
+                )
+            }
+        }
+
+        return
+    }
+
+    Text(
+        items.joinToString(" • "),
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+    )
+}
+
+private fun buildVerifiedSummaryItems(report: DeepVerificationReport): List<String> =
     buildList {
         if (report.credentialRecovered) {
             add("passkey recovered")
@@ -2350,7 +2379,7 @@ private fun buildVerifiedSummary(report: DeepVerificationReport): String =
             add("local backup credentials repaired")
         }
         add("${report.walletsVerified} wallet(s) verified")
-    }.joinToString(" • ")
+    }
 
 @Composable
 private fun VerifyAgainButton(onClick: () -> Unit) {
