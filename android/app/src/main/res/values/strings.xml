@@ -19,6 +19,7 @@
     <string name="title_wallet_information">Wallet information</string>
     <string name="label_wallet_network">Network</string>
     <string name="label_wallet_birthday">Birthday</string>
+    <string name="label_wallet_account_number">Account number</string>
     <string name="label_wallet_fingerprint">Fingerprint</string>
     <string name="label_wallet_type">Wallet type</string>
     <string name="title_wallet_settings">Settings</string>

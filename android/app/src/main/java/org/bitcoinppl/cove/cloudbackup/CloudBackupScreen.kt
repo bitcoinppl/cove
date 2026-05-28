@@ -1,6 +1,9 @@
 package org.bitcoinppl.cove.cloudbackup
 
+import android.content.res.Configuration
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,40 +15,58 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ArrowOutward
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DoNotDisturbOn
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -55,15 +76,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
@@ -99,6 +127,10 @@ import org.bitcoinppl.cove_core.WalletMode
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.bitcoinppl.cove_core.types.Network
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 internal enum class CloudBackupDetailBodyState {
     UNSUPPORTED_PASSKEY_PROVIDER,
@@ -108,6 +140,113 @@ internal enum class CloudBackupDetailBodyState {
     AUTHORIZATION_BLOCKED,
     LOADING,
 }
+
+private val CloudBackupDetailDateFormatter =
+    DateTimeFormatter.ofPattern("MMM d, yyyy 'at' h:mm a", Locale.US)
+
+private data class CloudBackupVisualColors(
+    val background: Color,
+    val cardFill: Color,
+    val elevatedCardFill: Color,
+    val cardBorder: Color,
+    val divider: Color,
+    val primaryText: Color,
+    val secondaryText: Color,
+    val cloudBlue: Color,
+    val cloudBlueFill: Color,
+    val walletIconFill: Color,
+    val walletIconTint: Color,
+    val bitcoinFill: Color,
+    val bitcoinText: Color,
+    val success: Color,
+    val successFill: Color,
+    val successBorder: Color,
+    val warning: Color,
+    val warningFill: Color,
+    val warningBorder: Color,
+    val danger: Color,
+    val dangerFill: Color,
+    val dangerBorder: Color,
+    val verifiedFill: Color,
+    val verifiedBorder: Color,
+    val repairFill: Color,
+    val outlineButtonBorder: Color,
+)
+
+@Composable
+private fun cloudBackupVisualColors(): CloudBackupVisualColors {
+    val isLight = MaterialTheme.colorScheme.isLight
+    val success = if (isLight) CoveColor.SystemGreenLight else CoveColor.SystemGreenDark
+    val cloudBlue = if (isLight) CoveColor.LinkBlue else CoveColor.CloudBackupDarkCloudBlue
+    val warning = if (isLight) CoveColor.CloudBackupLightWarning else CoveColor.CloudBackupDarkWarning
+    val danger = if (isLight) CoveColor.ErrorRed else CoveColor.CloudBackupDarkDanger
+
+    return if (isLight) {
+        CloudBackupVisualColors(
+            background = CoveColor.CloudBackupLightBackground,
+            cardFill = CoveColor.CloudBackupLightCardFill,
+            elevatedCardFill = CoveColor.CloudBackupLightElevatedCardFill,
+            cardBorder = CoveColor.CloudBackupLightCardBorder,
+            divider = CoveColor.CloudBackupLightDivider,
+            primaryText = CoveColor.CloudBackupLightPrimaryText,
+            secondaryText = CoveColor.CloudBackupLightSecondaryText,
+            cloudBlue = cloudBlue,
+            cloudBlueFill = cloudBlue.copy(alpha = 0.10f),
+            walletIconFill = CoveColor.CloudBackupLightWalletIconFill,
+            walletIconTint = CoveColor.CloudBackupLightWalletIconTint,
+            bitcoinFill = CoveColor.bitcoinOrange,
+            bitcoinText = CoveColor.CloudBackupLightCardFill,
+            success = success,
+            successFill = success.copy(alpha = 0.12f),
+            successBorder = success.copy(alpha = 0.38f),
+            warning = warning,
+            warningFill = warning.copy(alpha = 0.12f),
+            warningBorder = warning.copy(alpha = 0.42f),
+            danger = danger,
+            dangerFill = danger.copy(alpha = 0.10f),
+            dangerBorder = danger.copy(alpha = 0.26f),
+            verifiedFill = success.copy(alpha = 0.10f),
+            verifiedBorder = success.copy(alpha = 0.24f),
+            repairFill = cloudBlue.copy(alpha = 0.10f),
+            outlineButtonBorder = CoveColor.CloudBackupLightOutlineButtonBorder,
+        )
+    } else {
+        CloudBackupVisualColors(
+            background = CoveColor.CloudBackupDarkBackground,
+            cardFill = CoveColor.CloudBackupDarkCardFill.copy(alpha = 0.92f),
+            elevatedCardFill = CoveColor.CloudBackupDarkElevatedCardFill.copy(alpha = 0.94f),
+            cardBorder = CoveColor.CloudBackupDarkCardBorder.copy(alpha = 0.68f),
+            divider = CoveColor.CloudBackupDarkDivider.copy(alpha = 0.62f),
+            primaryText = CoveColor.CloudBackupDarkPrimaryText,
+            secondaryText = CoveColor.CloudBackupDarkSecondaryText,
+            cloudBlue = cloudBlue,
+            cloudBlueFill = cloudBlue.copy(alpha = 0.18f),
+            walletIconFill = CoveColor.CloudBackupDarkWalletIconFill,
+            walletIconTint = CoveColor.CloudBackupDarkWalletIconTint,
+            bitcoinFill = CoveColor.bitcoinOrange,
+            bitcoinText = CoveColor.CloudBackupLightCardFill,
+            success = success,
+            successFill = success.copy(alpha = 0.16f),
+            successBorder = success.copy(alpha = 0.55f),
+            warning = warning,
+            warningFill = warning.copy(alpha = 0.16f),
+            warningBorder = warning.copy(alpha = 0.56f),
+            danger = danger,
+            dangerFill = danger.copy(alpha = 0.17f),
+            dangerBorder = danger.copy(alpha = 0.42f),
+            verifiedFill = CoveColor.CloudBackupDarkVerifiedFill.copy(alpha = 0.82f),
+            verifiedBorder = success.copy(alpha = 0.24f),
+            repairFill = CoveColor.CloudBackupDarkRepairFill.copy(alpha = 0.86f),
+            outlineButtonBorder = CoveColor.CloudBackupDarkOutlineButtonBorder,
+        )
+    }
+}
+
+private fun cloudBackupFormattedDate(epochSeconds: ULong): String =
+    Instant
+        .ofEpochSecond(epochSeconds.toLong())
+        .atZone(ZoneId.systemDefault())
+        .format(CloudBackupDetailDateFormatter)
 
 internal fun cloudBackupDetailBodyState(
     manager: CloudBackupManager,
@@ -233,19 +372,60 @@ private fun CloudBackupScreenFrame(
     onReinitialize: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = cloudBackupVisualColors()
+    var isMenuOpen by remember { mutableStateOf(false) }
+
     Scaffold(
         modifier =
             modifier
                 .fillMaxSize()
                 .padding(WindowInsets.safeDrawing.asPaddingValues()),
+        containerColor = colors.background,
         topBar = {
             TopAppBar(
-                title = { Text("Cloud Backup") },
+                title = {
+                    Text(
+                        "Cloud Backup",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { isMenuOpen = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Cloud Backup options")
+                    }
+                    DropdownMenu(
+                        expanded = isMenuOpen,
+                        onDismissRequest = { isMenuOpen = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Recreate Backup Index") },
+                            onClick = {
+                                isMenuOpen = false
+                                onRecreate()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Reinitialize Cloud Backup") },
+                            onClick = {
+                                isMenuOpen = false
+                                onReinitialize()
+                            },
+                        )
+                    }
+                },
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = colors.background,
+                        titleContentColor = colors.primaryText,
+                        navigationIconContentColor = colors.primaryText,
+                        actionIconContentColor = colors.primaryText,
+                    ),
             )
         },
     ) { paddingValues ->
@@ -253,6 +433,7 @@ private fun CloudBackupScreenFrame(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .background(colors.background)
                     .padding(paddingValues),
         ) {
             when (val lifecycle = manager.lifecycle) {
@@ -564,8 +745,6 @@ private fun CloudBackupDetailContent(
                     detail = manager.detail!!,
                     syncHealth = manager.syncHealth,
                     manager = manager,
-                    onRecreate = onRecreate,
-                    onReinitialize = onReinitialize,
                 )
             }
             CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED -> {
@@ -600,6 +779,14 @@ private fun CloudBackupDetailContent(
                 bodyState == CloudBackupDetailBodyState.MISSING_PASSKEY
         ) {
             DisableCloudBackupSection(manager = manager, detail = manager.detail)
+        }
+
+        if (bodyState == CloudBackupDetailBodyState.DETAIL) {
+            VerificationSection(
+                manager = manager,
+                onRecreate = onRecreate,
+                onReinitialize = onReinitialize,
+            )
         }
     }
 }
@@ -642,22 +829,22 @@ private fun CloudBackupProgressCard(
     title: String,
     message: String,
 ) {
-    Card(
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
+    val colors = cloudBackupVisualColors()
+
+    CloudBackupGlassCard(
+        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+        fill = colors.cardFill,
+        border = colors.cardBorder,
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CircularProgressIndicator(modifier = Modifier.width(24.dp).height(24.dp), strokeWidth = 2.dp)
-            Spacer(modifier = Modifier.width(12.dp))
+            CircularProgressIndicator(modifier = Modifier.size(26.dp), color = colors.cloudBlue, strokeWidth = 3.dp)
             Column {
-                Text(title, fontWeight = FontWeight.SemiBold)
-                Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(title, fontWeight = FontWeight.SemiBold, color = colors.primaryText)
+                Text(message, style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
             }
         }
     }
@@ -775,8 +962,6 @@ private fun DetailFormContent(
     detail: CloudBackupDetail,
     syncHealth: CloudSyncHealth,
     manager: CloudBackupManager,
-    onRecreate: () -> Unit,
-    onReinitialize: () -> Unit,
 ) {
     CloudBackupHeaderSection(lastSync = detail.lastSync, syncHealth = syncHealth)
 
@@ -813,15 +998,9 @@ private fun DetailFormContent(
             }
         }
         is CloudBackupOtherBackupsState.LoadFailed -> {
-            OtherBackupsLoadFailedSection(error = otherBackups.error)
+                OtherBackupsLoadFailedSection(error = otherBackups.error)
         }
     }
-
-    VerificationSection(
-        manager = manager,
-        onRecreate = onRecreate,
-        onReinitialize = onReinitialize,
-    )
 }
 
 @Composable
@@ -833,53 +1012,87 @@ private fun DisableCloudBackupSection(
     var showFirstConfirmation by remember { mutableStateOf(false) }
     var showFinalConfirmation by remember { mutableStateOf(false) }
     val unavailableMessage = disableUnavailableMessage(manager, detail)
+    val colors = cloudBackupVisualColors()
 
-    SectionHeader("Disable Cloud Backup", modifier = Modifier.padding(horizontal = 16.dp))
-    MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Column {
-            if (manager.isDisablingCloudBackup) {
-                LoadingRow("Deleting cloud backups")
-                MaterialDivider()
-            }
+    CloudBackupSectionTitle(
+        title = "Disable Cloud Backup",
+        icon = Icons.Default.CloudOff,
+        tint = colors.danger,
+    )
 
-            manager.disableFailure?.let { failure ->
-                ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
-                MaterialDivider()
-                MaterialSettingsItem(
-                    title = "Try Again",
-                    onClick = { manager.dispatch(CloudBackupManagerAction.DisableCloudBackup) },
-                    leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
-                )
+    manager.disableFailure?.let { failure ->
+        ErrorInlineMessage(failure.message, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+        CloudBackupSimpleActionCard(
+            title = "Try Again",
+            icon = Icons.Default.Refresh,
+            tint = colors.danger,
+            onClick = { manager.dispatch(CloudBackupManagerAction.DisableCloudBackup) },
+        )
 
-                if (failure.canKeepEnabled) {
-                    MaterialDivider()
-                    MaterialSettingsItem(
-                        title = "Keep Cloud Backup Enabled",
-                        onClick = { manager.dispatch(CloudBackupManagerAction.KeepCloudBackupEnabled) },
-                        leadingContent = { Icon(Icons.Default.CloudDone, contentDescription = null) },
-                    )
-                }
-                MaterialDivider()
-            }
-
-            MaterialSettingsItem(
-                title = "Disable Cloud Backup",
-                subtitle = "Delete current Cove cloud backups. Local wallets stay on this device.",
-                onClick =
-                    if (manager.isDisablingCloudBackup) {
-                        null
-                    } else {
-                        {
-                            if (unavailableMessage != null) {
-                                showUnavailable = true
-                            } else {
-                                showFirstConfirmation = true
-                            }
-                        }
-                    },
-                titleColor = MaterialTheme.colorScheme.error,
-                leadingContent = { Icon(Icons.Default.CloudOff, contentDescription = null) },
+        if (failure.canKeepEnabled) {
+            CloudBackupSimpleActionCard(
+                title = "Keep Cloud Backup Enabled",
+                icon = Icons.Default.CloudDone,
+                tint = colors.success,
+                onClick = { manager.dispatch(CloudBackupManagerAction.KeepCloudBackupEnabled) },
             )
+        }
+    }
+
+    CloudBackupGlassCard(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+                .clickable(enabled = !manager.isDisablingCloudBackup) {
+                    if (unavailableMessage != null) {
+                        showUnavailable = true
+                    } else {
+                        showFirstConfirmation = true
+                    }
+                },
+        fill = colors.dangerFill,
+        border = colors.dangerBorder,
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CloudBackupIconBubble(
+                icon = if (manager.isDisablingCloudBackup) Icons.Default.Delete else Icons.Default.CloudOff,
+                fill = colors.danger.copy(alpha = 0.20f),
+                tint = colors.danger,
+                size = 48.dp,
+                iconSize = 28.dp,
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                Text(
+                    if (manager.isDisablingCloudBackup) "Deleting cloud backups" else "Disable Cloud Backup",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.danger,
+                )
+                Text(
+                    "Local wallets stay on this device. Current Cove cloud backups will be deleted from cloud storage.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondaryText,
+                )
+            }
+
+            if (manager.isDisablingCloudBackup) {
+                CircularProgressIndicator(modifier = Modifier.size(26.dp), color = colors.danger, strokeWidth = 3.dp)
+            } else {
+                Icon(
+                    Icons.AutoMirrored.Default.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = colors.secondaryText,
+                )
+            }
         }
     }
 
@@ -980,52 +1193,305 @@ private fun disableUnavailableMessage(
 }
 
 @Composable
+private fun CloudBackupGlassCard(
+    modifier: Modifier = Modifier,
+    fill: Color? = null,
+    border: Color? = null,
+    shape: RoundedCornerShape = RoundedCornerShape(22.dp),
+    content: @Composable () -> Unit,
+) {
+    val colors = cloudBackupVisualColors()
+    val cardFill = fill ?: colors.cardFill
+    val cardBorder = border ?: colors.cardBorder
+
+    Surface(
+        modifier =
+            modifier
+                .border(BorderStroke(1.dp, cardBorder), shape),
+        color = cardFill,
+        shape = shape,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun CloudBackupIconBubble(
+    icon: ImageVector,
+    fill: Color,
+    tint: Color,
+    size: Dp,
+    iconSize: Dp,
+    modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape = CircleShape,
+) {
+    Box(
+        modifier =
+            modifier
+                .size(size)
+                .background(fill, shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(iconSize))
+    }
+}
+
+@Composable
+private fun CloudBackupSectionTitle(
+    title: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    tint: Color? = null,
+    bitcoinIcon: Boolean = false,
+) {
+    val colors = cloudBackupVisualColors()
+    val contentTint = tint ?: colors.primaryText
+
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (bitcoinIcon) {
+            Surface(
+                color = colors.bitcoinFill,
+                shape = CircleShape,
+                modifier = Modifier.size(26.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        "₿",
+                        color = colors.bitcoinText,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        } else if (icon != null) {
+            Icon(icon, contentDescription = null, tint = contentTint, modifier = Modifier.size(24.dp))
+        }
+
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = contentTint,
+        )
+    }
+}
+
+@Composable
+private fun CloudBackupIconText(
+    icon: ImageVector,
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    maxLines: Int = 1,
+    iconSize: Dp = 13.dp,
+    textStyle: TextStyle = MaterialTheme.typography.labelSmall,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(iconSize))
+        Text(
+            text,
+            style = textStyle,
+            color = color,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun CloudBackupBitcoinMetadataText(text: String) {
+    val colors = cloudBackupVisualColors()
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "₿",
+            color = colors.secondaryText,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(13.dp),
+        )
+        Text(
+            text,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.secondaryText,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun WalletRowsCard(
+    wallets: List<CloudBackupWalletItem>,
+    onWalletClick: ((CloudBackupWalletItem) -> Unit)? = null,
+) {
+    val colors = cloudBackupVisualColors()
+
+    CloudBackupGlassCard(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp),
+    ) {
+        Column {
+            wallets.forEachIndexed { index, item ->
+                WalletItemRow(
+                    item = item,
+                    onClick = onWalletClick?.let { onClick -> { onClick(item) } },
+                    showChevron = onWalletClick != null,
+                )
+                if (index != wallets.lastIndex) {
+                    HorizontalDivider(
+                        color = colors.divider,
+                        modifier = Modifier.padding(start = 66.dp, end = 14.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CloudBackupSimpleActionCard(
+    title: String,
+    icon: ImageVector,
+    tint: Color,
+    onClick: () -> Unit,
+) {
+    val colors = cloudBackupVisualColors()
+
+    CloudBackupGlassCard(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+                .clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+            Text(
+                title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.primaryText,
+            )
+            Icon(
+                Icons.AutoMirrored.Default.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colors.secondaryText,
+            )
+        }
+    }
+}
+
+@Composable
 private fun CloudBackupHeaderSection(
     lastSync: ULong?,
     syncHealth: CloudSyncHealth,
 ) {
-    val successColor = MaterialTheme.coveColors.systemGreen
-    val infoColor = MaterialTheme.colorScheme.primary
+    val colors = cloudBackupVisualColors()
 
     val (icon, tint, label) =
         when (syncHealth) {
-            is CloudSyncHealth.Unknown -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Checking sync status")
-            is CloudSyncHealth.AllUploaded -> Triple(Icons.Default.CloudDone, successColor, "All files synced to Google Drive")
-            is CloudSyncHealth.Uploading -> Triple(Icons.Default.CloudUpload, infoColor, "Syncing to Google Drive")
-            is CloudSyncHealth.Failed -> Triple(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Sync error: ${syncHealth.v1}")
-            is CloudSyncHealth.NoFiles -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "No cloud backup files uploaded yet")
-            is CloudSyncHealth.AuthorizationRequired -> Triple(Icons.Default.WarningAmber, MaterialTheme.colorScheme.error, "Google Drive access needs to be reconnected: ${syncHealth.v1}")
-            is CloudSyncHealth.Unavailable -> Triple(Icons.Default.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "Google Drive is unavailable")
+            is CloudSyncHealth.Unknown -> Triple(Icons.Default.CloudOff, colors.secondaryText, "Checking sync status")
+            is CloudSyncHealth.AllUploaded -> Triple(Icons.Default.CloudDone, colors.success, "All files confirmed")
+            is CloudSyncHealth.Uploading -> Triple(Icons.Default.CloudUpload, colors.cloudBlue, "Syncing to cloud...")
+            is CloudSyncHealth.Failed -> Triple(Icons.Default.WarningAmber, colors.danger, "Sync error: ${syncHealth.v1}")
+            is CloudSyncHealth.NoFiles -> Triple(Icons.Default.CloudOff, colors.secondaryText, "No cloud backup files uploaded yet")
+            is CloudSyncHealth.AuthorizationRequired -> Triple(Icons.Default.WarningAmber, colors.danger, "Google Drive access needs to be reconnected: ${syncHealth.v1}")
+            is CloudSyncHealth.Unavailable -> Triple(Icons.Default.CloudOff, colors.secondaryText, "Google Drive is unavailable")
         }
 
-    Card(
+    CloudBackupGlassCard(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        fill = colors.elevatedCardFill,
+        border = colors.cardBorder,
     ) {
-        Column(
+        Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, contentDescription = null, tint = tint)
-            Text("Cloud Backup Active", fontWeight = FontWeight.SemiBold)
-            lastSync?.let {
+            CloudBackupIconBubble(
+                icon = icon,
+                fill = colors.cloudBlueFill,
+                tint = colors.cloudBlue,
+                size = 48.dp,
+                iconSize = 28.dp,
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
                 Text(
-                    "Last synced ${java.time.Instant.ofEpochSecond(it.toLong())}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    "Cloud Backup Active",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.primaryText,
                 )
+
+                lastSync?.let {
+                    CloudBackupIconText(
+                        icon = Icons.Default.Schedule,
+                        text = "Last synced ${cloudBackupFormattedDate(it)}",
+                        color = colors.secondaryText,
+                        iconSize = 14.dp,
+                        textStyle = MaterialTheme.typography.bodySmall,
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (syncHealth is CloudSyncHealth.Uploading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = colors.cloudBlue,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+                    }
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = tint,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-            Text(label, style = MaterialTheme.typography.bodySmall, color = tint)
         }
     }
 }
@@ -1035,31 +1501,20 @@ private fun WalletSections(
     title: String,
     wallets: List<CloudBackupWalletItem>,
 ) {
-    val grouped = wallets.groupBy { GroupKey(it.network?.cloudBackupDisplayName() ?: "Unsupported", it.walletMode) }
-        .toSortedMap()
+    val grouped =
+        wallets
+            .groupBy { GroupKey(it.network?.cloudBackupDisplayName() ?: "Unsupported", it.walletMode) }
+            .toSortedMap()
 
-    SectionHeader(title, modifier = Modifier.padding(horizontal = 16.dp))
-    MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Column {
-            var isFirstGroup = true
-            grouped.forEach { (group, items) ->
-                if (!isFirstGroup) {
-                    HorizontalDivider()
-                }
-                isFirstGroup = false
-                Text(
-                    text = group.title,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                )
-                items.forEachIndexed { index, item ->
-                    WalletItemRow(item = item)
-                    if (index != items.lastIndex) {
-                        MaterialDivider()
-                    }
-                }
-            }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        grouped.forEach { (group, items) ->
+            val sectionTitle = if (title == "Up to Date") group.title else title
+            CloudBackupSectionTitle(
+                title = sectionTitle,
+                icon = if (group.network == "Bitcoin") null else Icons.Default.AccountBalanceWallet,
+                bitcoinIcon = group.network == "Bitcoin",
+            )
+            WalletRowsCard(wallets = items)
         }
     }
 }
@@ -1099,62 +1554,150 @@ private fun WalletType.cloudBackupDisplayName(): String =
 @Composable
 private fun WalletItemRow(
     item: CloudBackupWalletItem,
+    onClick: (() -> Unit)? = null,
+    showChevron: Boolean = false,
 ) {
-    MaterialSettingsItem(
-        title = item.name,
-        subtitle =
-            buildList {
-                item.network?.cloudBackupDisplayName()?.let(::add)
-                item.walletType?.cloudBackupDisplayName()?.let(::add)
-                item.fingerprint?.let(::add)
-                item.labelCount?.let { add("$it labels") }
-                item.backupUpdatedAt?.let { add(java.time.Instant.ofEpochSecond(it.toLong()).toString()) }
-            }.joinToString(" • "),
-        leadingContent = {
-            StatusBadge(status = item.syncStatus)
-        },
-        trailingContent = {
-            if (item.syncStatus == CloudBackupWalletStatus.UNSUPPORTED_VERSION) {
-                Icon(Icons.Default.WarningAmber, contentDescription = null, tint = CoveColor.WarningOrange)
+    val colors = cloudBackupVisualColors()
+    val primaryMetadata =
+        buildList {
+            item.network?.cloudBackupDisplayName()?.let(::add)
+            item.walletType?.cloudBackupDisplayName()?.let(::add)
+            item.fingerprint?.let(::add)
+        }.joinToString(" • ")
+    val labelText = "${item.labelCount ?: 0UL} labels"
+    val updatedAt = item.backupUpdatedAt?.let(::cloudBackupFormattedDate)
+    val shape = RoundedCornerShape(18.dp)
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .then(
+                    if (onClick != null) {
+                        Modifier.clickable(onClick = onClick)
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CloudBackupIconBubble(
+            icon = Icons.Default.AccountBalanceWallet,
+            fill = colors.walletIconFill,
+            tint = colors.walletIconTint,
+            size = 40.dp,
+            iconSize = 22.dp,
+            shape = RoundedCornerShape(12.dp),
+        )
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    item.name,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.primaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                StatusBadge(status = item.syncStatus)
+                if (showChevron || onClick != null) {
+                    Icon(
+                        Icons.AutoMirrored.Default.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = colors.secondaryText,
+                        modifier = Modifier.size(22.dp),
+                    )
+                } else if (item.syncStatus == CloudBackupWalletStatus.UNSUPPORTED_VERSION) {
+                    Icon(Icons.Default.WarningAmber, contentDescription = null, tint = colors.warning)
+                }
             }
-        },
-    )
+            CloudBackupBitcoinMetadataText(primaryMetadata)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CloudBackupIconText(
+                    icon = Icons.AutoMirrored.Default.Label,
+                    text = labelText,
+                    color = colors.secondaryText,
+                    maxLines = 1,
+                    modifier = Modifier.widthIn(max = 70.dp),
+                )
+                updatedAt?.let {
+                    Text("•", color = colors.secondaryText, style = MaterialTheme.typography.bodySmall)
+                    CloudBackupIconText(
+                        icon = Icons.Default.CalendarToday,
+                        text = it,
+                        color = colors.secondaryText,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
 private fun StatusBadge(
     status: CloudBackupWalletStatus,
 ) {
-    val successColor = MaterialTheme.coveColors.systemGreen
-    val infoColor = MaterialTheme.colorScheme.primary
-    val warningColor = CoveColor.WarningOrange
-    val (label, color) =
+    val colors = cloudBackupVisualColors()
+    val (label, color, fill, border, icon) =
         when (status) {
-            CloudBackupWalletStatus.DIRTY -> "Dirty" to warningColor
+            CloudBackupWalletStatus.DIRTY -> StatusBadgeStyle("Dirty", colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber)
             CloudBackupWalletStatus.UPLOADING,
             CloudBackupWalletStatus.UPLOADED_PENDING_CONFIRMATION,
-            -> "Syncing" to infoColor
-            CloudBackupWalletStatus.CONFIRMED -> "Synced" to successColor
-            CloudBackupWalletStatus.FAILED -> "Failed" to MaterialTheme.colorScheme.error
-            CloudBackupWalletStatus.DELETED_FROM_DEVICE -> "Not on device" to warningColor
-            CloudBackupWalletStatus.UNSUPPORTED_VERSION -> "Unsupported" to warningColor
-            CloudBackupWalletStatus.REMOTE_STATE_UNKNOWN -> "Unknown" to MaterialTheme.colorScheme.onSurfaceVariant
+            -> StatusBadgeStyle("Syncing", colors.cloudBlue, colors.cloudBlueFill, colors.cloudBlue.copy(alpha = 0.48f), Icons.Default.Refresh)
+            CloudBackupWalletStatus.CONFIRMED -> StatusBadgeStyle("Confirmed", colors.success, colors.successFill, colors.successBorder, Icons.Default.Check)
+            CloudBackupWalletStatus.FAILED -> StatusBadgeStyle("Failed", colors.danger, colors.dangerFill, colors.dangerBorder, Icons.Default.WarningAmber)
+            CloudBackupWalletStatus.DELETED_FROM_DEVICE -> StatusBadgeStyle("Not on device", colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.DoNotDisturbOn)
+            CloudBackupWalletStatus.UNSUPPORTED_VERSION -> StatusBadgeStyle("Unsupported", colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber)
+            CloudBackupWalletStatus.REMOTE_STATE_UNKNOWN -> StatusBadgeStyle("Unknown", colors.secondaryText, colors.cardFill, colors.cardBorder, Icons.Default.WarningAmber)
         }
 
     Surface(
-        color = color.copy(alpha = 0.12f),
+        color = fill,
         shape = CircleShape,
+        border = BorderStroke(1.dp, border),
     ) {
-        Text(
-            label,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = color,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(12.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
+
+private data class StatusBadgeStyle(
+    val label: String,
+    val color: Color,
+    val fill: Color,
+    val border: Color,
+    val icon: ImageVector,
+)
 
 @Composable
 private fun OtherBackupsLoadFailedSection(error: String) {
@@ -1398,50 +1941,48 @@ private fun CloudOnlySection(
         }
     }
 
-    SectionHeader("Not on This Device", modifier = Modifier.padding(horizontal = 16.dp))
-    MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Column {
-            when (val cloudOnly = manager.cloudOnly) {
-                is CloudOnlyState.NotFetched -> {
-                    LaunchedEffect(cloudOnly) {
-                        manager.dispatch(CloudBackupManagerAction.FetchCloudOnly)
-                    }
-                    LoadingRow("Loading wallets not on this device")
-                }
-
-                is CloudOnlyState.Loading -> {
-                    LoadingRow("Loading wallets not on this device")
-                }
-
-                is CloudOnlyState.Loaded -> {
-                    cloudOnly.wallets.forEachIndexed { index, item ->
-                        MaterialSettingsItem(
-                            title = item.name,
-                            subtitle = item.network?.cloudBackupDisplayName(),
-                            onClick = { selectedWallet = item },
-                            leadingContent = { StatusBadge(item.syncStatus) },
-                            trailingContent = { Icon(Icons.Default.ArrowOutward, contentDescription = null) },
-                        )
-                        if (index != cloudOnly.wallets.lastIndex) {
-                            MaterialDivider()
-                        }
-                    }
-
-                    when (val operation = manager.cloudOnlyOperation) {
-                        is CloudOnlyOperation.Failed -> {
-                            ErrorInlineMessage(operation.error, modifier = Modifier.padding(16.dp))
-                        }
-                        is CloudOnlyOperation.Warning -> {
-                            ErrorInlineMessage(operation.message, modifier = Modifier.padding(16.dp))
-                        }
-                        else -> Unit
-                    }
-                }
-
-                is CloudOnlyState.Failed -> {
-                    ErrorInlineMessage(cloudOnly.error, modifier = Modifier.padding(16.dp))
-                }
+    CloudBackupSectionTitle(
+        title = "Not on This Device",
+        icon = Icons.Default.PhoneAndroid,
+        tint = cloudBackupVisualColors().primaryText,
+    )
+    when (val cloudOnly = manager.cloudOnly) {
+        is CloudOnlyState.NotFetched -> {
+            LaunchedEffect(cloudOnly) {
+                manager.dispatch(CloudBackupManagerAction.FetchCloudOnly)
             }
+            CloudBackupProgressCard(
+                title = "Loading wallets not on this device",
+                message = "Checking Cloud Backup for wallets that are not local",
+            )
+        }
+
+        is CloudOnlyState.Loading -> {
+            CloudBackupProgressCard(
+                title = "Loading wallets not on this device",
+                message = "Checking Cloud Backup for wallets that are not local",
+            )
+        }
+
+        is CloudOnlyState.Loaded -> {
+            WalletRowsCard(
+                wallets = cloudOnly.wallets,
+                onWalletClick = { selectedWallet = it },
+            )
+
+            when (val operation = manager.cloudOnlyOperation) {
+                is CloudOnlyOperation.Failed -> {
+                    ErrorInlineMessage(operation.error, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+                }
+                is CloudOnlyOperation.Warning -> {
+                    ErrorInlineMessage(operation.message, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+                }
+                else -> Unit
+            }
+        }
+
+        is CloudOnlyState.Failed -> {
+            ErrorInlineMessage(cloudOnly.error, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         }
     }
 
@@ -1509,9 +2050,10 @@ private fun CloudOnlySection(
 private fun PasskeyConfirmedSectionContent(
     manager: CloudBackupManager,
 ) {
-    MaterialSettingsItem(
+    CloudBackupSimpleActionCard(
         title = "Passkey verified",
-        subtitle = "Run a full verification to confirm wallet backups can be decrypted",
+        icon = Icons.Default.Security,
+        tint = cloudBackupVisualColors().success,
         onClick = {
             manager.dispatch(
                 CloudBackupManagerAction.StartVerification(
@@ -1519,7 +2061,6 @@ private fun PasskeyConfirmedSectionContent(
                 ),
             )
         },
-        leadingContent = { Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.coveColors.systemGreen) },
     )
 }
 
@@ -1529,49 +2070,58 @@ private fun VerificationSection(
     onRecreate: () -> Unit,
     onReinitialize: () -> Unit,
 ) {
-    SectionHeader("Verification", modifier = Modifier.padding(horizontal = 16.dp))
-    MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Column {
-            when (val verification = manager.verificationState) {
-                null,
-                CloudBackupVerificationState.NotVerified,
-                CloudBackupVerificationState.Required,
-                -> {
-                    MaterialSettingsItem(
-                        title = "Verify Now",
-                        subtitle = "Run verification to confirm your cloud backup can be decrypted and restored",
-                        onClick = {
-                            manager.dispatch(
-                                CloudBackupManagerAction.StartVerification(
-                                    CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
-                                ),
-                            )
-                        },
-                        leadingContent = { Icon(Icons.Default.Security, contentDescription = null) },
-                    )
-                }
+    val colors = cloudBackupVisualColors()
 
-                CloudBackupVerificationState.Running -> {
-                    LoadingRow("Verifying backup integrity")
-                }
-
-                is CloudBackupVerificationState.Verified -> {
-                    val report = verification.report
-                    if (report != null) {
-                        VerifiedSectionContent(
-                            report = report,
-                            manager = manager,
+    Column(
+        modifier = Modifier.padding(top = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        when (val verification = manager.verificationState) {
+            null,
+            CloudBackupVerificationState.NotVerified,
+            CloudBackupVerificationState.Required,
+            -> {
+                CloudBackupSimpleActionCard(
+                    title = "Verify Now",
+                    icon = Icons.Default.Security,
+                    tint = colors.cloudBlue,
+                    onClick = {
+                        manager.dispatch(
+                            CloudBackupManagerAction.StartVerification(
+                                CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                            ),
                         )
-                    } else {
-                        PasskeyConfirmedSectionContent(manager)
-                    }
-                }
+                    },
+                )
+            }
 
-                CloudBackupVerificationState.AwaitingUploadConfirmation -> {
+            CloudBackupVerificationState.Running -> {
+                CloudBackupProgressCard(
+                    title = "Verifying backup integrity",
+                    message = "Confirming that wallet backups can be decrypted and restored",
+                )
+            }
+
+            is CloudBackupVerificationState.Verified -> {
+                val report = verification.report
+                if (report != null) {
+                    VerifiedSectionContent(report = report)
+                } else {
                     PasskeyConfirmedSectionContent(manager)
                 }
+            }
 
-                is CloudBackupVerificationState.Failed -> {
+            CloudBackupVerificationState.AwaitingUploadConfirmation -> {
+                PasskeyConfirmedSectionContent(manager)
+            }
+
+            is CloudBackupVerificationState.Failed -> {
+                CloudBackupGlassCard(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp),
+                ) {
                     VerificationFailureContent(
                         failure = verification.v1,
                         manager = manager,
@@ -1580,53 +2130,42 @@ private fun VerificationSection(
                     )
                 }
             }
+        }
 
-            when (val sync = manager.syncState) {
-                is CloudBackupSyncState.Syncing -> {
-                    MaterialDivider()
-                    LoadingRow("Syncing unsynced wallets")
-                }
-
-                is CloudBackupSyncState.Failed -> {
-                    MaterialDivider()
-                    ErrorInlineMessage(sync.v1, modifier = Modifier.padding(16.dp))
-                }
-
-                is CloudBackupSyncState.Blocked -> {
-                    MaterialDivider()
-                    ErrorInlineMessage(sync.v1, modifier = Modifier.padding(16.dp))
-                }
-
-                else -> Unit
+        when (val sync = manager.syncState) {
+            is CloudBackupSyncState.Failed -> {
+                ErrorInlineMessage(sync.v1, modifier = Modifier.padding(horizontal = 14.dp))
             }
 
-            val needsSync = manager.detail?.needsSync?.isNotEmpty() == true
-            if (needsSync) {
-                MaterialDivider()
-                MaterialSettingsItem(
-                    title = "Sync Now",
-                    subtitle = "Upload wallets that are out of date",
-                    onClick = { manager.dispatch(CloudBackupManagerAction.SyncUnsynced) },
-                    leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
-                )
+            is CloudBackupSyncState.Blocked -> {
+                ErrorInlineMessage(sync.v1, modifier = Modifier.padding(horizontal = 14.dp))
             }
 
-           if (manager.verificationState is CloudBackupVerificationState.Verified) {
-               MaterialDivider()
-               MaterialSettingsItem(
-                   title = "Verify Again",
-                   onClick = {
-                       manager.dispatch(
-                           CloudBackupManagerAction.StartVerification(
-                               CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
-                           ),
-                       )
-                   },
-                   leadingContent = { Icon(Icons.Default.Security, contentDescription = null) },
-               )
-           }
-       }
-   }
+            else -> Unit
+        }
+
+        val needsSync = manager.detail?.needsSync?.isNotEmpty() == true
+        if (needsSync) {
+            CloudBackupSimpleActionCard(
+                title = "Sync Now",
+                icon = Icons.Default.Refresh,
+                tint = colors.cloudBlue,
+                onClick = { manager.dispatch(CloudBackupManagerAction.SyncUnsynced) },
+            )
+        }
+
+        if (manager.verificationState is CloudBackupVerificationState.Verified) {
+            VerifyAgainButton(
+                onClick = {
+                    manager.dispatch(
+                        CloudBackupManagerAction.StartVerification(
+                            CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                        ),
+                    )
+                },
+            )
+        }
+    }
 }
 
 @Composable
@@ -1656,48 +2195,130 @@ private fun CancelledVerificationActions(
 @Composable
 private fun VerifiedSectionContent(
     report: DeepVerificationReport,
-    manager: CloudBackupManager,
 ) {
-    MaterialSettingsItem(
-        title = "Backup verified",
-        subtitle = buildVerifiedSummary(report),
-        leadingContent = { Icon(Icons.Default.CloudDone, contentDescription = null, tint = MaterialTheme.coveColors.systemGreen) },
-    )
+    val colors = cloudBackupVisualColors()
 
-    if (report.masterKeyWrapperRepaired) {
-        MaterialDivider()
-        MaterialSettingsItem(
-            title = "Cloud master key protection was repaired",
-            leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-    }
+    CloudBackupGlassCard(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp),
+        fill = colors.verifiedFill,
+        border = colors.verifiedBorder,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.Security,
+                    contentDescription = null,
+                    tint = colors.success,
+                    modifier = Modifier.size(32.dp),
+                )
+                Text(
+                    "Backup verified",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.primaryText,
+                )
+            }
 
-    if (report.localMasterKeyRepaired) {
-        MaterialDivider()
-        MaterialSettingsItem(
-            title = "Local backup credentials were repaired from cloud",
-            leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-    }
+            if (report.masterKeyWrapperRepaired) {
+                VerificationRepairRow("Cloud master key protection was repaired")
+            }
 
-    if (report.walletsFailed > 0u) {
-        MaterialDivider()
-        ErrorInlineMessage("${report.walletsFailed} wallet backup(s) could not be decrypted", modifier = Modifier.padding(16.dp))
-    }
+            if (report.localMasterKeyRepaired) {
+                VerificationRepairRow("Local backup credentials were repaired from cloud")
+            }
 
-    if (report.walletsUnsupported > 0u) {
-        MaterialDivider()
-        ErrorInlineMessage("${report.walletsUnsupported} wallet(s) use a newer backup format", modifier = Modifier.padding(16.dp))
+            if (report.credentialRecovered) {
+                VerificationRepairRow("Passkey credentials were recovered")
+            }
+
+            CloudBackupIconText(
+                icon = Icons.Default.Security,
+                text = "${report.walletsVerified} wallet(s) verified",
+                color = colors.secondaryText,
+            )
+
+            if (report.walletsFailed > 0u) {
+                ErrorInlineMessage("${report.walletsFailed} wallet backup(s) could not be decrypted")
+            }
+
+            if (report.walletsUnsupported > 0u) {
+                ErrorInlineMessage("${report.walletsUnsupported} wallet(s) use a newer backup format")
+            }
+        }
     }
 }
 
-private fun buildVerifiedSummary(report: DeepVerificationReport): String =
-    buildList {
-        if (report.credentialRecovered) {
-            add("passkey recovered")
+@Composable
+private fun VerificationRepairRow(title: String) {
+    val colors = cloudBackupVisualColors()
+
+    Surface(
+        color = colors.repairFill,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, colors.cloudBlue.copy(alpha = 0.25f)),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.Refresh, contentDescription = null, tint = colors.cloudBlue, modifier = Modifier.size(18.dp))
+            Text(
+                title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.cloudBlue,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Icon(
+                Icons.AutoMirrored.Default.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colors.cloudBlue,
+            )
         }
-        add("${report.walletsVerified} wallet(s) verified")
-    }.joinToString(" • ")
+    }
+}
+
+@Composable
+private fun VerifyAgainButton(onClick: () -> Unit) {
+    val colors = cloudBackupVisualColors()
+
+    OutlinedButton(
+        onClick = onClick,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .padding(horizontal = 14.dp),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.5.dp, colors.outlineButtonBorder),
+        colors =
+            ButtonDefaults.outlinedButtonColors(
+                contentColor = colors.outlineButtonBorder,
+            ),
+    ) {
+        Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(20.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            "Verify Again",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
 
 @Composable
 private fun VerificationFailureContent(
@@ -1791,36 +2412,54 @@ private fun ErrorInlineMessage(
     message: String,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    val colors = cloudBackupVisualColors()
+
+    CloudBackupGlassCard(
         modifier = modifier.fillMaxWidth(),
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
-            ),
-        shape = RoundedCornerShape(12.dp),
+        fill = colors.dangerFill,
+        border = colors.dangerBorder,
+        shape = RoundedCornerShape(16.dp),
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(message, color = MaterialTheme.colorScheme.onErrorContainer)
+            Icon(Icons.Default.WarningAmber, contentDescription = null, tint = colors.danger)
+            Text(message, color = colors.primaryText)
         }
     }
 }
 
-@Preview(name = "Cloud Backup Detail")
+@Preview(
+    name = "Cloud Backup Detail Dark",
+    widthDp = 393,
+    heightDp = 852,
+    showSystemUi = true,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
 @Composable
 private fun CloudBackupScreenPreview() {
     CloudBackupScreenPreviewContent()
 }
 
+@Preview(
+    name = "Cloud Backup Detail Light",
+    widthDp = 393,
+    heightDp = 852,
+    showSystemUi = true,
+    uiMode = Configuration.UI_MODE_NIGHT_NO,
+)
 @Composable
-internal fun CloudBackupScreenPreviewContent() {
+private fun CloudBackupScreenLightPreview() {
+    CloudBackupScreenPreviewContent()
+}
+
+@Composable
+internal fun CloudBackupScreenPreviewContent(darkTheme: Boolean = isSystemInDarkTheme()) {
     val manager = remember { CloudBackupManager(cloudBackupPreviewState()) }
 
-    CoveTheme(dynamicColor = false) {
+    CoveTheme(darkTheme = darkTheme, dynamicColor = false) {
         CloudBackupScreenFrame(
             manager = manager,
             onBack = {},
@@ -1833,26 +2472,27 @@ internal fun CloudBackupScreenPreviewContent() {
 private fun cloudBackupPreviewState(): CloudBackupState {
     val detail =
         CloudBackupDetail(
-            lastSync = 1_779_914_580UL,
+            lastSync = 1_779_915_780UL,
             upToDate =
                 listOf(
                     cloudBackupPreviewWallet(
                         name = "Wallet 1",
                         fingerprint = "55C5625F",
                         status = CloudBackupWalletStatus.CONFIRMED,
-                        updatedAt = 1_779_914_580UL,
+                        updatedAt = 1_779_915_780UL,
                     ),
                     cloudBackupPreviewWallet(
                         name = "Wallet 2",
                         fingerprint = "00053556",
                         status = CloudBackupWalletStatus.CONFIRMED,
-                        updatedAt = 1_779_929_760UL,
+                        updatedAt = 1_779_930_960UL,
                     ),
                     cloudBackupPreviewWallet(
                         name = "Imported 73C5DA0A",
                         fingerprint = "73C5DA0A",
+                        walletType = WalletType.COLD,
                         status = CloudBackupWalletStatus.CONFIRMED,
-                        updatedAt = 1_779_929_880UL,
+                        updatedAt = 1_779_931_080UL,
                     ),
                 ),
             needsSync = emptyList(),
@@ -1876,7 +2516,7 @@ private fun cloudBackupPreviewState(): CloudBackupState {
                             name = "Wallet 3",
                             fingerprint = "73C5DA0A",
                             status = CloudBackupWalletStatus.DELETED_FROM_DEVICE,
-                            updatedAt = 1_779_929_820UL,
+                            updatedAt = 1_779_931_020UL,
                         ),
                     ),
                 ),
@@ -1919,12 +2559,13 @@ private fun cloudBackupPreviewWallet(
     fingerprint: String,
     status: CloudBackupWalletStatus,
     updatedAt: ULong,
+    walletType: WalletType = WalletType.HOT,
 ): CloudBackupWalletItem =
     CloudBackupWalletItem(
         name = name,
         network = Network.BITCOIN,
         walletMode = WalletMode.MAIN,
-        walletType = WalletType.HOT,
+        walletType = walletType,
         fingerprint = fingerprint,
         labelCount = 0u,
         backupUpdatedAt = updatedAt,

@@ -89,6 +89,7 @@ fun WalletSettingsScreen(
     var showFinalDeleteConfirmation by remember { mutableStateOf(false) }
     var requiredConfirmations by remember { mutableStateOf(1.toUByte()) }
     var deleteError by remember { mutableStateOf<String?>(null) }
+    var accountNumber by remember { mutableStateOf<UInt?>(null) }
     val finalDeleteConfirmationMessage =
         if (app.cloudBackupManager.isCloudBackupEnabled) {
             "This wallet will be deleted from this device. You can recover it from " +
@@ -113,6 +114,7 @@ fun WalletSettingsScreen(
     // validate metadata on appear and disappear
     LaunchedEffect(manager) {
         manager.validateMetadata()
+        accountNumber = manager.rust.nonDefaultAccountNumber()
     }
 
     DisposableEffect(Unit) {
@@ -190,6 +192,14 @@ fun WalletSettingsScreen(
                             MaterialSettingsItem(
                                 title = stringResource(R.string.label_wallet_birthday),
                                 subtitle = birthday.displayValue(),
+                            )
+                            MaterialDivider()
+                        }
+
+                        accountNumber?.let { number ->
+                            MaterialSettingsItem(
+                                title = stringResource(R.string.label_wallet_account_number),
+                                subtitle = number.toString(),
                             )
                             MaterialDivider()
                         }
