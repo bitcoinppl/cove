@@ -63,7 +63,7 @@ ci:
     just compile
     just test
 
-# Regenerate UniFFI bindings in GitHub Actions for the current branch
+# Regenerate UniFFI bindings in GitHub Actions for committed branch changes
 [group('ci')]
 regenerate-bindings:
     just xtask regenerate-bindings
