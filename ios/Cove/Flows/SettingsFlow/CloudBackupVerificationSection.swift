@@ -95,22 +95,10 @@ struct VerificationSection: View {
                 .foregroundStyle(Color.statusSuccess)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
 
-            if report.masterKeyWrapperRepaired {
-                Label(
-                    "Cloud master key protection was repaired",
-                    systemImage: "wrench.and.screwdriver.fill"
-                )
-                .foregroundStyle(Color.statusInfo)
-                .font(.caption)
-            }
-
-            if report.localMasterKeyRepaired {
-                Label(
-                    "Local backup credentials were repaired from cloud",
-                    systemImage: "wrench.and.screwdriver.fill"
-                )
-                .foregroundStyle(Color.statusInfo)
-                .font(.caption)
+            if let summary = verifiedSummary(report) {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if report.walletsFailed > 0 {
@@ -130,15 +118,31 @@ struct VerificationSection: View {
                 .foregroundStyle(Color.statusWarning)
                 .font(.caption)
             }
-
-            if report.walletsVerified > 0 {
-                Text("\(report.walletsVerified) wallet(s) verified")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
 
         actionButtons
+    }
+
+    private func verifiedSummary(_ report: DeepVerificationReport) -> String? {
+        var parts: [String] = []
+
+        if report.credentialRecovered {
+            parts.append("Passkey recovered")
+        }
+
+        if report.masterKeyWrapperRepaired {
+            parts.append("Cloud master key protection repaired")
+        }
+
+        if report.localMasterKeyRepaired {
+            parts.append("Local backup credentials repaired")
+        }
+
+        if report.walletsVerified > 0 {
+            parts.append("\(report.walletsVerified) wallet(s) verified")
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 
     @ViewBuilder

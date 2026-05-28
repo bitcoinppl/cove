@@ -2321,21 +2321,9 @@ private fun VerifiedSectionContent(
                 )
             }
 
-            if (report.masterKeyWrapperRepaired) {
-                VerificationRepairRow("Cloud master key protection was repaired")
-            }
-
-            if (report.localMasterKeyRepaired) {
-                VerificationRepairRow("Local backup credentials were repaired from cloud")
-            }
-
-            if (report.credentialRecovered) {
-                VerificationRepairRow("Passkey credentials were recovered")
-            }
-
             CloudBackupIconText(
                 icon = Icons.Default.Security,
-                text = "${report.walletsVerified} wallet(s) verified",
+                text = buildVerifiedSummary(report),
                 color = colors.secondaryText,
             )
 
@@ -2350,40 +2338,19 @@ private fun VerifiedSectionContent(
     }
 }
 
-@Composable
-private fun VerificationRepairRow(title: String) {
-    val colors = cloudBackupVisualColors()
-
-    Surface(
-        color = colors.repairFill,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, colors.cloudBlue.copy(alpha = 0.25f)),
-    ) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Default.Refresh, contentDescription = null, tint = colors.cloudBlue, modifier = Modifier.size(18.dp))
-            Text(
-                title,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.cloudBlue,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Icon(
-                Icons.AutoMirrored.Default.KeyboardArrowRight,
-                contentDescription = null,
-                tint = colors.cloudBlue,
-            )
+private fun buildVerifiedSummary(report: DeepVerificationReport): String =
+    buildList {
+        if (report.credentialRecovered) {
+            add("passkey recovered")
         }
-    }
-}
+        if (report.masterKeyWrapperRepaired) {
+            add("cloud master key protection repaired")
+        }
+        if (report.localMasterKeyRepaired) {
+            add("local backup credentials repaired")
+        }
+        add("${report.walletsVerified} wallet(s) verified")
+    }.joinToString(" • ")
 
 @Composable
 private fun VerifyAgainButton(onClick: () -> Unit) {
