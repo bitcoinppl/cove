@@ -335,7 +335,7 @@ internal fun TransactionsScanProgressStrip(
         )
 
         Text(
-            text = "Scanning for transactions...",
+            text = stringResource(R.string.scanning_for_transactions),
             color = secondaryText.copy(alpha = 0.7f),
             fontSize = 12.sp,
         )
@@ -372,7 +372,7 @@ internal fun EmptyWalletScanState(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "Checking wallet history",
+            text = stringResource(R.string.checking_wallet_history),
             color = secondaryText,
             fontSize = 16.sp,
         )
@@ -385,7 +385,11 @@ internal fun EmptyWalletScanState(
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "${scanProgress?.checked ?: 0u} addresses checked",
+            text =
+                stringResource(
+                    R.string.addresses_checked,
+                    (scanProgress?.checked ?: 0u).toString(),
+                ),
             color = secondaryText,
             fontSize = 13.sp,
         )

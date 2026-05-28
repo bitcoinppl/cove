@@ -47,7 +47,7 @@ class TransactionsScanUiTest {
         compose.onNodeWithText("Checking wallet history").assertIsDisplayed()
         compose.onNodeWithText("42 addresses checked").assertIsDisplayed()
         compose.onAllNodes(hasProgressBar()).assertCountEquals(1)
-        compose.onAllNodes(hasText("No transactions")).assertCountEquals(0)
+        compose.onAllNodes(hasText("No transactions yet")).assertCountEquals(0)
     }
 
     @Test
