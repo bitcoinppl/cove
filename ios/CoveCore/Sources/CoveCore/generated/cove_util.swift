@@ -398,7 +398,7 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that SWIFT handles always have the lowest bit set
 fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
 fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
@@ -578,13 +578,13 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
  * serialization boundary.
  */
 public protocol GenerationTrackerProtocol: AnyObject, Sendable {
-    
+
     func advance()  -> GenerationToken
-    
+
     func capture()  -> GenerationToken
-    
+
     func isCurrent(capturedToken: GenerationToken)  -> Bool
-    
+
 }
 /**
  * Shared source of truth for stale async-work tokens
@@ -652,9 +652,9 @@ public convenience init() {
         try! rustCall { uniffi_cove_util_fn_free_generationtracker(handle, $0) }
     }
 
-    
 
-    
+
+
 open func advance() -> GenerationToken  {
     return try!  FfiConverterTypeGenerationToken_lift(try! rustCall() {
         uniffiCallStatus in
@@ -663,7 +663,7 @@ open func advance() -> GenerationToken  {
     )
 })
 }
-    
+
 open func capture() -> GenerationToken  {
     return try!  FfiConverterTypeGenerationToken_lift(try! rustCall() {
         uniffiCallStatus in
@@ -672,7 +672,7 @@ open func capture() -> GenerationToken  {
     )
 })
 }
-    
+
 open func isCurrent(capturedToken: GenerationToken) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -682,9 +682,9 @@ open func isCurrent(capturedToken: GenerationToken) -> Bool  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -743,9 +743,9 @@ public struct GenerationToken: Equatable, Hashable {
         self.value = value
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)

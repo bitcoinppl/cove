@@ -398,7 +398,7 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that SWIFT handles always have the lowest bit set
 fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
 fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
@@ -552,7 +552,7 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 
 public protocol TapSignerProtocol: AnyObject, Sendable {
-    
+
     /**
      * Get the full card identifier string
      *
@@ -560,11 +560,11 @@ public protocol TapSignerProtocol: AnyObject, Sendable {
      * Panics if the pubkey is invalid (should not happen as it's already validated)
      */
     func fullCardIdent()  -> String
-    
+
     func identFileNamePrefix()  -> String
-    
+
     func isEqual(rhs: TapSigner)  -> Bool
-    
+
 }
 open class TapSigner: TapSignerProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -616,9 +616,9 @@ open class TapSigner: TapSignerProtocol, @unchecked Sendable {
         try! rustCall { uniffi_cove_tap_card_fn_free_tapsigner(handle, $0) }
     }
 
-    
 
-    
+
+
     /**
      * Get the full card identifier string
      *
@@ -633,7 +633,7 @@ open func fullCardIdent() -> String  {
     )
 })
 }
-    
+
 open func identFileNamePrefix() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -642,7 +642,7 @@ open func identFileNamePrefix() -> String  {
     )
 })
 }
-    
+
 open func isEqual(rhs: TapSigner) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -652,9 +652,9 @@ open func isEqual(rhs: TapSigner) -> Bool  {
     )
 })
 }
-    
 
-    
+
+
 }
 
 
@@ -718,9 +718,9 @@ public struct SatsCard: Equatable, Hashable {
         self.signature = signature
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -734,10 +734,10 @@ public struct FfiConverterTypeSatsCard: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsCard {
         return
             try SatsCard(
-                state: FfiConverterTypeSatsCardState.read(from: &buf), 
-                slotNumber: FfiConverterUInt32.read(from: &buf), 
-                addressSuffix: FfiConverterString.read(from: &buf), 
-                nonce: FfiConverterString.read(from: &buf), 
+                state: FfiConverterTypeSatsCardState.read(from: &buf),
+                slotNumber: FfiConverterUInt32.read(from: &buf),
+                addressSuffix: FfiConverterString.read(from: &buf),
+                nonce: FfiConverterString.read(from: &buf),
                 signature: FfiConverterString.read(from: &buf)
         )
     }
@@ -769,7 +769,7 @@ public func FfiConverterTypeSatsCard_lower(_ value: SatsCard) -> RustBuffer {
 
 
 public enum Field: Equatable, Hashable {
-    
+
     case signature
     case ident
     case state
@@ -796,50 +796,50 @@ public struct FfiConverterTypeField: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Field {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .signature
-        
+
         case 2: return .ident
-        
+
         case 3: return .state
-        
+
         case 4: return .nonce
-        
+
         case 5: return .slotNumber
-        
+
         case 6: return .address
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: Field, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .signature:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .ident:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .state:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .nonce:
             writeInt(&buf, Int32(4))
-        
-        
+
+
         case .slotNumber:
             writeInt(&buf, Int32(5))
-        
-        
+
+
         case .address:
             writeInt(&buf, Int32(6))
-        
+
         }
     }
 }
@@ -863,7 +863,7 @@ public func FfiConverterTypeField_lower(_ value: Field) -> RustBuffer {
 
 
 public enum SatsCardState: Equatable, Hashable {
-    
+
     case sealed
     case unsealed
     case error
@@ -887,32 +887,32 @@ public struct FfiConverterTypeSatsCardState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SatsCardState {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .sealed
-        
+
         case 2: return .unsealed
-        
+
         case 3: return .error
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: SatsCardState, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .sealed:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .unsealed:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .error:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -936,7 +936,7 @@ public func FfiConverterTypeSatsCardState_lower(_ value: SatsCardState) -> RustB
 
 
 public enum TapCard {
-    
+
     case satsCard(SatsCard
     )
     case tapSigner(TapSigner
@@ -961,30 +961,30 @@ public struct FfiConverterTypeTapCard: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapCard {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .satsCard(try FfiConverterTypeSatsCard.read(from: &buf)
         )
-        
+
         case 2: return .tapSigner(try FfiConverterTypeTapSigner.read(from: &buf)
         )
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: TapCard, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case let .satsCard(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeSatsCard.write(v1, into: &buf)
-            
-        
+
+
         case let .tapSigner(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeTapSigner.write(v1, into: &buf)
-            
+
         }
     }
 }
@@ -1006,11 +1006,11 @@ public func FfiConverterTypeTapCard_lower(_ value: TapCard) -> RustBuffer {
 
 
 
-public 
+public
 enum TapCardParseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case InvalidUrl(String
     )
     case NotUrlEncoded(String
@@ -1026,15 +1026,15 @@ enum TapCardParseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     )
     case UnableToRecoverPubkey
 
-    
 
-    
 
-    
+
+
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -1051,9 +1051,9 @@ public struct FfiConverterTypeTapCardParseError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .InvalidUrl(
             try FfiConverterString.read(from: &buf)
             )
@@ -1082,47 +1082,47 @@ public struct FfiConverterTypeTapCardParseError: FfiConverterRustBuffer {
     public static func write(_ value: TapCardParseError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case let .InvalidUrl(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .NotUrlEncoded(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .MissingField(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeField.write(v1, into: &buf)
-            
-        
+
+
         case let .UnknownCardState(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case .EmptyCardState:
             writeInt(&buf, Int32(5))
-        
-        
+
+
         case let .ParseSlotNumberError(v1):
             writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case let .UnableToParseSignature(v1):
             writeInt(&buf, Int32(7))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
+
         case .UnableToRecoverPubkey:
             writeInt(&buf, Int32(8))
-        
+
         }
     }
 }
@@ -1145,7 +1145,7 @@ public func FfiConverterTypeTapCardParseError_lower(_ value: TapCardParseError) 
 
 
 public enum TapSignerState: Equatable, Hashable {
-    
+
     case sealed
     case unused
     case error
@@ -1169,32 +1169,32 @@ public struct FfiConverterTypeTapSignerState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerState {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .sealed
-        
+
         case 2: return .unused
-        
+
         case 3: return .error
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: TapSignerState, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .sealed:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .unused:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .error:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }

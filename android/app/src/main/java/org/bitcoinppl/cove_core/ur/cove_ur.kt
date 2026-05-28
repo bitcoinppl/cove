@@ -344,7 +344,7 @@ internal inline fun<T, reified E: Throwable> uniffiTraitInterfaceCallWithError(
         }
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that Kotlin-generated handles always have the lowest bit set
 private const val UNIFFI_HANDLEMAP_INITIAL = 1.toLong()
 private const val UNIFFI_HANDLEMAP_DELTA = 2.toLong()
@@ -354,7 +354,7 @@ private const val UNIFFI_HANDLEMAP_DELTA = 2.toLong()
 // This is used pass an opaque 64-bit handle representing a foreign object to the Rust code.
 internal class UniffiHandleMap<T: Any> {
     private val map = ConcurrentHashMap<Long, T>()
-    // Start 
+    // Start
     private val counter = java.util.concurrent.atomic.AtomicLong(UNIFFI_HANDLEMAP_INITIAL)
 
     val size: Int
@@ -708,74 +708,74 @@ internal object IntegrityCheckingUniffiLib {
     external fun ffi_cove_ur_uniffi_contract_version(
     ): Int
 
-        
+
 }
 
 internal object UniffiLib {
-    
+
     // The Cleaner for the whole library
     internal val CLEANER: UniffiCleaner by lazy {
         UniffiCleaner.create()
     }
-    
+
 
     init {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_ur"))
-        
+
     }
-    external fun uniffi_cove_ur_fn_clone_cryptohdkey(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_clone_cryptohdkey(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_ur_fn_free_cryptohdkey(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_free_cryptohdkey(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_ur_fn_constructor_cryptohdkey_decode(`cbor`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_constructor_cryptohdkey_decode(`cbor`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_ur_fn_method_cryptohdkey_encode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_method_cryptohdkey_encode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_ur_fn_clone_cryptopsbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_clone_cryptopsbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_ur_fn_free_cryptopsbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_free_cryptopsbt(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_ur_fn_constructor_cryptopsbt_decode(`cbor`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_constructor_cryptopsbt_decode(`cbor`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_ur_fn_constructor_cryptopsbt_from_psbt_bytes(`psbtBytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_constructor_cryptopsbt_from_psbt_bytes(`psbtBytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_ur_fn_constructor_cryptopsbt_from_ur(`ur`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_constructor_cryptopsbt_from_ur(`ur`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_ur_fn_method_cryptopsbt_encode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_method_cryptopsbt_encode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_ur_fn_method_cryptopsbt_to_psbt_bytes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_method_cryptopsbt_to_psbt_bytes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_ur_fn_method_cryptopsbt_to_ur(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_method_cryptopsbt_to_ur(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_ur_fn_clone_cryptoseed(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_clone_cryptoseed(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_ur_fn_free_cryptoseed(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_free_cryptoseed(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_ur_fn_constructor_cryptoseed_decode(`cbor`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_constructor_cryptoseed_decode(`cbor`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_ur_fn_constructor_cryptoseed_from_entropy(`payload`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_constructor_cryptoseed_from_entropy(`payload`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_ur_fn_constructor_cryptoseed_from_entropy_with_metadata(`payload`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`note`: RustBuffer.ByValue,`creationDate`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_constructor_cryptoseed_from_entropy_with_metadata(`payload`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`note`: RustBuffer.ByValue,`creationDate`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_ur_fn_method_cryptoseed_encode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_method_cryptoseed_encode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_ur_fn_method_cryptoseed_entropy(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_method_cryptoseed_entropy(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_ur_fn_method_cryptoseed_get_creation_date(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_method_cryptoseed_get_creation_date(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_ur_fn_method_cryptoseed_get_name(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_method_cryptoseed_get_name(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_ur_fn_method_cryptoseed_get_note(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_method_cryptoseed_get_note(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_ur_fn_method_urerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_ur_fn_method_urerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_ur_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_ur_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_ur_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun ffi_cove_ur_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun ffi_cove_ur_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -783,7 +783,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_u8(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun ffi_cove_ur_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -791,7 +791,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_i8(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun ffi_cove_ur_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -799,7 +799,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_u16(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
     external fun ffi_cove_ur_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -807,7 +807,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_i16(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
     external fun ffi_cove_ur_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -815,7 +815,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_u32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Int
     external fun ffi_cove_ur_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -823,7 +823,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_i32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Int
     external fun ffi_cove_ur_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -831,7 +831,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_u64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun ffi_cove_ur_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -839,7 +839,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_i64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun ffi_cove_ur_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -847,7 +847,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_f32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Float
     external fun ffi_cove_ur_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -855,7 +855,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_f64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Double
     external fun ffi_cove_ur_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -863,7 +863,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_rust_buffer(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun ffi_cove_ur_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -871,10 +871,10 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_ur_rust_future_free_void(`handle`: Long,
     ): Unit
-    external fun ffi_cove_ur_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_ur_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
 
-        
+
 }
 
 private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
@@ -1011,7 +1011,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
         }
     }
 
-/** 
+/**
  * Placeholder object used to signal that we're constructing an interface with a FFI handle.
  *
  * This is the first argument for interface constructors that input a raw handle. It exists is that
@@ -1022,7 +1022,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
  * */
 object UniffiWithHandle
 
-/** 
+/**
  * Used to instantiate an interface without an actual pointer, for fakes in tests, mostly.
  *
  * @suppress
@@ -1292,7 +1292,7 @@ public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
  * crypto-hdkey: Hierarchical Deterministic Key (BIP32)
  */
 public interface CryptoHdkeyInterface {
-    
+
     /**
      * Encode as CBOR for UR
      *
@@ -1301,7 +1301,7 @@ public interface CryptoHdkeyInterface {
      * Returns an error if CBOR encoding fails
      */
     fun `encode`(): kotlin.ByteArray
-    
+
     companion object
 }
 
@@ -1409,7 +1409,7 @@ open class CryptoHdkey: Disposable, AutoCloseable, CryptoHdkeyInterface
         }
     }
 
-    
+
     /**
      * Encode as CBOR for UR
      *
@@ -1428,16 +1428,16 @@ open class CryptoHdkey: Disposable, AutoCloseable, CryptoHdkeyInterface
     }
     )
     }
-    
-
-    
-
-    
 
 
-    
+
+
+
+
+
+
     companion object {
-        
+
     /**
      * Decode from CBOR
      *
@@ -1449,17 +1449,17 @@ open class CryptoHdkey: Disposable, AutoCloseable, CryptoHdkeyInterface
             return FfiConverterTypeCryptoHdkey.lift(
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptohdkey_decode(
-    
-        
+
+
         FfiConverterByteArray.lower(`cbor`),_status)
 }
     )
     }
-    
 
-        
+
+
     }
-    
+
 }
 
 
@@ -1587,7 +1587,7 @@ public object FfiConverterTypeCryptoHdkey: FfiConverter<CryptoHdkey, Long> {
  * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 public interface CryptoPsbtInterface {
-    
+
     /**
      * Encode as CBOR for UR
      *
@@ -1595,12 +1595,12 @@ public interface CryptoPsbtInterface {
      * Returns error if CBOR encoding fails
      */
     fun `encode`(): kotlin.ByteArray
-    
+
     /**
      * Get PSBT as bytes
      */
     fun `toPsbtBytes`(): kotlin.ByteArray
-    
+
     /**
      * Encode as UR string
      *
@@ -1608,7 +1608,7 @@ public interface CryptoPsbtInterface {
      * Returns error if CBOR encoding fails
      */
     fun `toUr`(): kotlin.String
-    
+
     companion object
 }
 
@@ -1717,7 +1717,7 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
         }
     }
 
-    
+
     /**
      * Encode as CBOR for UR
      *
@@ -1735,9 +1735,9 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
     }
     )
     }
-    
 
-    
+
+
     /**
      * Get PSBT as bytes
      */override fun `toPsbtBytes`(): kotlin.ByteArray {
@@ -1751,9 +1751,9 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
     }
     )
     }
-    
 
-    
+
+
     /**
      * Encode as UR string
      *
@@ -1771,16 +1771,16 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
     }
     )
     }
-    
-
-    
-
-    
 
 
-    
+
+
+
+
+
+
     companion object {
-        
+
     /**
      * Decode from CBOR
      *
@@ -1791,15 +1791,15 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
             return FfiConverterTypeCryptoPsbt.lift(
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptopsbt_decode(
-    
-        
+
+
         FfiConverterByteArray.lower(`cbor`),_status)
 }
     )
     }
-    
 
-        
+
+
     /**
      * Create from PSBT bytes
      *
@@ -1810,15 +1810,15 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
             return FfiConverterTypeCryptoPsbt.lift(
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptopsbt_from_psbt_bytes(
-    
-        
+
+
         FfiConverterByteArray.lower(`psbtBytes`),_status)
 }
     )
     }
-    
 
-        
+
+
     /**
      * Decode from UR string
      *
@@ -1829,17 +1829,17 @@ open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
             return FfiConverterTypeCryptoPsbt.lift(
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptopsbt_from_ur(
-    
-        
+
+
         FfiConverterString.lower(`ur`),_status)
 }
     )
     }
-    
 
-        
+
+
     }
-    
+
 }
 
 
@@ -1967,7 +1967,7 @@ public object FfiConverterTypeCryptoPsbt: FfiConverter<CryptoPsbt, Long> {
  * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 public interface CryptoSeedInterface {
-    
+
     /**
      * Encode as CBOR for UR
      *
@@ -1975,27 +1975,27 @@ public interface CryptoSeedInterface {
      * Returns error if CBOR encoding fails
      */
     fun `encode`(): kotlin.ByteArray
-    
+
     /**
      * Get entropy bytes
      */
     fun `entropy`(): kotlin.ByteArray
-    
+
     /**
      * Get creation date if present
      */
     fun `getCreationDate`(): kotlin.ULong?
-    
+
     /**
      * Get name if present
      */
     fun `getName`(): kotlin.String?
-    
+
     /**
      * Get note if present
      */
     fun `getNote`(): kotlin.String?
-    
+
     companion object
 }
 
@@ -2104,7 +2104,7 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
         }
     }
 
-    
+
     /**
      * Encode as CBOR for UR
      *
@@ -2122,9 +2122,9 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
     }
     )
     }
-    
 
-    
+
+
     /**
      * Get entropy bytes
      */override fun `entropy`(): kotlin.ByteArray {
@@ -2138,9 +2138,9 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
     }
     )
     }
-    
 
-    
+
+
     /**
      * Get creation date if present
      */override fun `getCreationDate`(): kotlin.ULong? {
@@ -2154,9 +2154,9 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
     }
     )
     }
-    
 
-    
+
+
     /**
      * Get name if present
      */override fun `getName`(): kotlin.String? {
@@ -2170,9 +2170,9 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
     }
     )
     }
-    
 
-    
+
+
     /**
      * Get note if present
      */override fun `getNote`(): kotlin.String? {
@@ -2186,16 +2186,16 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
     }
     )
     }
-    
-
-    
-
-    
 
 
-    
+
+
+
+
+
+
     companion object {
-        
+
     /**
      * Decode from CBOR
      *
@@ -2206,15 +2206,15 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
             return FfiConverterTypeCryptoSeed.lift(
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptoseed_decode(
-    
-        
+
+
         FfiConverterByteArray.lower(`cbor`),_status)
 }
     )
     }
-    
 
-        
+
+
     /**
      * Create from entropy bytes
      *
@@ -2225,15 +2225,15 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
             return FfiConverterTypeCryptoSeed.lift(
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptoseed_from_entropy(
-    
-        
+
+
         FfiConverterByteArray.lower(`payload`),_status)
 }
     )
     }
-    
 
-        
+
+
     /**
      * Create from entropy bytes with optional metadata
      *
@@ -2244,8 +2244,8 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
             return FfiConverterTypeCryptoSeed.lift(
     uniffiRustCallWithError(UrException) { _status ->
     UniffiLib.uniffi_cove_ur_fn_constructor_cryptoseed_from_entropy_with_metadata(
-    
-        
+
+
         FfiConverterByteArray.lower(`payload`),
         FfiConverterOptionalString.lower(`name`),
         FfiConverterOptionalString.lower(`note`),
@@ -2253,11 +2253,11 @@ open class CryptoSeed: Disposable, AutoCloseable, CryptoSeedInterface
 }
     )
     }
-    
 
-        
+
+
     }
-    
+
 }
 
 
@@ -2289,107 +2289,107 @@ public object FfiConverterTypeCryptoSeed: FfiConverter<CryptoSeed, Long> {
 
 
 sealed class UrException: kotlin.Exception() {
-    
+
     class CborEncodeException(
-        
+
         val v1: kotlin.String
         ) : UrException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class CborDecodeException(
-        
+
         val v1: kotlin.String
         ) : UrException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class InvalidField(
-        
+
         val v1: kotlin.String
         ) : UrException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class MissingField(
-        
+
         val v1: kotlin.String
         ) : UrException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class InvalidKeyDataLength(
-        
-        val `expected`: kotlin.ULong, 
-        
+
+        val `expected`: kotlin.ULong,
+
         val `actual`: kotlin.ULong
         ) : UrException() {
         override val message
             get() = "expected=${ `expected` }, actual=${ `actual` }"
     }
-    
+
     class InvalidTag(
-        
-        val `expected`: kotlin.ULong, 
-        
+
+        val `expected`: kotlin.ULong,
+
         val `actual`: kotlin.ULong
         ) : UrException() {
         override val message
             get() = "expected=${ `expected` }, actual=${ `actual` }"
     }
-    
+
     class InvalidPayloadLength(
-        
+
         val v1: kotlin.String
         ) : UrException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class UrParseException(
-        
+
         val v1: kotlin.String
         ) : UrException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class InvalidOperation(
-        
+
         val v1: kotlin.String
         ) : UrException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class InvalidKeyData(
-        
+
         val v1: kotlin.String
         ) : UrException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class MasterKeyNotAllowed(
         ) : UrException() {
         override val message
             get() = ""
     }
-    
+
     class InvalidUtf8(
-        
+
         val v1: kotlin.String
         ) : UrException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
 
-    
+
+
 
     // The local Rust `Display`/`Debug` implementation.
     override fun toString(): String {
@@ -2405,7 +2405,7 @@ sealed class UrException: kotlin.Exception() {
         override fun lift(error_buf: RustBuffer.ByValue): UrException = FfiConverterTypeUrError.lift(error_buf)
     }
 
-    
+
 }
 
 /**
@@ -2413,7 +2413,7 @@ sealed class UrException: kotlin.Exception() {
  */
 public object FfiConverterTypeUrError : FfiConverterRustBuffer<UrException> {
     override fun read(buf: ByteBuffer): UrException {
-        
+
 
         return when(buf.getInt()) {
             1 -> UrException.CborEncodeException(

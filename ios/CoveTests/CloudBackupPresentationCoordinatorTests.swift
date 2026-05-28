@@ -77,7 +77,7 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
     @MainActor
     func testUnsettledNavigationQueuesNewVerificationPrompt() {
         let coordinator = CloudBackupPresentationCoordinator {
-            .verificationPrompt
+            .verification
         }
 
         coordinator.update(
@@ -88,13 +88,13 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
         )
 
         XCTAssertNil(coordinator.currentPresentation)
-        XCTAssertEqual(coordinator.queuedPresentation, .verificationPrompt)
+        XCTAssertEqual(coordinator.queuedPresentation, CloudBackupRootPresentation.verificationPrompt)
     }
 
     @MainActor
     func testQueuedVerificationPromptPresentsAfterNavigationSettles() {
         let coordinator = CloudBackupPresentationCoordinator {
-            .verificationPrompt
+            .verification
         }
 
         coordinator.update(
@@ -110,18 +110,18 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(coordinator.currentPresentation, .verificationPrompt)
+        XCTAssertEqual(coordinator.currentPresentation, CloudBackupRootPresentation.verificationPrompt)
         XCTAssertNil(coordinator.queuedPresentation)
     }
 
     @MainActor
     func testVisibleVerificationPromptIsNotDismissedByNavigationSettling() {
         let coordinator = CloudBackupPresentationCoordinator {
-            .verificationPrompt
+            .verification
         }
 
         coordinator.update(context: presentableContext(presentationPolicy: .requiresUnlockedAuth))
-        XCTAssertEqual(coordinator.currentPresentation, .verificationPrompt)
+        XCTAssertEqual(coordinator.currentPresentation, CloudBackupRootPresentation.verificationPrompt)
 
         coordinator.update(
             context: presentableContext(
@@ -130,17 +130,17 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(coordinator.currentPresentation, .verificationPrompt)
+        XCTAssertEqual(coordinator.currentPresentation, CloudBackupRootPresentation.verificationPrompt)
     }
 
     @MainActor
     func testVisibleVerificationPromptDismissesForAppAlertDuringNavigationSettling() {
         let coordinator = CloudBackupPresentationCoordinator {
-            .verificationPrompt
+            .verification
         }
 
         coordinator.update(context: presentableContext(presentationPolicy: .requiresUnlockedAuth))
-        XCTAssertEqual(coordinator.currentPresentation, .verificationPrompt)
+        XCTAssertEqual(coordinator.currentPresentation, CloudBackupRootPresentation.verificationPrompt)
 
         coordinator.update(
             context: presentableContext(
@@ -151,7 +151,7 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
         )
 
         XCTAssertNil(coordinator.currentPresentation)
-        XCTAssertEqual(coordinator.queuedPresentation, .verificationPrompt)
+        XCTAssertEqual(coordinator.queuedPresentation, CloudBackupRootPresentation.verificationPrompt)
     }
 
     func testRootPromptCompletionShowsSuccessFloaterFeedback() {

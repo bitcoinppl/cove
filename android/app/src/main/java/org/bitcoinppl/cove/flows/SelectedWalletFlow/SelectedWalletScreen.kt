@@ -75,6 +75,7 @@ import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.WalletScanStatus
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.WalletId
@@ -328,17 +329,20 @@ fun SelectedWalletScreen(
                 val walletId = manager.walletMetadata?.id
                 val showLabels = manager.walletMetadata?.showLabels ?: false
                 val loadState = manager.loadState
+                val isScanStatusActive =
+                    manager.scanStatus is WalletScanStatus.Scanning ||
+                        manager.scanStatus is WalletScanStatus.ScanningPendingProgress
 
                 // determine transaction data based on load state
-                val (transactions, isScanning, isFirstScan) =
+                val (transactions, isFirstScan) =
                     when (loadState) {
                         is WalletLoadState.SCANNING -> {
                             val txns = loadState.txns
                             val firstScan = manager.walletMetadata?.internal?.lastScanFinished == null
-                            Triple(txns, true, firstScan)
+                            Pair(txns, firstScan)
                         }
-                        is WalletLoadState.LOADED -> Triple(loadState.txns, false, false)
-                        else -> Triple(emptyList(), false, false)
+                        is WalletLoadState.LOADED -> Pair(loadState.txns, false)
+                        else -> Pair(emptyList(), false)
                     }
 
                 // transfer pending scroll ID to active when returning from details screen
@@ -350,7 +354,7 @@ fun SelectedWalletScreen(
                 }
 
                 // scroll to saved transaction when returning from details
-                LaunchedEffect(manager.scrolledTransactionId, hasTransactions) {
+                LaunchedEffect(manager.scrolledTransactionId, hasTransactions, isScanStatusActive) {
                     val targetId = manager.scrolledTransactionId ?: return@LaunchedEffect
                     if (!hasTransactions) return@LaunchedEffect
 
@@ -359,7 +363,7 @@ fun SelectedWalletScreen(
                     // index 1 = verify reminder (even if empty)
                     // index 2 = txn-title
                     // index 3 = scanning indicator (if scanning and hasTransactions)
-                    val baseOffset = 2 + 1 + (if (isScanning && hasTransactions) 1 else 0)
+                    val baseOffset = 2 + 1 + (if (isScanStatusActive && hasTransactions) 1 else 0)
 
                     // find the index of the transaction with the matching ID
                     val unsignedIndex = unsignedTransactions.indexOfFirst { it.id().toString() == targetId }
@@ -419,6 +423,7 @@ fun SelectedWalletScreen(
                                     primaryAmount = primaryAmount,
                                     secondaryAmount = secondaryAmount,
                                     pendingAmount = pendingAmount,
+                                    balancePresentation = manager.balancePresentation,
                                     onToggleUnit = { manager.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
                                     onToggleSensitive = { manager.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
                                     onSend = onSend,
@@ -447,20 +452,11 @@ fun SelectedWalletScreen(
                                         )
                                     }
                                 }
-                                isFirstScan && transactions.isEmpty() && unsignedTransactions.isEmpty() -> {
-                                    item(key = "first-scan-loading") {
-                                        TransactionsLoadingView(
-                                            secondaryText = secondaryText,
-                                            primaryText = primaryText,
-                                            modifier = Modifier.fillParentMaxHeight(0.5f),
-                                        )
-                                    }
-                                }
                                 else -> {
                                     transactionItems(
                                         transactions = transactions,
                                         unsignedTransactions = unsignedTransactions,
-                                        isScanning = isScanning,
+                                        isScanning = isScanStatusActive,
                                         isFirstScan = isFirstScan,
                                         fiatOrBtc = fiatOrBtc,
                                         sensitiveVisible = sensitiveVisible,

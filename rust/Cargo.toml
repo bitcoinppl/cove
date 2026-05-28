@@ -126,6 +126,7 @@ cove-bip39 = { path = "./crates/cove-bip39" }
 cove-cspp = { path = "./crates/cove-cspp" }
 cove-device = { path = "./crates/cove-device" }
 cove-bdk = { path = "./crates/cove-bdk" }
+cove-bdk-progressive-scan = { path = "./crates/cove-bdk-progressive-scan" }
 cove-tokio = { path = "./crates/cove-tokio" }
 cove-http = { path = "./crates/cove-http" }
 
@@ -153,6 +154,7 @@ act-zero-ext = "0.2.0"
 
 # async 
 tokio = { workspace = true, features = ["rt"] }
+tokio-util = "0.7.18"
 async-trait = { workspace = true }
 futures = "0.3.32"
 backon = "1.6.0"

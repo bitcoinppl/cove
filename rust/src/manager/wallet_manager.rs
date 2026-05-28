@@ -1,4 +1,5 @@
 pub mod actor;
+pub mod balance_presentation;
 pub mod receive_address;
 
 use std::{
@@ -8,6 +9,7 @@ use std::{
 
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
+pub use balance_presentation::BalancePresentation;
 use flume::Receiver;
 use parking_lot::RwLock;
 use receive_address::{ReceiveAddressPresentation, ReceiveAddressState};
@@ -22,6 +24,7 @@ use crate::{
     app::FfiApp,
     converter::{Converter, ConverterError},
     database::{Database, error::DatabaseError},
+    discovery_scanner::{ScannerResponse, WalletDiscoveryScanner},
     fee_client::{FEE_CLIENT, FEES, FeeResponse},
     fiat::{
         FiatCurrency,
@@ -48,7 +51,6 @@ use crate::{
             WalletType,
         },
     },
-    wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
 };
 
@@ -68,8 +70,7 @@ pub type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletManagerReconcileMessage {
-    StartedInitialFullScan,
-    StartedExpandedFullScan(Vec<Transaction>),
+    WalletScanStatusChanged(WalletScanStatus),
 
     AvailableTransactions(Vec<Transaction>),
     ScanComplete(Vec<Transaction>),
@@ -119,6 +120,29 @@ pub enum WalletLoadState {
     Loading,
     Scanning(Vec<Transaction>),
     Loaded(Vec<Transaction>),
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum WalletScanPhase {
+    Full,
+    Rescan,
+    Incremental,
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct WalletScanProgress {
+    pub phase: WalletScanPhase,
+    pub checked: u32,
+    pub gap: u32,
+    pub stop_gap: u32,
+    pub progress_basis_points: u32,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum WalletScanStatus {
+    Idle,
+    Scanning(WalletScanProgress),
+    ScanningPendingProgress(WalletScanPhase),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -171,9 +195,7 @@ pub struct RustWalletManager {
 
     label_manager: Arc<LabelManager>,
     initial_load_state: WalletLoadState,
-
-    #[allow(dead_code)]
-    scanner: Option<Addr<WalletScanner>>,
+    discovery_scanner: Option<Addr<WalletDiscoveryScanner>>,
 }
 
 pub type Error = WalletManagerError;
@@ -268,6 +290,27 @@ pub enum WalletManagerError {
     ReceiveAddressError(String),
 }
 
+fn start_discovery_scanner(
+    metadata: WalletMetadata,
+    sender: flume::Sender<SingleOrMany>,
+) -> Option<Addr<WalletDiscoveryScanner>> {
+    if !matches!(
+        &metadata.discovery_state,
+        DiscoveryState::StartedJson(_) | DiscoveryState::StartedMnemonic
+    ) {
+        return None;
+    }
+
+    let id = metadata.id.clone();
+    match WalletDiscoveryScanner::try_new(metadata, sender) {
+        Ok(scanner) => Some(spawn_actor(scanner)),
+        Err(error) => {
+            warn!("unable to start wallet discovery scanner for {id}: {error}");
+            None
+        }
+    }
+}
+
 #[uniffi::export(async_runtime = "tokio")]
 impl RustWalletManager {
     #[uniffi::constructor(name = "new")]
@@ -313,8 +356,7 @@ impl RustWalletManager {
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
         let actor = task::spawn_actor(wallet_actor);
 
-        // will only create the scanner if its not already complete
-        let scanner = WalletScanner::try_new(metadata.clone(), sender).ok().map(spawn_actor);
+        let discovery_scanner = start_discovery_scanner(metadata.clone(), sender);
 
         let label_manager = LabelManager::new(id.clone()).into();
 
@@ -326,13 +368,21 @@ impl RustWalletManager {
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             initial_load_state,
-            scanner,
+            discovery_scanner,
         })
     }
 
     #[uniffi::method]
     pub fn initial_load_state(&self) -> WalletLoadState {
         self.initial_load_state.clone()
+    }
+
+    #[uniffi::method]
+    pub fn balance_presentation(&self, scan_status: WalletScanStatus) -> BalancePresentation {
+        BalancePresentation::for_scan(
+            self.metadata.read().internal.last_scan_finished,
+            &scan_status,
+        )
     }
 
     #[uniffi::method]
@@ -381,8 +431,7 @@ impl RustWalletManager {
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
-        let scanner =
-            WalletScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
+        let discovery_scanner = start_discovery_scanner(metadata.clone(), sender.clone());
 
         let wallet_actor = WalletActor::new(wallet, sender.clone())
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
@@ -397,7 +446,7 @@ impl RustWalletManager {
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             initial_load_state: WalletLoadState::Loading,
-            scanner,
+            discovery_scanner,
         })
     }
 
@@ -432,7 +481,7 @@ impl RustWalletManager {
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             initial_load_state: WalletLoadState::Loading,
-            scanner: None,
+            discovery_scanner: None,
         })
     }
 
@@ -1334,7 +1383,7 @@ impl RustWalletManager {
             Action::ToggleShowLabels => candidate.show_labels = !candidate.show_labels,
 
             Action::SelectedWalletDisappeared => {
-                send!(self.actor.stop_all_scans());
+                self.shutdown_actors();
                 return;
             }
 
@@ -1368,6 +1417,18 @@ impl RustWalletManager {
         *self.metadata.write() = candidate.clone();
         self.reconciler.send(Message::WalletMetadataChanged(Box::new(candidate.clone())));
         CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &candidate);
+    }
+
+    pub fn shutdown(&self) {
+        self.shutdown_actors();
+    }
+
+    fn shutdown_actors(&self) {
+        send!(self.actor.shutdown());
+
+        if let Some(discovery_scanner) = &self.discovery_scanner {
+            send!(discovery_scanner.shutdown());
+        }
     }
 }
 
@@ -1438,13 +1499,14 @@ impl RustWalletManager {
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             initial_load_state: WalletLoadState::Loading,
-            scanner: None,
+            discovery_scanner: None,
         }
     }
 }
 
 impl Drop for RustWalletManager {
     fn drop(&mut self) {
+        self.shutdown();
         debug!("[DROP] Wallet View manager: {}", self.id);
     }
 }

@@ -344,7 +344,7 @@ internal inline fun<T, reified E: Throwable> uniffiTraitInterfaceCallWithError(
         }
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that Kotlin-generated handles always have the lowest bit set
 private const val UNIFFI_HANDLEMAP_INITIAL = 1.toLong()
 private const val UNIFFI_HANDLEMAP_DELTA = 2.toLong()
@@ -354,7 +354,7 @@ private const val UNIFFI_HANDLEMAP_DELTA = 2.toLong()
 // This is used pass an opaque 64-bit handle representing a foreign object to the Rust code.
 internal class UniffiHandleMap<T: Any> {
     private val map = ConcurrentHashMap<Long, T>()
-    // Start 
+    // Start
     private val counter = java.util.concurrent.atomic.AtomicLong(UNIFFI_HANDLEMAP_INITIAL)
 
     val size: Int
@@ -684,40 +684,40 @@ internal object IntegrityCheckingUniffiLib {
     external fun ffi_cove_tap_card_uniffi_contract_version(
     ): Int
 
-        
+
 }
 
 internal object UniffiLib {
-    
+
     // The Cleaner for the whole library
     internal val CLEANER: UniffiCleaner by lazy {
         UniffiCleaner.create()
     }
-    
+
 
     init {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_tap_card"))
-        
+
     }
-    external fun uniffi_cove_tap_card_fn_clone_tapsigner(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_tap_card_fn_clone_tapsigner(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_tap_card_fn_free_tapsigner(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_tap_card_fn_free_tapsigner(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_tap_card_fn_method_tapsigner_full_card_ident(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_tap_card_fn_method_tapsigner_full_card_ident(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_tap_card_fn_method_tapsigner_ident_file_name_prefix(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_tap_card_fn_method_tapsigner_ident_file_name_prefix(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_tap_card_fn_method_tapsigner_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_tap_card_fn_method_tapsigner_is_equal(`ptr`: Long,`rhs`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
-    external fun uniffi_cove_tap_card_fn_func_tap_signer_preview_new(`preview`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_tap_card_fn_func_tap_signer_preview_new(`preview`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun ffi_cove_tap_card_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_tap_card_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_tap_card_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun ffi_cove_tap_card_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun ffi_cove_tap_card_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -725,7 +725,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_u8(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun ffi_cove_tap_card_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -733,7 +733,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_i8(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun ffi_cove_tap_card_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -741,7 +741,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_u16(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
     external fun ffi_cove_tap_card_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -749,7 +749,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_i16(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
     external fun ffi_cove_tap_card_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -757,7 +757,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_u32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Int
     external fun ffi_cove_tap_card_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -765,7 +765,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_i32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Int
     external fun ffi_cove_tap_card_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -773,7 +773,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_u64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun ffi_cove_tap_card_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -781,7 +781,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_i64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun ffi_cove_tap_card_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -789,7 +789,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_f32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Float
     external fun ffi_cove_tap_card_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -797,7 +797,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_f64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Double
     external fun ffi_cove_tap_card_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -805,7 +805,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_rust_buffer(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun ffi_cove_tap_card_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -813,10 +813,10 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_tap_card_rust_future_free_void(`handle`: Long,
     ): Unit
-    external fun ffi_cove_tap_card_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_tap_card_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
 
-        
+
 }
 
 private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
@@ -917,7 +917,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
         }
     }
 
-/** 
+/**
  * Placeholder object used to signal that we're constructing an interface with a FFI handle.
  *
  * This is the first argument for interface constructors that input a raw handle. It exists is that
@@ -928,7 +928,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
  * */
 object UniffiWithHandle
 
-/** 
+/**
  * Used to instantiate an interface without an actual pointer, for fakes in tests, mostly.
  *
  * @suppress
@@ -1199,7 +1199,7 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
 
 
 public interface TapSignerInterface {
-    
+
     /**
      * Get the full card identifier string
      *
@@ -1207,11 +1207,11 @@ public interface TapSignerInterface {
      * Panics if the pubkey is invalid (should not happen as it's already validated)
      */
     fun `fullCardIdent`(): kotlin.String
-    
+
     fun `identFileNamePrefix`(): kotlin.String
-    
+
     fun `isEqual`(`rhs`: TapSigner): kotlin.Boolean
-    
+
     companion object
 }
 
@@ -1316,7 +1316,7 @@ open class TapSigner: Disposable, AutoCloseable, TapSignerInterface
         }
     }
 
-    
+
     /**
      * Get the full card identifier string
      *
@@ -1333,7 +1333,7 @@ open class TapSigner: Disposable, AutoCloseable, TapSignerInterface
     }
     )
     }
-    
+
 
     override fun `identFileNamePrefix`(): kotlin.String {
             return FfiConverterString.lift(
@@ -1346,7 +1346,7 @@ open class TapSigner: Disposable, AutoCloseable, TapSignerInterface
     }
     )
     }
-    
+
 
     override fun `isEqual`(`rhs`: TapSigner): kotlin.Boolean {
             return FfiConverterBoolean.lift(
@@ -1354,26 +1354,26 @@ open class TapSigner: Disposable, AutoCloseable, TapSignerInterface
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_tap_card_fn_method_tapsigner_is_equal(
         it,
-        
+
         FfiConverterTypeTapSigner.lower(`rhs`),_status)
 }
     }
     )
     }
-    
-
-    
-
-    
 
 
-    
-    
+
+
+
+
+
+
+
     /**
      * @suppress
      */
     companion object
-    
+
 }
 
 
@@ -1404,21 +1404,21 @@ public object FfiConverterTypeTapSigner: FfiConverter<TapSigner, Long> {
 
 data class SatsCard (
     var `state`: SatsCardState
-    , 
+    ,
     var `slotNumber`: kotlin.UInt
-    , 
+    ,
     var `addressSuffix`: kotlin.String
-    , 
+    ,
     var `nonce`: kotlin.String
-    , 
+    ,
     var `signature`: kotlin.String
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -1457,7 +1457,7 @@ public object FfiConverterTypeSatsCard: FfiConverterRustBuffer<SatsCard> {
 
 
 enum class Field {
-    
+
     SIGNATURE,
     IDENT,
     STATE,
@@ -1465,7 +1465,7 @@ enum class Field {
     SLOT_NUMBER,
     ADDRESS;
 
-    
+
 
 
     companion object
@@ -1495,12 +1495,12 @@ public object FfiConverterTypeField: FfiConverterRustBuffer<Field> {
 
 
 enum class SatsCardState {
-    
+
     SEALED,
     UNSEALED,
     ERROR;
 
-    
+
 
 
     companion object
@@ -1529,50 +1529,50 @@ public object FfiConverterTypeSatsCardState: FfiConverterRustBuffer<SatsCardStat
 
 
 sealed class TapCard: Disposable  {
-    
+
     data class SatsCard(
         val v1: org.bitcoinppl.cove_core.tapcard.SatsCard) : TapCard()
-        
+
     {
-        
+
 
         companion object
     }
-    
+
     data class TapSigner(
         val v1: org.bitcoinppl.cove_core.tapcard.TapSigner) : TapCard()
-        
+
     {
-        
+
 
         companion object
     }
-    
 
-    
+
+
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
             is TapCard.SatsCard -> {
-                
+
     Disposable.destroy(
         this.v1
     )
-                
+
             }
             is TapCard.TapSigner -> {
-                
+
     Disposable.destroy(
         this.v1
     )
-                
+
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
-    
 
-    
-    
+
+
+
 
 
     companion object
@@ -1634,76 +1634,76 @@ public object FfiConverterTypeTapCard : FfiConverterRustBuffer<TapCard>{
 
 
 sealed class TapCardParseException: kotlin.Exception() {
-    
+
     class InvalidUrl(
-        
+
         val v1: kotlin.String
         ) : TapCardParseException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class NotUrlEncoded(
-        
+
         val v1: kotlin.String
         ) : TapCardParseException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class MissingField(
-        
+
         val v1: Field
         ) : TapCardParseException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class UnknownCardState(
-        
+
         val v1: kotlin.String
         ) : TapCardParseException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class EmptyCardState(
         ) : TapCardParseException() {
         override val message
             get() = ""
     }
-    
+
     class ParseSlotNumberException(
-        
+
         val v1: kotlin.String
         ) : TapCardParseException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class UnableToParseSignature(
-        
+
         val v1: kotlin.String
         ) : TapCardParseException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class UnableToRecoverPubkey(
         ) : TapCardParseException() {
         override val message
             get() = ""
     }
-    
 
-    
+
+
 
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<TapCardParseException> {
         override fun lift(error_buf: RustBuffer.ByValue): TapCardParseException = FfiConverterTypeTapCardParseError.lift(error_buf)
     }
 
-    
+
 }
 
 /**
@@ -1711,7 +1711,7 @@ sealed class TapCardParseException: kotlin.Exception() {
  */
 public object FfiConverterTypeTapCardParseError : FfiConverterRustBuffer<TapCardParseException> {
     override fun read(buf: ByteBuffer): TapCardParseException {
-        
+
 
         return when(buf.getInt()) {
             1 -> TapCardParseException.InvalidUrl(
@@ -1830,12 +1830,12 @@ public object FfiConverterTypeTapCardParseError : FfiConverterRustBuffer<TapCard
 
 
 enum class TapSignerState {
-    
+
     SEALED,
     UNUSED,
     ERROR;
 
-    
+
 
 
     companion object
@@ -1869,12 +1869,12 @@ public object FfiConverterTypeTapSignerState: FfiConverterRustBuffer<TapSignerSt
             return FfiConverterTypeTapSigner.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_tap_card_fn_func_tap_signer_preview_new(
-    
-        
+
+
         FfiConverterBoolean.lower(`preview`),_status)
 }
     )
     }
-    
+
 
 

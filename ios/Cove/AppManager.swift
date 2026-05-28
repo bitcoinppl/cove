@@ -109,6 +109,8 @@ private let navigationSettleDelayMs = 800
         }
 
         logger.debug("did not find vm for \(id), creating new vm: \(walletManager?.id ?? "none")")
+        walletManager?.close()
+        walletManager = nil
 
         let walletvm = try WalletManager(id: id)
         walletManager = walletvm

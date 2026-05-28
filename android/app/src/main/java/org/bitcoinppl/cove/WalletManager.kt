@@ -21,6 +21,13 @@ import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 
+private val WalletScanStatus.isActive: Boolean
+    get() =
+        when (this) {
+            WalletScanStatus.Idle -> false
+            is WalletScanStatus.Scanning, is WalletScanStatus.ScanningPendingProgress -> true
+        }
+
 /**
  * wallet manager - manages wallet state, balance, transactions
  * ported from iOS WalletManager.swift
@@ -44,6 +51,20 @@ class WalletManager :
 
     var loadState by mutableStateOf<WalletLoadState>(WalletLoadState.LOADING)
         private set
+
+    var scanStatus by mutableStateOf<WalletScanStatus>(WalletScanStatus.Idle)
+        private set
+
+    private var balancePresentationState by mutableStateOf(
+        BalancePresentation(
+            primaryOpacity = 1.0,
+            secondaryOpacity = 0.75,
+            pendingOpacity = 0.6,
+        ),
+    )
+
+    val balancePresentation: BalancePresentation
+        get() = balancePresentationState
 
     var balance by mutableStateOf(Balance.zero())
         private set
@@ -110,6 +131,7 @@ class WalletManager :
         this.id = walletId
         this.rust = rustManager
         this.walletMetadata = metadata
+        this.balancePresentationState = rustManager.balancePresentation(WalletScanStatus.Idle)
         this.unsignedTransactions = runCatching { rustManager.getUnsignedTransactions() }.getOrElse { emptyList() }
 
         // set initial load state from Rust cached data
@@ -236,16 +258,21 @@ class WalletManager :
 
     private fun apply(message: WalletManagerReconcileMessage) {
         when (message) {
-            is WalletManagerReconcileMessage.StartedInitialFullScan -> {
-                when (val current = loadState) {
-                    is WalletLoadState.SCANNING -> if (current.txns.isEmpty()) loadState = WalletLoadState.LOADING
-                    is WalletLoadState.LOADED -> loadState = WalletLoadState.SCANNING(current.txns)
-                    else -> loadState = WalletLoadState.LOADING
+            is WalletManagerReconcileMessage.WalletScanStatusChanged -> {
+                scanStatus = message.v1
+                balancePresentationState = rust.balancePresentation(message.v1)
+                if (message.v1.isActive) {
+                    when (val current = loadState) {
+                        is WalletLoadState.SCANNING -> Unit
+                        is WalletLoadState.LOADED -> loadState = WalletLoadState.SCANNING(current.txns)
+                        is WalletLoadState.LOADING -> loadState = WalletLoadState.SCANNING(listOf())
+                    }
+                } else {
+                    when (val current = loadState) {
+                        is WalletLoadState.SCANNING -> loadState = WalletLoadState.LOADED(current.txns)
+                        is WalletLoadState.LOADED, is WalletLoadState.LOADING -> Unit
+                    }
                 }
-            }
-
-            is WalletManagerReconcileMessage.StartedExpandedFullScan -> {
-                loadState = WalletLoadState.SCANNING(message.v1)
             }
 
             is WalletManagerReconcileMessage.AvailableTransactions -> {
@@ -295,6 +322,7 @@ class WalletManager :
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
                 walletMetadata = message.v1
                 persistWalletMetadata(message.v1)
+                balancePresentationState = rust.balancePresentation(scanStatus)
             }
 
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
@@ -393,6 +421,7 @@ class WalletManager :
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return
         logDebug("Closing WalletManager for $id")
+        rust.shutdown()
         ioScope.cancel()
         mainScope.cancel()
         rust.close()

@@ -177,6 +177,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.SOFTWARE_IMPORT,
+                onEnable = {},
                 onEnabled = { selected = "enabled" },
                 onSkip = { selected = "skip-software" },
             )
@@ -189,6 +190,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.HARDWARE,
+                onEnable = {},
                 onEnabled = { selected = "enabled" },
                 onSkip = { selected = "skip-hardware" },
             )
@@ -206,6 +208,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.NEW_USER,
+                onEnable = {},
                 onEnabled = { selected = "enabled-standard" },
                 onSkip = { selected = "skip-standard" },
             )
@@ -220,6 +223,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.SOFTWARE_IMPORT,
+                onEnable = {},
                 onEnabled = { selected = "enabled-software" },
                 onSkip = { selected = "skip-software" },
             )
@@ -236,6 +240,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.HARDWARE,
+                onEnable = {},
                 onEnabled = { selected = "enabled-hardware" },
                 onSkip = { selected = "skip-hardware" },
             )
@@ -256,6 +261,7 @@ class OnboardingBranchScreensTest {
 
         compose.setOnboardingContent {
             OnboardingRestoreOfferView(
+                providerHint = null,
                 warningMessage = null,
                 errorMessage = null,
                 onRestore = { selected = "restore" },
@@ -301,6 +307,7 @@ class OnboardingBranchScreensTest {
 
         compose.setOnboardingContent {
             OnboardingRestoreOfferView(
+                providerHint = null,
                 warningMessage = "Cloud storage may be unavailable.",
                 errorMessage = null,
                 onRestore = { selected = "restore-warning" },
@@ -316,6 +323,7 @@ class OnboardingBranchScreensTest {
 
         compose.setOnboardingContent {
             OnboardingRestoreOfferView(
+                providerHint = null,
                 warningMessage = null,
                 errorMessage = "Passkey verification failed.",
                 onRestore = { selected = "restore-error" },

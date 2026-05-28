@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use bdk_electrum::{
     BdkElectrumClient,
@@ -14,9 +14,11 @@ use bdk_wallet::{
     chain::spk_client::{FullScanRequest, FullScanResponse},
 };
 use bitcoin::{Transaction, Txid, consensus::Decodable};
+use cove_bdk_progressive_scan::{ProgressiveScanner, ScanEvent};
 use serde::Deserialize;
 use serde_json::Value;
 use tap::TapFallible as _;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 
 use super::{ELECTRUM_BATCH_SIZE, Error, NodeClientOptions};
@@ -229,6 +231,41 @@ impl ElectrumClient {
         Ok(result)
     }
 
+    pub async fn progressive_full_scan(
+        &self,
+        request: FullScanRequest<KeychainKind>,
+        tx_graph: &TxGraph<ConfirmationBlockTime>,
+        last_revealed_indices: BTreeMap<KeychainKind, u32>,
+        stop_gap: usize,
+        events: flume::Sender<ScanEvent<KeychainKind>>,
+        cancel_token: CancellationToken,
+    ) -> cove_bdk_progressive_scan::Result<FullScanResponse<KeychainKind>> {
+        debug!("start populate_tx_cache for progressive scan");
+        let client = self.client.clone();
+        let tx_graph = tx_graph.clone();
+        cove_tokio::unblock::run_blocking(move || {
+            client.populate_tx_cache(tx_graph.full_txs().map(|tx_node| tx_node.tx));
+        })
+        .await;
+        debug!("populate_tx_cache for progressive scan done");
+
+        let client = self.client.clone();
+        let batch_size = self.options.batch_size;
+        cove_tokio::unblock::run_blocking(move || {
+            ProgressiveScanner::builder()
+                .request(request)
+                .last_revealed_indices(last_revealed_indices)
+                .stop_gap(stop_gap)
+                .events(events)
+                .cancel_token(cancel_token)
+                .electrum(client)?
+                .batch_size(batch_size)
+                .fetch_prev_txouts(false)
+                .run()
+        })
+        .await
+    }
+
     pub async fn sync(
         &self,
         request: SyncRequest<(KeychainKind, u32)>,
@@ -297,6 +334,8 @@ mod tests {
     #[tokio::test]
     #[ignore] // requires external network connection to blockstream electrum server
     async fn test_get_confirmed_transaction_fallback() {
+        cove_tokio::init();
+
         // blockstream.info does not support verbose transactions
         let client = ElectrumClient::new_from_node(&crate::node::Node {
             url: "ssl://electrum.blockstream.info:50002".to_string(),
@@ -307,7 +346,7 @@ mod tests {
         .await
         .unwrap();
 
-        // Test with a known confirmed transaction
+        // test with a known confirmed transaction
         let id = "79fd7b17741a33006bbbaeccc30f5f8eeb07745fd2e70e88ec3c392c264500a4";
         let txid = Arc::new(Txid::from_str(id).unwrap());
         let result = client.get_confirmed_transaction(txid.clone()).await;

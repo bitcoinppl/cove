@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use bdk_esplora::{
     EsploraAsyncExt as _,
@@ -10,7 +10,9 @@ use bdk_wallet::chain::{
 };
 use bdk_wallet::{KeychainKind, chain::BlockId};
 use bitcoin::Txid;
+use cove_bdk_progressive_scan::{ProgressiveScanner, ScanEvent};
 use tap::TapFallible as _;
+use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 use crate::node::Node;
@@ -82,6 +84,26 @@ impl EsploraClient {
             .full_scan(request, stop_gap, self.options.batch_size)
             .await
             .map_err(Error::EsploraScan)
+    }
+
+    pub async fn progressive_full_scan(
+        &self,
+        request: FullScanRequest<KeychainKind>,
+        last_revealed_indices: BTreeMap<KeychainKind, u32>,
+        stop_gap: usize,
+        events: flume::Sender<ScanEvent<KeychainKind>>,
+        cancel_token: CancellationToken,
+    ) -> cove_bdk_progressive_scan::Result<FullScanResponse<KeychainKind>> {
+        ProgressiveScanner::builder()
+            .request(request)
+            .last_revealed_indices(last_revealed_indices)
+            .stop_gap(stop_gap)
+            .events(events)
+            .cancel_token(cancel_token)
+            .esplora(self.client.clone())?
+            .parallel_requests(self.options.batch_size)
+            .run()
+            .await
     }
 
     pub async fn sync(

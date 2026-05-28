@@ -5,7 +5,7 @@ use crate::{
     },
     historical_price_service::HistoricalPriceService,
     manager::wallet_manager::{
-        Error, SendFlowErrorAlert, WalletManagerError,
+        Error, SendFlowErrorAlert, WalletManagerError, WalletScanStatus,
         receive_address::{
             CACHE_WINDOW, ReceiveAddressPresentation, ReceiveAddressRefreshState,
             ReceiveAddressSession, ReceiveAddressState, ReceiveAddressStatus,
@@ -25,6 +25,8 @@ use crate::{
         Address, AddressInfo, Wallet, WalletAddressType, balance::Balance, metadata::BlockSizeLast,
     },
 };
+mod scan;
+
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
@@ -33,7 +35,7 @@ use bdk_wallet::{
     chain::{
         BlockId, TxGraph,
         bitcoin::Psbt,
-        spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
+        spk_client::{FullScanResponse, SyncRequest, SyncResponse},
     },
     error::CreateTxError,
 };
@@ -47,7 +49,8 @@ use bdk_wallet::{KeychainKind, LocalOutput, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
-use cove_common::consts::{GAP_LIMIT, MIN_SEND_AMOUNT};
+use cove_bdk_progressive_scan::ScanUpdate;
+use cove_common::consts::MIN_SEND_AMOUNT;
 use cove_tokio::{AbortableTask, FutureTimeoutExt as _};
 use cove_types::{
     confirm::{AddressAndAmount, ConfirmDetails, ExtraItem, InputOutputDetails, SplitOutput},
@@ -67,6 +70,11 @@ use tracing::{debug, error, info, warn};
 
 use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
+use self::scan::{
+    EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, PreparedProgressiveScan,
+    RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, ScanRequestOrder, WalletScanActor,
+    WalletScanEvent, should_update_full_scan_metadata,
+};
 use super::{SingleOrMany, WalletManagerReconcileMessage};
 
 const RECEIVE_ADDRESS_FRESHNESS_TIMEOUT: Duration = Duration::from_millis(400);
@@ -86,6 +94,7 @@ pub struct WalletActor {
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
     receive_address_watcher: Option<Addr<ReceiveAddressWatcher>>,
     receive_address_refresh_timer: Option<AbortableTask<()>>,
+    scan_actor: Option<Addr<WalletScanActor>>,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -99,49 +108,20 @@ pub enum ActorState {
     PerformingFullScan(FullScanType),
 
     SyncScanComplete,
+    IncrementalScanComplete,
 
     FullScanComplete(FullScanType),
-
-    /// incremental scan is performed after the expanded full scan
-    IncrementalScanComplete,
 
     FailedFullScan(FullScanType),
     FailedIncrementalScan,
     FailedSyncScan,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum FullScanType {
-    /// Initial scan scans for 20 addresses GAP_LIMIT
-    Initial,
-    /// Expanded scan scans for 150 addresses GAP_LIMIT
-    Expanded,
-    Rescan(u32),
-}
-
-impl FullScanType {
-    fn stop_gap(&self) -> usize {
-        match self {
-            Self::Initial => 20,
-            Self::Expanded => 150,
-            Self::Rescan(gap) => *gap as usize,
-        }
-    }
-
-    /// Whether this scan covers at least as many addresses as the expanded scan.
-    fn covers_expanded(&self) -> bool {
-        match self {
-            Self::Initial => false,
-            Self::Expanded => true,
-            Self::Rescan(gap) => *gap as usize >= Self::Expanded.stop_gap(),
-        }
-    }
-}
-
 #[async_trait::async_trait]
 impl Actor for WalletActor {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
+        self.spawn_scan_actor();
         send!(addr.check_node_connection());
         Produces::ok(())
     }
@@ -203,6 +183,7 @@ impl WalletActor {
             transaction_watchers: HashMap::default(),
             receive_address_watcher: None,
             receive_address_refresh_timer: None,
+            scan_actor: None,
             db,
         })
     }
@@ -939,8 +920,7 @@ impl WalletActor {
         use WalletManagerReconcileMessage as Msg;
         debug!("wallet_scan_and_notify");
 
-        // get the initial balance and transactions
-        {
+        let scan_progress_start = {
             let initial_balance =
                 self.balance().await?.await.map_err_str(Error::WalletBalanceError)?;
 
@@ -949,11 +929,18 @@ impl WalletActor {
             let initial_transactions =
                 self.transactions().await?.await.map_err_str(Error::TransactionsRetrievalError)?;
 
+            let progress_start = wallet_scan_progress_start(
+                self.completed_initial_scan(),
+                initial_transactions.is_empty(),
+            );
+
             self.send(Msg::AvailableTransactions(initial_transactions));
-        }
+
+            progress_start
+        };
 
         // start the wallet scan in a background task
-        self.start_wallet_scan_in_task(force_scan)
+        self.start_wallet_scan_in_task(force_scan, scan_progress_start)
             .await?
             .await
             .map_err_str(Error::WalletScanError)?;
@@ -961,7 +948,11 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    pub async fn start_wallet_scan_in_task(&mut self, force_scan: bool) -> ActorResult<()> {
+    pub async fn start_wallet_scan_in_task(
+        &mut self,
+        force_scan: bool,
+        progress_start: ScanProgressStart,
+    ) -> ActorResult<()> {
         debug!("start_wallet_scan");
 
         if let Some(last_scan) = self.last_scan_finished()
@@ -969,6 +960,7 @@ impl WalletActor {
             && !force_scan
         {
             debug!("skipping wallet scan, last scan was less than 15 seconds ago");
+            self.send_scan_status(WalletScanStatus::Idle);
             return Produces::ok(());
         }
 
@@ -977,8 +969,8 @@ impl WalletActor {
 
         // perform that scanning in a background task
         let addr = self.addr.clone();
-        if self.wallet.metadata.internal.performed_full_scan_at.is_some() {
-            send!(addr.perform_incremental_scan());
+        if self.completed_initial_scan() {
+            send!(addr.perform_incremental_scan(progress_start));
         } else {
             send!(addr.perform_full_scan());
         }
@@ -1133,10 +1125,16 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    pub async fn stop_all_scans(&mut self) {
-        debug!("stop_all_scans");
+    pub async fn shutdown(&mut self) {
+        debug!("shutdown wallet actor");
+        if let Some(scan_actor) = &self.scan_actor {
+            send!(scan_actor.shutdown());
+        }
+
+        self.stop_receive_address_watcher();
+        self.stop_receive_address_refresh_timer();
         self.transaction_watchers = HashMap::default();
-        // TODO: stop the wallet scans too, need to save the task handle when we start the scan
+        self.send_scan_status(WalletScanStatus::Idle);
     }
 
     async fn remove_watcher_for_txn(&mut self, tx_id: Txid) {
@@ -1171,30 +1169,16 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    // perform full scan in 2 steps:
-    // 1. do a full scan of the first 20 addresses, return results
-    // 2. do a full scan of the next 150 addresses, return results
     async fn perform_full_scan(&mut self) -> ActorResult<()> {
-        self.maybe_perform_initial_full_scan().await?;
-        Produces::ok(())
-    }
-
-    // when a wallet is first opened, we need to scan for its addresses, but we want the
-    // initial scan to be fast, so we can have transactions show up in the UI quickly
-    // so we do a full scan of only the first 20 addresses, initially
-    async fn maybe_perform_initial_full_scan(&mut self) -> ActorResult<()> {
-        if self.state != ActorState::Initial {
+        if !matches!(self.state, ActorState::Initial | ActorState::FailedFullScan(_)) {
             debug!("already performing scanning or scanned skipping ({:?})", self.state);
 
             return Produces::ok(());
         }
 
-        debug!("starting initial full scan");
-        self.reconciler.send(WalletManagerReconcileMessage::StartedInitialFullScan.into()).unwrap();
-
-        // scan happens in the background, state update afterwards
-        self.state = ActorState::PerformingFullScan(FullScanType::Initial);
-        self.perform_initial_full_scan().await?;
+        debug!("starting full scan");
+        let scan_actor = self.scan_actor();
+        send!(scan_actor.start_full_scan(ScanProgressStart::Immediate));
 
         Produces::ok(())
     }
@@ -1314,154 +1298,113 @@ impl WalletActor {
             .collect()
     }
 
-    // after the initial full scan is complete, do a much for comprehensive scan of the wallet
-    // this is slower, but we want to be able to see all transactions in the UI, so scan the next
-    // 150 addresses
-    async fn maybe_perform_expanded_full_scan(&mut self) -> ActorResult<()> {
-        let already_covered = matches!(
-            self.state,
-            ActorState::FullScanComplete(t) if t.covers_expanded(),
-        ) || self.state == ActorState::IncrementalScanComplete;
-
-        if already_covered {
-            debug!("already scanned skipping expanded full scan ({:?})", self.state);
-            return Produces::ok(());
-        }
-
-        debug!("starting expanded full scan");
-        let txns = self.transactions().await?.await?;
-
-        self.reconciler
-            .send(WalletManagerReconcileMessage::StartedExpandedFullScan(txns).into())
-            .unwrap();
-
-        // scan happens in the background, state update afterwards
-        self.state = ActorState::PerformingFullScan(FullScanType::Expanded);
-        send!(self.addr.perform_expanded_full_scan());
-
-        Produces::ok(())
-    }
-
-    async fn perform_initial_full_scan(&mut self) -> ActorResult<()> {
-        debug!("perform_initial_full_scan");
-        static FULL_SCAN_TYPE: FullScanType = FullScanType::Initial;
-
-        let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
-        self.addr.send_fut_with(|addr| async move {
-            let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
-
-            let full_scan_result = node_client
-                .start_wallet_scan(&graph, full_scan_request, FULL_SCAN_TYPE.stop_gap())
-                .await;
-
-            let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
-            debug!("[initial] done initial full scan in {}s", now - start);
-
-            // update wallet state
-            let _ = call!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE)).await;
-
-            // perform next scan
-            send!(addr.maybe_perform_expanded_full_scan());
-        });
-
-        Produces::ok(())
-    }
-
-    async fn perform_expanded_full_scan(&mut self) -> ActorResult<()> {
-        debug!("perform_expanded_full_scan");
-        static FULL_SCAN_TYPE: FullScanType = FullScanType::Expanded;
-
-        let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
-        self.addr.send_fut_with(|addr| async move {
-            let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
-
-            let full_scan_result = node_client
-                .start_wallet_scan(&graph, full_scan_request, FULL_SCAN_TYPE.stop_gap())
-                .await;
-
-            let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
-            debug!("[expanded] done expanded full scan in {}s", now - start);
-
-            // update wallet state
-            send!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE));
-        });
-
-        Produces::ok(())
-    }
-
     /// Perform a full scan with a user-supplied gap limit to recover missed addresses.
     pub async fn perform_rescan_full_scan(&mut self, gap_limit: u32) -> ActorResult<()> {
         debug!("perform_rescan_full_scan with gap_limit={gap_limit}");
 
-        if matches!(
-            self.state,
-            ActorState::PerformingFullScan(_) | ActorState::PerformingIncrementalScan
-        ) {
-            warn!("scan already in progress, rejecting rescan ({:?})", self.state);
-            return Err(
-                Error::WalletScanError("wallet scan already in progress".to_string()).into()
-            );
-        }
-
-        let scan_type = FullScanType::Rescan(gap_limit);
-
-        let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
-
-        let txns = self.transactions().await?.await?;
-        self.reconciler
-            .send(WalletManagerReconcileMessage::StartedExpandedFullScan(txns).into())
-            .unwrap();
-
-        self.state = ActorState::PerformingFullScan(scan_type);
-        self.addr.send_fut_with(|addr| async move {
-            let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
-
-            let full_scan_result = node_client
-                .start_wallet_scan(&graph, full_scan_request, scan_type.stop_gap())
-                .await;
-
-            let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
-            debug!("[rescan] done rescan full scan in {}s", now - start);
-
-            send!(addr.handle_full_scan_complete(full_scan_result, scan_type));
-        });
+        let scan_actor = self.scan_actor();
+        send!(scan_actor.start_rescan(gap_limit));
 
         Produces::ok(())
     }
 
-    async fn get_for_full_scan(
+    async fn prepare_progressive_scan(
         &mut self,
-    ) -> Result<(FullScanRequest<KeychainKind>, TxGraph, NodeClient)> {
+        request_order: ScanRequestOrder,
+    ) -> ActorResult<PreparedProgressiveScan> {
         let node_client = self.node_client().await?.clone();
 
-        let full_scan_request = self.wallet.bdk.start_full_scan().build();
+        let full_scan_request = match request_order {
+            ScanRequestOrder::Standard => self.wallet.bdk.start_full_scan().build(),
+            ScanRequestOrder::ReceivePriority => self.wallet.start_receive_prioritized_full_scan(),
+        };
         let graph = self.wallet.bdk.tx_graph().clone();
+        let last_revealed_indices = self.wallet.bdk.spk_index().last_revealed_indices();
 
-        Ok((full_scan_request, graph, node_client))
+        Produces::ok(PreparedProgressiveScan {
+            node_client,
+            graph,
+            full_scan_request,
+            last_revealed_indices,
+        })
     }
 
-    async fn perform_incremental_scan(&mut self) -> ActorResult<()> {
+    async fn perform_incremental_scan(
+        &mut self,
+        progress_start: ScanProgressStart,
+    ) -> ActorResult<()> {
         debug!("starting incremental scan");
 
-        self.state = ActorState::PerformingIncrementalScan;
-        let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
-
-        let node_client = self.node_client().await?.clone();
-
-        let full_scan_request = self.wallet.bdk.start_full_scan().build();
-        let graph = self.wallet.bdk.tx_graph().clone();
-        self.addr.send_fut_with(|addr| async move {
-            let scan_result =
-                node_client.start_wallet_scan(&graph, full_scan_request, GAP_LIMIT as usize).await;
-
-            let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
-            debug!("done incremental scan in {}s", now - start);
-
-            // update wallet state
-            send!(addr.handle_incremental_scan_complete(scan_result));
-        });
+        let scan_actor = self.scan_actor();
+        send!(scan_actor.start_incremental_scan(progress_start));
 
         Produces::ok(())
+    }
+
+    async fn handle_wallet_scan_event(&mut self, event: WalletScanEvent) -> ActorResult<()> {
+        match event {
+            WalletScanEvent::FullScanStarted(scan_type) => {
+                self.state = ActorState::PerformingFullScan(scan_type);
+            }
+            WalletScanEvent::IncrementalScanStarted => {
+                self.state = ActorState::PerformingIncrementalScan;
+            }
+            WalletScanEvent::FullScanPrepareFailed(scan_type) => {
+                self.state =
+                    state_after_full_scan_prepare_failed(scan_type, self.completed_initial_scan());
+            }
+            WalletScanEvent::IncrementalScanPrepareFailed => {
+                self.state = ActorState::FailedIncrementalScan;
+            }
+            WalletScanEvent::StatusChanged(status) => {
+                self.send_scan_status(status);
+            }
+            WalletScanEvent::PartialUpdate(scan_update) => {
+                self.handle_progressive_scan_update(scan_update);
+            }
+            WalletScanEvent::FlushUi => {
+                self.flush_progressive_scan_ui().await;
+            }
+            WalletScanEvent::FullScanFinished { scan_type, result } => {
+                self.handle_full_scan_complete(result, scan_type).await?;
+            }
+            WalletScanEvent::IncrementalScanFinished { result } => {
+                self.handle_incremental_scan_complete(result).await?;
+            }
+        }
+
+        Produces::ok(())
+    }
+
+    fn handle_progressive_scan_update(&mut self, scan_update: ScanUpdate<KeychainKind>) {
+        if let Err(error) = self.apply_progressive_scan_update(scan_update) {
+            error!("Failed to apply progressive scan update: {error}");
+            self.send(WalletManagerReconcileMessage::WalletError(Error::WalletScanError(format!(
+                "failed to apply progressive scan update: {error}"
+            ))));
+        }
+    }
+
+    fn apply_progressive_scan_update(
+        &mut self,
+        scan_update: ScanUpdate<KeychainKind>,
+    ) -> Result<()> {
+        if scan_update.is_empty() {
+            return Ok(());
+        }
+
+        self.wallet.bdk.apply_update(progressive_scan_update_response(scan_update))?;
+        self.wallet.persist()?;
+
+        Ok(())
+    }
+
+    async fn flush_progressive_scan_ui(&mut self) {
+        let balance = self.wallet.balance();
+        self.send(WalletManagerReconcileMessage::WalletBalanceChanged(balance.into()));
+
+        let transactions = self.do_transactions().await;
+        self.send(WalletManagerReconcileMessage::UpdatedTransactions(transactions));
     }
 
     async fn handle_full_scan_complete(
@@ -1478,25 +1421,22 @@ impl WalletActor {
             }
             Err(error) => {
                 self.state = ActorState::FailedFullScan(full_scan_type);
+                self.send_scan_status(WalletScanStatus::Idle);
                 return Err(error.into());
             }
         }
 
-        // only mark as scan complete when the scan covered at least the
-        // expanded 150-address gap; smaller rescans must not persist this
-        // or the automatic expanded scan will be skipped next boot.
-        if full_scan_type.covers_expanded() {
+        if should_update_full_scan_metadata(full_scan_type) {
             let now = jiff::Timestamp::now().as_second() as u64;
             self.wallet.metadata.internal.performed_full_scan_at = Some(now);
             Database::global().wallets.update_internal_metadata(&self.wallet.metadata)?;
         }
 
-        // always update the last scan finished time
         self.save_last_scan_finished();
         self.notify_scan_complete().await?;
 
-        // update the state
         self.state = ActorState::FullScanComplete(full_scan_type);
+        self.send_scan_status(WalletScanStatus::Idle);
 
         Produces::ok(())
     }
@@ -1505,16 +1445,22 @@ impl WalletActor {
         &mut self,
         scan_result: Result<FullScanResponse<KeychainKind>, NodeError>,
     ) -> ActorResult<()> {
-        if scan_result.is_err() {
-            self.state = ActorState::FailedIncrementalScan;
-        }
+        let sync_result = match scan_result {
+            Ok(sync_result) => sync_result,
+            Err(error) => {
+                self.state = ActorState::FailedIncrementalScan;
+                self.send_scan_status(WalletScanStatus::Idle);
+                return Err(error.into());
+            }
+        };
 
-        let sync_result = scan_result?;
         self.wallet.bdk.apply_update(sync_result)?;
         self.wallet.persist()?;
         self.save_last_scan_finished();
 
         self.notify_scan_complete().await?;
+        self.state = ActorState::IncrementalScanComplete;
+        self.send_scan_status(WalletScanStatus::Idle);
 
         Produces::ok(())
     }
@@ -1607,6 +1553,11 @@ impl WalletActor {
         self.wallet.metadata = metadata;
 
         Some(())
+    }
+
+    fn completed_initial_scan(&mut self) -> bool {
+        self.wallet.metadata.internal.performed_full_scan_at.is_some()
+            || self.last_scan_finished().is_some()
     }
 
     fn last_height_fetched(&mut self) -> Option<(Duration, usize)> {
@@ -2001,14 +1952,89 @@ fn current_epoch_secs() -> u64 {
     UNIX_EPOCH.elapsed().unwrap_or_default().as_secs()
 }
 
+fn progressive_scan_update_response(
+    scan_update: ScanUpdate<KeychainKind>,
+) -> FullScanResponse<KeychainKind> {
+    FullScanResponse {
+        chain_update: scan_update.chain_update,
+        tx_update: scan_update.tx_update,
+        last_active_indices: scan_update.last_active_indices,
+    }
+}
+
+fn state_after_full_scan_prepare_failed(
+    scan_type: FullScanType,
+    completed_initial_scan: bool,
+) -> ActorState {
+    if !completed_initial_scan {
+        return ActorState::Initial;
+    }
+
+    ActorState::FailedFullScan(scan_type)
+}
+
+fn wallet_scan_progress_start(
+    completed_initial_scan: bool,
+    cached_transactions_empty: bool,
+) -> ScanProgressStart {
+    if !completed_initial_scan {
+        return ScanProgressStart::Immediate;
+    }
+
+    if cached_transactions_empty {
+        return ScanProgressStart::Delayed(EMPTY_WALLET_SCAN_PROGRESS_DELAY);
+    }
+
+    ScanProgressStart::Delayed(RETURNING_WALLET_SCAN_PROGRESS_DELAY)
+}
+
 impl WalletActor {
     fn send(&self, msg: WalletManagerReconcileMessage) {
-        self.reconciler.send(msg.into()).unwrap();
+        if self.reconciler.send(msg.into()).is_err() {
+            warn!("wallet manager reconciler dropped");
+        }
+    }
+
+    fn send_scan_status(&self, status: WalletScanStatus) {
+        self.send(WalletManagerReconcileMessage::WalletScanStatusChanged(status));
+    }
+
+    fn scan_actor(&mut self) -> Addr<WalletScanActor> {
+        if let Some(scan_actor) = &self.scan_actor {
+            return scan_actor.clone();
+        }
+
+        self.spawn_scan_actor()
+    }
+
+    fn spawn_scan_actor(&mut self) -> Addr<WalletScanActor> {
+        let scan_actor = spawn_actor(WalletScanActor::new(self.addr.clone()));
+        self.watch_scan_actor_termination(scan_actor.clone());
+        self.scan_actor = Some(scan_actor.clone());
+        scan_actor
+    }
+
+    fn watch_scan_actor_termination(&self, scan_actor: Addr<WalletScanActor>) {
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            scan_actor.termination().await;
+            send!(addr.clear_scan_actor_if_stopped(scan_actor));
+        });
+    }
+
+    async fn clear_scan_actor_if_stopped(&mut self, stopped_scan_actor: Addr<WalletScanActor>) {
+        if self.scan_actor.as_ref().is_some_and(|scan_actor| scan_actor == &stopped_scan_actor) {
+            self.scan_actor = None;
+        }
     }
 }
 
 impl Drop for WalletActor {
     fn drop(&mut self) {
+        let _ = self.reconciler.send(
+            WalletManagerReconcileMessage::WalletScanStatusChanged(WalletScanStatus::Idle).into(),
+        );
+
         debug!("[DROP] Wallet Actor for {}", self.wallet.id);
     }
 }
@@ -2037,4 +2063,68 @@ async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
         .map_err(|err| err.to_string())?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use bdk_wallet::KeychainKind;
+    use cove_bdk_progressive_scan::ScanUpdate;
+    use std::collections::BTreeMap;
+
+    use super::{
+        ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType,
+        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, progressive_scan_update_response,
+        wallet_scan_progress_start,
+    };
+
+    #[test]
+    fn progressive_scan_update_response_preserves_last_active_indices() {
+        let scan_update = ScanUpdate {
+            chain_update: None,
+            tx_update: Default::default(),
+            last_active_indices: BTreeMap::from([(KeychainKind::External, 7)]),
+        };
+
+        let response = progressive_scan_update_response(scan_update);
+
+        assert_eq!(response.last_active_indices, BTreeMap::from([(KeychainKind::External, 7)]));
+    }
+
+    #[test]
+    fn prepare_failure_before_first_full_scan_returns_to_initial_state() {
+        assert_eq!(
+            super::state_after_full_scan_prepare_failed(FullScanType::Full, false),
+            ActorState::Initial
+        );
+    }
+
+    #[test]
+    fn prepare_failure_after_completed_full_scan_records_failed_scan() {
+        assert_eq!(
+            super::state_after_full_scan_prepare_failed(FullScanType::Rescan(50), true),
+            ActorState::FailedFullScan(FullScanType::Rescan(50))
+        );
+    }
+
+    #[test]
+    fn first_full_scan_uses_immediate_progress() {
+        assert_eq!(wallet_scan_progress_start(false, true), ScanProgressStart::Immediate);
+        assert_eq!(wallet_scan_progress_start(false, false), ScanProgressStart::Immediate);
+    }
+
+    #[test]
+    fn returning_wallet_with_transactions_delays_progress() {
+        assert_eq!(
+            wallet_scan_progress_start(true, false),
+            ScanProgressStart::Delayed(RETURNING_WALLET_SCAN_PROGRESS_DELAY)
+        );
+    }
+
+    #[test]
+    fn empty_returning_wallet_delays_progress_separately() {
+        assert_eq!(
+            wallet_scan_progress_start(true, true),
+            ScanProgressStart::Delayed(EMPTY_WALLET_SCAN_PROGRESS_DELAY)
+        );
+    }
 }

@@ -351,7 +351,7 @@ internal inline fun<T, reified E: Throwable> uniffiTraitInterfaceCallWithError(
         }
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that Kotlin-generated handles always have the lowest bit set
 private const val UNIFFI_HANDLEMAP_INITIAL = 1.toLong()
 private const val UNIFFI_HANDLEMAP_DELTA = 2.toLong()
@@ -361,7 +361,7 @@ private const val UNIFFI_HANDLEMAP_DELTA = 2.toLong()
 // This is used pass an opaque 64-bit handle representing a foreign object to the Rust code.
 internal class UniffiHandleMap<T: Any> {
     private val map = ConcurrentHashMap<Long, T>()
-    // Start 
+    // Start
     private val counter = java.util.concurrent.atomic.AtomicLong(UNIFFI_HANDLEMAP_INITIAL)
 
     val size: Int
@@ -941,16 +941,16 @@ internal object IntegrityCheckingUniffiLib {
     external fun ffi_cove_device_uniffi_contract_version(
     ): Int
 
-        
+
 }
 
 internal object UniffiLib {
-    
+
     // The Cleaner for the whole library
     internal val CLEANER: UniffiCleaner by lazy {
         UniffiCleaner.create()
     }
-    
+
 
     init {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "cove_device"))
@@ -959,41 +959,41 @@ internal object UniffiLib {
         uniffiCallbackInterfaceDeviceAccess.register(this)
         uniffiCallbackInterfaceKeychainAccess.register(this)
         uniffiCallbackInterfacePasskeyProvider.register(this)
-        
+
     }
-    external fun uniffi_cove_device_fn_clone_cloudstorage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_clone_cloudstorage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_device_fn_free_cloudstorage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_free_cloudstorage(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_device_fn_constructor_cloudstorage_new(`cloudStorage`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_constructor_cloudstorage_new(`cloudStorage`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(`ptr`: Long,`policy`: RustBuffer.ByValue,
     ): Long
-    external fun uniffi_cove_device_fn_clone_connectivity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_clone_connectivity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_device_fn_free_connectivity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_free_connectivity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_device_fn_constructor_connectivity_new(`connectivity`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_constructor_connectivity_new(`connectivity`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_device_fn_clone_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_clone_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_device_fn_free_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_free_device(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_device_fn_constructor_device_new(`device`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_constructor_device_new(`device`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_device_fn_clone_keychain(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_clone_keychain(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_device_fn_free_keychain(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_free_keychain(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_device_fn_constructor_keychain_new(`keychain`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_constructor_keychain_new(`keychain`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_device_fn_clone_passkeyaccess(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_clone_passkeyaccess(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_device_fn_free_passkeyaccess(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_free_passkeyaccess(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_device_fn_constructor_passkeyaccess_new(`provider`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_constructor_passkeyaccess_new(`provider`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_device_fn_method_passkeyaccess_is_prf_supported(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_method_passkeyaccess_is_prf_supported(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_device_fn_init_callback_vtable_cloudstorageaccess(`vtable`: UniffiVTableCallbackInterfaceCloudStorageAccess,
     ): Unit
@@ -1005,27 +1005,27 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_device_fn_init_callback_vtable_passkeyprovider(`vtable`: UniffiVTableCallbackInterfacePasskeyProvider,
     ): Unit
-    external fun uniffi_cove_device_fn_method_cloudstorageerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_method_cloudstorageerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_device_fn_method_keychainerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_method_keychainerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_device_fn_method_passkeyerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_method_passkeyerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_device_fn_method_passkeyfailurereason_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_method_passkeyfailurereason_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_device_fn_method_passkeyoperation_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_method_passkeyoperation_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_device_fn_func_cloud_backup_locations_sync_health(`namespaceLocations`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_func_cloud_backup_locations_sync_health(`namespaceLocations`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_device_fn_func_passkey_aaguid_from_attestation_object(`attestationObject`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_cove_device_fn_func_passkey_aaguid_from_attestation_object(`attestationObject`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_device_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_device_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun ffi_cove_device_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun ffi_cove_device_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun ffi_cove_device_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1033,7 +1033,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_u8(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun ffi_cove_device_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1041,7 +1041,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_i8(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun ffi_cove_device_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1049,7 +1049,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_u16(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
     external fun ffi_cove_device_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1057,7 +1057,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_i16(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
     external fun ffi_cove_device_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1065,7 +1065,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_u32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Int
     external fun ffi_cove_device_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1073,7 +1073,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_i32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Int
     external fun ffi_cove_device_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1081,7 +1081,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_u64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun ffi_cove_device_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1089,7 +1089,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_i64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun ffi_cove_device_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1097,7 +1097,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_f32(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Float
     external fun ffi_cove_device_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1105,7 +1105,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_f64(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Double
     external fun ffi_cove_device_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1113,7 +1113,7 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_rust_buffer(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun ffi_cove_device_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
     ): Unit
@@ -1121,10 +1121,10 @@ internal object UniffiLib {
     ): Unit
     external fun ffi_cove_device_rust_future_free_void(`handle`: Long,
     ): Unit
-    external fun ffi_cove_device_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun ffi_cove_device_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
 
-        
+
 }
 
 private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
@@ -1429,7 +1429,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
         }
     }
 
-/** 
+/**
  * Placeholder object used to signal that we're constructing an interface with a FFI handle.
  *
  * This is the first argument for interface constructors that input a raw handle. It exists is that
@@ -1440,7 +1440,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
  * */
 object UniffiWithHandle
 
-/** 
+/**
  * Used to instantiate an interface without an actual pointer, for fakes in tests, mostly.
  *
  * @suppress
@@ -1738,12 +1738,12 @@ public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
 
 
 public interface CloudStorageInterface {
-    
+
     /**
      * Check if any cloud backup namespaces exist
      */
     suspend fun `hasAnyCloudBackup`(`policy`: CloudAccessPolicy): kotlin.Boolean
-    
+
     companion object
 }
 
@@ -1772,11 +1772,11 @@ open class CloudStorage: Disposable, AutoCloseable, CloudStorageInterface
         this.cleanable = null
     }
     constructor(`cloudStorage`: CloudStorageAccess) :
-        this(UniffiWithHandle, 
+        this(UniffiWithHandle,
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_constructor_cloudstorage_new(
-    
-        
+
+
         FfiConverterTypeCloudStorageAccess.lower(`cloudStorage`),_status)
 }
     )
@@ -1857,7 +1857,7 @@ open class CloudStorage: Disposable, AutoCloseable, CloudStorageInterface
         }
     }
 
-    
+
     /**
      * Check if any cloud backup namespaces exist
      */
@@ -1868,7 +1868,7 @@ open class CloudStorage: Disposable, AutoCloseable, CloudStorageInterface
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(
                 uniffiHandle,
-                
+
         FfiConverterTypeCloudAccessPolicy.lower(`policy`),
             )
         },
@@ -1882,18 +1882,18 @@ open class CloudStorage: Disposable, AutoCloseable, CloudStorageInterface
     )
     }
 
-    
-
-    
 
 
-    
-    
+
+
+
+
+
     /**
      * @suppress
      */
     companion object
-    
+
 }
 
 
@@ -2017,7 +2017,7 @@ public object FfiConverterTypeCloudStorage: FfiConverter<CloudStorage, Long> {
 
 
 public interface ConnectivityInterface {
-    
+
     companion object
 }
 
@@ -2046,11 +2046,11 @@ open class Connectivity: Disposable, AutoCloseable, ConnectivityInterface
         this.cleanable = null
     }
     constructor(`connectivity`: ConnectivityAccess) :
-        this(UniffiWithHandle, 
+        this(UniffiWithHandle,
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_constructor_connectivity_new(
-    
-        
+
+
         FfiConverterTypeConnectivityAccess.lower(`connectivity`),_status)
 }
     )
@@ -2131,18 +2131,18 @@ open class Connectivity: Disposable, AutoCloseable, ConnectivityInterface
         }
     }
 
-    
-
-    
 
 
-    
-    
+
+
+
+
+
     /**
      * @suppress
      */
     companion object
-    
+
 }
 
 
@@ -2266,7 +2266,7 @@ public object FfiConverterTypeConnectivity: FfiConverter<Connectivity, Long> {
 
 
 public interface DeviceInterface {
-    
+
     companion object
 }
 
@@ -2302,11 +2302,11 @@ open class Device: Disposable, AutoCloseable, DeviceInterface
      * Panics if the device has already been initialized
      */
     constructor(`device`: DeviceAccess) :
-        this(UniffiWithHandle, 
+        this(UniffiWithHandle,
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_constructor_device_new(
-    
-        
+
+
         FfiConverterTypeDeviceAccess.lower(`device`),_status)
 }
     )
@@ -2387,18 +2387,18 @@ open class Device: Disposable, AutoCloseable, DeviceInterface
         }
     }
 
-    
-
-    
 
 
-    
-    
+
+
+
+
+
     /**
      * @suppress
      */
     companion object
-    
+
 }
 
 
@@ -2522,7 +2522,7 @@ public object FfiConverterTypeDevice: FfiConverter<Device, Long> {
 
 
 public interface KeychainInterface {
-    
+
     companion object
 }
 
@@ -2558,11 +2558,11 @@ open class Keychain: Disposable, AutoCloseable, KeychainInterface
      * Panics if the keychain has already been initialized
      */
     constructor(`keychain`: KeychainAccess) :
-        this(UniffiWithHandle, 
+        this(UniffiWithHandle,
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_constructor_keychain_new(
-    
-        
+
+
         FfiConverterTypeKeychainAccess.lower(`keychain`),_status)
 }
     )
@@ -2643,18 +2643,18 @@ open class Keychain: Disposable, AutoCloseable, KeychainInterface
         }
     }
 
-    
-
-    
 
 
-    
-    
+
+
+
+
+
     /**
      * @suppress
      */
     companion object
-    
+
 }
 
 
@@ -2778,9 +2778,9 @@ public object FfiConverterTypeKeychain: FfiConverter<Keychain, Long> {
 
 
 public interface PasskeyAccessInterface {
-    
+
     fun `isPrfSupported`(): kotlin.Boolean
-    
+
     companion object
 }
 
@@ -2809,11 +2809,11 @@ open class PasskeyAccess: Disposable, AutoCloseable, PasskeyAccessInterface
         this.cleanable = null
     }
     constructor(`provider`: PasskeyProvider) :
-        this(UniffiWithHandle, 
+        this(UniffiWithHandle,
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_constructor_passkeyaccess_new(
-    
-        
+
+
         FfiConverterTypePasskeyProvider.lower(`provider`),_status)
 }
     )
@@ -2905,20 +2905,20 @@ open class PasskeyAccess: Disposable, AutoCloseable, PasskeyAccessInterface
     }
     )
     }
-    
-
-    
-
-    
 
 
-    
-    
+
+
+
+
+
+
+
     /**
      * @suppress
      */
     companion object
-    
+
 }
 
 
@@ -2955,18 +2955,18 @@ data class DiscoveredPasskeyResult (
      * 32-byte PRF key
      */
     var `prfOutput`: kotlin.ByteArray
-    , 
+    ,
     /**
      * Discovered credential ID, persisted to local keychain
      */
     var `credentialId`: kotlin.ByteArray
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -2996,17 +2996,17 @@ public object FfiConverterTypeDiscoveredPasskeyResult: FfiConverterRustBuffer<Di
 
 data class PasskeyRegistrationResult (
     var `credentialId`: kotlin.ByteArray
-    , 
+    ,
     var `providerAaguid`: kotlin.String
-    , 
+    ,
     var `registeredPlatform`: PasskeyRegistrationPlatform
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -3039,17 +3039,17 @@ public object FfiConverterTypePasskeyRegistrationResult: FfiConverterRustBuffer<
 
 data class PasskeyRegistrationUser (
     var `id`: kotlin.ByteArray
-    , 
+    ,
     var `name`: kotlin.String
-    , 
+    ,
     var `displayName`: kotlin.String
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -3082,13 +3082,13 @@ public object FfiConverterTypePasskeyRegistrationUser: FfiConverterRustBuffer<Pa
 
 data class RemoteBackupLocation (
     var `relativePath`: kotlin.String
-    
+
 ){
-    
 
-    
 
-    
+
+
+
     companion object
 }
 
@@ -3115,11 +3115,11 @@ public object FfiConverterTypeRemoteBackupLocation: FfiConverterRustBuffer<Remot
 
 
 enum class CloudAccessPolicy {
-    
+
     CONSENT_ALLOWED,
     SILENT;
 
-    
+
 
 
     companion object
@@ -3150,63 +3150,63 @@ public object FfiConverterTypeCloudAccessPolicy: FfiConverterRustBuffer<CloudAcc
 
 
 sealed class CloudStorageException: kotlin.Exception() {
-    
+
     class AuthorizationRequired(
-        
+
         val v1: kotlin.String
         ) : CloudStorageException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class NotAvailable(
-        
+
         val v1: kotlin.String
         ) : CloudStorageException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class Offline(
-        
+
         val v1: kotlin.String
         ) : CloudStorageException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class UploadFailed(
-        
+
         val v1: kotlin.String
         ) : CloudStorageException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class DownloadFailed(
-        
+
         val v1: kotlin.String
         ) : CloudStorageException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class NotFound(
-        
+
         val v1: kotlin.String
         ) : CloudStorageException() {
         override val message
             get() = "v1=${ v1 }"
     }
-    
+
     class QuotaExceeded(
         ) : CloudStorageException() {
         override val message
             get() = ""
     }
-    
 
-    
+
+
 
     // The local Rust `Display`/`Debug` implementation.
     override fun toString(): String {
@@ -3222,7 +3222,7 @@ sealed class CloudStorageException: kotlin.Exception() {
         override fun lift(error_buf: RustBuffer.ByValue): CloudStorageException = FfiConverterTypeCloudStorageError.lift(error_buf)
     }
 
-    
+
 }
 
 /**
@@ -3230,7 +3230,7 @@ sealed class CloudStorageException: kotlin.Exception() {
  */
 public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudStorageException> {
     override fun read(buf: ByteBuffer): CloudStorageException {
-        
+
 
         return when(buf.getInt()) {
             1 -> CloudStorageException.AuthorizationRequired(
@@ -3339,45 +3339,45 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
 
 
 sealed class CloudSyncHealth {
-    
+
     object Unknown : CloudSyncHealth()
-    
-    
+
+
     object AllUploaded : CloudSyncHealth()
-    
-    
+
+
     object Uploading : CloudSyncHealth()
-    
-    
+
+
     data class Failed(
         val v1: kotlin.String) : CloudSyncHealth()
-        
+
     {
-        
+
 
         companion object
     }
-    
+
     object NoFiles : CloudSyncHealth()
-    
-    
+
+
     data class AuthorizationRequired(
         val v1: kotlin.String) : CloudSyncHealth()
-        
+
     {
-        
+
 
         companion object
     }
-    
+
     object Unavailable : CloudSyncHealth()
-    
-    
 
-    
 
-    
-    
+
+
+
+
+
 
 
     companion object
@@ -3494,45 +3494,45 @@ public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSync
 
 
 sealed class KeychainException: kotlin.Exception() {
-    
+
     class Save(
         ) : KeychainException() {
         override val message
             get() = ""
     }
-    
+
     class Delete(
         ) : KeychainException() {
         override val message
             get() = ""
     }
-    
-    class ParseSavedValue(
-        
-        val v1: kotlin.String
-        ) : KeychainException() {
-        override val message
-            get() = "v1=${ v1 }"
-    }
-    
-    class Encrypt(
-        
-        val v1: kotlin.String
-        ) : KeychainException() {
-        override val message
-            get() = "v1=${ v1 }"
-    }
-    
-    class Decrypt(
-        
-        val v1: kotlin.String
-        ) : KeychainException() {
-        override val message
-            get() = "v1=${ v1 }"
-    }
-    
 
-    
+    class ParseSavedValue(
+
+        val v1: kotlin.String
+        ) : KeychainException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class Encrypt(
+
+        val v1: kotlin.String
+        ) : KeychainException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class Decrypt(
+
+        val v1: kotlin.String
+        ) : KeychainException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+
+
 
     // The local Rust `Display`/`Debug` implementation.
     override fun toString(): String {
@@ -3548,7 +3548,7 @@ sealed class KeychainException: kotlin.Exception() {
         override fun lift(error_buf: RustBuffer.ByValue): KeychainException = FfiConverterTypeKeychainError.lift(error_buf)
     }
 
-    
+
 }
 
 /**
@@ -3556,7 +3556,7 @@ sealed class KeychainException: kotlin.Exception() {
  */
 public object FfiConverterTypeKeychainError : FfiConverterRustBuffer<KeychainException> {
     override fun read(buf: ByteBuffer): KeychainException {
-        
+
 
         return when(buf.getInt()) {
             1 -> KeychainException.Save()
@@ -3636,12 +3636,12 @@ public object FfiConverterTypeKeychainError : FfiConverterRustBuffer<KeychainExc
 
 
 enum class PasskeyCredentialPresence {
-    
+
     PRESENT,
     MISSING,
     INDETERMINATE;
 
-    
+
 
 
     companion object
@@ -3672,45 +3672,45 @@ public object FfiConverterTypePasskeyCredentialPresence: FfiConverterRustBuffer<
 
 
 sealed class PasskeyException: kotlin.Exception() {
-    
+
     class NotSupported(
-        
+
         val `reason`: PasskeyFailureReason
         ) : PasskeyException() {
         override val message
             get() = "reason=${ `reason` }"
     }
-    
+
     class PrfUnsupportedProvider(
         ) : PasskeyException() {
         override val message
             get() = ""
     }
-    
+
     class UserCancelled(
         ) : PasskeyException() {
         override val message
             get() = ""
     }
-    
+
     class RequestFailed(
-        
-        val `operation`: PasskeyOperation, 
-        
+
+        val `operation`: PasskeyOperation,
+
         val `reason`: PasskeyFailureReason
         ) : PasskeyException() {
         override val message
             get() = "operation=${ `operation` }, reason=${ `reason` }"
     }
-    
+
     class NoCredentialFound(
         ) : PasskeyException() {
         override val message
             get() = ""
     }
-    
 
-    
+
+
 
     // The local Rust `Display`/`Debug` implementation.
     override fun toString(): String {
@@ -3726,7 +3726,7 @@ sealed class PasskeyException: kotlin.Exception() {
         override fun lift(error_buf: RustBuffer.ByValue): PasskeyException = FfiConverterTypePasskeyError.lift(error_buf)
     }
 
-    
+
 }
 
 /**
@@ -3734,7 +3734,7 @@ sealed class PasskeyException: kotlin.Exception() {
  */
 public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyException> {
     override fun read(buf: ByteBuffer): PasskeyException {
-        
+
 
         return when(buf.getInt()) {
             1 -> PasskeyException.NotSupported(
@@ -3812,45 +3812,45 @@ public object FfiConverterTypePasskeyError : FfiConverterRustBuffer<PasskeyExcep
 
 
 sealed class PasskeyFailureReason {
-    
+
     object PlatformAuthorizationFailed : PasskeyFailureReason()
-    
-    
+
+
     object InvalidResponse : PasskeyFailureReason()
-    
-    
+
+
     object NotHandled : PasskeyFailureReason()
-    
-    
+
+
     object Interrupted : PasskeyFailureReason()
-    
-    
+
+
     object ProviderConfiguration : PasskeyFailureReason()
-    
-    
+
+
     object NoCreateOption : PasskeyFailureReason()
-    
-    
+
+
     object DeviceNotConfigured : PasskeyFailureReason()
-    
-    
+
+
     object UnexpectedCredentialType : PasskeyFailureReason()
-    
-    
+
+
     object MissingCredentialId : PasskeyFailureReason()
-    
-    
+
+
     object MalformedResponse : PasskeyFailureReason()
-    
-    
+
+
     object TimedOut : PasskeyFailureReason()
-    
-    
+
+
     data class Unknown(
         val `diagnosticMessage`: kotlin.String) : PasskeyFailureReason()
-        
+
     {
-        
+
 
     // The local Rust `Display`/`Debug` implementation.
     override fun toString(): String {
@@ -3863,12 +3863,12 @@ sealed class PasskeyFailureReason {
     }
         companion object
     }
-    
 
-    
 
-    
-    
+
+
+
+
 
     // The local Rust `Display`/`Debug` implementation.
     override fun toString(): String {
@@ -4044,12 +4044,12 @@ public object FfiConverterTypePasskeyFailureReason : FfiConverterRustBuffer<Pass
 
 
 enum class PasskeyOperation {
-    
+
     REGISTRATION,
     DISCOVER_ASSERTION,
     AUTHENTICATE_ASSERTION;
 
-    
+
 
     // The local Rust `Display`/`Debug` implementation.
     override fun toString(): String {
@@ -4088,11 +4088,11 @@ public object FfiConverterTypePasskeyOperation: FfiConverterRustBuffer<PasskeyOp
 
 
 enum class PasskeyRegistrationPlatform {
-    
+
     IOS,
     ANDROID;
 
-    
+
 
 
     companion object
@@ -4123,36 +4123,36 @@ public object FfiConverterTypePasskeyRegistrationPlatform: FfiConverterRustBuffe
 
 
 public interface CloudStorageAccess {
-    
+
     suspend fun `uploadMasterKeyBackup`(`namespace`: kotlin.String, `location`: RemoteBackupLocation, `data`: kotlin.ByteArray, `policy`: CloudAccessPolicy)
-    
+
     suspend fun `uploadWalletBackup`(`namespace`: kotlin.String, `recordId`: kotlin.String, `location`: RemoteBackupLocation, `data`: kotlin.ByteArray, `policy`: CloudAccessPolicy)
-    
+
     suspend fun `downloadMasterKeyBackup`(`namespace`: kotlin.String, `locations`: List<RemoteBackupLocation>, `policy`: CloudAccessPolicy): kotlin.ByteArray
-    
+
     suspend fun `downloadWalletBackup`(`namespace`: kotlin.String, `recordId`: kotlin.String, `locations`: List<RemoteBackupLocation>, `policy`: CloudAccessPolicy): kotlin.ByteArray
-    
+
     suspend fun `deleteWalletBackup`(`namespace`: kotlin.String, `recordId`: kotlin.String, `locations`: List<RemoteBackupLocation>, `policy`: CloudAccessPolicy)
-    
+
     suspend fun `deleteNamespace`(`namespace`: kotlin.String, `policy`: CloudAccessPolicy)
-    
+
     /**
      * List all namespace IDs (subdirectories of cspp-namespaces/)
      */
     suspend fun `listNamespaces`(`policy`: CloudAccessPolicy): List<kotlin.String>
-    
+
     /**
      * List wallet backup file names for a namespace and access policy
      */
     suspend fun `listWalletFiles`(`namespace`: kotlin.String, `policy`: CloudAccessPolicy): List<kotlin.String>
-    
+
     /**
      * Check whether a blob has been fully uploaded to iCloud
      */
     suspend fun `isBackupUploaded`(`namespace`: kotlin.String, `recordId`: kotlin.String, `locations`: List<RemoteBackupLocation>, `policy`: CloudAccessPolicy): kotlin.Boolean
-    
+
     suspend fun `overallSyncHealth`(`policy`: CloudAccessPolicy): CloudSyncHealth
-    
+
     companion object
 }
 
@@ -4558,9 +4558,9 @@ public object FfiConverterTypeCloudStorageAccess: FfiConverterCallbackInterface<
 
 
 public interface ConnectivityAccess {
-    
+
     fun `isConnected`(): kotlin.Boolean
-    
+
     companion object
 }
 
@@ -4617,9 +4617,9 @@ public object FfiConverterTypeConnectivityAccess: FfiConverterCallbackInterface<
 
 
 public interface DeviceAccess {
-    
+
     fun `timezone`(): kotlin.String
-    
+
     companion object
 }
 
@@ -4676,7 +4676,7 @@ public object FfiConverterTypeDeviceAccess: FfiConverterCallbackInterface<Device
 
 
 public interface KeychainAccess {
-    
+
     /**
      * Saves a key-value pair
      *
@@ -4685,11 +4685,11 @@ public interface KeychainAccess {
      * Returns a `KeychainError` if the save operation fails
      */
     fun `save`(`key`: kotlin.String, `value`: kotlin.String)
-    
+
     fun `get`(`key`: kotlin.String): kotlin.String?
-    
+
     fun `delete`(`key`: kotlin.String): kotlin.Boolean
-    
+
     companion object
 }
 
@@ -4779,17 +4779,17 @@ public object FfiConverterTypeKeychainAccess: FfiConverterCallbackInterface<Keyc
 
 
 public interface PasskeyProvider {
-    
+
     /**
      * Create a new passkey credential
      */
     fun `createPasskey`(`rpId`: kotlin.String, `challenge`: kotlin.ByteArray, `user`: PasskeyRegistrationUser): PasskeyRegistrationResult
-    
+
     /**
      * Authenticate with a known credential_id (enable flow, re-enable)
      */
     fun `authenticateWithPrf`(`rpId`: kotlin.String, `credentialId`: kotlin.ByteArray, `prfSalt`: kotlin.ByteArray, `challenge`: kotlin.ByteArray): kotlin.ByteArray
-    
+
     /**
      * Discoverable credential assertion — no credential_id needed
      *
@@ -4798,9 +4798,9 @@ public interface PasskeyProvider {
      * Returns both the 32-byte PRF output and the credential_id of the discovered passkey
      */
     fun `discoverAndAuthenticateWithPrf`(`rpId`: kotlin.String, `prfSalt`: kotlin.ByteArray, `challenge`: kotlin.ByteArray): DiscoveredPasskeyResult
-    
+
     fun `isPrfSupported`(): kotlin.Boolean
-    
+
     /**
      * Non-interactive check whether a passkey credential exists on the device
      *
@@ -4809,7 +4809,7 @@ public interface PasskeyProvider {
      * does not respond clearly enough to prove presence or absence
      */
     fun `checkPasskeyPresence`(`rpId`: kotlin.String, `credentialId`: kotlin.ByteArray): PasskeyCredentialPresence
-    
+
     companion object
 }
 
@@ -5062,24 +5062,24 @@ public object FfiConverterSequenceSequenceString: FfiConverterRustBuffer<List<Li
             return FfiConverterTypeCloudSyncHealth.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_device_fn_func_cloud_backup_locations_sync_health(
-    
-        
+
+
         FfiConverterSequenceSequenceString.lower(`namespaceLocations`),_status)
 }
     )
     }
-    
+
 
     @Throws(PasskeyException::class) fun `passkeyAaguidFromAttestationObject`(`attestationObject`: kotlin.ByteArray): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCallWithError(PasskeyException) { _status ->
     UniffiLib.uniffi_cove_device_fn_func_passkey_aaguid_from_attestation_object(
-    
-        
+
+
         FfiConverterByteArray.lower(`attestationObject`),_status)
 }
     )
     }
-    
+
 
 

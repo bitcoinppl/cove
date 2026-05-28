@@ -1,3 +1,11 @@
+//! Discovers which imported wallet address types have transaction history
+//!
+//! This scanner runs during import flows when metadata is in a discovery state such as
+//! `StartedJson` or `StartedMnemonic`. It checks legacy and wrapped SegWit candidate wallets
+//! until it finds history or reaches the discovery scan limit, then records the discovered
+//! address types in wallet metadata. It is separate from the selected-wallet progressive
+//! transaction scanner, which syncs transactions for an already selected wallet
+
 use std::{sync::Arc, time::Instant};
 
 use act_zero::*;
@@ -15,7 +23,7 @@ use pubport::formats::Json;
 use tracing::{debug, error, info, warn};
 
 /// Default number of addresses to scan
-const DEFAULT_SCAN_LIMIT: u32 = 150;
+const DEFAULT_SCAN_LIMIT: u32 = 200;
 
 use crate::{
     database::{
@@ -51,7 +59,7 @@ pub struct Workers([Option<WorkerHandle>; 2]);
 #[derive(Debug, Clone)]
 pub struct WorkerHandle {
     pub id: WalletId,
-    pub addr: Addr<WalletScanWorker>,
+    pub addr: Addr<WalletDiscoveryWorker>,
     pub wallet_type: WalletAddressType,
     pub started_at: Instant,
     pub state: WorkerState,
@@ -87,7 +95,7 @@ pub enum ScannerResponse {
 }
 
 #[derive(Debug, Clone)]
-pub struct WalletScanner {
+pub struct WalletDiscoveryScanner {
     pub id: WalletId,
     pub addr: WeakAddr<Self>,
     pub workers: Workers,
@@ -104,7 +112,7 @@ pub enum ScanSource {
 }
 
 #[async_trait::async_trait]
-impl Actor for WalletScanner {
+impl Actor for WalletDiscoveryScanner {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
         self.started_at = Instant::now();
@@ -116,12 +124,12 @@ impl Actor for WalletScanner {
     }
 
     async fn error(&mut self, error: ActorError) -> bool {
-        error!("WalletScanner Error: {error:?}");
+        error!("WalletDiscoveryScanner Error: {error:?}");
         false
     }
 }
 
-impl WalletScanner {
+impl WalletDiscoveryScanner {
     /// Create a new scanner based on the DiscoveryState of the wallet metadata
     /// Only create a scanner if the discovery state is not already completed, and if
     /// have the required information to start a scan.
@@ -129,7 +137,7 @@ impl WalletScanner {
         metadata: WalletMetadata,
         reconciler: Sender<SingleOrMany>,
     ) -> Result<Self, WalletScannerError> {
-        debug!("starting wallet scanner for {}, metadata: {metadata:?}", metadata.id);
+        debug!("starting wallet discovery scanner for {}, metadata: {metadata:?}", metadata.id);
 
         let db = Database::global();
         let network = db.global_config().selected_network().into();
@@ -180,8 +188,12 @@ impl WalletScanner {
 
         // create workers
         for (wallet_type, wallet) in wallets.0.into_iter().flatten() {
-            let worker =
-                WalletScanWorker::new(id.clone(), wallet_type, wallet, node_client_builder.clone());
+            let worker = WalletDiscoveryWorker::new(
+                id.clone(),
+                wallet_type,
+                wallet,
+                node_client_builder.clone(),
+            );
 
             let addr = spawn_actor(worker);
             workers[index(wallet_type)].replace(WorkerHandle {
@@ -216,6 +228,17 @@ impl WalletScanner {
         for worker in self.workers.iter_mut().flatten() {
             call!(worker.addr.start(parent.clone())).await?;
             worker.state = WorkerState::Started;
+        }
+
+        Produces::ok(())
+    }
+
+    pub async fn shutdown(&mut self) -> ActorResult<()> {
+        debug!("shutting down wallet discovery scanner for {}", self.id);
+
+        for worker in self.workers.iter_mut().flatten() {
+            send!(worker.addr.shutdown());
+            worker.addr = Default::default();
         }
 
         Produces::ok(())
@@ -347,8 +370,8 @@ impl WalletScanner {
 // WORKER
 
 #[derive(Debug)]
-pub struct WalletScanWorker {
-    parent: WeakAddr<WalletScanner>,
+pub struct WalletDiscoveryWorker {
+    parent: WeakAddr<WalletDiscoveryScanner>,
     addr: WeakAddr<Self>,
     client_builder: NodeClientBuilder,
     wallet_type: WalletAddressType,
@@ -360,7 +383,7 @@ pub struct WalletScanWorker {
 }
 
 #[async_trait::async_trait]
-impl Actor for WalletScanWorker {
+impl Actor for WalletDiscoveryWorker {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
         self.started_at = Instant::now();
@@ -369,21 +392,21 @@ impl Actor for WalletScanWorker {
     }
 
     async fn error(&mut self, error: ActorError) -> bool {
-        error!("WalletScanWorker Error: {error:?}");
+        error!("WalletDiscoveryWorker Error: {error:?}");
         false
     }
 }
 
-impl WalletScanWorker {
+impl WalletDiscoveryWorker {
     pub fn new(
         id: WalletId,
         wallet_type: WalletAddressType,
         wallet: BdkWallet,
         client_builder: NodeClientBuilder,
     ) -> Self {
-        debug!("creating wallet scanner for {id}, type: {wallet_type}");
+        debug!("creating wallet discovery scanner for {id}, type: {wallet_type}");
         let db = WalletDataDb::new_or_existing(id.clone())
-            .expect("failed to open wallet database for scan worker");
+            .expect("failed to open wallet database for discovery scanner");
 
         let scan_info = db
             .get_scan_state(wallet_type)
@@ -399,7 +422,7 @@ impl WalletScanWorker {
             })
             .unwrap_or_else(|| ScanningInfo::new(wallet_type));
 
-        debug!("wallet scan info: {scan_info:?}");
+        debug!("wallet discovery scan info: {scan_info:?}");
         Self {
             parent: Default::default(),
             addr: Default::default(),
@@ -413,7 +436,7 @@ impl WalletScanWorker {
         }
     }
 
-    pub async fn start(&mut self, parent: WeakAddr<WalletScanner>) {
+    pub async fn start(&mut self, parent: WeakAddr<WalletDiscoveryScanner>) {
         self.parent = parent;
 
         let addr = self.addr.clone();
@@ -438,12 +461,12 @@ impl WalletScanWorker {
                 loop {
                     let address = call!(addr.address_at(current_address)).await?;
 
-                    // found address
-                    if client
+                    let found_address = client
                         .check_address_for_txn(address)
                         .await
-                        .context("could not check address")?
-                    {
+                        .context("could not check address")?;
+
+                    if found_address {
                         call!(parent.mark_found_txn(wallet_type)).await?;
 
                         // save the scan state
@@ -483,6 +506,12 @@ impl WalletScanWorker {
                 // todo: maybe send the error back to the parent? the scanner or the view model?
             }
         });
+
+        Produces::ok(())
+    }
+
+    pub async fn shutdown(&mut self) -> ActorResult<()> {
+        self.parent = Default::default();
 
         Produces::ok(())
     }

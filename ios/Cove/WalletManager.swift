@@ -1,6 +1,18 @@
+import os
 import SwiftUI
 
 extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletManager {}
+
+private extension WalletScanStatus {
+    var isActive: Bool {
+        switch self {
+        case .idle:
+            false
+        case .scanning, .scanningPendingProgress:
+            true
+        }
+    }
+}
 
 @Observable final class WalletManager: AnyReconciler, WalletManagerReconciler {
     typealias Message = WalletManagerReconcileMessage
@@ -11,9 +23,13 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     let id: WalletId
     @ObservationIgnored
     let rust: RustWalletManager
+    @ObservationIgnored
+    private let closeState = OSAllocatedUnfairLock(initialState: false)
 
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState
+    var scanStatus: WalletScanStatus
+    var balancePresentation: BalancePresentation
     var balance: Balance = .zero()
     var foundAddresses: [FoundAddress] = []
     var unsignedTransactions: [UnsignedTransaction] = []
@@ -41,14 +57,30 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     init(id: WalletId) throws {
         self.id = id
         let rust = try RustWalletManager(id: id)
+        let loadState = rust.initialLoadState()
 
         self.rust = rust
-        self.loadState = rust.initialLoadState()
+        self.loadState = loadState
+        self.scanStatus = .idle
+        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
 
         walletMetadata = rust.walletMetadata()
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
+    }
+
+    func close() {
+        guard markClosedIfNeeded() else { return }
+        rust.shutdown()
+    }
+
+    private func markClosedIfNeeded() -> Bool {
+        closeState.withLock { isClosed in
+            guard !isClosed else { return false }
+            isClosed = true
+            return true
+        }
     }
 
     init(xpub: String) throws {
@@ -57,6 +89,8 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         self.rust = rust
         self.loadState = .loading
+        self.scanStatus = .idle
+        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         walletMetadata = metadata
         id = metadata.id
 
@@ -80,6 +114,8 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         self.rust = rust
         self.loadState = .loading
+        self.scanStatus = .idle
+        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         walletMetadata = metadata
         id = metadata.id
 
@@ -165,18 +201,21 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
     func apply(_ message: Message) {
         switch message {
-        case .startedInitialFullScan:
-            switch self.loadState {
-            case let .scanning(txns) where !txns.isEmpty:
-                break
-            case let .loaded(txns):
-                self.loadState = .scanning(txns)
-            default:
-                self.loadState = .loading
+        case let .walletScanStatusChanged(status):
+            self.scanStatus = status
+            self.balancePresentation = rust.balancePresentation(scanStatus: status)
+            if status.isActive {
+                switch self.loadState {
+                case .scanning:
+                    break
+                case let .loaded(txns):
+                    self.loadState = .scanning(txns)
+                case .loading:
+                    self.loadState = .scanning([])
+                }
+            } else if case let .scanning(txns) = self.loadState {
+                self.loadState = .loaded(txns)
             }
-
-        case let .startedExpandedFullScan(txns):
-            self.loadState = .scanning(txns)
 
         case let .availableTransactions(txns):
             switch self.loadState {
@@ -212,6 +251,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         case let .walletMetadataChanged(metadata):
             withAnimation { self.walletMetadata = metadata }
             setWalletMetadata(metadata)
+            self.balancePresentation = rust.balancePresentation(scanStatus: scanStatus)
 
         case let .walletScannerResponse(scannerResponse):
             self.logger.debug("walletScannerResponse: \(scannerResponse)")
@@ -321,12 +361,15 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         self.rust = rust
         self.loadState = .loading
+        self.scanStatus = .idle
+        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         self.walletMetadata = rust.walletMetadata()
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
     deinit {
+        close()
         logger.debug("WalletManager deinit called for wallet \(id)")
     }
 }
