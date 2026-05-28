@@ -213,7 +213,7 @@ class AppManager private constructor() : FfiReconcile {
         navigationSettleJob?.cancel()
         navigationSettleJob = null
         isNavigationSettled = true
-        advanceNavigationGeneration()
+        advanceNavigationGeneration(skipSettle = true)
 
         // close managers before clearing them
         walletManager?.close()
@@ -442,9 +442,11 @@ class AppManager private constructor() : FfiReconcile {
         rust.resetAfterLoading(nextRoutes)
     }
 
-    private fun advanceNavigationGeneration(): GenerationToken {
+    private fun advanceNavigationGeneration(skipSettle: Boolean = false): GenerationToken {
         val generation = navigationGenerations.advance()
-        scheduleNavigationSettled(generation)
+        if (!skipSettle) {
+            scheduleNavigationSettled(generation)
+        }
         return generation
     }
 
