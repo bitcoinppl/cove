@@ -467,4 +467,18 @@ mod tests {
         let url = format!("  \n\t{}", satscard_https(SATSCARD_SEALED_FRAGMENT));
         assert!(matches!(TapCard::parse(&url).unwrap(), TapCard::SatsCard(_)));
     }
+
+    #[test]
+    fn test_ident_file_name_prefix() {
+        let url = "https://tapsigner.com/start#t=1&u=S&c=04d74fb1dfee7a4d&n=8940dc9808088820&s=6bda376546b7074b5a52f3264fe118d38889f49501b591b0b9e90a2ff2e07d26572898aaeb0f963a52cf707e7483203520ce40bdf5071e8f80262d587b41b99f";
+        let TapCard::TapSigner(ts) = TapCard::parse(url).unwrap() else {
+            panic!("not a tap signer")
+        };
+
+        let prefix = ts.ident_file_name_prefix();
+        // Derived from full_card_ident "XUFC5-2SWY2-PX24Q-IZC7W" with dashes removed and lowercased
+        assert_eq!(prefix, "xufc52swy2px24qizc7w");
+        assert!(!prefix.contains('-'), "file name prefix must not contain dashes");
+        assert_eq!(prefix, prefix.to_lowercase(), "file name prefix must be lowercase");
+    }
 }
