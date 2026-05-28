@@ -801,8 +801,6 @@ impl WalletActor {
         proposal_psbt: Psbt,
         fallback_tx: BdkTransaction,
     ) -> ActorResult<()> {
-        // do_broadcast_transaction handles both the network broadcast and local wallet insert;
-        // use ? so a broadcast failure surfaces as an actor error rather than a silent success
         match self.do_sign_original_psbt(proposal_psbt).await {
             Ok((_, proposal_tx)) => {
                 self.do_broadcast_transaction(proposal_tx.clone())
@@ -827,8 +825,6 @@ impl WalletActor {
         &mut self,
         fallback_tx: BdkTransaction,
     ) -> ActorResult<()> {
-        // do_broadcast_transaction handles both the network broadcast and local wallet insert;
-        // use ? so a broadcast failure surfaces as an actor error rather than a silent success
         self.do_broadcast_transaction(fallback_tx.clone())
             .await
             .tap_err(|error| error!("payjoin fallback broadcast failed: {error:?}"))?;
@@ -2131,14 +2127,14 @@ async fn payjoin_http_flow(
     network: bitcoin::Network,
 ) -> eyre::Result<Psbt> {
     // TODO: anti-probing (inputs_seen) — before creating a session, verify our inputs
-    // haven't appeared in a prior payjoin session with this receiver (M4).
+    // haven't appeared in a prior payjoin session with this receiver
 
-    // The endpoint may contain a '#' fragment (the OHTTP key) which must be
-    // percent-encoded as '%23' so it survives as a literal value in the pj= query param.
+    // the endpoint may contain a '#' fragment (the OHTTP key) which must be
+    // percent-encoded as '%23' so it survives as a literal value in the pj= query param
     let encoded_endpoint = endpoint.replace('#', "%23");
 
-    // Identify the recipient output: outputs with no bip32_derivation path are
-    // external (receiver) outputs — they have no derivation info in our wallet.
+    // identify the recipient output: outputs with no bip32_derivation are
+    // external (receiver) outputs — no derivation info in our wallet
     let (idx, _) = signed_psbt
         .outputs
         .iter()
@@ -2158,8 +2154,7 @@ async fn payjoin_http_flow(
         .check_pj_supported()
         .map_err(|_| eyre::eyre!("URI does not support payjoin (missing pj= param)"))?;
 
-    // Build the v2 sender state machine. NoopSessionPersister skips persistence
-    // for now; full session recovery (crash-resume) is planned for M4.
+    // build the v2 sender state machine; NoopSessionPersister skips persistence for now
     let persister = NoopSessionPersister::<PayjoinSessionEvent>::default();
     let sender = SenderBuilder::new(signed_psbt, pj_uri)
         .build_recommended(BdkFeeRate::BROADCAST_MIN)
@@ -2167,13 +2162,12 @@ async fn payjoin_http_flow(
         .save(&persister)
         .map_err(|e| eyre::eyre!("failed to save sender state: {e:?}"))?;
 
-    // Each request needs its own HTTP client; we cannot share the actor's client
-    // across threads or across the async boundary of send_fut.
+    // each request needs its own HTTP client — cannot share across the async boundary of send_fut
     let client =
         cove_http::new_client().map_err(|e| eyre::eyre!("failed to create HTTP client: {e:?}"))?;
 
-    // POST the original PSBT to the payjoin directory.
-    // Try relays in random order; fall through to the next on any failure.
+    // POST the original PSBT to the payjoin directory
+    // try relays in random order, falling through to the next on any failure
     let (post_response, post_ctx) = {
         let mut last_err: eyre::Error = eyre::eyre!("no OHTTP relays configured");
         let mut success = None;
@@ -2217,9 +2211,8 @@ async fn payjoin_http_flow(
         .save(&persister)
         .map_err(|e| eyre::eyre!("failed to process POST response: {e:?}"))?;
 
-    // Poll for the receiver's payjoin proposal via the OHTTP relay.
-    // Each poll is itself an HTTP POST to the relay (BIP77 mandates this).
-    // Relays are reshuffled per poll attempt for resilience and privacy.
+    // poll for the receiver's payjoin proposal via the OHTTP relay
+    // each poll is an HTTP POST (BIP77 mandates this); relays reshuffled per attempt
     for attempt in 0..PAYJOIN_MAX_POLL_ATTEMPTS {
         tokio::time::sleep(PAYJOIN_POLL_INTERVAL).await;
 
