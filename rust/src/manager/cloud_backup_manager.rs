@@ -138,6 +138,7 @@ impl CloudBackupEnableContext {
 pub enum CloudBackupEnableState {
     Idle,
     CreatingPasskey,
+    WaitingForPasskeyAvailability,
     AwaitingSavedPasskeyConfirmation(SavedPasskeyConfirmationMode),
     ConfirmingSavedPasskey,
     UploadingBackup,
@@ -1509,6 +1510,11 @@ impl RustCloudBackupManager {
             CloudBackupEnableOutcome::CreatingPasskey => {
                 self.apply_model_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
                     CloudBackupEnableState::CreatingPasskey,
+                ));
+            }
+            CloudBackupEnableOutcome::WaitingForPasskeyAvailability => {
+                self.apply_model_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
+                    CloudBackupEnableState::WaitingForPasskeyAvailability,
                 ));
             }
             CloudBackupEnableOutcome::UploadingBackup => {

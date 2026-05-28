@@ -6,6 +6,41 @@ pub(crate) enum PendingEnableUploadSelection {
     RetryOrForceNewConfirmation,
 }
 
+const AUTOMATIC_SAVED_PASSKEY_CONFIRMATION_RETRIES: u8 = 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SavedPasskeyConfirmationRetry {
+    Manual,
+    Automatic { retries_remaining: u8 },
+}
+
+impl SavedPasskeyConfirmationRetry {
+    fn for_mode(mode: SavedPasskeyConfirmationMode) -> Self {
+        match mode {
+            SavedPasskeyConfirmationMode::Manual => Self::Manual,
+            SavedPasskeyConfirmationMode::Automatic => Self::Automatic {
+                retries_remaining: AUTOMATIC_SAVED_PASSKEY_CONFIRMATION_RETRIES,
+            },
+        }
+    }
+
+    fn should_retry(self, error: &CloudBackupError) -> bool {
+        matches!(
+            self,
+            Self::Automatic { retries_remaining } if retries_remaining > 0
+        ) && matches!(error, CloudBackupError::Passkey(_))
+    }
+
+    fn after_retry(self) -> Self {
+        match self {
+            Self::Manual => Self::Manual,
+            Self::Automatic { retries_remaining } => Self::Automatic {
+                retries_remaining: retries_remaining.saturating_sub(1),
+            },
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct EnableRecoveryFinalization {
     pub(crate) namespace_id: String,
@@ -187,7 +222,12 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending) {
+        if !self.start_saved_passkey_confirmation(
+            manager.clone(),
+            claim,
+            pending,
+            SavedPasskeyConfirmationRetry::Manual,
+        ) {
             self.active_operation = None;
             manager.project_exclusive_operation_finished(claim);
         }
@@ -198,6 +238,7 @@ impl CloudBackupSupervisor {
     pub async fn complete_saved_passkey_confirmation(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
+        retry: SavedPasskeyConfirmationRetry,
         result: CloudBackupSavedPasskeyConfirmation,
     ) -> ActorResult<()> {
         if self.active_operation != Some(claim) {
@@ -217,6 +258,26 @@ impl CloudBackupSupervisor {
                 ));
                 manager.apply_enable_outcome(CloudBackupEnableOutcome::UploadingBackup);
                 self.schedule_enable_upload(manager, claim, confirmed);
+            }
+            CloudBackupSavedPasskeyConfirmation::Retry { pending, error }
+                if retry.should_retry(&error) =>
+            {
+                warn!("Automatic saved passkey confirmation will retry: {error}");
+                self.pending_enable_session = Some(pending);
+                manager.apply_enable_outcome(
+                    CloudBackupEnableOutcome::WaitingForPasskeyAvailability,
+                );
+
+                if !self.schedule_enable_saved_passkey_wait_with_retry(claim, retry.after_retry())
+                {
+                    manager.apply_enable_outcome(
+                        CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
+                            SavedPasskeyConfirmationMode::Manual,
+                        ),
+                    );
+                    self.active_operation = None;
+                    manager.project_exclusive_operation_finished(claim);
+                }
             }
             CloudBackupSavedPasskeyConfirmation::Retry { pending, error } => {
                 warn!("Confirm saved passkey will retry: {error}");
@@ -655,30 +716,63 @@ impl CloudBackupSupervisor {
                 registered.passkey,
                 registered.context,
             ));
-        manager.apply_enable_outcome(CloudBackupEnableOutcome::CreatingPasskey);
-        self.schedule_enable_saved_passkey_wait(claim, saved_passkey_confirmation);
+        manager.apply_enable_outcome(CloudBackupEnableOutcome::WaitingForPasskeyAvailability);
+        if !self.schedule_enable_saved_passkey_wait(claim, saved_passkey_confirmation) {
+            manager.apply_enable_outcome(
+                CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
+                    SavedPasskeyConfirmationMode::Manual,
+                ),
+            );
+            self.active_operation = None;
+            manager.project_exclusive_operation_finished(claim);
+        }
     }
 
     fn schedule_enable_saved_passkey_wait(
         &self,
         claim: CloudBackupExclusiveOperationClaim,
         mode: SavedPasskeyConfirmationMode,
-    ) {
+    ) -> bool {
+        self.schedule_enable_saved_passkey_wait_with_retry(
+            claim,
+            SavedPasskeyConfirmationRetry::for_mode(mode),
+        )
+    }
+
+    fn schedule_enable_saved_passkey_wait_with_retry(
+        &self,
+        claim: CloudBackupExclusiveOperationClaim,
+        retry: SavedPasskeyConfirmationRetry,
+    ) -> bool {
         let Some(addr) = self.addr() else {
             warn!("Could not schedule enable saved-passkey wait without supervisor addr");
-            return;
+            return false;
         };
 
         cove_tokio::task::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(3)).await;
-            send!(addr.complete_enable_saved_passkey_wait(claim, mode));
+            delay_before_new_passkey_auth().await;
+            send!(addr.complete_enable_saved_passkey_retry_wait(claim, retry));
         });
+
+        true
     }
 
     pub async fn complete_enable_saved_passkey_wait(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         mode: SavedPasskeyConfirmationMode,
+    ) -> ActorResult<()> {
+        self.complete_enable_saved_passkey_retry_wait(
+            claim,
+            SavedPasskeyConfirmationRetry::for_mode(mode),
+        )
+        .await
+    }
+
+    pub async fn complete_enable_saved_passkey_retry_wait(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        retry: SavedPasskeyConfirmationRetry,
     ) -> ActorResult<()> {
         if self.active_operation != Some(claim) {
             return Produces::ok(());
@@ -688,14 +782,16 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        match mode {
-            SavedPasskeyConfirmationMode::Manual => {
+        match retry {
+            SavedPasskeyConfirmationRetry::Manual => {
                 manager.apply_enable_outcome(
-                    CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(mode),
+                    CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
+                        SavedPasskeyConfirmationMode::Manual,
+                    ),
                 );
                 self.finish_enable_operation(manager, claim);
             }
-            SavedPasskeyConfirmationMode::Automatic => {
+            SavedPasskeyConfirmationRetry::Automatic { .. } => {
                 let pending = match self.pending_enable_session.take() {
                     Some(session @ PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)) => {
                         session
@@ -708,7 +804,7 @@ impl CloudBackupSupervisor {
                     }
                 };
 
-                if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending) {
+                if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending, retry) {
                     self.finish_enable_operation(manager, claim);
                 }
             }
@@ -722,6 +818,7 @@ impl CloudBackupSupervisor {
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
         pending: PendingEnableSession,
+        retry: SavedPasskeyConfirmationRetry,
     ) -> bool {
         let Some(addr) = self.addr() else {
             self.pending_enable_session = Some(pending);
@@ -732,7 +829,7 @@ impl CloudBackupSupervisor {
         manager.apply_enable_outcome(CloudBackupEnableOutcome::ConfirmingSavedPasskey);
         addr.send_fut_with(move |addr| async move {
             let result = manager.confirm_saved_passkey_from_session(pending).await;
-            send!(addr.complete_saved_passkey_confirmation(claim, result));
+            send!(addr.complete_saved_passkey_confirmation(claim, retry, result));
         });
 
         true

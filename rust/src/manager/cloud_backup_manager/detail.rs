@@ -150,6 +150,7 @@ pub(crate) enum CloudBackupEnableOutcome {
     ProgressCleared,
     ReturnedToIdle,
     CreatingPasskey,
+    WaitingForPasskeyAvailability,
     UploadingBackup,
     ConfirmingSavedPasskey,
     AwaitingSavedPasskeyConfirmation(SavedPasskeyConfirmationMode),

@@ -548,6 +548,9 @@ impl CloudBackupReducerState {
                 _ => CloudBackupEnableFlow::DiscoveringExistingBackup,
             },
             CloudBackupEnableState::CreatingPasskey => CloudBackupEnableFlow::CreatingPasskey,
+            CloudBackupEnableState::WaitingForPasskeyAvailability => {
+                CloudBackupEnableFlow::WaitingForPasskeyAvailability
+            }
             CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(mode) => {
                 CloudBackupEnableFlow::AwaitingSavedPasskeyConfirmation(mode)
             }
@@ -1298,6 +1301,9 @@ pub(crate) mod test_support {
 
         match flow {
             CloudBackupEnableFlow::CreatingPasskey => CloudBackupEnableState::CreatingPasskey,
+            CloudBackupEnableFlow::WaitingForPasskeyAvailability => {
+                CloudBackupEnableState::WaitingForPasskeyAvailability
+            }
             CloudBackupEnableFlow::AwaitingSavedPasskeyConfirmation(mode) => {
                 CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(*mode)
             }
@@ -1310,8 +1316,7 @@ pub(crate) mod test_support {
             }
             CloudBackupEnableFlow::DiscoveringExistingBackup
             | CloudBackupEnableFlow::AwaitingForceNewConfirmation(_, _)
-            | CloudBackupEnableFlow::AwaitingPasskeyChoice(_)
-            | CloudBackupEnableFlow::WaitingForPasskeyAvailability => CloudBackupEnableState::Idle,
+            | CloudBackupEnableFlow::AwaitingPasskeyChoice(_) => CloudBackupEnableState::Idle,
         }
     }
 
