@@ -108,6 +108,7 @@ pub enum ActorState {
     PerformingFullScan(FullScanType),
 
     SyncScanComplete,
+    IncrementalScanComplete,
 
     FullScanComplete(FullScanType),
 
@@ -1459,6 +1460,7 @@ impl WalletActor {
         self.save_last_scan_finished();
 
         self.notify_scan_complete().await?;
+        self.state = ActorState::IncrementalScanComplete;
         self.send_scan_status(WalletScanStatus::Idle);
 
         Produces::ok(())
