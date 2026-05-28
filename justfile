@@ -162,6 +162,18 @@ android-ui-manual:
 
 alias aum := android-ui-manual
 
+# Update Android Compose preview screenshot references
+[group('test')]
+[working-directory: 'android']
+android-preview-screenshots-update:
+    ./gradlew :app:updateDevDebugScreenshotTest
+
+# Validate Android Compose preview screenshots
+[group('test')]
+[working-directory: 'android']
+android-preview-screenshots-validate:
+    ./gradlew :app:validateDevDebugScreenshotTest
+
 # Run manual iOS full-launch UI tests without opening Simulator
 [group('test')]
 [script('bash')]
