@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftUIIntrospect
 
 struct ExportingBackup: Equatable {
     var tapSigner: TapSigner
@@ -64,6 +65,10 @@ struct SelectedWalletScreen: View {
     private var iOS26OrLater: Bool {
         if #available(iOS 26.0, *) { return true }
         return false
+    }
+
+    private var refreshControlTintColor: UIColor {
+        iOS26OrLater ? UIColor.label : UIColor.white
     }
 
     func updater(_ action: WalletManagerAction) {
@@ -502,11 +507,17 @@ struct SelectedWalletScreen: View {
                 let _ = try? await manager.rust.forceUpdateHeight()
                 await manager.updateWalletBalance()
             }
+            .introspect(.scrollView, on: .iOS(.v18, .v26)) { scrollView in
+                scrollView.refreshControl?.tintColor = refreshControlTintColor
+            }
             .onAppear {
                 // Reset SendFlowManager so new send flow is fresh
                 app.sendFlowManager = nil
-                UIRefreshControl.appearance().tintColor = UIColor.white
+                UIRefreshControl.appearance().tintColor = refreshControlTintColor
                 handleScrollToTransaction(proxy: proxy)
+            }
+            .onChange(of: colorScheme) {
+                UIRefreshControl.appearance().tintColor = refreshControlTintColor
             }
             .onChange(of: manager.loadState, initial: true) {
                 handleScrollToTransaction(proxy: proxy)
@@ -538,6 +549,7 @@ struct SelectedWalletScreen: View {
             pendingRenameNavigationTask = nil
 
             app.isPastHeader = false
+            UIRefreshControl.appearance().tintColor = UIColor.secondaryLabel
         }
         .alert(
             item: Binding(get: { manager.errorAlert }, set: { manager.errorAlert = $0 }),
