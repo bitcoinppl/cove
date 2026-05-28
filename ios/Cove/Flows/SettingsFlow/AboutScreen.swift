@@ -89,7 +89,7 @@ struct AboutScreen: View {
                 }
             }
 
-            if isBetaEnabled {
+            #if DEBUG
                 Section("Debug") {
                     Button(role: .destructive) {
                         alertState = .init(.confirmWipeCloud)
@@ -103,7 +103,7 @@ struct AboutScreen: View {
                         Text("Reset Local Backup State")
                     }
                 }
-            }
+            #endif
         }
         .navigationTitle("About")
         .onDisappear { buildTapTimer?.invalidate(); buildTapTimer = nil }
