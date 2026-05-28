@@ -48,10 +48,16 @@ class WalletManager :
     var scanStatus by mutableStateOf<WalletScanStatus>(WalletScanStatus.Idle)
         private set
 
-    private var balancePresentationState by mutableStateOf<BalancePresentation?>(null)
+    private var balancePresentationState by mutableStateOf(
+        BalancePresentation(
+            primaryOpacity = 1.0,
+            secondaryOpacity = 0.75,
+            pendingOpacity = 0.6,
+        ),
+    )
 
     val balancePresentation: BalancePresentation
-        get() = checkNotNull(balancePresentationState)
+        get() = balancePresentationState
 
     var balance by mutableStateOf(Balance.zero())
         private set
