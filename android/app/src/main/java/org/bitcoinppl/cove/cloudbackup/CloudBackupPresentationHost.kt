@@ -56,6 +56,7 @@ import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.CloudBackupEnablePromptChoice
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
@@ -477,7 +478,9 @@ fun CloudBackupPresentationHost(
                         onClick = {
                             coordinator.dismissCurrentPresentation()
                             manager.dispatch(
-                                enableCloudBackupForceNew(presentation.context),
+                                CloudBackupManagerAction.AcceptEnablePrompt(
+                                    CloudBackupEnablePromptChoice.CREATE_NEW,
+                                ),
                             )
                         },
                     ) { Text("Create New Backup") }
@@ -485,7 +488,9 @@ fun CloudBackupPresentationHost(
                         onClick = {
                             coordinator.dismissCurrentPresentation()
                             manager.dispatch(
-                                CloudBackupManagerAction.EnableCloudBackup(presentation.context),
+                                CloudBackupManagerAction.AcceptEnablePrompt(
+                                    CloudBackupEnablePromptChoice.USE_EXISTING,
+                                ),
                             )
                         },
                     ) { Text("Try Existing Passkey") }
@@ -520,7 +525,9 @@ fun CloudBackupPresentationHost(
                                 when (val intent = presentation.intent) {
                                     is CloudBackupPasskeyChoiceIntent.Enable ->
                                         manager.dispatch(
-                                            CloudBackupManagerAction.EnableCloudBackup(intent.v1),
+                                            CloudBackupManagerAction.AcceptEnablePrompt(
+                                                CloudBackupEnablePromptChoice.USE_EXISTING,
+                                            ),
                                         )
                                     is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
                                         manager.dispatch(CloudBackupManagerAction.RepairPasskey)
@@ -539,7 +546,9 @@ fun CloudBackupPresentationHost(
                                 when (val intent = presentation.intent) {
                                     is CloudBackupPasskeyChoiceIntent.Enable ->
                                         manager.dispatch(
-                                            CloudBackupManagerAction.EnableCloudBackupNoDiscovery(intent.v1),
+                                            CloudBackupManagerAction.AcceptEnablePrompt(
+                                                CloudBackupEnablePromptChoice.CREATE_NEW,
+                                            ),
                                         )
                                     is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
                                         manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery)
@@ -599,6 +608,7 @@ fun CloudBackupPresentationHost(
                     manager.dispatch(CloudBackupManagerAction.DismissVerificationPrompt)
                 },
                 onVerify = {
+                    coordinator.dismissCurrentPresentation()
                     manager.dispatch(
                         CloudBackupManagerAction.StartVerification(
                             CloudBackupVerificationSource.ROOT_PROMPT,

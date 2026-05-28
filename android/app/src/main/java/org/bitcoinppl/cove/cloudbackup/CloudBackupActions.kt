@@ -12,11 +12,6 @@ internal fun manualEnableCloudBackupNoDiscovery(
         manualEnableContext(source),
     )
 
-internal fun enableCloudBackupForceNew(
-    context: CloudBackupEnableContext,
-): CloudBackupManagerAction =
-    CloudBackupManagerAction.EnableCloudBackupForceNew(context)
-
 private fun manualEnableContext(source: CloudBackupVerificationSource): CloudBackupEnableContext =
     CloudBackupEnableContext(
         SavedPasskeyConfirmationMode.MANUAL,

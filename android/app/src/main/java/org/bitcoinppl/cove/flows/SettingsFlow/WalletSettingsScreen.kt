@@ -98,6 +98,7 @@ fun WalletSettingsScreen(
             "This wallet is not backed up and contains funds. You will lose access to " +
                 "these funds forever."
         }
+    val finalDeleteButtonTitle = if (app.cloudBackupManager.isCloudBackupEnabled) "Delete" else "Delete Forever"
 
     fun deleteWallet() {
         try {
@@ -110,6 +111,13 @@ fun WalletSettingsScreen(
     }
 
     fun firstDeleteConfirmationMessage(): String = manager.rust.deletionWarningMessage()
+
+    fun requiredDeleteConfirmations(): UByte =
+        if (app.cloudBackupManager.isCloudBackupEnabled) {
+            2.toUByte()
+        } else {
+            manager.rust.requiredDeletionConfirmations()
+        }
 
     // validate metadata on appear and disappear
     LaunchedEffect(manager) {
@@ -308,7 +316,7 @@ fun WalletSettingsScreen(
                                 )
                             },
                             onClick = {
-                                requiredConfirmations = manager.rust.requiredDeletionConfirmations()
+                                requiredConfirmations = requiredDeleteConfirmations()
                                 showFirstDeleteConfirmation = true
                             },
                         )
@@ -387,7 +395,7 @@ fun WalletSettingsScreen(
                         deleteWallet()
                     },
                 ) {
-                    Text("Delete Forever", color = MaterialTheme.colorScheme.error)
+                    Text(finalDeleteButtonTitle, color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {

@@ -139,6 +139,7 @@ internal fun OnboardingPromptScreen(
 
                 OnboardingStatusHero(
                     icon = icon,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                     pulse = true,
                 )
 

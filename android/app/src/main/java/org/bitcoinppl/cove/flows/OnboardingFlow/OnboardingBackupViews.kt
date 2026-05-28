@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
@@ -562,7 +564,6 @@ private fun OnboardingCloudBackupDetailsStepView(
 ) {
     val backupManager = remember { CloudBackupManager.getInstance() }
     var didReportEnabled by remember { mutableStateOf(false) }
-    var didAutoConfirmSavedPasskey by remember { mutableStateOf(false) }
 
     val lifecycleMsg = backupManager.lifecycleFailureMessage
     val onboardingMessage =
@@ -577,8 +578,6 @@ private fun OnboardingCloudBackupDetailsStepView(
     val isConfirmingUpload = backupManager.hasPendingUploadVerification
     val savedPasskeyConfirmationMode =
         (backupManager.enableFlow as? CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation)?.v1
-    val needsAutomaticPasskeyConfirmation =
-        savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.AUTOMATIC
     val needsManualPasskeyConfirmation =
         savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.MANUAL
     val isEnabling = backupManager.isLifecycleEnabling && !needsManualPasskeyConfirmation
@@ -586,7 +585,6 @@ private fun OnboardingCloudBackupDetailsStepView(
         isVerifying ||
             isConfirmingUpload ||
             backupManager.enableFlow == CloudBackupEnableFlow.ConfirmingSavedPasskey ||
-            needsAutomaticPasskeyConfirmation ||
             isEnabling
     val primaryButtonTitle =
         when {
@@ -619,13 +617,6 @@ private fun OnboardingCloudBackupDetailsStepView(
         backupManager.hasPendingUploadVerification,
     ) {
         completeIfEnabled()
-    }
-
-    LaunchedEffect(backupManager.enableFlow) {
-        if (needsAutomaticPasskeyConfirmation && !didAutoConfirmSavedPasskey && !didReportEnabled) {
-            didAutoConfirmSavedPasskey = true
-            backupManager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
-        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -1153,6 +1144,7 @@ internal fun OnboardingExchangeFundingView(
     var addressText by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var didCopyAddress by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(walletId) {
         addressRaw = null
@@ -1183,106 +1175,119 @@ internal fun OnboardingExchangeFundingView(
 
     OnboardingBackground {
         Column(modifier = Modifier.fillMaxSize()) {
-            Column(
+            BoxWithConstraints(
                 modifier =
                     Modifier
                         .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 24.dp)
-                        .padding(top = 32.dp),
+                        .fillMaxWidth(),
             ) {
-                Text(
-                    text = "Your wallet is ready to fund",
-                    color = Color.White,
-                    fontSize = 34.sp,
-                    lineHeight = 38.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = maxHeight)
+                            .verticalScroll(scrollState)
+                            .padding(horizontal = 24.dp)
+                            .padding(top = 32.dp, bottom = 14.dp),
+                ) {
+                    Text(
+                        text = "Your wallet is ready to fund",
+                        color = Color.White,
+                        fontSize = 34.sp,
+                        lineHeight = 38.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
 
-                Spacer(modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.size(12.dp))
 
-                Text(
-                    text = "Move your Bitcoin off the exchange and into the wallet you now control.",
-                    color = OnboardingTextSecondary,
-                    style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
-                )
+                    Text(
+                        text = "Move your Bitcoin off the exchange and into the wallet you now control.",
+                        color = OnboardingTextSecondary,
+                        style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+                    )
 
-                Spacer(modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.size(24.dp))
 
-                when {
-                    errorMessage != null -> {
-                        OnboardingInlineMessage(text = errorMessage!!)
-                    }
-                    addressRaw != null && addressText != null -> {
-                        val qrBitmap =
-                            remember(addressRaw) {
-                                QrCodeGenerator.generate(
-                                    text = addressRaw!!,
-                                    size = 512,
-                                    errorCorrectionLevel = ErrorCorrectionLevel.L,
-                                )
-                            }
-
-                        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(Color.White)
-                                        .padding(12.dp),
-                            ) {
-                                Image(
-                                    bitmap = qrBitmap.asImageBitmap(),
-                                    contentDescription = "Deposit address QR",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentScale = ContentScale.FillWidth,
-                                )
-                            }
-
-                            Column(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .background(OnboardingCardFill, RoundedCornerShape(16.dp))
-                                        .border(1.dp, OnboardingCardBorder, RoundedCornerShape(16.dp))
-                                        .padding(18.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(
-                                    text = "Deposit address",
-                                    color = CoveColor.coveLightGray.copy(alpha = 0.72f),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Text(
-                                    text = addressText!!,
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
-                                )
-                            }
-
-                            OnboardingSecondaryButton(
-                                text = if (didCopyAddress) "Copied" else "Copy Address",
-                                onClick = {
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("Bitcoin Address", addressRaw!!))
-                                    didCopyAddress = true
-                                },
-                            )
+                    when {
+                        errorMessage != null -> {
+                            OnboardingInlineMessage(text = errorMessage!!)
                         }
-                    }
-                    else -> {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            CircularProgressIndicator(color = Color.White)
-                            Text(
-                                text = "Loading deposit address",
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
+                        addressRaw != null && addressText != null -> {
+                            val qrBitmap =
+                                remember(addressRaw) {
+                                    QrCodeGenerator.generate(
+                                        text = addressRaw!!,
+                                        size = 512,
+                                        errorCorrectionLevel = ErrorCorrectionLevel.L,
+                                    )
+                                }
+
+                            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.CenterHorizontally)
+                                            .widthIn(max = 320.dp)
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(18.dp))
+                                            .background(Color.White)
+                                            .padding(12.dp),
+                                ) {
+                                    Image(
+                                        bitmap = qrBitmap.asImageBitmap(),
+                                        contentDescription = "Deposit address QR",
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .aspectRatio(1f),
+                                        contentScale = ContentScale.Fit,
+                                    )
+                                }
+
+                                Column(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .background(OnboardingCardFill, RoundedCornerShape(16.dp))
+                                            .border(1.dp, OnboardingCardBorder, RoundedCornerShape(16.dp))
+                                            .padding(18.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Text(
+                                        text = "Deposit address",
+                                        color = CoveColor.coveLightGray.copy(alpha = 0.72f),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        text = addressText!!,
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
+                                    )
+                                }
+
+                                OnboardingSecondaryButton(
+                                    text = if (didCopyAddress) "Copied" else "Copy Address",
+                                    onClick = {
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("Bitcoin Address", addressRaw!!))
+                                        didCopyAddress = true
+                                    },
+                                )
+                            }
+                        }
+                        else -> {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                CircularProgressIndicator(color = Color.White)
+                                Text(
+                                    text = "Loading deposit address",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
                         }
                     }
                 }
