@@ -58,12 +58,19 @@ use cove_util::result_ext::ResultExt as _;
 use eyre::Result;
 use flume::Sender;
 use rand::RngExt as _;
+use rand::seq::SliceRandom as _;
 use std::{
     sync::Arc,
     time::{Duration, UNIX_EPOCH},
 };
 use tap::TapFallible as _;
 use tracing::{debug, error, info, warn};
+
+use payjoin::{
+    Uri, UriExt,
+    persist::{NoopSessionPersister, OptionalTransitionOutcome},
+    send::v2::{SenderBuilder, SessionEvent as PayjoinSessionEvent},
+};
 
 use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
@@ -602,14 +609,47 @@ impl WalletActor {
     pub async fn initiate_payment(
         &mut self,
         psbt: Psbt,
-        _payjoin_endpoint: Option<String>,
+        payjoin_endpoint: Option<String>,
     ) -> ActorResult<Result<(), Error>> {
-        // TODO: if payjoin_endpoint is Some, run BIP77 negotiation before broadcast
-        let result = self.do_sign_and_broadcast_transaction(psbt).await;
-        Produces::ok(result)
+        let Some(endpoint) = payjoin_endpoint else {
+            // non-payjoin path: synchronous sign and broadcast
+            let result = self.do_sign_and_broadcast_transaction(psbt).await;
+            return Produces::ok(result);
+        };
+
+        // payjoin path: sign the original PSBT first so we have both the
+        // signed PSBT to POST to the directory and a valid fallback tx
+        let (signed_psbt, fallback_tx) = match self.do_sign_original_psbt(psbt).await {
+            Ok(pair) => pair,
+            Err(error) => return Produces::ok(Err(error)),
+        };
+
+        let network: bitcoin::Network = self.wallet.network.into();
+        let addr = self.addr.clone();
+
+        // spawn the BIP77 negotiation in a background task so the main actor
+        // can continue processing messages while we wait for the receiver
+        self.addr.send_fut(async move {
+            match payjoin_http_flow(signed_psbt, endpoint, network).await {
+                Ok(proposal_psbt) => {
+                    send!(addr.handle_payjoin_success(proposal_psbt, fallback_tx))
+                }
+                Err(error) => {
+                    warn!("payjoin negotiation failed, broadcasting fallback tx: {error:?}");
+                    send!(addr.handle_payjoin_fallback(fallback_tx))
+                }
+            }
+        });
+
+        // return immediately — the platform will wait for the PayjoinTxBroadcast reconcile
+        Produces::ok(Ok(()))
     }
 
-    async fn do_sign_and_broadcast_transaction(&mut self, mut psbt: Psbt) -> Result<(), Error> {
+    /// Sign a PSBT with the wallet's mnemonic, returning the signed PSBT and the extracted fallback tx.
+    async fn do_sign_original_psbt(
+        &mut self,
+        mut psbt: Psbt,
+    ) -> Result<(Psbt, BdkTransaction), Error> {
         fn err(s: &str) -> Error {
             Error::SignAndBroadcastError(s.to_string())
         }
@@ -624,7 +664,7 @@ impl WalletActor {
 
         let create_params = descriptors.into_create_params().network(network.into());
 
-        // create a new temp wallet with the descriptors
+        // create a new temp wallet with the descriptors to sign
         let wallet = create_params
             .create_wallet_no_persist()
             .tap_err(|error| error!("failed to create wallet: {error}"))
@@ -639,10 +679,19 @@ impl WalletActor {
             return Err(err("transaction not finalized, unable to sign"));
         }
 
-        let transaction = psbt
-            .extract_tx()
+        // clone before extract so we retain the signed PSBT for the payjoin POST;
+        // extract_tx_fee_rate_limit rejects extraction if the fee rate is unreasonably high
+        let fallback_tx = psbt
+            .clone()
+            .extract_tx_fee_rate_limit()
             .tap_err(|error| error!("failed to extract transaction: {error}"))
             .map_err(|_| err("failed to extract transaction"))?;
+
+        Ok((psbt, fallback_tx))
+    }
+
+    async fn do_sign_and_broadcast_transaction(&mut self, psbt: Psbt) -> Result<(), Error> {
+        let (_, transaction) = self.do_sign_original_psbt(psbt).await?;
 
         self.do_broadcast_transaction(transaction.clone()).await?;
 
@@ -742,6 +791,54 @@ impl WalletActor {
 
         // start a transaction watcher to track confirmations
         send!(self.addr.start_transaction_watcher(txid));
+    }
+
+    /// Called when the payjoin receiver accepted our proposal and returned a signed PSBT.
+    /// Signs the proposal with our keys, broadcasts it, and notifies the platform.
+    /// Falls back to broadcasting the original transaction if proposal signing fails.
+    pub async fn handle_payjoin_success(
+        &mut self,
+        proposal_psbt: Psbt,
+        fallback_tx: BdkTransaction,
+    ) -> ActorResult<()> {
+        let broadcast_result = match self.do_sign_original_psbt(proposal_psbt).await {
+            Ok((_, proposal_tx)) => self.do_broadcast_transaction(proposal_tx).await,
+            Err(error) => {
+                error!("failed to sign payjoin proposal, falling back to original tx: {error:?}");
+                self.do_broadcast_transaction(fallback_tx).await
+            }
+        };
+
+        match broadcast_result {
+            Ok(()) => self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast),
+            Err(error) => {
+                error!("payjoin broadcast failed: {error}");
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
+                ));
+            }
+        }
+
+        Produces::ok(())
+    }
+
+    /// Called when payjoin negotiation failed or timed out.
+    /// Broadcasts the original signed transaction as a fallback and notifies the platform.
+    pub async fn handle_payjoin_fallback(
+        &mut self,
+        fallback_tx: BdkTransaction,
+    ) -> ActorResult<()> {
+        match self.do_broadcast_transaction(fallback_tx).await {
+            Ok(()) => self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast),
+            Err(error) => {
+                error!("payjoin fallback broadcast failed: {error}");
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
+                ));
+            }
+        }
+
+        Produces::ok(())
     }
 
     pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {
@@ -2011,6 +2108,175 @@ impl Drop for WalletActor {
     fn drop(&mut self) {
         debug!("[DROP] Wallet Actor for {}", self.wallet.id);
     }
+}
+
+// max poll attempts before falling back; 60 × 5s = 5 minutes
+const PAYJOIN_MAX_POLL_ATTEMPTS: u32 = 60;
+
+const PAYJOIN_POLL_INTERVAL: Duration = Duration::from_secs(5);
+
+// send a payjoin HTTP request via reqwest and return the raw response bytes
+async fn http_post(client: &reqwest::Client, req: payjoin::Request) -> eyre::Result<Vec<u8>> {
+    Ok(client
+        .post(&req.url)
+        .header("Content-Type", req.content_type)
+        .body(req.body)
+        .send()
+        .await
+        .map_err(|e| eyre::eyre!("send failed: {e:?}"))?
+        .bytes()
+        .await
+        .map_err(|e| eyre::eyre!("body read failed: {e:?}"))?
+        .to_vec())
+}
+
+// returns OHTTP relay URLs shuffled per call — random order for resilience and privacy
+fn ohttp_relays() -> Vec<&'static str> {
+    let mut relays = vec![
+        "https://relay.payjoin.org",
+        "https://ohttp.achow101.com",
+        "https://pj.bobspacebkk.com",
+    ];
+    relays.shuffle(&mut rand::rng());
+    relays
+}
+
+// POST the signed PSBT to the payjoin directory via OHTTP relay, then poll until
+// the receiver returns a proposal PSBT or we time out after 5 minutes
+async fn payjoin_http_flow(
+    signed_psbt: Psbt,
+    endpoint: String,
+    network: bitcoin::Network,
+) -> eyre::Result<Psbt> {
+    // TODO: anti-probing (inputs_seen) — before creating a session, verify our inputs
+    // haven't appeared in a prior payjoin session with this receiver
+
+    // the endpoint may contain a '#' fragment (the OHTTP key) which must be
+    // percent-encoded as '%23' so it survives as a literal value in the pj= query param
+    let encoded_endpoint = endpoint.replace('#', "%23");
+
+    // identify the recipient output: outputs with no bip32_derivation are
+    // external (receiver) outputs — no derivation info in our wallet
+    // note: breaks for batch sends (two external outputs) or if a signing device strips
+    // derivation paths before handing us the PSBT — cove only does single-recipient sends for now
+    let (idx, _) = signed_psbt
+        .outputs
+        .iter()
+        .enumerate()
+        .find(|(_, o)| o.bip32_derivation.is_empty())
+        .ok_or_else(|| eyre::eyre!("no recipient output found in PSBT"))?;
+
+    let txout = &signed_psbt.unsigned_tx.output[idx];
+    let amount_btc = Amount::from_sat(txout.value.to_sat()).to_btc();
+    let address = bitcoin::Address::from_script(&txout.script_pubkey, Params::from(network))
+        .map_err(|e| eyre::eyre!("could not derive address from PSBT output: {e:?}"))?;
+
+    let bip21 = format!("bitcoin:{address}?amount={amount_btc:.8}&pj={encoded_endpoint}");
+    let pj_uri = Uri::try_from(bip21.as_str())
+        .map_err(|e| eyre::eyre!("failed to parse payjoin URI: {e:?}"))?
+        .assume_checked()
+        .check_pj_supported()
+        .map_err(|_| eyre::eyre!("URI does not support payjoin (missing pj= param)"))?;
+
+    // build the v2 sender state machine; NoopSessionPersister skips persistence for now
+    let persister = NoopSessionPersister::<PayjoinSessionEvent>::default();
+    let sender = SenderBuilder::new(signed_psbt, pj_uri)
+        .build_recommended(BdkFeeRate::BROADCAST_MIN)
+        .map_err(|e| eyre::eyre!("failed to build payjoin sender: {e:?}"))?
+        .save(&persister)
+        .map_err(|e| eyre::eyre!("failed to save sender state: {e:?}"))?;
+
+    // each request needs its own HTTP client — cannot share across the async boundary of send_fut
+    let client =
+        cove_http::new_client().map_err(|e| eyre::eyre!("failed to create HTTP client: {e:?}"))?;
+
+    // POST the original PSBT to the payjoin directory
+    // try relays in random order, falling through to the next on any failure
+    let (post_response, post_ctx) = {
+        let mut last_err: eyre::Error = eyre::eyre!("no OHTTP relays configured");
+        let mut success = None;
+        for relay in ohttp_relays() {
+            let (req, ctx) = match sender.create_v2_post_request(relay) {
+                Ok(pair) => pair,
+                Err(e) => {
+                    warn!("payjoin: relay {relay} rejected for POST: {e:?}");
+                    last_err = eyre::eyre!("relay {relay} rejected: {e:?}");
+                    continue;
+                }
+            };
+            match http_post(&client, req).await {
+                Ok(body) => {
+                    success = Some((body, ctx));
+                    break;
+                }
+                Err(e) => {
+                    warn!("payjoin: relay {relay} POST failed: {e}");
+                    last_err = e;
+                }
+            }
+        }
+        success.ok_or(last_err)?
+    };
+
+    let mut polling_sender = sender
+        .process_response(&post_response, post_ctx)
+        .save(&persister)
+        .map_err(|e| eyre::eyre!("failed to process POST response: {e:?}"))?;
+
+    // poll for the receiver's payjoin proposal via the OHTTP relay
+    // each poll is an HTTP POST (BIP77 mandates this); relays reshuffled per attempt
+    for attempt in 0..PAYJOIN_MAX_POLL_ATTEMPTS {
+        tokio::time::sleep(PAYJOIN_POLL_INTERVAL).await;
+
+        let poll_result = {
+            let mut last_err: eyre::Error = eyre::eyre!("no OHTTP relays configured");
+            let mut success = None;
+            for relay in ohttp_relays() {
+                let (req, ctx) = match polling_sender.create_poll_request(relay) {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        warn!("payjoin: relay {relay} rejected for poll: {e:?}");
+                        last_err = eyre::eyre!("relay {relay} rejected: {e:?}");
+                        continue;
+                    }
+                };
+                match http_post(&client, req).await {
+                    Ok(body) => {
+                        success = Some((body, ctx));
+                        break;
+                    }
+                    Err(e) => {
+                        warn!("payjoin: relay {relay} poll failed: {e}");
+                        last_err = e;
+                    }
+                }
+            }
+            success.ok_or(last_err)
+        };
+
+        // all relays failed this tick; skip and retry on the next tick
+        let (poll_response, poll_ctx) = match poll_result {
+            Ok(pair) => pair,
+            Err(e) => {
+                warn!("payjoin poll attempt {attempt}: all relays failed, retrying: {e}");
+                continue;
+            }
+        };
+
+        match polling_sender
+            .process_response(&poll_response, poll_ctx)
+            .save(&persister)
+            .map_err(|e| eyre::eyre!("failed to process poll response: {e:?}"))?
+        {
+            OptionalTransitionOutcome::Progress(proposal_psbt) => return Ok(proposal_psbt),
+            OptionalTransitionOutcome::Stasis(next) => {
+                polling_sender = next;
+                debug!("payjoin poll attempt {attempt}: no proposal yet, continuing");
+            }
+        }
+    }
+
+    Err(eyre::eyre!("payjoin timed out after {PAYJOIN_MAX_POLL_ATTEMPTS} poll attempts"))
 }
 
 async fn check_node_connection_inner(node: &Node) -> Result<(), String> {

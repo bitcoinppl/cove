@@ -58,6 +58,13 @@ class WalletManager :
     var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
 
+    // set to true when a payjoin transaction has been broadcast (success or fallback)
+    var payjoinTxBroadcast by mutableStateOf(false)
+
+    fun resetPayjoinTxBroadcast() {
+        payjoinTxBroadcast = false
+    }
+
     // cached transaction details (observable for Compose)
     val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
 
@@ -357,6 +364,10 @@ class WalletManager :
                     receiveAddressIsLoading = false
                     receiveAddressError = null
                 }
+            }
+
+            is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {
+                payjoinTxBroadcast = true
             }
         }
     }

@@ -4386,7 +4386,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 15850.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 58472.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571.toShort()) {
@@ -20951,10 +20951,8 @@ public interface RustWalletManagerInterface {
     fun `initialLoadState`(): WalletLoadState
     
     /**
-     * Send entry point for unsigned hot wallet PSBTs
-     *
-     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
-     * PayJoin negotiation is handled in the actor stub.
+     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
+     * direct broadcast otherwise.
      */
     suspend fun `initiatePayment`(`psbt`: Psbt, `payjoinEndpoint`: kotlin.String?)
     
@@ -21809,10 +21807,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
     
     /**
-     * Send entry point for unsigned hot wallet PSBTs
-     *
-     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
-     * PayJoin negotiation is handled in the actor stub.
+     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
+     * direct broadcast otherwise.
      */
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
@@ -53425,6 +53421,9 @@ sealed class WalletManagerReconcileMessage: Disposable  {
         companion object
     }
     
+    object PayjoinTxBroadcast : WalletManagerReconcileMessage()
+    
+    
 
     
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -53553,6 +53552,8 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     )
                 
             }
+            is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {// Nothing to destroy
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
     
@@ -53623,6 +53624,7 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             19 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
                 FfiConverterULong.read(buf),
                 )
+            20 -> WalletManagerReconcileMessage.PayjoinTxBroadcast
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -53759,6 +53761,12 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 + FfiConverterULong.allocationSize(value.v1)
             )
         }
+        is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: WalletManagerReconcileMessage, buf: ByteBuffer) {
@@ -53854,6 +53862,10 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
                 buf.putInt(19)
                 FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {
+                buf.putInt(20)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

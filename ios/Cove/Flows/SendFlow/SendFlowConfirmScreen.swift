@@ -184,6 +184,13 @@ struct SendFlowConfirmScreen: View {
                                     psbt: details.psbt(),
                                     payjoinEndpoint: payjoinEndpoint
                                 )
+                                // for payjoin, stay in .sending — PayjoinTxBroadcast reconcile fires sendState = .sent
+                                if payjoinEndpoint == nil {
+                                    sendState = .sent
+                                    isShowingAlert = true
+                                    auth.unlock()
+                                }
+                                return
                             }
                             sendState = .sent
                             isShowingAlert = true
@@ -216,6 +223,23 @@ struct SendFlowConfirmScreen: View {
                 guard let lockedAt = auth.lockedAt else { return }
                 let sinceLocked = Date.now.timeIntervalSince(lockedAt)
                 if sinceLocked < 5 { auth.lockState = .unlocked }
+            }
+            .onAppear {
+                // reset stale payjoin broadcast state from a prior send
+                manager.payjoinTxBroadcast = false
+            }
+            .onChange(of: manager.payjoinTxBroadcast) { _, isBroadcast in
+                guard isBroadcast else { return }
+                sendState = .sent
+                isShowingAlert = true
+                auth.unlock()
+            }
+            .onChange(of: manager.sendFlowErrorAlert) { _, alert in
+                // payjoin broadcast failure arrives via reconcile (not the catch block),
+                // so we must handle it here to unblock the UI from .sending
+                guard alert != nil, case .sending = sendState else { return }
+                sendState = .idle
+                isShowingErrorAlert = true
             }
             .alert(
                 "Sent!",

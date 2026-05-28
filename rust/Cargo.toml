@@ -57,7 +57,7 @@ bitcoin = { version = "0.32.9" }
 bdk_wallet = { version = "3.0.0", features = ["keys-bip39", "file_store", "rusqlite"] }
 bip39 = { version = "2.2.2", features = ["zeroize"] }
 bip329 = { version = "0.4.0" }
-payjoin = { version = "0.25.0", default-features = false, features = ["v1"] }
+payjoin = { version = "0.25.0", default-features = false, features = ["v1", "v2"] }
 pubport = { version = "0.5.0" }
 
 # bitcoin nodes
@@ -143,6 +143,9 @@ pubport = { workspace = true }
 
 # bip329 labels
 bip329 = { workspace = true }
+
+# payjoin (BIP77 sender)
+payjoin = { workspace = true }
 
 # tapsigner / satscard
 rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap" }
