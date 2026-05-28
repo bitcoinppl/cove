@@ -233,6 +233,17 @@ impl WalletDiscoveryScanner {
         Produces::ok(())
     }
 
+    pub async fn shutdown(&mut self) -> ActorResult<()> {
+        debug!("shutting down wallet discovery scanner for {}", self.id);
+
+        for worker in self.workers.iter_mut().flatten() {
+            send!(worker.addr.shutdown());
+            worker.addr = Default::default();
+        }
+
+        Produces::ok(())
+    }
+
     pub async fn mark_found_txn(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
         info!("marked worker {wallet_type:?} as found");
 
@@ -450,12 +461,12 @@ impl WalletDiscoveryWorker {
                 loop {
                     let address = call!(addr.address_at(current_address)).await?;
 
-                    // found address
-                    if client
+                    let found_address = client
                         .check_address_for_txn(address)
                         .await
-                        .context("could not check address")?
-                    {
+                        .context("could not check address")?;
+
+                    if found_address {
                         call!(parent.mark_found_txn(wallet_type)).await?;
 
                         // save the scan state
@@ -495,6 +506,12 @@ impl WalletDiscoveryWorker {
                 // todo: maybe send the error back to the parent? the scanner or the view model?
             }
         });
+
+        Produces::ok(())
+    }
+
+    pub async fn shutdown(&mut self) -> ActorResult<()> {
+        self.parent = Default::default();
 
         Produces::ok(())
     }

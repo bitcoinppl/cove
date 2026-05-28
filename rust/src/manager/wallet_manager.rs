@@ -195,8 +195,6 @@ pub struct RustWalletManager {
 
     label_manager: Arc<LabelManager>,
     initial_load_state: WalletLoadState,
-
-    #[allow(dead_code)]
     discovery_scanner: Option<Addr<WalletDiscoveryScanner>>,
 }
 
@@ -292,6 +290,22 @@ pub enum WalletManagerError {
     ReceiveAddressError(String),
 }
 
+fn start_discovery_scanner(
+    metadata: WalletMetadata,
+    sender: flume::Sender<SingleOrMany>,
+) -> Result<Option<Addr<WalletDiscoveryScanner>>, Error> {
+    if !matches!(
+        &metadata.discovery_state,
+        DiscoveryState::StartedJson(_) | DiscoveryState::StartedMnemonic
+    ) {
+        return Ok(None);
+    }
+
+    WalletDiscoveryScanner::try_new(metadata, sender).map(spawn_actor).map(Some).map_err(|error| {
+        Error::WalletScanError(format!("failed to start wallet discovery scanner: {error}"))
+    })
+}
+
 #[uniffi::export(async_runtime = "tokio")]
 impl RustWalletManager {
     #[uniffi::constructor(name = "new")]
@@ -337,9 +351,7 @@ impl RustWalletManager {
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
         let actor = task::spawn_actor(wallet_actor);
 
-        // will only create the discovery scanner if it is not already complete
-        let discovery_scanner =
-            WalletDiscoveryScanner::try_new(metadata.clone(), sender).ok().map(spawn_actor);
+        let discovery_scanner = start_discovery_scanner(metadata.clone(), sender)?;
 
         let label_manager = LabelManager::new(id.clone()).into();
 
@@ -414,8 +426,7 @@ impl RustWalletManager {
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
-        let discovery_scanner =
-            WalletDiscoveryScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
+        let discovery_scanner = start_discovery_scanner(metadata.clone(), sender.clone())?;
 
         let wallet_actor = WalletActor::new(wallet, sender.clone())
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
@@ -1367,7 +1378,7 @@ impl RustWalletManager {
             Action::ToggleShowLabels => candidate.show_labels = !candidate.show_labels,
 
             Action::SelectedWalletDisappeared => {
-                send!(self.actor.shutdown());
+                self.shutdown_actors();
                 return;
             }
 
@@ -1404,7 +1415,15 @@ impl RustWalletManager {
     }
 
     pub fn shutdown(&self) {
+        self.shutdown_actors();
+    }
+
+    fn shutdown_actors(&self) {
         send!(self.actor.shutdown());
+
+        if let Some(discovery_scanner) = &self.discovery_scanner {
+            send!(discovery_scanner.shutdown());
+        }
     }
 }
 
