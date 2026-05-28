@@ -293,17 +293,22 @@ pub enum WalletManagerError {
 fn start_discovery_scanner(
     metadata: WalletMetadata,
     sender: flume::Sender<SingleOrMany>,
-) -> Result<Option<Addr<WalletDiscoveryScanner>>, Error> {
+) -> Option<Addr<WalletDiscoveryScanner>> {
     if !matches!(
         &metadata.discovery_state,
         DiscoveryState::StartedJson(_) | DiscoveryState::StartedMnemonic
     ) {
-        return Ok(None);
+        return None;
     }
 
-    WalletDiscoveryScanner::try_new(metadata, sender).map(spawn_actor).map(Some).map_err(|error| {
-        Error::WalletScanError(format!("failed to start wallet discovery scanner: {error}"))
-    })
+    let id = metadata.id.clone();
+    match WalletDiscoveryScanner::try_new(metadata, sender) {
+        Ok(scanner) => Some(spawn_actor(scanner)),
+        Err(error) => {
+            warn!("unable to start wallet discovery scanner for {id}: {error}");
+            None
+        }
+    }
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -351,7 +356,7 @@ impl RustWalletManager {
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
         let actor = task::spawn_actor(wallet_actor);
 
-        let discovery_scanner = start_discovery_scanner(metadata.clone(), sender)?;
+        let discovery_scanner = start_discovery_scanner(metadata.clone(), sender);
 
         let label_manager = LabelManager::new(id.clone()).into();
 
@@ -426,7 +431,7 @@ impl RustWalletManager {
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
-        let discovery_scanner = start_discovery_scanner(metadata.clone(), sender.clone())?;
+        let discovery_scanner = start_discovery_scanner(metadata.clone(), sender.clone());
 
         let wallet_actor = WalletActor::new(wallet, sender.clone())
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
