@@ -94,6 +94,10 @@ class WalletManager :
     // set to true when a payjoin transaction has been broadcast (success or fallback)
     var payjoinTxBroadcast by mutableStateOf(false)
 
+    fun resetPayjoinTxBroadcast() {
+        payjoinTxBroadcast = false
+    }
+
     // cached transaction details (observable for Compose)
     val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
 

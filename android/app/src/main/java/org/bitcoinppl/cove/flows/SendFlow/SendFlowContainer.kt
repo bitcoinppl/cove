@@ -451,6 +451,12 @@ private fun SendFlowRouteToScreen(
             var showErrorAlert by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
+            // reset stale payjoin broadcast state so a prior send's true value doesn't
+            // immediately trigger success UI on entering this confirm screen
+            LaunchedEffect(Unit) {
+                walletManager.resetPayjoinTxBroadcast()
+            }
+
             // lock on appear for hot wallets
             LaunchedEffect(walletManager) {
                 kotlinx.coroutines.delay(50)
@@ -459,9 +465,10 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
-            // show success UI when the payjoin tx has been broadcast (success or fallback)
+            // show success UI when the payjoin tx has been broadcast (success or fallback);
+            // guard against stale true values that arrive before the send is actually in progress
             LaunchedEffect(walletManager.payjoinTxBroadcast) {
-                if (walletManager.payjoinTxBroadcast) {
+                if (walletManager.payjoinTxBroadcast && sendState == SendState.Sending) {
                     sendState = SendState.Sent
                     showSuccessAlert = true
                     Auth.unlock()
