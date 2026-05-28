@@ -473,6 +473,15 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
+            // payjoin broadcast failure arrives via sendFlowErrorAlert reconcile (not the
+            // catch block), so unblock the UI from Sending and show the error alert
+            LaunchedEffect(walletManager.sendFlowErrorAlert) {
+                if (walletManager.sendFlowErrorAlert != null && sendState == SendState.Sending) {
+                    sendState = SendState.Idle
+                    showErrorAlert = true
+                }
+            }
+
             // timed unlock on disappear
             DisposableEffect(Unit) {
                 onDispose {
