@@ -192,6 +192,7 @@ struct DisableCloudBackupSection: View {
                 Label("Disable Cloud Backup", systemImage: "icloud.slash")
             }
             .disabled(manager.isDisablingCloudBackup)
+            .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
 
             Text("Local wallets stay on this device. Current Cove cloud backups will be deleted from cloud storage.")
                 .font(.caption)
