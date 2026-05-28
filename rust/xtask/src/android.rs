@@ -21,7 +21,7 @@ const COVE_CORE_PACKAGE_PATH: &str = "org/bitcoinppl/cove_core";
 
 // Android run constants (dev flavor for local development)
 const ANDROID_PACKAGE_NAME: &str = "org.bitcoinppl.cove.dev";
-const ANDROID_ACTIVITY_NAME: &str = ".MainActivity";
+const ANDROID_ACTIVITY_NAME: &str = "org.bitcoinppl.cove.MainActivity";
 const APK_PATH_DEBUG: &str = "app/build/outputs/apk/dev/debug/app-dev-debug.apk";
 const APK_PATH_RELEASE: &str = "app/build/outputs/apk/dev/release/app-dev-release.apk";
 
