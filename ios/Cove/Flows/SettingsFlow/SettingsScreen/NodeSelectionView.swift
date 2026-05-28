@@ -13,7 +13,7 @@ struct NodeSelectionView: View {
     private let nodeSelector = NodeSelector()
 
     @State private var selectedNodeName: String
-    private var nodeList: [NodeSelection]
+    @State private var nodeList: [NodeSelection]
 
     @State private var nodeIsChecking = false
     @State private var customNodeName: String = ""
@@ -37,6 +37,13 @@ struct NodeSelectionView: View {
         if let checkUrlTask {
             checkUrlTask.cancel()
         }
+    }
+
+    @MainActor
+    private func refreshNodeState() {
+        let refreshedNodeSelector = NodeSelector()
+        nodeList = refreshedNodeSelector.nodeList()
+        selectedNodeName = refreshedNodeSelector.selectedNode().name
     }
 
     private func showLoadingPopup() {
@@ -121,7 +128,9 @@ struct NodeSelectionView: View {
                 let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
 
                 switch result {
-                case .success: completeLoading(.success("Connected to node successfully"))
+                case .success:
+                    refreshNodeState()
+                    completeLoading(.success("Connected to node successfully"))
                 case let .failure(error):
                     let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
                     let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
@@ -190,6 +199,8 @@ struct NodeSelectionView: View {
         }
         .scrollContentBackground(.hidden)
         .onChange(of: selectedNodeName) { _, newSelectedNodeName in
+            guard nodeSelector.selectedNode().name != newSelectedNodeName else { return }
+
             if selectedNodeName.hasPrefix("Custom") {
                 if case let .custom(savedSelectedNode) = nodeSelector.selectedNode() {
                     if savedSelectedNode.apiType == .electrum, selectedNodeName.contains("Electrum") {
@@ -212,15 +223,13 @@ struct NodeSelectionView: View {
             let task = Task {
                 do {
                     try await nodeSelector.checkSelectedNode(node: node)
+                    refreshNodeState()
                     completeLoading(.success("Succesfully connected to \(node.url)"))
                 } catch {
                     completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
                 }
             }
             checkUrlTask = task
-        }
-        .onChange(of: nodeList) { _, _ in
-            selectedNodeName = nodeSelector.selectedNode().name
         }
         .onDisappear {
             // custom esplora or electrum is selected
