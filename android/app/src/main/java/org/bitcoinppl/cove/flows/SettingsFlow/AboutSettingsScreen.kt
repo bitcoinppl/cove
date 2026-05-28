@@ -156,6 +156,8 @@ fun AboutSettingsScreen(
                         )
                     }
                 }
+
+                AboutDebugSection()
             }
         },
     )
