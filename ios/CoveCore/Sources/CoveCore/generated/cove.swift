@@ -9126,6 +9126,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func shutdown()
 
+    func shutdownActors()
+
     func splitTransactionOutputs(outputs: [AddressAndAmount]) async throws  -> SplitOutput
 
     func startWalletScan() async throws
@@ -10007,6 +10009,14 @@ open func setWalletType(walletType: WalletType)throws   {try rustCallWithError(F
 open func shutdown()  {try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustwalletmanager_shutdown(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+
+open func shutdownActors()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustwalletmanager_shutdown_actors(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
@@ -39836,6 +39846,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_shutdown() != 8138) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_shutdown_actors() != 16080) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs() != 4285) {
