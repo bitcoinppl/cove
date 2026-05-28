@@ -35080,6 +35080,43 @@ public object FfiConverterTypeCloudBackupEnableFlow : FfiConverterRustBuffer<Clo
 
 
 /**
+ * User selection for the currently visible enable prompt
+ */
+
+enum class CloudBackupEnablePromptChoice {
+
+    USE_EXISTING,
+    CREATE_NEW;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupEnablePromptChoice: FfiConverterRustBuffer<CloudBackupEnablePromptChoice> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupEnablePromptChoice.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupEnablePromptChoice) = 4UL
+
+    override fun write(value: CloudBackupEnablePromptChoice, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
  * Public top-level cloud backup lifecycle
  */
 sealed class CloudBackupLifecycle {
@@ -35352,6 +35389,24 @@ sealed class CloudBackupManagerAction {
     object EnterDetail : CloudBackupManagerAction()
 
 
+    data class PromptEnablePasskeyChoice(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupManagerAction()
+
+    {
+
+
+        companion object
+    }
+
+    data class AcceptEnablePrompt(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnablePromptChoice) : CloudBackupManagerAction()
+
+    {
+
+
+        companion object
+    }
+
 
 
 
@@ -35408,6 +35463,12 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             24 -> CloudBackupManagerAction.KeepCloudBackupEnabled
             25 -> CloudBackupManagerAction.RefreshDetail
             26 -> CloudBackupManagerAction.EnterDetail
+            27 -> CloudBackupManagerAction.PromptEnablePasskeyChoice(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                )
+            28 -> CloudBackupManagerAction.AcceptEnablePrompt(
+                FfiConverterTypeCloudBackupEnablePromptChoice.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -35576,6 +35637,20 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 4UL
             )
         }
+        is CloudBackupManagerAction.PromptEnablePasskeyChoice -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupManagerAction.AcceptEnablePrompt -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupEnablePromptChoice.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: CloudBackupManagerAction, buf: ByteBuffer) {
@@ -35689,6 +35764,16 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             }
             is CloudBackupManagerAction.EnterDetail -> {
                 buf.putInt(26)
+                Unit
+            }
+            is CloudBackupManagerAction.PromptEnablePasskeyChoice -> {
+                buf.putInt(27)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupManagerAction.AcceptEnablePrompt -> {
+                buf.putInt(28)
+                FfiConverterTypeCloudBackupEnablePromptChoice.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

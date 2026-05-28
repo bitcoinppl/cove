@@ -6208,14 +6208,11 @@ async fn existing_backup_prompt_preserves_onboarding_enable_context() {
         other => panic!("expected existing backup prompt, got {other:?}"),
     }
 
+    globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
     enable_cloud_backup_force_new_with_context(&manager, context).await.unwrap();
 
-    assert_eq!(
-        manager.model_snapshot().enable_state,
-        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
-            SavedPasskeyConfirmationMode::Automatic,
-        )
-    );
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+    assert_eq!(globals.passkey.authenticate_count(), 1);
 }
 
 #[tokio::test(flavor = "current_thread")]

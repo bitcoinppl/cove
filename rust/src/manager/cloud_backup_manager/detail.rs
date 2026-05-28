@@ -3,10 +3,10 @@ use tracing::error;
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
-    CLOUD_BACKUP_MANAGER, CloudBackupDetail, CloudBackupManagerAction, CloudBackupRestoreFlow,
-    CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    OtherBackupsOperation, RustCloudBackupManager, SavedPasskeyConfirmationMode,
-    actors::CloudBackupOperation,
+    CLOUD_BACKUP_MANAGER, CloudBackupDetail, CloudBackupManagerAction,
+    CloudBackupPasskeyChoiceIntent, CloudBackupRestoreFlow, CloudBackupWalletItem,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation,
+    RustCloudBackupManager, SavedPasskeyConfirmationMode, actors::CloudBackupOperation,
 };
 
 type Action = CloudBackupManagerAction;
@@ -214,16 +214,12 @@ impl RustCloudBackupManager {
         use Action as A;
         match action {
             A::EnableCloudBackup(context) => {
-                self.clear_passkey_choice_prompt();
                 self.enable_cloud_backup(context);
             }
             A::EnableCloudBackupForceNew(context) => {
-                self.clear_existing_backup_found_prompt();
                 self.enable_cloud_backup_force_new(context);
             }
             A::EnableCloudBackupNoDiscovery(context) => {
-                self.clear_existing_backup_found_prompt();
-                self.clear_passkey_choice_prompt();
                 self.enable_cloud_backup_no_discovery(context);
             }
             A::ConfirmSavedPasskey => {
@@ -269,6 +265,12 @@ impl RustCloudBackupManager {
             A::KeepCloudBackupEnabled => CLOUD_BACKUP_MANAGER.keep_cloud_backup_enabled(),
             A::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
             A::EnterDetail => CLOUD_BACKUP_MANAGER.clone().spawn_enter_detail(),
+            A::PromptEnablePasskeyChoice(context) => {
+                self.present_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(
+                    context, None,
+                ));
+            }
+            A::AcceptEnablePrompt(choice) => self.accept_enable_prompt(choice),
         }
     }
 }

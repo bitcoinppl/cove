@@ -5,9 +5,10 @@
 //! claims are tracked here so stale async completions cannot clear newer work
 
 use super::{
-    CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableState,
-    CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupRootPrompt,
-    CloudBackupStatus, CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
+    CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext,
+    CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupPasskeyChoiceIntent,
+    CloudBackupPasskeyHint, CloudBackupRootPrompt, CloudBackupStatus,
+    CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
     CloudBackupVerificationReason, CloudOnlyOperation, CloudOnlyState, DeepVerificationFailure,
     DeepVerificationReport, OtherBackupsOperation, PendingUploadVerificationState, RecoveryAction,
     RecoveryState, SyncState, VerificationState,
@@ -60,6 +61,13 @@ struct CloudBackupConfiguredReducerState {
 enum CloudBackupConfiguredPrompt {
     None,
     PasskeyChoice(CloudBackupPasskeyChoiceIntent),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CloudBackupAcceptedEnablePrompt {
+    Enable(CloudBackupEnableContext),
+    ForceNew(CloudBackupEnableContext),
+    NoDiscovery(CloudBackupEnableContext),
 }
 
 /// Exclusive operation category where newer claims replace active older claims
@@ -222,6 +230,48 @@ impl CloudBackupReducerState {
             | CloudBackupLifecyclePhase::Restoring(_)
             | CloudBackupLifecyclePhase::Failed(_) => CloudBackupRootPrompt::None,
         }
+    }
+
+    fn accept_enable_prompt(
+        &mut self,
+        choice: CloudBackupEnablePromptChoice,
+    ) -> Option<CloudBackupAcceptedEnablePrompt> {
+        let accepted = match (&self.phase, choice) {
+            (
+                CloudBackupLifecyclePhase::Enabling(
+                    CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, _),
+                ),
+                CloudBackupEnablePromptChoice::UseExisting,
+            ) => Some(CloudBackupAcceptedEnablePrompt::Enable(*context)),
+            (
+                CloudBackupLifecyclePhase::Enabling(
+                    CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, _),
+                ),
+                CloudBackupEnablePromptChoice::CreateNew,
+            ) => Some(CloudBackupAcceptedEnablePrompt::ForceNew(*context)),
+            (
+                CloudBackupLifecyclePhase::Enabling(CloudBackupEnableFlow::AwaitingPasskeyChoice(
+                    CloudBackupPasskeyChoiceIntent::Enable(context, _),
+                )),
+                CloudBackupEnablePromptChoice::UseExisting,
+            ) => Some(CloudBackupAcceptedEnablePrompt::Enable(*context)),
+            (
+                CloudBackupLifecyclePhase::Enabling(CloudBackupEnableFlow::AwaitingPasskeyChoice(
+                    CloudBackupPasskeyChoiceIntent::Enable(context, _),
+                )),
+                CloudBackupEnablePromptChoice::CreateNew,
+            ) => Some(CloudBackupAcceptedEnablePrompt::NoDiscovery(*context)),
+            _ => None,
+        };
+
+        if accepted.is_some() {
+            self.phase = CloudBackupLifecyclePhase::Enabling(
+                CloudBackupEnableFlow::DiscoveringExistingBackup,
+            );
+            self.configured.prompt = CloudBackupConfiguredPrompt::None;
+        }
+
+        accepted
     }
 
     fn configured_root_prompt(&self) -> CloudBackupRootPrompt {
@@ -1165,6 +1215,43 @@ impl CloudBackupStateReducer {
             }
         }
 
+        self.resolve_effects(
+            previous_status,
+            previous_lifecycle,
+            previous_presentation,
+            &mut effects,
+        );
+
+        Ok(effects)
+    }
+
+    pub(crate) fn accept_enable_prompt(
+        &mut self,
+        choice: CloudBackupEnablePromptChoice,
+    ) -> (Option<CloudBackupAcceptedEnablePrompt>, CloudBackupStateReducerEffects) {
+        let previous_status = self.state.status();
+        let previous_lifecycle = self.state.public_lifecycle();
+        let previous_presentation = self.state.verification_presentation.clone();
+        let mut effects = CloudBackupStateReducerEffects::default();
+        let accepted = self.state.accept_enable_prompt(choice);
+
+        self.resolve_effects(
+            previous_status,
+            previous_lifecycle,
+            previous_presentation,
+            &mut effects,
+        );
+
+        (accepted, effects)
+    }
+
+    fn resolve_effects(
+        &self,
+        previous_status: CloudBackupStatus,
+        previous_lifecycle: CloudBackupLifecycle,
+        previous_presentation: CloudBackupVerificationPresentation,
+        effects: &mut CloudBackupStateReducerEffects,
+    ) {
         let lifecycle = self.state.public_lifecycle();
         if lifecycle != previous_lifecycle {
             effects.lifecycle = Some(lifecycle);
@@ -1172,8 +1259,6 @@ impl CloudBackupStateReducer {
         effects.status_changed = self.state.status() != previous_status;
         effects.verification_presentation_changed =
             self.state.verification_presentation != previous_presentation;
-
-        Ok(effects)
     }
 }
 
@@ -1892,6 +1977,59 @@ mod tests {
                     registered_at: 1,
                 }),
             )),
+        );
+    }
+
+    #[test]
+    fn accepting_existing_backup_prompt_keeps_enable_lifecycle_active() {
+        let context = CloudBackupEnableContext::settings_manual();
+        let mut model = CloudBackupStateReducer::default();
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
+                context,
+                passkey_hint: None,
+            })
+            .unwrap();
+
+        let (accepted, effects) =
+            model.accept_enable_prompt(CloudBackupEnablePromptChoice::CreateNew);
+
+        assert_eq!(accepted, Some(CloudBackupAcceptedEnablePrompt::ForceNew(context)));
+        assert_eq!(model.snapshot().root_prompt, CloudBackupRootPrompt::None);
+        assert_eq!(
+            model.public_state().lifecycle,
+            CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::DiscoveringExistingBackup),
+        );
+        assert_eq!(
+            effects.lifecycle,
+            Some(CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::DiscoveringExistingBackup,)),
+        );
+    }
+
+    #[test]
+    fn accepting_enable_passkey_choice_keeps_enable_lifecycle_active() {
+        let context = CloudBackupEnableContext::settings_manual();
+        let mut model = CloudBackupStateReducer::default();
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::PasskeyChoicePromptSet(
+                CloudBackupPasskeyChoiceIntent::Enable(context, None),
+            ))
+            .unwrap();
+
+        let (accepted, effects) =
+            model.accept_enable_prompt(CloudBackupEnablePromptChoice::UseExisting);
+
+        assert_eq!(accepted, Some(CloudBackupAcceptedEnablePrompt::Enable(context)));
+        assert_eq!(model.snapshot().root_prompt, CloudBackupRootPrompt::None);
+        assert_eq!(
+            model.public_state().lifecycle,
+            CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::DiscoveringExistingBackup),
+        );
+        assert_eq!(
+            effects.lifecycle,
+            Some(CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::DiscoveringExistingBackup,)),
         );
     }
 

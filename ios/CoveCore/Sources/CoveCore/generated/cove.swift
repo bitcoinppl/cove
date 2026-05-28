@@ -19839,6 +19839,75 @@ public func FfiConverterTypeCloudBackupEnableFlow_lower(_ value: CloudBackupEnab
 
 
 /**
+ * User selection for the currently visible enable prompt
+ */
+
+public enum CloudBackupEnablePromptChoice: Equatable, Hashable {
+
+    case useExisting
+    case createNew
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupEnablePromptChoice: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupEnablePromptChoice: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupEnablePromptChoice
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupEnablePromptChoice {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .useExisting
+
+        case 2: return .createNew
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupEnablePromptChoice, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .useExisting:
+            writeInt(&buf, Int32(1))
+
+
+        case .createNew:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupEnablePromptChoice_lift(_ buf: RustBuffer) throws -> CloudBackupEnablePromptChoice {
+    return try FfiConverterTypeCloudBackupEnablePromptChoice.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupEnablePromptChoice_lower(_ value: CloudBackupEnablePromptChoice) -> RustBuffer {
+    return FfiConverterTypeCloudBackupEnablePromptChoice.lower(value)
+}
+
+
+
+/**
  * Public top-level cloud backup lifecycle
  */
 
@@ -19979,6 +20048,10 @@ public enum CloudBackupManagerAction: Equatable, Hashable {
     case keepCloudBackupEnabled
     case refreshDetail
     case enterDetail
+    case promptEnablePasskeyChoice(CloudBackupEnableContext
+    )
+    case acceptEnablePrompt(CloudBackupEnablePromptChoice
+    )
 
 
 
@@ -20058,6 +20131,12 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
         case 25: return .refreshDetail
 
         case 26: return .enterDetail
+
+        case 27: return .promptEnablePasskeyChoice(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
+        )
+
+        case 28: return .acceptEnablePrompt(try FfiConverterTypeCloudBackupEnablePromptChoice.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -20176,6 +20255,16 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
 
         case .enterDetail:
             writeInt(&buf, Int32(26))
+
+
+        case let .promptEnablePasskeyChoice(v1):
+            writeInt(&buf, Int32(27))
+            FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
+
+
+        case let .acceptEnablePrompt(v1):
+            writeInt(&buf, Int32(28))
+            FfiConverterTypeCloudBackupEnablePromptChoice.write(v1, into: &buf)
 
         }
     }

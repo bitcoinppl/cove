@@ -180,10 +180,6 @@ impl CloudBackupSupervisor {
                 return Produces::ok(());
             }
         };
-        let Some(addr) = self.addr() else {
-            self.pending_enable_session = Some(pending);
-            return Produces::ok(());
-        };
         let Some(claim) =
             self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Enable)
         else {
@@ -191,11 +187,10 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        manager.apply_enable_outcome(CloudBackupEnableOutcome::ConfirmingSavedPasskey);
-        addr.send_fut_with(move |addr| async move {
-            let result = manager.confirm_saved_passkey_from_session(pending).await;
-            send!(addr.complete_saved_passkey_confirmation(claim, result));
-        });
+        if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending) {
+            self.active_operation = None;
+            manager.project_exclusive_operation_finished(claim);
+        }
 
         Produces::ok(())
     }
@@ -693,10 +688,54 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        manager
-            .apply_enable_outcome(CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(mode));
-        self.finish_enable_operation(manager, claim);
+        match mode {
+            SavedPasskeyConfirmationMode::Manual => {
+                manager.apply_enable_outcome(
+                    CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(mode),
+                );
+                self.finish_enable_operation(manager, claim);
+            }
+            SavedPasskeyConfirmationMode::Automatic => {
+                let pending = match self.pending_enable_session.take() {
+                    Some(session @ PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)) => {
+                        session
+                    }
+                    other => {
+                        self.pending_enable_session = other;
+                        warn!("Automatic saved-passkey confirmation missing pending session");
+                        self.finish_enable_operation(manager, claim);
+                        return Produces::ok(());
+                    }
+                };
+
+                if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending) {
+                    self.finish_enable_operation(manager, claim);
+                }
+            }
+        }
+
         Produces::ok(())
+    }
+
+    fn start_saved_passkey_confirmation(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        claim: CloudBackupExclusiveOperationClaim,
+        pending: PendingEnableSession,
+    ) -> bool {
+        let Some(addr) = self.addr() else {
+            self.pending_enable_session = Some(pending);
+            warn!("Could not confirm saved passkey without supervisor addr");
+            return false;
+        };
+
+        manager.apply_enable_outcome(CloudBackupEnableOutcome::ConfirmingSavedPasskey);
+        addr.send_fut_with(move |addr| async move {
+            let result = manager.confirm_saved_passkey_from_session(pending).await;
+            send!(addr.complete_saved_passkey_confirmation(claim, result));
+        });
+
+        true
     }
 
     fn start_ready_enable_upload_if_present(
