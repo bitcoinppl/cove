@@ -171,7 +171,6 @@ fun TransactionsCardView(
                     progressFraction = scanProgressFraction,
                     primaryText = primaryText,
                     secondaryText = secondaryText,
-                    modifier = Modifier.padding(bottom = 10.dp),
                 )
             } else {
                 TransactionsScanSpinnerStrip(
@@ -340,6 +339,7 @@ internal fun TransactionsScanProgressStrip(
             text = stringResource(R.string.scanning_for_transactions),
             color = secondaryText.copy(alpha = 0.7f),
             fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 10.dp),
         )
     }
 }
