@@ -2183,6 +2183,8 @@ async fn payjoin_http_flow(
 
     // identify the recipient output: outputs with no bip32_derivation are
     // external (receiver) outputs — no derivation info in our wallet
+    // note: breaks for batch sends (two external outputs) or if a signing device strips
+    // derivation paths before handing us the PSBT — cove only does single-recipient sends for now
     let (idx, _) = signed_psbt
         .outputs
         .iter()
