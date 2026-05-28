@@ -103,6 +103,7 @@ fun NodeSettingsScreen(
             selectedNodeName == customElectrum ||
             selectedNodeName == customEsplora
 
+    // pull a fresh snapshot because NodeSelector mutates persisted node settings directly
     fun refreshNodeState() {
         NodeSelector().use { refreshedNodeSelector ->
             nodeList = refreshedNodeSelector.nodeList()

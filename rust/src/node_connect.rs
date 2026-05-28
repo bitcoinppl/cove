@@ -295,25 +295,18 @@ fn default_node_selection() -> NodeSelection {
     match network {
         Network::Bitcoin => {
             let (name, url) = BITCOIN_ELECTRUM[0];
-
             NodeSelection::Preset(Node::new_electrum(name.to_string(), url.to_string(), network))
         }
-
         Network::Testnet => {
             let (name, url) = TESTNET_ESPLORA[0];
-
             NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
         }
-
         Network::Signet => {
             let (name, url) = SIGNET_ESPLORA[0];
-
             NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
         }
-
         Network::Testnet4 => {
             let (name, url) = TESTNET4_ESPLORA[0];
-
             NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
         }
     }
