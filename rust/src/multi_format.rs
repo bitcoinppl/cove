@@ -53,6 +53,9 @@ pub enum MultiFormatError {
     #[error("Address is not supported for any network")]
     UnsupportedNetworkAddress,
 
+    #[error("silent payment addresses (sp1...) are not yet supported for sending")]
+    SilentPaymentNotSupported,
+
     #[error(
         "Not a valid format, we only support addresses, SeedQr, mnemonic, descriptors, XPUBs and PSBTs"
     )]
@@ -115,6 +118,10 @@ impl MultiFormat {
 
             Err(AddressError::UnsupportedNetwork) => {
                 return Err(MultiFormatError::UnsupportedNetworkAddress);
+            }
+
+            Err(AddressError::SilentPaymentNotSupported) => {
+                return Err(MultiFormatError::SilentPaymentNotSupported);
             }
 
             _ => {}

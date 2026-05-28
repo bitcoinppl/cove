@@ -25769,6 +25769,7 @@ enum MultiFormatError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     case InvalidSeedQr(SeedQrError
     )
     case UnsupportedNetworkAddress
+    case SilentPaymentNotSupported
     case UnrecognizedFormat
     case InvalidTapSigner(TapCardParseError
     )
@@ -25818,12 +25819,13 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
             try FfiConverterTypeSeedQrError.read(from: &buf)
             )
         case 2: return .UnsupportedNetworkAddress
-        case 3: return .UnrecognizedFormat
-        case 4: return .InvalidTapSigner(
+        case 3: return .SilentPaymentNotSupported
+        case 4: return .UnrecognizedFormat
+        case 5: return .InvalidTapSigner(
             try FfiConverterTypeTapCardParseError.read(from: &buf)
             )
-        case 5: return .TaprootNotSupported
-        case 6: return .PsbtNotSigned
+        case 6: return .TaprootNotSupported
+        case 7: return .PsbtNotSigned
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -25845,21 +25847,25 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case .UnrecognizedFormat:
+        case .SilentPaymentNotSupported:
             writeInt(&buf, Int32(3))
         
         
-        case let .InvalidTapSigner(v1):
+        case .UnrecognizedFormat:
             writeInt(&buf, Int32(4))
+        
+        
+        case let .InvalidTapSigner(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterTypeTapCardParseError.write(v1, into: &buf)
             
         
         case .TaprootNotSupported:
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
         
         
         case .PsbtNotSigned:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
         
         }
     }
@@ -25888,6 +25894,7 @@ enum MultiQrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     
     case ParseError(String
     )
+    case SilentPaymentNotSupported
     case InvalidUtf8
     case RequiresStringData
     case InvalidSeedQr(SeedQrError
@@ -25938,15 +25945,16 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
         case 1: return .ParseError(
             try FfiConverterString.read(from: &buf)
             )
-        case 2: return .InvalidUtf8
-        case 3: return .RequiresStringData
-        case 4: return .InvalidSeedQr(
+        case 2: return .SilentPaymentNotSupported
+        case 3: return .InvalidUtf8
+        case 4: return .RequiresStringData
+        case 5: return .InvalidSeedQr(
             try FfiConverterTypeSeedQrError.read(from: &buf)
             )
-        case 5: return .Ur(
+        case 6: return .Ur(
             try FfiConverterTypeUrError.read(from: &buf)
             )
-        case 6: return .BbqrCborNotSupported
+        case 7: return .BbqrCborNotSupported
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -25964,26 +25972,30 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case .InvalidUtf8:
+        case .SilentPaymentNotSupported:
             writeInt(&buf, Int32(2))
         
         
-        case .RequiresStringData:
+        case .InvalidUtf8:
             writeInt(&buf, Int32(3))
         
         
-        case let .InvalidSeedQr(v1):
+        case .RequiresStringData:
             writeInt(&buf, Int32(4))
+        
+        
+        case let .InvalidSeedQr(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterTypeSeedQrError.write(v1, into: &buf)
             
         
         case let .Ur(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeUrError.write(v1, into: &buf)
             
         
         case .BbqrCborNotSupported:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
         
         }
     }
@@ -29280,6 +29292,7 @@ enum SendFlowError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     )
     case UnableToGetFeeDetails(String
     )
+    case SilentPaymentNotSupported
 
     
 
@@ -29350,6 +29363,7 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
         case 14: return .UnableToGetFeeDetails(
             try FfiConverterString.read(from: &buf)
             )
+        case 15: return .SilentPaymentNotSupported
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29426,6 +29440,10 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(14))
             FfiConverterString.write(v1, into: &buf)
             
+        
+        case .SilentPaymentNotSupported:
+            writeInt(&buf, Int32(15))
+        
         }
     }
 }

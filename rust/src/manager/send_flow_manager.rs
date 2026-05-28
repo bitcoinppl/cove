@@ -438,8 +438,19 @@ impl RustSendFlowManager {
     pub fn validate_address(self: &Arc<Self>, display_alert: bool) -> bool {
         if self.state.lock().address.is_none() {
             if display_alert {
-                let error =
-                    SendFlowError::InvalidAddress(self.state.lock().entering_address.clone());
+                let (entering, current) = {
+                    let state = self.state.lock();
+                    (state.entering_address.clone(), state.metadata.network)
+                };
+                let error = match AddressWithNetwork::try_new(&entering) {
+                    Err(e) => SendFlowError::from_address_error(e, entering),
+                    Ok(awn) if !awn.is_valid_for_network(current) => SendFlowError::WrongNetwork {
+                        address: awn.address.to_string(),
+                        valid_for: awn.network,
+                        current,
+                    },
+                    Ok(_) => SendFlowError::InvalidAddress(entering),
+                };
                 self.reconciler.send(Message::SetAlert(error.into()));
             }
 

@@ -46,6 +46,9 @@ pub enum SendFlowError {
 
     #[error("unable to get fee details: {0}")]
     UnableToGetFeeDetails(String),
+
+    #[error("sending to silent payment addresses is not yet supported")]
+    SilentPaymentNotSupported,
 }
 
 impl SendFlowError {
@@ -57,6 +60,7 @@ impl SendFlowError {
                 Self::WrongNetwork { address, valid_for, current }
             }
 
+            AddressError::SilentPaymentNotSupported => Self::SilentPaymentNotSupported,
             _ => Self::InvalidAddress(address),
         }
     }

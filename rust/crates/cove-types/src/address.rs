@@ -98,6 +98,9 @@ pub enum AddressError {
 
     #[error("empty address")]
     EmptyAddress,
+
+    #[error("silent payment addresses (sp1...) are not yet supported for sending")]
+    SilentPaymentNotSupported,
 }
 
 impl Clone for AddressInfo {
@@ -208,6 +211,28 @@ impl AddressWithNetwork {
     }
 }
 
+fn is_silent_payment_address(s: &str) -> bool {
+    use bitcoin::bech32::{Bech32m, primitives::decode::CheckedHrpstring};
+
+    let s = s.trim();
+
+    // Quick prefix check before attempting a full decode.
+    let lower = s.to_lowercase();
+    if !lower.starts_with("sp1") && !lower.starts_with("tsp1") {
+        return false;
+    }
+
+    // BIP352 silent payment addresses are bech32m-specifically (not bech32).
+    // Reject strings that merely look like SP addresses but fail the checksum,
+    // and reject strings with a valid bech32 (not bech32m) checksum.
+    let Ok(checked) = CheckedHrpstring::new::<Bech32m>(s) else {
+        return false;
+    };
+
+    let hrp = checked.hrp().to_lowercase();
+    hrp == "sp" || hrp == "tsp"
+}
+
 fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
     let input = input.trim();
     if input.is_empty() {
@@ -222,6 +247,15 @@ fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
         }
         _ => format!("bitcoin:{input}"),
     };
+
+    // Check for silent payment addresses (sp1... / tsp1...) before handing off to the
+    // payjoin parser, which only accepts valid bech32 bitcoin addresses and would
+    // otherwise mask the specific error with a generic InvalidAddress.
+    let candidate = normalized.strip_prefix("bitcoin:").unwrap_or(&normalized);
+    let candidate = candidate.split('?').next().unwrap_or(candidate);
+    if is_silent_payment_address(candidate) {
+        return Err(Error::SilentPaymentNotSupported);
+    }
 
     // Try full payjoin URI parsing first
     if let Ok(uri) = payjoin::Uri::try_from(normalized.as_str()) {
@@ -326,6 +360,11 @@ impl Address {
     #[uniffi::constructor]
     pub fn from_string(address: &str, network: Network) -> Result<Self> {
         let address = address.trim();
+
+        if is_silent_payment_address(address) {
+            return Err(Error::SilentPaymentNotSupported);
+        }
+
         let bdk_address = BdkAddress::from_str(address).map_err(|_| Error::InvalidAddress)?;
 
         let bitcoin_network: bitcoin::Network = network.into();
@@ -542,6 +581,66 @@ mod tests {
         let parsed = parse_bitcoin_uri(a).unwrap();
         assert_eq!(parsed.address, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
         assert_eq!(parsed.amount, None);
+    }
+
+    /// Helper: encode a valid bech32m string with the given HRP and dummy payload.
+    fn make_sp_address(hrp_str: &str) -> String {
+        let hrp = bitcoin::bech32::Hrp::parse(hrp_str).unwrap();
+        bitcoin::bech32::encode::<bitcoin::bech32::Bech32m>(hrp, &[0u8; 66]).unwrap()
+    }
+
+    #[test]
+    fn test_silent_payment_address_detection() {
+        let mainnet = make_sp_address("sp");
+        let testnet = make_sp_address("tsp");
+
+        // valid SP addresses → SilentPaymentNotSupported
+        assert_eq!(
+            AddressWithNetwork::try_new(&mainnet),
+            Err(AddressError::SilentPaymentNotSupported)
+        );
+        assert_eq!(
+            AddressWithNetwork::try_new(&testnet),
+            Err(AddressError::SilentPaymentNotSupported)
+        );
+
+        // bitcoin: URI with valid SP address
+        let uri = format!("bitcoin:{mainnet}");
+        assert_eq!(AddressWithNetwork::try_new(&uri), Err(AddressError::SilentPaymentNotSupported));
+
+        // truncated / bad-checksum sp1 strings fall through to InvalidAddress
+        assert_eq!(AddressWithNetwork::try_new("sp1qqfoobar"), Err(AddressError::InvalidAddress));
+        assert_eq!(
+            AddressWithNetwork::try_new("tsp1qqtruncated"),
+            Err(AddressError::InvalidAddress)
+        );
+
+        // bech32 (not bech32m) encoding with sp HRP must not classify as SP
+        let sp_hrp = bitcoin::bech32::Hrp::parse("sp").unwrap();
+        let bech32_encoded =
+            bitcoin::bech32::encode::<bitcoin::bech32::Bech32>(sp_hrp, &[0u8; 66]).unwrap();
+        assert_eq!(AddressWithNetwork::try_new(&bech32_encoded), Err(AddressError::InvalidAddress));
+    }
+
+    #[test]
+    fn test_silent_payment_address_from_string() {
+        let mainnet = make_sp_address("sp");
+        let testnet = make_sp_address("tsp");
+
+        assert_eq!(
+            Address::from_string(&mainnet, Network::Bitcoin),
+            Err(AddressError::SilentPaymentNotSupported)
+        );
+        assert_eq!(
+            Address::from_string(&testnet, Network::Testnet),
+            Err(AddressError::SilentPaymentNotSupported)
+        );
+
+        // truncated sp1 string → InvalidAddress, not SilentPaymentNotSupported
+        assert_eq!(
+            Address::from_string("sp1qqfoobar", Network::Bitcoin),
+            Err(AddressError::InvalidAddress)
+        );
     }
 
     #[test]

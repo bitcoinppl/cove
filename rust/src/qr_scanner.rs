@@ -60,6 +60,9 @@ pub enum MultiQrError {
     #[error("{0}")]
     ParseError(String),
 
+    #[error("silent payment addresses (sp1...) are not yet supported for sending")]
+    SilentPaymentNotSupported,
+
     #[error("Invalid UTF-8")]
     InvalidUtf8,
 
@@ -214,8 +217,7 @@ fn parse_ur(qr: &str) -> Result<(QrScanner, ScanResult), MultiQrError> {
     match ur.to_foundation_ur()? {
         foundation_ur::UR::SinglePart { .. } | foundation_ur::UR::SinglePartDeserialized { .. } => {
             debug!("Single-part UR, converting to MultiFormat");
-            let multi_format =
-                MultiFormat::try_from_string(qr).map_err_str(MultiQrError::ParseError)?;
+            let multi_format = MultiFormat::try_from_string(qr)?;
 
             let result =
                 ScanResult::Complete { data: multi_format, haptic: HapticFeedback::Success };
@@ -273,7 +275,17 @@ fn parse_bbqr_data(
 
         FileType::UnicodeText | FileType::Json => {
             let data_string = String::from_utf8(data).map_err(|_| MultiQrError::InvalidUtf8)?;
-            MultiFormat::try_from_string(&data_string).map_err_str(MultiQrError::ParseError)
+            MultiFormat::try_from_string(&data_string).map_err(MultiQrError::from)
+        }
+    }
+}
+
+impl From<crate::multi_format::MultiFormatError> for MultiQrError {
+    fn from(err: crate::multi_format::MultiFormatError) -> Self {
+        use crate::multi_format::MultiFormatError;
+        match err {
+            MultiFormatError::SilentPaymentNotSupported => Self::SilentPaymentNotSupported,
+            other => Self::ParseError(other.to_string()),
         }
     }
 }
@@ -398,8 +410,7 @@ impl QrScanner {
         }
 
         // plain string - address, xpub, etc.
-        let multi_format =
-            MultiFormat::try_from_string(&qr).map_err_str(MultiQrError::ParseError)?;
+        let multi_format = MultiFormat::try_from_string(&qr)?;
         let result = ScanResult::Complete { data: multi_format, haptic: HapticFeedback::Success };
         Ok((Self::Complete(result.clone()), result))
     }

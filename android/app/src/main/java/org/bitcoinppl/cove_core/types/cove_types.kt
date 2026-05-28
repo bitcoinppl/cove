@@ -9605,6 +9605,12 @@ sealed class AddressException: kotlin.Exception() {
             get() = ""
     }
     
+    class SilentPaymentNotSupported(
+        ) : AddressException() {
+        override val message
+            get() = ""
+    }
+    
 
     
 
@@ -9635,6 +9641,7 @@ public object FfiConverterTypeAddressError : FfiConverterRustBuffer<AddressExcep
                 FfiConverterTypeNetwork.read(buf),
                 )
             6 -> AddressException.EmptyAddress()
+            7 -> AddressException.SilentPaymentNotSupported()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -9668,6 +9675,10 @@ public object FfiConverterTypeAddressError : FfiConverterRustBuffer<AddressExcep
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is AddressException.SilentPaymentNotSupported -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -9698,6 +9709,10 @@ public object FfiConverterTypeAddressError : FfiConverterRustBuffer<AddressExcep
             }
             is AddressException.EmptyAddress -> {
                 buf.putInt(6)
+                Unit
+            }
+            is AddressException.SilentPaymentNotSupported -> {
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

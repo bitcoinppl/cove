@@ -73,6 +73,8 @@ import SwiftUI
         switch error {
         case .EmptyAddress, .InvalidAddress, .WrongNetwork:
             "Invalid Address"
+        case .SilentPaymentNotSupported:
+            "Unsupported Address"
         case .InvalidNumber, .ZeroAmount: "Invalid Amount"
         case .InsufficientFunds, .NoBalance: "Insufficient Funds"
         case .SendAmountToLow: "Send Amount Too Low"
@@ -129,6 +131,8 @@ import SwiftUI
             msg
         case let .UnableToSaveUnsignedTransaction(msg):
             msg
+        case .SilentPaymentNotSupported:
+            "Sending to silent payment addresses (sp1...) is not yet supported. Support is coming soon."
         }
     }
 
@@ -145,7 +149,7 @@ import SwiftUI
     @ViewBuilder
     private func errorAlertButtons(_ error: SendFlowError) -> some View {
         switch error {
-        case .EmptyAddress, .WrongNetwork, .InvalidAddress:
+        case .EmptyAddress, .WrongNetwork, .InvalidAddress, .SilentPaymentNotSupported:
             Button("OK") {
                 self.alertState = .none
                 self.focusField = .address

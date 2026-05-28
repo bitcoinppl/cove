@@ -82,6 +82,9 @@ class SendFlowPresenter(
             is SendFlowException.WrongNetwork,
             -> "Invalid Address"
 
+            is SendFlowException.SilentPaymentNotSupported,
+            -> "Unsupported Address"
+
             is SendFlowException.InvalidNumber,
             is SendFlowException.ZeroAmount,
             -> "Invalid Amount"
@@ -152,6 +155,9 @@ class SendFlowPresenter(
 
             is SendFlowException.UnableToSaveUnsignedTransaction ->
                 error.v1
+
+            is SendFlowException.SilentPaymentNotSupported ->
+                "Sending to silent payment addresses (sp1...) is not yet supported. Support is coming soon."
         }
 
     /**
@@ -171,6 +177,7 @@ class SendFlowPresenter(
             is SendFlowException.EmptyAddress,
             is SendFlowException.WrongNetwork,
             is SendFlowException.InvalidAddress,
+            is SendFlowException.SilentPaymentNotSupported,
             -> {
                 {
                     alertState = null

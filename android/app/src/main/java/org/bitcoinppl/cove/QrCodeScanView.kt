@@ -38,6 +38,7 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
+import org.bitcoinppl.cove_core.MultiQrException
 import org.bitcoinppl.cove_core.QrScanner
 import org.bitcoinppl.cove_core.ScanProgress
 import org.bitcoinppl.cove_core.ScanResult
@@ -249,14 +250,14 @@ private fun QrScannerContent(
                                                                     scannedData = data
                                                                     if (!isDisposed) scanner.reset()
                                                                 },
-                                                                onError = { error ->
+                                                                onError = { title, message ->
                                                                     if (!isDisposed) scanner.reset()
                                                                     onDismiss()
                                                                     app.alertState =
                                                                         TaggedItem(
                                                                             AppAlertState.General(
-                                                                                title = "QR Scan Error",
-                                                                                message = error,
+                                                                                title = title,
+                                                                                message = message,
                                                                             ),
                                                                         )
                                                                 },
@@ -465,7 +466,7 @@ private fun handleQrCode(
     scanner: QrScanner,
     onProgress: (ScanProgress) -> Unit,
     onComplete: (MultiFormat) -> Unit,
-    onError: (String) -> Unit,
+    onError: (title: String, message: String) -> Unit,
 ) {
     try {
         // convert barcode to StringOrData (prioritize text, fall back to binary)
@@ -490,7 +491,15 @@ private fun handleQrCode(
     } catch (e: IllegalStateException) {
         // scanner was destroyed during async callback, ignore
         Log.d("QrCodeScanView", "Scanner already destroyed, ignoring: ${e.message}")
+    } catch (e: MultiQrException.SilentPaymentNotSupported) {
+        onError(
+            "Unsupported Address",
+            "Sending to silent payment addresses (sp1...) is not yet supported. Support is coming soon.",
+        )
     } catch (e: Exception) {
-        onError("Unable to scan QR code: ${e.message ?: "Unknown scanning error"}")
+        onError(
+            "QR Scan Error",
+            "Unable to scan QR code: ${e.message ?: "Unknown scanning error"}",
+        )
     }
 }

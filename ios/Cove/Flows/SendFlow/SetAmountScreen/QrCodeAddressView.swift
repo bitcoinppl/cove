@@ -117,6 +117,15 @@ struct QrCodeAddressView: View {
                     haptic.trigger()
                     progress = prog
                 }
+            } catch MultiQrError.SilentPaymentNotSupported {
+                scanner.reset()
+                dismiss()
+                app.alertState = TaggedItem(
+                    .general(
+                        title: "Unsupported Address",
+                        message: "Sending to silent payment addresses (sp1...) is not yet supported. Support is coming soon."
+                    )
+                )
             } catch {
                 scanner.reset()
                 dismiss()

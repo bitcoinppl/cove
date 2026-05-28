@@ -42280,6 +42280,12 @@ sealed class MultiFormatException: kotlin.Exception() {
             get() = ""
     }
     
+    class SilentPaymentNotSupported(
+        ) : MultiFormatException() {
+        override val message
+            get() = ""
+    }
+    
     class UnrecognizedFormat(
         ) : MultiFormatException() {
         override val message
@@ -42338,12 +42344,13 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
                 FfiConverterTypeSeedQrError.read(buf),
                 )
             2 -> MultiFormatException.UnsupportedNetworkAddress()
-            3 -> MultiFormatException.UnrecognizedFormat()
-            4 -> MultiFormatException.InvalidTapSigner(
+            3 -> MultiFormatException.SilentPaymentNotSupported()
+            4 -> MultiFormatException.UnrecognizedFormat()
+            5 -> MultiFormatException.InvalidTapSigner(
                 FfiConverterTypeTapCardParseError.read(buf),
                 )
-            5 -> MultiFormatException.TaprootNotSupported()
-            6 -> MultiFormatException.PsbtNotSigned()
+            6 -> MultiFormatException.TaprootNotSupported()
+            7 -> MultiFormatException.PsbtNotSigned()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -42356,6 +42363,10 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
                 + FfiConverterTypeSeedQrError.allocationSize(value.v1)
             )
             is MultiFormatException.UnsupportedNetworkAddress -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is MultiFormatException.SilentPaymentNotSupported -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -42390,21 +42401,25 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
                 buf.putInt(2)
                 Unit
             }
-            is MultiFormatException.UnrecognizedFormat -> {
+            is MultiFormatException.SilentPaymentNotSupported -> {
                 buf.putInt(3)
                 Unit
             }
-            is MultiFormatException.InvalidTapSigner -> {
+            is MultiFormatException.UnrecognizedFormat -> {
                 buf.putInt(4)
+                Unit
+            }
+            is MultiFormatException.InvalidTapSigner -> {
+                buf.putInt(5)
                 FfiConverterTypeTapCardParseError.write(value.v1, buf)
                 Unit
             }
             is MultiFormatException.TaprootNotSupported -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 Unit
             }
             is MultiFormatException.PsbtNotSigned -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -42424,6 +42439,12 @@ sealed class MultiQrException: kotlin.Exception() {
         ) : MultiQrException() {
         override val message
             get() = "v1=${ v1 }"
+    }
+    
+    class SilentPaymentNotSupported(
+        ) : MultiQrException() {
+        override val message
+            get() = ""
     }
     
     class InvalidUtf8(
@@ -42491,15 +42512,16 @@ public object FfiConverterTypeMultiQrError : FfiConverterRustBuffer<MultiQrExcep
             1 -> MultiQrException.ParseException(
                 FfiConverterString.read(buf),
                 )
-            2 -> MultiQrException.InvalidUtf8()
-            3 -> MultiQrException.RequiresStringData()
-            4 -> MultiQrException.InvalidSeedQr(
+            2 -> MultiQrException.SilentPaymentNotSupported()
+            3 -> MultiQrException.InvalidUtf8()
+            4 -> MultiQrException.RequiresStringData()
+            5 -> MultiQrException.InvalidSeedQr(
                 FfiConverterTypeSeedQrError.read(buf),
                 )
-            5 -> MultiQrException.Ur(
+            6 -> MultiQrException.Ur(
                 FfiConverterTypeUrError.read(buf),
                 )
-            6 -> MultiQrException.BbqrCborNotSupported()
+            7 -> MultiQrException.BbqrCborNotSupported()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -42510,6 +42532,10 @@ public object FfiConverterTypeMultiQrError : FfiConverterRustBuffer<MultiQrExcep
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
+            )
+            is MultiQrException.SilentPaymentNotSupported -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
             )
             is MultiQrException.InvalidUtf8 -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -42543,26 +42569,30 @@ public object FfiConverterTypeMultiQrError : FfiConverterRustBuffer<MultiQrExcep
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is MultiQrException.InvalidUtf8 -> {
+            is MultiQrException.SilentPaymentNotSupported -> {
                 buf.putInt(2)
                 Unit
             }
-            is MultiQrException.RequiresStringData -> {
+            is MultiQrException.InvalidUtf8 -> {
                 buf.putInt(3)
                 Unit
             }
-            is MultiQrException.InvalidSeedQr -> {
+            is MultiQrException.RequiresStringData -> {
                 buf.putInt(4)
+                Unit
+            }
+            is MultiQrException.InvalidSeedQr -> {
+                buf.putInt(5)
                 FfiConverterTypeSeedQrError.write(value.v1, buf)
                 Unit
             }
             is MultiQrException.Ur -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 FfiConverterTypeUrError.write(value.v1, buf)
                 Unit
             }
             is MultiQrException.BbqrCborNotSupported -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -46320,6 +46350,12 @@ sealed class SendFlowException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class SilentPaymentNotSupported(
+        ) : SendFlowException() {
+        override val message
+            get() = ""
+    }
+    
 
     
 
@@ -46378,6 +46414,7 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
             14 -> SendFlowException.UnableToGetFeeDetails(
                 FfiConverterString.read(buf),
                 )
+            15 -> SendFlowException.SilentPaymentNotSupported()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -46449,6 +46486,10 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is SendFlowException.SilentPaymentNotSupported -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -46517,6 +46558,10 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
             is SendFlowException.UnableToGetFeeDetails -> {
                 buf.putInt(14)
                 FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is SendFlowException.SilentPaymentNotSupported -> {
+                buf.putInt(15)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
