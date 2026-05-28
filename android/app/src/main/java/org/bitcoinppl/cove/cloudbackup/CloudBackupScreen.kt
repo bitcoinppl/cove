@@ -144,7 +144,7 @@ internal enum class CloudBackupDetailBodyState {
 }
 
 private val CloudBackupDetailDateFormatter =
-    DateTimeFormatter.ofPattern("MMM d, yyyy 'at' h:mm a", Locale.US)
+    DateTimeFormatter.ofPattern("MMM d, yyyy 'at' h:mm a", Locale.getDefault())
 
 private val CloudBackupDetailSectionSpacing = 14.dp
 private val CloudBackupSectionTitleContentSpacing = 10.dp
@@ -373,6 +373,7 @@ private fun CloudBackupScreenFrame(
 ) {
     val colors = cloudBackupVisualColors()
     var isMenuOpen by remember { mutableStateOf(false) }
+    val isConfigured = manager.isConfigured
 
     Scaffold(
         modifier =
@@ -407,20 +408,22 @@ private fun CloudBackupScreenFrame(
                         expanded = isMenuOpen,
                         onDismissRequest = { isMenuOpen = false },
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Recreate Backup Index") },
-                            onClick = {
-                                isMenuOpen = false
-                                onRecreate()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Reinitialize Cloud Backup") },
-                            onClick = {
-                                isMenuOpen = false
-                                onReinitialize()
-                            },
-                        )
+                        if (isConfigured) {
+                            DropdownMenuItem(
+                                text = { Text("Recreate Backup Index") },
+                                onClick = {
+                                    isMenuOpen = false
+                                    onRecreate()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Reinitialize Cloud Backup") },
+                                onClick = {
+                                    isMenuOpen = false
+                                    onReinitialize()
+                                },
+                            )
+                        }
                     }
                 },
                 colors =
@@ -1033,6 +1036,15 @@ private fun DisableCloudBackupSection(
     var showFinalConfirmation by remember { mutableStateOf(false) }
     val unavailableMessage = disableUnavailableMessage(manager, detail)
     val colors = cloudBackupVisualColors()
+    val coordinator = LocalCloudBackupPresentationCoordinator.current
+
+    DisposableEffect(coordinator, showUnavailable, showFirstConfirmation, showFinalConfirmation) {
+        val isBlocked = showUnavailable || showFirstConfirmation || showFinalConfirmation
+        coordinator?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, isBlocked)
+        onDispose {
+            coordinator?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, false)
+        }
+    }
 
     CloudBackupSectionTitle(
         title = "Disable Cloud Backup",
