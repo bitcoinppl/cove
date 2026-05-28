@@ -415,8 +415,7 @@ private fun SendFlowRouteToScreen(
             var showErrorAlert by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
-            // reset stale payjoin broadcast state so a prior send's true value doesn't
-            // immediately trigger success UI on entering this confirm screen
+            // reset stale payjoin broadcast state from a prior send
             LaunchedEffect(Unit) {
                 walletManager.resetPayjoinTxBroadcast()
             }
@@ -429,8 +428,7 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
-            // show success UI when the payjoin tx has been broadcast (success or fallback);
-            // guard against stale true values that arrive before the send is actually in progress
+            // show success UI on payjoin broadcast, guard against stale state
             LaunchedEffect(walletManager.payjoinTxBroadcast) {
                 if (walletManager.payjoinTxBroadcast && sendState == SendState.Sending) {
                     sendState = SendState.Sent
@@ -518,8 +516,7 @@ private fun SendFlowRouteToScreen(
                                 }
                                 SendConfirmationInput.Unsigned -> {
                                     walletManager.rust.initiatePayment(details.psbt(), payjoinEndpoint)
-                                    // for payjoin, stay in Sending state — the PayjoinTxBroadcast
-                                    // reconcile will trigger success UI when the tx is broadcast
+                                    // for payjoin, stay in Sending — PayjoinTxBroadcast reconcile triggers success UI
                                     if (payjoinEndpoint != null) return@launch
                                 }
                             }

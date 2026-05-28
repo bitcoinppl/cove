@@ -184,8 +184,7 @@ struct SendFlowConfirmScreen: View {
                                     psbt: details.psbt(),
                                     payjoinEndpoint: payjoinEndpoint
                                 )
-                                // for payjoin, stay in .sending — the PayjoinTxBroadcast
-                                // reconcile will fire sendState = .sent when done
+                                // for payjoin, stay in .sending — PayjoinTxBroadcast reconcile fires sendState = .sent
                                 if payjoinEndpoint == nil {
                                     sendState = .sent
                                     isShowingAlert = true
