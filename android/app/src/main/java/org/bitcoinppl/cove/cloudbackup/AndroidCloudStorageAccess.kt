@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.cloudbackup
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import java.io.ByteArrayOutputStream
@@ -266,7 +267,9 @@ internal class DriveHttpException(
 class AndroidCloudStorageAccess internal constructor(
     private val driveAuthorization: DriveAuthorization,
 ) : CloudStorageAccess {
-    constructor(context: Context) : this(DriveAuthorizationHelper(context))
+    constructor(context: Context) : this(
+        CachingDriveAuthorization(DriveAuthorizationHelper(context)),
+    )
 
     private val namespacesRootFolderMutex = Mutex()
     private val namespaceFolderMutexes = ConcurrentHashMap<String, Mutex>()
@@ -899,6 +902,7 @@ class AndroidCloudStorageAccess internal constructor(
         onError: (Throwable) -> CloudStorageException,
         block: suspend (token: String) -> T,
     ): T {
+        val started = SystemClock.elapsedRealtime()
         val firstToken =
             try {
                 driveAuthorization.accessToken(interactive)
@@ -909,7 +913,12 @@ class AndroidCloudStorageAccess internal constructor(
             }
 
         try {
-            return block(firstToken)
+            return block(firstToken).also {
+                Log.d(
+                    "AndroidCloudStorage",
+                    "drive operation elapsed_ms=${SystemClock.elapsedRealtime() - started}",
+                )
+            }
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             if (error is DriveHttpException && error.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
@@ -929,7 +938,12 @@ class AndroidCloudStorageAccess internal constructor(
                     }
 
                 try {
-                    return block(retryToken)
+                    return block(retryToken).also {
+                        Log.d(
+                            "AndroidCloudStorage",
+                            "drive operation retry elapsed_ms=${SystemClock.elapsedRealtime() - started}",
+                        )
+                    }
                 } catch (retryError: Throwable) {
                     if (retryError is CancellationException) throw retryError
                     throw onError(retryError)

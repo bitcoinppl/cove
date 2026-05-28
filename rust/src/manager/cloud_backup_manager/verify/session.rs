@@ -11,7 +11,8 @@ use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageE
 use cove_device::keychain::Keychain;
 use cove_device::passkey::{PasskeyAccess, PasskeyCredentialPresence};
 use cove_util::ResultExt as _;
-use tracing::{info, warn};
+use futures::stream::{self, StreamExt as _};
+use tracing::{debug, info, warn};
 use zeroize::Zeroizing;
 
 use super::passkey_auth::PasskeyAuthOutcome;
@@ -21,8 +22,8 @@ use super::wrapper_repair::{
 };
 use crate::manager::cloud_backup_manager::pending::remote_wallet_revision_matches;
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CloudBackupDetail, CloudBackupError, CloudBackupKeychain,
-    CloudBackupRetryAction, CloudBackupRetryContext, DeepVerificationFailure,
+    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError,
+    CloudBackupKeychain, CloudBackupRetryAction, CloudBackupRetryContext, DeepVerificationFailure,
     DeepVerificationReport, DeepVerificationResult, PASSKEY_RP_ID, PendingVerificationCompletion,
     PendingVerificationUpload, RustCloudBackupManager,
     actors::CloudBackupUploadedWallet,
@@ -272,6 +273,7 @@ impl VerificationSession {
     }
 
     pub(crate) async fn run(mut self) -> Result<CloudBackupDeepVerificationStep, CloudBackupError> {
+        let started = std::time::Instant::now();
         let encrypted_master = match self.load_encrypted_master_key().await? {
             EncryptedMasterKeyStep::Loaded(encrypted_master) => Some(encrypted_master),
             EncryptedMasterKeyStep::Missing => None,
@@ -279,8 +281,17 @@ impl VerificationSession {
                 return Ok(CloudBackupDeepVerificationStep::Complete(result));
             }
         };
+        debug!(
+            elapsed_ms = started.elapsed().as_millis(),
+            "Verification timing: loaded master key backup"
+        );
 
+        let started = std::time::Instant::now();
         let master_key_resolution = self.resolve_master_key_step(encrypted_master.as_ref()).await?;
+        debug!(
+            elapsed_ms = started.elapsed().as_millis(),
+            "Verification timing: resolved master key"
+        );
         let master_key_resolution = match master_key_resolution {
             MasterKeyResolution::Finished(result) => {
                 return Ok(CloudBackupDeepVerificationStep::Complete(result));
@@ -294,9 +305,14 @@ impl VerificationSession {
             self.apply_verified_cloud_master_key(&authenticated_master.master_key)?;
         }
 
+        let started = std::time::Instant::now();
         if let Some(result) = self.ensure_wallet_inventory_or_short_circuit().await {
             return Ok(CloudBackupDeepVerificationStep::Complete(result));
         }
+        debug!(
+            elapsed_ms = started.elapsed().as_millis(),
+            "Verification timing: loaded wallet inventory"
+        );
 
         let authenticated_master = match master_key_resolution {
             ContinuableMasterKeyResolution::Authenticated(authenticated_master) => {
@@ -595,13 +611,28 @@ impl VerificationSession {
             authenticated_master.source
         );
         let critical_key = Zeroizing::new(authenticated_master.master_key.critical_data_key());
+        let started = std::time::Instant::now();
         let (verified, failed, unsupported) = self.verify_wallet_backups(&critical_key).await;
+        debug!(
+            elapsed_ms = started.elapsed().as_millis(),
+            "Verification timing: checked wallet backups"
+        );
         self.report.wallets_verified = verified;
         self.report.wallets_failed = failed;
         self.report.wallets_unsupported = unsupported;
+        let started = std::time::Instant::now();
         let other_backups = self.manager.other_backup_state(&self.cloud).await;
+        debug!(
+            elapsed_ms = started.elapsed().as_millis(),
+            "Verification timing: checked other backup state"
+        );
+        let started = std::time::Instant::now();
         let remote_wallet_truth_result =
             self.manager.load_remote_wallet_truth(&wallet_record_ids, self.cloud.clone()).await;
+        debug!(
+            elapsed_ms = started.elapsed().as_millis(),
+            "Verification timing: refreshed remote wallet truth"
+        );
 
         let remote_wallet_truth = match remote_wallet_truth_result {
             Ok(remote_wallet_truth) => remote_wallet_truth,
@@ -783,8 +814,19 @@ impl VerificationSession {
         let mut failed = 0u32;
         let mut unsupported = 0u32;
 
-        for record_id in wallet_record_ids {
-            match reader.lookup_entry(record_id).await {
+        let mut lookups = stream::iter(wallet_record_ids.iter().cloned())
+            .map(|record_id| {
+                let reader = reader.clone();
+
+                async move {
+                    let result = reader.lookup_entry(&record_id).await;
+                    (record_id, result)
+                }
+            })
+            .buffer_unordered(CLOUD_BACKUP_IO_CONCURRENCY);
+
+        while let Some((record_id, result)) = lookups.next().await {
+            match result {
                 Ok(WalletBackupLookup::Found(_)) => verified += 1,
                 Ok(WalletBackupLookup::UnsupportedVersion(_)) => unsupported += 1,
                 Ok(WalletBackupLookup::NotFound) => {

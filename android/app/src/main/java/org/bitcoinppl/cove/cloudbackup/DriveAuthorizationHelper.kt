@@ -10,6 +10,8 @@ import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Scope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 
 internal class AuthorizationRequiredException(
@@ -21,6 +23,33 @@ internal interface DriveAuthorization {
     suspend fun accessToken(interactive: Boolean): String
 
     suspend fun clearToken(token: String)
+}
+
+internal class CachingDriveAuthorization(
+    private val delegate: DriveAuthorization,
+) : DriveAuthorization {
+    private val tokenMutex = Mutex()
+    private var cachedAccessToken: String? = null
+
+    override suspend fun accessToken(interactive: Boolean): String {
+        cachedAccessToken?.let { return it }
+
+        return tokenMutex.withLock {
+            cachedAccessToken ?: delegate.accessToken(interactive).also { token ->
+                cachedAccessToken = token
+            }
+        }
+    }
+
+    override suspend fun clearToken(token: String) {
+        tokenMutex.withLock {
+            if (cachedAccessToken == token) {
+                cachedAccessToken = null
+            }
+        }
+
+        delegate.clearToken(token)
+    }
 }
 
 internal class DriveAuthorizationHelper(

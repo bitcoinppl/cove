@@ -120,6 +120,27 @@ class AndroidCloudStorageAccessTest {
         }
 
     @Test
+    fun cachingDriveAuthorizationReusesTokenUntilCleared() =
+        runBlocking {
+            val delegate = RecordingDriveAuthorization()
+            val authorization = CachingDriveAuthorization(delegate)
+
+            assertEquals("token-1", authorization.accessToken(interactive = false))
+            assertEquals("token-1", authorization.accessToken(interactive = true))
+            assertEquals(listOf(false), delegate.accessRequests)
+
+            delegate.token = "token-2"
+            authorization.clearToken("other-token")
+            assertEquals("token-1", authorization.accessToken(interactive = false))
+            assertEquals(listOf(false), delegate.accessRequests)
+
+            authorization.clearToken("token-1")
+            assertEquals("token-2", authorization.accessToken(interactive = false))
+            assertEquals(listOf(false, false), delegate.accessRequests)
+            assertEquals(listOf("other-token", "token-1"), delegate.clearedTokens)
+        }
+
+    @Test
     fun authorizationRequiredErrorsPreserveMessagesAcrossOperations() {
         val authorizationError = AuthorizationRequiredException("google drive authorization was cancelled")
         val uploadError = mapDriveUploadError(authorizationError, "wallet-record")
@@ -344,5 +365,20 @@ class AndroidCloudStorageAccessTest {
         }
 
         override suspend fun clearToken(token: String) = Unit
+    }
+
+    private class RecordingDriveAuthorization : DriveAuthorization {
+        var token = "token-1"
+        val accessRequests = mutableListOf<Boolean>()
+        val clearedTokens = mutableListOf<String>()
+
+        override suspend fun accessToken(interactive: Boolean): String {
+            accessRequests.add(interactive)
+            return token
+        }
+
+        override suspend fun clearToken(token: String) {
+            clearedTokens.add(token)
+        }
     }
 }
