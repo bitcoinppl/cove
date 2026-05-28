@@ -31,7 +31,7 @@ struct WalletBalanceHeaderView: View {
                 Text(manager.rust.displayFiatAmount(amount: fiatBalance))
             } else {
                 ProgressView()
-                    .tint(.white)
+                    .tint(.white.opacity(balancePresentation.primaryOpacity))
             }
         } else {
             Text(manager.amountFmtUnit(balance))
@@ -47,7 +47,7 @@ struct WalletBalanceHeaderView: View {
                 Text(manager.rust.displayFiatAmount(amount: fiatBalance))
             } else {
                 ProgressView()
-                    .tint(.white.opacity(0.75))
+                    .tint(.white.opacity(balancePresentation.secondaryOpacity))
                     .scaleEffect(0.7)
             }
         } else {

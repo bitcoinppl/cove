@@ -14,6 +14,17 @@ private extension WalletScanStatus {
     }
 }
 
+private extension WalletLoadState {
+    var initialScanStatus: WalletScanStatus {
+        switch self {
+        case .loading, .loaded:
+            .idle
+        case .scanning:
+            .scanningPendingProgress(.full)
+        }
+    }
+}
+
 @Observable final class WalletManager: AnyReconciler, WalletManagerReconciler {
     typealias Message = WalletManagerReconcileMessage
     typealias Action = WalletManagerAction
@@ -28,7 +39,7 @@ private extension WalletScanStatus {
 
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState
-    var scanStatus: WalletScanStatus = .idle
+    var scanStatus: WalletScanStatus
     var balancePresentation: BalancePresentation
     var balance: Balance = .zero()
     var foundAddresses: [FoundAddress] = []
@@ -57,10 +68,13 @@ private extension WalletScanStatus {
     init(id: WalletId) throws {
         self.id = id
         let rust = try RustWalletManager(id: id)
+        let loadState = rust.initialLoadState()
+        let scanStatus = loadState.initialScanStatus
 
         self.rust = rust
-        self.loadState = rust.initialLoadState()
-        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
+        self.loadState = loadState
+        self.scanStatus = scanStatus
+        self.balancePresentation = rust.balancePresentation(scanStatus: scanStatus)
 
         walletMetadata = rust.walletMetadata()
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
@@ -87,6 +101,7 @@ private extension WalletScanStatus {
 
         self.rust = rust
         self.loadState = .loading
+        self.scanStatus = .idle
         self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         walletMetadata = metadata
         id = metadata.id
@@ -111,6 +126,7 @@ private extension WalletScanStatus {
 
         self.rust = rust
         self.loadState = .loading
+        self.scanStatus = .idle
         self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         walletMetadata = metadata
         id = metadata.id
@@ -357,6 +373,7 @@ private extension WalletScanStatus {
 
         self.rust = rust
         self.loadState = .loading
+        self.scanStatus = .idle
         self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         self.walletMetadata = rust.walletMetadata()
 

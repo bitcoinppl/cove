@@ -165,8 +165,8 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Transactions"].waitForExistence(timeout: 30))
         XCTAssertTrue(staticText(containing: "0 BTC").waitForExistence(timeout: 30))
-        XCTAssertTrue(app.staticTexts["Checking wallet history"].exists)
-        XCTAssertFalse(app.staticTexts["No transactions"].exists)
+        XCTAssertTrue(app.staticTexts["Checking wallet history"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["No transactions"].waitForExistence(timeout: 1))
     }
 
     func testSoftwareWalletUserCanImportKnownLegacyWalletWithHistory() {
