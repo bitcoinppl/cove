@@ -107,6 +107,7 @@ struct CloudBackupDetailScreen: View {
                 onReinitialize: { showReinitializeConfirmation = true }
             )
             if manager.detail != nil {
+                DisableCloudBackupDivider()
                 DisableCloudBackupSection(manager: manager, detail: manager.detail)
             }
         }
@@ -180,6 +181,19 @@ struct CloudBackupDetailScreen: View {
             }
         default:
             EmptyView()
+        }
+    }
+}
+
+private struct DisableCloudBackupDivider: View {
+    var body: some View {
+        Section {
+            VStack {
+                Divider()
+            }
+            .padding(.vertical, 28)
+            .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+            .listRowBackground(Color.clear)
         }
     }
 }

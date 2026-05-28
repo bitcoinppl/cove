@@ -356,14 +356,6 @@ struct CloudBackupPresentationHost<Content: View>: View {
         )
     }
 
-    private var existingBackupContext: CloudBackupEnableContext? {
-        if case let .existingBackupFound(context, _) = coordinator.currentPresentation {
-            return context
-        }
-
-        return nil
-    }
-
     private var existingBackupPasskeyHint: CloudBackupPasskeyHint? {
         if case let .existingBackupFound(_, passkeyHint) = coordinator.currentPresentation {
             return passkeyHint
@@ -407,10 +399,10 @@ struct CloudBackupPresentationHost<Content: View>: View {
         coordinator.dismissCurrentPresentation()
 
         switch (intent, existing) {
-        case let (.enable(context, _), true):
-            manager.dispatch(action: .enableCloudBackup(context))
-        case let (.enable(context, _), false):
-            manager.dispatch(action: .enableCloudBackupNoDiscovery(context))
+        case (.enable, true):
+            manager.dispatch(action: .acceptEnablePrompt(.useExisting))
+        case (.enable, false):
+            manager.dispatch(action: .acceptEnablePrompt(.createNew))
         case (.repairPasskey, true):
             manager.dispatch(action: .repairPasskey)
         case (.repairPasskey, false):
@@ -523,14 +515,12 @@ struct CloudBackupPresentationHost<Content: View>: View {
                 isPresented: showingExistingBackupPrompt
             ) {
                 Button("Create New Backup", role: .destructive) {
-                    guard let existingBackupContext else { return }
                     coordinator.dismissCurrentPresentation()
-                    manager.dispatch(action: .enableCloudBackupForceNew(existingBackupContext))
+                    manager.dispatch(action: .acceptEnablePrompt(.createNew))
                 }
                 Button("Try Existing Passkey") {
-                    guard let existingBackupContext else { return }
                     coordinator.dismissCurrentPresentation()
-                    manager.dispatch(action: .enableCloudBackup(existingBackupContext))
+                    manager.dispatch(action: .acceptEnablePrompt(.useExisting))
                 }
                 Button("Cancel", role: .cancel) {
                     coordinator.dismissCurrentPresentation()
