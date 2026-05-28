@@ -160,6 +160,7 @@ where
 
         let spks =
             (0..batch_size).map_while(|_| spks_with_expected_txids.next()).collect::<Vec<_>>();
+
         if spks.is_empty() {
             return Ok(last_active_index);
         }
@@ -168,8 +169,17 @@ where
             .inner
             .batch_script_get_history(spks.iter().map(|(_, script)| script.spk.as_script()))?;
 
+        if spk_histories.len() != spks.len() {
+            return Err(Error::Electrum(electrum_client::Error::Message(format!(
+                "electrum batch history response length mismatch: requested {}, received {}",
+                spks.len(),
+                spk_histories.len()
+            ))));
+        }
+
         let mut partial_update = TxUpdate::<ConfirmationBlockTime>::default();
         let mut pending_anchors = Vec::new();
+
         for ((spk_index, spk), spk_history) in spks.into_iter().zip(spk_histories) {
             let used = !spk_history.is_empty();
             let scan_progress = progress.checked(keychain.clone(), used);
@@ -436,6 +446,7 @@ mod tests {
         histories: Arc<Mutex<VecDeque<Vec<GetHistoryRes>>>>,
         transactions: BTreeMap<Txid, Transaction>,
         fetched_txids: Arc<Mutex<Vec<Txid>>>,
+        history_response_limit: Option<usize>,
         merkle_response_limit: Option<usize>,
     }
 
@@ -446,6 +457,7 @@ mod tests {
                 histories: Arc::new(Mutex::new(VecDeque::new())),
                 transactions: BTreeMap::new(),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                history_response_limit: None,
                 merkle_response_limit: None,
             }
         }
@@ -456,6 +468,7 @@ mod tests {
                 histories: Arc::new(Mutex::new(VecDeque::new())),
                 transactions: BTreeMap::new(),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                history_response_limit: None,
                 merkle_response_limit: None,
             }
         }
@@ -471,6 +484,7 @@ mod tests {
                 ]))),
                 transactions: BTreeMap::from([(txid, tx)]),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                history_response_limit: None,
                 merkle_response_limit: None,
             }
         }
@@ -485,6 +499,7 @@ mod tests {
                 ]))),
                 transactions: BTreeMap::from([(txid, tx)]),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                history_response_limit: None,
                 merkle_response_limit: None,
             }
         }
@@ -503,6 +518,7 @@ mod tests {
                 ]))),
                 transactions: BTreeMap::from([(txid, tx)]),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                history_response_limit: None,
                 merkle_response_limit: None,
             }
         }
@@ -517,8 +533,13 @@ mod tests {
                 ]))),
                 transactions: BTreeMap::new(),
                 fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                history_response_limit: None,
                 merkle_response_limit: None,
             }
+        }
+
+        fn with_history_response_limit(limit: usize) -> Self {
+            Self { history_response_limit: Some(limit), ..Self::empty_history() }
         }
 
         fn with_merkle_response_limit(limit: usize) -> Self {
@@ -641,7 +662,13 @@ mod tests {
 
             let mut histories = self.histories.lock().expect("history lock not poisoned");
 
-            Ok(scripts.into_iter().map(|_| histories.pop_front().unwrap_or_default()).collect())
+            let histories = scripts
+                .into_iter()
+                .map(|_| histories.pop_front().unwrap_or_default())
+                .take(self.history_response_limit.unwrap_or(usize::MAX))
+                .collect();
+
+            Ok(histories)
         }
 
         fn script_list_unspent(
@@ -1001,6 +1028,7 @@ mod tests {
             ]))),
             transactions: BTreeMap::from([(txid, tx)]),
             fetched_txids: Arc::new(Mutex::new(Vec::new())),
+            history_response_limit: None,
             merkle_response_limit: None,
         };
         let client = BdkElectrumClient::new(fake);
@@ -1246,6 +1274,35 @@ mod tests {
 
         let events = receiver.try_iter().collect::<Vec<_>>();
         assert!(matches!(result, Err(Error::Electrum(_))));
+        assert!(!events.iter().any(|event| matches!(event, ScanEvent::Complete(_))));
+    }
+
+    #[test]
+    fn short_batch_history_response_returns_error() {
+        let request = FullScanRequest::builder_at(0)
+            .spks_for_keychain(
+                "external",
+                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
+            )
+            .build();
+        let (events, receiver) = flume::unbounded();
+        let client = BdkElectrumClient::new(FakeElectrum::with_history_response_limit(1));
+
+        let result = ProgressiveScanner::builder()
+            .request(request)
+            .stop_gap(2)
+            .events(events)
+            .electrum(client)
+            .expect("scanner builds")
+            .batch_size(2)
+            .run();
+
+        let events = receiver.try_iter().collect::<Vec<_>>();
+        assert!(matches!(
+            result,
+            Err(Error::Electrum(electrum_client::Error::Message(message)))
+                if message.contains("response length mismatch")
+        ));
         assert!(!events.iter().any(|event| matches!(event, ScanEvent::Complete(_))));
     }
 }

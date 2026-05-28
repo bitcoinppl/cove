@@ -319,10 +319,10 @@ fn insert_anchor_or_seen_at_from_status(
     status: esplora_client::TxStatus,
 ) {
     if let esplora_client::TxStatus {
+        confirmed: true,
         block_height: Some(height),
         block_hash: Some(hash),
         block_time: Some(time),
-        ..
     } = status
     {
         let anchor =
@@ -1059,6 +1059,27 @@ mod tests {
                 block_height: None,
                 block_hash: None,
                 block_time: None,
+            },
+        );
+
+        assert!(update.seen_ats.contains(&(txid, 100)));
+        assert!(update.anchors.is_empty());
+    }
+
+    #[test]
+    fn unconfirmed_esplora_status_with_block_fields_inserts_seen_at() {
+        let mut update = TxUpdate::<ConfirmationBlockTime>::default();
+        let txid = txid(5);
+
+        insert_anchor_or_seen_at_from_status(
+            &mut update,
+            100,
+            txid,
+            esplora_client::TxStatus {
+                confirmed: false,
+                block_height: Some(42),
+                block_hash: Some(block_hash(6)),
+                block_time: Some(123_456),
             },
         );
 
