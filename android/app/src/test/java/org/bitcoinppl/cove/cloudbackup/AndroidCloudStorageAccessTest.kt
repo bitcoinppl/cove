@@ -4,7 +4,11 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Status
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.bitcoinppl.cove_core.device.RemoteBackupLocation
@@ -122,13 +126,19 @@ class AndroidCloudStorageAccessTest {
     @Test
     fun cachingDriveAuthorizationReusesTokenUntilCleared() =
         runBlocking {
+            var now = 0L
             val delegate = RecordingDriveAuthorization()
-            val authorization = CachingDriveAuthorization(delegate)
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { now },
+                cacheWindowMs = 1_000,
+            )
 
             assertEquals("token-1", authorization.accessToken(interactive = false))
             assertEquals("token-1", authorization.accessToken(interactive = true))
             assertEquals(listOf(false), delegate.accessRequests)
 
+            now = 500
             delegate.token = "token-2"
             authorization.clearToken("other-token")
             assertEquals("token-1", authorization.accessToken(interactive = false))
@@ -138,6 +148,57 @@ class AndroidCloudStorageAccessTest {
             assertEquals("token-2", authorization.accessToken(interactive = false))
             assertEquals(listOf(false, false), delegate.accessRequests)
             assertEquals(listOf("other-token", "token-1"), delegate.clearedTokens)
+        }
+
+    @Test
+    fun cachingDriveAuthorizationExpiresIdleToken() =
+        runBlocking {
+            var now = 0L
+            val delegate = RecordingDriveAuthorization()
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { now },
+                cacheWindowMs = 1_000,
+            )
+
+            assertEquals("token-1", authorization.accessToken(interactive = false))
+
+            now = 999
+            assertEquals("token-1", authorization.accessToken(interactive = false))
+
+            now = 2_000
+            delegate.token = "token-2"
+            assertEquals("token-2", authorization.accessToken(interactive = false))
+            assertEquals(listOf(false, false), delegate.accessRequests)
+        }
+
+    @Test
+    fun cachingDriveAuthorizationDoesNotRefreshWhileClearIsRunning() =
+        runTest {
+            val delegate = BlockingClearDriveAuthorization()
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { 0 },
+                cacheWindowMs = 1_000,
+            )
+
+            assertEquals("token-1", authorization.accessToken(interactive = false))
+
+            delegate.token = "token-2"
+            val clear = async { authorization.clearToken("token-1") }
+            delegate.clearStarted.await()
+
+            val refresh = async { authorization.accessToken(interactive = false) }
+            yield()
+
+            assertFalse(refresh.isCompleted)
+
+            delegate.finishClear.complete(Unit)
+            clear.await()
+
+            assertEquals("token-2", refresh.await())
+            assertEquals(listOf(false, false), delegate.accessRequests)
+            assertEquals(listOf("token-1"), delegate.clearedTokens)
         }
 
     @Test
@@ -379,6 +440,25 @@ class AndroidCloudStorageAccessTest {
 
         override suspend fun clearToken(token: String) {
             clearedTokens.add(token)
+        }
+    }
+
+    private class BlockingClearDriveAuthorization : DriveAuthorization {
+        var token = "token-1"
+        val accessRequests = mutableListOf<Boolean>()
+        val clearedTokens = mutableListOf<String>()
+        val clearStarted = CompletableDeferred<Unit>()
+        val finishClear = CompletableDeferred<Unit>()
+
+        override suspend fun accessToken(interactive: Boolean): String {
+            accessRequests.add(interactive)
+            return token
+        }
+
+        override suspend fun clearToken(token: String) {
+            clearedTokens.add(token)
+            clearStarted.complete(Unit)
+            finishClear.await()
         }
     }
 }

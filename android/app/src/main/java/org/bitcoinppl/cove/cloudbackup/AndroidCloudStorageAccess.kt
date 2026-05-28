@@ -2,7 +2,6 @@ package org.bitcoinppl.cove.cloudbackup
 
 import android.content.Context
 import android.net.Uri
-import android.os.SystemClock
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import java.io.ByteArrayOutputStream
@@ -194,6 +193,8 @@ private fun ApiException.cloudStorageMessage(prefix: String): String {
 private fun logDriveWarning(message: String, error: Throwable) {
     runCatching { Log.w("AndroidCloudStorage", message, error) }
 }
+
+internal fun monotonicTimeMs(): Long = System.nanoTime() / 1_000_000L
 
 internal fun mapDriveUploadError(error: Throwable, target: String): CloudStorageException =
     when (error) {
@@ -902,7 +903,7 @@ class AndroidCloudStorageAccess internal constructor(
         onError: (Throwable) -> CloudStorageException,
         block: suspend (token: String) -> T,
     ): T {
-        val started = SystemClock.elapsedRealtime()
+        val started = monotonicTimeMs()
         val firstToken =
             try {
                 driveAuthorization.accessToken(interactive)
@@ -916,7 +917,7 @@ class AndroidCloudStorageAccess internal constructor(
             return block(firstToken).also {
                 Log.d(
                     "AndroidCloudStorage",
-                    "drive operation elapsed_ms=${SystemClock.elapsedRealtime() - started}",
+                    "drive operation elapsed_ms=${monotonicTimeMs() - started}",
                 )
             }
         } catch (error: Throwable) {
@@ -941,7 +942,7 @@ class AndroidCloudStorageAccess internal constructor(
                     return block(retryToken).also {
                         Log.d(
                             "AndroidCloudStorage",
-                            "drive operation retry elapsed_ms=${SystemClock.elapsedRealtime() - started}",
+                            "drive operation retry elapsed_ms=${monotonicTimeMs() - started}",
                         )
                     }
                 } catch (retryError: Throwable) {

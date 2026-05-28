@@ -27,28 +27,53 @@ internal interface DriveAuthorization {
 
 internal class CachingDriveAuthorization(
     private val delegate: DriveAuthorization,
+    private val elapsedRealtime: () -> Long = ::monotonicTimeMs,
+    private val cacheWindowMs: Long = ACCESS_TOKEN_CACHE_IDLE_MS,
 ) : DriveAuthorization {
     private val tokenMutex = Mutex()
-    private var cachedAccessToken: String? = null
+    private var cachedAccessToken: CachedAccessToken? = null
 
-    override suspend fun accessToken(interactive: Boolean): String {
-        cachedAccessToken?.let { return it }
-
-        return tokenMutex.withLock {
-            cachedAccessToken ?: delegate.accessToken(interactive).also { token ->
-                cachedAccessToken = token
-            }
-        }
+    init {
+        require(cacheWindowMs > 0) { "cacheWindowMs must be positive" }
     }
+
+    override suspend fun accessToken(interactive: Boolean): String =
+        tokenMutex.withLock {
+            val now = elapsedRealtime()
+            cachedAccessToken?.let { cached ->
+                if (cached.expiresAtMs > now) {
+                    cachedAccessToken = cached.copy(expiresAtMs = now + cacheWindowMs)
+                    return@withLock cached.token
+                }
+
+                cachedAccessToken = null
+            }
+
+            val token = delegate.accessToken(interactive)
+            cachedAccessToken = CachedAccessToken(
+                token = token,
+                expiresAtMs = elapsedRealtime() + cacheWindowMs,
+            )
+            token
+        }
 
     override suspend fun clearToken(token: String) {
         tokenMutex.withLock {
-            if (cachedAccessToken == token) {
+            if (cachedAccessToken?.token == token) {
                 cachedAccessToken = null
             }
-        }
 
-        delegate.clearToken(token)
+            delegate.clearToken(token)
+        }
+    }
+
+    private data class CachedAccessToken(
+        val token: String,
+        val expiresAtMs: Long,
+    )
+
+    companion object {
+        private const val ACCESS_TOKEN_CACHE_IDLE_MS = 2 * 60 * 1000L
     }
 }
 
