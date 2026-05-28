@@ -36,6 +36,7 @@ pub(crate) enum FullScanType {
 }
 
 impl FullScanType {
+    /// Returns the address gap that stops this scan type
     pub(crate) const fn stop_gap(&self) -> usize {
         match self {
             Self::Full => FULL_SCAN_STOP_GAP,
@@ -43,6 +44,7 @@ impl FullScanType {
         }
     }
 
+    /// Returns the UI phase represented by this full scan type
     pub(crate) const fn phase(&self) -> WalletScanPhase {
         match self {
             Self::Full => WalletScanPhase::Full,
@@ -121,6 +123,7 @@ struct ProgressiveFullScanJob {
     scan_generation: u64,
     cancel_token: CancellationToken,
     prepared: PreparedProgressiveScan,
+    progress_reveal_at: tokio::time::Instant,
 }
 
 struct ProgressiveFullScanResult {
@@ -130,6 +133,7 @@ struct ProgressiveFullScanResult {
 }
 
 impl ProgressiveFullScanResult {
+    /// Returns whether the scan completed with a usable node response
     fn scan_succeeded(&self) -> bool {
         self.result.is_ok()
     }
@@ -147,6 +151,7 @@ struct ScanFlushCadence {
 }
 
 impl ScanFlushCadence {
+    /// Chooses whether a partial wallet update should flush immediately or be debounced
     fn record_update(&mut self, now: tokio::time::Instant) -> ScanFlushDecision {
         if self.sent_first_flush {
             ScanFlushDecision::Debounce(now + SCAN_PARTIAL_FLUSH_INTERVAL)
@@ -170,6 +175,7 @@ pub(crate) struct WalletScanActor {
 }
 
 impl WalletScanActor {
+    /// Creates a scan actor that reports wallet scan events back to the wallet actor
     pub(crate) fn new(wallet_addr: WeakAddr<WalletActor>) -> Self {
         Self {
             addr: WeakAddr::default(),
@@ -184,6 +190,7 @@ impl WalletScanActor {
         }
     }
 
+    /// Starts a full wallet scan and replaces any active scan generation
     pub(crate) async fn start_full_scan(
         &mut self,
         progress_start: ScanProgressStart,
@@ -191,6 +198,7 @@ impl WalletScanActor {
         self.begin_scan(RunningScan::Full(FullScanType::Full), progress_start)
     }
 
+    /// Starts an incremental scan unless another scan is already active
     pub(crate) async fn start_incremental_scan(
         &mut self,
         progress_start: ScanProgressStart,
@@ -203,6 +211,7 @@ impl WalletScanActor {
         self.begin_scan(RunningScan::Incremental, progress_start)
     }
 
+    /// Starts or queues a rescan with the requested gap limit
     pub(crate) async fn start_rescan(&mut self, gap_limit: u32) -> ActorResult<()> {
         if self.scan_in_progress() {
             debug!("scan already in progress, queueing rescan gap_limit={gap_limit}");
@@ -216,6 +225,7 @@ impl WalletScanActor {
         )
     }
 
+    /// Cancels active scan work and reports an idle scan state
     pub(crate) async fn shutdown(&mut self) -> ActorResult<()> {
         self.clear_scan_lifecycle();
         self.send_event(WalletScanEvent::StatusChanged(WalletScanStatus::Idle));
@@ -226,6 +236,7 @@ impl WalletScanActor {
         self.active_generation.is_some()
     }
 
+    /// Initializes scan state and asks the wallet actor to prepare the scan request
     fn begin_scan(
         &mut self,
         scan: RunningScan,
@@ -234,6 +245,11 @@ impl WalletScanActor {
         self.progress.clear();
         self.max_progress_basis_points = 0;
         self.progress_is_visible = matches!(progress_start, ScanProgressStart::Immediate);
+        let now = tokio::time::Instant::now();
+        let progress_reveal_at = match progress_start {
+            ScanProgressStart::Immediate => now,
+            ScanProgressStart::Delayed(delay) => now + delay,
+        };
 
         let (scan_generation, cancel_token) = self.start_scan_generation();
         match scan {
@@ -247,18 +263,19 @@ impl WalletScanActor {
 
         self.send_event(WalletScanEvent::StatusChanged(initial_scan_status(scan, progress_start)));
 
-        if let ScanProgressStart::Delayed(delay) = progress_start {
-            self.schedule_progress_reveal(scan_generation, scan, delay);
-        }
-
         let request_order = scan.request_order();
         let addr = self.addr.clone();
         let wallet_addr = self.wallet_addr.clone();
         self.addr.send_fut(async move {
             match call!(wallet_addr.prepare_progressive_scan(request_order)).await {
                 Ok(prepared) => {
-                    let job =
-                        ProgressiveFullScanJob { scan, scan_generation, cancel_token, prepared };
+                    let job = ProgressiveFullScanJob {
+                        scan,
+                        scan_generation,
+                        cancel_token,
+                        prepared,
+                        progress_reveal_at,
+                    };
                     send!(addr.run_progressive_scan_job(job));
                 }
                 Err(error) => {
@@ -271,6 +288,7 @@ impl WalletScanActor {
         Produces::ok(())
     }
 
+    /// Runs a prepared scan job when its generation is still current
     async fn run_progressive_scan_job(&mut self, job: ProgressiveFullScanJob) -> ActorResult<()> {
         if !should_accept_scan_generation(self.active_generation, job.scan_generation) {
             debug!("ignoring stale progressive scan job");
@@ -290,87 +308,118 @@ impl WalletScanActor {
         self.handle_scan_result(scan_result).await
     }
 
+    /// Drives the node scan future while forwarding progress and debounced updates
     async fn run_progressive_full_scan(
         &mut self,
         job: ProgressiveFullScanJob,
     ) -> ActorResult<ProgressiveFullScanResult> {
         let (events_tx, events_rx) = flume::bounded(32);
-        self.seed_scan_progress(
-            job.prepared.full_scan_request.keychains(),
-            job.scan.stop_gap() as u32,
-        );
+        let scan = job.scan;
+        let scan_generation = job.scan_generation;
+        let cancel_token = job.cancel_token.clone();
+
+        self.seed_scan_progress(job.prepared.full_scan_request.keychains(), scan.stop_gap() as u32);
 
         let scan_future = job.prepared.node_client.start_progressive_wallet_scan(
             &job.prepared.graph,
             job.prepared.full_scan_request,
             job.prepared.last_revealed_indices,
-            job.scan.stop_gap(),
+            scan.stop_gap(),
             events_tx,
-            job.cancel_token.clone(),
+            cancel_token.clone(),
         );
 
-        tokio::pin!(scan_future);
         let mut flush_cadence = ScanFlushCadence::default();
-        let mut flush_deadline = Option::<tokio::time::Instant>::None;
         let mut last_progress_sent = Option::<tokio::time::Instant>::None;
+        let mut flush_timer_armed = false;
+
+        let flush_timer = tokio::time::sleep(SCAN_PARTIAL_FLUSH_INTERVAL);
+        let progress_reveal_timer = tokio::time::sleep_until(job.progress_reveal_at);
+
+        tokio::pin!(scan_future);
+        tokio::pin!(flush_timer);
+        tokio::pin!(progress_reveal_timer);
 
         let scan_result = loop {
             tokio::select! {
+                // scan finished before another progress, flush, or reveal event
                 result = &mut scan_future => break result,
+
+                // scan emitted progress or a partial wallet update
                 event = events_rx.recv_async() => {
-                    if let Ok(event) = event
-                        && self.forward_scan_event(
-                        event,
-                        job.scan_generation,
-                        job.scan.phase(),
-                        &mut last_progress_sent,
-                    )
-                        && record_scan_update_flush(
-                            &mut flush_cadence,
-                            &mut flush_deadline,
-                            tokio::time::Instant::now(),
-                        )
-                    {
-                        self.send_event(WalletScanEvent::FlushUi);
+                    let should_flush = match event {
+                        Ok(event) => self.forward_scan_event(
+                            event,
+                            scan_generation,
+                            scan.phase(),
+                            &mut last_progress_sent,
+                        ),
+                        Err(_) => false,
+                    };
+
+                    if !should_flush {
+                        continue;
+                    }
+
+                    match flush_cadence.record_update(tokio::time::Instant::now()) {
+                        ScanFlushDecision::Immediate => {
+                            self.send_event(WalletScanEvent::FlushUi);
+                        }
+
+                        ScanFlushDecision::Debounce(deadline) => {
+                            flush_timer.as_mut().reset(deadline);
+                            flush_timer_armed = true;
+                        }
                     }
                 }
-                _ = async {
-                    tokio::time::sleep_until(flush_deadline.expect("flush deadline is set")).await;
-                }, if flush_deadline.is_some() => {
-                    flush_deadline = None;
+
+                // debounced partial updates are ready to be sent to the UI
+                _ = &mut flush_timer, if flush_timer_armed => {
+                    flush_timer_armed = false;
                     self.send_event(WalletScanEvent::FlushUi);
+                }
+
+                // delayed scans switch from the lightweight spinner to detailed progress
+                _ = &mut progress_reveal_timer, if !self.progress_is_visible => {
+                    self.reveal_delayed_progress(scan_generation, scan);
                 }
             }
         };
 
         while let Ok(event) = events_rx.try_recv() {
-            if self.forward_scan_event(
+            let scan_phase = scan.phase();
+            let should_flush = self.forward_scan_event(
                 event,
-                job.scan_generation,
-                job.scan.phase(),
+                scan_generation,
+                scan_phase,
                 &mut last_progress_sent,
-            ) && record_scan_update_flush(
-                &mut flush_cadence,
-                &mut flush_deadline,
-                tokio::time::Instant::now(),
-            ) {
-                self.send_event(WalletScanEvent::FlushUi);
+            );
+
+            if should_flush {
+                let now = tokio::time::Instant::now();
+                let flush_decision = flush_cadence.record_update(now);
+
+                match flush_decision {
+                    ScanFlushDecision::Immediate => {
+                        self.send_event(WalletScanEvent::FlushUi);
+                    }
+                    ScanFlushDecision::Debounce(deadline) => {
+                        flush_timer.as_mut().reset(deadline);
+                        flush_timer_armed = true;
+                    }
+                }
             }
         }
 
-        if flush_deadline.is_some()
-            && should_flush_pending_after_scan_result(&scan_result, &job.cancel_token)
+        if flush_timer_armed && should_flush_pending_after_scan_result(&scan_result, &cancel_token)
         {
             self.send_event(WalletScanEvent::FlushUi);
         }
 
-        Produces::ok(ProgressiveFullScanResult {
-            scan: job.scan,
-            scan_generation: job.scan_generation,
-            result: scan_result,
-        })
+        Produces::ok(ProgressiveFullScanResult { scan, scan_generation, result: scan_result })
     }
 
+    /// Applies a finished scan result if it still belongs to the active generation
     async fn handle_scan_result(
         &mut self,
         scan_result: ProgressiveFullScanResult,
@@ -427,6 +476,7 @@ impl WalletScanActor {
         Produces::ok(())
     }
 
+    /// Starts a queued rescan after the active scan has finished applying
     async fn start_queued_rescan(&mut self) -> ActorResult<()> {
         let Some(gap_limit) = self.queued_rescan_gap_limit.take() else {
             return Produces::ok(());
@@ -438,17 +488,14 @@ impl WalletScanActor {
         )
     }
 
-    async fn reveal_delayed_progress(
-        &mut self,
-        scan_generation: u64,
-        scan: RunningScan,
-    ) -> ActorResult<()> {
+    /// Reveals detailed progress for delayed scans that are still active
+    fn reveal_delayed_progress(&mut self, scan_generation: u64, scan: RunningScan) {
         if !should_reveal_delayed_progress(
             self.active_generation,
             scan_generation,
             self.progress_is_visible,
         ) {
-            return Produces::ok(());
+            return;
         }
 
         self.progress_is_visible = true;
@@ -456,10 +503,9 @@ impl WalletScanActor {
             .scan_status_from_current_progress(scan.phase())
             .unwrap_or_else(|| initial_progress_status(scan));
         self.send_event(WalletScanEvent::StatusChanged(status));
-
-        Produces::ok(())
     }
 
+    /// Reports scan preparation failure when the failed generation is still active
     async fn handle_scan_prepare_failed(
         &mut self,
         scan_generation: u64,
@@ -484,6 +530,7 @@ impl WalletScanActor {
         Produces::ok(())
     }
 
+    /// Forwards node scan events and returns whether the UI needs a partial flush
     fn forward_scan_event(
         &mut self,
         event: ScanEvent<KeychainKind>,
@@ -513,6 +560,7 @@ impl WalletScanActor {
         }
     }
 
+    /// Merges one keychain progress event into the aggregate UI scan status
     fn scan_status_from_progress(
         &mut self,
         progress: ScanProgress<KeychainKind>,
@@ -540,11 +588,13 @@ impl WalletScanActor {
         })
     }
 
+    /// Records the highest visible progress value for the current scan
     fn record_visible_progress(&mut self, progress_basis_points: u32) -> u32 {
         self.max_progress_basis_points = self.max_progress_basis_points.max(progress_basis_points);
         self.max_progress_basis_points
     }
 
+    /// Builds the current visible scan status from accumulated keychain progress
     fn scan_status_from_current_progress(
         &self,
         phase: WalletScanPhase,
@@ -560,14 +610,7 @@ impl WalletScanActor {
         }))
     }
 
-    fn schedule_progress_reveal(&self, scan_generation: u64, scan: RunningScan, delay: Duration) {
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
-            tokio::time::sleep(delay).await;
-            send!(addr.reveal_delayed_progress(scan_generation, scan));
-        });
-    }
-
+    /// Starts a new scan generation and cancels any previous active generation
     fn start_scan_generation(&mut self) -> (u64, CancellationToken) {
         if let Some(cancel_token) = self.active_cancel_token.take() {
             cancel_token.cancel();
@@ -581,12 +624,14 @@ impl WalletScanActor {
         (scan_generation, cancel_token)
     }
 
+    /// Clears the active scan generation after a scan finishes normally
     fn clear_active_scan(&mut self) {
         self.active_cancel_token = None;
         self.active_generation = None;
         self.progress_is_visible = false;
     }
 
+    /// Cancels active scan work and resets queued scan lifecycle state
     fn clear_scan_lifecycle(&mut self) {
         if let Some(cancel_token) = self.active_cancel_token.take() {
             cancel_token.cancel();
@@ -598,6 +643,7 @@ impl WalletScanActor {
         self.progress_is_visible = false;
     }
 
+    /// Seeds per-keychain progress so the UI can show aggregate scan work immediately
     fn seed_scan_progress(
         &mut self,
         keychains: impl IntoIterator<Item = KeychainKind>,
@@ -609,6 +655,7 @@ impl WalletScanActor {
             .collect();
     }
 
+    /// Sends a scan event to the wallet actor without waiting for it to apply
     fn send_event(&self, event: WalletScanEvent) {
         send!(self.wallet_addr.handle_wallet_scan_event(event));
     }
@@ -650,6 +697,7 @@ fn should_forward_scan_progress(
     should_forward
 }
 
+/// Builds the initial scan status shown before node progress arrives
 fn initial_scan_status(scan: RunningScan, progress_start: ScanProgressStart) -> WalletScanStatus {
     match progress_start {
         ScanProgressStart::Immediate => initial_progress_status(scan),
@@ -657,6 +705,7 @@ fn initial_scan_status(scan: RunningScan, progress_start: ScanProgressStart) -> 
     }
 }
 
+/// Builds an empty progress status for the requested scan
 fn initial_progress_status(scan: RunningScan) -> WalletScanStatus {
     WalletScanStatus::Scanning(WalletScanProgress {
         phase: scan.phase(),
@@ -667,6 +716,7 @@ fn initial_progress_status(scan: RunningScan) -> WalletScanStatus {
     })
 }
 
+/// Aggregates progress across all scanned keychains
 fn total_keychain_progress(
     progress: impl IntoIterator<Item = KeychainProgress>,
 ) -> Option<KeychainProgress> {
@@ -679,6 +729,7 @@ fn total_keychain_progress(
     })
 }
 
+/// Returns whether a delayed scan should switch from pending to visible progress
 fn should_reveal_delayed_progress(
     active_generation: Option<u64>,
     reveal_generation: u64,
@@ -687,6 +738,7 @@ fn should_reveal_delayed_progress(
     !progress_is_visible && should_accept_scan_generation(active_generation, reveal_generation)
 }
 
+/// Returns whether a node scan error represents expected cancellation
 fn is_cancelled_progressive_scan(
     error: &NodeClientError,
     cancel_token: Option<&CancellationToken>,
@@ -700,6 +752,7 @@ fn is_cancelled_progressive_scan(
     }
 }
 
+/// Returns whether pending partial updates should flush after scan completion
 fn should_flush_pending_after_scan_result(
     scan_result: &std::result::Result<FullScanResponse<KeychainKind>, NodeClientError>,
     cancel_token: &CancellationToken,
@@ -711,20 +764,7 @@ fn should_flush_pending_after_scan_result(
     }
 }
 
-fn record_scan_update_flush(
-    flush_cadence: &mut ScanFlushCadence,
-    flush_deadline: &mut Option<tokio::time::Instant>,
-    now: tokio::time::Instant,
-) -> bool {
-    match flush_cadence.record_update(now) {
-        ScanFlushDecision::Immediate => true,
-        ScanFlushDecision::Debounce(deadline) => {
-            *flush_deadline = Some(deadline);
-            false
-        }
-    }
-}
-
+/// Estimates scan progress in basis points from checked addresses and remaining gap
 fn scan_progress_basis_points(progress: KeychainProgress) -> u32 {
     let checked = u64::from(progress.checked);
     let remaining_gap = u64::from(progress.stop_gap.saturating_sub(progress.gap));
@@ -737,6 +777,7 @@ fn scan_progress_basis_points(progress: KeychainProgress) -> u32 {
     basis_points.min(u64::from(SCAN_PROGRESS_BASIS_POINTS)) as u32
 }
 
+/// Returns whether a successful full scan should refresh persisted full-scan metadata
 pub(crate) const fn should_update_full_scan_metadata(scan_type: FullScanType) -> bool {
     match scan_type {
         FullScanType::Full => true,
@@ -744,6 +785,7 @@ pub(crate) const fn should_update_full_scan_metadata(scan_type: FullScanType) ->
     }
 }
 
+/// Returns whether an event belongs to the active scan generation
 fn should_accept_scan_generation(active_generation: Option<u64>, event_generation: u64) -> bool {
     active_generation == Some(event_generation)
 }
@@ -762,10 +804,10 @@ mod tests {
         FullScanType, RunningScan, SCAN_PARTIAL_FLUSH_INTERVAL, SCAN_PROGRESS_BASIS_POINTS,
         SCAN_PROGRESS_INTERVAL, ScanFlushCadence, ScanFlushDecision, ScanProgressStart,
         ScanRequestOrder, WalletScanActor, WalletScanPhase, WalletScanProgress, WalletScanStatus,
-        initial_scan_status, is_cancelled_progressive_scan, record_scan_update_flush,
-        scan_progress_basis_points, should_accept_scan_generation,
-        should_flush_pending_after_scan_result, should_forward_scan_progress,
-        should_reveal_delayed_progress, should_update_full_scan_metadata,
+        initial_scan_status, is_cancelled_progressive_scan, scan_progress_basis_points,
+        should_accept_scan_generation, should_flush_pending_after_scan_result,
+        should_forward_scan_progress, should_reveal_delayed_progress,
+        should_update_full_scan_metadata,
     };
 
     #[test]
@@ -921,19 +963,6 @@ mod tests {
     }
 
     #[test]
-    fn record_scan_update_flush_records_debounced_deadline() {
-        let mut cadence = ScanFlushCadence::default();
-        let mut deadline = None;
-        let now = tokio::time::Instant::now();
-        let later = now + Duration::from_millis(10);
-
-        assert!(record_scan_update_flush(&mut cadence, &mut deadline, now));
-        assert_eq!(deadline, None);
-        assert!(!record_scan_update_flush(&mut cadence, &mut deadline, later));
-        assert_eq!(deadline, Some(later + SCAN_PARTIAL_FLUSH_INTERVAL));
-    }
-
-    #[test]
     fn failed_scan_flushes_pending_debounced_updates() {
         let result = Err(crate::node::client::Error::ProgressiveScan(
             cove_bdk_progressive_scan::Error::ChannelClosed,
@@ -946,11 +975,12 @@ mod tests {
     #[test]
     fn drained_update_after_first_flush_is_pending_on_scan_error() {
         let mut cadence = ScanFlushCadence { sent_first_flush: true };
-        let mut deadline = None;
         let now = tokio::time::Instant::now();
 
-        assert!(!record_scan_update_flush(&mut cadence, &mut deadline, now));
-        assert_eq!(deadline, Some(now + SCAN_PARTIAL_FLUSH_INTERVAL));
+        assert_eq!(
+            cadence.record_update(now),
+            ScanFlushDecision::Debounce(now + SCAN_PARTIAL_FLUSH_INTERVAL)
+        );
 
         let result = Err(crate::node::client::Error::ProgressiveScan(
             cove_bdk_progressive_scan::Error::ChannelClosed,

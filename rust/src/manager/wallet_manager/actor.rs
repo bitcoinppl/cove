@@ -960,6 +960,7 @@ impl WalletActor {
             && !force_scan
         {
             debug!("skipping wallet scan, last scan was less than 15 seconds ago");
+            self.send_scan_status(WalletScanStatus::Idle);
             return Produces::ok(());
         }
 

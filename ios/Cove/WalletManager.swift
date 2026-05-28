@@ -14,17 +14,6 @@ private extension WalletScanStatus {
     }
 }
 
-private extension WalletLoadState {
-    var initialScanStatus: WalletScanStatus {
-        switch self {
-        case .loading, .loaded:
-            .idle
-        case .scanning:
-            .scanningPendingProgress(.full)
-        }
-    }
-}
-
 @Observable final class WalletManager: AnyReconciler, WalletManagerReconciler {
     typealias Message = WalletManagerReconcileMessage
     typealias Action = WalletManagerAction
@@ -69,12 +58,11 @@ private extension WalletLoadState {
         self.id = id
         let rust = try RustWalletManager(id: id)
         let loadState = rust.initialLoadState()
-        let scanStatus = loadState.initialScanStatus
 
         self.rust = rust
         self.loadState = loadState
-        self.scanStatus = scanStatus
-        self.balancePresentation = rust.balancePresentation(scanStatus: scanStatus)
+        self.scanStatus = .idle
+        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
 
         walletMetadata = rust.walletMetadata()
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
