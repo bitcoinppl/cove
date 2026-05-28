@@ -57,8 +57,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.ui.theme.coveColors
@@ -66,14 +68,22 @@ import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
+import org.bitcoinppl.cove_core.CloudBackupConfiguredState
 import org.bitcoinppl.cove_core.CloudBackupDetail
+import org.bitcoinppl.cove_core.CloudBackupDetailState
+import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
+import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupRetryAction
+import org.bitcoinppl.cove_core.CloudBackupRootPrompt
+import org.bitcoinppl.cove_core.CloudBackupState
 import org.bitcoinppl.cove_core.CloudBackupSyncState
+import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
@@ -82,10 +92,13 @@ import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.DeepVerificationReport
+import org.bitcoinppl.cove_core.LoadedCloudBackupDetail
 import org.bitcoinppl.cove_core.OtherBackupsOperation
 import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 import org.bitcoinppl.cove_core.WalletMode
+import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
+import org.bitcoinppl.cove_core.types.Network
 
 internal enum class CloudBackupDetailBodyState {
     UNSUPPORTED_PASSKEY_PROVIDER,
@@ -156,78 +169,13 @@ fun CloudBackupScreen(
         }
     }
 
-    Scaffold(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .padding(WindowInsets.safeDrawing.asPaddingValues()),
-        topBar = {
-            TopAppBar(
-                title = { Text("Cloud Backup") },
-                navigationIcon = {
-                    IconButton(onClick = { app.popRoute() }) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
-    ) { paddingValues ->
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-        ) {
-            when (val lifecycle = manager.lifecycle) {
-                is CloudBackupLifecycle.Disabled -> {
-                    CloudBackupEnableContent(
-                        modifier = Modifier.fillMaxSize(),
-                        message = null,
-                        isBusy = false,
-                        onEnable = { manager.dispatch(manualEnableCloudBackupNoDiscovery(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
-                    )
-                }
-
-                is CloudBackupLifecycle.Enabling -> {
-                    CloudBackupEnableProgressOrConfirmation(manager)
-                }
-
-                is CloudBackupLifecycle.Restoring -> {
-                    CloudBackupProgressContent(
-                        title = "Restoring from cloud backup",
-                        message = "Downloading and restoring your encrypted backups",
-                    )
-                }
-
-                is CloudBackupLifecycle.Failed -> {
-                    if (manager.isCloudBackupEnabled) {
-                        CloudBackupDetailContent(
-                            manager = manager,
-                            headerError = lifecycle.v1.message,
-                            onRecreate = { showRecreateConfirmation = true },
-                            onReinitialize = { showReinitializeConfirmation = true },
-                        )
-                    } else {
-                        CloudBackupEnableContent(
-                            modifier = Modifier.fillMaxSize(),
-                            message = lifecycle.v1.message,
-                            isBusy = false,
-                            onEnable = { manager.dispatch(manualEnableCloudBackupNoDiscovery(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
-                        )
-                    }
-                }
-
-                else -> {
-                    CloudBackupDetailContent(
-                        manager = manager,
-                        headerError = null,
-                        onRecreate = { showRecreateConfirmation = true },
-                        onReinitialize = { showReinitializeConfirmation = true },
-                    )
-                }
-            }
-        }
-    }
+    CloudBackupScreenFrame(
+        manager = manager,
+        modifier = modifier,
+        onBack = { app.popRoute() },
+        onRecreate = { showRecreateConfirmation = true },
+        onReinitialize = { showReinitializeConfirmation = true },
+    )
 
     if (showRecreateConfirmation) {
         AlertDialog(
@@ -273,6 +221,89 @@ fun CloudBackupScreen(
                 TextButton(onClick = { showReinitializeConfirmation = false }) { Text("Cancel") }
             },
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CloudBackupScreenFrame(
+    manager: CloudBackupManager,
+    onBack: () -> Unit,
+    onRecreate: () -> Unit,
+    onReinitialize: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Scaffold(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(WindowInsets.safeDrawing.asPaddingValues()),
+        topBar = {
+            TopAppBar(
+                title = { Text("Cloud Backup") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
+        },
+    ) { paddingValues ->
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+        ) {
+            when (val lifecycle = manager.lifecycle) {
+                is CloudBackupLifecycle.Disabled -> {
+                    CloudBackupEnableContent(
+                        modifier = Modifier.fillMaxSize(),
+                        message = null,
+                        isBusy = false,
+                        onEnable = { manager.dispatch(manualEnableCloudBackupNoDiscovery(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
+                    )
+                }
+
+                is CloudBackupLifecycle.Enabling -> {
+                    CloudBackupEnableProgressOrConfirmation(manager)
+                }
+
+                is CloudBackupLifecycle.Restoring -> {
+                    CloudBackupProgressContent(
+                        title = "Restoring from cloud backup",
+                        message = "Downloading and restoring your encrypted backups",
+                    )
+                }
+
+                is CloudBackupLifecycle.Failed -> {
+                    if (manager.isCloudBackupEnabled) {
+                        CloudBackupDetailContent(
+                            manager = manager,
+                            headerError = lifecycle.v1.message,
+                            onRecreate = onRecreate,
+                            onReinitialize = onReinitialize,
+                        )
+                    } else {
+                        CloudBackupEnableContent(
+                            modifier = Modifier.fillMaxSize(),
+                            message = lifecycle.v1.message,
+                            isBusy = false,
+                            onEnable = { manager.dispatch(manualEnableCloudBackupNoDiscovery(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
+                        )
+                    }
+                }
+
+                else -> {
+                    CloudBackupDetailContent(
+                        manager = manager,
+                        headerError = null,
+                        onRecreate = onRecreate,
+                        onReinitialize = onReinitialize,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1755,3 +1786,125 @@ private fun ErrorInlineMessage(
         }
     }
 }
+
+@Preview(name = "Cloud Backup Detail")
+@Composable
+private fun CloudBackupScreenPreview() {
+    CloudBackupScreenPreviewContent()
+}
+
+@Composable
+internal fun CloudBackupScreenPreviewContent() {
+    val manager = remember { CloudBackupManager(cloudBackupPreviewState()) }
+
+    CoveTheme(dynamicColor = false) {
+        CloudBackupScreenFrame(
+            manager = manager,
+            onBack = {},
+            onRecreate = {},
+            onReinitialize = {},
+        )
+    }
+}
+
+private fun cloudBackupPreviewState(): CloudBackupState {
+    val detail =
+        CloudBackupDetail(
+            lastSync = 1_779_914_580UL,
+            upToDate =
+                listOf(
+                    cloudBackupPreviewWallet(
+                        name = "Wallet 1",
+                        fingerprint = "55C5625F",
+                        status = CloudBackupWalletStatus.CONFIRMED,
+                        updatedAt = 1_779_914_580UL,
+                    ),
+                    cloudBackupPreviewWallet(
+                        name = "Wallet 2",
+                        fingerprint = "00053556",
+                        status = CloudBackupWalletStatus.CONFIRMED,
+                        updatedAt = 1_779_929_760UL,
+                    ),
+                    cloudBackupPreviewWallet(
+                        name = "Imported 73C5DA0A",
+                        fingerprint = "73C5DA0A",
+                        status = CloudBackupWalletStatus.CONFIRMED,
+                        updatedAt = 1_779_929_880UL,
+                    ),
+                ),
+            needsSync = emptyList(),
+            cloudOnlyCount = 1u,
+            otherBackups =
+                CloudBackupOtherBackupsState.Loaded(
+                    CloudBackupOtherBackupsSummary(
+                        namespaceCount = 0u,
+                        walletCount = 0u,
+                        passkeyHints = emptyList(),
+                    ),
+                ),
+        )
+    val loadedDetail =
+        LoadedCloudBackupDetail(
+            detail = detail,
+            cloudOnly =
+                CloudOnlyState.Loaded(
+                    listOf(
+                        cloudBackupPreviewWallet(
+                            name = "Wallet 3",
+                            fingerprint = "73C5DA0A",
+                            status = CloudBackupWalletStatus.DELETED_FROM_DEVICE,
+                            updatedAt = 1_779_929_820UL,
+                        ),
+                    ),
+                ),
+            cloudOnlyOperation = CloudOnlyOperation.Idle,
+            otherBackupsOperation = OtherBackupsOperation.Idle,
+        )
+
+    return CloudBackupState(
+        lifecycle =
+            CloudBackupLifecycle.Configured(
+                CloudBackupConfiguredState(
+                    passkey = CloudBackupPasskeyState.Available,
+                    verification =
+                        CloudBackupVerificationState.Verified(
+                            report =
+                                DeepVerificationReport(
+                                    masterKeyWrapperRepaired = true,
+                                    localMasterKeyRepaired = false,
+                                    credentialRecovered = false,
+                                    walletsVerified = 4u,
+                                    walletsFailed = 0u,
+                                    walletsUnsupported = 0u,
+                                    detail = detail,
+                                ),
+                            lastVerifiedAt = 1_779_930_000UL,
+                        ),
+                    sync = CloudBackupSyncState.Syncing,
+                    destructiveOperation = CloudBackupDestructiveOperationState.Idle,
+                    detail = CloudBackupDetailState.Loaded(loadedDetail),
+                    rootPrompt = CloudBackupRootPrompt.None,
+                    syncHealth = CloudSyncHealth.Uploading,
+                    verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
+                ),
+            ),
+    )
+}
+
+private fun cloudBackupPreviewWallet(
+    name: String,
+    fingerprint: String,
+    status: CloudBackupWalletStatus,
+    updatedAt: ULong,
+): CloudBackupWalletItem =
+    CloudBackupWalletItem(
+        name = name,
+        network = Network.BITCOIN,
+        walletMode = WalletMode.MAIN,
+        walletType = WalletType.HOT,
+        fingerprint = fingerprint,
+        labelCount = 0u,
+        backupUpdatedAt = updatedAt,
+        syncStatus = status,
+        recordId = name,
+    )
