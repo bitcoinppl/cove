@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 @Stable
 class SendFlowManager(
-    internal val rust: RustSendFlowManager,
+    private val rust: RustSendFlowManager,
     var presenter: SendFlowPresenter,
 ) : SendFlowManagerReconciler,
     Closeable {
@@ -105,12 +105,51 @@ class SendFlowManager(
         android.util.Log.w(tag, message)
     }
 
+    private fun markClosedAfterDestroyedHandle(
+        callName: String,
+        error: IllegalStateException,
+    ) {
+        isClosed.set(true)
+        logWarn("$callName skipped because RustSendFlowManager is closed: ${error.message}")
+    }
+
+    private inline fun <T> withRustOr(
+        defaultValue: T,
+        callName: String,
+        block: RustSendFlowManager.() -> T,
+    ): T {
+        if (isClosed.get()) return defaultValue
+
+        return try {
+            rust.block()
+        } catch (e: IllegalStateException) {
+            markClosedAfterDestroyedHandle(callName, e)
+            defaultValue
+        }
+    }
+
+    private suspend inline fun <T> withRustOrSuspend(
+        defaultValue: T,
+        callName: String,
+        crossinline block: suspend RustSendFlowManager.() -> T,
+    ): T {
+        if (isClosed.get()) return defaultValue
+
+        return try {
+            rust.block()
+        } catch (e: IllegalStateException) {
+            markClosedAfterDestroyedHandle(callName, e)
+            defaultValue
+        }
+    }
+
     /**
      * get/set entering address with dispatch
      */
     var enteringAddress: String
         get() = _enteringAddress
         set(value) {
+            if (isClosed.get()) return
             _enteringAddress = value
             dispatch(SendFlowManagerAction.NotifyEnteringAddressChanged(value))
         }
@@ -120,6 +159,7 @@ class SendFlowManager(
      * only dispatches if value actually changed (matches iOS pattern)
      */
     fun updateEnteringBtcAmount(value: String) {
+        if (isClosed.get()) return
         if (enteringBtcAmount != value) {
             enteringBtcAmount = value
             debouncedDispatch(SendFlowManagerAction.NotifyEnteringBtcAmountChanged(value))
@@ -131,6 +171,7 @@ class SendFlowManager(
      * only dispatches if value actually changed (matches iOS pattern)
      */
     fun updateEnteringFiatAmount(value: String) {
+        if (isClosed.get()) return
         if (enteringFiatAmount != value) {
             enteringFiatAmount = value
             debouncedDispatch(SendFlowManagerAction.NotifyEnteringFiatAmountChanged(value))
@@ -147,11 +188,61 @@ class SendFlowManager(
                 validateFeePercentage(displayAlert)
     }
 
-    fun validateAddress(displayAlert: Boolean = false): Boolean = rust.validateAddress(displayAlert)
+    suspend fun waitForInit(): Boolean =
+        withRustOrSuspend(false, "waitForInit") {
+            waitForInit()
+        }
 
-    fun validateAmount(displayAlert: Boolean = false): Boolean = rust.validateAmount(displayAlert)
+    fun amountExceedsBalance(): Boolean =
+        withRustOr(false, "amountExceedsBalance") {
+            amountExceedsBalance()
+        }
 
-    fun validateFeePercentage(displayAlert: Boolean = false): Boolean = rust.validateFeePercentage(displayAlert)
+    fun currentAmount(): Amount? =
+        withRustOr(null, "amount") {
+            amount()
+        }
+
+    fun maxSendMinusFees(): Amount? =
+        withRustOr(null, "maxSendMinusFees") {
+            maxSendMinusFees()
+        }
+
+    fun maxSendMinusFeesAndSmallUtxo(): Amount? =
+        withRustOr(null, "maxSendMinusFeesAndSmallUtxo") {
+            maxSendMinusFeesAndSmallUtxo()
+        }
+
+    fun sanitizeBtcEnteringAmount(
+        oldValue: String,
+        newValue: String,
+    ): String? =
+        withRustOr(null, "sanitizeBtcEnteringAmount") {
+            sanitizeBtcEnteringAmount(oldValue, newValue)
+        }
+
+    fun sanitizeFiatEnteringAmount(
+        oldValue: String,
+        newValue: String,
+    ): String? =
+        withRustOr(null, "sanitizeFiatEnteringAmount") {
+            sanitizeFiatEnteringAmount(oldValue, newValue)
+        }
+
+    fun validateAddress(displayAlert: Boolean = false): Boolean =
+        withRustOr(false, "validateAddress") {
+            validateAddress(displayAlert)
+        }
+
+    fun validateAmount(displayAlert: Boolean = false): Boolean =
+        withRustOr(false, "validateAmount") {
+            validateAmount(displayAlert)
+        }
+
+    fun validateFeePercentage(displayAlert: Boolean = false): Boolean =
+        withRustOr(false, "validateFeePercentage") {
+            validateFeePercentage(displayAlert)
+        }
 
     fun updateAddress(address: Address) {
         if (isClosed.get()) return
@@ -161,22 +252,49 @@ class SendFlowManager(
     }
 
     fun updateAmount(amount: Amount) {
+        if (isClosed.get()) return
         this.amount = amount
         dispatch(SendFlowManagerAction.NotifyAmountChanged(amount))
     }
 
     fun refreshPresenters() {
-        totalSpentInFiat = rust.totalSpentInFiat()
-        totalSpentInBtc = rust.totalSpentInBtc()
-        totalFeeString = rust.totalFeeString()
-        sendAmountBtc = rust.sendAmountBtc()
-        sendAmountFiat = rust.sendAmountFiat()
+        totalSpentInFiat =
+            withRustOr(totalSpentInFiat, "totalSpentInFiat") {
+                totalSpentInFiat()
+            }
+        totalSpentInBtc =
+            withRustOr(totalSpentInBtc, "totalSpentInBtc") {
+                totalSpentInBtc()
+            }
+        totalFeeString =
+            withRustOr(totalFeeString, "totalFeeString") {
+                totalFeeString()
+            }
+        sendAmountBtc =
+            withRustOr(sendAmountBtc, "sendAmountBtc") {
+                sendAmountBtc()
+            }
+        sendAmountFiat =
+            withRustOr(sendAmountFiat, "sendAmountFiat") {
+                sendAmountFiat()
+            }
     }
 
     suspend fun getNewCustomFeeRateWithTotal(
         feeRate: FeeRate,
         feeSpeed: FeeSpeed,
-    ): FeeRateOptionWithTotalFee = rust.getCustomFeeOption(feeRate, feeSpeed)
+    ): FeeRateOptionWithTotalFee {
+        if (isClosed.get()) {
+            throw IllegalStateException("SendFlowManager is closed")
+        }
+
+        return try {
+            rust.getCustomFeeOption(feeRate, feeSpeed)
+        } catch (e: IllegalStateException) {
+            markClosedAfterDestroyedHandle("getCustomFeeOption", e)
+            throw e
+        }
+    }
 
     private fun apply(message: SendFlowManagerReconcileMessage) {
         when (message) {
@@ -265,7 +383,11 @@ class SendFlowManager(
     fun dispatch(action: SendFlowManagerAction) {
         if (isClosed.get()) return
         logDebug("dispatch: $action")
-        mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
+        mainScope.launch(Dispatchers.IO) {
+            withRustOr(Unit, "dispatch") {
+                dispatch(action)
+            }
+        }
     }
 
     /**
