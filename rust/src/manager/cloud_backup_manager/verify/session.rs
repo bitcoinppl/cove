@@ -613,7 +613,7 @@ impl VerificationSession {
             Ok(read_pass) => read_pass,
             Err(error) => {
                 return CloudBackupDeepVerificationStep::Complete(
-                    self.remote_truth_retry_result(&error),
+                    self.local_inventory_retry_result(&error),
                 );
             }
         };
