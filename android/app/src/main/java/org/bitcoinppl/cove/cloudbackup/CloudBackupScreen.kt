@@ -999,14 +999,21 @@ private fun CloudBackupHeaderSection(
         }
 
     Card(
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(icon, contentDescription = null, tint = tint)
@@ -1028,7 +1035,7 @@ private fun WalletSections(
     title: String,
     wallets: List<CloudBackupWalletItem>,
 ) {
-    val grouped = wallets.groupBy { GroupKey(it.network?.displayName() ?: "Unsupported", it.walletMode) }
+    val grouped = wallets.groupBy { GroupKey(it.network?.cloudBackupDisplayName() ?: "Unsupported", it.walletMode) }
         .toSortedMap()
 
     SectionHeader(title, modifier = Modifier.padding(horizontal = 16.dp))
@@ -1073,6 +1080,22 @@ private data class GroupKey(
         compareValuesBy(this, other, GroupKey::network, { it.walletMode?.ordinal ?: Int.MAX_VALUE })
 }
 
+private fun Network.cloudBackupDisplayName(): String =
+    when (this) {
+        Network.BITCOIN -> "Bitcoin"
+        Network.TESTNET -> "Testnet"
+        Network.TESTNET4 -> "Testnet4"
+        Network.SIGNET -> "Signet"
+    }
+
+private fun WalletType.cloudBackupDisplayName(): String =
+    when (this) {
+        WalletType.HOT -> "Hot"
+        WalletType.COLD -> "Cold"
+        WalletType.XPUB_ONLY -> "Xpub Only"
+        WalletType.WATCH_ONLY -> "Watch Only"
+    }
+
 @Composable
 private fun WalletItemRow(
     item: CloudBackupWalletItem,
@@ -1081,8 +1104,8 @@ private fun WalletItemRow(
         title = item.name,
         subtitle =
             buildList {
-                item.network?.displayName()?.let(::add)
-                item.walletType?.displayName()?.let(::add)
+                item.network?.cloudBackupDisplayName()?.let(::add)
+                item.walletType?.cloudBackupDisplayName()?.let(::add)
                 item.fingerprint?.let(::add)
                 item.labelCount?.let { add("$it labels") }
                 item.backupUpdatedAt?.let { add(java.time.Instant.ofEpochSecond(it.toLong()).toString()) }
@@ -1394,7 +1417,7 @@ private fun CloudOnlySection(
                     cloudOnly.wallets.forEachIndexed { index, item ->
                         MaterialSettingsItem(
                             title = item.name,
-                            subtitle = item.network?.displayName(),
+                            subtitle = item.network?.cloudBackupDisplayName(),
                             onClick = { selectedWallet = item },
                             leadingContent = { StatusBadge(item.syncStatus) },
                             trailingContent = { Icon(Icons.Default.ArrowOutward, contentDescription = null) },
