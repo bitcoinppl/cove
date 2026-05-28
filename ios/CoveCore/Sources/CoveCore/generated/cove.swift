@@ -19716,7 +19716,6 @@ public enum CloudBackupEnableFlow: Equatable, Hashable {
     case awaitingPasskeyChoice(CloudBackupPasskeyChoiceIntent
     )
     case creatingPasskey
-    case waitingForPasskeyAvailability
     case awaitingSavedPasskeyConfirmation(SavedPasskeyConfirmationMode
     )
     case confirmingSavedPasskey
@@ -19724,6 +19723,7 @@ public enum CloudBackupEnableFlow: Equatable, Hashable {
     )
     case retryingUploadWithStagedMaterial(progress: CloudBackupProgress?
     )
+    case waitingForPasskeyAvailability
 
 
 
@@ -19755,18 +19755,18 @@ public struct FfiConverterTypeCloudBackupEnableFlow: FfiConverterRustBuffer {
 
         case 4: return .creatingPasskey
 
-        case 5: return .waitingForPasskeyAvailability
-
-        case 6: return .awaitingSavedPasskeyConfirmation(try FfiConverterTypeSavedPasskeyConfirmationMode.read(from: &buf)
+        case 5: return .awaitingSavedPasskeyConfirmation(try FfiConverterTypeSavedPasskeyConfirmationMode.read(from: &buf)
         )
 
-        case 7: return .confirmingSavedPasskey
+        case 6: return .confirmingSavedPasskey
 
-        case 8: return .uploadingInitialBackup(progress: try FfiConverterOptionTypeCloudBackupProgress.read(from: &buf)
+        case 7: return .uploadingInitialBackup(progress: try FfiConverterOptionTypeCloudBackupProgress.read(from: &buf)
         )
 
-        case 9: return .retryingUploadWithStagedMaterial(progress: try FfiConverterOptionTypeCloudBackupProgress.read(from: &buf)
+        case 8: return .retryingUploadWithStagedMaterial(progress: try FfiConverterOptionTypeCloudBackupProgress.read(from: &buf)
         )
+
+        case 9: return .waitingForPasskeyAvailability
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -19795,27 +19795,27 @@ public struct FfiConverterTypeCloudBackupEnableFlow: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
 
 
-        case .waitingForPasskeyAvailability:
-            writeInt(&buf, Int32(5))
-
-
         case let .awaitingSavedPasskeyConfirmation(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeSavedPasskeyConfirmationMode.write(v1, into: &buf)
 
 
         case .confirmingSavedPasskey:
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
 
 
         case let .uploadingInitialBackup(progress):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(7))
             FfiConverterOptionTypeCloudBackupProgress.write(progress, into: &buf)
 
 
         case let .retryingUploadWithStagedMaterial(progress):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
             FfiConverterOptionTypeCloudBackupProgress.write(progress, into: &buf)
+
+
+        case .waitingForPasskeyAvailability:
+            writeInt(&buf, Int32(9))
 
         }
     }

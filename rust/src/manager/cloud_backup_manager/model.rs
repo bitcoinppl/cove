@@ -1001,11 +1001,11 @@ pub enum CloudBackupEnableFlow {
     AwaitingForceNewConfirmation(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
     AwaitingPasskeyChoice(CloudBackupPasskeyChoiceIntent),
     CreatingPasskey,
-    WaitingForPasskeyAvailability,
     AwaitingSavedPasskeyConfirmation(super::SavedPasskeyConfirmationMode),
     ConfirmingSavedPasskey,
     UploadingInitialBackup { progress: Option<super::CloudBackupProgress> },
     RetryingUploadWithStagedMaterial { progress: Option<super::CloudBackupProgress> },
+    WaitingForPasskeyAvailability,
 }
 
 /// Public restore progress state
