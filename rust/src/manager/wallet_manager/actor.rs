@@ -805,13 +805,13 @@ impl WalletActor {
             Ok((_, proposal_tx)) => {
                 self.do_broadcast_transaction(proposal_tx.clone())
                     .await
-                    .tap_err(|error| error!("failed to broadcast payjoin proposal tx: {error:?}"))?;
+                    .tap_err(|error| error!("failed to broadcast payjoin proposal tx: {error}"))?;
             }
             Err(error) => {
                 error!("failed to sign payjoin proposal, falling back to original tx: {error:?}");
                 self.do_broadcast_transaction(fallback_tx.clone())
                     .await
-                    .tap_err(|error| error!("payjoin fallback broadcast also failed: {error:?}"))?;
+                    .tap_err(|error| error!("payjoin fallback broadcast also failed: {error}"))?;
             }
         }
 
@@ -827,7 +827,7 @@ impl WalletActor {
     ) -> ActorResult<()> {
         self.do_broadcast_transaction(fallback_tx.clone())
             .await
-            .tap_err(|error| error!("payjoin fallback broadcast failed: {error:?}"))?;
+            .tap_err(|error| error!("payjoin fallback broadcast failed: {error}"))?;
 
         self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast);
         Produces::ok(())
@@ -2107,8 +2107,22 @@ const PAYJOIN_MAX_POLL_ATTEMPTS: u32 = 60;
 
 const PAYJOIN_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
-/// Returns OHTTP relay URLs in random order for resilience and privacy.
-/// Shuffled per call so no single relay is always preferred.
+// send a payjoin HTTP request via reqwest and return the raw response bytes
+async fn http_post(client: &reqwest::Client, req: payjoin::Request) -> eyre::Result<Vec<u8>> {
+    Ok(client
+        .post(&req.url)
+        .header("Content-Type", req.content_type)
+        .body(req.body)
+        .send()
+        .await
+        .map_err(|e| eyre::eyre!("send failed: {e:?}"))?
+        .bytes()
+        .await
+        .map_err(|e| eyre::eyre!("body read failed: {e:?}"))?
+        .to_vec())
+}
+
+// returns OHTTP relay URLs shuffled per call — random order for resilience and privacy
 fn ohttp_relays() -> Vec<&'static str> {
     let mut relays = vec![
         "https://relay.payjoin.org",
@@ -2119,8 +2133,8 @@ fn ohttp_relays() -> Vec<&'static str> {
     relays
 }
 
-/// POST the signed PSBT to the payjoin directory via OHTTP relay, then poll until
-/// the receiver returns a proposal PSBT or we time out after 5 minutes.
+// POST the signed PSBT to the payjoin directory via OHTTP relay, then poll until
+// the receiver returns a proposal PSBT or we time out after 5 minutes
 async fn payjoin_http_flow(
     signed_psbt: Psbt,
     endpoint: String,
@@ -2176,30 +2190,18 @@ async fn payjoin_http_flow(
                 Ok(pair) => pair,
                 Err(e) => {
                     warn!("payjoin: relay {relay} rejected for POST: {e:?}");
-                    last_err = eyre::eyre!("{e:?}");
+                    last_err = eyre::eyre!("relay {relay} rejected: {e:?}");
                     continue;
                 }
             };
-            match client
-                .post(&req.url)
-                .header("Content-Type", req.content_type)
-                .body(req.body)
-                .send()
-                .await
-            {
-                Ok(resp) => match resp.bytes().await {
-                    Ok(body) => {
-                        success = Some((body, ctx));
-                        break;
-                    }
-                    Err(e) => {
-                        warn!("payjoin: relay {relay} POST body read failed: {e:?}");
-                        last_err = eyre::eyre!("{e:?}");
-                    }
-                },
+            match http_post(&client, req).await {
+                Ok(body) => {
+                    success = Some((body, ctx));
+                    break;
+                }
                 Err(e) => {
-                    warn!("payjoin: relay {relay} POST send failed: {e:?}");
-                    last_err = eyre::eyre!("{e:?}");
+                    warn!("payjoin: relay {relay} POST failed: {e}");
+                    last_err = e;
                 }
             }
         }
@@ -2224,30 +2226,18 @@ async fn payjoin_http_flow(
                     Ok(pair) => pair,
                     Err(e) => {
                         warn!("payjoin: relay {relay} rejected for poll: {e:?}");
-                        last_err = eyre::eyre!("{e:?}");
+                        last_err = eyre::eyre!("relay {relay} rejected: {e:?}");
                         continue;
                     }
                 };
-                match client
-                    .post(&req.url)
-                    .header("Content-Type", req.content_type)
-                    .body(req.body)
-                    .send()
-                    .await
-                {
-                    Ok(resp) => match resp.bytes().await {
-                        Ok(body) => {
-                            success = Some((body, ctx));
-                            break;
-                        }
-                        Err(e) => {
-                            warn!("payjoin: relay {relay} poll body read failed: {e:?}");
-                            last_err = eyre::eyre!("{e:?}");
-                        }
-                    },
+                match http_post(&client, req).await {
+                    Ok(body) => {
+                        success = Some((body, ctx));
+                        break;
+                    }
                     Err(e) => {
-                        warn!("payjoin: relay {relay} poll send failed: {e:?}");
-                        last_err = eyre::eyre!("{e:?}");
+                        warn!("payjoin: relay {relay} poll failed: {e}");
+                        last_err = e;
                     }
                 }
             }
@@ -2267,11 +2257,7 @@ async fn payjoin_http_flow(
         }
     }
 
-    Err(eyre::eyre!(
-        "payjoin timed out after {} poll attempts ({} minutes)",
-        PAYJOIN_MAX_POLL_ATTEMPTS,
-        PAYJOIN_MAX_POLL_ATTEMPTS * PAYJOIN_POLL_INTERVAL.as_secs() as u32 / 60,
-    ))
+    Err(eyre::eyre!("payjoin timed out after {PAYJOIN_MAX_POLL_ATTEMPTS} poll attempts"))
 }
 
 async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
