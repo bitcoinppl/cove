@@ -303,7 +303,7 @@ internal fun TransactionsScanSpinnerStrip(
             modifier
                 .fillMaxWidth()
                 .height(18.dp),
-        contentAlignment = Alignment.CenterStart,
+        contentAlignment = Alignment.Center,
     ) {
         CircularProgressIndicator(
             modifier = Modifier.size(16.dp),

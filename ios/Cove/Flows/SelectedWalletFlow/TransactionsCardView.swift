@@ -147,7 +147,7 @@ struct TransactionsScanSpinnerStrip: View {
         ProgressView()
             .scaleEffect(0.75)
             .tint(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
             .frame(height: 18)
     }
 }
