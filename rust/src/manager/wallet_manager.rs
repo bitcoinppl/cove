@@ -142,6 +142,7 @@ pub struct WalletScanProgress {
 pub enum WalletScanStatus {
     Idle,
     Scanning(WalletScanProgress),
+    ScanningPendingProgress(WalletScanPhase),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]

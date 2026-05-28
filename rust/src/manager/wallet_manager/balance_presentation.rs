@@ -22,7 +22,11 @@ impl BalancePresentation {
         last_scan_finished: Option<Duration>,
         scan_status: &WalletScanStatus,
     ) -> Self {
-        if last_scan_finished.is_none() && matches!(scan_status, WalletScanStatus::Scanning(_)) {
+        let scan_is_active = matches!(
+            scan_status,
+            WalletScanStatus::Scanning(_) | WalletScanStatus::ScanningPendingProgress(_)
+        );
+        if last_scan_finished.is_none() && scan_is_active {
             return Self::provisional();
         }
 

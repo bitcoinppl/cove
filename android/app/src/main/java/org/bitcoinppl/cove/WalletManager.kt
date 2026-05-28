@@ -21,6 +21,13 @@ import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 
+private val WalletScanStatus.isActive: Boolean
+    get() =
+        when (this) {
+            WalletScanStatus.Idle -> false
+            is WalletScanStatus.Scanning, is WalletScanStatus.ScanningPendingProgress -> true
+        }
+
 /**
  * wallet manager - manages wallet state, balance, transactions
  * ported from iOS WalletManager.swift
@@ -254,7 +261,7 @@ class WalletManager :
             is WalletManagerReconcileMessage.WalletScanStatusChanged -> {
                 scanStatus = message.v1
                 balancePresentationState = rust.balancePresentation(message.v1)
-                if (message.v1 is WalletScanStatus.Scanning) {
+                if (message.v1.isActive) {
                     when (val current = loadState) {
                         is WalletLoadState.SCANNING -> Unit
                         is WalletLoadState.LOADED -> loadState = WalletLoadState.SCANNING(current.txns)

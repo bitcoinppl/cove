@@ -54071,6 +54071,15 @@ sealed class WalletScanStatus {
         companion object
     }
 
+    data class ScanningPendingProgress(
+        val v1: org.bitcoinppl.cove_core.WalletScanPhase) : WalletScanStatus()
+
+    {
+
+
+        companion object
+    }
+
 
 
 
@@ -54091,6 +54100,9 @@ public object FfiConverterTypeWalletScanStatus : FfiConverterRustBuffer<WalletSc
             2 -> WalletScanStatus.Scanning(
                 FfiConverterTypeWalletScanProgress.read(buf),
                 )
+            3 -> WalletScanStatus.ScanningPendingProgress(
+                FfiConverterTypeWalletScanPhase.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -54109,6 +54121,13 @@ public object FfiConverterTypeWalletScanStatus : FfiConverterRustBuffer<WalletSc
                 + FfiConverterTypeWalletScanProgress.allocationSize(value.v1)
             )
         }
+        is WalletScanStatus.ScanningPendingProgress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletScanPhase.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: WalletScanStatus, buf: ByteBuffer) {
@@ -54120,6 +54139,11 @@ public object FfiConverterTypeWalletScanStatus : FfiConverterRustBuffer<WalletSc
             is WalletScanStatus.Scanning -> {
                 buf.putInt(2)
                 FfiConverterTypeWalletScanProgress.write(value.v1, buf)
+                Unit
+            }
+            is WalletScanStatus.ScanningPendingProgress -> {
+                buf.putInt(3)
+                FfiConverterTypeWalletScanPhase.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

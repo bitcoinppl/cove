@@ -3,6 +3,17 @@ import SwiftUI
 
 extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletManager {}
 
+private extension WalletScanStatus {
+    var isActive: Bool {
+        switch self {
+        case .idle:
+            false
+        case .scanning, .scanningPendingProgress:
+            true
+        }
+    }
+}
+
 @Observable final class WalletManager: AnyReconciler, WalletManagerReconciler {
     typealias Message = WalletManagerReconcileMessage
     typealias Action = WalletManagerAction
@@ -189,7 +200,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         case let .walletScanStatusChanged(status):
             self.scanStatus = status
             self.balancePresentation = rust.balancePresentation(scanStatus: status)
-            if case .scanning = status {
+            if status.isActive {
                 switch self.loadState {
                 case .scanning:
                     break

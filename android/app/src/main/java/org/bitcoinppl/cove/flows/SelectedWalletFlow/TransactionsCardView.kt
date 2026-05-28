@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -82,6 +83,7 @@ private fun WalletScanStatus.progressOrNull(): WalletScanProgress? =
     when (this) {
         WalletScanStatus.Idle -> null
         is WalletScanStatus.Scanning -> v1
+        is WalletScanStatus.ScanningPendingProgress -> null
     }
 
 private fun WalletScanProgress?.fraction(): Float =
@@ -113,6 +115,7 @@ fun TransactionsCardView(
     val hasTransactions = transactions.isNotEmpty() || unsignedTransactions.isNotEmpty()
     val scanProgress = manager.scanStatus.progressOrNull()
     val scanProgressFraction = scanProgress.fraction()
+    val isScanProgressVisible = scanProgress != null
 
     // cleanup on disappear - dismiss any active dialogs/popups when leaving
     DisposableEffect(Unit) {
@@ -163,28 +166,46 @@ fun TransactionsCardView(
         )
 
         if (isScanning && hasTransactions) {
-            TransactionsScanProgressStrip(
-                progressFraction = scanProgressFraction,
-                primaryText = primaryText,
-                secondaryText = secondaryText,
-                modifier = Modifier.padding(bottom = 10.dp),
-            )
+            if (isScanProgressVisible) {
+                TransactionsScanProgressStrip(
+                    progressFraction = scanProgressFraction,
+                    primaryText = primaryText,
+                    secondaryText = secondaryText,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+            } else {
+                TransactionsScanSpinnerStrip(
+                    secondaryText = secondaryText,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+            }
         }
 
         // render transactions, scan state, or empty state
         if (!hasTransactions) {
             if (isScanning) {
-                EmptyWalletScanState(
-                    scanProgress = scanProgress,
-                    progressFraction = scanProgressFraction,
-                    primaryText = primaryText,
-                    secondaryText = secondaryText,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(top = 64.dp),
-                )
+                if (isScanProgressVisible) {
+                    EmptyWalletScanState(
+                        scanProgress = scanProgress,
+                        progressFraction = scanProgressFraction,
+                        primaryText = primaryText,
+                        secondaryText = secondaryText,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .padding(top = 64.dp),
+                    )
+                } else {
+                    EmptyWalletScanSpinnerState(
+                        primaryText = primaryText,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .padding(top = 64.dp),
+                    )
+                }
             } else {
                 // scan complete but no transactions
                 Column(
@@ -273,6 +294,26 @@ fun TransactionsCardView(
 }
 
 @Composable
+internal fun TransactionsScanSpinnerStrip(
+    secondaryText: Color,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(18.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(16.dp),
+            color = secondaryText,
+            strokeWidth = 2.dp,
+        )
+    }
+}
+
+@Composable
 internal fun TransactionsScanProgressStrip(
     progressFraction: Float,
     primaryText: Color,
@@ -297,6 +338,23 @@ internal fun TransactionsScanProgressStrip(
             text = "Scanning for transactions...",
             color = secondaryText.copy(alpha = 0.7f),
             fontSize = 12.sp,
+        )
+    }
+}
+
+@Composable
+internal fun EmptyWalletScanSpinnerState(
+    primaryText: Color,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(28.dp),
+            color = primaryText,
+            strokeWidth = 2.5.dp,
         )
     }
 }
@@ -873,18 +931,29 @@ fun LazyListScope.transactionItems(
 
     val scanProgress = manager.scanStatus.progressOrNull()
     val scanProgressFraction = scanProgress.fraction()
+    val isScanProgressVisible = scanProgress != null
 
     if (isScanning && hasTransactions) {
         item(key = "scanning") {
-            TransactionsScanProgressStrip(
-                progressFraction = scanProgressFraction,
-                primaryText = primaryText,
-                secondaryText = secondaryText,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-            )
+            if (isScanProgressVisible) {
+                TransactionsScanProgressStrip(
+                    progressFraction = scanProgressFraction,
+                    primaryText = primaryText,
+                    secondaryText = secondaryText,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                )
+            } else {
+                TransactionsScanSpinnerStrip(
+                    secondaryText = secondaryText,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                )
+            }
         }
     }
 
@@ -937,17 +1006,28 @@ fun LazyListScope.transactionItems(
         }
     } else if (isScanning) {
         item(key = "first-scan-loading") {
-            EmptyWalletScanState(
-                scanProgress = scanProgress,
-                progressFraction = scanProgressFraction,
-                primaryText = primaryText,
-                secondaryText = secondaryText,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                        .padding(top = 56.dp),
-            )
+            if (isScanProgressVisible) {
+                EmptyWalletScanState(
+                    scanProgress = scanProgress,
+                    progressFraction = scanProgressFraction,
+                    primaryText = primaryText,
+                    secondaryText = secondaryText,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .padding(top = 56.dp),
+                )
+            } else {
+                EmptyWalletScanSpinnerState(
+                    primaryText = primaryText,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .padding(top = 56.dp),
+                )
+            }
         }
     } else {
         // empty state

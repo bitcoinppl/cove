@@ -71,8 +71,9 @@ use tracing::{debug, error, info, warn};
 use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
 use self::scan::{
-    FullScanType, PreparedProgressiveScan, ScanRequestOrder, WalletScanActor, WalletScanEvent,
-    should_update_full_scan_metadata,
+    EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, PreparedProgressiveScan,
+    RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, ScanRequestOrder, WalletScanActor,
+    WalletScanEvent, should_update_full_scan_metadata,
 };
 use super::{SingleOrMany, WalletManagerReconcileMessage};
 
@@ -918,8 +919,7 @@ impl WalletActor {
         use WalletManagerReconcileMessage as Msg;
         debug!("wallet_scan_and_notify");
 
-        // get the initial balance and transactions
-        {
+        let scan_progress_start = {
             let initial_balance =
                 self.balance().await?.await.map_err_str(Error::WalletBalanceError)?;
 
@@ -928,11 +928,18 @@ impl WalletActor {
             let initial_transactions =
                 self.transactions().await?.await.map_err_str(Error::TransactionsRetrievalError)?;
 
+            let progress_start = wallet_scan_progress_start(
+                self.wallet.metadata.internal.performed_full_scan_at.is_some(),
+                initial_transactions.is_empty(),
+            );
+
             self.send(Msg::AvailableTransactions(initial_transactions));
-        }
+
+            progress_start
+        };
 
         // start the wallet scan in a background task
-        self.start_wallet_scan_in_task(force_scan)
+        self.start_wallet_scan_in_task(force_scan, scan_progress_start)
             .await?
             .await
             .map_err_str(Error::WalletScanError)?;
@@ -940,7 +947,11 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    pub async fn start_wallet_scan_in_task(&mut self, force_scan: bool) -> ActorResult<()> {
+    pub async fn start_wallet_scan_in_task(
+        &mut self,
+        force_scan: bool,
+        progress_start: ScanProgressStart,
+    ) -> ActorResult<()> {
         debug!("start_wallet_scan");
 
         if let Some(last_scan) = self.last_scan_finished()
@@ -957,7 +968,7 @@ impl WalletActor {
         // perform that scanning in a background task
         let addr = self.addr.clone();
         if self.wallet.metadata.internal.performed_full_scan_at.is_some() {
-            send!(addr.perform_incremental_scan());
+            send!(addr.perform_incremental_scan(progress_start));
         } else {
             send!(addr.perform_full_scan());
         }
@@ -1165,7 +1176,7 @@ impl WalletActor {
 
         debug!("starting full scan");
         let scan_actor = self.scan_actor();
-        send!(scan_actor.start_full_scan());
+        send!(scan_actor.start_full_scan(ScanProgressStart::Immediate));
 
         Produces::ok(())
     }
@@ -1316,11 +1327,14 @@ impl WalletActor {
         })
     }
 
-    async fn perform_incremental_scan(&mut self) -> ActorResult<()> {
+    async fn perform_incremental_scan(
+        &mut self,
+        progress_start: ScanProgressStart,
+    ) -> ActorResult<()> {
         debug!("starting incremental scan");
 
         let scan_actor = self.scan_actor();
-        send!(scan_actor.start_incremental_scan());
+        send!(scan_actor.start_incremental_scan(progress_start));
 
         Produces::ok(())
     }
@@ -1953,6 +1967,21 @@ fn state_after_full_scan_prepare_failed(
     ActorState::FailedFullScan(scan_type)
 }
 
+fn wallet_scan_progress_start(
+    completed_full_scan: bool,
+    cached_transactions_empty: bool,
+) -> ScanProgressStart {
+    if !completed_full_scan {
+        return ScanProgressStart::Immediate;
+    }
+
+    if cached_transactions_empty {
+        return ScanProgressStart::Delayed(EMPTY_WALLET_SCAN_PROGRESS_DELAY);
+    }
+
+    ScanProgressStart::Delayed(RETURNING_WALLET_SCAN_PROGRESS_DELAY)
+}
+
 impl WalletActor {
     fn send(&self, msg: WalletManagerReconcileMessage) {
         self.reconciler.send(msg.into()).unwrap();
@@ -2034,7 +2063,11 @@ mod tests {
     use cove_bdk_progressive_scan::ScanUpdate;
     use std::collections::BTreeMap;
 
-    use super::{ActorState, FullScanType, progressive_scan_update_response};
+    use super::{
+        ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType,
+        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, progressive_scan_update_response,
+        wallet_scan_progress_start,
+    };
 
     #[test]
     fn progressive_scan_update_response_preserves_last_active_indices() {
@@ -2062,6 +2095,28 @@ mod tests {
         assert_eq!(
             super::state_after_full_scan_prepare_failed(FullScanType::Rescan(50), true),
             ActorState::FailedFullScan(FullScanType::Rescan(50))
+        );
+    }
+
+    #[test]
+    fn first_full_scan_uses_immediate_progress() {
+        assert_eq!(wallet_scan_progress_start(false, true), ScanProgressStart::Immediate);
+        assert_eq!(wallet_scan_progress_start(false, false), ScanProgressStart::Immediate);
+    }
+
+    #[test]
+    fn returning_wallet_with_transactions_delays_progress() {
+        assert_eq!(
+            wallet_scan_progress_start(true, false),
+            ScanProgressStart::Delayed(RETURNING_WALLET_SCAN_PROGRESS_DELAY)
+        );
+    }
+
+    #[test]
+    fn empty_returning_wallet_delays_progress_separately() {
+        assert_eq!(
+            wallet_scan_progress_start(true, true),
+            ScanProgressStart::Delayed(EMPTY_WALLET_SCAN_PROGRESS_DELAY)
         );
     }
 }

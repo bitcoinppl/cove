@@ -25,6 +25,9 @@ const SCAN_PARTIAL_FLUSH_INTERVAL: Duration = Duration::from_millis(300);
 const SCAN_PROGRESS_BASIS_POINTS: u32 = 10_000;
 const FULL_SCAN_STOP_GAP: usize = 150;
 
+pub(crate) const RETURNING_WALLET_SCAN_PROGRESS_DELAY: Duration = Duration::from_secs(5);
+pub(crate) const EMPTY_WALLET_SCAN_PROGRESS_DELAY: Duration = RETURNING_WALLET_SCAN_PROGRESS_DELAY;
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum FullScanType {
     /// Full scan uses a 150-address stop gap
@@ -59,6 +62,12 @@ pub(crate) struct PreparedProgressiveScan {
 pub(crate) enum ScanRequestOrder {
     Standard,
     ReceivePriority,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum ScanProgressStart {
+    Immediate,
+    Delayed(Duration),
 }
 
 pub(crate) enum WalletScanEvent {
@@ -156,6 +165,7 @@ pub(crate) struct WalletScanActor {
     next_generation: u64,
     queued_rescan_gap_limit: Option<u32>,
     max_progress_basis_points: u32,
+    progress_is_visible: bool,
 }
 
 impl WalletScanActor {
@@ -169,20 +179,27 @@ impl WalletScanActor {
             next_generation: 0,
             queued_rescan_gap_limit: None,
             max_progress_basis_points: 0,
+            progress_is_visible: false,
         }
     }
 
-    pub(crate) async fn start_full_scan(&mut self) -> ActorResult<()> {
-        self.begin_scan(RunningScan::Full(FullScanType::Full))
+    pub(crate) async fn start_full_scan(
+        &mut self,
+        progress_start: ScanProgressStart,
+    ) -> ActorResult<()> {
+        self.begin_scan(RunningScan::Full(FullScanType::Full), progress_start)
     }
 
-    pub(crate) async fn start_incremental_scan(&mut self) -> ActorResult<()> {
+    pub(crate) async fn start_incremental_scan(
+        &mut self,
+        progress_start: ScanProgressStart,
+    ) -> ActorResult<()> {
         if self.scan_in_progress() {
             debug!("scan already in progress, skipping incremental scan");
             return Produces::ok(());
         }
 
-        self.begin_scan(RunningScan::Incremental)
+        self.begin_scan(RunningScan::Incremental, progress_start)
     }
 
     pub(crate) async fn start_rescan(&mut self, gap_limit: u32) -> ActorResult<()> {
@@ -192,7 +209,10 @@ impl WalletScanActor {
             return Produces::ok(());
         }
 
-        self.begin_scan(RunningScan::Full(FullScanType::Rescan(gap_limit)))
+        self.begin_scan(
+            RunningScan::Full(FullScanType::Rescan(gap_limit)),
+            ScanProgressStart::Immediate,
+        )
     }
 
     pub(crate) async fn shutdown(&mut self) -> ActorResult<()> {
@@ -205,14 +225,16 @@ impl WalletScanActor {
         self.active_generation.is_some()
     }
 
-    fn begin_scan(&mut self, scan: RunningScan) -> ActorResult<()> {
+    fn begin_scan(
+        &mut self,
+        scan: RunningScan,
+        progress_start: ScanProgressStart,
+    ) -> ActorResult<()> {
         self.progress.clear();
         self.max_progress_basis_points = 0;
+        self.progress_is_visible = matches!(progress_start, ScanProgressStart::Immediate);
 
         let (scan_generation, cancel_token) = self.start_scan_generation();
-        let progress_basis_points = self.record_visible_progress(0);
-        let display_progress =
-            KeychainProgress { checked: 0, gap: 0, stop_gap: scan.stop_gap() as u32 };
         match scan {
             RunningScan::Full(scan_type) => {
                 self.send_event(WalletScanEvent::FullScanStarted(scan_type));
@@ -221,15 +243,12 @@ impl WalletScanActor {
                 self.send_event(WalletScanEvent::IncrementalScanStarted);
             }
         }
-        self.send_event(WalletScanEvent::StatusChanged(WalletScanStatus::Scanning(
-            WalletScanProgress {
-                phase: scan.phase(),
-                checked: display_progress.checked,
-                gap: display_progress.gap,
-                stop_gap: display_progress.stop_gap,
-                progress_basis_points,
-            },
-        )));
+
+        self.send_event(WalletScanEvent::StatusChanged(initial_scan_status(scan, progress_start)));
+
+        if let ScanProgressStart::Delayed(delay) = progress_start {
+            self.schedule_progress_reveal(scan_generation, scan, delay);
+        }
 
         let request_order = scan.request_order();
         let addr = self.addr.clone();
@@ -398,7 +417,32 @@ impl WalletScanActor {
             return Produces::ok(());
         };
 
-        self.begin_scan(RunningScan::Full(FullScanType::Rescan(gap_limit)))
+        self.begin_scan(
+            RunningScan::Full(FullScanType::Rescan(gap_limit)),
+            ScanProgressStart::Immediate,
+        )
+    }
+
+    async fn reveal_delayed_progress(
+        &mut self,
+        scan_generation: u64,
+        scan: RunningScan,
+    ) -> ActorResult<()> {
+        if !should_reveal_delayed_progress(
+            self.active_generation,
+            scan_generation,
+            self.progress_is_visible,
+        ) {
+            return Produces::ok(());
+        }
+
+        self.progress_is_visible = true;
+        let status = self
+            .scan_status_from_current_progress(scan.phase())
+            .unwrap_or_else(|| initial_progress_status(scan));
+        self.send_event(WalletScanEvent::StatusChanged(status));
+
+        Produces::ok(())
     }
 
     async fn handle_scan_prepare_failed(&mut self, scan: RunningScan) -> ActorResult<()> {
@@ -432,7 +476,9 @@ impl WalletScanActor {
             ScanEvent::Progress(progress) => {
                 if should_forward_scan_progress(last_progress_sent, tokio::time::Instant::now()) {
                     let status = self.scan_status_from_progress(progress, phase);
-                    self.send_event(WalletScanEvent::StatusChanged(status));
+                    if self.progress_is_visible {
+                        self.send_event(WalletScanEvent::StatusChanged(status));
+                    }
                 }
                 false
             }
@@ -458,13 +504,7 @@ impl WalletScanActor {
             },
         );
 
-        let total =
-            self.progress.values().fold(KeychainProgress::default(), |mut total, progress| {
-                total.checked = total.checked.saturating_add(progress.checked);
-                total.gap = total.gap.saturating_add(progress.gap);
-                total.stop_gap = total.stop_gap.saturating_add(progress.stop_gap);
-                total
-            });
+        let total = total_keychain_progress(self.progress.values().copied()).unwrap_or_default();
         let progress_basis_points = scan_progress_basis_points(total);
         let progress_basis_points = self.record_visible_progress(progress_basis_points);
 
@@ -482,6 +522,29 @@ impl WalletScanActor {
         self.max_progress_basis_points
     }
 
+    fn scan_status_from_current_progress(
+        &self,
+        phase: WalletScanPhase,
+    ) -> Option<WalletScanStatus> {
+        let total = total_keychain_progress(self.progress.values().copied())?;
+
+        Some(WalletScanStatus::Scanning(WalletScanProgress {
+            phase,
+            checked: total.checked,
+            gap: total.gap,
+            stop_gap: total.stop_gap,
+            progress_basis_points: self.max_progress_basis_points,
+        }))
+    }
+
+    fn schedule_progress_reveal(&self, scan_generation: u64, scan: RunningScan, delay: Duration) {
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            tokio::time::sleep(delay).await;
+            send!(addr.reveal_delayed_progress(scan_generation, scan));
+        });
+    }
+
     fn start_scan_generation(&mut self) -> (u64, CancellationToken) {
         let cancel_token = CancellationToken::new();
         let scan_generation = self.next_generation;
@@ -494,6 +557,7 @@ impl WalletScanActor {
     fn clear_active_scan(&mut self) {
         self.active_cancel_token = None;
         self.active_generation = None;
+        self.progress_is_visible = false;
     }
 
     fn clear_scan_lifecycle(&mut self) {
@@ -504,6 +568,7 @@ impl WalletScanActor {
         self.queued_rescan_gap_limit = None;
         self.progress.clear();
         self.max_progress_basis_points = 0;
+        self.progress_is_visible = false;
     }
 
     fn seed_scan_progress(
@@ -556,6 +621,43 @@ fn should_forward_scan_progress(
     }
 
     should_forward
+}
+
+fn initial_scan_status(scan: RunningScan, progress_start: ScanProgressStart) -> WalletScanStatus {
+    match progress_start {
+        ScanProgressStart::Immediate => initial_progress_status(scan),
+        ScanProgressStart::Delayed(_) => WalletScanStatus::ScanningPendingProgress(scan.phase()),
+    }
+}
+
+fn initial_progress_status(scan: RunningScan) -> WalletScanStatus {
+    WalletScanStatus::Scanning(WalletScanProgress {
+        phase: scan.phase(),
+        checked: 0,
+        gap: 0,
+        stop_gap: scan.stop_gap() as u32,
+        progress_basis_points: 0,
+    })
+}
+
+fn total_keychain_progress(
+    progress: impl IntoIterator<Item = KeychainProgress>,
+) -> Option<KeychainProgress> {
+    progress.into_iter().fold(None, |total, progress| {
+        let mut total = total.unwrap_or_default();
+        total.checked = total.checked.saturating_add(progress.checked);
+        total.gap = total.gap.saturating_add(progress.gap);
+        total.stop_gap = total.stop_gap.saturating_add(progress.stop_gap);
+        Some(total)
+    })
+}
+
+fn should_reveal_delayed_progress(
+    active_generation: Option<u64>,
+    reveal_generation: u64,
+    progress_is_visible: bool,
+) -> bool {
+    !progress_is_visible && should_accept_scan_generation(active_generation, reveal_generation)
 }
 
 fn is_cancelled_progressive_scan(
@@ -626,15 +728,17 @@ mod tests {
     use act_zero::WeakAddr;
     use bdk_wallet::{KeychainKind, chain::spk_client::FullScanResponse};
     use cove_bdk_progressive_scan::{KeychainProgress, ScanProgress};
+    use cove_common::consts::GAP_LIMIT;
     use tokio_util::sync::CancellationToken;
 
     use super::{
         FullScanType, RunningScan, SCAN_PARTIAL_FLUSH_INTERVAL, SCAN_PROGRESS_BASIS_POINTS,
-        SCAN_PROGRESS_INTERVAL, ScanFlushCadence, ScanFlushDecision, ScanRequestOrder,
-        WalletScanActor, WalletScanPhase, WalletScanProgress, WalletScanStatus,
-        is_cancelled_progressive_scan, record_scan_update_flush, scan_progress_basis_points,
-        should_accept_scan_generation, should_flush_pending_after_scan_result,
-        should_forward_scan_progress, should_update_full_scan_metadata,
+        SCAN_PROGRESS_INTERVAL, ScanFlushCadence, ScanFlushDecision, ScanProgressStart,
+        ScanRequestOrder, WalletScanActor, WalletScanPhase, WalletScanProgress, WalletScanStatus,
+        initial_scan_status, is_cancelled_progressive_scan, record_scan_update_flush,
+        scan_progress_basis_points, should_accept_scan_generation,
+        should_flush_pending_after_scan_result, should_forward_scan_progress,
+        should_reveal_delayed_progress, should_update_full_scan_metadata,
     };
 
     #[test]
@@ -888,13 +992,46 @@ mod tests {
         assert_eq!(RunningScan::Incremental.request_order(), ScanRequestOrder::ReceivePriority);
     }
 
+    #[test]
+    fn immediate_scan_start_shows_progress_status() {
+        assert_eq!(
+            initial_scan_status(RunningScan::Incremental, ScanProgressStart::Immediate),
+            WalletScanStatus::Scanning(WalletScanProgress {
+                phase: WalletScanPhase::Incremental,
+                checked: 0,
+                gap: 0,
+                stop_gap: GAP_LIMIT as u32,
+                progress_basis_points: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn delayed_scan_start_hides_progress_status() {
+        assert_eq!(
+            initial_scan_status(
+                RunningScan::Incremental,
+                ScanProgressStart::Delayed(Duration::from_secs(5)),
+            ),
+            WalletScanStatus::ScanningPendingProgress(WalletScanPhase::Incremental)
+        );
+    }
+
+    #[test]
+    fn delayed_progress_reveals_only_for_active_hidden_generation() {
+        assert!(should_reveal_delayed_progress(Some(7), 7, false));
+        assert!(!should_reveal_delayed_progress(Some(7), 6, false));
+        assert!(!should_reveal_delayed_progress(None, 7, false));
+        assert!(!should_reveal_delayed_progress(Some(7), 7, true));
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn incremental_scan_request_is_ignored_while_scan_is_active() {
         let mut scan_actor = WalletScanActor::new(WeakAddr::default());
         scan_actor.active_generation = Some(7);
         scan_actor.next_generation = 11;
 
-        assert!(scan_actor.start_incremental_scan().await.is_ok());
+        assert!(scan_actor.start_incremental_scan(ScanProgressStart::Immediate).await.is_ok());
 
         assert_eq!(scan_actor.active_generation, Some(7));
         assert_eq!(scan_actor.next_generation, 11);

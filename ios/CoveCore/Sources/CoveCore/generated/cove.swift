@@ -34415,6 +34415,8 @@ public enum WalletScanStatus: Equatable, Hashable {
     case idle
     case scanning(WalletScanProgress
     )
+    case scanningPendingProgress(WalletScanPhase
+    )
 
 
 
@@ -34441,6 +34443,9 @@ public struct FfiConverterTypeWalletScanStatus: FfiConverterRustBuffer {
         case 2: return .scanning(try FfiConverterTypeWalletScanProgress.read(from: &buf)
         )
 
+        case 3: return .scanningPendingProgress(try FfiConverterTypeWalletScanPhase.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -34456,6 +34461,11 @@ public struct FfiConverterTypeWalletScanStatus: FfiConverterRustBuffer {
         case let .scanning(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeWalletScanProgress.write(v1, into: &buf)
+
+
+        case let .scanningPendingProgress(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeWalletScanPhase.write(v1, into: &buf)
 
         }
     }

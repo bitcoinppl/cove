@@ -28,6 +28,15 @@ struct TransactionsCardView: View {
     }
 
     private var isScanning: Bool {
+        switch manager.scanStatus {
+        case .idle:
+            false
+        case .scanning, .scanningPendingProgress:
+            true
+        }
+    }
+
+    private var isScanProgressVisible: Bool {
         scanProgress != nil
     }
 
@@ -48,8 +57,13 @@ struct TransactionsCardView: View {
                 .padding(.bottom, 12)
 
                 if isScanning, !transactions.isEmpty || !unsignedTransactions.isEmpty {
-                    TransactionsScanProgressStrip(progressFraction: scanProgressFraction)
-                        .padding(.bottom, 10)
+                    if isScanProgressVisible {
+                        TransactionsScanProgressStrip(progressFraction: scanProgressFraction)
+                            .padding(.bottom, 10)
+                    } else {
+                        TransactionsScanSpinnerStrip()
+                            .padding(.bottom, 10)
+                    }
                 }
 
                 LazyVStack(alignment: .leading) {
@@ -90,12 +104,18 @@ struct TransactionsCardView: View {
                 }
 
                 if transactions.isEmpty, unsignedTransactions.isEmpty, isScanning {
-                    EmptyWalletScanState(
-                        scanProgress: scanProgress,
-                        progressFraction: scanProgressFraction
-                    )
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 56)
+                    if isScanProgressVisible {
+                        EmptyWalletScanState(
+                            scanProgress: scanProgress,
+                            progressFraction: scanProgressFraction
+                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 56)
+                    } else {
+                        EmptyWalletScanSpinnerState()
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 56)
+                    }
 
                     Spacer()
                         .frame(minHeight: screenHeight * 0.2)
@@ -122,6 +142,16 @@ struct TransactionsCardView: View {
     }
 }
 
+struct TransactionsScanSpinnerStrip: View {
+    var body: some View {
+        ProgressView()
+            .scaleEffect(0.75)
+            .tint(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 18)
+    }
+}
+
 struct TransactionsScanProgressStrip: View {
     let progressFraction: Double
 
@@ -136,6 +166,13 @@ struct TransactionsScanProgressStrip: View {
                 .foregroundStyle(.secondary.opacity(0.7))
                 .font(.caption2)
         }
+    }
+}
+
+struct EmptyWalletScanSpinnerState: View {
+    var body: some View {
+        ProgressView()
+            .tint(.primary)
     }
 }
 

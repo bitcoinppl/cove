@@ -329,7 +329,9 @@ fun SelectedWalletScreen(
                 val walletId = manager.walletMetadata?.id
                 val showLabels = manager.walletMetadata?.showLabels ?: false
                 val loadState = manager.loadState
-                val isScanStatusActive = manager.scanStatus is WalletScanStatus.Scanning
+                val isScanStatusActive =
+                    manager.scanStatus is WalletScanStatus.Scanning ||
+                        manager.scanStatus is WalletScanStatus.ScanningPendingProgress
 
                 // determine transaction data based on load state
                 val (transactions, isFirstScan) =
