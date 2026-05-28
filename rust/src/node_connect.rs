@@ -8,14 +8,13 @@ use eyre::{Context, eyre};
 pub const BITCOIN_ESPLORA: [(&str, &str); 1] =
     [("blockstream.info", "https://blockstream.info/api/")];
 
-pub const BITCOIN_ELECTRUM: [(&str, &str); 7] = [
+// self-signed SSL presets: electrum.emzy.de, electrum.bitaroo.net,
+// fulcrum.sethforprivacy.com, electrum1.bluewallet.io
+// enable these if Cove supports self-signed SSL certs later
+pub const BITCOIN_ELECTRUM: [(&str, &str); 3] = [
     ("fulcrum.bullbitcoin.com", "ssl://fulcrum.bullbitcoin.com:50002"),
     ("electrum.blockstream.info", "ssl://electrum.blockstream.info:50002"),
     ("electrum.diynodes.com", "ssl://electrum.diynodes.com:50022"),
-    ("electrum.emzy.de", "ssl://electrum.emzy.de:50002"),
-    ("electrum.bitaroo.net", "ssl://electrum.bitaroo.net:50002"),
-    ("fulcrum.sethforprivacy.com", "ssl://fulcrum.sethforprivacy.com:50002"),
-    ("electrum1.bluewallet.io", "ssl://electrum1.bluewallet.io:443"),
 ];
 
 pub const TESTNET_ESPLORA: [(&str, &str); 2] = [
