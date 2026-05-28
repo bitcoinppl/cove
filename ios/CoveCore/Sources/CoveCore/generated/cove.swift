@@ -31129,6 +31129,14 @@ public func isAuthError() -> Bool  {
 })
 }
     
+public func isConnectionError() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_tapsignerreadererror_isconnectionerror(
+            FfiConverterTypeTapSignerReaderError_lower(self),$0
+    )
+})
+}
+    
 public func isNoBackupError() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -31844,6 +31852,8 @@ enum TransportError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError
     )
     case CvcChangeError(String
     )
+    case ConnectionError(String
+    )
     case UnknownError(String
     )
 
@@ -31904,7 +31914,10 @@ public struct FfiConverterTypeTransportError: FfiConverterRustBuffer {
         case 6: return .CvcChangeError(
             try FfiConverterString.read(from: &buf)
             )
-        case 7: return .UnknownError(
+        case 7: return .ConnectionError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 8: return .UnknownError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -31949,8 +31962,13 @@ public struct FfiConverterTypeTransportError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .UnknownError(v1):
+        case let .ConnectionError(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .UnknownError(v1):
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(v1, into: &buf)
             
         }

@@ -360,8 +360,11 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         } catch let error as TapSignerReaderError {
             logger.error("TAPSIGNER error: \(error)")
             tapSignerError = error
-            if case .TapSignerError(.CkTap(.BadAuth)) = error {
+            if error.isAuthError() {
                 return session.invalidate(errorMessage: "Wrong PIN, please try again")
+            }
+            if error.isConnectionError() {
+                return session.invalidate(errorMessage: "Tag connection lost, please hold your phone still")
             }
             session.invalidate(errorMessage: "TapSigner error: \(error.description)")
         } catch {
@@ -439,9 +442,18 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
 
                 if let error {
                     logger.error("APDU error: \(error)")
-                    continuation.resume(
-                        throwing: TransportError.UnknownError(error.localizedDescription)
-                    )
+                    // Check if this is a connection error
+                    if let nfcError = error as? NFCReaderError,
+                       nfcError.code == .readerTransceiveErrorTagConnectionLost
+                    {
+                        continuation.resume(
+                            throwing: TransportError.ConnectionError(error.localizedDescription)
+                        )
+                    } else {
+                        continuation.resume(
+                            throwing: TransportError.UnknownError(error.localizedDescription)
+                        )
+                    }
                     return
                 }
 

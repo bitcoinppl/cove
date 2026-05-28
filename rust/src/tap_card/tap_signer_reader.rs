@@ -562,6 +562,10 @@ impl TapSignerReaderError {
     pub const fn is_no_backup_error(&self) -> bool {
         matches!(self, Self::TapSignerError(TransportError::CkTap(CkTapError::BackupFirst)))
     }
+
+    pub const fn is_connection_error(&self) -> bool {
+        matches!(self, Self::TapSignerError(TransportError::ConnectionError(_)))
+    }
 }
 
 mod ffi {
@@ -645,6 +649,11 @@ impl TapSignerReaderError {
     #[uniffi::method(name = "isNoBackupError")]
     fn ffi_is_no_backup_error(&self) -> bool {
         self.is_no_backup_error()
+    }
+
+    #[uniffi::method(name = "isConnectionError")]
+    fn ffi_is_connection_error(&self) -> bool {
+        self.is_connection_error()
     }
 }
 

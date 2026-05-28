@@ -2,7 +2,9 @@ import SwiftUI
 
 extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletManager {}
 
-@Observable final class WalletManager: AnyReconciler, WalletManagerReconciler {
+@MainActor
+@Observable
+final class WalletManager: AnyReconciler, WalletManagerReconciler {
     typealias Message = WalletManagerReconcileMessage
     typealias Action = WalletManagerAction
 
@@ -272,7 +274,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
-    func reconcile(message: Message) {
+    nonisolated func reconcile(message: Message) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             logger.debug("reconcile \(message)")
@@ -280,7 +282,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
-    func reconcileMany(messages: [Message]) {
+    nonisolated func reconcileMany(messages: [Message]) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             logger.debug("reconcile_messages: \(messages)")

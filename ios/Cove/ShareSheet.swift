@@ -2,8 +2,7 @@ import LinkPresentation
 import SwiftUI
 import UIKit
 
-@MainActor
-private class ShareableFile: NSObject, UIActivityItemSource {
+private final class ShareableFile: NSObject, UIActivityItemSource {
     let url: URL
     let iconImage: UIImage?
 
