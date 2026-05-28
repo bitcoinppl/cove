@@ -1359,6 +1359,59 @@ private fun CloudBackupBitcoinMetadataText(text: String) {
 }
 
 @Composable
+private fun CloudBackupTitledContentSection(
+    title: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    tint: Color? = null,
+    bitcoinIcon: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(CloudBackupSectionTitleContentSpacing),
+    ) {
+        CloudBackupSectionTitle(
+            title = title,
+            icon = icon,
+            tint = tint,
+            bitcoinIcon = bitcoinIcon,
+        )
+        content()
+    }
+}
+
+@Composable
+private fun WalletRowsSection(
+    title: String,
+    wallets: List<CloudBackupWalletItem>,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    tint: Color? = null,
+    bitcoinIcon: Boolean = false,
+    onWalletClick: ((CloudBackupWalletItem) -> Unit)? = null,
+    showChevron: Boolean = onWalletClick != null,
+    operatingRecordId: String? = null,
+    rowsEnabled: Boolean = true,
+) {
+    CloudBackupTitledContentSection(
+        title = title,
+        modifier = modifier,
+        icon = icon,
+        tint = tint,
+        bitcoinIcon = bitcoinIcon,
+    ) {
+        WalletRowsCard(
+            wallets = wallets,
+            onWalletClick = onWalletClick,
+            showChevron = showChevron,
+            operatingRecordId = operatingRecordId,
+            rowsEnabled = rowsEnabled,
+        )
+    }
+}
+
+@Composable
 private fun WalletRowsCard(
     wallets: List<CloudBackupWalletItem>,
     onWalletClick: ((CloudBackupWalletItem) -> Unit)? = null,
@@ -1536,12 +1589,12 @@ private fun WalletSections(
     Column(verticalArrangement = Arrangement.spacedBy(CloudBackupSectionTitleContentSpacing)) {
         grouped.forEach { (group, items) ->
             val sectionTitle = if (title == "Up to Date") group.title else title
-            CloudBackupSectionTitle(
+            WalletRowsSection(
                 title = sectionTitle,
+                wallets = items,
                 icon = if (group.network == "Bitcoin") null else Icons.Default.AccountBalanceWallet,
                 bitcoinIcon = group.network == "Bitcoin",
             )
-            WalletRowsCard(wallets = items)
         }
     }
 }
@@ -1972,56 +2025,57 @@ private fun CloudOnlySection(
         }
     }
 
-    CloudBackupSectionTitle(
+    CloudBackupTitledContentSection(
         title = "Not on This Device",
         icon = Icons.Default.PhoneAndroid,
         tint = cloudBackupVisualColors().primaryText,
-    )
-    Spacer(modifier = Modifier.height(CloudBackupSectionTitleContentSpacing))
-
-    when (val cloudOnly = manager.cloudOnly) {
-        is CloudOnlyState.NotFetched -> {
-            LaunchedEffect(cloudOnly) {
-                manager.dispatch(CloudBackupManagerAction.FetchCloudOnly)
+    ) {
+        when (val cloudOnly = manager.cloudOnly) {
+            is CloudOnlyState.NotFetched -> {
+                LaunchedEffect(cloudOnly) {
+                    manager.dispatch(CloudBackupManagerAction.FetchCloudOnly)
+                }
+                CloudBackupProgressCard(
+                    title = "Loading wallets not on this device",
+                    message = "Checking Cloud Backup for wallets that are not local",
+                )
             }
-            CloudBackupProgressCard(
-                title = "Loading wallets not on this device",
-                message = "Checking Cloud Backup for wallets that are not local",
-            )
-        }
 
-        is CloudOnlyState.Loading -> {
-            CloudBackupProgressCard(
-                title = "Loading wallets not on this device",
-                message = "Checking Cloud Backup for wallets that are not local",
-            )
-        }
+            is CloudOnlyState.Loading -> {
+                CloudBackupProgressCard(
+                    title = "Loading wallets not on this device",
+                    message = "Checking Cloud Backup for wallets that are not local",
+                )
+            }
 
-        is CloudOnlyState.Loaded -> {
-            val operatingRecordId =
-                (manager.cloudOnlyOperation as? CloudOnlyOperation.Operating)?.recordId
+            is CloudOnlyState.Loaded -> {
+                val operatingRecordId =
+                    (manager.cloudOnlyOperation as? CloudOnlyOperation.Operating)?.recordId
 
-            WalletRowsCard(
-                wallets = cloudOnly.wallets,
-                onWalletClick = { selectedWallet = it },
-                showChevron = false,
-                operatingRecordId = operatingRecordId,
-                rowsEnabled = operatingRecordId == null,
-            )
+                WalletRowsCard(
+                    wallets = cloudOnly.wallets,
+                    onWalletClick = { selectedWallet = it },
+                    showChevron = false,
+                    operatingRecordId = operatingRecordId,
+                    rowsEnabled = operatingRecordId == null,
+                )
+            }
 
-            when (val operation = manager.cloudOnlyOperation) {
-                is CloudOnlyOperation.Failed -> {
-                    ErrorInlineMessage(operation.error, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-                }
-                is CloudOnlyOperation.Warning -> {
-                    ErrorInlineMessage(operation.message, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-                }
-                else -> Unit
+            is CloudOnlyState.Failed -> {
+                ErrorInlineMessage(cloudOnly.error, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
         }
+    }
 
-        is CloudOnlyState.Failed -> {
-            ErrorInlineMessage(cloudOnly.error, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+    if (manager.cloudOnly is CloudOnlyState.Loaded) {
+        when (val operation = manager.cloudOnlyOperation) {
+            is CloudOnlyOperation.Failed -> {
+                ErrorInlineMessage(operation.error, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            }
+            is CloudOnlyOperation.Warning -> {
+                ErrorInlineMessage(operation.message, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            }
+            else -> Unit
         }
     }
 
