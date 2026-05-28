@@ -88,7 +88,7 @@ fun SendFlowContainer(
             }
 
             // wait for initialization, rust handles alert + popRoute on failure
-            val initSuccess = sfm.rust.waitForInit()
+            val initSuccess = sfm.waitForInit()
             if (initSuccess) {
                 walletManager = wm
                 sendFlowManager = sfm
@@ -100,20 +100,18 @@ fun SendFlowContainer(
         }
     }
 
-    // cleanup on disappear
-    DisposableEffect(walletId) {
-        onDispose {
-            sendFlowManager?.presenter?.setDisappearing()
-            app.clearSendFlowManager()
-        }
-    }
-
     // render
     when {
         walletManager != null && sendFlowManager != null && initCompleted -> {
             val wm = walletManager ?: return
             val sfm = sendFlowManager ?: return
             val presenter = sfm.presenter
+
+            DisposableEffect(presenter) {
+                onDispose {
+                    presenter.setDisappearing()
+                }
+            }
 
             // check for zero balance
             LaunchedEffect(wm.balance) {
@@ -166,9 +164,9 @@ fun SendFlowContainer(
             LaunchedEffect(Auth.isLocked) {
                 if (!Auth.isLocked) {
                     // after unlock, validate and focus appropriate field
-                    if (!sfm.rust.validateAmount()) {
+                    if (!sfm.validateAmount()) {
                         sfm.dispatch(SendFlowManagerAction.ChangeSetAmountFocusField(SetAmountFocusField.AMOUNT))
-                    } else if (!sfm.rust.validateAddress()) {
+                    } else if (!sfm.validateAddress()) {
                         sfm.dispatch(SendFlowManagerAction.ChangeSetAmountFocusField(SetAmountFocusField.ADDRESS))
                     }
                 }
@@ -209,7 +207,7 @@ private fun SendFlowRouteToScreen(
 ) {
     when (sendRoute) {
         is SendRoute.SetAmount -> {
-            val exceedsBalance = sendFlowManager.rust.amountExceedsBalance()
+            val exceedsBalance = sendFlowManager.amountExceedsBalance()
             var previouslyExceeded by remember { mutableStateOf(false) }
             val snackbarHostState = remember { SnackbarHostState() }
             val validationScope = rememberCoroutineScope()
@@ -232,10 +230,10 @@ private fun SendFlowRouteToScreen(
                 snackbarHostState = snackbarHostState,
                 onBack = { app.popRoute() },
                 onNext = {
-                    val addressValid = sendFlowManager.rust.validateAddress()
-                    val amountValid = sendFlowManager.rust.validateAmount()
+                    val addressValid = sendFlowManager.validateAddress()
+                    val amountValid = sendFlowManager.validateAmount()
                     val hasAddress = sendFlowManager.enteringAddress.isNotEmpty()
-                    val hasAmount = sendFlowManager.rust.amount().asSats() > 0uL
+                    val hasAmount = (sendFlowManager.currentAmount()?.asSats() ?: 0uL) > 0uL
 
                     when {
                         !addressValid -> {
@@ -296,7 +294,7 @@ private fun SendFlowRouteToScreen(
                                             }
                                             // focus management: if amount valid clear focus, otherwise focus amount
                                             presenter.focusField =
-                                                if (sendFlowManager.rust.validateAmount()) {
+                                                if (sendFlowManager.validateAmount()) {
                                                     null
                                                 } else {
                                                     SetAmountFocusField.AMOUNT

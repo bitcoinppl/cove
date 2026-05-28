@@ -165,13 +165,20 @@ class AppManager private constructor() : FfiReconcile {
         walletManager = null
     }
 
-    fun clearSendFlowManager() {
+    private fun clearSendFlowManager() {
         try {
             sendFlowManager?.close()
         } catch (e: Exception) {
             Log.w(tag, "Error closing SendFlowManager: ${e.message}")
         }
         sendFlowManager = null
+    }
+
+    private fun clearInactiveSendFlowManager() {
+        val manager = sendFlowManager ?: return
+        if (routeStackContainsSendWallet(router.default, router.routes, manager.id)) return
+
+        clearSendFlowManager()
     }
 
     val fullVersionId: String
@@ -252,7 +259,7 @@ class AppManager private constructor() : FfiReconcile {
         if (newRoutes != router.routes) {
             dispatch(AppAction.UpdateRoute(newRoutes))
         }
-        router.updateRoutes(newRoutes)
+        updateRoutesAndClearInactiveSendFlowManager(newRoutes)
     }
 
     fun pushRoutes(routes: List<Route>) {
@@ -264,7 +271,7 @@ class AppManager private constructor() : FfiReconcile {
         if (newRoutes != router.routes) {
             dispatch(AppAction.UpdateRoute(newRoutes))
         }
-        router.updateRoutes(newRoutes)
+        updateRoutesAndClearInactiveSendFlowManager(newRoutes)
     }
 
     fun popRoute() {
@@ -276,7 +283,7 @@ class AppManager private constructor() : FfiReconcile {
             if (newRoutes != router.routes) {
                 dispatch(AppAction.UpdateRoute(newRoutes))
             }
-            router.updateRoutes(newRoutes)
+            updateRoutesAndClearInactiveSendFlowManager(newRoutes)
         }
     }
 
@@ -287,7 +294,12 @@ class AppManager private constructor() : FfiReconcile {
         if (routes != router.routes) {
             dispatch(AppAction.UpdateRoute(routes))
         }
+        updateRoutesAndClearInactiveSendFlowManager(routes)
+    }
+
+    private fun updateRoutesAndClearInactiveSendFlowManager(routes: List<Route>) {
         router.updateRoutes(routes)
+        clearInactiveSendFlowManager()
     }
 
     fun scanQr() {
@@ -556,12 +568,12 @@ class AppManager private constructor() : FfiReconcile {
         mainScope.launch {
             when (message) {
                 is AppStateReconcileMessage.RouteUpdated -> {
-                    router.updateRoutes(message.v1.toList())
+                    updateRoutesAndClearInactiveSendFlowManager(message.v1.toList())
                 }
 
                 is AppStateReconcileMessage.PushedRoute -> {
                     val newRoutes = (router.routes + message.v1).toList()
-                    router.updateRoutes(newRoutes)
+                    updateRoutesAndClearInactiveSendFlowManager(newRoutes)
                 }
 
                 is AppStateReconcileMessage.DatabaseUpdated -> {
@@ -583,7 +595,7 @@ class AppManager private constructor() : FfiReconcile {
 
                 is AppStateReconcileMessage.DefaultRouteChanged -> {
                     router.default = message.v1
-                    router.updateRoutes(message.v2.toList())
+                    updateRoutesAndClearInactiveSendFlowManager(message.v2.toList())
                     routeId = UUID.randomUUID().toString()
                     Log.d(tag, "Route ID changed to: $routeId")
                 }
