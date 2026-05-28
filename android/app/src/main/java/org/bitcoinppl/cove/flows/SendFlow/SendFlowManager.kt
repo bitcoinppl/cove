@@ -383,7 +383,7 @@ class SendFlowManager(
     fun dispatch(action: SendFlowManagerAction) {
         if (isClosed.get()) return
         logDebug("dispatch: $action")
-        mainScope.launch(Dispatchers.IO) {
+        mainScope.launch {
             withRustOr(Unit, "dispatch") {
                 dispatch(action)
             }
