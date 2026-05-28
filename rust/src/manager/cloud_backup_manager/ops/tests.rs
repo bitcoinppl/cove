@@ -1825,6 +1825,36 @@ async fn confirm_saved_passkey_reuses_original_credential_id() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn automatic_saved_passkey_confirmation_retries_until_available() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+    globals.passkey.set_authenticate_result(Err(PasskeyError::NoCredentialFound));
+    globals.passkey.push_authenticate_result(Err(PasskeyError::NoCredentialFound));
+    globals.passkey.push_authenticate_result(Ok(vec![7; 32]));
+
+    let context = CloudBackupEnableContext {
+        saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
+        verification_source: CloudBackupVerificationSource::Onboarding,
+    };
+    enable_cloud_backup_no_discovery_with_context(&manager, context).await.unwrap();
+
+    assert_eq!(globals.passkey.create_count(), 1);
+    assert_eq!(globals.passkey.authenticate_count(), 3);
+    assert_eq!(
+        globals.passkey.authenticated_credential_ids(),
+        vec![vec![1, 2, 3], vec![1, 2, 3], vec![1, 2, 3]]
+    );
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();

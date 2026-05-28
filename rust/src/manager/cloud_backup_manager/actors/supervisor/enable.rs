@@ -6,7 +6,7 @@ pub(crate) enum PendingEnableUploadSelection {
     RetryOrForceNewConfirmation,
 }
 
-const AUTOMATIC_SAVED_PASSKEY_CONFIRMATION_RETRIES: u8 = 1;
+const AUTOMATIC_SAVED_PASSKEY_CONFIRMATION_RETRIES: u8 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SavedPasskeyConfirmationRetry {
@@ -18,9 +18,9 @@ impl SavedPasskeyConfirmationRetry {
     fn for_mode(mode: SavedPasskeyConfirmationMode) -> Self {
         match mode {
             SavedPasskeyConfirmationMode::Manual => Self::Manual,
-            SavedPasskeyConfirmationMode::Automatic => Self::Automatic {
-                retries_remaining: AUTOMATIC_SAVED_PASSKEY_CONFIRMATION_RETRIES,
-            },
+            SavedPasskeyConfirmationMode::Automatic => {
+                Self::Automatic { retries_remaining: AUTOMATIC_SAVED_PASSKEY_CONFIRMATION_RETRIES }
+            }
         }
     }
 
@@ -34,9 +34,9 @@ impl SavedPasskeyConfirmationRetry {
     fn after_retry(self) -> Self {
         match self {
             Self::Manual => Self::Manual,
-            Self::Automatic { retries_remaining } => Self::Automatic {
-                retries_remaining: retries_remaining.saturating_sub(1),
-            },
+            Self::Automatic { retries_remaining } => {
+                Self::Automatic { retries_remaining: retries_remaining.saturating_sub(1) }
+            }
         }
     }
 }
@@ -264,12 +264,10 @@ impl CloudBackupSupervisor {
             {
                 warn!("Automatic saved passkey confirmation will retry: {error}");
                 self.pending_enable_session = Some(pending);
-                manager.apply_enable_outcome(
-                    CloudBackupEnableOutcome::WaitingForPasskeyAvailability,
-                );
+                manager
+                    .apply_enable_outcome(CloudBackupEnableOutcome::WaitingForPasskeyAvailability);
 
-                if !self.schedule_enable_saved_passkey_wait_with_retry(claim, retry.after_retry())
-                {
+                if !self.schedule_enable_saved_passkey_wait_with_retry(claim, retry.after_retry()) {
                     manager.apply_enable_outcome(
                         CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
                             SavedPasskeyConfirmationMode::Manual,
@@ -733,10 +731,17 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         mode: SavedPasskeyConfirmationMode,
     ) -> bool {
-        self.schedule_enable_saved_passkey_wait_with_retry(
-            claim,
-            SavedPasskeyConfirmationRetry::for_mode(mode),
-        )
+        let Some(addr) = self.addr() else {
+            warn!("Could not schedule enable saved-passkey wait without supervisor addr");
+            return false;
+        };
+
+        cove_tokio::task::spawn(async move {
+            delay_before_new_passkey_auth().await;
+            send!(addr.complete_enable_saved_passkey_wait(claim, mode));
+        });
+
+        true
     }
 
     fn schedule_enable_saved_passkey_wait_with_retry(

@@ -66,7 +66,7 @@ impl cove_cspp::CsppStore for MockStoreHandle {
 }
 
 type MockDiscoverResult = Result<(Vec<u8>, Vec<u8>), PasskeyError>;
-type MockPasskeyActionResult = Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>;
+type MockPasskeyActionResults = Arc<Mutex<VecDeque<Result<Vec<u8>, PasskeyError>>>>;
 type MockPasskeyCreateResult = Arc<Mutex<Option<Result<PasskeyRegistrationResult, PasskeyError>>>>;
 type MockPasskeyPresenceResults = Arc<Mutex<VecDeque<PasskeyCredentialPresence>>>;
 #[derive(Debug, Clone, Default)]
@@ -625,7 +625,7 @@ impl CloudStorageAccess for MockCloudStorage {
 pub(crate) struct MockPasskeyProviderImpl {
     discover_results: Arc<Mutex<VecDeque<MockDiscoverResult>>>,
     create_result: MockPasskeyCreateResult,
-    authenticate_result: MockPasskeyActionResult,
+    authenticate_results: MockPasskeyActionResults,
     create_count: Arc<Mutex<usize>>,
     authenticate_count: Arc<Mutex<usize>>,
     discover_count: Arc<Mutex<usize>>,
@@ -637,7 +637,7 @@ impl MockPasskeyProviderImpl {
     pub(crate) fn reset(&self) {
         self.discover_results.lock().clear();
         *self.create_result.lock() = None;
-        *self.authenticate_result.lock() = None;
+        self.authenticate_results.lock().clear();
         *self.create_count.lock() = 0;
         *self.authenticate_count.lock() = 0;
         *self.discover_count.lock() = 0;
@@ -672,7 +672,13 @@ impl MockPasskeyProviderImpl {
     }
 
     pub(crate) fn set_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
-        *self.authenticate_result.lock() = Some(result);
+        let mut results = self.authenticate_results.lock();
+        results.clear();
+        results.push_back(result);
+    }
+
+    pub(crate) fn push_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
+        self.authenticate_results.lock().push_back(result);
     }
 
     pub(crate) fn authenticate_count(&self) -> usize {
@@ -719,7 +725,7 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
     ) -> Result<Vec<u8>, PasskeyError> {
         *self.authenticate_count.lock() += 1;
         self.authenticated_credential_ids.lock().push(credential_id);
-        self.authenticate_result.lock().take().unwrap_or_else(|| {
+        self.authenticate_results.lock().pop_front().unwrap_or_else(|| {
             Err(PasskeyError::RequestFailed {
                 operation: PasskeyOperation::AuthenticateAssertion,
                 reason: PasskeyFailureReason::Unknown {
