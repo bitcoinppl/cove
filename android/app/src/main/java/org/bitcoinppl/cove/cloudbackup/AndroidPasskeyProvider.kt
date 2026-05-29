@@ -461,8 +461,10 @@ private fun passkeyCreateDomErrorReason(
 }
 
 private fun DomError.isRpIdValidationError(message: String): Boolean =
-    (this is DataError || this is SecurityError) &&
-        (type.isRpIdValidationErrorMessage() || message.isRpIdValidationErrorMessage())
+    this is DataError ||
+        this is SecurityError ||
+        type.isRpIdValidationErrorMessage() ||
+        message.isRpIdValidationErrorMessage()
 
 private fun String.isRpIdValidationErrorMessage(): Boolean =
     contains("RP ID cannot be validated", ignoreCase = true)
