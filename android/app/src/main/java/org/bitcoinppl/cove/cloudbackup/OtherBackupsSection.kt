@@ -81,12 +81,20 @@ internal fun OtherBackupsSection(
         }
     }
 
-    DisposableEffect(blocker, showRecoverConfirmation, showDeleteConfirmation, showFinalDeleteConfirmation, recoveryResult) {
+    DisposableEffect(
+        blocker,
+        showRecoverConfirmation,
+        showDeleteConfirmation,
+        showFinalDeleteConfirmation,
+        recoveryResult,
+        isOperating,
+    ) {
         val isBlocked =
             showRecoverConfirmation ||
                 showDeleteConfirmation ||
                 showFinalDeleteConfirmation ||
-                recoveryResult != null
+                recoveryResult != null ||
+                isOperating
         blocker?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, isBlocked)
         onDispose {
             blocker?.setBlocker(CloudBackupPresentationBlocker.CLOUD_BACKUP_DETAIL_DIALOG, false)

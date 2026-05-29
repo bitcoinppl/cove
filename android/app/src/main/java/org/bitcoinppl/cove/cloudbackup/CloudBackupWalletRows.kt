@@ -215,7 +215,7 @@ internal fun WalletSections(
 
     Column(verticalArrangement = Arrangement.spacedBy(CloudBackupSectionTitleContentSpacing)) {
         grouped.forEach { (group, items) ->
-            val sectionTitle = if (title == "Up to Date") group.title else title
+            val sectionTitle = if (title == "Up to Date") group.title else "${group.title} — $title"
             WalletRowsSection(
                 title = sectionTitle,
                 wallets = items,

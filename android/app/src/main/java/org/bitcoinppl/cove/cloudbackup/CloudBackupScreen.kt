@@ -50,7 +50,9 @@ fun CloudBackupScreen(
 
     var showRecreateConfirmation by remember { mutableStateOf(false) }
     var showReinitializeConfirmation by remember { mutableStateOf(false) }
+    var wasLifecycleDisabled by remember(manager) { mutableStateOf(manager.isLifecycleDisabled) }
 
+    val isLifecycleDisabled = manager.isLifecycleDisabled
     val detailDialogBlocker = showRecreateConfirmation || showReinitializeConfirmation
 
     DisposableEffect(coordinator, detailDialogBlocker) {
@@ -67,10 +69,11 @@ fun CloudBackupScreen(
         manager.dispatch(CloudBackupManagerAction.EnterDetail)
     }
 
-    LaunchedEffect(manager.isLifecycleDisabled) {
-        if (manager.isLifecycleDisabled) {
+    LaunchedEffect(manager, isLifecycleDisabled) {
+        if (!wasLifecycleDisabled && isLifecycleDisabled) {
             app.popRoute()
         }
+        wasLifecycleDisabled = isLifecycleDisabled
     }
 
     CloudBackupScreenFrame(

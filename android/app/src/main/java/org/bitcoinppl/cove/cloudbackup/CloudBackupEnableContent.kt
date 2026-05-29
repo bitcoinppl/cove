@@ -43,6 +43,7 @@ import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 @Composable
 internal fun CloudBackupEnableProgressOrConfirmation(manager: CloudBackupManager) {
     val enableFlow = manager.enableFlow
+
     if (enableFlow is CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation &&
         enableFlow.v1 == SavedPasskeyConfirmationMode.MANUAL
     ) {
