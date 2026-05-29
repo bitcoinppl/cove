@@ -93,7 +93,6 @@ import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.ui.theme.coveColors
-import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
@@ -172,73 +171,44 @@ private data class CloudBackupVisualColors(
     val dangerBorder: Color,
     val verifiedFill: Color,
     val verifiedBorder: Color,
-    val repairFill: Color,
     val outlineButtonBorder: Color,
 )
 
 @Composable
 private fun cloudBackupVisualColors(): CloudBackupVisualColors {
-    val isLight = MaterialTheme.colorScheme.isLight
-    val success = if (isLight) CoveColor.SystemGreenLight else CoveColor.SystemGreenDark
-    val cloudBlue = if (isLight) CoveColor.LinkBlue else CoveColor.CloudBackupDarkCloudBlue
-    val warning = if (isLight) CoveColor.CloudBackupLightWarning else CoveColor.CloudBackupDarkWarning
-    val danger = if (isLight) CoveColor.ErrorRed else CoveColor.CloudBackupDarkDanger
+    val colorScheme = MaterialTheme.colorScheme
+    val coveColors = MaterialTheme.coveColors
+    val cloudBlue = colorScheme.secondary
+    val success = coveColors.systemGreen
+    val warning = CoveColor.WarningOrange
+    val danger = colorScheme.error
+    val successFill = success.copy(alpha = 0.14f)
 
-    return if (isLight) {
-        CloudBackupVisualColors(
-            background = CoveColor.CloudBackupLightBackground,
-            cardFill = CoveColor.CloudBackupLightCardFill,
-            elevatedCardFill = CoveColor.CloudBackupLightElevatedCardFill,
-            cardBorder = CoveColor.CloudBackupLightCardBorder,
-            divider = CoveColor.CloudBackupLightDivider,
-            primaryText = CoveColor.CloudBackupLightPrimaryText,
-            secondaryText = CoveColor.CloudBackupLightSecondaryText,
-            cloudBlue = cloudBlue,
-            cloudBlueFill = cloudBlue.copy(alpha = 0.10f),
-            bitcoinFill = CoveColor.bitcoinOrange,
-            bitcoinText = CoveColor.CloudBackupLightCardFill,
-            success = success,
-            successFill = success.copy(alpha = 0.12f),
-            successBorder = success.copy(alpha = 0.38f),
-            warning = warning,
-            warningFill = warning.copy(alpha = 0.12f),
-            warningBorder = warning.copy(alpha = 0.42f),
-            danger = danger,
-            dangerFill = danger.copy(alpha = 0.10f),
-            dangerBorder = danger.copy(alpha = 0.26f),
-            verifiedFill = success.copy(alpha = 0.10f),
-            verifiedBorder = success.copy(alpha = 0.24f),
-            repairFill = cloudBlue.copy(alpha = 0.10f),
-            outlineButtonBorder = CoveColor.CloudBackupLightOutlineButtonBorder,
-        )
-    } else {
-        CloudBackupVisualColors(
-            background = CoveColor.CloudBackupDarkBackground,
-            cardFill = CoveColor.CloudBackupDarkCardFill.copy(alpha = 0.92f),
-            elevatedCardFill = CoveColor.CloudBackupDarkElevatedCardFill.copy(alpha = 0.94f),
-            cardBorder = CoveColor.CloudBackupDarkCardBorder.copy(alpha = 0.68f),
-            divider = CoveColor.CloudBackupDarkDivider.copy(alpha = 0.62f),
-            primaryText = CoveColor.CloudBackupDarkPrimaryText,
-            secondaryText = CoveColor.CloudBackupDarkSecondaryText,
-            cloudBlue = cloudBlue,
-            cloudBlueFill = cloudBlue.copy(alpha = 0.18f),
-            bitcoinFill = CoveColor.bitcoinOrange,
-            bitcoinText = CoveColor.CloudBackupLightCardFill,
-            success = success,
-            successFill = success.copy(alpha = 0.16f),
-            successBorder = success.copy(alpha = 0.55f),
-            warning = warning,
-            warningFill = warning.copy(alpha = 0.16f),
-            warningBorder = warning.copy(alpha = 0.56f),
-            danger = danger,
-            dangerFill = danger.copy(alpha = 0.17f),
-            dangerBorder = danger.copy(alpha = 0.42f),
-            verifiedFill = CoveColor.CloudBackupDarkVerifiedFill.copy(alpha = 0.82f),
-            verifiedBorder = success.copy(alpha = 0.24f),
-            repairFill = CoveColor.CloudBackupDarkRepairFill.copy(alpha = 0.86f),
-            outlineButtonBorder = CoveColor.CloudBackupDarkOutlineButtonBorder,
-        )
-    }
+    return CloudBackupVisualColors(
+        background = colorScheme.background,
+        cardFill = colorScheme.surface,
+        elevatedCardFill = colorScheme.surfaceContainer,
+        cardBorder = colorScheme.outlineVariant,
+        divider = colorScheme.outlineVariant,
+        primaryText = colorScheme.onSurface,
+        secondaryText = colorScheme.onSurfaceVariant,
+        cloudBlue = cloudBlue,
+        cloudBlueFill = colorScheme.secondaryContainer.copy(alpha = 0.36f),
+        bitcoinFill = CoveColor.bitcoinOrange,
+        bitcoinText = CoveColor.midnightBlue,
+        success = success,
+        successFill = successFill,
+        successBorder = success.copy(alpha = 0.42f),
+        warning = warning,
+        warningFill = warning.copy(alpha = 0.14f),
+        warningBorder = warning.copy(alpha = 0.42f),
+        danger = danger,
+        dangerFill = colorScheme.errorContainer.copy(alpha = 0.50f),
+        dangerBorder = danger.copy(alpha = 0.32f),
+        verifiedFill = successFill,
+        verifiedBorder = success.copy(alpha = 0.30f),
+        outlineButtonBorder = cloudBlue,
+    )
 }
 
 private fun cloudBackupFormattedDate(epochSeconds: ULong): String =

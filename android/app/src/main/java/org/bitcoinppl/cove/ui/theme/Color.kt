@@ -73,35 +73,6 @@ object CoveColor {
     val WarningOrange = ComposeColor(0xFFF59E0B)
     val SuccessGreen = ComposeColor(0xFF4CAF50)
     val ErrorRed = ComposeColor(0xFFF44336)
-
-    // cloud backup detail colors
-    val CloudBackupLightBackground = ComposeColor(0xFFF7F8FB)
-    val CloudBackupLightCardFill = ComposeColor(0xFFFFFFFF)
-    val CloudBackupLightElevatedCardFill = ComposeColor(0xFFF3F6FB)
-    val CloudBackupLightCardBorder = ComposeColor(0xFFE1E6EF)
-    val CloudBackupLightDivider = ComposeColor(0xFFE2E6EC)
-    val CloudBackupLightPrimaryText = ComposeColor(0xFF172033)
-    val CloudBackupLightSecondaryText = ComposeColor(0xFF5E6675)
-    val CloudBackupLightWalletIconFill = ComposeColor(0xFFF1EBFF)
-    val CloudBackupLightWalletIconTint = ComposeColor(0xFF8058D6)
-    val CloudBackupLightWarning = ComposeColor(0xFFE37B12)
-    val CloudBackupLightOutlineButtonBorder = ComposeColor(0xFF8A69D8)
-
-    val CloudBackupDarkBackground = ComposeColor(0xFF080D13)
-    val CloudBackupDarkCardFill = ComposeColor(0xFF171E27)
-    val CloudBackupDarkElevatedCardFill = ComposeColor(0xFF1A2432)
-    val CloudBackupDarkCardBorder = ComposeColor(0xFF3A4657)
-    val CloudBackupDarkDivider = ComposeColor(0xFF46505E)
-    val CloudBackupDarkPrimaryText = ComposeColor(0xFFF2F5FA)
-    val CloudBackupDarkSecondaryText = ComposeColor(0xFFC1C7D0)
-    val CloudBackupDarkCloudBlue = ComposeColor(0xFF7EA6FF)
-    val CloudBackupDarkWalletIconFill = ComposeColor(0xFF2A223E)
-    val CloudBackupDarkWalletIconTint = ComposeColor(0xFFC19BFF)
-    val CloudBackupDarkWarning = ComposeColor(0xFFFFA044)
-    val CloudBackupDarkDanger = ComposeColor(0xFFFF7A7A)
-    val CloudBackupDarkVerifiedFill = ComposeColor(0xFF092A1D)
-    val CloudBackupDarkRepairFill = ComposeColor(0xFF102846)
-    val CloudBackupDarkOutlineButtonBorder = ComposeColor(0xFFC39DFF)
 }
 
 /**
