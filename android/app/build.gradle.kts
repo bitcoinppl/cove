@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    id("com.android.compose.screenshot")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jlleitschuh.gradle.ktlint")
 }
@@ -7,6 +8,7 @@ plugins {
 android {
     namespace = "org.bitcoinppl.cove"
     compileSdk = 36
+    experimentalProperties["android.experimental.enableScreenshotTest"] = true
 
     defaultConfig {
         applicationId = "org.bitcoinppl.cove"
@@ -106,6 +108,9 @@ dependencies {
     androidTestImplementation(platform("androidx.compose:compose-bom:2025.12.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestUtil("androidx.test:orchestrator:1.6.1")
+    screenshotTestImplementation(platform("androidx.compose:compose-bom:2025.12.01"))
+    screenshotTestImplementation("androidx.compose.ui:ui-tooling")
+    screenshotTestImplementation("com.android.tools.screenshot:screenshot-validation-api:0.0.1-alpha15")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 

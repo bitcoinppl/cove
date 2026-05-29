@@ -2,14 +2,16 @@ package org.bitcoinppl.cove.cloudbackup
 
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import androidx.activity.result.IntentSenderRequest
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.ClearTokenRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Scope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 
 internal class AuthorizationRequiredException(
@@ -21,6 +23,58 @@ internal interface DriveAuthorization {
     suspend fun accessToken(interactive: Boolean): String
 
     suspend fun clearToken(token: String)
+}
+
+internal class CachingDriveAuthorization(
+    private val delegate: DriveAuthorization,
+    private val elapsedRealtime: () -> Long = ::monotonicTimeMs,
+    private val cacheWindowMs: Long = ACCESS_TOKEN_CACHE_IDLE_MS,
+) : DriveAuthorization {
+    private val tokenMutex = Mutex()
+    private var cachedAccessToken: CachedAccessToken? = null
+
+    init {
+        require(cacheWindowMs > 0) { "cacheWindowMs must be positive" }
+    }
+
+    override suspend fun accessToken(interactive: Boolean): String =
+        tokenMutex.withLock {
+            val now = elapsedRealtime()
+            cachedAccessToken?.let { cached ->
+                if (cached.expiresAtMs > now) {
+                    cachedAccessToken = cached.copy(expiresAtMs = now + cacheWindowMs)
+                    return@withLock cached.token
+                }
+
+                cachedAccessToken = null
+            }
+
+            val token = delegate.accessToken(interactive)
+            cachedAccessToken = CachedAccessToken(
+                token = token,
+                expiresAtMs = elapsedRealtime() + cacheWindowMs,
+            )
+            token
+        }
+
+    override suspend fun clearToken(token: String) {
+        tokenMutex.withLock {
+            if (cachedAccessToken?.token == token) {
+                cachedAccessToken = null
+            }
+
+            delegate.clearToken(token)
+        }
+    }
+
+    private data class CachedAccessToken(
+        val token: String,
+        val expiresAtMs: Long,
+    )
+
+    companion object {
+        private const val ACCESS_TOKEN_CACHE_IDLE_MS = 2 * 60 * 1000L
+    }
 }
 
 internal class DriveAuthorizationHelper(
@@ -75,19 +129,25 @@ internal class DriveAuthorizationHelper(
                 IntentSenderRequest.Builder(pendingIntent.intentSender).build(),
             )
 
-        if (activityResult.resultCode != Activity.RESULT_OK) {
-            throw AuthorizationRequiredException("google drive authorization was cancelled")
-        }
+        val resultIntent = activityResult.data
+        if (resultIntent == null) {
+            if (activityResult.resultCode != Activity.RESULT_OK) {
+                throw AuthorizationRequiredException("google drive authorization was cancelled")
+            }
 
-        val resultIntent =
-            activityResult.data ?: Intent()
+            throw IllegalStateException("google drive authorization result is missing intent data")
+        }
 
         return try {
             client.getAuthorizationResultFromIntent(resultIntent)
         } catch (error: ApiException) {
-            throw AuthorizationRequiredException("google drive authorization result could not be parsed", error)
+            if (error.statusCode == CommonStatusCodes.CANCELED) {
+                throw AuthorizationRequiredException("google drive authorization was cancelled", error)
+            }
+
+            throw error
         } catch (error: RuntimeException) {
-            throw AuthorizationRequiredException("google drive authorization result could not be parsed", error)
+            throw IllegalStateException("google drive authorization result could not be parsed", error)
         }
     }
 

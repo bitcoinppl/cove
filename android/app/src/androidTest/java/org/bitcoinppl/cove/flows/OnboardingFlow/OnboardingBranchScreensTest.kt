@@ -1,26 +1,42 @@
 package org.bitcoinppl.cove.flows.OnboardingFlow
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.OnboardingBranch
 import org.bitcoinppl.cove_core.OnboardingStorageSelection
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
 class OnboardingBranchScreensTest {
     @get:Rule
     val compose = createComposeRule()
+
+    private var updateContent: ((@Composable () -> Unit) -> Unit)? = null
+
+    @Before
+    fun bootstrapRustRuntime() {
+        bootstrapRustRuntimeForUiTest()
+    }
 
     @Test
     fun welcomeContinuesToBitcoinChoice() {
@@ -40,36 +56,48 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
-    fun bitcoinChoiceExposesNewAndExistingBranches() {
-        var selected: Boolean? = null
+    fun bitcoinChoiceExposesRestoreNewAndExistingBranches() {
+        var selected = ""
 
         compose.setOnboardingContent {
             OnboardingBitcoinChoiceScreen(
                 errorMessage = null,
-                onNewHere = { selected = false },
-                onHasBitcoin = { selected = true },
+                onRestoreFromCoveBackup = { selected = "restore" },
+                onNewHere = { selected = "new" },
+                onHasBitcoin = { selected = "existing" },
             )
         }
 
+        compose.assertNodeBelow("onboarding.bitcoinChoice.restoreDivider", "onboarding.bitcoinChoice.existing")
+        compose.assertNodeBelow("onboarding.bitcoinChoice.restore", "onboarding.bitcoinChoice.restoreDivider")
+
         compose.card("No, I'm new here").performClick()
-        assertEquals(false, selected)
+        assertEquals("new", selected)
 
         compose.card("Yes, I have Bitcoin").performClick()
-        assertEquals(true, selected)
+        assertEquals("existing", selected)
+
+        compose.card("Restore From Cove Backup").performClick()
+        assertEquals("restore", selected)
     }
 
     @Test
     fun storageChoiceExposesExchangeHardwareAndSoftwareBranches() {
         var selected: OnboardingStorageSelection? = null
+        var restoreSelected = false
 
         compose.setOnboardingContent {
             OnboardingStorageChoiceScreen(
                 errorMessage = null,
-                onRestoreFromCoveBackup = null,
+                onRestoreFromCoveBackup = { restoreSelected = true },
                 onSelectStorage = { selected = it },
                 onBack = {},
             )
         }
+
+        compose.onAllNodesWithTag("onboarding.storage.restoreDivider").assertCountEquals(0)
+        compose.assertNodeBelow("onboarding.storage.restore", "onboarding.storage.software")
+        compose.onNodeWithText("Restore your Cove backup from Google Drive, secured by passkeys").assertIsDisplayed()
 
         compose.card("On an exchange").performClick()
         assertEquals(OnboardingStorageSelection.EXCHANGE, selected)
@@ -79,6 +107,9 @@ class OnboardingBranchScreensTest {
 
         compose.card("Software wallet").performClick()
         assertEquals(OnboardingStorageSelection.SOFTWARE_WALLET, selected)
+
+        compose.card("I'm already using Cove").performClick()
+        assertEquals(true, restoreSelected)
     }
 
     @Test
@@ -99,12 +130,14 @@ class OnboardingBranchScreensTest {
     @Test
     fun backupContinueRequiresRecoveryWordsOrCloudBackup() {
         var selected = ""
+        val secretWordsSaved = mutableStateOf(false)
+        val cloudBackupEnabled = mutableStateOf(false)
 
         compose.setOnboardingContent {
             OnboardingBackupWalletView(
                 branch = OnboardingBranch.NEW_USER,
-                secretWordsSaved = false,
-                cloudBackupEnabled = false,
+                secretWordsSaved = secretWordsSaved.value,
+                cloudBackupEnabled = cloudBackupEnabled.value,
                 wordCount = 12,
                 onShowWords = { selected = "words" },
                 onEnableCloudBackup = { selected = "cloud" },
@@ -118,21 +151,24 @@ class OnboardingBranchScreensTest {
         compose.button("Enable").performClick()
         assertEquals("cloud", selected)
 
-        compose.setOnboardingContent {
-            OnboardingBackupWalletView(
-                branch = OnboardingBranch.NEW_USER,
-                secretWordsSaved = true,
-                cloudBackupEnabled = false,
-                wordCount = 12,
-                onShowWords = {},
-                onEnableCloudBackup = {},
-                onContinue = { selected = "continue" },
-            )
+        compose.runOnUiThread {
+            selected = ""
+            secretWordsSaved.value = true
+            cloudBackupEnabled.value = false
         }
 
         compose.button("Continue").assertIsEnabled()
         compose.button("Continue").performClick()
         assertEquals("continue", selected)
+
+        compose.runOnUiThread {
+            secretWordsSaved.value = false
+            cloudBackupEnabled.value = true
+        }
+
+        compose.onNodeWithText("Back up your wallet").assertIsDisplayed()
+        compose.onNodeWithText("Choose at least one backup method before continuing.").assertIsDisplayed()
+        compose.button("Enabled").assertIsDisplayed()
     }
 
     @Test
@@ -166,7 +202,7 @@ class OnboardingBranchScreensTest {
         compose.button("I Saved These Words").performClick()
         assertEquals("saved", selected)
 
-        compose.onNodeWithContentDescription("Back").performClick()
+        compose.button("Back").performClick()
         assertEquals("back", selected)
     }
 
@@ -302,7 +338,7 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
-    fun restoreOfferWarningAndErrorVariantsRenderWithoutRestoring() {
+    fun restoreOfferWarningCopyIsHiddenAndErrorVariantRendersWithoutRestoring() {
         var selected = ""
 
         compose.setOnboardingContent {
@@ -316,7 +352,11 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("Restore from Google Drive").assertIsDisplayed()
-        compose.onNodeWithText("Cloud storage may be unavailable.").assertIsDisplayed()
+        compose.onAllNodesWithText(
+            "We couldn't confirm whether a Google Drive backup is available.",
+            substring = true,
+        ).assertCountEquals(0)
+        compose.onAllNodesWithText("Cloud storage may be unavailable.").assertCountEquals(0)
         compose.button("Restore with Passkey").assertIsDisplayed()
         compose.onNodeWithText("Set Up as New").performClick()
         assertEquals("skip-warning", selected)
@@ -382,7 +422,7 @@ class OnboardingBranchScreensTest {
 
         compose.card("Enter recovery words").performClick()
         compose.card("12 words").performClick()
-        compose.onNodeWithText("Import Wallet").assertIsDisplayed()
+        compose.onNodeWithTag("hotWalletImport.word.1").assertIsDisplayed()
 
         compose.setOnboardingContent {
             OnboardingSoftwareImportFlowView(
@@ -398,7 +438,7 @@ class OnboardingBranchScreensTest {
 
         compose.card("Enter recovery words").performClick()
         compose.card("24 words").performClick()
-        compose.onNodeWithText("Import Wallet").assertIsDisplayed()
+        compose.onNodeWithTag("hotWalletImport.word.1").assertIsDisplayed()
     }
 
     @Test
@@ -469,7 +509,7 @@ class OnboardingBranchScreensTest {
             .performClick()
         compose.cardContaining("I have read and agree").performScrollTo()
             .performClick()
-        compose.button("Agree and Continue").performScrollTo().assertIsEnabled()
+        compose.button("Agree and Continue").assertIsEnabled()
         compose.button("Agree and Continue").performClick()
 
         assertEquals(true, agreed)
@@ -479,17 +519,39 @@ class OnboardingBranchScreensTest {
         onNode(hasText(text) and hasClickAction())
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.card(title: String) =
-        onNode(hasClickAction() and hasAnyDescendant(hasText(title)))
+        onNode(hasClickAction() and hasAnyDescendant(hasText(title)), useUnmergedTree = true)
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.cardContaining(text: String) =
-        onNode(hasClickAction() and hasAnyDescendant(hasText(text, substring = true)))
+        onNode(hasClickAction() and hasAnyDescendant(hasText(text, substring = true)), useUnmergedTree = true)
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.assertNodeBelow(
+        lowerTag: String,
+        upperTag: String,
+    ) {
+        val lowerTop = onNodeWithTag(lowerTag).getUnclippedBoundsInRoot().top
+        val upperBottom = onNodeWithTag(upperTag).getUnclippedBoundsInRoot().bottom
+
+        assertTrue("$lowerTag should appear below $upperTag", lowerTop > upperBottom)
+    }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.setOnboardingContent(
-        content: @androidx.compose.runtime.Composable () -> Unit,
+        content: @Composable () -> Unit,
     ) {
+        updateContent?.let { update ->
+            update(content)
+            return
+        }
+
+        val contentState = mutableStateOf(content)
+        updateContent = { nextContent ->
+            runOnUiThread {
+                contentState.value = nextContent
+            }
+        }
+
         setContent {
             CoveTheme(darkTheme = true) {
-                content()
+                contentState.value()
             }
         }
     }

@@ -601,6 +601,9 @@ fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {
             info!("User cancelled new passkey flow for wrapper repair");
             CloudBackupError::PasskeyDiscoveryCancelled
         }
+        error if is_android_passkey_association_error(&error) => {
+            CloudBackupError::Passkey(android_passkey_association_message().into())
+        }
         other => CloudBackupError::Passkey(other.to_string()),
     }
 }
@@ -612,8 +615,25 @@ fn map_enable_passkey_error(error: PasskeyError) -> CloudBackupError {
             info!("User cancelled new passkey flow for cloud backup enable");
             CloudBackupError::PasskeyDiscoveryCancelled
         }
+        error if is_android_passkey_association_error(&error) => {
+            CloudBackupError::Passkey(android_passkey_association_message().into())
+        }
         other => CloudBackupError::Passkey(other.to_string()),
     }
+}
+
+fn is_android_passkey_association_error(error: &PasskeyError) -> bool {
+    matches!(
+        error,
+        PasskeyError::RequestFailed {
+            operation: PasskeyOperation::Registration,
+            reason: PasskeyFailureReason::DeviceNotConfigured,
+        }
+    )
+}
+
+fn android_passkey_association_message() -> &'static str {
+    "Cove could not verify Android passkey setup yet. Wait a few minutes and try again. If this keeps happening, update Cove or contact support."
 }
 
 fn prf_output_to_key(prf_output: Vec<u8>) -> Result<[u8; 32], CloudBackupError> {
@@ -667,5 +687,31 @@ mod tests {
         );
 
         assert_eq!(hint.name_suffix, "09IX");
+    }
+
+    #[test]
+    fn android_passkey_association_error_uses_actionable_message() {
+        let source = PasskeyError::RequestFailed {
+            operation: PasskeyOperation::Registration,
+            reason: PasskeyFailureReason::DeviceNotConfigured,
+        };
+
+        let error = map_enable_passkey_error(source);
+
+        assert!(
+            matches!(error, CloudBackupError::Passkey(message) if message == android_passkey_association_message())
+        );
+    }
+
+    #[test]
+    fn android_passkey_association_error_is_not_provider_unsupported() {
+        let source = PasskeyError::RequestFailed {
+            operation: PasskeyOperation::Registration,
+            reason: PasskeyFailureReason::DeviceNotConfigured,
+        };
+
+        let error = map_wrapper_repair_passkey_error(source);
+
+        assert!(!matches!(error, CloudBackupError::UnsupportedPasskeyProvider));
     }
 }

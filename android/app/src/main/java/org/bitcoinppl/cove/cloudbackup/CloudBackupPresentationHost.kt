@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,13 +52,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.CloudBackupEnablePromptChoice
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
-import org.bitcoinppl.cove_core.CloudBackupPasskeyHint
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
+import org.bitcoinppl.cove_core.CloudBackupPasskeyHint
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
+import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.DeepVerificationFailure
@@ -90,6 +95,7 @@ data class CloudBackupPresentationContext(
     val appHasAlert: Boolean = false,
     val appHasSheet: Boolean = false,
     val isViewingCloudBackup: Boolean = false,
+    val isNavigationSettled: Boolean = true,
     val presentationPolicy: CloudBackupPresentationPolicy = CloudBackupPresentationPolicy.REQUIRES_UNLOCKED_AUTH,
 )
 
@@ -109,6 +115,39 @@ enum class CloudBackupPresentationBlocker {
     CLOUD_BACKUP_DETAIL_DIALOG,
 }
 
+internal sealed class CloudBackupVerificationFeedback {
+    data class SuccessFloater(val text: String) : CloudBackupVerificationFeedback()
+
+    data class FailureAlert(
+        val title: String,
+        val message: String,
+    ) : CloudBackupVerificationFeedback()
+}
+
+internal fun cloudBackupVerificationFeedback(
+    presentation: CloudBackupVerificationPresentation,
+): CloudBackupVerificationFeedback? =
+    when (presentation) {
+        is CloudBackupVerificationPresentation.Completed ->
+            if (presentation.source == CloudBackupVerificationSource.ROOT_PROMPT) {
+                CloudBackupVerificationFeedback.SuccessFloater("Cloud Backup Verified")
+            } else {
+                null
+            }
+
+        is CloudBackupVerificationPresentation.Failed ->
+            if (presentation.source == CloudBackupVerificationSource.ROOT_PROMPT) {
+                CloudBackupVerificationFeedback.FailureAlert(
+                    title = "Cloud Backup Verification Failed",
+                    message = presentation.message,
+                )
+            } else {
+                null
+            }
+
+        else -> null
+    }
+
 internal fun isCloudBackupPresentationPresentable(
     presentation: CloudBackupRootPresentation,
     context: CloudBackupPresentationContext,
@@ -121,6 +160,7 @@ internal fun isCloudBackupPresentationPresentable(
     if (context.appHasAlert) return false
     if (context.appHasSheet) return false
     if (hasBlockers) return false
+    if (!context.isNavigationSettled) return false
 
     return when (presentation) {
         is CloudBackupRootPresentation.ExistingBackupFound,
@@ -194,6 +234,12 @@ class CloudBackupPresentationCoordinator {
             transitionJob?.cancel()
             transitionJob = null
             queuedPresentation = desired
+            if (blockers.contains(CloudBackupPresentationBlocker.SETTINGS_LOCAL_MODAL)) {
+                requiresPresentationDelay = true
+            }
+            if (currentPresentation == desired && isPromptBlockedOnlyByNavigationSettling(desired)) {
+                return
+            }
             if (currentPresentation != null) {
                 ignoreNextDismissEvent = true
                 currentPresentation = null
@@ -277,6 +323,16 @@ class CloudBackupPresentationCoordinator {
         )
     }
 
+    private fun isPromptBlockedOnlyByNavigationSettling(presentation: CloudBackupRootPresentation): Boolean {
+        if (context.isNavigationSettled) return false
+
+        return isCloudBackupPresentationPresentable(
+            presentation = presentation,
+            context = context.copy(isNavigationSettled = true),
+            hasBlockers = blockers.isNotEmpty(),
+        )
+    }
+
     companion object {
         private const val PRESENTATION_DELAY_MS = 800L
     }
@@ -311,6 +367,8 @@ fun CloudBackupPresentationHost(
     val coordinator = remember { CloudBackupPresentationCoordinator() }
     val lifecycleOwner = LocalLifecycleOwner.current
     var isActivityResumed by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
+    var observedVerificationPresentation by remember { mutableStateOf(manager.verificationPresentation) }
+    var successFloaterText by remember { mutableStateOf<String?>(null) }
 
     val context =
         CloudBackupPresentationContext(
@@ -321,6 +379,7 @@ fun CloudBackupPresentationHost(
             appHasAlert = app.alertState != null,
             appHasSheet = app.sheetState != null,
             isViewingCloudBackup = app.currentRoute == Route.Settings(SettingsRoute.CloudBackup),
+            isNavigationSettled = app.isNavigationSettled,
             presentationPolicy = presentationPolicy,
         )
 
@@ -354,10 +413,52 @@ fun CloudBackupPresentationHost(
         coordinator.reconcile()
     }
 
+    LaunchedEffect(manager.verificationPresentation) {
+        val presentation = manager.verificationPresentation
+        if (presentation == observedVerificationPresentation) return@LaunchedEffect
+
+        observedVerificationPresentation = presentation
+        when (val feedback = cloudBackupVerificationFeedback(presentation)) {
+            is CloudBackupVerificationFeedback.SuccessFloater -> {
+                successFloaterText = feedback.text
+            }
+            is CloudBackupVerificationFeedback.FailureAlert -> {
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.General(
+                            title = feedback.title,
+                            message = feedback.message,
+                        ),
+                    )
+            }
+            null -> Unit
+        }
+    }
+
+    LaunchedEffect(successFloaterText) {
+        val text = successFloaterText ?: return@LaunchedEffect
+        delay(SUCCESS_FLOATER_DURATION_MS)
+        if (successFloaterText == text) {
+            successFloaterText = null
+        }
+    }
+
     androidx.compose.runtime.CompositionLocalProvider(
         LocalCloudBackupPresentationCoordinator provides coordinator,
     ) {
-        content()
+        Box(modifier = Modifier.fillMaxSize()) {
+            content()
+            successFloaterText?.let { text ->
+                CloudBackupSuccessFloater(
+                    text = text,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 14.dp, start = 16.dp, end = 16.dp),
+                )
+            }
+        }
     }
 
     when (val presentation = coordinator.currentPresentation) {
@@ -377,7 +478,9 @@ fun CloudBackupPresentationHost(
                         onClick = {
                             coordinator.dismissCurrentPresentation()
                             manager.dispatch(
-                                enableCloudBackupForceNew(presentation.context),
+                                CloudBackupManagerAction.AcceptEnablePrompt(
+                                    CloudBackupEnablePromptChoice.CREATE_NEW,
+                                ),
                             )
                         },
                     ) { Text("Create New Backup") }
@@ -385,7 +488,9 @@ fun CloudBackupPresentationHost(
                         onClick = {
                             coordinator.dismissCurrentPresentation()
                             manager.dispatch(
-                                CloudBackupManagerAction.EnableCloudBackup(presentation.context),
+                                CloudBackupManagerAction.AcceptEnablePrompt(
+                                    CloudBackupEnablePromptChoice.USE_EXISTING,
+                                ),
                             )
                         },
                     ) { Text("Try Existing Passkey") }
@@ -420,7 +525,9 @@ fun CloudBackupPresentationHost(
                                 when (val intent = presentation.intent) {
                                     is CloudBackupPasskeyChoiceIntent.Enable ->
                                         manager.dispatch(
-                                            CloudBackupManagerAction.EnableCloudBackup(intent.v1),
+                                            CloudBackupManagerAction.AcceptEnablePrompt(
+                                                CloudBackupEnablePromptChoice.USE_EXISTING,
+                                            ),
                                         )
                                     is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
                                         manager.dispatch(CloudBackupManagerAction.RepairPasskey)
@@ -439,7 +546,9 @@ fun CloudBackupPresentationHost(
                                 when (val intent = presentation.intent) {
                                     is CloudBackupPasskeyChoiceIntent.Enable ->
                                         manager.dispatch(
-                                            CloudBackupManagerAction.EnableCloudBackupNoDiscovery(intent.v1),
+                                            CloudBackupManagerAction.AcceptEnablePrompt(
+                                                CloudBackupEnablePromptChoice.CREATE_NEW,
+                                            ),
                                         )
                                     is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
                                         manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery)
@@ -499,6 +608,7 @@ fun CloudBackupPresentationHost(
                     manager.dispatch(CloudBackupManagerAction.DismissVerificationPrompt)
                 },
                 onVerify = {
+                    coordinator.dismissCurrentPresentation()
                     manager.dispatch(
                         CloudBackupManagerAction.StartVerification(
                             CloudBackupVerificationSource.ROOT_PROMPT,
@@ -509,6 +619,38 @@ fun CloudBackupPresentationHost(
         }
 
         null -> Unit
+    }
+}
+
+@Composable
+private fun CloudBackupSuccessFloater(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+    ) {
+        RowWithCheckIcon(text)
+    }
+}
+
+@Composable
+private fun RowWithCheckIcon(text: String) {
+    Row(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Default.CheckCircle,
+            contentDescription = null,
+            tint = MaterialTheme.coveColors.systemGreen,
+        )
+        Text(text, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -625,3 +767,5 @@ private fun CloudBackupVerificationPrompt(
         }
     }
 }
+
+private const val SUCCESS_FLOATER_DURATION_MS = 2_000L

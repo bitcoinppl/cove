@@ -107,6 +107,27 @@ class AndroidPasskeyProviderTest {
         assertTrue(timedOut is PasskeyException.RequestFailed)
         assertEquals(PasskeyOperation.REGISTRATION, (timedOut as PasskeyException.RequestFailed).operation)
         assertEquals(PasskeyFailureReason.TimedOut, timedOut.reason)
+
+        val rpIdValidation = mapPasskeyCreateError(Exception("RP ID cannot be validated."))
+        assertTrue(rpIdValidation is PasskeyException.RequestFailed)
+        assertEquals(
+            PasskeyFailureReason.DeviceNotConfigured,
+            (rpIdValidation as PasskeyException.RequestFailed).reason,
+        )
+
+        val createSecurityError = mapPasskeyCreateError(CreatePublicKeyCredentialDomException(SecurityError()))
+        assertTrue(createSecurityError is PasskeyException.RequestFailed)
+        assertEquals(
+            PasskeyFailureReason.DeviceNotConfigured,
+            (createSecurityError as PasskeyException.RequestFailed).reason,
+        )
+
+        val createDataError = mapPasskeyCreateError(CreatePublicKeyCredentialDomException(DataError()))
+        assertTrue(createDataError is PasskeyException.RequestFailed)
+        assertEquals(
+            PasskeyFailureReason.DeviceNotConfigured,
+            (createDataError as PasskeyException.RequestFailed).reason,
+        )
     }
 
     @Test

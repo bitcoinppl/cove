@@ -41,7 +41,7 @@ class StartupRobot<A : ComponentActivity>(
             compose.onNodeWithTag(tag).performScrollTo().performClick()
         }
 
-        compose.onNodeWithTag("onboarding.terms.agree").performScrollTo().performClick()
+        compose.onNodeWithTag("onboarding.terms.agree").performClick()
     }
 }
 

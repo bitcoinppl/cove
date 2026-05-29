@@ -89,6 +89,7 @@ fun WalletSettingsScreen(
     var showFinalDeleteConfirmation by remember { mutableStateOf(false) }
     var requiredConfirmations by remember { mutableStateOf(1.toUByte()) }
     var deleteError by remember { mutableStateOf<String?>(null) }
+    var accountNumber by remember { mutableStateOf<UInt?>(null) }
     val finalDeleteConfirmationMessage =
         if (app.cloudBackupManager.isCloudBackupEnabled) {
             "This wallet will be deleted from this device. You can recover it from " +
@@ -97,6 +98,7 @@ fun WalletSettingsScreen(
             "This wallet is not backed up and contains funds. You will lose access to " +
                 "these funds forever."
         }
+    val finalDeleteButtonTitle = if (app.cloudBackupManager.isCloudBackupEnabled) "Delete" else "Delete Forever"
 
     fun deleteWallet() {
         try {
@@ -110,9 +112,12 @@ fun WalletSettingsScreen(
 
     fun firstDeleteConfirmationMessage(): String = manager.rust.deletionWarningMessage()
 
+    fun requiredDeleteConfirmations(): UByte = manager.rust.requiredDeletionConfirmations()
+
     // validate metadata on appear and disappear
     LaunchedEffect(manager) {
         manager.validateMetadata()
+        accountNumber = manager.rust.nonDefaultAccountNumber()
     }
 
     DisposableEffect(Unit) {
@@ -190,6 +195,14 @@ fun WalletSettingsScreen(
                             MaterialSettingsItem(
                                 title = stringResource(R.string.label_wallet_birthday),
                                 subtitle = birthday.displayValue(),
+                            )
+                            MaterialDivider()
+                        }
+
+                        accountNumber?.let { number ->
+                            MaterialSettingsItem(
+                                title = stringResource(R.string.label_wallet_account_number),
+                                subtitle = number.toString(),
                             )
                             MaterialDivider()
                         }
@@ -298,7 +311,7 @@ fun WalletSettingsScreen(
                                 )
                             },
                             onClick = {
-                                requiredConfirmations = manager.rust.requiredDeletionConfirmations()
+                                requiredConfirmations = requiredDeleteConfirmations()
                                 showFirstDeleteConfirmation = true
                             },
                         )
@@ -377,7 +390,7 @@ fun WalletSettingsScreen(
                         deleteWallet()
                     },
                 ) {
-                    Text("Delete Forever", color = MaterialTheme.colorScheme.error)
+                    Text(finalDeleteButtonTitle, color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {

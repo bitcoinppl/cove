@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CurrencyBitcoin
@@ -44,8 +45,6 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -130,74 +129,81 @@ internal fun OnboardingTermsScreen(
                     .fillMaxSize()
                     .statusBarsPadding()
                     .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 26.dp, vertical = 22.dp),
+                    .padding(horizontal = 26.dp)
+                    .padding(top = 22.dp, bottom = 24.dp),
         ) {
-            Text(
-                text = "Terms & Conditions",
-                color = Color.White,
-                fontSize = 34.sp,
-                lineHeight = 38.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            Column(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = "Terms & Conditions",
+                    color = Color.White,
+                    fontSize = 34.sp,
+                    lineHeight = 38.sp,
+                    fontWeight = FontWeight.Bold,
+                )
 
-            Spacer(modifier = Modifier.size(12.dp))
+                Spacer(modifier = Modifier.size(12.dp))
 
-            Text(
-                text = "By continuing, you agree to the following:",
-                color = OnboardingTextSecondary,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+                Text(
+                    text = "By continuing, you agree to the following:",
+                    color = OnboardingTextSecondary,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
 
-            Spacer(modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.size(20.dp))
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OnboardingTermsCheckboxCard(
-                    checked = checks[0],
-                    onCheckedChange = { checks[0] = it },
-                    text = "I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.",
-                    modifier = Modifier.testTag("onboarding.terms.check.backup"),
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OnboardingTermsCheckboxCard(
+                        checked = checks[0],
+                        onCheckedChange = { checks[0] = it },
+                        text = "I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.",
+                        modifier = Modifier.testTag("onboarding.terms.check.backup"),
+                    )
+                    OnboardingTermsCheckboxCard(
+                        checked = checks[1],
+                        onCheckedChange = { checks[1] = it },
+                        text = "I understand that any unlawful use of Cove is strictly prohibited.",
+                        modifier = Modifier.testTag("onboarding.terms.check.legal"),
+                    )
+                    OnboardingTermsCheckboxCard(
+                        checked = checks[2],
+                        onCheckedChange = { checks[2] = it },
+                        text = "I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.",
+                        modifier = Modifier.testTag("onboarding.terms.check.financial"),
+                    )
+                    OnboardingTermsCheckboxCard(
+                        checked = checks[3],
+                        onCheckedChange = { checks[3] = it },
+                        text = "I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.",
+                        modifier = Modifier.testTag("onboarding.terms.check.recovery"),
+                    )
+                    OnboardingTermsAgreementCard(
+                        checked = checks[4],
+                        onCheckedChange = { checks[4] = it },
+                        onOpenUrl = { uriHandler.openUri(it) },
+                        modifier = Modifier.testTag("onboarding.terms.check.agreement"),
+                    )
+                }
+
+                Spacer(modifier = Modifier.size(16.dp))
+
+                if (errorMessage != null) {
+                    OnboardingInlineMessage(text = errorMessage)
+                    Spacer(modifier = Modifier.size(8.dp))
+                }
+
+                Text(
+                    text = "By checking these boxes, you accept and agree to the above terms.",
+                    color = CoveColor.coveLightGray.copy(alpha = 0.50f),
+                    style = MaterialTheme.typography.bodySmall,
                 )
-                OnboardingTermsCheckboxCard(
-                    checked = checks[1],
-                    onCheckedChange = { checks[1] = it },
-                    text = "I understand that any unlawful use of Cove is strictly prohibited.",
-                    modifier = Modifier.testTag("onboarding.terms.check.legal"),
-                )
-                OnboardingTermsCheckboxCard(
-                    checked = checks[2],
-                    onCheckedChange = { checks[2] = it },
-                    text = "I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.",
-                    modifier = Modifier.testTag("onboarding.terms.check.financial"),
-                )
-                OnboardingTermsCheckboxCard(
-                    checked = checks[3],
-                    onCheckedChange = { checks[3] = it },
-                    text = "I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.",
-                    modifier = Modifier.testTag("onboarding.terms.check.recovery"),
-                )
-                OnboardingTermsAgreementCard(
-                    checked = checks[4],
-                    onCheckedChange = { checks[4] = it },
-                    onOpenUrl = { uriHandler.openUri(it) },
-                    modifier = Modifier.testTag("onboarding.terms.check.agreement"),
-                )
+
+                Spacer(modifier = Modifier.size(20.dp))
             }
-
-            Spacer(modifier = Modifier.size(16.dp))
-
-            if (errorMessage != null) {
-                OnboardingInlineMessage(text = errorMessage)
-                Spacer(modifier = Modifier.size(8.dp))
-            }
-
-            Text(
-                text = "By checking these boxes, you accept and agree to the above terms.",
-                color = CoveColor.coveLightGray.copy(alpha = 0.50f),
-                style = MaterialTheme.typography.bodySmall,
-            )
-
-            Spacer(modifier = Modifier.size(20.dp))
 
             OnboardingPrimaryButton(
                 text = "Agree and Continue",
@@ -205,8 +211,6 @@ internal fun OnboardingTermsScreen(
                 modifier = Modifier.testTag("onboarding.terms.agree"),
                 enabled = allChecked,
             )
-
-            Spacer(modifier = Modifier.size(24.dp))
         }
     }
 }
@@ -234,16 +238,8 @@ private fun OnboardingTermsCheckboxCard(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Checkbox(
+        OnboardingTermsCheckIndicator(
             checked = checked,
-            onCheckedChange = null,
-            colors =
-                CheckboxDefaults.colors(
-                    checkedColor = OnboardingGradientLight,
-                    uncheckedColor = OnboardingTextSecondary,
-                    checkmarkColor = Color.White,
-                ),
-            modifier = Modifier.size(22.dp),
         )
         Text(
             text = text,
@@ -307,16 +303,8 @@ private fun OnboardingTermsAgreementCard(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Checkbox(
+        OnboardingTermsCheckIndicator(
             checked = checked,
-            onCheckedChange = null,
-            colors =
-                CheckboxDefaults.colors(
-                    checkedColor = OnboardingGradientLight,
-                    uncheckedColor = OnboardingTextSecondary,
-                    checkmarkColor = Color.White,
-                ),
-            modifier = Modifier.size(22.dp),
         )
 
         ClickableText(
@@ -339,6 +327,34 @@ private fun OnboardingTermsAgreementCard(
 }
 
 @Composable
+private fun OnboardingTermsCheckIndicator(checked: Boolean) {
+    Box(
+        modifier =
+            Modifier
+                .size(22.dp)
+                .background(
+                    color = if (checked) OnboardingGradientLight else Color.Transparent,
+                    shape = CircleShape,
+                )
+                .border(
+                    width = 2.dp,
+                    color = if (checked) OnboardingGradientLight else OnboardingTextSecondary,
+                    shape = CircleShape,
+                ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (checked) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(14.dp),
+            )
+        }
+    }
+}
+
+@Composable
 internal fun OnboardingRestoreOfferView(
     warningMessage: String?,
     errorMessage: String?,
@@ -351,7 +367,7 @@ internal fun OnboardingRestoreOfferView(
         if (warningMessage == null) {
             "A previous Google Drive backup was found. Restore your wallet securely using your passkey."
         } else {
-            "We couldn't confirm whether a Google Drive backup is available. If you're reinstalling this device, you can still try restoring with your passkey."
+            null
     }
 
     OnboardingBackground {
@@ -388,24 +404,21 @@ internal fun OnboardingRestoreOfferView(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Spacer(modifier = Modifier.size(16.dp))
+                if (body != null) {
+                    Spacer(modifier = Modifier.size(16.dp))
 
-                Text(
-                    text = body,
-                    color = OnboardingTextSecondary,
-                    style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                    Text(
+                        text = body,
+                        color = OnboardingTextSecondary,
+                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
                 Spacer(modifier = Modifier.size(28.dp))
 
                 OnboardingPasskeyCard(providerHint = providerHint)
-
-                if (warningMessage != null) {
-                    Spacer(modifier = Modifier.size(14.dp))
-                    OnboardingRestoreWarningCard(text = warningMessage)
-                }
 
                 if (errorMessage != null) {
                     Spacer(modifier = Modifier.size(14.dp))
@@ -598,7 +611,7 @@ private fun OnboardingCloudSearchHero() {
             imageVector = Icons.Outlined.Cloud,
             contentDescription = null,
             tint = OnboardingGradientLight,
-            modifier = Modifier.size(54.dp),
+            modifier = Modifier.size(34.dp),
         )
 
         Icon(
@@ -701,17 +714,6 @@ private fun OnboardingRestoreOfferWithProviderDatePreview() {
 }
 
 @Composable
-private fun OnboardingRestoreWarningCard(text: String) {
-    OnboardingRestoreMessageCard(
-        text = text,
-        icon = Icons.Default.Warning,
-        foreground = OnboardingGradientLight.copy(alpha = 0.95f),
-        background = OnboardingGradientLight.copy(alpha = 0.08f),
-        border = OnboardingGradientLight.copy(alpha = 0.22f),
-    )
-}
-
-@Composable
 private fun OnboardingRestoreErrorCard(text: String) {
     OnboardingRestoreMessageCard(
         text = text,
@@ -784,6 +786,7 @@ internal fun OnboardingWelcomeScreen(
 @Composable
 internal fun OnboardingBitcoinChoiceScreen(
     errorMessage: String?,
+    onRestoreFromCoveBackup: () -> Unit,
     onNewHere: () -> Unit,
     onHasBitcoin: () -> Unit,
 ) {
@@ -811,6 +814,12 @@ internal fun OnboardingBitcoinChoiceScreen(
                 icon = Icons.Default.Download,
                 onClick = onHasBitcoin,
                 modifier = Modifier.testTag("onboarding.bitcoinChoice.existing"),
+            )
+
+            OnboardingCloudRestoreChoiceSection(
+                onClick = onRestoreFromCoveBackup,
+                dividerModifier = Modifier.testTag("onboarding.bitcoinChoice.restoreDivider"),
+                cardModifier = Modifier.testTag("onboarding.bitcoinChoice.restore"),
             )
         }
     }
@@ -878,9 +887,6 @@ internal fun OnboardingStorageChoiceScreen(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (onRestoreFromCoveBackup != null) {
-                OnboardingCloudRestoreChoiceCard(onClick = onRestoreFromCoveBackup)
-            }
             OnboardingChoiceCard(
                 title = "On an exchange",
                 subtitle = "Move funds into a wallet you control",
@@ -902,6 +908,15 @@ internal fun OnboardingStorageChoiceScreen(
                 onClick = { onSelectStorage(OnboardingStorageSelection.SOFTWARE_WALLET) },
                 modifier = Modifier.testTag("onboarding.storage.software"),
             )
+            if (onRestoreFromCoveBackup != null) {
+                OnboardingCloudRestoreChoiceSection(
+                    onClick = onRestoreFromCoveBackup,
+                    showDivider = false,
+                    title = "I'm already using Cove",
+                    subtitle = "Restore your Cove backup from Google Drive, secured by passkeys",
+                    cardModifier = Modifier.testTag("onboarding.storage.restore"),
+                )
+            }
         }
 
         Spacer(modifier = Modifier.size(14.dp))
@@ -912,4 +927,38 @@ internal fun OnboardingStorageChoiceScreen(
             modifier = Modifier.testTag("onboarding.back"),
         )
     }
+}
+
+@Composable
+private fun OnboardingCloudRestoreChoiceSection(
+    onClick: () -> Unit,
+    dividerModifier: Modifier = Modifier,
+    cardModifier: Modifier = Modifier,
+    showDivider: Boolean = true,
+    title: String? = null,
+    subtitle: String? = null,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (showDivider) {
+            OnboardingChoiceDivider(modifier = dividerModifier)
+        }
+
+        OnboardingCloudRestoreChoiceCard(
+            onClick = onClick,
+            modifier = cardModifier,
+            title = title,
+            subtitle = subtitle,
+        )
+    }
+}
+
+@Composable
+private fun OnboardingChoiceDivider(modifier: Modifier = Modifier) {
+    Box(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(CoveColor.coveLightGray.copy(alpha = 0.16f)),
+    )
 }

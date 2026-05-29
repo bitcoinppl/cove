@@ -139,6 +139,7 @@ internal fun OnboardingPromptScreen(
 
                 OnboardingStatusHero(
                     icon = icon,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                     pulse = true,
                 )
 
@@ -546,10 +547,12 @@ internal fun OnboardingInlineMessage(
 internal fun OnboardingCloudRestoreChoiceCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    title: String? = null,
+    subtitle: String? = null,
 ) {
     OnboardingChoiceCard(
-        title = stringResource(R.string.onboarding_restore_card_title),
-        subtitle = stringResource(R.string.onboarding_restore_card_subtitle),
+        title = title ?: stringResource(R.string.onboarding_restore_card_title),
+        subtitle = subtitle ?: stringResource(R.string.onboarding_restore_card_subtitle),
         icon = Icons.Default.CloudDownload,
         onClick = onClick,
         modifier = modifier,

@@ -19716,7 +19716,6 @@ public enum CloudBackupEnableFlow: Equatable, Hashable {
     case awaitingPasskeyChoice(CloudBackupPasskeyChoiceIntent
     )
     case creatingPasskey
-    case waitingForPasskeyAvailability
     case awaitingSavedPasskeyConfirmation(SavedPasskeyConfirmationMode
     )
     case confirmingSavedPasskey
@@ -19724,6 +19723,7 @@ public enum CloudBackupEnableFlow: Equatable, Hashable {
     )
     case retryingUploadWithStagedMaterial(progress: CloudBackupProgress?
     )
+    case waitingForPasskeyAvailability
 
 
 
@@ -19755,18 +19755,18 @@ public struct FfiConverterTypeCloudBackupEnableFlow: FfiConverterRustBuffer {
 
         case 4: return .creatingPasskey
 
-        case 5: return .waitingForPasskeyAvailability
-
-        case 6: return .awaitingSavedPasskeyConfirmation(try FfiConverterTypeSavedPasskeyConfirmationMode.read(from: &buf)
+        case 5: return .awaitingSavedPasskeyConfirmation(try FfiConverterTypeSavedPasskeyConfirmationMode.read(from: &buf)
         )
 
-        case 7: return .confirmingSavedPasskey
+        case 6: return .confirmingSavedPasskey
 
-        case 8: return .uploadingInitialBackup(progress: try FfiConverterOptionTypeCloudBackupProgress.read(from: &buf)
+        case 7: return .uploadingInitialBackup(progress: try FfiConverterOptionTypeCloudBackupProgress.read(from: &buf)
         )
 
-        case 9: return .retryingUploadWithStagedMaterial(progress: try FfiConverterOptionTypeCloudBackupProgress.read(from: &buf)
+        case 8: return .retryingUploadWithStagedMaterial(progress: try FfiConverterOptionTypeCloudBackupProgress.read(from: &buf)
         )
+
+        case 9: return .waitingForPasskeyAvailability
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -19795,27 +19795,27 @@ public struct FfiConverterTypeCloudBackupEnableFlow: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
 
 
-        case .waitingForPasskeyAvailability:
-            writeInt(&buf, Int32(5))
-
-
         case let .awaitingSavedPasskeyConfirmation(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeSavedPasskeyConfirmationMode.write(v1, into: &buf)
 
 
         case .confirmingSavedPasskey:
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
 
 
         case let .uploadingInitialBackup(progress):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(7))
             FfiConverterOptionTypeCloudBackupProgress.write(progress, into: &buf)
 
 
         case let .retryingUploadWithStagedMaterial(progress):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
             FfiConverterOptionTypeCloudBackupProgress.write(progress, into: &buf)
+
+
+        case .waitingForPasskeyAvailability:
+            writeInt(&buf, Int32(9))
 
         }
     }
@@ -19834,6 +19834,75 @@ public func FfiConverterTypeCloudBackupEnableFlow_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeCloudBackupEnableFlow_lower(_ value: CloudBackupEnableFlow) -> RustBuffer {
     return FfiConverterTypeCloudBackupEnableFlow.lower(value)
+}
+
+
+
+/**
+ * User selection for the currently visible enable prompt
+ */
+
+public enum CloudBackupEnablePromptChoice: Equatable, Hashable {
+
+    case useExisting
+    case createNew
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupEnablePromptChoice: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupEnablePromptChoice: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupEnablePromptChoice
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupEnablePromptChoice {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .useExisting
+
+        case 2: return .createNew
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupEnablePromptChoice, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .useExisting:
+            writeInt(&buf, Int32(1))
+
+
+        case .createNew:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupEnablePromptChoice_lift(_ buf: RustBuffer) throws -> CloudBackupEnablePromptChoice {
+    return try FfiConverterTypeCloudBackupEnablePromptChoice.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupEnablePromptChoice_lower(_ value: CloudBackupEnablePromptChoice) -> RustBuffer {
+    return FfiConverterTypeCloudBackupEnablePromptChoice.lower(value)
 }
 
 
@@ -19979,6 +20048,10 @@ public enum CloudBackupManagerAction: Equatable, Hashable {
     case keepCloudBackupEnabled
     case refreshDetail
     case enterDetail
+    case promptEnablePasskeyChoice(CloudBackupEnableContext
+    )
+    case acceptEnablePrompt(CloudBackupEnablePromptChoice
+    )
 
 
 
@@ -20058,6 +20131,12 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
         case 25: return .refreshDetail
 
         case 26: return .enterDetail
+
+        case 27: return .promptEnablePasskeyChoice(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
+        )
+
+        case 28: return .acceptEnablePrompt(try FfiConverterTypeCloudBackupEnablePromptChoice.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -20176,6 +20255,16 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
 
         case .enterDetail:
             writeInt(&buf, Int32(26))
+
+
+        case let .promptEnablePasskeyChoice(v1):
+            writeInt(&buf, Int32(27))
+            FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
+
+
+        case let .acceptEnablePrompt(v1):
+            writeInt(&buf, Int32(28))
+            FfiConverterTypeCloudBackupEnablePromptChoice.write(v1, into: &buf)
 
         }
     }

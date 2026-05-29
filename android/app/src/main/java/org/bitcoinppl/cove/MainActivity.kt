@@ -262,6 +262,9 @@ class MainActivity : FragmentActivity() {
                     darkScrim = android.graphics.Color.TRANSPARENT,
                 ),
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
 
         authorizationLauncher =
             registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->

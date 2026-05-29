@@ -143,12 +143,12 @@ fun SendFlowSetAmountScreen(
     val feeAmount = sendFlowManager.totalFeeString
     val totalSpendingCrypto = sendFlowManager.totalSpentInBtc
     val totalSpendingFiat = sendFlowManager.totalSpentInFiat
-    val exceedsBalance = sendFlowManager.rust.amountExceedsBalance()
+    val exceedsBalance = sendFlowManager.amountExceedsBalance()
 
     // initial focus logic: set focus based on validation state (matches iOS behavior)
     LaunchedEffect(sendFlowManager) {
-        val amount = sendFlowManager.rust.amount()
-        val isAmountInvalid = amount.asSats() == 0uL
+        val amount = sendFlowManager.currentAmount()
+        val isAmountInvalid = amount == null || amount.asSats() == 0uL
         val isAddressEmpty = initialAddress.isEmpty()
 
         presenter.focusField =
@@ -277,10 +277,10 @@ fun SendFlowSetAmountScreen(
                                 walletManager.dispatch(WalletManagerAction.ToggleFiatOrBtc)
                             },
                             onSanitizeBtcAmount = { oldValue, newValue ->
-                                sendFlowManager.rust.sanitizeBtcEnteringAmount(oldValue, newValue)
+                                sendFlowManager.sanitizeBtcEnteringAmount(oldValue, newValue)
                             },
                             onSanitizeFiatAmount = { oldValue, newValue ->
-                                sendFlowManager.rust.sanitizeFiatEnteringAmount(oldValue, newValue)
+                                sendFlowManager.sanitizeFiatEnteringAmount(oldValue, newValue)
                             },
                             isFiatMode = isFiatMode,
                             exceedsBalance = exceedsBalance,
@@ -291,7 +291,7 @@ fun SendFlowSetAmountScreen(
                             },
                             onDone = {
                                 presenter.focusField =
-                                    if (!sendFlowManager.rust.validateAddress()) {
+                                    if (!sendFlowManager.validateAddress()) {
                                         SetAmountFocusField.ADDRESS
                                     } else {
                                         null
@@ -312,7 +312,7 @@ fun SendFlowSetAmountScreen(
                             },
                             onDone = {
                                 presenter.focusField =
-                                    if (!sendFlowManager.rust.validateAmount()) {
+                                    if (!sendFlowManager.validateAmount()) {
                                         SetAmountFocusField.AMOUNT
                                     } else {
                                         null

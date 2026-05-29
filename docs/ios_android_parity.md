@@ -201,6 +201,12 @@ SwiftUI and Compose have different APIs for lifecycle events and side effects. T
 | `.task { }` | `LaunchedEffect(Unit) { }` | For async work on appear |
 | `.task(id:) { }` | `LaunchedEffect(id) { }` | Re-runs when `id` changes |
 
+### Manager Cleanup
+
+Route-level `DisposableEffect` cleanup should only close objects owned by that route instance. Do not close or clear managers obtained from an app-level cache such as `app.getWalletManager()` or `app.getSendFlowManager()` from route disposal. Navigation transitions can overlap old and new route entries, so an outgoing route can dispose after the incoming route has already reused the same generated UniFFI handle.
+
+For cached managers, put cleanup at the owner/session boundary instead: clear the manager when the app route stack no longer contains the owning flow or wallet. Keep generated `manager.rust.*` calls behind platform manager wrapper methods so post-close calls become guarded no-ops or controlled failures instead of destroyed-handle crashes.
+
 ### Reactive Value Changes
 
 | iOS (SwiftUI) | Android (Compose) | Notes |

@@ -6,7 +6,6 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
-use std::time::Duration;
 
 use act_zero::{Actor, ActorResult, Addr, AddrLike, Produces, WeakAddr, call, send};
 use cove_cspp::{backup_data::MASTER_KEY_RECORD_ID, master_key_crypto};
@@ -40,7 +39,9 @@ use crate::manager::cloud_backup_manager::verify::{
     CloudBackupPreparedDeepVerificationWrapperRepair, CloudBackupPreparedPasskeyWrapperRepair,
     CloudBackupUploadedDeepVerificationAutoSync, CloudBackupUploadedPasskeyWrapperRepair,
 };
-use crate::manager::cloud_backup_manager::wallets::{UnpersistedPrfKey, WalletRestoreOutcome};
+use crate::manager::cloud_backup_manager::wallets::{
+    UnpersistedPrfKey, WalletRestoreOutcome, delay_before_new_passkey_auth,
+};
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
     CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailOutcome, CloudBackupDetailResult,

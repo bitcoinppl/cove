@@ -171,7 +171,6 @@ fun TransactionsCardView(
                     progressFraction = scanProgressFraction,
                     primaryText = primaryText,
                     secondaryText = secondaryText,
-                    modifier = Modifier.padding(bottom = 10.dp),
                 )
             } else {
                 TransactionsScanSpinnerStrip(
@@ -332,12 +331,15 @@ internal fun TransactionsScanProgressStrip(
                     .height(2.dp),
             color = primaryText.copy(alpha = 0.45f),
             trackColor = secondaryText.copy(alpha = 0.12f),
+            gapSize = 0.dp,
+            drawStopIndicator = {},
         )
 
         Text(
             text = stringResource(R.string.scanning_for_transactions),
             color = secondaryText.copy(alpha = 0.7f),
             fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 10.dp),
         )
     }
 }
@@ -382,6 +384,8 @@ internal fun EmptyWalletScanState(
             modifier = Modifier.fillMaxWidth(0.72f),
             color = primaryText,
             trackColor = secondaryText.copy(alpha = 0.16f),
+            gapSize = 0.dp,
+            drawStopIndicator = {},
         )
         Spacer(Modifier.height(8.dp))
         Text(

@@ -703,28 +703,35 @@ impl RustOnboardingManager {
     }
 
     fn begin_cloud_backup_enable(&self, discovery: CloudRestoreDiscovery) {
+        info!("Onboarding: begin cloud backup enable discovery={discovery:?}");
+        let context = CloudBackupEnableContext {
+            saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
+            verification_source: CloudBackupVerificationSource::Onboarding,
+        };
+
         match discovery {
             CloudRestoreDiscovery::BackupFound(hint) => {
+                info!("Onboarding: presenting cloud backup passkey choice for existing backup");
                 CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
                 CLOUD_BACKUP_MANAGER.present_passkey_choice_prompt(
                     CloudBackupPasskeyChoiceIntent::Enable(
-                        CloudBackupEnableContext {
-                            saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
-                            verification_source: CloudBackupVerificationSource::Onboarding,
-                        },
+                        context,
                         hint.map(CloudBackupPasskeyHint::from),
                     ),
                 );
             }
             CloudRestoreDiscovery::NoBackupFound => {
+                info!("Onboarding: enabling cloud backup without discovery");
                 CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
                 CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
-                CLOUD_BACKUP_MANAGER.enable_cloud_backup_no_discovery(CloudBackupEnableContext {
-                    saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
-                    verification_source: CloudBackupVerificationSource::Onboarding,
-                });
+                CLOUD_BACKUP_MANAGER.enable_cloud_backup_no_discovery(context);
             }
-            CloudRestoreDiscovery::Checking | CloudRestoreDiscovery::Inconclusive(_) => {}
+            CloudRestoreDiscovery::Checking | CloudRestoreDiscovery::Inconclusive(_) => {
+                info!("Onboarding: enabling cloud backup with fresh discovery");
+                CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
+                CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
+                CLOUD_BACKUP_MANAGER.enable_cloud_backup(context);
+            }
         }
     }
 
@@ -1191,6 +1198,10 @@ impl FlowState {
             ),
             (Self::HardwareImport, OnboardingAction::HardwareImportCompleted { wallet_id }) => (
                 Self::CloudBackup(CloudBackupFlow::HardwareImport { wallet_id }),
+                TransitionCommand::None,
+            ),
+            (Self::BitcoinChoice { .. }, OnboardingAction::OpenCloudRestore) => (
+                Self::restore_entry_for(cloud_restore_discovery, RestoreOrigin::BitcoinChoice),
                 TransitionCommand::None,
             ),
             (Self::StorageChoice { .. }, OnboardingAction::OpenCloudRestore) => (
@@ -3037,6 +3048,25 @@ mod tests {
         assert!(matches!(
             flow,
             FlowState::RestoreUnavailable { origin: RestoreOrigin::StorageChoice }
+        ));
+    }
+
+    #[test]
+    fn explicit_restore_from_bitcoin_choice_can_try_when_cloud_is_unavailable() {
+        let mut flow = FlowState::BitcoinChoice { error_message: None };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::OpenCloudRestore,
+            CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::CloudUnavailable),
+            &mut restore_offer_allowed,
+            None,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(matches!(
+            flow,
+            FlowState::RestoreOffer { origin: RestoreOrigin::BitcoinChoice, error_message: None }
         ));
     }
 
