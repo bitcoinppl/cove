@@ -237,8 +237,13 @@ struct SendFlowConfirmScreen: View {
             .onChange(of: manager.sendFlowErrorAlert) { _, alert in
                 // payjoin broadcast failure arrives via reconcile (not the catch block),
                 // so we must handle it here to unblock the UI from .sending
-                guard alert != nil, case .sending = sendState else { return }
-                sendState = .idle
+                guard let alert, case .sending = sendState else { return }
+                let errorMessage =
+                    switch alert.item {
+                    case let .signAndBroadcast(error): error
+                    case let .confirmDetails(error): error
+                    }
+                sendState = .error(errorMessage)
                 isShowingErrorAlert = true
             }
             .alert(
