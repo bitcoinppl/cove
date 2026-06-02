@@ -776,14 +776,22 @@ impl WalletActor {
 
     /// Called when the payjoin receiver accepted our proposal and returned a signed PSBT.
     /// Signs the proposal with our keys, broadcasts it, and notifies the platform.
-    /// Falls back to broadcasting the original transaction if proposal signing fails.
+    /// Falls back to broadcasting the original transaction if proposal signing or broadcast fails.
     pub async fn handle_payjoin_success(
         &mut self,
         proposal_psbt: Psbt,
         fallback_tx: BdkTransaction,
     ) -> ActorResult<()> {
         let broadcast_result = match self.do_sign_original_psbt(proposal_psbt).await {
-            Ok((_, proposal_tx)) => self.do_broadcast_transaction(proposal_tx).await,
+            Ok((_, proposal_tx)) => match self.do_broadcast_transaction(proposal_tx).await {
+                Ok(()) => Ok(()),
+                Err(error) => {
+                    error!(
+                        "failed to broadcast payjoin proposal, falling back to original tx: {error:?}"
+                    );
+                    self.do_broadcast_transaction(fallback_tx).await
+                }
+            },
             Err(error) => {
                 error!("failed to sign payjoin proposal, falling back to original tx: {error:?}");
                 self.do_broadcast_transaction(fallback_tx).await
