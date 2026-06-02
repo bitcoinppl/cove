@@ -441,7 +441,12 @@ private fun SendFlowRouteToScreen(
             // catch block), so unblock the UI from Sending and show the error alert
             LaunchedEffect(walletManager.sendFlowErrorAlert) {
                 if (walletManager.sendFlowErrorAlert != null && sendState == SendState.Sending) {
-                    sendState = SendState.Idle
+                    val message =
+                        when (val alert = walletManager.sendFlowErrorAlert!!.item) {
+                            is SendFlowErrorAlert.SignAndBroadcast -> alert.v1
+                            is SendFlowErrorAlert.ConfirmDetails -> alert.v1
+                        }
+                    sendState = SendState.Error(message)
                     showErrorAlert = true
                 }
             }
