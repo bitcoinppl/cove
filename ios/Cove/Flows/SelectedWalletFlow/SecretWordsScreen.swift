@@ -13,9 +13,27 @@ struct SecretWordsScreen: View {
 
     let id: WalletId
 
+    private enum RecoveryWordsLoadError {
+        case mnemonic(MnemonicError)
+        case generic(String)
+
+        var message: String {
+            switch self {
+            case .mnemonic(.NotAvailable):
+                "Recovery words are unavailable on this device for this wallet. This can happen after restoring to a new iPhone because Secure Enclave data does not transfer. Restore this wallet from your saved recovery words before sending more BTC to it."
+            case .mnemonic(.GetWalletKeychain):
+                "Cove could not access this wallet's recovery words in the keychain right now."
+            case .mnemonic(.UnknownWord):
+                "Cove could not decode this wallet's recovery words."
+            case let .generic(message):
+                message
+            }
+        }
+    }
+
     // private
     @State var words: Mnemonic?
-    @State var errorMessage: String?
+    @State private var loadError: RecoveryWordsLoadError?
     @State private var showSeedQrAlert = false
     @State private var showSeedQrSheet = false
 
@@ -57,8 +75,22 @@ struct SecretWordsScreen: View {
                     .frame(maxHeight: rowHeight * CGFloat(numberOfRows) + 32)
                     .frame(width: screenWidth * 0.9)
                     .font(.caption)
+                } else if let loadError {
+                    Text(loadError.message)
+                        .multilineTextAlignment(.leading)
+                        .font(.callout)
+                        .foregroundStyle(.white.opacity(0.95))
+                        .padding(16)
+                        .frame(maxWidth: screenWidth * 0.9, alignment: .leading)
+                        .background(Color.red.opacity(0.16))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.red.opacity(0.30), lineWidth: 1)
+                        }
+                        .cornerRadius(10)
                 } else {
-                    Text(errorMessage ?? "Loading...")
+                    ProgressView()
+                        .tint(.white)
                 }
 
                 Spacer()
@@ -104,15 +136,24 @@ struct SecretWordsScreen: View {
         .onAppear {
             auth.lock()
             guard words == nil else { return }
-            do { words = try Mnemonic(id: id) } catch { errorMessage = error.localizedDescription }
+            do {
+                words = try Mnemonic(id: id)
+                loadError = nil
+            } catch let mnemonicError as MnemonicError {
+                loadError = .mnemonic(mnemonicError)
+            } catch {
+                loadError = .generic(error.localizedDescription)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { showSeedQrAlert = true }) {
-                    Image(systemName: "qrcode")
-                        .foregroundStyle(.white)
+            if words != nil {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showSeedQrAlert = true }) {
+                        Image(systemName: "qrcode")
+                            .foregroundStyle(.white)
+                    }
                 }
             }
         }
