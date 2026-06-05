@@ -451,11 +451,6 @@ private fun SendFlowRouteToScreen(
             var showErrorAlert by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
-            // reset stale payjoin broadcast state from a prior send
-            LaunchedEffect(Unit) {
-                walletManager.resetPayjoinTxBroadcast()
-            }
-
             // lock on appear for hot wallets
             LaunchedEffect(walletManager) {
                 kotlinx.coroutines.delay(50)
@@ -464,9 +459,10 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
-            // show success UI on payjoin broadcast, guard against stale state
+            // show success UI on payjoin broadcast; TaggedItem key changes each time so
+            // no manual reset is needed even if the user sends multiple payjoin transactions
             LaunchedEffect(walletManager.payjoinTxBroadcast) {
-                if (walletManager.payjoinTxBroadcast && sendState == SendState.Sending) {
+                if (walletManager.payjoinTxBroadcast != null && sendState == SendState.Sending) {
                     sendState = SendState.Sent
                     showSuccessAlert = true
                     Auth.unlock()

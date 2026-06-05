@@ -224,12 +224,9 @@ struct SendFlowConfirmScreen: View {
                 let sinceLocked = Date.now.timeIntervalSince(lockedAt)
                 if sinceLocked < 5 { auth.lockState = .unlocked }
             }
-            .onAppear {
-                // reset stale payjoin broadcast state from a prior send
-                manager.payjoinTxBroadcast = false
-            }
-            .onChange(of: manager.payjoinTxBroadcast) { _, isBroadcast in
-                guard isBroadcast else { return }
+            .onChange(of: manager.payjoinTxBroadcast) { _, uuid in
+                // UUID changes each time so this fires reliably across multiple sends
+                guard uuid != nil, case .sending = sendState else { return }
                 sendState = .sent
                 isShowingAlert = true
                 auth.unlock()

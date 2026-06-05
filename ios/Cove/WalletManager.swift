@@ -76,8 +76,9 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     /// errors in SendFlow
     var sendFlowErrorAlert: TaggedItem<SendFlowErrorAlert>? = nil
 
-    /// set to true when a payjoin transaction has been broadcast (success or fallback)
-    var payjoinTxBroadcast: Bool = false
+    /// non-nil when a payjoin transaction has been broadcast (success or fallback);
+    /// UUID changes each time so onChange always fires even across multiple sends
+    var payjoinTxBroadcast: UUID? = nil
 
     /// cached transaction details
     var transactionDetails: [TxId: TransactionDetails] = [:]
@@ -423,7 +424,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             }
 
         case .payjoinTxBroadcast:
-            self.payjoinTxBroadcast = true
+            self.payjoinTxBroadcast = UUID()
         }
     }
 
