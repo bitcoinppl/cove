@@ -1,5 +1,6 @@
 pub mod actor;
 pub mod balance_presentation;
+mod payjoin;
 pub mod receive_address;
 
 use std::{

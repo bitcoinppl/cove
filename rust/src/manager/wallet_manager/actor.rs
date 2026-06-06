@@ -25,10 +25,9 @@ use crate::{
         Address, AddressInfo, Wallet, WalletAddressType, balance::Balance, metadata::BlockSizeLast,
     },
 };
-mod payjoin;
 mod scan;
 
-use self::payjoin::payjoin_http_flow;
+use super::payjoin::payjoin_http_flow;
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
