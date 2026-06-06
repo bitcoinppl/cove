@@ -235,10 +235,16 @@ fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
         let payjoin = match checked.check_pj_supported() {
             Ok(pj_uri) => {
                 let endpoint = pj_uri.extras.endpoint();
-                let output_substitution_enabled = match pj_uri.extras.output_substitution() {
-                    payjoin::OutputSubstitution::Enabled => true,
-                    payjoin::OutputSubstitution::Disabled => false,
+
+                // pjos=0 means output substitution is disabled; anything else (including
+                // absent) means enabled. Check the raw query string directly so we don't
+                // depend on the v1-only OutputSubstitution type.
+                let pjos_disabled = match normalized.split_once('?') {
+                    Some((_, query)) => query.split('&').any(|p| p == "pjos=0"),
+                    None => false,
                 };
+                let output_substitution_enabled = !pjos_disabled;
+
                 Some(PayJoinParams { endpoint, output_substitution_enabled })
             }
             Err(_) => None,
@@ -503,6 +509,9 @@ impl Address {
 mod tests {
     use super::*;
 
+    // valid BIP77 v2 pj= endpoint, from the payjoin crate's own session test vectors
+    const TEST_PJ_ENDPOINT: &str = "HTTPS://PAYJO.IN/TXJCGKTKXLUUZ%23EX1C4UC6ES-OH1QYPM5JXYNS754Y4R45QWE336QFX6ZR8DQGVQCULVZTV20TFVEYDMFQC-RK1Q0DJS3VVDXWQQTLQ8022QGXSX7ML9PHZ6EDSF6AKEWQG758JPS2EV";
+
     #[test]
     fn test_parse_bitcoin_uri_no_amount() {
         let a = "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm";
@@ -645,22 +654,25 @@ mod tests {
 
     #[test]
     fn test_parse_bitcoin_uri_with_pj() {
-        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001&pj=https://example.com/payjoin";
-        let parsed = parse_bitcoin_uri(a).unwrap();
+        let a = format!(
+            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001&pj={TEST_PJ_ENDPOINT}"
+        );
+        let parsed = parse_bitcoin_uri(&a).unwrap();
         assert_eq!(parsed.address, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
         assert_eq!(parsed.amount, Some(Amount::from_btc(0.001).unwrap()));
         let pj = parsed.payjoin.as_ref().unwrap();
-        assert_eq!(pj.endpoint, "https://example.com/payjoin");
+        assert!(pj.endpoint.to_lowercase().contains("payjo.in"));
         // pjos defaults to enabled when omitted
         assert!(pj.output_substitution_enabled);
     }
 
     #[test]
     fn test_parse_bitcoin_uri_with_pj_and_pjos_disabled() {
-        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001&pj=https://example.com/payjoin&pjos=0";
-        let parsed = parse_bitcoin_uri(a).unwrap();
+        let a = format!(
+            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001&pj={TEST_PJ_ENDPOINT}&pjos=0"
+        );
+        let parsed = parse_bitcoin_uri(&a).unwrap();
         let pj = parsed.payjoin.as_ref().unwrap();
-        assert_eq!(pj.endpoint, "https://example.com/payjoin");
         assert!(!pj.output_substitution_enabled);
     }
 
@@ -688,8 +700,10 @@ mod tests {
     #[test]
     fn test_parse_bitcoin_uri_pjos_enabled() {
         // pjos=1 means output substitution is enabled
-        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pj=https://example.com/payjoin&pjos=1";
-        let parsed = parse_bitcoin_uri(a).unwrap();
+        let a = format!(
+            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?pj={TEST_PJ_ENDPOINT}&pjos=1"
+        );
+        let parsed = parse_bitcoin_uri(&a).unwrap();
         assert!(parsed.payjoin.as_ref().unwrap().output_substitution_enabled);
     }
 
@@ -722,13 +736,12 @@ mod tests {
 
     #[test]
     fn test_address_with_network_carries_pj() {
-        let address_with_network = AddressWithNetwork::try_new(
-            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001&pj=https://example.com/payjoin&pjos=0",
-        )
-        .unwrap();
+        let a = format!(
+            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001&pj={TEST_PJ_ENDPOINT}&pjos=0"
+        );
+        let address_with_network = AddressWithNetwork::try_new(&a).unwrap();
 
         let pj = address_with_network.payjoin.as_ref().unwrap();
-        assert_eq!(pj.endpoint, "https://example.com/payjoin");
         assert!(!pj.output_substitution_enabled);
         assert_eq!(address_with_network.amount, Some(Amount::from_btc(0.001).unwrap()));
     }
