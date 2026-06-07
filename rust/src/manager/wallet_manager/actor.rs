@@ -29,7 +29,7 @@ use crate::{
 };
 mod scan;
 
-use super::payjoin::payjoin_http_flow;
+use super::payjoin::{PayjoinActor, PayjoinSender, build_sender};
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
@@ -101,6 +101,7 @@ pub struct WalletActor {
     receive_address_refresh_timer: Option<AbortableTask<()>>,
     scan_actor: Option<Addr<WalletScanActor>>,
     scan_generation: WalletScanGeneration,
+    payjoin_actor: Option<Addr<PayjoinActor>>,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -204,6 +205,7 @@ impl WalletActor {
             receive_address_refresh_timer: None,
             scan_actor: None,
             scan_generation: WalletScanGeneration::INITIAL,
+            payjoin_actor: None,
             db,
         })
     }
@@ -651,22 +653,17 @@ impl WalletActor {
         let (signed_psbt, fallback_tx) = self.do_sign_original_psbt(psbt).await?;
 
         let network: bitcoin::Network = self.wallet.network.into();
-        let addr = self.addr.clone();
 
-        // spawn the BIP77 negotiation in a background task so the main actor
-        // can continue processing messages while we wait for the receiver
-        self.addr.send_fut(async move {
-            match payjoin_http_flow(signed_psbt, endpoint, network).await {
-                Ok(proposal_psbt) => {
-                    send!(addr.handle_payjoin_success(proposal_psbt, fallback_tx))
-                }
-                Err(error) => {
-                    warn!("payjoin negotiation failed, broadcasting fallback tx: {error:?}");
-                    send!(addr.handle_payjoin_fallback(fallback_tx))
-                }
+        let sender = match build_sender(signed_psbt, endpoint, network) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("payjoin setup failed, broadcasting fallback tx: {e}");
+                send!(self.addr.handle_payjoin_fallback(fallback_tx));
+                return Ok(());
             }
-        });
+        };
 
+        self.spawn_payjoin_actor(sender, fallback_tx);
         Ok(())
     }
 
@@ -1287,6 +1284,7 @@ impl WalletActor {
             send!(scan_actor.shutdown(scan_generation));
         }
 
+        self.payjoin_actor = None;
         self.stop_receive_address_watcher();
         self.stop_receive_address_refresh_timer();
         self.state = ActorState::Initial;
@@ -2363,6 +2361,30 @@ impl WalletActor {
     async fn clear_scan_actor_if_stopped(&mut self, stopped_scan_actor: Addr<WalletScanActor>) {
         if self.scan_actor.as_ref().is_some_and(|scan_actor| scan_actor == &stopped_scan_actor) {
             self.scan_actor = None;
+        }
+    }
+
+    fn spawn_payjoin_actor(&mut self, sender: PayjoinSender, fallback_tx: BdkTransaction) {
+        let payjoin_actor = spawn_actor(PayjoinActor::new(self.addr.clone(), sender, fallback_tx));
+        self.watch_payjoin_actor_termination(payjoin_actor.clone());
+        self.payjoin_actor = Some(payjoin_actor);
+    }
+
+    fn watch_payjoin_actor_termination(&self, payjoin_actor: Addr<PayjoinActor>) {
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            payjoin_actor.termination().await;
+            send!(addr.clear_payjoin_actor_if_stopped(payjoin_actor));
+        });
+    }
+
+    async fn clear_payjoin_actor_if_stopped(&mut self, stopped_payjoin_actor: Addr<PayjoinActor>) {
+        if self
+            .payjoin_actor
+            .as_ref()
+            .is_some_and(|payjoin_actor| payjoin_actor == &stopped_payjoin_actor)
+        {
+            self.payjoin_actor = None;
         }
     }
 }
