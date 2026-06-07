@@ -88,6 +88,7 @@ pub(super) async fn payjoin_http_flow(
     // build the v2 sender state machine; NoopSessionPersister skips persistence for now
     let persister = NoopSessionPersister::<PayjoinSessionEvent>::default();
     let sender = SenderBuilder::new(signed_psbt, pj_uri)
+        .always_disable_output_substitution()
         .build_recommended(BdkFeeRate::BROADCAST_MIN)
         .map_err(|e| eyre::eyre!("failed to build payjoin sender: {e:?}"))?
         .save(&persister)
