@@ -15,18 +15,17 @@ use tracing::{debug, error, warn};
 
 use super::actor::WalletActor;
 
-// max poll attempts before falling back to original tx; 60 × 5s = 5 minutes
-const PAYJOIN_MAX_POLL_ATTEMPTS: u32 = 60;
-
-const PAYJOIN_POLL_INTERVAL: Duration = Duration::from_secs(5);
-
 // send a payjoin HTTP request via reqwest and return the raw response bytes
-async fn http_post(client: &reqwest::Client, req: payjoin::Request) -> eyre::Result<Vec<u8>> {
+async fn http_post(
+    client: &reqwest::Client,
+    req: payjoin::Request,
+    timeout: Duration,
+) -> eyre::Result<Vec<u8>> {
     Ok(client
         .post(&req.url)
         .header("Content-Type", req.content_type)
         .body(req.body)
-        .timeout(Duration::from_secs(30))
+        .timeout(timeout)
         .send()
         .await
         .map_err(|e| eyre::eyre!("send failed: {e:?}"))?
@@ -47,7 +46,7 @@ fn ohttp_relays() -> Vec<&'static str> {
     relays
 }
 
-/// Opaque alias so `actor.rs` can name the initial sender state without importing payjoin internals.
+/// Opaque alias so `actor.rs` can name the initial sender state without importing payjoin internals
 pub(super) type PayjoinSender = V2Sender<WithReplyKey>;
 
 /// Builds the v2 sender state machine from a signed PSBT and payjoin endpoint
@@ -101,11 +100,11 @@ pub(super) fn build_sender(
     Ok(sender)
 }
 
-/// Tracks which phase of the BIP-77 v2 negotiation the actor is currently in.
+/// Tracks which phase of the BIP-77 v2 negotiation the actor is currently in
 enum PayjoinSession {
-    /// Initial POST has not been sent yet; holds the sender state machine ready to POST.
+    /// Initial POST has not been sent yet; holds the sender state machine ready to POST
     PrePost { sender: V2Sender<WithReplyKey> },
-    /// POST was accepted by the directory; now polling for the receiver's proposal.
+    /// POST was accepted by the directory; now polling for the receiver's proposal
     Polling { polling_sender: V2Sender<PollingForProposal> },
 }
 
@@ -114,7 +113,6 @@ pub(super) struct PayjoinActor {
     wallet_addr: WeakAddr<WalletActor>,
     fallback_tx: BdkTransaction,
     session: Option<PayjoinSession>,
-    poll_attempt: u32,
 }
 
 impl PayjoinActor {
@@ -128,7 +126,6 @@ impl PayjoinActor {
             wallet_addr,
             fallback_tx,
             session: Some(PayjoinSession::PrePost { sender }),
-            poll_attempt: 0,
         }
     }
 }
@@ -186,7 +183,7 @@ impl PayjoinActor {
                             continue;
                         }
                     };
-                    match http_post(&client, req).await {
+                    match http_post(&client, req, Duration::from_secs(30)).await {
                         Ok(body) => {
                             success = Some((body, ctx));
                             break;
@@ -226,25 +223,18 @@ impl PayjoinActor {
         Produces::ok(())
     }
 
-    /// Stores the polling sender and schedules the first poll
+    /// Stores the polling sender and begins polling
     pub(super) async fn post_succeeded(
         &mut self,
         polling_sender: V2Sender<PollingForProposal>,
     ) -> ActorResult<()> {
         self.session = Some(PayjoinSession::Polling { polling_sender });
-        self.schedule_next_poll();
+        self.begin_next_poll();
         Produces::ok(())
     }
 
-    /// Poll the directory for the receiver's proposal PSBT.
+    /// Poll the directory for the receiver's proposal PSBT
     pub(super) async fn begin_poll(&mut self) -> ActorResult<()> {
-        if self.poll_attempt >= PAYJOIN_MAX_POLL_ATTEMPTS {
-            warn!("payjoin: timed out after {} poll attempts", PAYJOIN_MAX_POLL_ATTEMPTS);
-            let fallback_tx = self.fallback_tx.clone();
-            send!(self.wallet_addr.handle_payjoin_fallback(fallback_tx));
-            return Produces::ok(());
-        }
-
         // clone so the original stays in self.session, allowing retry if all relays fail this tick
         let polling_sender = match &self.session {
             Some(PayjoinSession::Polling { polling_sender }) => polling_sender.clone(),
@@ -254,8 +244,6 @@ impl PayjoinActor {
             }
         };
 
-        self.poll_attempt += 1;
-        let attempt = self.poll_attempt;
         let wallet_addr = self.wallet_addr.clone();
         let fallback_tx = self.fallback_tx.clone();
 
@@ -263,8 +251,8 @@ impl PayjoinActor {
             let client = match cove_http::new_client() {
                 Ok(c) => c,
                 Err(e) => {
-                    warn!("payjoin poll attempt {attempt}: failed to create HTTP client: {e:?}");
-                    send!(addr.schedule_next_poll_msg());
+                    warn!("payjoin poll: failed to create HTTP client: {e:?}");
+                    send!(addr.begin_next_poll_msg());
                     return;
                 }
             };
@@ -281,7 +269,10 @@ impl PayjoinActor {
                             continue;
                         }
                     };
-                    match http_post(&client, req).await {
+                    // polls are long-polling: the directory holds the connection open until a
+                    // proposal arrives or its own timeout fires, so allow slightly more than
+                    // the server-side timeout to avoid racing it
+                    match http_post(&client, req, Duration::from_secs(35)).await {
                         Ok(body) => {
                             success = Some((body, ctx));
                             break;
@@ -298,8 +289,8 @@ impl PayjoinActor {
             let (poll_response, poll_ctx) = match poll_result {
                 Ok(pair) => pair,
                 Err(e) => {
-                    warn!("payjoin poll attempt {attempt}: all relays failed, retrying: {e}");
-                    send!(addr.schedule_next_poll_msg());
+                    warn!("payjoin poll: all relays failed, retrying: {e}");
+                    send!(addr.begin_next_poll_msg());
                     return;
                 }
             };
@@ -310,11 +301,11 @@ impl PayjoinActor {
                     send!(wallet_addr.handle_payjoin_success(proposal_psbt, fallback_tx));
                 }
                 Ok(OptionalTransitionOutcome::Stasis(next)) => {
-                    debug!("payjoin poll attempt {attempt}: no proposal yet, continuing");
+                    debug!("payjoin poll: no proposal yet, continuing");
                     send!(addr.update_polling_sender(next));
                 }
                 Err(e) => {
-                    warn!("payjoin poll attempt {attempt}: fatal error processing response: {e:?}");
+                    warn!("payjoin poll: fatal error processing response: {e:?}");
                     send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
                 }
             }
@@ -323,26 +314,25 @@ impl PayjoinActor {
         Produces::ok(())
     }
 
-    /// Schedules the next poll, called from async task context
-    pub(super) async fn schedule_next_poll_msg(&mut self) -> ActorResult<()> {
-        self.schedule_next_poll();
-        Produces::ok(())
-    }
-
-    /// Updates the polling sender on Stasis and schedules the next poll
+    /// Updates the polling sender on Stasis and continues polling
     pub(super) async fn update_polling_sender(
         &mut self,
         next: V2Sender<PollingForProposal>,
     ) -> ActorResult<()> {
         self.session = Some(PayjoinSession::Polling { polling_sender: next });
-        self.schedule_next_poll();
+        self.begin_next_poll();
         Produces::ok(())
     }
 
-    fn schedule_next_poll(&mut self) {
+    /// Queues the next poll immediately, called from async task context
+    pub(super) async fn begin_next_poll_msg(&mut self) -> ActorResult<()> {
+        self.begin_next_poll();
+        Produces::ok(())
+    }
+
+    fn begin_next_poll(&mut self) {
         let addr = self.addr.clone();
         self.addr.send_fut(async move {
-            tokio::time::sleep(PAYJOIN_POLL_INTERVAL).await;
             send!(addr.begin_poll());
         });
     }
