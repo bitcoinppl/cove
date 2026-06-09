@@ -853,6 +853,7 @@ impl WalletActor {
             }
         }
 
+        self.payjoin_actor = None;
         Produces::ok(())
     }
 
@@ -872,6 +873,7 @@ impl WalletActor {
             }
         }
 
+        self.payjoin_actor = None;
         Produces::ok(())
     }
 
@@ -2365,27 +2367,8 @@ impl WalletActor {
     }
 
     fn spawn_payjoin_actor(&mut self, sender: PayjoinSender, fallback_tx: BdkTransaction) {
-        let payjoin_actor = spawn_actor(PayjoinActor::new(self.addr.clone(), sender, fallback_tx));
-        self.watch_payjoin_actor_termination(payjoin_actor.clone());
-        self.payjoin_actor = Some(payjoin_actor);
-    }
-
-    fn watch_payjoin_actor_termination(&self, payjoin_actor: Addr<PayjoinActor>) {
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
-            payjoin_actor.termination().await;
-            send!(addr.clear_payjoin_actor_if_stopped(payjoin_actor));
-        });
-    }
-
-    async fn clear_payjoin_actor_if_stopped(&mut self, stopped_payjoin_actor: Addr<PayjoinActor>) {
-        if self
-            .payjoin_actor
-            .as_ref()
-            .is_some_and(|payjoin_actor| payjoin_actor == &stopped_payjoin_actor)
-        {
-            self.payjoin_actor = None;
-        }
+        self.payjoin_actor =
+            Some(spawn_actor(PayjoinActor::new(self.addr.clone(), sender, fallback_tx)));
     }
 }
 
