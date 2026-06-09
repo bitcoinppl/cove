@@ -15,7 +15,7 @@ use tracing::{debug, error, warn};
 
 use super::actor::WalletActor;
 
-// send a payjoin HTTP request via reqwest and return the raw response bytes
+// send a payjoin HTTP request via reqwest and return the response bytes
 async fn http_post(
     client: &reqwest::Client,
     req: payjoin::Request,
@@ -252,6 +252,7 @@ impl PayjoinActor {
                 Ok(c) => c,
                 Err(e) => {
                     warn!("payjoin poll: failed to create HTTP client: {e:?}");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                     send!(addr.begin_next_poll_msg());
                     return;
                 }
@@ -290,6 +291,7 @@ impl PayjoinActor {
                 Ok(pair) => pair,
                 Err(e) => {
                     warn!("payjoin poll: all relays failed, retrying: {e}");
+                    tokio::time::sleep(Duration::from_secs(2)).await;
                     send!(addr.begin_next_poll_msg());
                     return;
                 }
