@@ -6,7 +6,9 @@
 
 use std::collections::HashSet;
 
-use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion, wallet_record_id};
+use cove_cspp::backup_data::{
+    EncryptedMasterKeyBackup, MasterKeyBackupVersion, WalletEntry, wallet_record_id,
+};
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
@@ -247,6 +249,62 @@ struct WalletBackupReadPass {
     verified: u32,
     failed: u32,
     unsupported: u32,
+}
+
+struct WalletBackupReadOutcome {
+    record_id: String,
+    lookup: Result<WalletBackupLookup<WalletEntry>, CloudBackupError>,
+    is_listed: bool,
+    is_local: bool,
+}
+
+impl WalletBackupReadPass {
+    fn record_outcome(&mut self, outcome: WalletBackupReadOutcome) {
+        let WalletBackupReadOutcome { record_id, lookup, is_listed, is_local } = outcome;
+
+        match lookup {
+            Ok(WalletBackupLookup::Found(entry)) => {
+                if is_listed {
+                    self.verified += 1;
+                }
+
+                if is_local {
+                    self.remote_wallet_truth
+                        .summaries_by_record_id
+                        .insert(record_id, RemoteWalletBackupSummary::from_entry(&entry));
+                }
+            }
+            Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
+                if is_listed {
+                    self.unsupported += 1;
+                }
+
+                if is_local {
+                    warn!(
+                        "Cloud backup remote truth found unsupported wallet backup version {version} for record_id={record_id}"
+                    );
+                    self.remote_wallet_truth.unsupported_record_ids.insert(record_id);
+                }
+            }
+            Ok(WalletBackupLookup::NotFound) => {
+                if is_listed {
+                    warn!("Verify: failed to download wallet {record_id}: not found");
+                    self.failed += 1;
+                }
+            }
+            Err(error) => {
+                if is_listed {
+                    warn!("Verify: failed to download wallet {record_id}: {error}");
+                    self.failed += 1;
+                }
+
+                if is_local {
+                    warn!("Cloud backup remote truth failed for record_id={record_id}: {error}");
+                    self.remote_wallet_truth.unknown_record_ids.insert(record_id);
+                }
+            }
+        }
+    }
 }
 
 impl VerificationSession {
@@ -812,73 +870,33 @@ impl VerificationSession {
             }
         }
 
-        let mut verified = 0u32;
-        let mut failed = 0u32;
-        let mut unsupported = 0u32;
-        let mut remote_wallet_truth = RemoteWalletTruth::default();
+        let mut read_pass = WalletBackupReadPass {
+            remote_wallet_truth: RemoteWalletTruth::default(),
+            verified: 0,
+            failed: 0,
+            unsupported: 0,
+        };
 
         let mut lookups = stream::iter(record_ids)
             .map(|record_id| {
                 let reader = reader.clone();
 
                 async move {
-                    let result = reader.lookup_entry(&record_id).await;
-                    (record_id, result)
+                    let lookup = reader.lookup_entry(&record_id).await;
+                    (record_id, lookup)
                 }
             })
             .buffer_unordered(CLOUD_BACKUP_IO_CONCURRENCY);
 
-        while let Some((record_id, result)) = lookups.next().await {
+        while let Some((record_id, lookup)) = lookups.next().await {
             let is_listed = listed_record_ids.contains(&record_id);
             let is_local = local_record_ids.contains(&record_id);
+            let outcome = WalletBackupReadOutcome { record_id, lookup, is_listed, is_local };
 
-            match result {
-                Ok(WalletBackupLookup::Found(entry)) => {
-                    if is_listed {
-                        verified += 1;
-                    }
-
-                    if is_local {
-                        remote_wallet_truth
-                            .summaries_by_record_id
-                            .insert(record_id, RemoteWalletBackupSummary::from_entry(&entry));
-                    }
-                }
-                Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
-                    if is_listed {
-                        unsupported += 1;
-                    }
-
-                    if is_local {
-                        warn!(
-                            "Cloud backup remote truth found unsupported wallet backup version {version} for record_id={record_id}"
-                        );
-                        remote_wallet_truth.unsupported_record_ids.insert(record_id);
-                    }
-                }
-                Ok(WalletBackupLookup::NotFound) => {
-                    if is_listed {
-                        warn!("Verify: failed to download wallet {record_id}: not found");
-                        failed += 1;
-                    }
-                }
-                Err(error) => {
-                    if is_listed {
-                        warn!("Verify: failed to download wallet {record_id}: {error}");
-                        failed += 1;
-                    }
-
-                    if is_local {
-                        warn!(
-                            "Cloud backup remote truth failed for record_id={record_id}: {error}"
-                        );
-                        remote_wallet_truth.unknown_record_ids.insert(record_id);
-                    }
-                }
-            }
+            read_pass.record_outcome(outcome);
         }
 
-        Ok(WalletBackupReadPass { remote_wallet_truth, verified, failed, unsupported })
+        Ok(read_pass)
     }
 
     fn local_wallet_record_ids(&self) -> Result<HashSet<String>, CloudBackupError> {
