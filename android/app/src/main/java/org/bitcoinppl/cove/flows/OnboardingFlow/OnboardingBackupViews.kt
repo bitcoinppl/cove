@@ -4,10 +4,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
@@ -264,17 +264,11 @@ internal fun OnboardingSecretWordsView(
                     Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(horizontal = 24.dp)
+                        .padding(horizontal = 16.dp)
                         .padding(top = 20.dp),
                 horizontalArrangement = Arrangement.Start,
             ) {
-                Text(
-                    text = "Back",
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable(onClick = onBack),
-                )
+                OnboardingTopBackButton(enabled = true, onClick = onBack)
             }
 
             Column(
@@ -303,16 +297,19 @@ internal fun OnboardingSecretWordsView(
 
                 Spacer(modifier = Modifier.size(24.dp))
 
+                val wordCards = onboardingWordsInTwoColumnVisualOrder(words)
+
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth().height(gridHeightForWordCount(words.size)),
                 ) {
-                    items(words.size) { index ->
+                    items(wordCards.size) { index ->
+                        val wordCard = wordCards[index]
                         OnboardingWordCard(
-                            index = index + 1,
-                            word = words[index],
+                            index = wordCard.index,
+                            word = wordCard.word,
                         )
                     }
                 }
@@ -338,7 +335,33 @@ internal fun OnboardingSecretWordsView(
     }
 }
 
-private fun gridHeightForWordCount(wordCount: Int) = (((wordCount + 1) / 2).coerceAtLeast(1) * 74).dp
+internal data class OnboardingWordCardItem(
+    val index: Int,
+    val word: String,
+)
+
+internal fun onboardingWordsInTwoColumnVisualOrder(words: List<String>): List<OnboardingWordCardItem> {
+    val rows = onboardingWordGridRowCount(words.size)
+
+    return buildList {
+        repeat(rows) { row ->
+            val leftIndex = row
+            val rightIndex = row + rows
+
+            words.getOrNull(leftIndex)?.let { word ->
+                add(OnboardingWordCardItem(index = leftIndex + 1, word = word))
+            }
+
+            words.getOrNull(rightIndex)?.let { word ->
+                add(OnboardingWordCardItem(index = rightIndex + 1, word = word))
+            }
+        }
+    }
+}
+
+private fun gridHeightForWordCount(wordCount: Int) = (onboardingWordGridRowCount(wordCount) * 74).dp
+
+private fun onboardingWordGridRowCount(wordCount: Int) = ((wordCount + 1) / 2).coerceAtLeast(1)
 
 @Composable
 private fun OnboardingWordCard(
@@ -589,8 +612,19 @@ private fun OnboardingCloudBackupDetailsStepView(
             ?: "Enable Cloud Backup"
     val rootPrompt = backupManager.rootPrompt
     val isPromptingForEnableChoice =
-        rootPrompt is CloudBackupRootPrompt.PasskeyChoice &&
-            rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.Enable
+        rootPrompt is CloudBackupRootPrompt.ExistingBackupFound ||
+            (
+                rootPrompt is CloudBackupRootPrompt.PasskeyChoice &&
+                    rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.Enable
+            )
+
+    fun cancelCloudBackupDetails() {
+        if (needsManualPasskeyConfirmation) {
+            backupManager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
+        }
+
+        onSkip()
+    }
 
     fun completeIfEnabled() {
         if (didReportEnabled) return
@@ -611,6 +645,14 @@ private fun OnboardingCloudBackupDetailsStepView(
         backupManager.hasPendingUploadVerification,
     ) {
         completeIfEnabled()
+    }
+
+    BackHandler {
+        if (isBusy || isPromptingForEnableChoice) {
+            return@BackHandler
+        }
+
+        cancelCloudBackupDetails()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -636,17 +678,13 @@ private fun OnboardingCloudBackupDetailsStepView(
 
                 onEnable()
             },
-            onCancel = {
-                if (needsManualPasskeyConfirmation) {
-                    backupManager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
-                }
-
-                onSkip()
-            },
+            onCancel = { cancelCloudBackupDetails() },
             message = onboardingMessage,
             isBusy = isBusy || isPromptingForEnableChoice,
             context = context,
             primaryButtonTitle = primaryButtonTitle,
+            cancelButtonTitle = "Back",
+            cancelButtonLeading = true,
         )
 
         if (isBusy) {
