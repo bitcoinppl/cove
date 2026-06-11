@@ -151,9 +151,11 @@ struct OnboardingSecretWordsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
+                    let wordCards = onboardingWordsInTwoColumnVisualOrder(words)
+
                     LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                            OnboardingWordCard(index: index + 1, word: word)
+                        ForEach(wordCards) { wordCard in
+                            OnboardingWordCard(index: wordCard.index, word: wordCard.word)
                         }
                     }
                 }
@@ -173,6 +175,39 @@ struct OnboardingSecretWordsView: View {
                 .background(.clear)
         }
     }
+}
+
+struct OnboardingWordCardItem: Equatable, Identifiable {
+    let index: Int
+    let word: String
+
+    var id: Int {
+        index
+    }
+}
+
+func onboardingWordsInTwoColumnVisualOrder(_ words: [String]) -> [OnboardingWordCardItem] {
+    let rows = onboardingWordGridRowCount(words.count)
+
+    return (0 ..< rows).flatMap { row in
+        let leftIndex = row
+        let rightIndex = row + rows
+
+        return [
+            onboardingWordCardItem(words: words, index: leftIndex),
+            onboardingWordCardItem(words: words, index: rightIndex),
+        ].compactMap(\.self)
+    }
+}
+
+private func onboardingWordCardItem(words: [String], index: Int) -> OnboardingWordCardItem? {
+    guard words.indices.contains(index) else { return nil }
+
+    return OnboardingWordCardItem(index: index + 1, word: words[index])
+}
+
+private func onboardingWordGridRowCount(_ wordCount: Int) -> Int {
+    max((wordCount + 1) / 2, 1)
 }
 
 struct OnboardingCloudBackupStepView: View {
