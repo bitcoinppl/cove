@@ -2,6 +2,8 @@ package org.bitcoinppl.cove.cloudbackup
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -98,6 +100,8 @@ internal fun DisableCloudBackupSection(
     ) {
         Text("Disable Cloud Backup", style = MaterialTheme.typography.bodySmall)
     }
+
+    Spacer(modifier = Modifier.height(32.dp))
 
     if (showUnavailable) {
         AlertDialog(
