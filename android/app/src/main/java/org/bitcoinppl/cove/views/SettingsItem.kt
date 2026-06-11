@@ -78,7 +78,7 @@ fun MaterialSettingsItem(
                         onCheckChanged = onCheckChanged ?: {},
                     )
                 }
-            } else {
+            } else if (onClick != null) {
                 {
                     Icon(
                         imageVector = Icons.AutoMirrored.Default.ArrowForward,
@@ -86,6 +86,8 @@ fun MaterialSettingsItem(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            } else {
+                null
             },
     )
 }

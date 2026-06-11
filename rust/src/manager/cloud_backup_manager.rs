@@ -63,8 +63,9 @@ pub use self::detail::{
 };
 pub(crate) use self::keychain::CloudBackupKeychain;
 use self::model::{
-    CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim, CloudBackupStateReducer,
-    CloudBackupStateReducerEffects, CloudBackupStateReducerEvent,
+    CloudBackupAcceptedEnablePrompt, CloudBackupExclusiveOperation,
+    CloudBackupExclusiveOperationClaim, CloudBackupStateReducer, CloudBackupStateReducerEffects,
+    CloudBackupStateReducerEvent,
 };
 pub use self::model::{CloudBackupLifecycle, CloudBackupRestoreFlow};
 pub(crate) use self::ops::{
@@ -137,6 +138,7 @@ impl CloudBackupEnableContext {
 pub enum CloudBackupEnableState {
     Idle,
     CreatingPasskey,
+    WaitingForPasskeyAvailability,
     AwaitingSavedPasskeyConfirmation(SavedPasskeyConfirmationMode),
     ConfirmingSavedPasskey,
     UploadingBackup,
@@ -147,6 +149,13 @@ pub enum CloudBackupEnableState {
 pub enum CloudBackupPasskeyChoiceIntent {
     Enable(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
     RepairPasskey,
+}
+
+/// User selection for the currently visible enable prompt
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudBackupEnablePromptChoice {
+    UseExisting,
+    CreateNew,
 }
 
 /// Root-level prompt the UI should show for the current cloud backup state
@@ -188,6 +197,8 @@ pub enum CloudBackupManagerAction {
     KeepCloudBackupEnabled,
     RefreshDetail,
     EnterDetail,
+    PromptEnablePasskeyChoice(CloudBackupEnableContext),
+    AcceptEnablePrompt(CloudBackupEnablePromptChoice),
 }
 
 /// Result of a disable attempt after the supervisor resolves remote and local work
@@ -460,7 +471,7 @@ pub(crate) fn blocking_cloud_error(
     step: BlockingCloudStep,
     error: CloudBackupError,
 ) -> CloudBackupError {
-    if is_connectivity_related_issue(&error) {
+    if CloudStorageIssue::from(&error) == CloudStorageIssue::Offline {
         return offline_error_for_step(step);
     }
 
@@ -488,6 +499,7 @@ impl From<&CloudBackupError> for CloudStorageIssue {
             | CloudBackupError::Internal(_)
             | CloudBackupError::Compatibility(_)
             | CloudBackupError::PasskeyMismatch
+            | CloudBackupError::NoBackupFound
             | CloudBackupError::PasskeyDiscoveryCancelled
             | CloudBackupError::Cancelled => Self::Other,
         }
@@ -1043,6 +1055,9 @@ pub(crate) enum CloudBackupError {
     #[error("Passkey didn't match any backups, please try a new one")]
     PasskeyMismatch,
 
+    #[error("no cloud backups found")]
+    NoBackupFound,
+
     #[error("user cancelled passkey discovery")]
     PasskeyDiscoveryCancelled,
 
@@ -1461,6 +1476,27 @@ impl RustCloudBackupManager {
         self.apply_model_event(CloudBackupStateReducerEvent::PasskeyChoicePromptCleared);
     }
 
+    pub(crate) fn accept_enable_prompt(&self, choice: CloudBackupEnablePromptChoice) {
+        let (accepted, effects) = {
+            let mut state = self.state.write();
+            state.accept_enable_prompt(choice)
+        };
+        self.send_model_effects(effects);
+
+        match accepted {
+            Some(CloudBackupAcceptedEnablePrompt::Enable(context)) => {
+                self.enable_cloud_backup(context);
+            }
+            Some(CloudBackupAcceptedEnablePrompt::ForceNew(context)) => {
+                self.enable_cloud_backup_force_new(context);
+            }
+            Some(CloudBackupAcceptedEnablePrompt::NoDiscovery(context)) => {
+                self.enable_cloud_backup_no_discovery(context);
+            }
+            None => {}
+        }
+    }
+
     pub(crate) fn dismiss_missing_passkey_prompt(&self) {
         self.apply_model_event(CloudBackupStateReducerEvent::MissingPasskeyPromptDismissed);
     }
@@ -1478,6 +1514,11 @@ impl RustCloudBackupManager {
             CloudBackupEnableOutcome::CreatingPasskey => {
                 self.apply_model_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
                     CloudBackupEnableState::CreatingPasskey,
+                ));
+            }
+            CloudBackupEnableOutcome::WaitingForPasskeyAvailability => {
+                self.apply_model_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
+                    CloudBackupEnableState::WaitingForPasskeyAvailability,
                 ));
             }
             CloudBackupEnableOutcome::UploadingBackup => {

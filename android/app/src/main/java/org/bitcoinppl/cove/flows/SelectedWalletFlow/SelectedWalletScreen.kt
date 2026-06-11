@@ -114,6 +114,7 @@ fun SelectedWalletScreen(
     isDarkList: Boolean,
     manager: WalletManager,
     app: AppManager,
+    isCloudBackupEnabled: Boolean = app.cloudBackupManager.isCloudBackupEnabled,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val actualWalletName = manager.walletMetadata?.name ?: "Wallet"
@@ -327,6 +328,7 @@ fun SelectedWalletScreen(
 
                 val isVerified = manager.isVerified
                 val walletId = manager.walletMetadata?.id
+                val shouldShowVerifyReminder = !isVerified && !isCloudBackupEnabled
                 val showLabels = manager.walletMetadata?.showLabels ?: false
                 val loadState = manager.loadState
                 val isScanStatusActive =
@@ -436,7 +438,7 @@ fun SelectedWalletScreen(
                             item(key = "verify-reminder") {
                                 VerifyReminder(
                                     walletId = walletId,
-                                    isVerified = isVerified,
+                                    visible = shouldShowVerifyReminder,
                                     app = app,
                                 )
                             }
@@ -488,10 +490,10 @@ fun SelectedWalletScreen(
 @Composable
 private fun VerifyReminder(
     walletId: WalletId?,
-    isVerified: Boolean,
+    visible: Boolean,
     app: AppManager,
 ) {
-    if (!isVerified && walletId != null) {
+    if (visible && walletId != null) {
         Box(
             modifier =
                 Modifier

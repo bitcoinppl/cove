@@ -13,6 +13,7 @@ import androidx.test.uiautomator.Until
 import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 
 class FullLaunchStartupRobot(
     private val device: UiDevice,
@@ -89,6 +90,15 @@ class FullLaunchOnboardingRobot(
 
     fun goBackToBitcoinChoice(): FullLaunchOnboardingRobot {
         device.waitUntilVisible(text("Back")).click()
+        device.waitUntilVisible(text("Do you already have Bitcoin?"))
+        device.waitUntilVisible(tag("onboarding.bitcoinChoice.new"))
+        device.waitUntilVisible(tag("onboarding.bitcoinChoice.existing"))
+
+        return this
+    }
+
+    fun systemBackToBitcoinChoice(): FullLaunchOnboardingRobot {
+        device.pressBack()
         device.waitUntilVisible(text("Do you already have Bitcoin?"))
         device.waitUntilVisible(tag("onboarding.bitcoinChoice.new"))
         device.waitUntilVisible(tag("onboarding.bitcoinChoice.existing"))
@@ -291,7 +301,8 @@ class FullLaunchOnboardingRobot(
     }
 
     fun openCloudBackupFromBackupWallet(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.cloudBackup.prompt")).click()
+        device.waitUntilVisible(tag("onboarding.cloudBackup.prompt"))
+        device.waitUntilVisible(text("Enable")).click()
         device.waitUntilVisible(text("Cloud Backup"))
 
         return this
@@ -303,13 +314,92 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
+    fun systemBackFromCloudBackupDetails(): FullLaunchOnboardingRobot {
+        device.pressBack()
+
+        return this
+    }
+
     fun assertCloudBackupDetails(): FullLaunchOnboardingRobot {
         device.waitUntilVisible(text("Cloud Backup"))
         device.waitUntilVisible(text("How It Works"))
+        device.waitUntilVisible(text("Back"))
         device.waitUntilVisible(tag("onboarding.cloudBackup.cancel"))
         device.waitUntilVisible(tag("onboarding.cloudBackup.enable"))
 
         return this
+    }
+
+    fun enableCloudBackupFromDetails(): FullLaunchOnboardingRobot {
+        listOf(
+            "my passkey is required",
+            "access to my Google account",
+            "manually back up my 12 or 24 words",
+        ).forEach { label ->
+            device.scrollUntilVisible(textContains(label)).click()
+        }
+
+        device.scrollUntilVisible(tag("onboarding.cloudBackup.enable")).click()
+
+        return this
+    }
+
+    fun assertCreatePasskeySheetShown(): FullLaunchOnboardingRobot {
+        val wrongSheetSelectors =
+            listOf(
+                textContains("Sign in another way"),
+                textContains("Use passkey from"),
+            )
+        val createSheetSelectors =
+            listOf(
+                textContains("Create a passkey"),
+                textContains("Create passkey"),
+                textContains("Save a passkey"),
+                textContains("Save passkey"),
+            )
+        val deadline = System.currentTimeMillis() + 20_000
+
+        while (System.currentTimeMillis() < deadline) {
+            selectGoogleAuthorizationAccountIfNeeded()
+            chooseNewPasskeyIfExistingBackupPromptShown()
+
+            if (createSheetSelectors.any { device.findObject(it.value) != null }) {
+                device.pressBack()
+                return this
+            }
+
+            wrongSheetSelectors.firstOrNull { device.findObject(it.value) != null }?.let { selector ->
+                fail("Expected passkey creation sheet, but saw ${selector.description}\n${device.dumpWindowHierarchy()}")
+            }
+
+            Thread.sleep(100)
+        }
+
+        error("Timed out waiting for passkey creation sheet\n${device.dumpWindowHierarchy()}")
+    }
+
+    private fun chooseNewPasskeyIfExistingBackupPromptShown() {
+        if (device.findObject(textContains("previous backup").value) == null) {
+            return
+        }
+
+        val createButton =
+            device.findObject(text("Create New Backup").value)
+                ?: device.findObject(text("Create New Passkey").value)
+                ?: return
+
+        val bounds = createButton.visibleBounds
+        device.click(bounds.centerX(), bounds.centerY())
+        Thread.sleep(500)
+    }
+
+    private fun selectGoogleAuthorizationAccountIfNeeded() {
+        if (device.findObject(text("Choose an account").value) == null) {
+            return
+        }
+
+        device.findObject(textContains("@").value)?.click()
+        Thread.sleep(500)
     }
 
     private fun assertQrScannerVisible() {

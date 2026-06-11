@@ -74,11 +74,13 @@ pub(crate) enum CloudBackupEnablePreparation {
         passkey_hint: Option<CloudBackupPasskeyHint>,
     },
     Recover {
+        context: CloudBackupEnableContext,
         matches: Vec<NamespaceMatch>,
     },
 }
 
 pub(crate) struct CloudBackupEnableRecoveryPreparation {
+    context: CloudBackupEnableContext,
     merge_namespaces: Vec<MergeNamespace>,
     active_index: usize,
     active_namespace_id: String,
@@ -88,11 +90,13 @@ pub(crate) struct CloudBackupEnableRecoveryPreparation {
 
 #[derive(Debug)]
 pub(crate) struct CloudBackupEnableRecoveryCompletion {
+    pub(crate) context: CloudBackupEnableContext,
     pub(crate) namespace_id: String,
     pub(crate) credential_id: Vec<u8>,
     pub(crate) prf_salt: [u8; 32],
     pub(crate) active_critical_key: Zeroizing<[u8; 32]>,
     pub(crate) uploaded_wallets: Vec<CloudBackupUploadedWallet>,
+    pub(crate) pending_uploads: Vec<PendingVerificationUpload>,
     pub(crate) cleanup_sources: Vec<CleanupSourceNamespace>,
 }
 
@@ -170,6 +174,7 @@ impl RustCloudBackupManager {
 
     pub(crate) async fn prepare_enable_recovery(
         &self,
+        context: CloudBackupEnableContext,
         matches: Vec<NamespaceMatch>,
     ) -> Result<CloudBackupEnableRecoveryPreparation, CloudBackupError> {
         let cloud = CloudStorage::global_explicit_client();
@@ -192,6 +197,7 @@ impl RustCloudBackupManager {
         );
 
         Ok(CloudBackupEnableRecoveryPreparation {
+            context,
             merge_namespaces,
             active_index,
             active_namespace_id,
@@ -237,6 +243,7 @@ impl RustCloudBackupManager {
             .upload_all_wallets(&writes, &cloud, &active_namespace_id, &active_critical_key)
             .await
             .map_err(|error| blocking_cloud_error(BlockingCloudStep::Enable, error))?;
+        let pending_uploads = Self::pending_verification_uploads(&uploaded_wallets);
 
         let active_match = &preparation.merge_namespaces[preparation.active_index].matched;
         let credential_id = active_match.credential_id.clone();
@@ -258,11 +265,13 @@ impl RustCloudBackupManager {
             .collect::<Vec<_>>();
 
         Ok(CloudBackupEnableRecoveryCompletion {
+            context: preparation.context,
             namespace_id: active_namespace_id,
             credential_id,
             prf_salt,
             active_critical_key,
             uploaded_wallets,
+            pending_uploads,
             cleanup_sources,
         })
     }
@@ -446,7 +455,7 @@ impl RustCloudBackupManager {
                     });
                 }
 
-                Ok(CloudBackupEnablePreparation::Recover { matches })
+                Ok(CloudBackupEnablePreparation::Recover { context, matches })
             }
 
             NamespaceMatchOutcome::UserDeclined => {

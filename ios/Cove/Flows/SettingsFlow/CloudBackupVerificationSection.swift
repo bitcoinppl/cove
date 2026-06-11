@@ -95,22 +95,10 @@ struct VerificationSection: View {
                 .foregroundStyle(Color.statusSuccess)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
 
-            if report.masterKeyWrapperRepaired {
-                Label(
-                    "Cloud master key protection was repaired",
-                    systemImage: "wrench.and.screwdriver.fill"
-                )
-                .foregroundStyle(Color.statusInfo)
-                .font(.caption)
-            }
-
-            if report.localMasterKeyRepaired {
-                Label(
-                    "Local backup credentials were repaired from cloud",
-                    systemImage: "wrench.and.screwdriver.fill"
-                )
-                .foregroundStyle(Color.statusInfo)
-                .font(.caption)
+            if let summary = verifiedSummary(report) {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if report.walletsFailed > 0 {
@@ -130,23 +118,39 @@ struct VerificationSection: View {
                 .foregroundStyle(Color.statusWarning)
                 .font(.caption)
             }
-
-            if report.walletsVerified > 0 {
-                Text("\(report.walletsVerified) wallet(s) verified")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
 
         actionButtons
+    }
+
+    private func verifiedSummary(_ report: DeepVerificationReport) -> String? {
+        var parts: [String] = []
+
+        if report.credentialRecovered {
+            parts.append("Passkey recovered")
+        }
+
+        if report.masterKeyWrapperRepaired {
+            parts.append("Cloud master key protection repaired")
+        }
+
+        if report.localMasterKeyRepaired {
+            parts.append("Local backup credentials repaired")
+        }
+
+        if report.walletsVerified > 0 {
+            parts.append("\(report.walletsVerified) wallet(s) verified")
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 
     @ViewBuilder
     private func failureSection(_ failure: DeepVerificationFailure) -> some View {
         Section {
             switch failure {
-            case let .retry(message, _, _):
-                retryFailureContent(message)
+            case let .retry(message, _, retryContext):
+                retryFailureContent(message, retryContext: retryContext)
             case let .recreateManifest(message, warning, _):
                 recreateManifestContent(message: message, warning: warning)
             case let .reinitializeBackup(message, warning, _):
@@ -166,11 +170,11 @@ struct VerificationSection: View {
     }
 
     @ViewBuilder
-    private func retryFailureContent(_ message: String) -> some View {
+    private func retryFailureContent(_ message: String, retryContext: CloudBackupRetryContext?) -> some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(Color.statusWarning)
 
-        retryButton
+        retryButton(retryContext: retryContext)
         repairPasskeyButton
     }
 
@@ -284,9 +288,13 @@ struct VerificationSection: View {
         }
     }
 
-    private var retryButton: some View {
+    private func retryButton(retryContext: CloudBackupRetryContext?) -> some View {
         Button {
-            manager.startVerification()
+            if retryContext?.action == .verifyDiscoverable {
+                manager.dispatch(action: .startVerificationDiscoverable(.cloudBackupDetail))
+            } else {
+                manager.startVerification(source: .cloudBackupDetail)
+            }
         } label: {
             Label("Try Again", systemImage: "arrow.clockwise")
         }
@@ -295,7 +303,7 @@ struct VerificationSection: View {
 
     private var repairPasskeyButton: some View {
         Button {
-            manager.dispatch(action: .repairPasskey)
+            manager.dispatch(action: .repairPasskeyNoDiscovery)
         } label: {
             if manager.passkeyRepairState.isRecovering {
                 HStack {

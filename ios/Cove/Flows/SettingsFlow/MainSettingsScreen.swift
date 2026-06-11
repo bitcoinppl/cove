@@ -952,22 +952,8 @@ struct MainSettingsScreen: View {
 }
 
 private struct SettingsCloudBackupEnableSheet: View {
-    private enum PasskeyEnableFlow {
-        case idle
-        case choosing
-        case startedEnable
-
-        var isChoosing: Bool {
-            if case .choosing = self { return true }
-            return false
-        }
-    }
-
     @State private var manager = CloudBackupManager.shared
-    @State private var isStartingEnable = false
-    @State private var passkeyEnableFlow = PasskeyEnableFlow.idle
-    @State private var existingBackupContext: CloudBackupEnableContext?
-    @State private var existingBackupPasskeyHint: CloudBackupPasskeyHint?
+    @State private var ignoreNextPromptDismiss = false
 
     let onComplete: () -> Void
     let onDismiss: () -> Void
@@ -985,13 +971,50 @@ private struct SettingsCloudBackupEnableSheet: View {
             return false
         }
 
-        return isStartingEnable || manager.isLifecycleEnabling
+        if isAwaitingEnablePrompt(manager.rootPrompt) {
+            return false
+        }
+
+        return manager.isLifecycleEnabling
     }
 
-    private func shouldDismiss(for rootPrompt: CloudBackupRootPrompt) -> Bool {
-        if case .existingBackupFound = rootPrompt { return false }
-        if case .none = rootPrompt { return false }
-        return true
+    private var showingPasskeyChoice: Binding<Bool> {
+        Binding(
+            get: { isEnablePasskeyChoice(manager.rootPrompt) },
+            set: { isPresented in
+                guard !isPresented else { return }
+                handlePromptDismiss()
+            }
+        )
+    }
+
+    private var showingExistingBackupPrompt: Binding<Bool> {
+        Binding(
+            get: {
+                if case .existingBackupFound = manager.rootPrompt { return true }
+                return false
+            },
+            set: { isPresented in
+                guard !isPresented else { return }
+                handlePromptDismiss()
+            }
+        )
+    }
+
+    private var passkeyChoiceHint: CloudBackupPasskeyHint? {
+        guard case let .passkeyChoice(.enable(_, passkeyHint)) = manager.rootPrompt else {
+            return nil
+        }
+
+        return passkeyHint
+    }
+
+    private var existingBackupPasskeyHint: CloudBackupPasskeyHint? {
+        guard case let .existingBackupFound(_, passkeyHint) = manager.rootPrompt else {
+            return nil
+        }
+
+        return passkeyHint
     }
 
     private func isEnablePasskeyChoice(_ rootPrompt: CloudBackupRootPrompt) -> Bool {
@@ -1000,39 +1023,43 @@ private struct SettingsCloudBackupEnableSheet: View {
         return false
     }
 
-    private func shouldSuppressEnablePasskeyChoicePrompt(
-        _ rootPrompt: CloudBackupRootPrompt
-    ) -> Bool {
-        guard case .startedEnable = passkeyEnableFlow else { return false }
+    private func isAwaitingEnablePrompt(_ rootPrompt: CloudBackupRootPrompt) -> Bool {
+        if case .existingBackupFound = rootPrompt { return true }
         return isEnablePasskeyChoice(rootPrompt)
     }
 
-    private func startEnable(action: CloudBackupManagerAction) {
-        guard !isBusy else { return }
-        passkeyEnableFlow = .startedEnable
-        isStartingEnable = true
+    private func beginEnableChoice() {
+        guard !isBusy, !isAwaitingEnablePrompt(manager.rootPrompt) else { return }
+        manager.dispatch(action: .promptEnablePasskeyChoice(.init(
+            savedPasskeyConfirmation: .manual,
+            verificationSource: .settings
+        )))
+    }
+
+    private func dispatchPromptAction(_ action: CloudBackupManagerAction) {
+        ignoreNextPromptDismiss = true
         manager.dispatch(action: action)
     }
 
-    private func handleRootPrompt(_ rootPrompt: CloudBackupRootPrompt) {
-        if case let .existingBackupFound(context, passkeyHint) = rootPrompt {
-            existingBackupContext = context
-            existingBackupPasskeyHint = passkeyHint
-            passkeyEnableFlow = .idle
-            isStartingEnable = false
+    private func handlePromptDismiss() {
+        if ignoreNextPromptDismiss {
+            ignoreNextPromptDismiss = false
             return
         }
 
-        if shouldSuppressEnablePasskeyChoicePrompt(rootPrompt) {
-            passkeyEnableFlow = .idle
-            isStartingEnable = false
+        switch manager.rootPrompt {
+        case .existingBackupFound:
+            manager.dispatch(action: .discardPendingEnableCloudBackup)
+        case .passkeyChoice(.enable):
             manager.dispatch(action: .dismissPasskeyChoicePrompt)
-            return
+        case .none, .missingPasskeyReminder, .passkeyChoice(.repairPasskey), .verification:
+            break
         }
+    }
 
-        if shouldDismiss(for: rootPrompt) {
-            onDismiss()
-        }
+    private func existingPasskeyButtonTitle(for hint: CloudBackupPasskeyHint?) -> String {
+        guard let hint else { return "Use Existing Passkey" }
+        return "Use Existing Passkey (\(hint.nameSuffix))"
     }
 
     private var existingBackupMessage: String {
@@ -1044,14 +1071,6 @@ private struct SettingsCloudBackupEnableSheet: View {
     }
 
     var body: some View {
-        let showingPasskeyChoice = Binding(
-            get: { passkeyEnableFlow.isChoosing },
-            set: { isPresented in
-                guard !isPresented, case .choosing = passkeyEnableFlow else { return }
-                passkeyEnableFlow = .idle
-            }
-        )
-
         ZStack {
             if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableFlow {
                 CloudBackupEnableConfirmationView(
@@ -1065,10 +1084,7 @@ private struct SettingsCloudBackupEnableSheet: View {
                 )
             } else {
                 CloudBackupEnableOnboardingView(
-                    onEnable: {
-                        guard !isBusy else { return }
-                        passkeyEnableFlow = .choosing
-                    },
+                    onEnable: beginEnableChoice,
                     onCancel: onDismiss,
                     message: message,
                     isBusy: isBusy
@@ -1079,70 +1095,44 @@ private struct SettingsCloudBackupEnableSheet: View {
                 CloudBackupEnableBusyOverlay(enableFlow: manager.enableFlow)
             }
         }
-        .onChange(of: manager.lifecycle, initial: true) { _, lifecycle in
-            if case .enabling = lifecycle {
-                isStartingEnable = false
-            } else if isStartingEnable {
-                isStartingEnable = false
-            }
-
+        .onChange(of: manager.lifecycle, initial: true) { _, _ in
             if manager.isCloudBackupAvailable {
                 onComplete()
             }
         }
         .onChange(of: manager.rootPrompt, initial: true) { _, rootPrompt in
-            handleRootPrompt(rootPrompt)
+            if !isAwaitingEnablePrompt(rootPrompt) {
+                ignoreNextPromptDismiss = false
+            }
         }
         .alert(
             "Passkey Options",
             isPresented: showingPasskeyChoice
         ) {
-            Button("Use Existing Passkey") {
-                startEnable(action: .enableCloudBackup(.init(
-                    savedPasskeyConfirmation: .manual,
-                    verificationSource: .settings
-                )))
+            Button(existingPasskeyButtonTitle(for: passkeyChoiceHint)) {
+                dispatchPromptAction(.acceptEnablePrompt(.useExisting))
             }
             Button("Create New Passkey") {
-                startEnable(action: .enableCloudBackupNoDiscovery(.init(
-                    savedPasskeyConfirmation: .manual,
-                    verificationSource: .settings
-                )))
+                dispatchPromptAction(.acceptEnablePrompt(.createNew))
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) {
+                dispatchPromptAction(.dismissPasskeyChoicePrompt)
+            }
         } message: {
             Text("Would you like to use an existing passkey or create a new one?")
         }
         .alert(
             "Existing Cloud Backup Found",
-            isPresented: Binding(
-                get: { existingBackupContext != nil },
-                set: { isPresented in
-                    guard !isPresented else { return }
-                    if existingBackupContext != nil {
-                        manager.dispatch(action: .discardPendingEnableCloudBackup)
-                    }
-                    existingBackupContext = nil
-                    existingBackupPasskeyHint = nil
-                }
-            )
+            isPresented: showingExistingBackupPrompt
         ) {
             Button("Create New Backup", role: .destructive) {
-                guard let context = existingBackupContext else { return }
-                existingBackupContext = nil
-                existingBackupPasskeyHint = nil
-                manager.dispatch(action: .enableCloudBackupForceNew(context))
+                dispatchPromptAction(.acceptEnablePrompt(.createNew))
             }
             Button("Try Existing Passkey") {
-                guard let context = existingBackupContext else { return }
-                existingBackupContext = nil
-                existingBackupPasskeyHint = nil
-                manager.dispatch(action: .enableCloudBackup(context))
+                dispatchPromptAction(.acceptEnablePrompt(.useExisting))
             }
             Button("Cancel", role: .cancel) {
-                existingBackupContext = nil
-                existingBackupPasskeyHint = nil
-                manager.dispatch(action: .discardPendingEnableCloudBackup)
+                dispatchPromptAction(.discardPendingEnableCloudBackup)
             }
         } message: {
             Text(existingBackupMessage)

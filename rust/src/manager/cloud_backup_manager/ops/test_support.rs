@@ -66,7 +66,7 @@ impl cove_cspp::CsppStore for MockStoreHandle {
 }
 
 type MockDiscoverResult = Result<(Vec<u8>, Vec<u8>), PasskeyError>;
-type MockPasskeyActionResult = Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>;
+type MockPasskeyActionResults = Arc<Mutex<VecDeque<Result<Vec<u8>, PasskeyError>>>>;
 type MockPasskeyCreateResult = Arc<Mutex<Option<Result<PasskeyRegistrationResult, PasskeyError>>>>;
 type MockPasskeyPresenceResults = Arc<Mutex<VecDeque<PasskeyCredentialPresence>>>;
 #[derive(Debug, Clone, Default)]
@@ -159,6 +159,7 @@ struct MockCloudState {
     delete_namespace_attempts: usize,
     list_wallet_files_attempts: usize,
     list_wallet_files_attempts_by_namespace: HashMap<String, usize>,
+    wallet_backup_download_attempts: usize,
     wallet_backup_upload_attempts: usize,
     dirty_wallet_on_next_upload: Option<WalletId>,
     changed_wallet_on_next_upload: Option<WalletId>,
@@ -337,6 +338,10 @@ impl MockCloudStorage {
         self.state.lock().wallet_backup_upload_attempts
     }
 
+    pub(crate) fn wallet_backup_download_attempt_count(&self) -> usize {
+        self.state.lock().wallet_backup_download_attempts
+    }
+
     pub(crate) fn list_wallet_files_attempt_count(&self) -> usize {
         self.state.lock().list_wallet_files_attempts
     }
@@ -461,7 +466,11 @@ impl CloudStorageAccess for MockCloudStorage {
         _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        let dirty_wallet = self.state.lock().dirty_wallet_on_next_backup_check.take();
+        let dirty_wallet = {
+            let mut state = self.state.lock();
+            state.wallet_backup_download_attempts += 1;
+            state.dirty_wallet_on_next_backup_check.take()
+        };
         if let Some(wallet_id) = dirty_wallet {
             persist_dirty_blob_state(wallet_id);
         }
@@ -616,7 +625,7 @@ impl CloudStorageAccess for MockCloudStorage {
 pub(crate) struct MockPasskeyProviderImpl {
     discover_results: Arc<Mutex<VecDeque<MockDiscoverResult>>>,
     create_result: MockPasskeyCreateResult,
-    authenticate_result: MockPasskeyActionResult,
+    authenticate_results: MockPasskeyActionResults,
     create_count: Arc<Mutex<usize>>,
     authenticate_count: Arc<Mutex<usize>>,
     discover_count: Arc<Mutex<usize>>,
@@ -628,7 +637,7 @@ impl MockPasskeyProviderImpl {
     pub(crate) fn reset(&self) {
         self.discover_results.lock().clear();
         *self.create_result.lock() = None;
-        *self.authenticate_result.lock() = None;
+        self.authenticate_results.lock().clear();
         *self.create_count.lock() = 0;
         *self.authenticate_count.lock() = 0;
         *self.discover_count.lock() = 0;
@@ -663,7 +672,13 @@ impl MockPasskeyProviderImpl {
     }
 
     pub(crate) fn set_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
-        *self.authenticate_result.lock() = Some(result);
+        let mut results = self.authenticate_results.lock();
+        results.clear();
+        results.push_back(result);
+    }
+
+    pub(crate) fn push_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
+        self.authenticate_results.lock().push_back(result);
     }
 
     pub(crate) fn authenticate_count(&self) -> usize {
@@ -710,7 +725,7 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
     ) -> Result<Vec<u8>, PasskeyError> {
         *self.authenticate_count.lock() += 1;
         self.authenticated_credential_ids.lock().push(credential_id);
-        self.authenticate_result.lock().take().unwrap_or_else(|| {
+        self.authenticate_results.lock().pop_front().unwrap_or_else(|| {
             Err(PasskeyError::RequestFailed {
                 operation: PasskeyOperation::AuthenticateAssertion,
                 reason: PasskeyFailureReason::Unknown {

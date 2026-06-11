@@ -5,6 +5,7 @@ import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
@@ -133,6 +134,123 @@ class CloudBackupRegressionHelpersTest {
     }
 
     @Test
+    fun onboardingPolicySuppressesGenericCloudBackupRootPrompts() {
+        val context =
+            presentableContext(
+                presentationPolicy = CloudBackupPresentationPolicy.ONBOARDING,
+            )
+
+        assertFalse(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.VerificationPrompt,
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+        assertFalse(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.MissingPasskeyReminder,
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    @Test
+    fun onboardingPolicyAllowsCloudBackupEnablePrompts() {
+        val context =
+            presentableContext(
+                presentationPolicy = CloudBackupPresentationPolicy.ONBOARDING,
+            )
+
+        assertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.ExistingBackupFound(manualEnableContext(), null),
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+        assertTrue(
+            isCloudBackupPresentationPresentable(
+                presentation =
+                    CloudBackupRootPresentation.PasskeyChoice(
+                        CloudBackupPasskeyChoiceIntent.Enable(manualEnableContext(), null),
+                    ),
+                context = context,
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    @Test
+    fun unsettledNavigationBlocksCloudBackupRootPrompts() {
+        assertFalse(
+            isCloudBackupPresentationPresentable(
+                presentation = CloudBackupRootPresentation.VerificationPrompt,
+                context =
+                    presentableContext(
+                        presentationPolicy = CloudBackupPresentationPolicy.REQUIRES_UNLOCKED_AUTH,
+                    ).copy(isNavigationSettled = false),
+                hasBlockers = false,
+            ),
+        )
+    }
+
+    @Test
+    fun rootPromptVerificationResultsProduceFeedback() {
+        assertEquals(
+            CloudBackupVerificationFeedback.SuccessFloater("Cloud Backup Verified"),
+            cloudBackupVerificationFeedback(
+                CloudBackupVerificationPresentation.Completed(
+                    CloudBackupVerificationSource.ROOT_PROMPT,
+                ),
+            ),
+        )
+        assertEquals(
+            CloudBackupVerificationFeedback.FailureAlert(
+                title = "Cloud Backup Verification Failed",
+                message = "Drive unavailable",
+            ),
+            cloudBackupVerificationFeedback(
+                CloudBackupVerificationPresentation.Failed(
+                    source = CloudBackupVerificationSource.ROOT_PROMPT,
+                    message = "Drive unavailable",
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun nonRootPromptVerificationResultsDoNotProduceFeedback() {
+        assertNull(
+            cloudBackupVerificationFeedback(
+                CloudBackupVerificationPresentation.Completed(
+                    CloudBackupVerificationSource.SETTINGS,
+                ),
+            ),
+        )
+        assertNull(
+            cloudBackupVerificationFeedback(
+                CloudBackupVerificationPresentation.Failed(
+                    source = CloudBackupVerificationSource.ONBOARDING,
+                    message = "Drive unavailable",
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun settingsEnableStartsManualPasskeyChoicePrompt() {
+        val action = settingsEnableCloudBackupPrompt()
+        assertTrue(action is CloudBackupManagerAction.PromptEnablePasskeyChoice)
+
+        val context = (action as CloudBackupManagerAction.PromptEnablePasskeyChoice).v1
+
+        assertEquals(SavedPasskeyConfirmationMode.MANUAL, context.savedPasskeyConfirmation)
+        assertEquals(CloudBackupVerificationSource.SETTINGS, context.verificationSource)
+    }
+
+    @Test
     fun decoyModeBlocksAllCloudBackupRootPresentations() {
         val context =
             CloudBackupPresentationContext(
@@ -169,6 +287,16 @@ class CloudBackupRegressionHelpersTest {
             ),
         )
     }
+
+    private fun presentableContext(
+        presentationPolicy: CloudBackupPresentationPolicy,
+    ): CloudBackupPresentationContext =
+        CloudBackupPresentationContext(
+            isActivityResumed = true,
+            isUnlocked = true,
+            isCoverPresented = false,
+            presentationPolicy = presentationPolicy,
+        )
 
     private fun manualEnableContext(): CloudBackupEnableContext =
         CloudBackupEnableContext(

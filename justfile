@@ -162,6 +162,18 @@ android-ui-manual:
 
 alias aum := android-ui-manual
 
+# Update Android Compose preview screenshot references
+[group('test')]
+[working-directory('android')]
+android-preview-screenshots-update:
+    ./gradlew :app:updateDevDebugScreenshotTest
+
+# Validate Android Compose preview screenshots
+[group('test')]
+[working-directory('android')]
+android-preview-screenshots-validate:
+    ./gradlew :app:validateDevDebugScreenshotTest
+
 # Run manual iOS full-launch UI tests without opening Simulator
 [group('test')]
 [script('bash')]
@@ -399,6 +411,26 @@ run-android profile="debug":
     just xtask run-android {{ profile }} && just notf "done run android"
 
 alias ra := run-android
+
+# Launch installed Android app
+[group('util')]
+launch-android:
+    adb shell am start -W -n org.bitcoinppl.cove.dev/org.bitcoinppl.cove.MainActivity
+
+alias la := launch-android
+
+# Clear Android app data and launch installed app
+[group('util')]
+reset-run-android:
+    just reset-android
+    just launch-android
+
+[group('util')]
+reset-android:
+    adb shell pm clear org.bitcoinppl.cove.dev
+
+alias rra := reset-run-android
+alias rea := reset-android
 
 # Build and clean install Android (rebuilds native libs, clears Gradle cache)
 [group('util')]

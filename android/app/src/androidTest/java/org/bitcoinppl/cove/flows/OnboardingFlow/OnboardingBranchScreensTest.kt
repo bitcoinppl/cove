@@ -1,26 +1,44 @@
 package org.bitcoinppl.cove.flows.OnboardingFlow
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
+import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.OnboardingBranch
 import org.bitcoinppl.cove_core.OnboardingStorageSelection
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
 class OnboardingBranchScreensTest {
     @get:Rule
     val compose = createComposeRule()
+
+    private var updateContent: ((@Composable () -> Unit) -> Unit)? = null
+
+    @Before
+    fun bootstrapRustRuntime() {
+        bootstrapRustRuntimeForUiTest()
+    }
 
     @Test
     fun welcomeContinuesToBitcoinChoice() {
@@ -40,36 +58,49 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
-    fun bitcoinChoiceExposesNewAndExistingBranches() {
-        var selected: Boolean? = null
+    fun bitcoinChoiceExposesRestoreNewAndExistingBranches() {
+        var selected = ""
 
         compose.setOnboardingContent {
             OnboardingBitcoinChoiceScreen(
                 errorMessage = null,
-                onNewHere = { selected = false },
-                onHasBitcoin = { selected = true },
+                onRestoreFromCoveBackup = { selected = "restore" },
+                onNewHere = { selected = "new" },
+                onHasBitcoin = { selected = "existing" },
             )
         }
 
+        compose.assertNodeBelow("onboarding.bitcoinChoice.restoreDivider", "onboarding.bitcoinChoice.existing")
+        compose.assertNodeBelow("onboarding.bitcoinChoice.restore", "onboarding.bitcoinChoice.restoreDivider")
+
         compose.card("No, I'm new here").performClick()
-        assertEquals(false, selected)
+        assertEquals("new", selected)
 
         compose.card("Yes, I have Bitcoin").performClick()
-        assertEquals(true, selected)
+        assertEquals("existing", selected)
+
+        compose.card("Restore From Cove Backup").performClick()
+        assertEquals("restore", selected)
     }
 
     @Test
     fun storageChoiceExposesExchangeHardwareAndSoftwareBranches() {
         var selected: OnboardingStorageSelection? = null
+        var restoreSelected = false
 
         compose.setOnboardingContent {
             OnboardingStorageChoiceScreen(
                 errorMessage = null,
-                onRestoreFromCoveBackup = null,
+                onRestoreFromCoveBackup = { restoreSelected = true },
                 onSelectStorage = { selected = it },
                 onBack = {},
             )
         }
+
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
+        compose.onAllNodesWithTag("onboarding.storage.restoreDivider").assertCountEquals(0)
+        compose.assertNodeBelow("onboarding.storage.restore", "onboarding.storage.software")
+        compose.onNodeWithText("Restore your Cove backup from Google Drive, secured by passkeys").assertIsDisplayed()
 
         compose.card("On an exchange").performClick()
         assertEquals(OnboardingStorageSelection.EXCHANGE, selected)
@@ -79,6 +110,9 @@ class OnboardingBranchScreensTest {
 
         compose.card("Software wallet").performClick()
         assertEquals(OnboardingStorageSelection.SOFTWARE_WALLET, selected)
+
+        compose.card("I'm already using Cove").performClick()
+        assertEquals(true, restoreSelected)
     }
 
     @Test
@@ -99,12 +133,14 @@ class OnboardingBranchScreensTest {
     @Test
     fun backupContinueRequiresRecoveryWordsOrCloudBackup() {
         var selected = ""
+        val secretWordsSaved = mutableStateOf(false)
+        val cloudBackupEnabled = mutableStateOf(false)
 
         compose.setOnboardingContent {
             OnboardingBackupWalletView(
                 branch = OnboardingBranch.NEW_USER,
-                secretWordsSaved = false,
-                cloudBackupEnabled = false,
+                secretWordsSaved = secretWordsSaved.value,
+                cloudBackupEnabled = cloudBackupEnabled.value,
                 wordCount = 12,
                 onShowWords = { selected = "words" },
                 onEnableCloudBackup = { selected = "cloud" },
@@ -118,21 +154,24 @@ class OnboardingBranchScreensTest {
         compose.button("Enable").performClick()
         assertEquals("cloud", selected)
 
-        compose.setOnboardingContent {
-            OnboardingBackupWalletView(
-                branch = OnboardingBranch.NEW_USER,
-                secretWordsSaved = true,
-                cloudBackupEnabled = false,
-                wordCount = 12,
-                onShowWords = {},
-                onEnableCloudBackup = {},
-                onContinue = { selected = "continue" },
-            )
+        compose.runOnUiThread {
+            selected = ""
+            secretWordsSaved.value = true
+            cloudBackupEnabled.value = false
         }
 
         compose.button("Continue").assertIsEnabled()
         compose.button("Continue").performClick()
         assertEquals("continue", selected)
+
+        compose.runOnUiThread {
+            secretWordsSaved.value = false
+            cloudBackupEnabled.value = true
+        }
+
+        compose.onNodeWithText("Back up your wallet").assertIsDisplayed()
+        compose.onNodeWithText("Choose at least one backup method before continuing.").assertIsDisplayed()
+        compose.button("Enabled").assertIsDisplayed()
     }
 
     @Test
@@ -162,11 +201,12 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("Your Recovery Words").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.onNodeWithText("abandon").assertIsDisplayed()
         compose.button("I Saved These Words").performClick()
         assertEquals("saved", selected)
 
-        compose.onNodeWithContentDescription("Back").performClick()
+        compose.button("Back").performClick()
         assertEquals("back", selected)
     }
 
@@ -216,8 +256,9 @@ class OnboardingBranchScreensTest {
 
         compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
         compose.onNodeWithText("How It Works").assertIsDisplayed()
+        compose.button("Back").assertIsDisplayed()
         compose.button("Enable Cloud Backup").assertIsNotEnabled()
-        compose.onNodeWithText("Cancel").performClick()
+        compose.button("Back").performClick()
         assertEquals("skip-standard", selected)
 
         compose.setOnboardingContent {
@@ -232,7 +273,7 @@ class OnboardingBranchScreensTest {
         compose.button("Enable Cloud Backup").performClick()
         compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
         compose.button("Enable Cloud Backup").assertIsNotEnabled()
-        compose.onNodeWithText("Cancel").performClick()
+        compose.button("Back").performClick()
         compose.onNodeWithText("Protect this wallet with Cloud Backup?").assertIsDisplayed()
         compose.button("Not Now").performClick()
         assertEquals("skip-software", selected)
@@ -249,7 +290,62 @@ class OnboardingBranchScreensTest {
         compose.button("Enable Cloud Backup").performClick()
         compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
         compose.onNodeWithText("hardware wallet seed or recovery phrase", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Cancel").performClick()
+        compose.button("Back").performClick()
+        compose.onNodeWithText("Protect this hardware wallet with Cloud Backup?").assertIsDisplayed()
+        compose.button("Not Now").performClick()
+        assertEquals("skip-hardware", selected)
+    }
+
+    @Test
+    fun cloudBackupDetailsSystemBackCancelsWithoutStartingEnable() {
+        var selected = ""
+
+        compose.setOnboardingContent {
+            OnboardingCloudBackupStepView(
+                branch = OnboardingBranch.NEW_USER,
+                onEnable = {},
+                onEnabled = { selected = "enabled-standard" },
+                onSkip = { selected = "skip-standard" },
+            )
+        }
+
+        compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
+        compose.button("Back").assertIsDisplayed()
+        compose.pressSystemBack()
+        assertEquals("skip-standard", selected)
+
+        selected = ""
+        compose.setOnboardingContent {
+            OnboardingCloudBackupStepView(
+                branch = OnboardingBranch.SOFTWARE_IMPORT,
+                onEnable = {},
+                onEnabled = { selected = "enabled-software" },
+                onSkip = { selected = "skip-software" },
+            )
+        }
+
+        compose.button("Enable Cloud Backup").performClick()
+        compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
+        compose.button("Back").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("Protect this wallet with Cloud Backup?").assertIsDisplayed()
+        compose.button("Not Now").performClick()
+        assertEquals("skip-software", selected)
+
+        selected = ""
+        compose.setOnboardingContent {
+            OnboardingCloudBackupStepView(
+                branch = OnboardingBranch.HARDWARE,
+                onEnable = {},
+                onEnabled = { selected = "enabled-hardware" },
+                onSkip = { selected = "skip-hardware" },
+            )
+        }
+
+        compose.button("Enable Cloud Backup").performClick()
+        compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
+        compose.button("Back").assertIsDisplayed()
+        compose.pressSystemBack()
         compose.onNodeWithText("Protect this hardware wallet with Cloud Backup?").assertIsDisplayed()
         compose.button("Not Now").performClick()
         assertEquals("skip-hardware", selected)
@@ -282,6 +378,7 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("No Google Drive Backup Found").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.button("Continue Without Cloud Restore").performClick()
         assertEquals("continue-unavailable", selected)
         compose.button("Back").performClick()
@@ -295,6 +392,7 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("You're Offline").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.button("Continue Without Cloud Restore").performClick()
         assertEquals("continue-offline", selected)
         compose.button("Back").performClick()
@@ -302,7 +400,7 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
-    fun restoreOfferWarningAndErrorVariantsRenderWithoutRestoring() {
+    fun restoreOfferWarningCopyIsHiddenAndErrorVariantRendersWithoutRestoring() {
         var selected = ""
 
         compose.setOnboardingContent {
@@ -316,7 +414,11 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("Restore from Google Drive").assertIsDisplayed()
-        compose.onNodeWithText("Cloud storage may be unavailable.").assertIsDisplayed()
+        compose.onAllNodesWithText(
+            "We couldn't confirm whether a Google Drive backup is available.",
+            substring = true,
+        ).assertCountEquals(0)
+        compose.onAllNodesWithText("Cloud storage may be unavailable.").assertCountEquals(0)
         compose.button("Restore with Passkey").assertIsDisplayed()
         compose.onNodeWithText("Set Up as New").performClick()
         assertEquals("skip-warning", selected)
@@ -354,15 +456,51 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("Import your software wallet").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.button("Create a new wallet instead").performClick()
         assertEquals("create", selected)
         compose.card("Enter recovery words").performClick()
         compose.onNodeWithText("How many words do you have?").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.card("12 words").assertIsDisplayed()
         compose.card("24 words").assertIsDisplayed()
         compose.button("Back").performClick()
         compose.onNodeWithText("Import your software wallet").assertIsDisplayed()
         compose.button("Back").performClick()
+        assertEquals("back", selected)
+    }
+
+    @Test
+    fun softwareImportSystemBackUnwindsLocalModesBeforeLeavingStep() {
+        var selected = ""
+
+        compose.setOnboardingContent {
+            OnboardingSoftwareImportFlowView(
+                errorMessage = null,
+                cloudRestoreAlertVisible = false,
+                onImported = {},
+                onCreateWallet = {},
+                onRestoreFromCloudBackup = {},
+                onDismissCloudRestoreAlert = {},
+                onBack = { selected = "back" },
+            )
+        }
+
+        compose.card("Enter recovery words").performClick()
+        compose.onNodeWithText("How many words do you have?").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("Import your software wallet").assertIsDisplayed()
+
+        compose.card("Enter recovery words").performClick()
+        compose.card("12 words").performClick()
+        compose.onNodeWithTag("hotWalletImport.word.1").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("How many words do you have?").assertIsDisplayed()
+
+        compose.pressSystemBack()
+        compose.onNodeWithText("Import your software wallet").assertIsDisplayed()
+
+        compose.pressSystemBack()
         assertEquals("back", selected)
     }
 
@@ -382,7 +520,7 @@ class OnboardingBranchScreensTest {
 
         compose.card("Enter recovery words").performClick()
         compose.card("12 words").performClick()
-        compose.onNodeWithText("Import Wallet").assertIsDisplayed()
+        compose.onNodeWithTag("hotWalletImport.word.1").assertIsDisplayed()
 
         compose.setOnboardingContent {
             OnboardingSoftwareImportFlowView(
@@ -398,7 +536,7 @@ class OnboardingBranchScreensTest {
 
         compose.card("Enter recovery words").performClick()
         compose.card("24 words").performClick()
-        compose.onNodeWithText("Import Wallet").assertIsDisplayed()
+        compose.onNodeWithTag("hotWalletImport.word.1").assertIsDisplayed()
     }
 
     @Test
@@ -415,6 +553,7 @@ class OnboardingBranchScreensTest {
             )
         }
 
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.card("Scan export QR").assertIsDisplayed()
         compose.card("Import export file").assertIsDisplayed()
         compose.card("Scan with NFC").assertIsDisplayed()
@@ -436,15 +575,50 @@ class OnboardingBranchScreensTest {
 
         compose.card("Import export file").performClick()
         compose.onNodeWithText("Import a hardware export file").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.button("Choose File").assertIsDisplayed()
         compose.button("Back").performClick()
         compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
 
         compose.card("Scan with NFC").performClick()
         compose.onNodeWithText("Scan your hardware wallet with NFC").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.button("Start NFC Scan").assertIsDisplayed()
         compose.button("Back").performClick()
         compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
+    }
+
+    @Test
+    fun hardwareImportSystemBackUnwindsLocalModesBeforeLeavingStep() {
+        var selected = ""
+
+        compose.setOnboardingContent {
+            OnboardingHardwareImportFlowView(
+                cloudRestoreAlertVisible = false,
+                onImported = {},
+                onRestoreFromCloudBackup = {},
+                onDismissCloudRestoreAlert = {},
+                onBack = { selected = "back" },
+            )
+        }
+
+        compose.card("Import export file").performClick()
+        compose.onNodeWithText("Import a hardware export file").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
+
+        compose.card("Scan with NFC").performClick()
+        compose.onNodeWithText("Scan your hardware wallet with NFC").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
+
+        compose.card("Scan export QR").performClick()
+        compose.onNodeWithText("Scan Hardware QR").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
+
+        compose.pressSystemBack()
+        assertEquals("back", selected)
     }
 
     @Test
@@ -469,7 +643,7 @@ class OnboardingBranchScreensTest {
             .performClick()
         compose.cardContaining("I have read and agree").performScrollTo()
             .performClick()
-        compose.button("Agree and Continue").performScrollTo().assertIsEnabled()
+        compose.button("Agree and Continue").assertIsEnabled()
         compose.button("Agree and Continue").performClick()
 
         assertEquals(true, agreed)
@@ -479,17 +653,44 @@ class OnboardingBranchScreensTest {
         onNode(hasText(text) and hasClickAction())
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.card(title: String) =
-        onNode(hasClickAction() and hasAnyDescendant(hasText(title)))
+        onNode(hasClickAction() and hasAnyDescendant(hasText(title)), useUnmergedTree = true)
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.cardContaining(text: String) =
-        onNode(hasClickAction() and hasAnyDescendant(hasText(text, substring = true)))
+        onNode(hasClickAction() and hasAnyDescendant(hasText(text, substring = true)), useUnmergedTree = true)
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.pressSystemBack() {
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        waitForIdle()
+    }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.assertNodeBelow(
+        lowerTag: String,
+        upperTag: String,
+    ) {
+        val lowerTop = onNodeWithTag(lowerTag).getUnclippedBoundsInRoot().top
+        val upperBottom = onNodeWithTag(upperTag).getUnclippedBoundsInRoot().bottom
+
+        assertTrue("$lowerTag should appear below $upperTag", lowerTop > upperBottom)
+    }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.setOnboardingContent(
-        content: @androidx.compose.runtime.Composable () -> Unit,
+        content: @Composable () -> Unit,
     ) {
+        updateContent?.let { update ->
+            update(content)
+            return
+        }
+
+        val contentState = mutableStateOf(content)
+        updateContent = { nextContent ->
+            runOnUiThread {
+                contentState.value = nextContent
+            }
+        }
+
         setContent {
             CoveTheme(darkTheme = true) {
-                content()
+                contentState.value()
             }
         }
     }

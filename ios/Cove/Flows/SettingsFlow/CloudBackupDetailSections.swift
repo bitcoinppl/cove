@@ -37,8 +37,6 @@ struct DetailFormContent: View {
         case let .loadFailed(error):
             OtherBackupsLoadFailedSection(error: error)
         }
-
-        DisableCloudBackupSection(manager: manager, detail: detail)
     }
 
     private var wallets: [CloudBackupWalletItem] {
@@ -111,12 +109,10 @@ struct MissingPasskeyContent: View {
                     .font(.caption)
             }
         }
-
-        DisableCloudBackupSection(manager: manager, detail: manager.detail)
     }
 }
 
-private struct DisableCloudBackupSection: View {
+struct DisableCloudBackupSection: View {
     let manager: CloudBackupManager
     let detail: CloudBackupDetail?
     @State private var showingUnavailableAlert = false
@@ -157,12 +153,13 @@ private struct DisableCloudBackupSection: View {
     }
 
     var body: some View {
-        Section(header: Text("Disable Cloud Backup")) {
+        Section {
             if manager.isDisablingCloudBackup {
                 HStack {
                     ProgressView()
                         .padding(.trailing, 8)
                     Text("Deleting cloud backups...")
+                        .font(.footnote)
                 }
             }
 
@@ -193,13 +190,11 @@ private struct DisableCloudBackupSection: View {
                     showingFirstConfirmation = true
                 }
             } label: {
-                Label("Disable Cloud Backup", systemImage: "icloud.slash")
+                Text("Disable Cloud Backup")
+                    .font(.footnote)
             }
             .disabled(manager.isDisablingCloudBackup)
-
-            Text("Local wallets stay on this device. Current Cove cloud backups will be deleted from cloud storage.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
         }
         .alert("Cloud Backup Can't Be Disabled Yet", isPresented: $showingUnavailableAlert) {
             Button("OK", role: .cancel) {}

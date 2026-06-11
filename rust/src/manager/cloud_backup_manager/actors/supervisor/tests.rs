@@ -1,6 +1,7 @@
 use super::*;
 use super::enable::{
     EnableRecoveryFinalization, EnableUploadFinalization, PendingEnableUploadSelection,
+    SavedPasskeyConfirmationRetry,
 };
 use super::verification::DeepVerificationContinuation;
 use crate::database::cloud_backup::PersistedDisablingCloudBackup;
@@ -888,6 +889,7 @@ async fn supervisor_ignores_stale_saved_passkey_confirmation_completion() {
     supervisor
         .complete_saved_passkey_confirmation(
             stale,
+            SavedPasskeyConfirmationRetry::Manual,
             CloudBackupSavedPasskeyConfirmation::Failed(CloudBackupError::Internal(
                 "stale completion".into(),
             )),
@@ -901,6 +903,7 @@ async fn supervisor_ignores_stale_saved_passkey_confirmation_completion() {
     supervisor
         .complete_saved_passkey_confirmation(
             current,
+            SavedPasskeyConfirmationRetry::Manual,
             CloudBackupSavedPasskeyConfirmation::Failed(CloudBackupError::Internal(
                 "current completion".into(),
             )),
@@ -1096,8 +1099,10 @@ async fn supervisor_ignores_stale_enable_recovery_finalization_completion() {
         .complete_enable_recovery_finalization(
             stale,
             EnableRecoveryFinalization {
+                context: CloudBackupEnableContext::settings_manual(),
                 namespace_id: "stale-namespace".into(),
                 active_critical_key: zeroize::Zeroizing::new([0; 32]),
+                pending_uploads: Vec::new(),
                 cleanup_sources: Vec::new(),
             },
             Err(CloudBackupError::Internal("stale completion".into())),
@@ -1112,8 +1117,10 @@ async fn supervisor_ignores_stale_enable_recovery_finalization_completion() {
         .complete_enable_recovery_finalization(
             current,
             EnableRecoveryFinalization {
+                context: CloudBackupEnableContext::settings_manual(),
                 namespace_id: "current-namespace".into(),
                 active_critical_key: zeroize::Zeroizing::new([0; 32]),
+                pending_uploads: Vec::new(),
                 cleanup_sources: Vec::new(),
             },
             Err(CloudBackupError::Internal("current completion".into())),

@@ -5,6 +5,7 @@
 - for topic-specific guidance (passkeys, iCloud Drive, iOS/Android parity), read the docs linked from [ARCHITECTURE.md](ARCHITECTURE.md)
 - Before changing redb `TableDefinition`s, redb `Value::type_name()` implementations, persisted database structs/enums, or module paths containing persisted types, read [docs/redb.md](docs/redb.md) and verify old and new table metadata compatibility
 - prefer structurally correct fixes over temporary workarounds, even when the diff is larger
+- before changing Android manager ownership, generated UniFFI `.rust` access, `close()`, or route-level `DisposableEffect` cleanup, read the Mobile Frontends manager ownership guidance in [ARCHITECTURE.md](ARCHITECTURE.md) and the lifecycle notes in [docs/ios_android_parity.md](docs/ios_android_parity.md)
 - make impossible states impossible; prefer typed domain models over caller-specific conditionals or UI-side compensation
 - for long-lived UI-facing managers, prefer `dispatch(action:)` for user intents and keep named methods for reads, bootstrap/lifecycle hooks, and special service-style operations, use `state()` for the initial snapshot only, and send typed delta reconcile messages for ongoing UI updates instead of re-sending the whole state after every mutation
 - prefer scoped blocks to release locks or borrows instead of explicit `drop(...)` unless explicit `drop` is actually needed

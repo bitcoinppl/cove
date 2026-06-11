@@ -259,7 +259,6 @@ private struct OnboardingHardwareImportCloudBackupStepView: View {
 private struct OnboardingCloudBackupDetailsStepView: View {
     @State private var backupManager = CloudBackupManager.shared
     @State private var didReportEnabled = false
-    @State private var didAutoConfirmSavedPasskey = false
 
     let onEnable: () -> Void
     let onEnabled: () -> Void
@@ -287,7 +286,6 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         if case .running = backupManager.verificationState { return true }
         if backupManager.hasPendingUploadVerification { return true }
         if case .confirmingSavedPasskey = backupManager.enableFlow { return true }
-        if needsAutomaticPasskeyConfirmation { return true }
 
         return isEnablingCloudBackup && !needsManualPasskeyConfirmation
     }
@@ -312,35 +310,8 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         return mode
     }
 
-    private var needsAutomaticPasskeyConfirmation: Bool {
-        savedPasskeyConfirmationMode == .automatic
-    }
-
     private var needsManualPasskeyConfirmation: Bool {
         savedPasskeyConfirmationMode == .manual
-    }
-
-    private var isAutomaticPasskeyConfirmationPhase: Bool {
-        if needsAutomaticPasskeyConfirmation { return true }
-        if didAutoConfirmSavedPasskey,
-           case .confirmingSavedPasskey = backupManager.enableFlow
-        {
-            return true
-        }
-
-        return false
-    }
-
-    private var busyOverlayTitleOverride: String? {
-        guard isAutomaticPasskeyConfirmationPhase else { return nil }
-
-        return "Finishing passkey setup..."
-    }
-
-    private var busyOverlaySubtitleOverride: String? {
-        guard isAutomaticPasskeyConfirmationPhase else { return nil }
-
-        return "Cloud Backup will continue automatically"
     }
 
     private var primaryButtonTitle: String {
@@ -369,15 +340,6 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         onSkip()
     }
 
-    private func autoConfirmSavedPasskeyIfNeeded() {
-        guard needsAutomaticPasskeyConfirmation, !didAutoConfirmSavedPasskey, !didReportEnabled else {
-            return
-        }
-
-        didAutoConfirmSavedPasskey = true
-        backupManager.dispatch(action: .confirmSavedPasskey)
-    }
-
     var body: some View {
         ZStack {
             CloudBackupEnableOnboardingView(
@@ -391,21 +353,15 @@ private struct OnboardingCloudBackupDetailsStepView: View {
 
             if isBusy {
                 CloudBackupEnableBusyOverlay(
-                    enableFlow: backupManager.enableFlow,
-                    titleOverride: busyOverlayTitleOverride,
-                    subtitleOverride: busyOverlaySubtitleOverride
+                    enableFlow: backupManager.enableFlow
                 )
             }
         }
         .task {
             completeIfEnabled()
-            autoConfirmSavedPasskeyIfNeeded()
         }
         .onChange(of: backupManager.lifecycle, initial: true) { _, _ in
             completeIfEnabled()
-        }
-        .onChange(of: backupManager.enableFlow, initial: true) { _, _ in
-            autoConfirmSavedPasskeyIfNeeded()
         }
     }
 

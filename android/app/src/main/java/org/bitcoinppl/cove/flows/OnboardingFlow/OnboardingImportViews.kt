@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.flows.OnboardingFlow
 
 import android.content.Context
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -102,11 +103,14 @@ internal fun OnboardingSoftwareImportFlowView(
     var mode by remember { mutableStateOf<SoftwareImportMode>(SoftwareImportMode.Chooser) }
 
     when (val currentMode = mode) {
-        SoftwareImportMode.Chooser ->
+        SoftwareImportMode.Chooser -> {
+            BackHandler(onBack = onBack)
+
             OnboardingPromptScreen(
                 icon = Icons.Default.Download,
                 title = "Import your software wallet",
                 subtitle = "Choose how you want to bring your existing wallet into Cove.",
+                onBack = onBack,
             ) {
                 if (errorMessage != null) {
                     OnboardingInlineMessage(text = errorMessage)
@@ -130,13 +134,6 @@ internal fun OnboardingSoftwareImportFlowView(
 
                 Spacer(modifier = Modifier.size(14.dp))
 
-                OnboardingSecondaryButton(
-                    text = "Back",
-                    onClick = onBack,
-                )
-
-                Spacer(modifier = Modifier.size(2.dp))
-
                 TextButton(
                     onClick = onCreateWallet,
                     modifier =
@@ -151,12 +148,18 @@ internal fun OnboardingSoftwareImportFlowView(
                     )
                 }
             }
+        }
 
-        SoftwareImportMode.WordCount ->
+        SoftwareImportMode.WordCount -> {
+            BackHandler {
+                mode = SoftwareImportMode.Chooser
+            }
+
             OnboardingPromptScreen(
                 icon = Icons.Default.Description,
                 title = "How many words do you have?",
                 subtitle = "Select the recovery phrase length before entering your words.",
+                onBack = { mode = SoftwareImportMode.Chooser },
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OnboardingChoiceCard(
@@ -172,14 +175,8 @@ internal fun OnboardingSoftwareImportFlowView(
                         onClick = { mode = SoftwareImportMode.Words(NumberOfBip39Words.TWENTY_FOUR) },
                     )
                 }
-
-                Spacer(modifier = Modifier.size(14.dp))
-
-                OnboardingSecondaryButton(
-                    text = "Back",
-                    onClick = { mode = SoftwareImportMode.Chooser },
-                )
             }
+        }
 
         is SoftwareImportMode.Words ->
             OnboardingHotWalletImportView(
@@ -217,6 +214,8 @@ private fun OnboardingHotWalletImportView(
     val app = remember { AppManager.getInstance() }
     var manager by remember { mutableStateOf<ImportWalletManager?>(null) }
     var loading by remember { mutableStateOf(true) }
+
+    BackHandler(onBack = onBack)
 
     LaunchedEffect(numberOfWords, importType) {
         loading = true
@@ -273,11 +272,14 @@ internal fun OnboardingHardwareImportFlowView(
     var mode by remember { mutableStateOf<HardwareImportMode>(HardwareImportMode.Chooser) }
 
     when (mode) {
-        HardwareImportMode.Chooser ->
+        HardwareImportMode.Chooser -> {
+            BackHandler(onBack = onBack)
+
             OnboardingPromptScreen(
                 icon = Icons.Default.Download,
                 title = "Import your hardware wallet",
                 subtitle = "Choose how your hardware wallet exports its public data.",
+                onBack = onBack,
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OnboardingChoiceCard(
@@ -299,20 +301,19 @@ internal fun OnboardingHardwareImportFlowView(
                         onClick = { mode = HardwareImportMode.Nfc },
                     )
                 }
+            }
+        }
 
-                Spacer(modifier = Modifier.size(14.dp))
-
-                OnboardingSecondaryButton(
-                    text = "Back",
-                    onClick = onBack,
-                )
+        HardwareImportMode.Qr -> {
+            BackHandler {
+                mode = HardwareImportMode.Chooser
             }
 
-        HardwareImportMode.Qr ->
             OnboardingHardwareQrImportView(
                 onImported = onImported,
                 onBack = { mode = HardwareImportMode.Chooser },
             )
+        }
 
         HardwareImportMode.File ->
             OnboardingHardwareFileImportView(
@@ -366,6 +367,8 @@ private fun OnboardingHardwareQrImportView(
 ) {
     val app = remember { AppManager.getInstance() }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    BackHandler(onBack = onBack)
 
     Box(
         modifier =
@@ -435,6 +438,12 @@ private fun OnboardingHardwareFileImportView(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isImporting by remember { mutableStateOf(false) }
 
+    BackHandler {
+        if (!isImporting) {
+            onBack()
+        }
+    }
+
     val filePickerLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
@@ -459,6 +468,8 @@ private fun OnboardingHardwareFileImportView(
         icon = Icons.Default.Description,
         title = "Import a hardware export file",
         subtitle = "Choose the wallet export file from your hardware wallet.",
+        onBack = onBack,
+        backEnabled = !isImporting,
     ) {
         if (errorMessage != null) {
             OnboardingInlineMessage(text = errorMessage!!)
@@ -484,14 +495,6 @@ private fun OnboardingHardwareFileImportView(
                 onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
             )
         }
-
-        Spacer(modifier = Modifier.size(14.dp))
-
-        OnboardingSecondaryButton(
-            text = "Back",
-            onClick = onBack,
-            enabled = !isImporting,
-        )
     }
 }
 
@@ -503,6 +506,11 @@ private fun OnboardingHardwareNfcImportView(
     val activity = androidx.compose.ui.platform.LocalContext.current.findActivity()
     val nfcReader = remember(activity) { activity?.let { NfcReader(it) } }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    BackHandler {
+        nfcReader?.reset()
+        onBack()
+    }
 
     LaunchedEffect(nfcReader) {
         nfcReader?.scanResults?.collect { result ->
@@ -536,6 +544,10 @@ private fun OnboardingHardwareNfcImportView(
         icon = Icons.Default.Nfc,
         title = "Scan your hardware wallet with NFC",
         subtitle = "Hold your hardware wallet or export tag near the top of your phone.",
+        onBack = {
+            nfcReader?.reset()
+            onBack()
+        },
     ) {
         if (activity == null || nfcReader == null) {
             OnboardingInlineMessage(text = "NFC is not available on this device.")
@@ -561,16 +573,6 @@ private fun OnboardingHardwareNfcImportView(
                 nfcReader?.startScanning()
             },
             enabled = nfcReader != null && nfcReader.isScanning.not(),
-        )
-
-        Spacer(modifier = Modifier.size(14.dp))
-
-        OnboardingSecondaryButton(
-            text = "Back",
-            onClick = {
-                nfcReader?.reset()
-                onBack()
-            },
         )
     }
 }
@@ -617,12 +619,8 @@ private fun OnboardingImportErrorView(
         icon = Icons.Default.Download,
         title = title,
         subtitle = message,
-    ) {
-        OnboardingSecondaryButton(
-            text = "Back",
-            onClick = onBack,
-        )
-    }
+        onBack = onBack,
+    ) {}
 }
 
 private fun importHardwareWalletFromUri(

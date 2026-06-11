@@ -187,11 +187,11 @@ struct CloudRestoreOfferView: View {
                     .overlay(Color.coveLightGray.opacity(0.16))
             }
 
-            HStack(alignment: .center, spacing: 14) {
+            HStack(alignment: .center, spacing: 16) {
                 Image(systemName: "lock")
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(Color.btnGradientLight)
-                    .frame(width: 28)
+                    .frame(width: 48)
 
                 Text(passkeyStorageDescription)
                     .font(OnboardingRecoveryTypography.subheadline)

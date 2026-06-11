@@ -20,6 +20,7 @@ import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.NoCredentialException
+import androidx.credentials.exceptions.domerrors.DataError
 import androidx.credentials.exceptions.domerrors.DomError
 import androidx.credentials.exceptions.domerrors.InvalidStateError
 import androidx.credentials.exceptions.domerrors.NotAllowedError
@@ -362,7 +363,7 @@ internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
         is CreatePublicKeyCredentialDomException ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
-                passkeyDomErrorReason(error.domError),
+                passkeyCreateDomErrorReason(error),
             )
 
         is CreateCredentialUnsupportedException ->
@@ -371,13 +372,13 @@ internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
         is CreateCredentialException ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
-                passkeyUnknownReason(error.passkeyMessage("passkey creation failed")),
+                passkeyCreateFailureReason(error.passkeyMessage("passkey creation failed")),
             )
 
         else ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
-                passkeyUnknownReason(error.passkeyMessage("passkey creation failed")),
+                passkeyCreateFailureReason(error.passkeyMessage("passkey creation failed")),
             )
     }
 
@@ -436,6 +437,37 @@ private fun passkeyRequestFailed(
 
 private fun passkeyUnknownReason(message: String): PasskeyFailureReason =
     PasskeyFailureReason.Unknown(diagnosticMessage = message)
+
+private fun passkeyCreateFailureReason(message: String): PasskeyFailureReason =
+    if (message.isRpIdValidationErrorMessage()) {
+        PasskeyFailureReason.DeviceNotConfigured
+    } else {
+        passkeyUnknownReason(message)
+    }
+
+private fun passkeyCreateDomErrorReason(
+    error: CreatePublicKeyCredentialDomException,
+): PasskeyFailureReason {
+    val domError = error.domError
+    val message =
+        error.errorMessage?.toString()?.takeIf(String::isNotBlank)
+            ?: error.passkeyMessage("")
+
+    return if (domError.isRpIdValidationError(message)) {
+        PasskeyFailureReason.DeviceNotConfigured
+    } else {
+        passkeyDomErrorReason(domError)
+    }
+}
+
+private fun DomError.isRpIdValidationError(message: String): Boolean =
+    this is DataError ||
+        this is SecurityError ||
+        type.isRpIdValidationErrorMessage() ||
+        message.isRpIdValidationErrorMessage()
+
+private fun String.isRpIdValidationErrorMessage(): Boolean =
+    contains("RP ID cannot be validated", ignoreCase = true)
 
 private fun passkeyDomErrorReason(domError: DomError): PasskeyFailureReason =
     when (domError) {
