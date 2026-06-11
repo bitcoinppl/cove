@@ -41,13 +41,16 @@ internal fun OnboardingContainer(
         OnboardingStep.CLOUD_CHECK -> CloudCheckContent()
 
         OnboardingStep.RESTORE_OFFER ->
-            OnboardingRestoreOfferView(
-                warningMessage = restoreWarningMessage,
-                errorMessage = manager.state.errorMessage,
-                providerHint = manager.state.cloudRestoreProviderHint,
-                onRestore = { manager.dispatch(OnboardingAction.StartRestore) },
-                onSkip = { manager.dispatch(OnboardingAction.SkipRestore) },
-            )
+            BackableOnboardingStep(manager) {
+                OnboardingRestoreOfferView(
+                    warningMessage = restoreWarningMessage,
+                    errorMessage = manager.state.errorMessage,
+                    providerHint = manager.state.cloudRestoreProviderHint,
+                    onBack = { manager.dispatch(OnboardingAction.Back) },
+                    onRestore = { manager.dispatch(OnboardingAction.StartRestore) },
+                    onSkip = { manager.dispatch(OnboardingAction.SkipRestore) },
+                )
+            }
 
         OnboardingStep.RESTORE_OFFLINE ->
             BackableOnboardingStep(manager) {

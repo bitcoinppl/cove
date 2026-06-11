@@ -41,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -50,6 +51,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
@@ -115,6 +117,8 @@ internal fun OnboardingPromptScreen(
     title: String,
     subtitle: String,
     modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
+    backEnabled: Boolean = true,
     topContent: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -126,13 +130,16 @@ internal fun OnboardingPromptScreen(
                     .statusBarsPadding()
                     .navigationBarsPadding(),
         ) {
+            val backAction = onBack
+            val scrollTopPadding = if (backAction == null) 24.dp else 64.dp
+
             Column(
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = maxHeight)
                         .verticalScroll(rememberScrollState())
-                        .padding(vertical = 24.dp),
+                        .padding(top = scrollTopPadding, bottom = 24.dp),
                 verticalArrangement = Arrangement.Center,
             ) {
                 topContent?.invoke(this)
@@ -174,7 +181,43 @@ internal fun OnboardingPromptScreen(
                     content()
                 }
             }
+
+            if (backAction != null) {
+                OnboardingTopBackButton(
+                    enabled = backEnabled,
+                    onClick = backAction,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .statusBarsPadding()
+                            .padding(start = 16.dp, top = 12.dp),
+                )
+            }
         }
+    }
+}
+
+@Composable
+internal fun OnboardingTopBackButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.testTag("onboarding.back"),
+        colors =
+            ButtonDefaults.textButtonColors(
+                contentColor = Color.White,
+                disabledContentColor = Color.White.copy(alpha = 0.38f),
+            ),
+    ) {
+        Text(
+            text = "Back",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 

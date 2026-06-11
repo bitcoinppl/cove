@@ -44,6 +44,20 @@ class CloudBackupOnboardingFullLaunchTest {
     }
 
     @Test
+    fun newUserCloudBackupDetailsSystemBackReturnsToBackupWallet() {
+        FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
+
+        FullLaunchOnboardingRobot(device)
+            .tapGetStarted()
+            .chooseNewUser()
+            .openCloudBackupFromBackupWallet()
+            .assertCloudBackupDetails()
+            .systemBackFromCloudBackupDetails()
+
+        FullLaunchOnboardingRobot(device).assertBackupWallet()
+    }
+
+    @Test
     fun newUserCloudBackupEnableOpensCreatePasskeySheet() {
         FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
 

@@ -110,6 +110,7 @@ internal fun OnboardingSoftwareImportFlowView(
                 icon = Icons.Default.Download,
                 title = "Import your software wallet",
                 subtitle = "Choose how you want to bring your existing wallet into Cove.",
+                onBack = onBack,
             ) {
                 if (errorMessage != null) {
                     OnboardingInlineMessage(text = errorMessage)
@@ -132,13 +133,6 @@ internal fun OnboardingSoftwareImportFlowView(
                 }
 
                 Spacer(modifier = Modifier.size(14.dp))
-
-                OnboardingSecondaryButton(
-                    text = "Back",
-                    onClick = onBack,
-                )
-
-                Spacer(modifier = Modifier.size(2.dp))
 
                 TextButton(
                     onClick = onCreateWallet,
@@ -165,6 +159,7 @@ internal fun OnboardingSoftwareImportFlowView(
                 icon = Icons.Default.Description,
                 title = "How many words do you have?",
                 subtitle = "Select the recovery phrase length before entering your words.",
+                onBack = { mode = SoftwareImportMode.Chooser },
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OnboardingChoiceCard(
@@ -180,13 +175,6 @@ internal fun OnboardingSoftwareImportFlowView(
                         onClick = { mode = SoftwareImportMode.Words(NumberOfBip39Words.TWENTY_FOUR) },
                     )
                 }
-
-                Spacer(modifier = Modifier.size(14.dp))
-
-                OnboardingSecondaryButton(
-                    text = "Back",
-                    onClick = { mode = SoftwareImportMode.Chooser },
-                )
             }
         }
 
@@ -291,6 +279,7 @@ internal fun OnboardingHardwareImportFlowView(
                 icon = Icons.Default.Download,
                 title = "Import your hardware wallet",
                 subtitle = "Choose how your hardware wallet exports its public data.",
+                onBack = onBack,
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OnboardingChoiceCard(
@@ -312,13 +301,6 @@ internal fun OnboardingHardwareImportFlowView(
                         onClick = { mode = HardwareImportMode.Nfc },
                     )
                 }
-
-                Spacer(modifier = Modifier.size(14.dp))
-
-                OnboardingSecondaryButton(
-                    text = "Back",
-                    onClick = onBack,
-                )
             }
         }
 
@@ -486,6 +468,8 @@ private fun OnboardingHardwareFileImportView(
         icon = Icons.Default.Description,
         title = "Import a hardware export file",
         subtitle = "Choose the wallet export file from your hardware wallet.",
+        onBack = onBack,
+        backEnabled = !isImporting,
     ) {
         if (errorMessage != null) {
             OnboardingInlineMessage(text = errorMessage!!)
@@ -511,14 +495,6 @@ private fun OnboardingHardwareFileImportView(
                 onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
             )
         }
-
-        Spacer(modifier = Modifier.size(14.dp))
-
-        OnboardingSecondaryButton(
-            text = "Back",
-            onClick = onBack,
-            enabled = !isImporting,
-        )
     }
 }
 
@@ -568,6 +544,10 @@ private fun OnboardingHardwareNfcImportView(
         icon = Icons.Default.Nfc,
         title = "Scan your hardware wallet with NFC",
         subtitle = "Hold your hardware wallet or export tag near the top of your phone.",
+        onBack = {
+            nfcReader?.reset()
+            onBack()
+        },
     ) {
         if (activity == null || nfcReader == null) {
             OnboardingInlineMessage(text = "NFC is not available on this device.")
@@ -593,16 +573,6 @@ private fun OnboardingHardwareNfcImportView(
                 nfcReader?.startScanning()
             },
             enabled = nfcReader != null && nfcReader.isScanning.not(),
-        )
-
-        Spacer(modifier = Modifier.size(14.dp))
-
-        OnboardingSecondaryButton(
-            text = "Back",
-            onClick = {
-                nfcReader?.reset()
-                onBack()
-            },
         )
     }
 }
@@ -649,12 +619,8 @@ private fun OnboardingImportErrorView(
         icon = Icons.Default.Download,
         title = title,
         subtitle = message,
-    ) {
-        OnboardingSecondaryButton(
-            text = "Back",
-            onClick = onBack,
-        )
-    }
+        onBack = onBack,
+    ) {}
 }
 
 private fun importHardwareWalletFromUri(

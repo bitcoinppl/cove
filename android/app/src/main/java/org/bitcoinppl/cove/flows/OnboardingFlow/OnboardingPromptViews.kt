@@ -357,6 +357,7 @@ internal fun OnboardingRestoreOfferView(
     warningMessage: String?,
     errorMessage: String?,
     providerHint: CloudRestoreProviderHint?,
+    onBack: () -> Unit,
     onRestore: () -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -376,11 +377,12 @@ internal fun OnboardingRestoreOfferView(
         ) {
             Column(
                 modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = maxHeight)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 28.dp, vertical = 12.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = maxHeight)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 28.dp, vertical = 12.dp)
+                            .padding(top = 52.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -447,6 +449,16 @@ internal fun OnboardingRestoreOfferView(
 
                 Spacer(modifier = Modifier.size(26.dp))
             }
+
+            OnboardingTopBackButton(
+                enabled = true,
+                onClick = onBack,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(start = 16.dp, top = 12.dp),
+            )
         }
     }
 }
@@ -557,13 +569,18 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
             OnboardingPasskeyDivider()
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Default.Lock,
-                contentDescription = null,
-                tint = OnboardingGradientLight,
-                modifier = Modifier.size(20.dp),
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.width(48.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = OnboardingGradientLight,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
 
             Text(
                 text = "Your passkey is stored securely by your passkey provider, and your encrypted backup is stored in Google Drive app data.",
@@ -679,6 +696,7 @@ private fun OnboardingRestoreOfferWithProviderHintPreview() {
                 registeredAt = 1_777_612_800u,
                 nameSuffix = "09IX",
             ),
+        onBack = {},
         onRestore = {},
         onSkip = {},
     )
@@ -696,6 +714,7 @@ private fun OnboardingRestoreOfferWithProviderDatePreview() {
                 registeredAt = 1_777_612_800u,
                 nameSuffix = "09IY",
             ),
+        onBack = {},
         onRestore = {},
         onSkip = {},
     )
@@ -822,15 +841,11 @@ internal fun OnboardingRestoreUnavailableScreen(
         icon = Icons.Default.CloudOff,
         title = "No Backups Found",
         subtitle = "We couldn't find a Cove backup in Google Drive for this account. Continue without a backup, then set up Cloud Backup when you're ready.",
+        onBack = onBack,
     ) {
         OnboardingPrimaryButton(
             text = "Continue Without Backup",
             onClick = onContinue,
-        )
-        Spacer(modifier = Modifier.size(14.dp))
-        OnboardingSecondaryButton(
-            text = "Back",
-            onClick = onBack,
         )
     }
 }
@@ -844,15 +859,11 @@ internal fun OnboardingRestoreOfflineScreen(
         icon = Icons.Default.WifiOff,
         title = "You're Offline",
         subtitle = "Cove can't check for a Google Drive backup right now. You can continue onboarding and check Cloud Backup later in Settings.",
+        onBack = onBack,
     ) {
         OnboardingPrimaryButton(
             text = "Continue Without Cloud Restore",
             onClick = onContinue,
-        )
-        Spacer(modifier = Modifier.size(14.dp))
-        OnboardingSecondaryButton(
-            text = "Back",
-            onClick = onBack,
         )
     }
 }
@@ -868,6 +879,7 @@ internal fun OnboardingStorageChoiceScreen(
         icon = Icons.Default.Storage,
         title = "How do you store your Bitcoin?",
         subtitle = "Choose the option that best matches what you use today.",
+        onBack = onBack,
     ) {
         if (errorMessage != null) {
             OnboardingInlineMessage(text = errorMessage)
@@ -906,14 +918,6 @@ internal fun OnboardingStorageChoiceScreen(
                 )
             }
         }
-
-        Spacer(modifier = Modifier.size(14.dp))
-
-        OnboardingSecondaryButton(
-            text = "Back",
-            onClick = onBack,
-            modifier = Modifier.testTag("onboarding.back"),
-        )
     }
 }
 

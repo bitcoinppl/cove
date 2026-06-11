@@ -314,9 +314,16 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
+    fun systemBackFromCloudBackupDetails(): FullLaunchOnboardingRobot {
+        device.pressBack()
+
+        return this
+    }
+
     fun assertCloudBackupDetails(): FullLaunchOnboardingRobot {
         device.waitUntilVisible(text("Cloud Backup"))
         device.waitUntilVisible(text("How It Works"))
+        device.waitUntilVisible(text("Back"))
         device.waitUntilVisible(tag("onboarding.cloudBackup.cancel"))
         device.waitUntilVisible(tag("onboarding.cloudBackup.enable"))
 

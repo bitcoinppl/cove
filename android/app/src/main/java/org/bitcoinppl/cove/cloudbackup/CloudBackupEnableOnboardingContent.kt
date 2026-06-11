@@ -66,6 +66,8 @@ internal fun CloudBackupEnableOnboardingView(
     isBusy: Boolean,
     context: CloudBackupEnableOnboardingContext,
     primaryButtonTitle: String,
+    cancelButtonTitle: String = "Cancel",
+    cancelButtonLeading: Boolean = false,
 ) {
     var checks by remember { mutableStateOf(listOf(false, false, false)) }
     val allChecked = checks.all { it }
@@ -78,9 +80,12 @@ internal fun CloudBackupEnableOnboardingView(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 18.dp),
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = if (cancelButtonLeading) Arrangement.Start else Arrangement.End,
+            ) {
                 Text(
-                    text = "Cancel",
+                    text = cancelButtonTitle,
                     color = Color.White,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,

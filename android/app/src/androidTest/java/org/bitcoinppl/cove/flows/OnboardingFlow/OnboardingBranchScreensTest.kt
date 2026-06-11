@@ -97,6 +97,7 @@ class OnboardingBranchScreensTest {
             )
         }
 
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.onAllNodesWithTag("onboarding.storage.restoreDivider").assertCountEquals(0)
         compose.assertNodeBelow("onboarding.storage.restore", "onboarding.storage.software")
         compose.onNodeWithText("Restore your Cove backup from Google Drive, secured by passkeys").assertIsDisplayed()
@@ -200,6 +201,7 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("Your Recovery Words").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.onNodeWithText("abandon").assertIsDisplayed()
         compose.button("I Saved These Words").performClick()
         assertEquals("saved", selected)
@@ -254,8 +256,9 @@ class OnboardingBranchScreensTest {
 
         compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
         compose.onNodeWithText("How It Works").assertIsDisplayed()
+        compose.button("Back").assertIsDisplayed()
         compose.button("Enable Cloud Backup").assertIsNotEnabled()
-        compose.onNodeWithText("Cancel").performClick()
+        compose.button("Back").performClick()
         assertEquals("skip-standard", selected)
 
         compose.setOnboardingContent {
@@ -270,7 +273,7 @@ class OnboardingBranchScreensTest {
         compose.button("Enable Cloud Backup").performClick()
         compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
         compose.button("Enable Cloud Backup").assertIsNotEnabled()
-        compose.onNodeWithText("Cancel").performClick()
+        compose.button("Back").performClick()
         compose.onNodeWithText("Protect this wallet with Cloud Backup?").assertIsDisplayed()
         compose.button("Not Now").performClick()
         assertEquals("skip-software", selected)
@@ -287,7 +290,62 @@ class OnboardingBranchScreensTest {
         compose.button("Enable Cloud Backup").performClick()
         compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
         compose.onNodeWithText("hardware wallet seed or recovery phrase", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Cancel").performClick()
+        compose.button("Back").performClick()
+        compose.onNodeWithText("Protect this hardware wallet with Cloud Backup?").assertIsDisplayed()
+        compose.button("Not Now").performClick()
+        assertEquals("skip-hardware", selected)
+    }
+
+    @Test
+    fun cloudBackupDetailsSystemBackCancelsWithoutStartingEnable() {
+        var selected = ""
+
+        compose.setOnboardingContent {
+            OnboardingCloudBackupStepView(
+                branch = OnboardingBranch.NEW_USER,
+                onEnable = {},
+                onEnabled = { selected = "enabled-standard" },
+                onSkip = { selected = "skip-standard" },
+            )
+        }
+
+        compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
+        compose.button("Back").assertIsDisplayed()
+        compose.pressSystemBack()
+        assertEquals("skip-standard", selected)
+
+        selected = ""
+        compose.setOnboardingContent {
+            OnboardingCloudBackupStepView(
+                branch = OnboardingBranch.SOFTWARE_IMPORT,
+                onEnable = {},
+                onEnabled = { selected = "enabled-software" },
+                onSkip = { selected = "skip-software" },
+            )
+        }
+
+        compose.button("Enable Cloud Backup").performClick()
+        compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
+        compose.button("Back").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("Protect this wallet with Cloud Backup?").assertIsDisplayed()
+        compose.button("Not Now").performClick()
+        assertEquals("skip-software", selected)
+
+        selected = ""
+        compose.setOnboardingContent {
+            OnboardingCloudBackupStepView(
+                branch = OnboardingBranch.HARDWARE,
+                onEnable = {},
+                onEnabled = { selected = "enabled-hardware" },
+                onSkip = { selected = "skip-hardware" },
+            )
+        }
+
+        compose.button("Enable Cloud Backup").performClick()
+        compose.onNodeWithText("Cloud Backup").assertIsDisplayed()
+        compose.button("Back").assertIsDisplayed()
+        compose.pressSystemBack()
         compose.onNodeWithText("Protect this hardware wallet with Cloud Backup?").assertIsDisplayed()
         compose.button("Not Now").performClick()
         assertEquals("skip-hardware", selected)
@@ -320,6 +378,7 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("No Google Drive Backup Found").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.button("Continue Without Cloud Restore").performClick()
         assertEquals("continue-unavailable", selected)
         compose.button("Back").performClick()
@@ -333,6 +392,7 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("You're Offline").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.button("Continue Without Cloud Restore").performClick()
         assertEquals("continue-offline", selected)
         compose.button("Back").performClick()
@@ -396,10 +456,12 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("Import your software wallet").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.button("Create a new wallet instead").performClick()
         assertEquals("create", selected)
         compose.card("Enter recovery words").performClick()
         compose.onNodeWithText("How many words do you have?").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.card("12 words").assertIsDisplayed()
         compose.card("24 words").assertIsDisplayed()
         compose.button("Back").performClick()
@@ -491,6 +553,7 @@ class OnboardingBranchScreensTest {
             )
         }
 
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.card("Scan export QR").assertIsDisplayed()
         compose.card("Import export file").assertIsDisplayed()
         compose.card("Scan with NFC").assertIsDisplayed()
@@ -512,12 +575,14 @@ class OnboardingBranchScreensTest {
 
         compose.card("Import export file").performClick()
         compose.onNodeWithText("Import a hardware export file").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.button("Choose File").assertIsDisplayed()
         compose.button("Back").performClick()
         compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
 
         compose.card("Scan with NFC").performClick()
         compose.onNodeWithText("Scan your hardware wallet with NFC").assertIsDisplayed()
+        compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
         compose.button("Start NFC Scan").assertIsDisplayed()
         compose.button("Back").performClick()
         compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
