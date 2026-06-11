@@ -70,6 +70,7 @@ internal fun CloudBackupEnableOnboardingView(
     cancelButtonLeading: Boolean = false,
 ) {
     var checks by remember { mutableStateOf(listOf(false, false, false)) }
+
     val allChecked = checks.all { it }
 
     OnboardingBackground {

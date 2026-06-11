@@ -728,12 +728,12 @@ impl RustOnboardingManager {
             saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
             verification_source: CloudBackupVerificationSource::Onboarding,
         };
+        CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
+        CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
 
         match OnboardingCloudBackupEnableStart::from_discovery(discovery) {
             OnboardingCloudBackupEnableStart::ConfirmExistingBackup(hint) => {
                 info!("Onboarding: confirming existing cloud backup before creating passkey");
-                CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
-                CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
                 CLOUD_BACKUP_MANAGER.present_existing_backup_found_prompt(
                     context,
                     hint.map(CloudBackupPasskeyHint::from),
@@ -741,8 +741,6 @@ impl RustOnboardingManager {
             }
             OnboardingCloudBackupEnableStart::CreateNewPasskey => {
                 info!("Onboarding: enabling cloud backup without passkey discovery");
-                CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
-                CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
                 CLOUD_BACKUP_MANAGER.enable_cloud_backup_no_discovery(context);
             }
         }
