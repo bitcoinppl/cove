@@ -153,12 +153,13 @@ struct DisableCloudBackupSection: View {
     }
 
     var body: some View {
-        Section(header: Text("Disable Cloud Backup")) {
+        Section {
             if manager.isDisablingCloudBackup {
                 HStack {
                     ProgressView()
                         .padding(.trailing, 8)
                     Text("Deleting cloud backups...")
+                        .font(.footnote)
                 }
             }
 
@@ -189,14 +190,11 @@ struct DisableCloudBackupSection: View {
                     showingFirstConfirmation = true
                 }
             } label: {
-                Label("Disable Cloud Backup", systemImage: "icloud.slash")
+                Text("Disable Cloud Backup")
+                    .font(.footnote)
             }
             .disabled(manager.isDisablingCloudBackup)
             .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
-
-            Text("Local wallets stay on this device. Current Cove cloud backups will be deleted from cloud storage.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
         .alert("Cloud Backup Can't Be Disabled Yet", isPresented: $showingUnavailableAlert) {
             Button("OK", role: .cancel) {}
