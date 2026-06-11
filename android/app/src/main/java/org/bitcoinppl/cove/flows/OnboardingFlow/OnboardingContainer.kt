@@ -1,15 +1,12 @@
 package org.bitcoinppl.cove.flows.OnboardingFlow
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import org.bitcoinppl.cove.OnboardingManager
-import org.bitcoinppl.cove_core.CloudBackupEnableContext
-import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingCloudRestoreState
 import org.bitcoinppl.cove_core.OnboardingStep
-import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 
 @Composable
 internal fun OnboardingContainer(
@@ -53,16 +50,20 @@ internal fun OnboardingContainer(
             )
 
         OnboardingStep.RESTORE_OFFLINE ->
-            OnboardingRestoreOfflineScreen(
-                onContinue = { manager.dispatch(OnboardingAction.ContinueWithoutCloudRestore) },
-                onBack = { manager.dispatch(OnboardingAction.Back) },
-            )
+            BackableOnboardingStep(manager) {
+                OnboardingRestoreOfflineScreen(
+                    onContinue = { manager.dispatch(OnboardingAction.ContinueWithoutCloudRestore) },
+                    onBack = { manager.dispatch(OnboardingAction.Back) },
+                )
+            }
 
         OnboardingStep.RESTORE_UNAVAILABLE ->
-            OnboardingRestoreUnavailableScreen(
-                onContinue = { manager.dispatch(OnboardingAction.ContinueWithoutCloudRestore) },
-                onBack = { manager.dispatch(OnboardingAction.Back) },
-            )
+            BackableOnboardingStep(manager) {
+                OnboardingRestoreUnavailableScreen(
+                    onContinue = { manager.dispatch(OnboardingAction.ContinueWithoutCloudRestore) },
+                    onBack = { manager.dispatch(OnboardingAction.Back) },
+                )
+            }
 
         OnboardingStep.RESTORING,
         OnboardingStep.RESTORE_COMPLETE,
@@ -89,14 +90,16 @@ internal fun OnboardingContainer(
             )
 
         OnboardingStep.STORAGE_CHOICE ->
-            OnboardingStorageChoiceScreen(
-                errorMessage = manager.state.errorMessage,
-                onRestoreFromCoveBackup = { manager.dispatch(OnboardingAction.OpenCloudRestore) },
-                onSelectStorage = { selection ->
-                    manager.dispatch(OnboardingAction.SelectStorage(selection))
-                },
-                onBack = { manager.dispatch(OnboardingAction.Back) },
-            )
+            BackableOnboardingStep(manager) {
+                OnboardingStorageChoiceScreen(
+                    errorMessage = manager.state.errorMessage,
+                    onRestoreFromCoveBackup = { manager.dispatch(OnboardingAction.OpenCloudRestore) },
+                    onSelectStorage = { selection ->
+                        manager.dispatch(OnboardingAction.SelectStorage(selection))
+                    },
+                    onBack = { manager.dispatch(OnboardingAction.Back) },
+                )
+            }
 
         OnboardingStep.CREATING_WALLET ->
             OnboardingCreatingWalletView(
@@ -128,11 +131,13 @@ internal fun OnboardingContainer(
             )
 
         OnboardingStep.SECRET_WORDS ->
-            OnboardingSecretWordsView(
-                words = manager.state.createdWords,
-                onBack = { manager.dispatch(OnboardingAction.Back) },
-                onSaved = { manager.dispatch(OnboardingAction.SecretWordsSaved) },
-            )
+            BackableOnboardingStep(manager) {
+                OnboardingSecretWordsView(
+                    words = manager.state.createdWords,
+                    onBack = { manager.dispatch(OnboardingAction.Back) },
+                    onSaved = { manager.dispatch(OnboardingAction.SecretWordsSaved) },
+                )
+            }
 
         OnboardingStep.EXCHANGE_FUNDING ->
             OnboardingExchangeFundingView(
@@ -172,18 +177,18 @@ internal fun OnboardingContainer(
     stepContent
 }
 
-private fun OnboardingManager.beginCloudBackupEnable() {
-    if (state.cloudRestoreState == OnboardingCloudRestoreState.BACKUP_FOUND) {
-        dispatch(OnboardingAction.BeginCloudBackupEnable)
-        return
+@Composable
+private fun BackableOnboardingStep(
+    manager: OnboardingManager,
+    content: @Composable () -> Unit,
+) {
+    BackHandler {
+        manager.dispatch(OnboardingAction.Back)
     }
 
-    app.cloudBackupManager.dispatch(
-        CloudBackupManagerAction.EnableCloudBackupNoDiscovery(
-            CloudBackupEnableContext(
-                SavedPasskeyConfirmationMode.AUTOMATIC,
-                CloudBackupVerificationSource.ONBOARDING,
-            ),
-        ),
-    )
+    content()
+}
+
+private fun OnboardingManager.beginCloudBackupEnable() {
+    dispatch(OnboardingAction.BeginCloudBackupEnable)
 }

@@ -97,6 +97,15 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
+    fun systemBackToBitcoinChoice(): FullLaunchOnboardingRobot {
+        device.pressBack()
+        device.waitUntilVisible(text("Do you already have Bitcoin?"))
+        device.waitUntilVisible(tag("onboarding.bitcoinChoice.new"))
+        device.waitUntilVisible(tag("onboarding.bitcoinChoice.existing"))
+
+        return this
+    }
+
     fun useAnotherWallet(): FullLaunchOnboardingRobot {
         device.waitUntilVisible(text("How do you store your Bitcoin?"))
 

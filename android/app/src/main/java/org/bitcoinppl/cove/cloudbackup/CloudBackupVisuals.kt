@@ -25,7 +25,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -140,19 +139,6 @@ internal fun CloudBackupProgressContent(
             Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-}
-
-@Composable
-internal fun DisableCloudBackupDivider() {
-    val colors = cloudBackupVisualColors()
-
-    HorizontalDivider(
-        color = colors.divider,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 14.dp, top = 30.dp, end = 14.dp, bottom = 10.dp),
-    )
 }
 
 @Composable

@@ -38,13 +38,11 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneIphone
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -613,16 +611,6 @@ private fun OnboardingCloudSearchHero() {
             tint = OnboardingGradientLight,
             modifier = Modifier.size(34.dp),
         )
-
-        Icon(
-            imageVector = Icons.Outlined.Search,
-            contentDescription = null,
-            tint = OnboardingGradientLight,
-            modifier =
-                Modifier
-                    .size(28.dp)
-                    .padding(start = 18.dp, top = 12.dp),
-        )
     }
 }
 
@@ -832,11 +820,11 @@ internal fun OnboardingRestoreUnavailableScreen(
 ) {
     OnboardingPromptScreen(
         icon = Icons.Default.CloudOff,
-        title = "No Google Drive Backup Found",
-        subtitle = "We couldn't find a Cove backup in Google Drive for this account. You can continue without cloud restore or go back.",
+        title = "No Backups Found",
+        subtitle = "We couldn't find a Cove backup in Google Drive for this account. Continue without a backup, then set up Cloud Backup when you're ready.",
     ) {
         OnboardingPrimaryButton(
-            text = "Continue Without Cloud Restore",
+            text = "Continue Without Backup",
             onClick = onContinue,
         )
         Spacer(modifier = Modifier.size(14.dp))

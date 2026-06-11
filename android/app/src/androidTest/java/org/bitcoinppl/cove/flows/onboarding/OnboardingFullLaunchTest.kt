@@ -73,6 +73,16 @@ class OnboardingFullLaunchTest {
     }
 
     @Test
+    fun existingUserSystemBackGoesBackToBitcoinChoice() {
+        FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
+
+        FullLaunchOnboardingRobot(device)
+            .tapGetStarted()
+            .chooseExistingUser()
+            .systemBackToBitcoinChoice()
+    }
+
+    @Test
     fun exchangeUserCanReachFundingAfterBackup() {
         FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
 

@@ -5,6 +5,7 @@ import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
@@ -236,6 +237,17 @@ class CloudBackupRegressionHelpersTest {
                 ),
             ),
         )
+    }
+
+    @Test
+    fun settingsEnableStartsManualPasskeyChoicePrompt() {
+        val action = settingsEnableCloudBackupPrompt()
+        assertTrue(action is CloudBackupManagerAction.PromptEnablePasskeyChoice)
+
+        val context = (action as CloudBackupManagerAction.PromptEnablePasskeyChoice).v1
+
+        assertEquals(SavedPasskeyConfirmationMode.MANUAL, context.savedPasskeyConfirmation)
+        assertEquals(CloudBackupVerificationSource.SETTINGS, context.verificationSource)
     }
 
     @Test

@@ -31,13 +31,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove_core.CloudBackupEnableContext
+import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
+import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
+import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -143,6 +147,16 @@ internal fun CloudBackupScreenFrame(
     val colors = cloudBackupVisualColors()
     var isMenuOpen by remember { mutableStateOf(false) }
     val isConfigured = manager.isConfigured
+    val lifecycle = manager.lifecycle
+
+    if (shouldShowCloudBackupEnableOnboarding(manager, lifecycle)) {
+        CloudBackupSettingsEnableOnboarding(
+            manager = manager,
+            message = (lifecycle as? CloudBackupLifecycle.Failed)?.v1?.message,
+            onCancel = onBack,
+        )
+        return
+    }
 
     Scaffold(
         modifier =
@@ -212,20 +226,7 @@ internal fun CloudBackupScreenFrame(
                     .background(colors.background)
                     .padding(paddingValues),
         ) {
-            when (val lifecycle = manager.lifecycle) {
-                is CloudBackupLifecycle.Disabled -> {
-                    CloudBackupEnableContent(
-                        modifier = Modifier.fillMaxSize(),
-                        message = null,
-                        isBusy = false,
-                        onEnable = { manager.dispatch(manualEnableCloudBackupNoDiscovery(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
-                    )
-                }
-
-                is CloudBackupLifecycle.Enabling -> {
-                    CloudBackupEnableProgressOrConfirmation(manager)
-                }
-
+            when (lifecycle) {
                 is CloudBackupLifecycle.Restoring -> {
                     CloudBackupProgressContent(
                         title = "Restoring from cloud backup",
@@ -234,21 +235,12 @@ internal fun CloudBackupScreenFrame(
                 }
 
                 is CloudBackupLifecycle.Failed -> {
-                    if (manager.isCloudBackupEnabled) {
-                        CloudBackupDetailContent(
-                            manager = manager,
-                            headerError = lifecycle.v1.message,
-                            onRecreate = onRecreate,
-                            onReinitialize = onReinitialize,
-                        )
-                    } else {
-                        CloudBackupEnableContent(
-                            modifier = Modifier.fillMaxSize(),
-                            message = lifecycle.v1.message,
-                            isBusy = false,
-                            onEnable = { manager.dispatch(manualEnableCloudBackupNoDiscovery(CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL)) },
-                        )
-                    }
+                    CloudBackupDetailContent(
+                        manager = manager,
+                        headerError = lifecycle.v1.message,
+                        onRecreate = onRecreate,
+                        onReinitialize = onReinitialize,
+                    )
                 }
 
                 else -> {
@@ -263,3 +255,81 @@ internal fun CloudBackupScreenFrame(
         }
     }
 }
+
+private fun shouldShowCloudBackupEnableOnboarding(
+    manager: CloudBackupManager,
+    lifecycle: CloudBackupLifecycle,
+): Boolean =
+    lifecycle is CloudBackupLifecycle.Disabled ||
+        lifecycle is CloudBackupLifecycle.Enabling ||
+        (lifecycle is CloudBackupLifecycle.Failed && !manager.isCloudBackupEnabled)
+
+@Composable
+private fun CloudBackupSettingsEnableOnboarding(
+    manager: CloudBackupManager,
+    message: String?,
+    onCancel: () -> Unit,
+) {
+    val savedPasskeyConfirmationMode =
+        (manager.enableFlow as? CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation)?.v1
+    val needsManualPasskeyConfirmation =
+        savedPasskeyConfirmationMode == SavedPasskeyConfirmationMode.MANUAL
+    val isAwaitingEnablePrompt = isAwaitingEnablePrompt(manager.rootPrompt)
+    val isBusy =
+        !needsManualPasskeyConfirmation &&
+            !isAwaitingEnablePrompt &&
+            manager.isLifecycleEnabling
+    val primaryButtonTitle =
+        if (needsManualPasskeyConfirmation) {
+            "Confirm Passkey"
+        } else {
+            "Enable Cloud Backup"
+        }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        CloudBackupEnableOnboardingView(
+            onEnable = {
+                if (isBusy || isAwaitingEnablePrompt) {
+                    return@CloudBackupEnableOnboardingView
+                }
+
+                if (needsManualPasskeyConfirmation) {
+                    manager.dispatch(CloudBackupManagerAction.ConfirmSavedPasskey)
+                    return@CloudBackupEnableOnboardingView
+                }
+
+                manager.dispatch(settingsEnableCloudBackupPrompt())
+            },
+            onCancel = {
+                if (needsManualPasskeyConfirmation) {
+                    manager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
+                }
+
+                onCancel()
+            },
+            message = message,
+            isBusy = isBusy || isAwaitingEnablePrompt,
+            context = CloudBackupEnableOnboardingContext.STANDARD,
+            primaryButtonTitle = primaryButtonTitle,
+        )
+
+        if (isBusy) {
+            CloudBackupEnableBusyOverlay(manager.enableFlow)
+        }
+    }
+}
+
+private fun isAwaitingEnablePrompt(rootPrompt: CloudBackupRootPrompt): Boolean =
+    rootPrompt is CloudBackupRootPrompt.ExistingBackupFound ||
+        (
+            rootPrompt is CloudBackupRootPrompt.PasskeyChoice &&
+                rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.Enable
+        )
+
+internal fun settingsEnableCloudBackupPrompt(): CloudBackupManagerAction =
+    CloudBackupManagerAction.PromptEnablePasskeyChoice(
+        CloudBackupEnableContext(
+            SavedPasskeyConfirmationMode.MANUAL,
+            CloudBackupVerificationSource.SETTINGS,
+        ),
+    )

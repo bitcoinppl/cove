@@ -1,21 +1,15 @@
 package org.bitcoinppl.cove.cloudbackup
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
@@ -55,12 +48,6 @@ internal fun DisableCloudBackupSection(
         }
     }
 
-    CloudBackupSectionTitle(
-        title = "Disable Cloud Backup",
-        icon = Icons.Default.CloudOff,
-        tint = colors.danger,
-    )
-
     manager.disableFailure?.let { failure ->
         ErrorInlineMessage(failure.message, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
         CloudBackupSimpleActionCard(
@@ -80,61 +67,36 @@ internal fun DisableCloudBackupSection(
         }
     }
 
-    CloudBackupGlassCard(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 8.dp)
-                .clickable(enabled = !manager.isDisablingCloudBackup) {
-                    if (unavailableMessage != null) {
-                        showUnavailable = true
-                    } else {
-                        showFirstConfirmation = true
-                    }
-                },
-        fill = colors.dangerFill,
-        border = colors.dangerBorder,
-    ) {
+    if (manager.isDisablingCloudBackup) {
         Row(
-            modifier = Modifier.padding(18.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CloudBackupIconBubble(
-                icon = if (manager.isDisablingCloudBackup) Icons.Default.Delete else Icons.Default.CloudOff,
-                fill = colors.danger.copy(alpha = 0.20f),
-                tint = colors.danger,
-                size = 48.dp,
-                iconSize = 28.dp,
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = colors.danger, strokeWidth = 2.dp)
+            Text(
+                "Deleting cloud backups",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.danger,
             )
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
-                Text(
-                    if (manager.isDisablingCloudBackup) "Deleting cloud backups" else "Disable Cloud Backup",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.danger,
-                )
-                Text(
-                    "Local wallets stay on this device. Current Cove cloud backups will be deleted from cloud storage.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.secondaryText,
-                )
-            }
-
-            if (manager.isDisablingCloudBackup) {
-                CircularProgressIndicator(modifier = Modifier.size(26.dp), color = colors.danger, strokeWidth = 3.dp)
-            } else {
-                Icon(
-                    Icons.AutoMirrored.Default.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = colors.secondaryText,
-                )
-            }
         }
+    }
+
+    TextButton(
+        onClick = {
+            if (unavailableMessage != null) {
+                showUnavailable = true
+            } else {
+                showFirstConfirmation = true
+            }
+        },
+        enabled = !manager.isDisablingCloudBackup,
+        modifier =
+            Modifier
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        colors = ButtonDefaults.textButtonColors(contentColor = colors.danger),
+    ) {
+        Text("Disable Cloud Backup", style = MaterialTheme.typography.bodySmall)
     }
 
     if (showUnavailable) {

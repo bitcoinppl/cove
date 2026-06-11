@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.flows.OnboardingFlow
 
 import android.content.Context
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -102,7 +103,9 @@ internal fun OnboardingSoftwareImportFlowView(
     var mode by remember { mutableStateOf<SoftwareImportMode>(SoftwareImportMode.Chooser) }
 
     when (val currentMode = mode) {
-        SoftwareImportMode.Chooser ->
+        SoftwareImportMode.Chooser -> {
+            BackHandler(onBack = onBack)
+
             OnboardingPromptScreen(
                 icon = Icons.Default.Download,
                 title = "Import your software wallet",
@@ -151,8 +154,13 @@ internal fun OnboardingSoftwareImportFlowView(
                     )
                 }
             }
+        }
 
-        SoftwareImportMode.WordCount ->
+        SoftwareImportMode.WordCount -> {
+            BackHandler {
+                mode = SoftwareImportMode.Chooser
+            }
+
             OnboardingPromptScreen(
                 icon = Icons.Default.Description,
                 title = "How many words do you have?",
@@ -180,6 +188,7 @@ internal fun OnboardingSoftwareImportFlowView(
                     onClick = { mode = SoftwareImportMode.Chooser },
                 )
             }
+        }
 
         is SoftwareImportMode.Words ->
             OnboardingHotWalletImportView(
@@ -217,6 +226,8 @@ private fun OnboardingHotWalletImportView(
     val app = remember { AppManager.getInstance() }
     var manager by remember { mutableStateOf<ImportWalletManager?>(null) }
     var loading by remember { mutableStateOf(true) }
+
+    BackHandler(onBack = onBack)
 
     LaunchedEffect(numberOfWords, importType) {
         loading = true
@@ -273,7 +284,9 @@ internal fun OnboardingHardwareImportFlowView(
     var mode by remember { mutableStateOf<HardwareImportMode>(HardwareImportMode.Chooser) }
 
     when (mode) {
-        HardwareImportMode.Chooser ->
+        HardwareImportMode.Chooser -> {
+            BackHandler(onBack = onBack)
+
             OnboardingPromptScreen(
                 icon = Icons.Default.Download,
                 title = "Import your hardware wallet",
@@ -307,12 +320,18 @@ internal fun OnboardingHardwareImportFlowView(
                     onClick = onBack,
                 )
             }
+        }
 
-        HardwareImportMode.Qr ->
+        HardwareImportMode.Qr -> {
+            BackHandler {
+                mode = HardwareImportMode.Chooser
+            }
+
             OnboardingHardwareQrImportView(
                 onImported = onImported,
                 onBack = { mode = HardwareImportMode.Chooser },
             )
+        }
 
         HardwareImportMode.File ->
             OnboardingHardwareFileImportView(
@@ -366,6 +385,8 @@ private fun OnboardingHardwareQrImportView(
 ) {
     val app = remember { AppManager.getInstance() }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    BackHandler(onBack = onBack)
 
     Box(
         modifier =
@@ -435,6 +456,12 @@ private fun OnboardingHardwareFileImportView(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isImporting by remember { mutableStateOf(false) }
 
+    BackHandler {
+        if (!isImporting) {
+            onBack()
+        }
+    }
+
     val filePickerLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
@@ -503,6 +530,11 @@ private fun OnboardingHardwareNfcImportView(
     val activity = androidx.compose.ui.platform.LocalContext.current.findActivity()
     val nfcReader = remember(activity) { activity?.let { NfcReader(it) } }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    BackHandler {
+        nfcReader?.reset()
+        onBack()
+    }
 
     LaunchedEffect(nfcReader) {
         nfcReader?.scanResults?.collect { result ->

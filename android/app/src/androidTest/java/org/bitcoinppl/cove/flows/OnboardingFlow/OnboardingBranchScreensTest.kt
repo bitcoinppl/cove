@@ -17,6 +17,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.OnboardingBranch
@@ -407,6 +409,40 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
+    fun softwareImportSystemBackUnwindsLocalModesBeforeLeavingStep() {
+        var selected = ""
+
+        compose.setOnboardingContent {
+            OnboardingSoftwareImportFlowView(
+                errorMessage = null,
+                cloudRestoreAlertVisible = false,
+                onImported = {},
+                onCreateWallet = {},
+                onRestoreFromCloudBackup = {},
+                onDismissCloudRestoreAlert = {},
+                onBack = { selected = "back" },
+            )
+        }
+
+        compose.card("Enter recovery words").performClick()
+        compose.onNodeWithText("How many words do you have?").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("Import your software wallet").assertIsDisplayed()
+
+        compose.card("Enter recovery words").performClick()
+        compose.card("12 words").performClick()
+        compose.onNodeWithTag("hotWalletImport.word.1").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("How many words do you have?").assertIsDisplayed()
+
+        compose.pressSystemBack()
+        compose.onNodeWithText("Import your software wallet").assertIsDisplayed()
+
+        compose.pressSystemBack()
+        assertEquals("back", selected)
+    }
+
+    @Test
     fun softwareImportManualScreensOpenWithoutUsingQrScanner() {
         compose.setOnboardingContent {
             OnboardingSoftwareImportFlowView(
@@ -488,6 +524,39 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
+    fun hardwareImportSystemBackUnwindsLocalModesBeforeLeavingStep() {
+        var selected = ""
+
+        compose.setOnboardingContent {
+            OnboardingHardwareImportFlowView(
+                cloudRestoreAlertVisible = false,
+                onImported = {},
+                onRestoreFromCloudBackup = {},
+                onDismissCloudRestoreAlert = {},
+                onBack = { selected = "back" },
+            )
+        }
+
+        compose.card("Import export file").performClick()
+        compose.onNodeWithText("Import a hardware export file").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
+
+        compose.card("Scan with NFC").performClick()
+        compose.onNodeWithText("Scan your hardware wallet with NFC").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
+
+        compose.card("Scan export QR").performClick()
+        compose.onNodeWithText("Scan Hardware QR").assertIsDisplayed()
+        compose.pressSystemBack()
+        compose.onNodeWithText("Import your hardware wallet").assertIsDisplayed()
+
+        compose.pressSystemBack()
+        assertEquals("back", selected)
+    }
+
+    @Test
     fun termsRequireEveryCheckboxBeforeAgreeing() {
         var agreed = false
 
@@ -523,6 +592,11 @@ class OnboardingBranchScreensTest {
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.cardContaining(text: String) =
         onNode(hasClickAction() and hasAnyDescendant(hasText(text, substring = true)), useUnmergedTree = true)
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.pressSystemBack() {
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        waitForIdle()
+    }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.assertNodeBelow(
         lowerTag: String,

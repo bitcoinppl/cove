@@ -150,7 +150,6 @@ internal fun CloudBackupDetailContent(
                 onRecreate = onRecreate,
                 onReinitialize = onReinitialize,
             )
-            DisableCloudBackupDivider()
         }
 
         if (
