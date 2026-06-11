@@ -20,10 +20,9 @@ use crate::{
     database::{Database, global_config::GlobalConfigKey},
     manager::{
         cloud_backup_manager::{
-            CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent,
-            CloudBackupPasskeyHint, CloudBackupRestoreEvent, CloudBackupRestoreFlow,
-            CloudBackupRestoreReport, CloudBackupVerificationSource, CloudStorageIssue,
-            SavedPasskeyConfirmationMode,
+            CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupPasskeyHint,
+            CloudBackupRestoreEvent, CloudBackupRestoreFlow, CloudBackupRestoreReport,
+            CloudBackupVerificationSource, CloudStorageIssue, SavedPasskeyConfirmationMode,
         },
         connectivity_manager::CONNECTIVITY_MANAGER,
     },
@@ -354,6 +353,23 @@ enum CloudRestoreDiscovery {
     BackupFound(Option<CloudRestoreProviderHint>),
     NoBackupFound,
     Inconclusive(CloudCheckIssue),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum OnboardingCloudBackupEnableStart {
+    ConfirmExistingBackup(Option<CloudRestoreProviderHint>),
+    CreateNewPasskey,
+}
+
+impl OnboardingCloudBackupEnableStart {
+    fn from_discovery(discovery: CloudRestoreDiscovery) -> Self {
+        match discovery {
+            CloudRestoreDiscovery::BackupFound(hint) => Self::ConfirmExistingBackup(hint),
+            CloudRestoreDiscovery::Checking
+            | CloudRestoreDiscovery::NoBackupFound
+            | CloudRestoreDiscovery::Inconclusive(_) => Self::CreateNewPasskey,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -713,28 +729,21 @@ impl RustOnboardingManager {
             verification_source: CloudBackupVerificationSource::Onboarding,
         };
 
-        match discovery {
-            CloudRestoreDiscovery::BackupFound(hint) => {
-                info!("Onboarding: presenting cloud backup passkey choice for existing backup");
+        match OnboardingCloudBackupEnableStart::from_discovery(discovery) {
+            OnboardingCloudBackupEnableStart::ConfirmExistingBackup(hint) => {
+                info!("Onboarding: confirming existing cloud backup before creating passkey");
                 CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
-                CLOUD_BACKUP_MANAGER.present_passkey_choice_prompt(
-                    CloudBackupPasskeyChoiceIntent::Enable(
-                        context,
-                        hint.map(CloudBackupPasskeyHint::from),
-                    ),
+                CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
+                CLOUD_BACKUP_MANAGER.present_existing_backup_found_prompt(
+                    context,
+                    hint.map(CloudBackupPasskeyHint::from),
                 );
             }
-            CloudRestoreDiscovery::NoBackupFound => {
-                info!("Onboarding: enabling cloud backup without discovery");
+            OnboardingCloudBackupEnableStart::CreateNewPasskey => {
+                info!("Onboarding: enabling cloud backup without passkey discovery");
                 CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
                 CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
                 CLOUD_BACKUP_MANAGER.enable_cloud_backup_no_discovery(context);
-            }
-            CloudRestoreDiscovery::Checking | CloudRestoreDiscovery::Inconclusive(_) => {
-                info!("Onboarding: enabling cloud backup with fresh discovery");
-                CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
-                CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
-                CLOUD_BACKUP_MANAGER.enable_cloud_backup(context);
             }
         }
     }
@@ -1234,6 +1243,9 @@ impl FlowState {
             }
             (Self::RestoreOffer { origin, .. }, OnboardingAction::SkipRestore) => {
                 *restore_offer_allowed = false;
+                (origin.flow_state(), TransitionCommand::None)
+            }
+            (Self::RestoreOffer { origin, .. }, OnboardingAction::Back) => {
                 (origin.flow_state(), TransitionCommand::None)
             }
             (Self::RestoreOffline { origin }, OnboardingAction::ContinueWithoutCloudRestore) => {
@@ -2351,6 +2363,34 @@ mod tests {
             }
             other => panic!("unexpected flow state: {other:?}"),
         }
+    }
+
+    #[test]
+    fn onboarding_cloud_backup_enable_start_confirms_existing_backup() {
+        assert_eq!(
+            OnboardingCloudBackupEnableStart::from_discovery(CloudRestoreDiscovery::BackupFound(
+                None,
+            )),
+            OnboardingCloudBackupEnableStart::ConfirmExistingBackup(None),
+        );
+    }
+
+    #[test]
+    fn onboarding_cloud_backup_enable_start_creates_new_without_passkey_discovery_by_default() {
+        assert_eq!(
+            OnboardingCloudBackupEnableStart::from_discovery(CloudRestoreDiscovery::NoBackupFound),
+            OnboardingCloudBackupEnableStart::CreateNewPasskey,
+        );
+        assert_eq!(
+            OnboardingCloudBackupEnableStart::from_discovery(CloudRestoreDiscovery::Checking),
+            OnboardingCloudBackupEnableStart::CreateNewPasskey,
+        );
+        assert_eq!(
+            OnboardingCloudBackupEnableStart::from_discovery(CloudRestoreDiscovery::Inconclusive(
+                CloudCheckIssue::Offline,
+            )),
+            OnboardingCloudBackupEnableStart::CreateNewPasskey,
+        );
     }
 
     #[test]
@@ -3518,6 +3558,58 @@ mod tests {
     }
 
     #[test]
+    fn back_from_restore_offer_returns_to_origin_and_keeps_future_prompts() {
+        let scenarios = [
+            RestoreOrigin::BitcoinChoice,
+            RestoreOrigin::StorageChoice,
+            RestoreOrigin::HardwareImport,
+            RestoreOrigin::SoftwareImport,
+        ];
+
+        for origin in scenarios {
+            let mut flow = FlowState::RestoreOffer { origin, error_message: None };
+            let mut restore_offer_allowed = true;
+
+            let command = flow.apply_user_action(
+                OnboardingAction::Back,
+                CloudRestoreDiscovery::BackupFound(None),
+                &mut restore_offer_allowed,
+                None,
+            );
+
+            assert_eq!(command, TransitionCommand::None);
+            assert!(restore_offer_allowed);
+            assert_restore_offer_back_origin(flow, origin);
+        }
+    }
+
+    #[test]
+    fn back_from_startup_restore_offer_goes_to_terms() {
+        let mut flow =
+            FlowState::RestoreOffer { origin: RestoreOrigin::Startup, error_message: None };
+        let mut restore_offer_allowed = true;
+
+        let command = flow.apply_user_action(
+            OnboardingAction::Back,
+            CloudRestoreDiscovery::BackupFound(None),
+            &mut restore_offer_allowed,
+            None,
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert!(restore_offer_allowed);
+        assert!(matches!(
+            flow,
+            FlowState::Terms {
+                context: TermsContext::StartupRestoreRecovery,
+                error_message: None,
+                progress: None,
+                allow_auto_advance: true,
+            }
+        ));
+    }
+
+    #[test]
     fn skip_restore_from_startup_check_goes_to_terms() {
         let mut flow =
             FlowState::RestoreOffer { origin: RestoreOrigin::Startup, error_message: None };
@@ -4147,6 +4239,19 @@ mod tests {
                 assert_eq!(*post_onboarding, expected_destination);
             }
             other => panic!("unexpected flow state: {other:?}"),
+        }
+    }
+
+    fn assert_restore_offer_back_origin(flow: FlowState, origin: RestoreOrigin) {
+        match (flow, origin) {
+            (FlowState::BitcoinChoice { error_message: None }, RestoreOrigin::BitcoinChoice)
+            | (FlowState::StorageChoice { error_message: None }, RestoreOrigin::StorageChoice)
+            | (FlowState::HardwareImport, RestoreOrigin::HardwareImport)
+            | (FlowState::SoftwareImport { error_message: None }, RestoreOrigin::SoftwareImport) => {
+            }
+            (flow, origin) => {
+                panic!("unexpected flow state after restore offer back: {flow:?} for {origin:?}")
+            }
         }
     }
 
