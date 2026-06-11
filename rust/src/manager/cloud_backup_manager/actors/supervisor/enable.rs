@@ -43,8 +43,10 @@ impl SavedPasskeyConfirmationRetry {
 
 #[derive(Debug)]
 pub(crate) struct EnableRecoveryFinalization {
+    pub(crate) context: CloudBackupEnableContext,
     pub(crate) namespace_id: String,
     pub(crate) active_critical_key: zeroize::Zeroizing<[u8; 32]>,
+    pub(crate) pending_uploads: Vec<PendingVerificationUpload>,
     pub(crate) cleanup_sources: Vec<CleanupSourceNamespace>,
 }
 
@@ -327,9 +329,9 @@ impl CloudBackupSupervisor {
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
                 self.finish_enable_operation(manager, claim);
             }
-            Ok(CloudBackupEnablePreparation::Recover { matches }) => {
+            Ok(CloudBackupEnablePreparation::Recover { context, matches }) => {
                 self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.prepare_enable_recovery(matches).await;
+                    let result = manager.prepare_enable_recovery(context, matches).await;
                     send!(addr.complete_enable_recovery_preparation(claim, result));
                 });
             }
@@ -485,11 +487,13 @@ impl CloudBackupSupervisor {
         completion: CloudBackupEnableRecoveryCompletion,
     ) -> Result<(), CloudBackupError> {
         let CloudBackupEnableRecoveryCompletion {
+            context,
             namespace_id,
             credential_id,
             prf_salt,
             active_critical_key,
             uploaded_wallets,
+            pending_uploads,
             cleanup_sources,
         } = completion;
 
@@ -504,8 +508,10 @@ impl CloudBackupSupervisor {
         });
 
         let finalization = EnableRecoveryFinalization {
+            context,
             namespace_id: namespace_id.clone(),
             active_critical_key,
+            pending_uploads,
             cleanup_sources,
         };
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
@@ -541,21 +547,43 @@ impl CloudBackupSupervisor {
         match result {
             Ok(()) => {
                 let EnableRecoveryFinalization {
+                    context,
                     namespace_id,
                     active_critical_key,
+                    pending_uploads,
                     cleanup_sources,
                 } = finalization;
                 call!(self.cleanup.enqueue_cleanup(CloudBackupCleanupJob {
                     cloud: CloudStorage::global_explicit_client(),
-                    active_namespace_id: namespace_id,
+                    active_namespace_id: namespace_id.clone(),
                     active_critical_key: *active_critical_key,
                     sources: cleanup_sources,
                 }))
                 .await
                 .map_err_str(CloudBackupError::Internal)?;
 
+                let should_finalize_now = pending_uploads.is_empty();
+                let report = DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: 0,
+                    wallets_failed: 0,
+                    wallets_unsupported: 0,
+                    detail: None,
+                };
+                manager.replace_pending_verification_completion_for_source(
+                    PendingVerificationCompletion::new(report, namespace_id, pending_uploads),
+                    context.verification_source,
+                );
+                manager.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
                 self.pending_enable_session = None;
                 manager.clear_enable_progress(CloudBackupStatus::Enabled);
+                manager.refresh_persisted_flags();
+                if should_finalize_now {
+                    manager.finalize_pending_verification_if_ready().await;
+                }
+
                 info!("Cloud backup enabled (recovered existing namespace)");
                 self.finish_enable_operation(manager, claim);
             }

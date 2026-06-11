@@ -42,8 +42,8 @@ use crate::manager::cloud_backup_manager::wallets::{
 };
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupDisableOutcome,
-    CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupEnableState,
-    CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
+    CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupEnablePromptChoice,
+    CloudBackupEnableState, CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
     CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
     CloudBackupVerificationOutcome, CloudBackupVerificationPresentation,
     CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
@@ -1305,7 +1305,10 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
         credential_id: vec![1, 2, 3],
     };
 
-    let preparation = manager.prepare_enable_recovery(vec![matched]).await.unwrap();
+    let preparation = manager
+        .prepare_enable_recovery(CloudBackupEnableContext::settings_manual(), vec![matched])
+        .await
+        .unwrap();
     manager.save_enable_recovery_master_key(&preparation).unwrap();
     let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
     manager.project_exclusive_operation_started(claim);
@@ -1336,7 +1339,10 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         credential_id: vec![1, 2, 3],
     };
 
-    let preparation = manager.prepare_enable_recovery(vec![matched]).await.unwrap();
+    let preparation = manager
+        .prepare_enable_recovery(CloudBackupEnableContext::settings_manual(), vec![matched])
+        .await
+        .unwrap();
     manager.save_enable_recovery_master_key(&preparation).unwrap();
     let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
     manager.project_exclusive_operation_started(claim);
@@ -6315,6 +6321,63 @@ async fn existing_backup_prompt_preserves_onboarding_enable_context() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn existing_passkey_onboarding_recovery_completes_verification() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+
+    let prf_key = [7u8; 32];
+    let existing_master_key = cove_cspp::master_key::MasterKey::generate();
+    let existing_namespace = existing_master_key.namespace_id();
+    let encrypted_existing_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&existing_master_key, &prf_key, &[9; 32])
+            .unwrap();
+    globals.cloud.set_master_key_backup(
+        existing_namespace,
+        serde_json::to_vec(&encrypted_existing_master).unwrap(),
+    );
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let context = CloudBackupEnableContext {
+        saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
+        verification_source: CloudBackupVerificationSource::Onboarding,
+    };
+    enable_cloud_backup_no_discovery_with_context(&manager, context).await.unwrap();
+
+    assert!(matches!(
+        manager.model_snapshot().root_prompt,
+        CloudBackupRootPrompt::ExistingBackupFound(_, _)
+    ));
+
+    manager.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+        CloudBackupEnablePromptChoice::UseExisting,
+    ));
+
+    wait_for_test_condition(
+        Duration::from_secs(2),
+        "existing passkey onboarding recovery should verify",
+        || {
+            let snapshot = manager.model_snapshot();
+            manager.current_status() == CloudBackupStatus::Enabled
+                && matches!(snapshot.verification, VerificationState::Verified(_))
+        },
+    )
+    .await;
+
+    assert_eq!(
+        manager.model_snapshot().pending_upload_verification,
+        PendingUploadVerificationState::Idle
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn detail_entry_after_restart_without_active_authorization_prompts_normally() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -6656,6 +6719,22 @@ async fn restore_treats_missing_wallet_listing_as_empty_without_enabling() {
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Disabled
     );
+    assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restore_empty_namespace_list_returns_no_backup_found() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();
+
+    assert!(matches!(error, CloudBackupError::NoBackupFound));
     assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
 }
 

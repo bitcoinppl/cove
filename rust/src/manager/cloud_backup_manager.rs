@@ -499,6 +499,7 @@ impl From<&CloudBackupError> for CloudStorageIssue {
             | CloudBackupError::Internal(_)
             | CloudBackupError::Compatibility(_)
             | CloudBackupError::PasskeyMismatch
+            | CloudBackupError::NoBackupFound
             | CloudBackupError::PasskeyDiscoveryCancelled
             | CloudBackupError::Cancelled => Self::Other,
         }
@@ -1053,6 +1054,9 @@ pub(crate) enum CloudBackupError {
 
     #[error("Passkey didn't match any backups, please try a new one")]
     PasskeyMismatch,
+
+    #[error("no cloud backups found")]
+    NoBackupFound,
 
     #[error("user cancelled passkey discovery")]
     PasskeyDiscoveryCancelled,

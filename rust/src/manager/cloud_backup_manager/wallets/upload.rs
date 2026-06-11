@@ -600,6 +600,7 @@ impl RustCloudBackupManager {
             | CloudBackupError::Internal(_)
             | CloudBackupError::Compatibility(_)
             | CloudBackupError::PasskeyMismatch
+            | CloudBackupError::NoBackupFound
             | CloudBackupError::PasskeyDiscoveryCancelled
             | CloudBackupError::Cancelled => false,
         }

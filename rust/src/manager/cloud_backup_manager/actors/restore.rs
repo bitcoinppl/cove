@@ -30,6 +30,7 @@ use super::CloudBackupSupervisor;
 pub(crate) enum CloudBackupRestoreEvent {
     Progress(CloudBackupRestoreFlow),
     Complete(CloudBackupRestoreReport),
+    NoBackupFound,
     Failed(String),
 }
 
@@ -473,7 +474,7 @@ impl RestoreOperation {
 
         namespaces.sort();
         if namespaces.is_empty() {
-            return Err(CloudBackupError::Internal("no cloud backup namespaces found".into()));
+            return Err(CloudBackupError::NoBackupFound);
         }
 
         info!("Restore: authenticating with passkey across {} namespace(s)", namespaces.len());

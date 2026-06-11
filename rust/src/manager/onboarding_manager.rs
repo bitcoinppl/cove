@@ -329,6 +329,7 @@ enum InternalEvent {
     CloudCheckFinished(CloudCheckOutcome),
     RestoreProgress { attempt_id: u64, flow: CloudBackupRestoreFlow },
     RestoreComplete { attempt_id: u64, report: CloudBackupRestoreReport },
+    RestoreNoBackupFound { attempt_id: u64 },
     RestoreFailed { attempt_id: u64, message: String },
     WalletCreated { flow: CreatedWalletFlow },
     WalletCreationFailed { branch: OnboardingBranch, error: String },
@@ -653,6 +654,9 @@ impl RustOnboardingManager {
                     }
                     CloudBackupRestoreEvent::Complete(report) => {
                         InternalEvent::RestoreComplete { attempt_id, report }
+                    }
+                    CloudBackupRestoreEvent::NoBackupFound => {
+                        InternalEvent::RestoreNoBackupFound { attempt_id }
                     }
                     CloudBackupRestoreEvent::Failed(message) => {
                         InternalEvent::RestoreFailed { attempt_id, message }
@@ -1374,10 +1378,18 @@ impl FlowState {
             ) if attempt_id == event_attempt_id => Self::RestoreComplete { origin, report },
             (
                 Self::Restoring { origin, attempt_id, .. },
+                InternalEvent::RestoreNoBackupFound { attempt_id: event_attempt_id },
+            ) if attempt_id == event_attempt_id => {
+                *cloud_restore_discovery = CloudRestoreDiscovery::NoBackupFound;
+                Self::RestoreUnavailable { origin }
+            }
+            (
+                Self::Restoring { origin, attempt_id, .. },
                 InternalEvent::RestoreFailed { attempt_id: event_attempt_id, message },
             ) if attempt_id == event_attempt_id => Self::RestoreFailed { origin, message },
             (state, InternalEvent::RestoreProgress { .. }) => state,
             (state, InternalEvent::RestoreComplete { .. }) => state,
+            (state, InternalEvent::RestoreNoBackupFound { .. }) => state,
             (state, InternalEvent::RestoreFailed { .. }) => state,
             (Self::BitcoinChoice { .. }, InternalEvent::WalletCreated { flow })
                 if flow.branch == OnboardingBranch::NewUser =>
@@ -1431,6 +1443,7 @@ impl FlowState {
         let event_attempt_id = match event {
             InternalEvent::RestoreProgress { attempt_id, .. }
             | InternalEvent::RestoreComplete { attempt_id, .. }
+            | InternalEvent::RestoreNoBackupFound { attempt_id }
             | InternalEvent::RestoreFailed { attempt_id, .. } => *attempt_id,
             _ => return false,
         };
@@ -2925,6 +2938,51 @@ mod tests {
         let ui = flow.ui_state(&discovery, true, false);
         assert_eq!(ui.step, OnboardingStep::RestoreComplete);
         assert_eq!(ui.restore_state, OnboardingRestoreState::Complete(report));
+    }
+
+    #[test]
+    fn restore_no_backup_found_enters_restore_unavailable() {
+        let mut flow = FlowState::Restoring {
+            origin: RestoreOrigin::StorageChoice,
+            attempt_id: 7,
+            flow: CloudBackupRestoreFlow::Finding,
+        };
+        let mut discovery = CloudRestoreDiscovery::BackupFound(None);
+
+        flow.apply_event(
+            InternalEvent::RestoreNoBackupFound { attempt_id: 7 },
+            &mut discovery,
+            true,
+        );
+
+        assert!(matches!(
+            flow,
+            FlowState::RestoreUnavailable { origin: RestoreOrigin::StorageChoice }
+        ));
+        assert_eq!(discovery, CloudRestoreDiscovery::NoBackupFound);
+
+        let ui = flow.ui_state(&discovery, true, false);
+        assert_eq!(ui.step, OnboardingStep::RestoreUnavailable);
+        assert_eq!(ui.cloud_restore_state, OnboardingCloudRestoreState::NoBackupFound);
+    }
+
+    #[test]
+    fn stale_restore_no_backup_found_is_ignored() {
+        let mut flow = FlowState::Restoring {
+            origin: RestoreOrigin::StorageChoice,
+            attempt_id: 7,
+            flow: CloudBackupRestoreFlow::Finding,
+        };
+        let mut discovery = CloudRestoreDiscovery::BackupFound(None);
+
+        flow.apply_event(
+            InternalEvent::RestoreNoBackupFound { attempt_id: 6 },
+            &mut discovery,
+            true,
+        );
+
+        assert!(matches!(flow, FlowState::Restoring { attempt_id: 7, .. }));
+        assert_eq!(discovery, CloudRestoreDiscovery::BackupFound(None));
     }
 
     #[test]
