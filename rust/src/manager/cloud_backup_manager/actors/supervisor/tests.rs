@@ -78,6 +78,70 @@ fn test_enable_upload_finalization() -> EnableUploadFinalization {
     }
 }
 
+#[test]
+fn enable_recovery_finalization_debug_redacts_nested_items() {
+    let finalization = EnableRecoveryFinalization {
+        context: CloudBackupEnableContext::settings_manual(),
+        namespace_id: "active-namespace-secret".into(),
+        active_critical_key: zeroize::Zeroizing::new([0; 32]),
+        pending_uploads: vec![PendingVerificationUpload::new(
+            "pending-wallet-record-secret".into(),
+            "pending-wallet-revision-secret".into(),
+        )],
+        cleanup_sources: vec![CleanupSourceNamespace {
+            namespace_id: "cleanup-namespace-secret".into(),
+            expected_wallets: Vec::new(),
+        }],
+    };
+
+    let debug = format!("{finalization:?}");
+
+    assert!(debug.contains("pending_uploads_count: 1"), "{debug}");
+    assert!(debug.contains("cleanup_sources_count: 1"), "{debug}");
+    assert!(!debug.contains("active-namespace-secret"), "{debug}");
+    assert!(!debug.contains("pending-wallet-record-secret"), "{debug}");
+    assert!(!debug.contains("pending-wallet-revision-secret"), "{debug}");
+    assert!(!debug.contains("cleanup-namespace-secret"), "{debug}");
+}
+
+#[test]
+fn enable_recovery_completion_debug_redacts_nested_items() {
+    let completion = CloudBackupEnableRecoveryCompletion {
+        context: CloudBackupEnableContext::settings_manual(),
+        namespace_id: "active-namespace-secret".into(),
+        credential_id: vec![1, 2, 3],
+        prf_salt: [9; 32],
+        active_critical_key: zeroize::Zeroizing::new([0; 32]),
+        uploaded_wallets: vec![CloudBackupUploadedWallet::new(
+            WalletId::from("uploaded-wallet-id-secret".to_string()),
+            "uploaded-wallet-record-secret".into(),
+            "uploaded-wallet-revision-secret".into(),
+        )],
+        pending_uploads: vec![PendingVerificationUpload::new(
+            "pending-wallet-record-secret".into(),
+            "pending-wallet-revision-secret".into(),
+        )],
+        cleanup_sources: vec![CleanupSourceNamespace {
+            namespace_id: "cleanup-namespace-secret".into(),
+            expected_wallets: Vec::new(),
+        }],
+    };
+
+    let debug = format!("{completion:?}");
+
+    assert!(debug.contains("uploaded_wallets_count: 1"), "{debug}");
+    assert!(debug.contains("pending_uploads_count: 1"), "{debug}");
+    assert!(debug.contains("cleanup_sources_count: 1"), "{debug}");
+    assert!(debug.contains("credential_id: <redacted len=3>"), "{debug}");
+    assert!(!debug.contains("active-namespace-secret"), "{debug}");
+    assert!(!debug.contains("uploaded-wallet-id-secret"), "{debug}");
+    assert!(!debug.contains("uploaded-wallet-record-secret"), "{debug}");
+    assert!(!debug.contains("uploaded-wallet-revision-secret"), "{debug}");
+    assert!(!debug.contains("pending-wallet-record-secret"), "{debug}");
+    assert!(!debug.contains("pending-wallet-revision-secret"), "{debug}");
+    assert!(!debug.contains("cleanup-namespace-secret"), "{debug}");
+}
+
 fn awaiting_force_new_session(
     master_key: cove_cspp::master_key::MasterKey,
     passkey: UnpersistedPrfKey,

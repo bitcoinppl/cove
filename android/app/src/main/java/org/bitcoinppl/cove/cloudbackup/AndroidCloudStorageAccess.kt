@@ -498,26 +498,7 @@ class AndroidCloudStorageAccess internal constructor(
                 interactive = policy.allowsConsent(),
                 onError = { error -> throw error },
             ) { token ->
-                val namespacesRootId = findNamespacesRootFolderId(token) ?: return@runDriveOperation CloudSyncHealth.NoFiles
-                val namespaces =
-                    listChildren(
-                        token = token,
-                        parentId = namespacesRootId,
-                        foldersOnly = true,
-                    )
-                if (namespaces.isEmpty()) {
-                    return@runDriveOperation CloudSyncHealth.NoFiles
-                }
-
-                val namespaceFiles =
-                    namespaces.map { namespace ->
-                        listBackupLocations(
-                            token = token,
-                            namespaceFolderId = namespace.id,
-                        )
-                    }
-
-                cloudBackupLocationsSyncHealth(namespaceFiles)
+                cloudBackupLocationsSyncHealth(listNamespaceBackupLocations(token))
             }
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
@@ -529,6 +510,14 @@ class AndroidCloudStorageAccess internal constructor(
                 is CloudStorageException.NotAvailable -> CloudSyncHealth.Unavailable
                 else -> CloudSyncHealth.Failed(mapped.message ?: "drive sync status failed")
             }
+        }
+
+    suspend fun hasCloudBackupFiles(policy: CloudAccessPolicy): Boolean =
+        runDriveOperation(
+            interactive = policy.allowsConsent(),
+            onError = { error -> mapDriveListError(error) },
+        ) { token ->
+            cloudBackupLocationsSyncHealth(listNamespaceBackupLocations(token)) !is CloudSyncHealth.NoFiles
         }
 
     private suspend fun findNamespacesRootFolderId(token: String): String? =
@@ -822,6 +811,36 @@ class AndroidCloudStorageAccess internal constructor(
         return locations.distinct()
     }
 
+    private suspend fun listNamespaceBackupLocations(token: String): List<List<String>> {
+        val namespacesRootId = findNamespacesRootFolderId(token) ?: return emptyList()
+
+        return listNamespaceFolders(token, namespacesRootId)
+            .map { namespace ->
+                listBackupLocations(
+                    token = token,
+                    namespaceFolderId = namespace.id,
+                )
+            }
+    }
+
+    private suspend fun listNamespaceFolders(
+        token: String,
+        namespacesRootId: String,
+    ): List<DriveFileMetadata> {
+        val namespaces =
+            listChildren(
+                token = token,
+                parentId = namespacesRootId,
+                foldersOnly = true,
+            )
+        val duplicates = duplicateDriveFolderNames(namespaces.map { it.name })
+        if (duplicates.isNotEmpty()) {
+            throw duplicateDriveFolderException("namespace")
+        }
+
+        return namespaces
+    }
+
     private suspend fun listNamespaces(
         interactive: Boolean,
     ): List<String> =
@@ -830,17 +849,7 @@ class AndroidCloudStorageAccess internal constructor(
             onError = { error -> mapDriveListError(error) },
         ) { token ->
             val namespacesRootId = findNamespacesRootFolderId(token) ?: return@runDriveOperation emptyList()
-            val namespaces = listChildren(
-                token = token,
-                parentId = namespacesRootId,
-                foldersOnly = true,
-            ).map { it.name }
-            val duplicates = duplicateDriveFolderNames(namespaces)
-            if (duplicates.isNotEmpty()) {
-                throw duplicateDriveFolderException("namespace")
-            }
-
-            namespaces
+            listNamespaceFolders(token, namespacesRootId).map { it.name }
         }
 
     private fun buildMultipartBody(

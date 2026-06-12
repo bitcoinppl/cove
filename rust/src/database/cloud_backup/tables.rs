@@ -80,7 +80,7 @@ impl Value for CloudBlobSyncStateJson {
     {
         serde_json::from_slice(data).unwrap_or_else(|error| {
             error!("Failed to decode persisted cloud backup blob sync state: {error}");
-            corrupt_blob_sync_state(error)
+            error.into()
         })
     }
 
@@ -97,18 +97,20 @@ impl Value for CloudBlobSyncStateJson {
     }
 }
 
-fn corrupt_blob_sync_state(error: serde_json::Error) -> PersistedCloudBlobSyncState {
-    // redb value decoding cannot report an error, so return a non-trusting tombstone
-    PersistedCloudBlobSyncState::master_key_wrapper(
-        CORRUPT_BLOB_SYNC_NAMESPACE_ID.into(),
-        PersistedCloudBlobState::Failed(CloudBlobFailedState {
-            revision_hash: None,
-            retryable: false,
-            issue: None,
-            error: format!("failed to decode persisted cloud backup blob sync state: {error}"),
-            failed_at: 0,
-        }),
-    )
+impl From<serde_json::Error> for PersistedCloudBlobSyncState {
+    fn from(error: serde_json::Error) -> Self {
+        // redb value decoding cannot report an error, so return a non-trusting tombstone
+        PersistedCloudBlobSyncState::master_key_wrapper(
+            CORRUPT_BLOB_SYNC_NAMESPACE_ID.into(),
+            PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                revision_hash: None,
+                retryable: false,
+                issue: None,
+                error: format!("failed to decode persisted cloud backup blob sync state: {error}"),
+                failed_at: 0,
+            }),
+        )
+    }
 }
 
 #[cfg(test)]

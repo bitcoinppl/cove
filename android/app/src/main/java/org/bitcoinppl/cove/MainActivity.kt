@@ -140,19 +140,16 @@ internal sealed class BootstrapFailure {
 internal sealed class CatastrophicCloudRestoreCheck {
     data object Idle : CatastrophicCloudRestoreCheck()
     data object Checking : CatastrophicCloudRestoreCheck()
-
-    data class BackupFound(
-        val namespaceCount: Int,
-    ) : CatastrophicCloudRestoreCheck()
+    data object BackupFound : CatastrophicCloudRestoreCheck()
 
     data class Failed(
         val message: String,
     ) : CatastrophicCloudRestoreCheck()
 }
 
-internal fun catastrophicCloudRestoreCheckResult(namespaceCount: Int): CatastrophicCloudRestoreCheck =
-    if (namespaceCount > 0) {
-        CatastrophicCloudRestoreCheck.BackupFound(namespaceCount)
+internal fun catastrophicCloudRestoreCheckResult(hasBackupFiles: Boolean): CatastrophicCloudRestoreCheck =
+    if (hasBackupFiles) {
+        CatastrophicCloudRestoreCheck.BackupFound
     } else {
         CatastrophicCloudRestoreCheck.Failed(
             "No Cloud Backup was found for the selected Google account.",
@@ -344,10 +341,10 @@ class MainActivity : FragmentActivity() {
                 lifecycleScope.launch {
                     catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Checking
                     try {
-                        val namespaces = AndroidCloudStorageAccess(this@MainActivity)
-                            .listNamespaces(CloudAccessPolicy.CONSENT_ALLOWED)
+                        val hasBackupFiles = AndroidCloudStorageAccess(this@MainActivity)
+                            .hasCloudBackupFiles(CloudAccessPolicy.CONSENT_ALLOWED)
                         catastrophicCloudRestoreCheck =
-                            catastrophicCloudRestoreCheckResult(namespaces.size)
+                            catastrophicCloudRestoreCheckResult(hasBackupFiles)
                     } catch (error: kotlinx.coroutines.CancellationException) {
                         throw error
                     } catch (error: Throwable) {

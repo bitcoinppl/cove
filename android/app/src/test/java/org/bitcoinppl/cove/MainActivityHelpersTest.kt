@@ -8,10 +8,10 @@ import org.junit.Test
 class MainActivityHelpersTest {
     @Test
     fun catastrophicRestoreCheckRequiresFoundBackupBeforeConfirmation() {
-        assertTrue(catastrophicCloudRestoreCheckResult(0) is CatastrophicCloudRestoreCheck.Failed)
+        assertTrue(catastrophicCloudRestoreCheckResult(false) is CatastrophicCloudRestoreCheck.Failed)
         assertEquals(
-            CatastrophicCloudRestoreCheck.BackupFound(namespaceCount = 2),
-            catastrophicCloudRestoreCheckResult(2),
+            CatastrophicCloudRestoreCheck.BackupFound,
+            catastrophicCloudRestoreCheckResult(true),
         )
     }
 

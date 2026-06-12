@@ -107,9 +107,9 @@ impl std::fmt::Debug for CloudBackupEnableRecoveryCompletion {
             .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
             .field("prf_salt", &"<redacted>")
             .field("active_critical_key", &"<redacted>")
-            .field("uploaded_wallets", &self.uploaded_wallets)
-            .field("pending_uploads", &self.pending_uploads)
-            .field("cleanup_sources", &self.cleanup_sources)
+            .field("uploaded_wallets_count", &self.uploaded_wallets.len())
+            .field("pending_uploads_count", &self.pending_uploads.len())
+            .field("cleanup_sources_count", &self.cleanup_sources.len())
             .finish()
     }
 }
