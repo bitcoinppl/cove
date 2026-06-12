@@ -68,6 +68,7 @@ impl CloudBackupSupervisor {
         else {
             return;
         };
+        manager.project_enable_context_started(context);
 
         match self.start_ready_enable_upload_if_present(
             manager.clone(),
@@ -103,6 +104,7 @@ impl CloudBackupSupervisor {
         else {
             return;
         };
+        manager.project_enable_context_started(context);
 
         match self.start_ready_enable_upload_if_present(
             manager.clone(),
@@ -141,6 +143,7 @@ impl CloudBackupSupervisor {
         else {
             return;
         };
+        manager.project_enable_context_started(context);
 
         match self.start_ready_enable_upload_if_present(
             manager.clone(),

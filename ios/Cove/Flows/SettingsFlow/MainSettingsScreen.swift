@@ -903,6 +903,10 @@ struct MainSettingsScreen: View {
                 onComplete: {
                     sheetState = .none
                     DispatchQueue.main.async {
+                        guard !app.currentRoute.isEqual(routeToCheck: .settings(.cloudBackup)) else {
+                            return
+                        }
+
                         app.pushRoute(.settings(.cloudBackup))
                     }
                 },
@@ -1057,6 +1061,12 @@ private struct SettingsCloudBackupEnableSheet: View {
         }
     }
 
+    private func completeIfReady(_ completion: TaggedItem<CloudBackupEnableContext>?) {
+        guard completion?.item.verificationSource == .settings else { return }
+
+        onComplete()
+    }
+
     private func existingPasskeyButtonTitle(for hint: CloudBackupPasskeyHint?) -> String {
         guard let hint else { return "Use Existing Passkey" }
         return "Use Existing Passkey (\(hint.nameSuffix))"
@@ -1095,10 +1105,8 @@ private struct SettingsCloudBackupEnableSheet: View {
                 CloudBackupEnableBusyOverlay(enableFlow: manager.enableFlow)
             }
         }
-        .onChange(of: manager.lifecycle, initial: true) { _, _ in
-            if manager.isCloudBackupAvailable {
-                onComplete()
-            }
+        .onChange(of: manager.enableCompletion) { _, completion in
+            completeIfReady(completion)
         }
         .onChange(of: manager.rootPrompt, initial: true) { _, rootPrompt in
             if !isAwaitingEnablePrompt(rootPrompt) {

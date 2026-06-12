@@ -290,6 +290,7 @@ class CloudBackupManager private constructor(
     private fun apply(message: CloudBackupReconcileMessage) {
         when (message) {
             is CloudBackupReconcileMessage.Lifecycle -> state = state.copy(lifecycle = message.v1)
+            is CloudBackupReconcileMessage.EnableCompleted -> Unit
         }.let {}
         refreshPersistedEnabledState()
     }

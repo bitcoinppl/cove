@@ -36150,7 +36150,16 @@ public object FfiConverterTypeCloudBackupPasskeyState : FfiConverterRustBuffer<C
 sealed class CloudBackupReconcileMessage {
 
     data class Lifecycle(
-        val v1: org.bitcoinppl.cove_core.CloudBackupLifecycle) : CloudBackupReconcileMessage()
+        val v1: CloudBackupLifecycle) : CloudBackupReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    data class EnableCompleted(
+        val v1: org.bitcoinppl.cove_core.CloudBackupEnableContext) : CloudBackupReconcileMessage()
 
     {
 
@@ -36177,6 +36186,9 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             1 -> CloudBackupReconcileMessage.Lifecycle(
                 FfiConverterTypeCloudBackupLifecycle.read(buf),
                 )
+            2 -> CloudBackupReconcileMessage.EnableCompleted(
+                FfiConverterTypeCloudBackupEnableContext.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -36189,6 +36201,13 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 + FfiConverterTypeCloudBackupLifecycle.allocationSize(value.v1)
             )
         }
+        is CloudBackupReconcileMessage.EnableCompleted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: CloudBackupReconcileMessage, buf: ByteBuffer) {
@@ -36196,6 +36215,11 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             is CloudBackupReconcileMessage.Lifecycle -> {
                 buf.putInt(1)
                 FfiConverterTypeCloudBackupLifecycle.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.EnableCompleted -> {
+                buf.putInt(2)
+                FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

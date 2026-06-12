@@ -12,6 +12,11 @@ list:
 xtask *args:
     cd rust && cargo xtask {{ args }}
 
+# Rebase current branch onto new-base after choosing the old squash-merged base
+[group('utils')]
+rebase new_base="master":
+    just xtask rebase "{{ new_base }}"
+
 # Sign a PSBT and output all formats (base64, hex, binary, bbqr-gif, ur-gif)
 # Requires MNEMONIC env var (set in .envrc or pass directly)
 [group('utils')]

@@ -16,6 +16,7 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     @ObservationIgnored private let syncHealthObserver: SyncHealthObserver
 
     var state: CloudBackupState
+    var enableCompletion: TaggedItem<CloudBackupEnableContext>?
 
     private init() {
         let rust = RustCloudBackupManager()
@@ -253,6 +254,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         switch message {
         case let .lifecycle(lifecycle):
             state.lifecycle = lifecycle
+        case let .enableCompleted(context):
+            enableCompletion = TaggedItem(context)
         }
     }
 

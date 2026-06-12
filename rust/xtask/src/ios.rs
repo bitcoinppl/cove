@@ -35,6 +35,8 @@ const IOS_CONFIGURATION_DEBUG: &str = "Debug";
 const IOS_CONFIGURATION_RELEASE: &str = "Release";
 const IOS_TEAM_ID: &str = "Q8UP8C53Y8";
 const IOS_GENERIC_DEVICE_DESTINATION: &str = "generic/platform=iOS";
+// clear the project-level Apple Development identity so export can resolve distribution signing
+const IOS_TESTFLIGHT_CODE_SIGN_IDENTITY: &str = "";
 const IOS_SIMULATOR_DESTINATION: &str = "platform=iOS Simulator,name=iPhone 15 Pro,OS=latest";
 const XCODE_DERIVED_DATA_PATH: &str = "Library/Developer/Xcode/DerivedData";
 const IOS_SIMULATOR_DERIVED_DATA_DIR: &str = "Cove-simulator-run";
@@ -462,7 +464,7 @@ pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Res
     let xcode_path = xcode_distribution_path();
     let archive_cmd = cmd!(
         sh,
-        "xcodebuild -project {IOS_PROJECT} -scheme {IOS_SCHEME} -configuration {IOS_CONFIGURATION_RELEASE} -destination {IOS_GENERIC_DEVICE_DESTINATION} -archivePath {archive_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id} archive"
+        "xcodebuild -project {IOS_PROJECT} -scheme {IOS_SCHEME} -configuration {IOS_CONFIGURATION_RELEASE} -destination {IOS_GENERIC_DEVICE_DESTINATION} -archivePath {archive_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id} CODE_SIGN_IDENTITY={IOS_TESTFLIGHT_CODE_SIGN_IDENTITY} archive"
     )
     .env("PATH", &xcode_path);
     run_xcodebuild(archive_cmd, verbose, "Failed to archive iOS app")?;
