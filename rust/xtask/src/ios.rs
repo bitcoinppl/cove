@@ -36,6 +36,12 @@ const IOS_CONFIGURATION_DEBUG: &str = "Debug";
 const IOS_CONFIGURATION_RELEASE: &str = "Release";
 const IOS_TEAM_ID: &str = "Q8UP8C53Y8";
 const IOS_GENERIC_DEVICE_DESTINATION: &str = "generic/platform=iOS";
+const IOS_REQUIRED_SIGNED_ENTITLEMENTS: [&str; 4] = [
+    "com.apple.developer.associated-domains",
+    "com.apple.developer.icloud-container-identifiers",
+    "com.apple.developer.nfc.readersession.formats",
+    "com.apple.developer.ubiquity-container-identifiers",
+];
 const IOS_SIMULATOR_DESTINATION: &str = "platform=iOS Simulator,name=iPhone 15 Pro,OS=latest";
 const XCODE_DERIVED_DATA_PATH: &str = "Library/Developer/Xcode/DerivedData";
 const IOS_SIMULATOR_DERIVED_DATA_DIR: &str = "Cove-simulator-run";
@@ -484,6 +490,7 @@ fn upload_testflight_inner(
     )
     .env("PATH", &xcode_path);
     run_xcodebuild(archive_cmd, verbose, "Failed to archive iOS app")?;
+    validate_testflight_archive_entitlements(&sh, &archive_path)?;
     print_success(&format!("Created archive at {archive_path}"));
 
     print_info("Uploading iOS archive to App Store Connect...");
@@ -560,6 +567,48 @@ fn ensure_aasa_webcredentials_app(body: &str, app_identifier: &str) -> Result<()
 
     let listed_apps = apps.iter().filter_map(|app| app.as_str()).collect::<Vec<_>>().join(", ");
     Err(eyre!("`webcredentials.apps` does not include {app_identifier}; found [{}]", listed_apps))
+}
+
+fn validate_testflight_archive_entitlements(sh: &Shell, archive_path: &str) -> Result<()> {
+    let app_path = format!("{archive_path}/Products/Applications/{IOS_APP_NAME}.app");
+
+    let output = cmd!(sh, "/usr/bin/codesign -d --entitlements - {app_path}")
+        .ignore_status()
+        .output()
+        .wrap_err("Failed to inspect TestFlight archive entitlements")?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    let entitlements = format!("{stdout}\n{stderr}");
+
+    if !output.status.success() || entitlements.contains("code object is not signed") {
+        color_eyre::eyre::bail!(
+            "TestFlight archive app is not signed; refusing to upload an archive without target entitlements"
+        );
+    }
+
+    if entitlements.contains("invalid entitlements blob") {
+        color_eyre::eyre::bail!(
+            "TestFlight archive app has an invalid entitlements blob; refusing to upload"
+        );
+    }
+
+    let missing = IOS_REQUIRED_SIGNED_ENTITLEMENTS
+        .iter()
+        .filter(|entitlement| !entitlements.contains(**entitlement))
+        .copied()
+        .collect::<Vec<_>>();
+
+    if !missing.is_empty() {
+        color_eyre::eyre::bail!(
+            "TestFlight archive is missing signed entitlements: {}",
+            missing.join(", ")
+        );
+    }
+
+    print_success("Validated TestFlight archive signed entitlements");
+
+    Ok(())
 }
 
 struct TestflightApiCredentials {
