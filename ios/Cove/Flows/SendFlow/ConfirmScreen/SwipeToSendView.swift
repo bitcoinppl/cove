@@ -87,9 +87,7 @@ struct SwipeToSendView: View {
                 .overlay(
                     Group {
                         if sendState == .idle {
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 20))
-                                .foregroundColor(.white)
+                            PulsingSendArrow(isPulsing: !isDragging && offset == 0)
                         }
                     }
                 )
@@ -150,6 +148,27 @@ struct SwipeToSendView: View {
         } action: { frame in
             containerWidth = frame.width
         }
+    }
+}
+
+private struct PulsingSendArrow: View {
+    let isPulsing: Bool
+
+    @State private var isAnimating = false
+
+    var body: some View {
+        Image(systemName: "arrow.right")
+            .font(.system(size: 20))
+            .foregroundColor(.white)
+            .opacity(isPulsing ? (isAnimating ? 1 : 0.6) : 1)
+            .animation(
+                .easeInOut(duration: 0.9)
+                    .repeatForever(autoreverses: true),
+                value: isAnimating
+            )
+            .onAppear {
+                isAnimating = true
+            }
     }
 }
 

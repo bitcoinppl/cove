@@ -1,12 +1,5 @@
 package org.bitcoinppl.cove.navigation
 
-import androidx.compose.animation.ContentTransform
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,7 +20,6 @@ import org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails.Transacti
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowContainer
 import org.bitcoinppl.cove.flows.SettingsFlow.SettingsContainer
 import org.bitcoinppl.cove.secret_words.SecretWordsScreen
-import org.bitcoinppl.cove.ui.theme.MaterialMotion
 import org.bitcoinppl.cove_core.Route
 
 /**
@@ -70,10 +62,6 @@ fun CoveNavDisplay(
             }
         },
         modifier = modifier,
-        // Material Design Shared Axis X transitions (horizontal slide + fade)
-        transitionSpec = { forwardTransition() },
-        popTransitionSpec = { backwardTransition() },
-        predictivePopTransitionSpec = { backwardTransition() },
         entryProvider = { route ->
             NavEntry(route) {
                 RouteContent(app = app, route = route)
@@ -81,44 +69,6 @@ fun CoveNavDisplay(
         },
     )
 }
-
-/**
- * Material SharedAxis X transition for forward navigation (push)
- * Per spec: outgoing fades 0-100ms, incoming fades 100-300ms, both slide over 300ms
- */
-private fun forwardTransition(): ContentTransform =
-    slideInHorizontally(
-        initialOffsetX = { it },
-        animationSpec = tween(300, easing = MaterialMotion.emphasizedDecelerate),
-    ) +
-        fadeIn(
-            animationSpec = tween(200, delayMillis = 100),
-        ) togetherWith slideOutHorizontally(
-            targetOffsetX = { -it / 3 },
-            animationSpec = tween(300, easing = MaterialMotion.emphasizedAccelerate),
-        ) +
-        fadeOut(
-            animationSpec = tween(100),
-        )
-
-/**
- * Material SharedAxis X transition for backward navigation (pop)
- * Per spec: outgoing fades 0-100ms, incoming fades 100-300ms, both slide over 300ms
- */
-private fun backwardTransition(): ContentTransform =
-    slideInHorizontally(
-        initialOffsetX = { -it / 3 },
-        animationSpec = tween(300, easing = MaterialMotion.emphasizedDecelerate),
-    ) +
-        fadeIn(
-            animationSpec = tween(200, delayMillis = 100),
-        ) togetherWith slideOutHorizontally(
-            targetOffsetX = { it },
-            animationSpec = tween(300, easing = MaterialMotion.emphasizedAccelerate),
-        ) +
-        fadeOut(
-            animationSpec = tween(100),
-        )
 
 /**
  * Maps FFI Route to screen content
