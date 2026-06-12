@@ -154,21 +154,23 @@ struct SwipeToSendView: View {
 private struct PulsingSendArrow: View {
     let isPulsing: Bool
 
-    @State private var isAnimating = false
-
     var body: some View {
-        Image(systemName: "arrow.right")
-            .font(.system(size: 20))
-            .foregroundColor(.white)
-            .opacity(isPulsing ? (isAnimating ? 1 : 0.6) : 1)
-            .animation(
-                .easeInOut(duration: 0.9)
-                    .repeatForever(autoreverses: true),
-                value: isAnimating
-            )
-            .onAppear {
-                isAnimating = true
-            }
+        TimelineView(.animation(paused: !isPulsing)) { context in
+            Image(systemName: "arrow.right")
+                .font(.system(size: 20))
+                .foregroundColor(.white)
+                .opacity(isPulsing ? opacity(at: context.date) : 1)
+        }
+    }
+
+    private func opacity(at date: Date) -> Double {
+        let progress = date
+            .timeIntervalSinceReferenceDate
+            .truncatingRemainder(dividingBy: 1.8) / 0.9
+        let mirroredProgress = progress <= 1 ? progress : 2 - progress
+        let easedProgress = 0.5 - (0.5 * cos(mirroredProgress * .pi))
+
+        return 0.6 + (0.4 * easedProgress)
     }
 }
 
