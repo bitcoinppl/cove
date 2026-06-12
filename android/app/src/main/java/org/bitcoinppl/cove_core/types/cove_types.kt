@@ -9289,8 +9289,6 @@ public object FfiConverterTypeBlockSizeLast: FfiConverterRustBuffer<BlockSizeLas
 
 data class PayJoinParams (
     var `endpoint`: kotlin.String
-    ,
-    var `outputSubstitutionEnabled`: kotlin.Boolean
 
 ){
 
@@ -9308,18 +9306,15 @@ public object FfiConverterTypePayJoinParams: FfiConverterRustBuffer<PayJoinParam
     override fun read(buf: ByteBuffer): PayJoinParams {
         return PayJoinParams(
             FfiConverterString.read(buf),
-            FfiConverterBoolean.read(buf),
         )
     }
 
     override fun allocationSize(value: PayJoinParams) = (
-            FfiConverterString.allocationSize(value.`endpoint`) +
-            FfiConverterBoolean.allocationSize(value.`outputSubstitutionEnabled`)
+            FfiConverterString.allocationSize(value.`endpoint`)
     )
 
     override fun write(value: PayJoinParams, buf: ByteBuffer) {
             FfiConverterString.write(value.`endpoint`, buf)
-            FfiConverterBoolean.write(value.`outputSubstitutionEnabled`, buf)
     }
 }
 
