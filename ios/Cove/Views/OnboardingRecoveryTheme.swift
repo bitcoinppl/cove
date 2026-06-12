@@ -44,31 +44,41 @@ struct OnboardingStatusHero: View {
     var ringSizes: [CGFloat] = [118, 86, 58]
 
     var body: some View {
-        TimelineView(.animation) { context in
-            let ringScale = pulse ? ringScale(at: context.date) : 1
-
-            ZStack {
-                ForEach(Array(ringSizes.enumerated()), id: \.offset) { index, size in
-                    Circle()
-                        .stroke(tint.opacity(ringOpacity(for: index)), lineWidth: 1)
-                        .frame(width: size, height: size)
-                        .scaleEffect(ringScale)
+        Group {
+            if pulse {
+                TimelineView(.animation) { context in
+                    ringStack { index in
+                        ringScale(for: index, at: context.date)
+                    }
                 }
-
-                Circle()
-                    .fill(fillColor)
-                    .frame(width: 58, height: 58)
-
-                Circle()
-                    .stroke(tint.opacity(pulse ? 0.88 : 0.7), lineWidth: 1.3)
-                    .frame(width: 58, height: 58)
-
-                Image(systemName: systemImage)
-                    .font(.system(size: iconSize, weight: .semibold))
-                    .foregroundStyle(tint)
+            } else {
+                ringStack { _ in 1 }
             }
         }
         .frame(width: 118, height: 118)
+    }
+
+    private func ringStack(scale: @escaping (Int) -> CGFloat) -> some View {
+        ZStack {
+            ForEach(Array(ringSizes.enumerated()), id: \.offset) { index, size in
+                Circle()
+                    .stroke(tint.opacity(ringOpacity(for: index)), lineWidth: 1)
+                    .frame(width: size, height: size)
+                    .scaleEffect(scale(index))
+            }
+
+            Circle()
+                .fill(fillColor)
+                .frame(width: 58, height: 58)
+
+            Circle()
+                .stroke(tint.opacity(pulse ? 0.88 : 0.7), lineWidth: 1.3)
+                .frame(width: 58, height: 58)
+
+            Image(systemName: systemImage)
+                .font(.system(size: iconSize, weight: .semibold))
+                .foregroundStyle(tint)
+        }
     }
 
     private func ringOpacity(for index: Int) -> Double {
@@ -79,12 +89,26 @@ struct OnboardingStatusHero: View {
         }
     }
 
-    private func ringScale(at date: Date) -> CGFloat {
+    private func ringScale(for index: Int, at date: Date) -> CGFloat {
         let duration = 1.85
-        let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: duration * 2)
+        let delay = Double(index) * 0.12
+        let cycle = duration * 2
+        let time = date.timeIntervalSinceReferenceDate - delay
+        let phase = time.truncatingRemainder(dividingBy: cycle)
         let progress = phase <= duration ? phase / duration : 2 - phase / duration
+        let amplitude = ringScaleAmplitude(for: index)
+        let minimum = 1 - amplitude * 0.35
+        let maximum = 1 + amplitude
 
-        return 0.96 + (0.10 * CGFloat(progress))
+        return minimum + ((maximum - minimum) * CGFloat(progress))
+    }
+
+    private func ringScaleAmplitude(for index: Int) -> CGFloat {
+        switch index {
+        case 0: 0.10
+        case 1: 0.07
+        default: 0.04
+        }
     }
 }
 
