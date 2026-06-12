@@ -103,6 +103,15 @@ class AndroidPasskeyProviderTest {
         assertEquals(PasskeyOperation.REGISTRATION, (interrupted as PasskeyException.RequestFailed).operation)
         assertEquals(PasskeyFailureReason.Interrupted, interrupted.reason)
 
+        val foregroundTimeout = mapPasskeyCreateError(
+            ForegroundAuthorizationTimeoutException("foreground activity was unavailable"),
+        )
+        assertTrue(foregroundTimeout is PasskeyException.RequestFailed)
+        assertEquals(
+            PasskeyFailureReason.TimedOut,
+            (foregroundTimeout as PasskeyException.RequestFailed).reason,
+        )
+
         val timedOut = mapPasskeyCreateError(CreatePublicKeyCredentialDomException(TimeoutError()))
         assertTrue(timedOut is PasskeyException.RequestFailed)
         assertEquals(PasskeyOperation.REGISTRATION, (timedOut as PasskeyException.RequestFailed).operation)
@@ -148,6 +157,16 @@ class AndroidPasskeyProviderTest {
         assertTrue(interrupted is PasskeyException.RequestFailed)
         assertEquals(PasskeyOperation.DISCOVER_ASSERTION, (interrupted as PasskeyException.RequestFailed).operation)
         assertEquals(PasskeyFailureReason.Interrupted, interrupted.reason)
+
+        val foregroundTimeout = mapPasskeyGetError(
+            ForegroundAuthorizationTimeoutException("foreground activity was unavailable"),
+            PasskeyOperation.DISCOVER_ASSERTION,
+        )
+        assertTrue(foregroundTimeout is PasskeyException.RequestFailed)
+        assertEquals(
+            PasskeyFailureReason.TimedOut,
+            (foregroundTimeout as PasskeyException.RequestFailed).reason,
+        )
 
         val notAllowed = mapPasskeyGetError(
             GetPublicKeyCredentialDomException(NotAllowedError()),

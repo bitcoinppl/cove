@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
@@ -82,6 +83,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationPolicy
 import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
+import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
@@ -117,6 +119,8 @@ import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletType
+import org.bitcoinppl.cove_core.device.CloudAccessPolicy
+import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 import java.time.Instant
 
@@ -132,6 +136,44 @@ internal sealed class BootstrapFailure {
         val message: String,
     ) : BootstrapFailure()
 }
+
+internal sealed class CatastrophicCloudRestoreCheck {
+    data object Idle : CatastrophicCloudRestoreCheck()
+    data object Checking : CatastrophicCloudRestoreCheck()
+
+    data class BackupFound(
+        val namespaceCount: Int,
+    ) : CatastrophicCloudRestoreCheck()
+
+    data class Failed(
+        val message: String,
+    ) : CatastrophicCloudRestoreCheck()
+}
+
+internal fun catastrophicCloudRestoreCheckResult(namespaceCount: Int): CatastrophicCloudRestoreCheck =
+    if (namespaceCount > 0) {
+        CatastrophicCloudRestoreCheck.BackupFound(namespaceCount)
+    } else {
+        CatastrophicCloudRestoreCheck.Failed(
+            "No Cloud Backup was found for the selected Google account.",
+        )
+    }
+
+internal fun catastrophicCloudRestoreErrorMessage(error: Throwable): String =
+    when (error) {
+        is CloudStorageException.AuthorizationRequired ->
+            error.v1.ifBlank { "Google Drive access is required before local data can be reset." }
+        is CloudStorageException.Offline ->
+            "Cannot check Google Drive while offline: ${error.v1}"
+        is CloudStorageException.NotFound ->
+            "No Cloud Backup was found for the selected Google account."
+        is CloudStorageException.QuotaExceeded ->
+            "Google Drive quota is exceeded. Cove could not check for a Cloud Backup."
+        is CloudStorageException.NotAvailable ->
+            "Google Drive is unavailable: ${error.v1}"
+        else ->
+            error.message ?: "Cove could not check for a Cloud Backup."
+    }
 
 internal fun classifyBootstrapFailure(error: Exception): BootstrapFailure =
     when (error) {
@@ -280,6 +322,9 @@ class MainActivity : FragmentActivity() {
             var needsCatastrophicRecovery by remember { mutableStateOf(false) }
             var bootstrapAttempt by remember { mutableStateOf(0) }
             var bdkMigrationWarning by remember { mutableStateOf<String?>(null) }
+            var catastrophicCloudRestoreCheck by remember {
+                mutableStateOf<CatastrophicCloudRestoreCheck>(CatastrophicCloudRestoreCheck.Idle)
+            }
 
             fun resetCatastrophicRecoveryAndRetry(logContext: String) {
                 try {
@@ -295,11 +340,39 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
+            fun checkCloudBackupBeforeCatastrophicReset() {
+                lifecycleScope.launch {
+                    catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Checking
+                    try {
+                        val namespaces = AndroidCloudStorageAccess(this@MainActivity)
+                            .listNamespaces(CloudAccessPolicy.CONSENT_ALLOWED)
+                        catastrophicCloudRestoreCheck =
+                            catastrophicCloudRestoreCheckResult(namespaces.size)
+                    } catch (error: kotlinx.coroutines.CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        Log.w(TAG, "[STARTUP] failed to check cloud backup before catastrophic reset", error)
+                        catastrophicCloudRestoreCheck =
+                            CatastrophicCloudRestoreCheck.Failed(
+                                catastrophicCloudRestoreErrorMessage(error),
+                            )
+                    }
+                }
+            }
+
             if (!bootstrapped) {
                 if (needsCatastrophicRecovery) {
                     CatastrophicRecoveryView(
+                        cloudRestoreCheck = catastrophicCloudRestoreCheck,
                         onRestoreFromCloud = {
-                            resetCatastrophicRecoveryAndRetry("reset")
+                            checkCloudBackupBeforeCatastrophicReset()
+                        },
+                        onConfirmRestoreFromCloud = {
+                            catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Idle
+                            resetCatastrophicRecoveryAndRetry("restore")
+                        },
+                        onDismissRestoreFromCloud = {
+                            catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Idle
                         },
                         onWipeLocalData = {
                             resetCatastrophicRecoveryAndRetry("wipe")
@@ -1215,7 +1288,10 @@ private fun GlobalAlertDialog(
 
 @Composable
 private fun CatastrophicRecoveryView(
+    cloudRestoreCheck: CatastrophicCloudRestoreCheck,
     onRestoreFromCloud: () -> Unit,
+    onConfirmRestoreFromCloud: () -> Unit,
+    onDismissRestoreFromCloud: () -> Unit,
     onWipeLocalData: () -> Unit,
     onContactSupport: () -> Unit,
 ) {
@@ -1245,9 +1321,31 @@ private fun CatastrophicRecoveryView(
             Spacer(modifier = Modifier.height(28.dp))
             FilledTonalButton(
                 onClick = onRestoreFromCloud,
+                enabled = cloudRestoreCheck !is CatastrophicCloudRestoreCheck.Checking,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Restore from Cloud Backup")
+                if (cloudRestoreCheck is CatastrophicCloudRestoreCheck.Checking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    if (cloudRestoreCheck is CatastrophicCloudRestoreCheck.Checking) {
+                        "Checking Cloud Backup"
+                    } else {
+                        "Restore from Cloud Backup"
+                    },
+                )
+            }
+            if (cloudRestoreCheck is CatastrophicCloudRestoreCheck.Failed) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    cloudRestoreCheck.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
             Spacer(modifier = Modifier.height(8.dp))
             TextButton(
@@ -1287,6 +1385,26 @@ private fun CatastrophicRecoveryView(
             },
             dismissButton = {
                 TextButton(onClick = { showWipeConfirmation = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (cloudRestoreCheck is CatastrophicCloudRestoreCheck.BackupFound) {
+        AlertDialog(
+            onDismissRequest = onDismissRestoreFromCloud,
+            title = { Text("Restore from Cloud Backup?") },
+            text = {
+                Text(
+                    "Cove found a Cloud Backup for the selected Google account. This will erase the damaged local data on this device and restart into Cloud Backup restore.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = onConfirmRestoreFromCloud) {
+                    Text("Erase and Restore", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissRestoreFromCloud) { Text("Cancel") }
             },
         )
     }

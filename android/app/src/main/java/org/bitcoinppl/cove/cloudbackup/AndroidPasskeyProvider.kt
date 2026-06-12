@@ -341,6 +341,11 @@ class AndroidPasskeyProvider(
 internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
     when (error) {
         is PasskeyException -> error
+        is ForegroundAuthorizationTimeoutException ->
+            passkeyRequestFailed(
+                PasskeyOperation.REGISTRATION,
+                PasskeyFailureReason.TimedOut,
+            )
         is CreateCredentialCancellationException -> PasskeyException.UserCancelled()
         is CreateCredentialInterruptedException ->
             passkeyRequestFailed(
@@ -388,6 +393,11 @@ internal fun mapPasskeyGetError(
 ): PasskeyException =
     when (error) {
         is PasskeyException -> error
+        is ForegroundAuthorizationTimeoutException ->
+            passkeyRequestFailed(
+                operation,
+                PasskeyFailureReason.TimedOut,
+            )
         is NoCredentialException -> PasskeyException.NoCredentialFound()
         is GetCredentialCancellationException -> PasskeyException.UserCancelled()
         is GetCredentialInterruptedException ->
