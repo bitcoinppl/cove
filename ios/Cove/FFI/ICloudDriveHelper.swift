@@ -170,8 +170,17 @@ final class ICloudDriveHelper: @unchecked Sendable {
             .appendingPathComponent(namespacesSubdirectory, isDirectory: true)
     }
 
+    func validateNamespace(_ namespace: String) throws -> String {
+        guard Self.isValidNamespaceID(namespace) else {
+            throw CloudStorageError.InvalidNamespace("expected 32 lowercase hex characters")
+        }
+
+        return namespace
+    }
+
     /// Directory for a specific namespace: Data/cspp-namespaces/{namespace}/
     func namespaceDirectoryURL(namespace: String) throws -> URL {
+        let namespace = try validateNamespace(namespace)
         let url = try namespacesRootURL()
             .appendingPathComponent(namespace, isDirectory: true)
         try coordinatedCreateDirectory(at: url)
@@ -179,7 +188,8 @@ final class ICloudDriveHelper: @unchecked Sendable {
     }
 
     func namespaceDirectoryReadURL(namespace: String) throws -> URL {
-        try namespacesRootReadURL()
+        let namespace = try validateNamespace(namespace)
+        return try namespacesRootReadURL()
             .appendingPathComponent(namespace, isDirectory: true)
     }
 
@@ -554,7 +564,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         } catch {
             lastCoordinatedReadError = error
             Log.warn(
-                "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt) file=\(filename): \(error.localizedDescription)"
+                "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt): \(error.localizedDescription)"
             )
         }
 
@@ -585,7 +595,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
                 } catch {
                     lastCoordinatedReadError = error
                     Log.warn(
-                        "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt) file=\(filename): \(error.localizedDescription)"
+                        "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt): \(error.localizedDescription)"
                     )
                 }
             }
@@ -620,7 +630,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
     }
 
-    private func triggerDownload(url: URL, recordId: String, filename: String) throws {
+    private func triggerDownload(url: URL, recordId: String, filename _: String) throws {
         do {
             try FileManager.default.startDownloadingUbiquitousItem(at: url)
         } catch {
@@ -632,7 +642,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
             {
                 throw CloudStorageError.NotFound(recordId)
             }
-            Log.warn("downloadFile: startDownloading failed for \(filename): \(error.localizedDescription)")
+            Log.warn("downloadFile: startDownloading failed: \(error.localizedDescription)")
         }
     }
 
@@ -909,6 +919,17 @@ final class ICloudDriveHelper: @unchecked Sendable {
         return nsError.code == NSFileNoSuchFileError
             || nsError.code == NSFileReadNoSuchFileError
             || nsError.code == Self.legacyFileReadNoSuchFileError
+    }
+
+    private static func isValidNamespaceID(_ namespace: String) -> Bool {
+        namespace.count == 32 && namespace.utf8.allSatisfy { byte in
+            switch byte {
+            case 48 ... 57, 97 ... 102:
+                true
+            default:
+                false
+            }
+        }
     }
 
     /// Checks sync health of all files in namespace directories
