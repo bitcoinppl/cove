@@ -30,6 +30,7 @@ struct CloudBackupReducerState {
     phase: CloudBackupLifecyclePhase,
     configured: CloudBackupConfiguredReducerState,
     active_operation: Option<CloudBackupExclusiveOperationClaim>,
+    active_enable_context: Option<CloudBackupEnableContext>,
     sync_health: CloudSyncHealth,
     missing_passkey_dismissed: bool,
     should_prompt_verification: bool,
@@ -114,6 +115,7 @@ impl Default for CloudBackupReducerState {
             phase: CloudBackupLifecyclePhase::Disabled,
             configured: CloudBackupConfiguredReducerState::default(),
             active_operation: None,
+            active_enable_context: None,
             sync_health: CloudSyncHealth::Unknown,
             missing_passkey_dismissed: false,
             should_prompt_verification: false,
@@ -478,9 +480,11 @@ impl CloudBackupReducerState {
     fn apply_status(&mut self, status: CloudBackupStatus) {
         match status {
             CloudBackupStatus::Disabled => {
+                self.active_enable_context = None;
                 self.phase = CloudBackupLifecyclePhase::Disabled;
             }
             CloudBackupStatus::Disabling => {
+                self.active_enable_context = None;
                 self.configured.destructive_operation =
                     CloudBackupDestructiveOperationState::Disabling;
                 self.configured.prompt = CloudBackupConfiguredPrompt::None;
@@ -494,6 +498,7 @@ impl CloudBackupReducerState {
                 self.phase = CloudBackupLifecyclePhase::Enabling(flow);
             }
             CloudBackupStatus::Restoring => {
+                self.active_enable_context = None;
                 let flow = match &self.phase {
                     CloudBackupLifecyclePhase::Restoring(flow) => flow.clone(),
                     _ => CloudBackupRestoreFlow::Finding,
@@ -517,6 +522,7 @@ impl CloudBackupReducerState {
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
             CloudBackupStatus::PasskeyMissing => {
+                self.active_enable_context = None;
                 self.configured.passkey = match &self.configured.passkey {
                     CloudBackupPasskeyState::NeedsRepair { state } => {
                         CloudBackupPasskeyState::NeedsRepair { state: state.clone() }
@@ -532,11 +538,13 @@ impl CloudBackupReducerState {
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
             CloudBackupStatus::UnsupportedPasskeyProvider => {
+                self.active_enable_context = None;
                 self.configured.passkey = CloudBackupPasskeyState::UnsupportedProvider;
                 self.configured.prompt = CloudBackupConfiguredPrompt::None;
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
             CloudBackupStatus::Error(message) => {
+                self.active_enable_context = None;
                 self.phase = CloudBackupLifecyclePhase::Failed(CloudBackupFailure { message });
             }
         }
@@ -819,6 +827,7 @@ impl CloudBackupReducerState {
     fn clear_prompt_state(&mut self) {
         self.configured.prompt = CloudBackupConfiguredPrompt::None;
         self.missing_passkey_dismissed = false;
+        self.active_enable_context = None;
 
         if matches!(
             self.phase,
@@ -864,6 +873,7 @@ impl CloudBackupReducerState {
 pub(crate) enum CloudBackupStateReducerEvent {
     ExclusiveOperationStarted(CloudBackupExclusiveOperationClaim),
     ExclusiveOperationFinished(CloudBackupExclusiveOperationClaim),
+    EnableContextStarted(CloudBackupEnableContext),
     RuntimeStatusReconciled(CloudBackupStatus),
     ExistingBackupFoundPromptSet {
         context: CloudBackupEnableContext,
@@ -911,6 +921,7 @@ pub(crate) enum CloudBackupStateReducerEventRejection {}
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct CloudBackupStateReducerEffects {
     pub(crate) lifecycle: Option<CloudBackupLifecycle>,
+    pub(crate) enable_completed: Option<CloudBackupEnableContext>,
     pub(crate) status_changed: bool,
     pub(crate) verification_presentation_changed: bool,
     pub(crate) verification_decision_pending: bool,
@@ -1098,6 +1109,9 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim) => {
                 self.state.finish_exclusive_operation(claim);
             }
+            CloudBackupStateReducerEvent::EnableContextStarted(context) => {
+                self.state.active_enable_context = Some(context);
+            }
             CloudBackupStateReducerEvent::RuntimeStatusReconciled(status) => {
                 self.state.apply_status(status);
             }
@@ -1105,6 +1119,7 @@ impl CloudBackupStateReducer {
                 context,
                 passkey_hint,
             } => {
+                self.state.active_enable_context = Some(context);
                 self.state.phase = CloudBackupLifecyclePhase::Enabling(
                     CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, passkey_hint),
                 );
@@ -1116,11 +1131,13 @@ impl CloudBackupStateReducer {
                         CloudBackupEnableFlow::AwaitingForceNewConfirmation(_, _)
                     )
                 ) {
+                    self.state.active_enable_context = None;
                     self.state.phase = CloudBackupLifecyclePhase::Disabled;
                 }
             }
             CloudBackupStateReducerEvent::PasskeyChoicePromptSet(intent) => match &intent {
-                CloudBackupPasskeyChoiceIntent::Enable(_, _) => {
+                CloudBackupPasskeyChoiceIntent::Enable(context, _) => {
+                    self.state.active_enable_context = Some(*context);
                     self.state.phase = CloudBackupLifecyclePhase::Enabling(
                         CloudBackupEnableFlow::AwaitingPasskeyChoice(intent),
                     );
@@ -1140,6 +1157,7 @@ impl CloudBackupStateReducer {
                         )
                     )
                 ) {
+                    self.state.active_enable_context = None;
                     self.state.phase = CloudBackupLifecyclePhase::Disabled;
                 }
                 self.state.configured.prompt = CloudBackupConfiguredPrompt::None;
@@ -1254,7 +1272,7 @@ impl CloudBackupStateReducer {
     }
 
     fn resolve_effects(
-        &self,
+        &mut self,
         previous_status: CloudBackupStatus,
         previous_lifecycle: CloudBackupLifecycle,
         previous_presentation: CloudBackupVerificationPresentation,
@@ -1264,7 +1282,13 @@ impl CloudBackupStateReducer {
         if lifecycle != previous_lifecycle {
             effects.lifecycle = Some(lifecycle);
         }
-        effects.status_changed = self.state.status() != previous_status;
+
+        let status = self.state.status();
+        if previous_status == CloudBackupStatus::Enabling && status == CloudBackupStatus::Enabled {
+            effects.enable_completed = self.state.active_enable_context.take();
+        }
+
+        effects.status_changed = status != previous_status;
         effects.verification_presentation_changed =
             self.state.verification_presentation != previous_presentation;
     }
@@ -1406,6 +1430,41 @@ mod tests {
             effects.lifecycle,
             Some(CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::DiscoveringExistingBackup)),
         );
+    }
+
+    #[test]
+    fn enable_completion_emits_context_after_operation_finishes() {
+        let context = CloudBackupEnableContext::settings_manual();
+        let claim =
+            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 1);
+        let mut model = CloudBackupStateReducer::default();
+
+        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim)).unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::EnableContextStarted(context)).unwrap();
+
+        let configured_effects = model
+            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+                CloudBackupStatus::Enabled,
+            ))
+            .unwrap();
+
+        assert_eq!(configured_effects.enable_completed, None);
+        assert!(matches!(configured_effects.lifecycle, Some(CloudBackupLifecycle::Configured(_))));
+        assert_eq!(model.status(), CloudBackupStatus::Enabling);
+
+        let finished_effects = model
+            .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim))
+            .unwrap();
+
+        assert_eq!(finished_effects.enable_completed, Some(context));
+        assert!(finished_effects.status_changed);
+        assert_eq!(model.status(), CloudBackupStatus::Enabled);
+
+        let repeated_effects = model
+            .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim))
+            .unwrap();
+
+        assert_eq!(repeated_effects.enable_completed, None);
     }
 
     #[test]

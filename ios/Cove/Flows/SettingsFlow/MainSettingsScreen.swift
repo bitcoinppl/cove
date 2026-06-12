@@ -957,7 +957,6 @@ struct MainSettingsScreen: View {
 
 private struct SettingsCloudBackupEnableSheet: View {
     @State private var manager = CloudBackupManager.shared
-    @State private var didComplete = false
     @State private var ignoreNextPromptDismiss = false
 
     let onComplete: () -> Void
@@ -1062,10 +1061,9 @@ private struct SettingsCloudBackupEnableSheet: View {
         }
     }
 
-    private func completeIfReady() {
-        guard !didComplete, manager.isCloudBackupAvailable else { return }
+    private func completeIfReady(_ completion: TaggedItem<CloudBackupEnableContext>?) {
+        guard completion?.item.verificationSource == .settings else { return }
 
-        didComplete = true
         onComplete()
     }
 
@@ -1107,8 +1105,8 @@ private struct SettingsCloudBackupEnableSheet: View {
                 CloudBackupEnableBusyOverlay(enableFlow: manager.enableFlow)
             }
         }
-        .onChange(of: manager.lifecycle, initial: true) { _, _ in
-            completeIfReady()
+        .onChange(of: manager.enableCompletion) { _, completion in
+            completeIfReady(completion)
         }
         .onChange(of: manager.rootPrompt, initial: true) { _, rootPrompt in
             if !isAwaitingEnablePrompt(rootPrompt) {

@@ -212,7 +212,8 @@ pub(crate) enum CloudBackupDisableOutcome {
 /// Typed state delta sent from Rust to Swift and Kotlin reconcilers
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
-    Lifecycle(CloudBackupLifecycle),
+    Lifecycle(Box<CloudBackupLifecycle>),
+    EnableCompleted(CloudBackupEnableContext),
 }
 
 /// Restore summary shown after cloud backup onboarding restore completes
@@ -1152,6 +1153,10 @@ impl RustCloudBackupManager {
         self.apply_model_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim));
     }
 
+    pub(crate) fn project_enable_context_started(&self, context: CloudBackupEnableContext) {
+        self.apply_model_event(CloudBackupStateReducerEvent::EnableContextStarted(context));
+    }
+
     fn has_in_flight_lifecycle(status: &CloudBackupStatus) -> bool {
         matches!(
             status,
@@ -1329,7 +1334,11 @@ impl RustCloudBackupManager {
 
     fn send_model_effects(&self, effects: CloudBackupStateReducerEffects) {
         if let Some(lifecycle) = effects.lifecycle {
-            self.send(Message::Lifecycle(lifecycle));
+            self.send(Message::Lifecycle(Box::new(lifecycle)));
+        }
+
+        if let Some(context) = effects.enable_completed {
+            self.send(Message::EnableCompleted(context));
         }
     }
 

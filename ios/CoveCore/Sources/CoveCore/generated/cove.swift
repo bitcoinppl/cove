@@ -20608,6 +20608,8 @@ public enum CloudBackupReconcileMessage: Equatable, Hashable {
 
     case lifecycle(CloudBackupLifecycle
     )
+    case enableCompleted(CloudBackupEnableContext
+    )
 
 
 
@@ -20632,6 +20634,9 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
         case 1: return .lifecycle(try FfiConverterTypeCloudBackupLifecycle.read(from: &buf)
         )
 
+        case 2: return .enableCompleted(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -20643,6 +20648,11 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
         case let .lifecycle(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeCloudBackupLifecycle.write(v1, into: &buf)
+
+
+        case let .enableCompleted(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
 
         }
     }
