@@ -42,24 +42,29 @@ struct OnboardingStatusHero: View {
     var pulse = false
     var iconSize: CGFloat = 24
     var ringSizes: [CGFloat] = [118, 86, 58]
-    @State private var isPulsing = false
 
     var body: some View {
+        Group {
+            if pulse {
+                TimelineView(.animation) { context in
+                    ringStack { index in
+                        ringScale(for: index, at: context.date)
+                    }
+                }
+            } else {
+                ringStack { _ in 1 }
+            }
+        }
+        .frame(width: 118, height: 118)
+    }
+
+    private func ringStack(scale: @escaping (Int) -> CGFloat) -> some View {
         ZStack {
             ForEach(Array(ringSizes.enumerated()), id: \.offset) { index, size in
                 Circle()
                     .stroke(tint.opacity(ringOpacity(for: index)), lineWidth: 1)
                     .frame(width: size, height: size)
-                    .scaleEffect(ringScale(for: index))
-                    .opacity(ringAnimatedOpacity(for: index))
-                    .animation(
-                        pulse
-                            ? .easeInOut(duration: 1.85)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(index) * 0.12)
-                            : .default,
-                        value: isPulsing
-                    )
+                    .scaleEffect(scale(index))
             }
 
             Circle()
@@ -74,11 +79,6 @@ struct OnboardingStatusHero: View {
                 .font(.system(size: iconSize, weight: .semibold))
                 .foregroundStyle(tint)
         }
-        .frame(width: 118, height: 118)
-        .onAppear {
-            guard pulse else { return }
-            isPulsing = true
-        }
     }
 
     private func ringOpacity(for index: Int) -> Double {
@@ -89,16 +89,26 @@ struct OnboardingStatusHero: View {
         }
     }
 
-    private func ringScale(for index: Int) -> CGFloat {
-        guard pulse else { return 1 }
-        let offsets: [CGFloat] = [0.1, 0.07, 0.04]
-        let offset = offsets[min(index, offsets.count - 1)]
-        return isPulsing ? 1 + offset : 1 - (offset * 0.35)
+    private func ringScale(for index: Int, at date: Date) -> CGFloat {
+        let duration = 1.85
+        let delay = Double(index) * 0.12
+        let cycle = duration * 2
+        let time = date.timeIntervalSinceReferenceDate - delay
+        let phase = time.truncatingRemainder(dividingBy: cycle)
+        let progress = phase <= duration ? phase / duration : 2 - phase / duration
+        let amplitude = ringScaleAmplitude(for: index)
+        let minimum = 1 - amplitude * 0.35
+        let maximum = 1 + amplitude
+
+        return minimum + ((maximum - minimum) * CGFloat(progress))
     }
 
-    private func ringAnimatedOpacity(for index: Int) -> Double {
-        guard pulse else { return 1 }
-        return isPulsing ? ringOpacity(for: index) * 0.6 : ringOpacity(for: index) * 1.3
+    private func ringScaleAmplitude(for index: Int) -> CGFloat {
+        switch index {
+        case 0: 0.10
+        case 1: 0.07
+        default: 0.04
+        }
     }
 }
 
