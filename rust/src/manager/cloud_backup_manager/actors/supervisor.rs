@@ -99,11 +99,21 @@ pub(crate) enum CloudBackupOperation {
 /// The cache lets detail entry reuse fresh authorization after enable or repair,
 /// but it is intentionally lost on restart so passkey availability is checked
 /// again through the platform
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct RuntimePasskeyAuthorization {
     namespace_id: String,
     credential_id: Vec<u8>,
     prf_salt: [u8; 32],
+}
+
+impl std::fmt::Debug for RuntimePasskeyAuthorization {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RuntimePasskeyAuthorization")
+            .field("namespace_id", &"<redacted>")
+            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
+            .field("prf_salt", &"<redacted>")
+            .finish()
+    }
 }
 
 #[derive(Debug)]
@@ -282,7 +292,7 @@ impl CloudBackupSupervisor {
             blocking_cloud_error(BlockingCloudStep::DeleteCloudWallet, error)
         })?;
 
-        info!("Deleted cloud wallet {}", prepared.record_id);
+        info!("Deleted cloud wallet");
         Ok(())
     }
 

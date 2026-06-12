@@ -544,6 +544,46 @@ mod tests {
     }
 
     #[test]
+    fn cloud_backup_state_accepts_pending_verification_completion_without_created_at() {
+        let state: PersistedCloudBackupState = serde_json::from_value(serde_json::json!({
+            "version": 2,
+            "backup": {
+                "state": "Configured",
+                "data": {
+                    "passkey": "Available",
+                    "verification": {
+                        "state": "NotVerified",
+                        "data": {}
+                    },
+                    "sync": {},
+                    "pending_verification_completion": {
+                        "report": {
+                            "master_key_wrapper_repaired": false,
+                            "local_master_key_repaired": false,
+                            "credential_recovered": false,
+                            "wallets_verified": 0,
+                            "wallets_failed": 0,
+                            "wallets_unsupported": 0
+                        },
+                        "namespace_id": "0123456789abcdef0123456789abcdef",
+                        "uploads": ["MasterKeyWrapper"]
+                    }
+                }
+            }
+        }))
+        .unwrap();
+
+        let PersistedCloudBackupState::Configured(configured) = state else {
+            panic!("expected configured cloud backup state");
+        };
+        let completion =
+            configured.pending_verification_completion.expect("pending verification completion");
+
+        assert_eq!(completion.created_at, None);
+        assert_eq!(completion.uploads, vec![PersistedPendingVerificationUpload::MasterKeyWrapper]);
+    }
+
+    #[test]
     fn cloud_backup_state_rejects_v1_disabling_domain_json() {
         let error = serde_json::from_value::<PersistedCloudBackupState>(serde_json::json!({
             "version": 1,

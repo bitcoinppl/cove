@@ -1809,12 +1809,13 @@ async fn supervisor_routes_write_blocker_commands_to_write_supervisor() {
     let writes = spawn_actor(CloudBackupWriteSupervisor::new(Weak::new()));
     let mut supervisor = CloudBackupSupervisor::new(Arc::downgrade(&manager), writes.clone());
     let blocker = CloudBackupWriteBlocker::Disabling { operation_id: 9 };
+    let namespace = "0123456789abcdef0123456789abcdef";
 
     call!(writes.block(blocker)).await.unwrap();
 
     let blocked_write = call!(writes.upload_wallet_backup(
         CloudStorage::global_explicit_client(),
-        "namespace".into(),
+        namespace.into(),
         "record".into(),
         vec![1, 2, 3]
     ))
@@ -1829,7 +1830,7 @@ async fn supervisor_routes_write_blocker_commands_to_write_supervisor() {
 
     let allowed_write = call!(writes.upload_wallet_backup(
         CloudStorage::global_explicit_client(),
-        "namespace".into(),
+        namespace.into(),
         "record".into(),
         vec![1, 2, 3]
     ))

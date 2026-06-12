@@ -1501,6 +1501,8 @@ enum CloudStorageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     case NotFound(String
     )
     case QuotaExceeded
+    case InvalidNamespace(String
+    )
 
 
 
@@ -1560,6 +1562,9 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 7: return .QuotaExceeded
+        case 8: return .InvalidNamespace(
+            try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1604,6 +1609,11 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
 
         case .QuotaExceeded:
             writeInt(&buf, Int32(7))
+
+
+        case let .InvalidNamespace(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(v1, into: &buf)
 
         }
     }

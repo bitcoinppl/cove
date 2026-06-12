@@ -378,7 +378,13 @@ async fn list_active_wallets_for_disable(
             Ok(record_ids) => return Ok(record_ids.into_iter().collect()),
             Err(CloudStorageError::NotFound(_)) => {
                 let Some(delay) = backoff.next() else {
-                    return Ok(HashSet::new());
+                    return Err(blocking_cloud_error(
+                        BlockingCloudStep::Disable,
+                        CloudBackupError::cloud_storage_context(
+                            "list wallet backups",
+                            CloudStorageError::NotFound(namespace_id.to_owned()),
+                        ),
+                    ));
                 };
                 tokio::time::sleep(delay).await;
             }

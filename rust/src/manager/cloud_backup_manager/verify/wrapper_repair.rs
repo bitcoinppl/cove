@@ -48,14 +48,25 @@ impl From<WrapperRepairError> for CloudBackupError {
 }
 
 /// Chooses how wrapper repair should acquire passkey material
-#[derive(Debug)]
 pub(crate) enum WrapperRepairStrategy {
     CreateNew,
     DiscoverOrCreate,
     ReuseExisting(Vec<u8>),
 }
 
-#[derive(Debug)]
+impl std::fmt::Debug for WrapperRepairStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::CreateNew => f.write_str("CreateNew"),
+            Self::DiscoverOrCreate => f.write_str("DiscoverOrCreate"),
+            Self::ReuseExisting(credential_id) => f
+                .debug_tuple("ReuseExisting")
+                .field(&format_args!("<redacted len={}>", credential_id.len()))
+                .finish(),
+        }
+    }
+}
+
 struct WrapperRepairCredentials {
     prf_key: Zeroizing<[u8; 32]>,
     prf_salt: [u8; 32],
@@ -63,7 +74,17 @@ struct WrapperRepairCredentials {
     provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
 }
 
-#[derive(Debug)]
+impl std::fmt::Debug for WrapperRepairCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WrapperRepairCredentials")
+            .field("prf_key", &"<redacted>")
+            .field("prf_salt", &"<redacted>")
+            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
+            .field("provider_hint", &self.provider_hint)
+            .finish()
+    }
+}
+
 pub(crate) struct CloudBackupPreparedPasskeyWrapperRepair {
     pub(crate) namespace_id: String,
     pub(crate) credential_id: Vec<u8>,
@@ -73,7 +94,22 @@ pub(crate) struct CloudBackupPreparedPasskeyWrapperRepair {
     pub(crate) uploaded_at: u64,
 }
 
-#[derive(Debug)]
+impl std::fmt::Debug for CloudBackupPreparedPasskeyWrapperRepair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CloudBackupPreparedPasskeyWrapperRepair")
+            .field("namespace_id", &"<redacted>")
+            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
+            .field("prf_salt", &"<redacted>")
+            .field(
+                "master_key_wrapper_json",
+                &format_args!("<redacted len={}>", self.master_key_wrapper_json.len()),
+            )
+            .field("master_key_wrapper_revision", &self.master_key_wrapper_revision)
+            .field("uploaded_at", &self.uploaded_at)
+            .finish()
+    }
+}
+
 pub(crate) struct CloudBackupPasskeyWrapperRepairUpload {
     pub(crate) namespace_id: String,
     pub(crate) master_key_wrapper_json: Vec<u8>,
@@ -81,9 +117,30 @@ pub(crate) struct CloudBackupPasskeyWrapperRepairUpload {
     pub(crate) uploaded_at: u64,
 }
 
-#[derive(Debug)]
+impl std::fmt::Debug for CloudBackupPasskeyWrapperRepairUpload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CloudBackupPasskeyWrapperRepairUpload")
+            .field("namespace_id", &"<redacted>")
+            .field(
+                "master_key_wrapper_json",
+                &format_args!("<redacted len={}>", self.master_key_wrapper_json.len()),
+            )
+            .field("master_key_wrapper_revision", &self.master_key_wrapper_revision)
+            .field("uploaded_at", &self.uploaded_at)
+            .finish()
+    }
+}
+
 pub(crate) struct CloudBackupUploadedPasskeyWrapperRepair {
     pub(crate) namespace_id: String,
+}
+
+impl std::fmt::Debug for CloudBackupUploadedPasskeyWrapperRepair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CloudBackupUploadedPasskeyWrapperRepair")
+            .field("namespace_id", &"<redacted>")
+            .finish()
+    }
 }
 
 impl CloudBackupPreparedPasskeyWrapperRepair {

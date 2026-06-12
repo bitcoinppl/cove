@@ -469,13 +469,19 @@ async fn passkey_match_mixed_supported_and_unsupported_versions_returns_no_match
     let globals = test_globals();
     globals.reset();
 
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let supported_namespace = format!("{}-supported", master_key.namespace_id());
-    let unsupported_namespace = format!("{}-unsupported", master_key.namespace_id());
+    let supported_master_key = cove_cspp::master_key::MasterKey::generate();
+    let supported_namespace = supported_master_key.namespace_id();
+    let unsupported_master_key = cove_cspp::master_key::MasterKey::generate();
+    let unsupported_namespace = unsupported_master_key.namespace_id();
     let encrypted_master =
-        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
-    let mut unsupported_master =
-        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+        cove_cspp::master_key_crypto::encrypt_master_key(&supported_master_key, &[7; 32], &[9; 32])
+            .unwrap();
+    let mut unsupported_master = cove_cspp::master_key_crypto::encrypt_master_key(
+        &unsupported_master_key,
+        &[7; 32],
+        &[9; 32],
+    )
+    .unwrap();
     unsupported_master.version = 2;
 
     globals.cloud.set_master_key_backup(
@@ -539,13 +545,16 @@ async fn passkey_match_targeted_auth_propagates_unsupported_provider() {
     let globals = test_globals();
     globals.reset();
 
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let first_namespace = format!("{}-first", master_key.namespace_id());
-    let second_namespace = format!("{}-second", master_key.namespace_id());
+    let first_master_key = cove_cspp::master_key::MasterKey::generate();
+    let first_namespace = first_master_key.namespace_id();
+    let second_master_key = cove_cspp::master_key::MasterKey::generate();
+    let second_namespace = second_master_key.namespace_id();
     let first_encrypted =
-        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+        cove_cspp::master_key_crypto::encrypt_master_key(&first_master_key, &[7; 32], &[9; 32])
+            .unwrap();
     let second_encrypted =
-        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[8; 32], &[9; 32]).unwrap();
+        cove_cspp::master_key_crypto::encrypt_master_key(&second_master_key, &[8; 32], &[9; 32])
+            .unwrap();
     globals.cloud.set_master_key_backup(
         first_namespace.clone(),
         serde_json::to_vec(&first_encrypted).unwrap(),
@@ -1298,9 +1307,10 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
     globals.cloud.fail_wallet_backup_upload("upload failed");
 
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let master_key = cove_cspp::master_key::MasterKey::generate();
     let matched = NamespaceMatch {
-        namespace_id: "matched-namespace".into(),
-        master_key: cove_cspp::master_key::MasterKey::generate(),
+        namespace_id: master_key.namespace_id(),
+        master_key,
         prf_salt: [9; 32],
         credential_id: vec![1, 2, 3],
     };
@@ -1332,9 +1342,10 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
     globals.keychain.fail_save_at(3);
 
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let master_key = cove_cspp::master_key::MasterKey::generate();
     let matched = NamespaceMatch {
-        namespace_id: "matched-namespace".into(),
-        master_key: cove_cspp::master_key::MasterKey::generate(),
+        namespace_id: master_key.namespace_id(),
+        master_key,
         prf_salt: [9; 32],
         credential_id: vec![1, 2, 3],
     };
@@ -2110,7 +2121,7 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn enable_treats_missing_wallet_listing_as_empty_during_recovery() {
+async fn enable_recovery_fails_closed_when_matched_wallet_listing_is_missing() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -2171,11 +2182,15 @@ async fn enable_treats_missing_wallet_listing_as_empty_during_recovery() {
         vec![wallet_filename_from_record_id(&record_id)],
     );
 
-    enable_cloud_backup_create_new(&manager).await.unwrap();
+    let error = enable_cloud_backup_create_new(&manager).await.unwrap_err();
 
-    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(wallet_namespace.clone()));
-    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(1));
+    assert!(error.to_string().contains("wallet files missing"), "{error}");
+    assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+    assert!(globals.cloud.has_namespace(&empty_namespace));
     assert!(globals.cloud.has_namespace(&wallet_namespace));
 }
 
@@ -2221,7 +2236,7 @@ async fn cleanup_deletes_source_namespace_after_active_record_proof() {
     reset_cloud_backup_test_state(&manager, globals);
     let active_master_key = cove_cspp::master_key::MasterKey::generate();
     let active_namespace = active_master_key.namespace_id();
-    let source_namespace = "source-namespace".to_string();
+    let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let wallet = xpub_only_wallet_metadata();
     Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
@@ -2267,7 +2282,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
     reset_cloud_backup_test_state(&manager, globals);
     let active_master_key = cove_cspp::master_key::MasterKey::generate();
     let active_namespace = active_master_key.namespace_id();
-    let source_namespace = "source-namespace".to_string();
+    let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let record_id = "missing-record".to_string();
     let active_namespace_list_attempt_count =
         globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace);
@@ -2307,7 +2322,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
     let active_master_key = cove_cspp::master_key::MasterKey::generate();
     let wrong_master_key = cove_cspp::master_key::MasterKey::generate();
     let active_namespace = active_master_key.namespace_id();
-    let source_namespace = "source-namespace".to_string();
+    let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let wallet = xpub_only_wallet_metadata();
     Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
@@ -2358,7 +2373,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
     reset_cloud_backup_test_state(&manager, globals);
     let active_master_key = cove_cspp::master_key::MasterKey::generate();
     let active_namespace = active_master_key.namespace_id();
-    let source_namespace = "source-namespace".to_string();
+    let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let wallet = xpub_only_wallet_metadata();
     Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
@@ -2409,7 +2424,7 @@ async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
     reset_cloud_backup_test_state(&manager, globals);
     let active_master_key = cove_cspp::master_key::MasterKey::generate();
     let active_namespace = active_master_key.namespace_id();
-    let source_namespace = "source-namespace".to_string();
+    let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let wallet = xpub_only_wallet_metadata();
     Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
@@ -2460,7 +2475,7 @@ async fn cleanup_keeps_source_namespace_when_delete_fails() {
     reset_cloud_backup_test_state(&manager, globals);
     let active_master_key = cove_cspp::master_key::MasterKey::generate();
     let active_namespace = active_master_key.namespace_id();
-    let source_namespace = "source-namespace".to_string();
+    let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let wallet = xpub_only_wallet_metadata();
     Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
@@ -2523,6 +2538,34 @@ async fn passkey_repair_finalization_keeps_existing_count_when_wallet_refresh_fa
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn passkey_repair_finalization_keeps_existing_count_when_wallet_listing_is_missing() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 2);
+
+    Database::global()
+        .cloud_backup_state
+        .set(&persisted_passkey_missing_cloud_backup_state(Some(7)))
+        .unwrap();
+    manager.sync_persisted_state();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.fail_list_wallet_files_for_namespace(
+        namespace,
+        CloudStorageError::NotFound("wallet files missing".into()),
+    );
+
+    let finalization = manager.prepare_passkey_repair_finalization().await.unwrap();
+    manager.apply_passkey_repair_finalization(finalization).unwrap();
+
+    let state = Database::global().cloud_backup_state.get().unwrap();
+    assert_eq!(state.status(), PersistedCloudBackupStatus::Enabled);
+    assert_eq!(state.wallet_count(), Some(7));
+    assert_eq!(manager.model_snapshot().status, CloudBackupStatus::Enabled);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -2551,6 +2594,25 @@ async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() 
     assert_eq!(manager.model_snapshot().sync_health, CloudSyncHealth::Uploading);
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wrapper_repair_fails_closed_when_wallet_listing_is_missing() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.fail_list_wallet_files_for_namespace(
+        namespace,
+        CloudStorageError::NotFound("wallet files missing".into()),
+    );
+
+    let error = manager.prepare_passkey_wrapper_repair_no_discovery().await.unwrap_err();
+
+    assert!(error.to_string().contains("wallet files missing"), "{error}");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2740,6 +2802,72 @@ async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn keep_cloud_backup_enabled_resumes_dirty_wallet_marked_during_disable_fence() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let metadata = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![metadata.clone()]);
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let record_id = wallet_record_id(metadata.id.as_ref());
+    let PersistedCloudBackupState::Configured(previous_configured) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected configured cloud backup state");
+    };
+    Database::global()
+        .cloud_backup_state
+        .set(&PersistedCloudBackupState::Disabling(PersistedDisablingCloudBackup {
+            previous_configured,
+            namespace_id: namespace.clone(),
+            disable_generation: 42,
+            started_at: 100,
+            delete_started_at: None,
+            last_error: None,
+            retry_after: None,
+        }))
+        .unwrap();
+
+    manager.handle_wallet_backup_change(metadata.id.clone());
+
+    assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 0);
+    assert!(matches!(
+        Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+        Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+    ));
+
+    run_keep_cloud_backup_enabled(&manager).await;
+
+    wait_for_test_condition(
+        Duration::from_secs(5),
+        "dirty wallet marked during disable fence uploads after Keep Enabled",
+        || {
+            let upload_attempted = globals.cloud.wallet_backup_upload_attempt_count() > 0;
+            let uploaded_or_confirmed = matches!(
+                Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+                Some(PersistedCloudBlobSyncState {
+                    state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
+                        | PersistedCloudBlobState::Confirmed(_),
+                    ..
+                })
+            );
+
+            upload_attempted && uploaded_or_confirmed
+        },
+    )
+    .await;
+    assert!(matches!(
+        Database::global().cloud_backup_state.get().unwrap(),
+        PersistedCloudBackupState::Configured(_)
+    ));
+
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn keep_cloud_backup_enabled_preserves_configured_runtime_status() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -2895,7 +3023,7 @@ async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain(
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn disable_cloud_backup_not_found_listing_retries_then_finishes_cleanup() {
+async fn disable_cloud_backup_not_found_listing_retries_then_fails_closed() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -2910,13 +3038,20 @@ async fn disable_cloud_backup_not_found_listing_retries_then_finishes_cleanup() 
     );
 
     run_disable_cloud_backup(&manager).await;
+    let error = disable_failure_message(&manager);
 
+    assert!(error.contains("list wallet backups"), "{error}");
     assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 4);
-    assert_eq!(
-        Database::global().cloud_backup_state.get().unwrap().status(),
-        PersistedCloudBackupStatus::Disabled
-    );
-    assert!(CloudBackupKeychain::global().namespace_id().is_none());
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert!(globals.cloud.has_namespace(&namespace));
+    assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace.as_str()));
+    let PersistedCloudBackupState::Disabling(disabling) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected persisted disabling state");
+    };
+    assert!(disabling.delete_started_at.is_none());
+    assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3022,7 +3157,7 @@ async fn reupload_all_wallets_does_not_create_master_key_for_existing_namespace(
     let globals = test_globals();
     globals.reset();
 
-    CloudBackupKeychain::global().save_namespace_id("existing-namespace").unwrap();
+    CloudBackupKeychain::global().save_namespace_id("0123456789abcdef0123456789abcdef").unwrap();
 
     let manager = init_manager();
     let claim =
@@ -3197,7 +3332,7 @@ async fn other_backup_summary_counts_only_wallets_missing_from_local_wallets() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn other_backup_summary_counts_empty_namespace_when_wallet_listing_is_missing() {
+async fn other_backup_summary_fails_closed_when_wallet_listing_is_missing() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -3212,10 +3347,10 @@ async fn other_backup_summary_counts_empty_namespace_when_wallet_listing_is_miss
         CloudStorageError::NotFound("wallet files missing".into()),
     );
 
-    let summary =
-        manager.other_backup_summary(&CloudStorage::global_explicit_client()).await.unwrap();
-    assert_eq!(summary.namespace_count, 1);
-    assert_eq!(summary.wallet_count, 0);
+    let error =
+        manager.other_backup_summary(&CloudStorage::global_explicit_client()).await.unwrap_err();
+
+    assert!(error.to_string().contains("wallet files missing"), "{error}");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3317,6 +3452,56 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
         manager.other_backup_summary(&CloudStorage::global_explicit_client()).await.unwrap();
     assert_eq!(summary.namespace_count, 0);
     assert_eq!(summary.wallet_count, 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_current_namespace_not_found_fails_closed_without_source_delete() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.fail_list_wallet_files_for_namespace(
+        current_namespace,
+        CloudStorageError::NotFound("current wallet files missing".into()),
+    );
+
+    let prf_key = [7u8; 32];
+    let other_master_key = cove_cspp::master_key::MasterKey::generate();
+    let other_namespace = other_master_key.namespace_id();
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&other_master_key, &prf_key, &[9; 32])
+            .unwrap();
+    globals.cloud.set_master_key_backup(
+        other_namespace.clone(),
+        serde_json::to_vec(&encrypted_master).unwrap(),
+    );
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let wallet = xpub_only_wallet_metadata();
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        other_namespace.clone(),
+        record_id.clone(),
+        encrypted_wallet_backup_bytes(&wallet, &other_master_key, "other-revision", 1).await,
+    );
+    globals.cloud.set_wallet_files(
+        other_namespace.clone(),
+        vec![wallet_filename_from_record_id(&record_id)],
+    );
+    let delete_attempt_count = globals.cloud.delete_namespace_attempt_count();
+
+    let error = manager.do_recover_other_backups().await.unwrap_err();
+
+    assert!(error.to_string().contains("current wallet files missing"), "{error}");
+    assert!(globals.cloud.has_namespace(&other_namespace));
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), delete_attempt_count);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3593,7 +3778,7 @@ async fn backup_wallets_does_not_create_master_key_or_upload_when_missing() {
     let globals = test_globals();
     globals.reset();
 
-    let namespace = "existing-namespace";
+    let namespace = "0123456789abcdef0123456789abcdef";
     CloudBackupKeychain::global().save_namespace_id(namespace).unwrap();
 
     let manager = init_manager();
@@ -3621,7 +3806,7 @@ async fn upload_wallet_if_dirty_does_not_create_master_key_for_existing_namespac
     let globals = test_globals();
     globals.reset();
 
-    let namespace = "existing-namespace";
+    let namespace = "0123456789abcdef0123456789abcdef";
     CloudBackupKeychain::global().save_namespace_id(namespace).unwrap();
 
     let manager = init_manager();
@@ -4214,8 +4399,9 @@ async fn force_new_reports_uploading_while_master_key_confirmation_is_pending() 
     CONNECTIVITY_MANAGER.set_connection_state(true);
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
     globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
-    globals.cloud.set_master_key_backup("existing-namespace".into(), vec![1, 2, 3]);
-    globals.cloud.set_wallet_files("existing-namespace".into(), vec!["wallet-1.json".into()]);
+    let existing_namespace = "fedcba9876543210fedcba9876543210";
+    globals.cloud.set_master_key_backup(existing_namespace.into(), vec![1, 2, 3]);
+    globals.cloud.set_wallet_files(existing_namespace.into(), vec!["wallet-1.json".into()]);
 
     let metadata = xpub_only_wallet_metadata();
     persist_xpub_wallets(vec![metadata]);
@@ -4551,6 +4737,29 @@ async fn refresh_cloud_backup_detail_uses_interactive_wallet_listing() {
         .expect("expected listed wallet");
     assert_eq!(listed_record_id, record_id);
     globals.cloud.clear_list_wallet_files_non_interactive_failure();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn refresh_cloud_backup_detail_returns_access_error_when_wallet_listing_is_missing() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.fail_list_wallet_files_for_namespace(
+        namespace,
+        CloudStorageError::NotFound("wallet files missing".into()),
+    );
+
+    let Some(CloudBackupDetailResult::AccessError(error)) =
+        manager.refresh_cloud_backup_detail().await
+    else {
+        panic!("expected cloud backup detail access error");
+    };
+
+    assert!(error.to_string().contains("wallet files missing"), "{error}");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -5441,6 +5650,60 @@ async fn pending_upload_verification_keeps_master_key_wrapper_hash_mismatch_pend
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn pending_upload_verification_expires_stale_completion() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    manager.replace_pending_verification_completion(PendingVerificationCompletion::new(
+        DeepVerificationReport {
+            master_key_wrapper_repaired: false,
+            local_master_key_repaired: false,
+            credential_recovered: false,
+            wallets_verified: 0,
+            wallets_failed: 0,
+            wallets_unsupported: 0,
+            detail: None,
+        },
+        namespace_id,
+        vec![PendingVerificationUpload::master_key_wrapper()],
+    ));
+
+    let mut state = RustCloudBackupManager::load_persisted_state();
+    match &mut state {
+        PersistedCloudBackupState::Configured(configured) => {
+            configured
+                .pending_verification_completion
+                .as_mut()
+                .expect("pending verification completion")
+                .created_at = Some(0);
+        }
+        other => panic!("expected configured cloud backup state, got {other:?}"),
+    }
+    Database::global().cloud_backup_state.set(&state).unwrap();
+
+    manager.finalize_pending_verification_if_ready().await;
+
+    assert!(manager.pending_verification_completion().is_none());
+    assert_eq!(
+        manager.model_snapshot().pending_upload_verification,
+        PendingUploadVerificationState::Idle
+    );
+    match manager.model_snapshot().verification {
+        VerificationState::Failed(DeepVerificationFailure::Retry { message, .. }) => {
+            assert_eq!(
+                message,
+                "cloud backup upload confirmation expired; start verification again"
+            );
+        }
+        other => panic!("expected retry failure for stale completion, got {other:?}"),
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -6016,6 +6279,50 @@ async fn discard_pending_enable_retry_upload_deletes_remote_master_key() {
     .await;
 
     assert!(cspp.load_master_key_from_store().unwrap().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn discard_pending_enable_retry_upload_keeps_pending_state_when_remote_cleanup_fails() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    cspp.save_master_key(&master_key).unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.fail_delete_wallet_backup("delete failed");
+    replace_pending_enable_session_for_test(
+        &manager,
+        PendingEnableSession::retry_upload(
+            master_key,
+            UnpersistedPrfKey {
+                prf_key: [7; 32],
+                prf_salt: [9; 32],
+                credential_id: vec![1, 2, 3],
+                provider_hint: None,
+            },
+            CloudBackupEnableContext::settings_manual(),
+        ),
+    )
+    .await;
+
+    manager.discard_pending_enable_cloud_backup();
+
+    wait_for_test_condition(
+        Duration::from_secs(1),
+        "discard pending enable cleanup failure should surface",
+        || matches!(manager.state().lifecycle, CloudBackupLifecycle::Failed(_)),
+    )
+    .await;
+
+    assert!(globals.cloud.has_master_key_backup(&namespace));
+    assert!(cspp.load_master_key_from_store().unwrap().is_some());
+    assert!(take_pending_enable_session_for_test(&manager).await.is_some());
 }
 
 #[test]
@@ -6682,16 +6989,20 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
     assert_eq!(report.wallets_failed, 0);
     assert!(report.failed_wallet_errors.is_empty(), "{:?}", report.failed_wallet_errors);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(2));
+    let active_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    assert!(globals.cloud.has_wallet_backup(&active_namespace, &first_record_id));
+    assert!(globals.cloud.has_wallet_backup(&active_namespace, &second_record_id));
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn restore_treats_missing_wallet_listing_as_empty_without_enabling() {
+async fn restore_missing_wallet_listing_fails_closed_without_finalizing_empty_state() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
-    reset_cloud_backup_test_state(&manager, globals);
+    configure_enabled_cloud_backup(&manager, globals, 7);
+    let existing_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
 
     let prf_key = [7u8; 32];
     let master_key = cove_cspp::master_key::MasterKey::generate();
@@ -6711,15 +7022,56 @@ async fn restore_treats_missing_wallet_listing_as_empty_without_enabling() {
     globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
 
     let operation = new_restore_operation_for_test(&manager).await;
+    let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();
+
+    assert!(error.to_string().contains("wallet files missing"), "{error}");
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(7));
+    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(existing_namespace));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restore_all_duplicate_wallets_preserves_existing_configured_state() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    configure_enabled_cloud_backup(&manager, globals, 7);
+    let existing_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let duplicate_wallet = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![duplicate_wallet.clone()]);
+
+    let prf_key = [7u8; 32];
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &prf_key, &[9; 32]).unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(duplicate_wallet.id.as_ref());
+    globals.cloud.set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted).unwrap());
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        record_id.clone(),
+        encrypted_wallet_backup_bytes(&duplicate_wallet, &master_key, "duplicate-revision", 1)
+            .await,
+    );
+    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+
+    let operation = new_restore_operation_for_test(&manager).await;
     let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
 
     assert_eq!(report.wallets_restored, 0);
     assert_eq!(report.wallets_failed, 0);
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
-        PersistedCloudBackupStatus::Disabled
+        PersistedCloudBackupStatus::Enabled
     );
-    assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(7));
+    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(existing_namespace));
 }
 
 #[tokio::test(flavor = "current_thread")]

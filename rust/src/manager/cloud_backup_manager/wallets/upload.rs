@@ -156,7 +156,7 @@ impl RustCloudBackupManager {
         let mut uploaded_wallets = Vec::with_capacity(wallets.len());
 
         for (index, metadata) in wallets.iter().enumerate() {
-            info!("Backup: uploading wallet {}/{} '{}'", index + 1, wallets.len(), metadata.name);
+            info!("Backup: uploading wallet {}/{}", index + 1, wallets.len());
             let prepared_upload = match prepare_cloud_wallet_upload(
                 metadata,
                 &batch.namespace,
@@ -228,7 +228,7 @@ impl RustCloudBackupManager {
         let mut uploaded_wallets = Vec::with_capacity(wallets.len());
 
         for (index, metadata) in wallets.iter().enumerate() {
-            info!("Backup: uploading wallet {}/{} '{}'", index + 1, wallets.len(), metadata.name);
+            info!("Backup: uploading wallet {}/{}", index + 1, wallets.len());
             let prepared_upload =
                 match prepare_cloud_wallet_upload(metadata, namespace, critical_key).await {
                     Ok(prepared_upload) => prepared_upload,

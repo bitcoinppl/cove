@@ -3205,6 +3205,14 @@ sealed class CloudStorageException: kotlin.Exception() {
             get() = ""
     }
 
+    class InvalidNamespace(
+
+        val v1: kotlin.String
+        ) : CloudStorageException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
 
 
 
@@ -3252,6 +3260,9 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
                 FfiConverterString.read(buf),
                 )
             7 -> CloudStorageException.QuotaExceeded()
+            8 -> CloudStorageException.InvalidNamespace(
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -3292,6 +3303,11 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is CloudStorageException.InvalidNamespace -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
         }
     }
 
@@ -3329,6 +3345,11 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
             }
             is CloudStorageException.QuotaExceeded -> {
                 buf.putInt(7)
+                Unit
+            }
+            is CloudStorageException.InvalidNamespace -> {
+                buf.putInt(8)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

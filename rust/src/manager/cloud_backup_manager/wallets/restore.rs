@@ -12,7 +12,6 @@ use super::{DownloadedWalletBackup, RemoteWalletBackupSummary, decode_cloud_labe
 use crate::backup::import::{LabelRestoreBehavior, LabelRestoreWarning, restore_wallet_labels};
 use crate::backup::model::{WalletBackup, WalletSecret};
 use crate::manager::cloud_backup_manager::{CloudBackupError, LocalWalletSecret};
-use crate::wallet::metadata::WalletMetadata;
 use crate::wallet_identity::{
     ExistingWalletIdentitySet, WalletIdentityKey, fallback_identity_key_for_backup,
     identity_key_for_backup,
@@ -132,9 +131,7 @@ impl WalletBackupReader {
 
         if encrypted.version != 1 {
             let version = encrypted.version;
-            warn!(
-                "Skipping wallet backup {record_id}: unsupported wallet backup version {version}"
-            );
+            warn!("Skipping wallet backup with unsupported wallet backup version {version}");
             return Ok(WalletBackupLookup::UnsupportedVersion(version));
         }
 
@@ -188,7 +185,7 @@ impl WalletRestoreSession {
             Ok(duplicate_key) => duplicate_key,
             Err(error) => {
                 let fallback_key = wallet.fallback_duplicate_key();
-                if self.should_skip_duplicate_wallet(&wallet.metadata, &fallback_key) {
+                if self.should_skip_duplicate_wallet(&fallback_key) {
                     return Ok(WalletRestoreOutcome::SkippedDuplicate);
                 }
 
@@ -196,7 +193,7 @@ impl WalletRestoreSession {
             }
         };
 
-        if self.should_skip_duplicate_wallet(&wallet.metadata, &duplicate_key) {
+        if self.should_skip_duplicate_wallet(&duplicate_key) {
             return Ok(WalletRestoreOutcome::SkippedDuplicate);
         }
 
@@ -206,13 +203,9 @@ impl WalletRestoreSession {
         Ok(outcome)
     }
 
-    fn should_skip_duplicate_wallet(
-        &self,
-        metadata: &WalletMetadata,
-        duplicate_key: &WalletIdentityKey,
-    ) -> bool {
+    fn should_skip_duplicate_wallet(&self, duplicate_key: &WalletIdentityKey) -> bool {
         if self.0.contains(duplicate_key) {
-            info!("Skipping duplicate wallet {}", metadata.name);
+            info!("Skipping duplicate wallet during cloud restore");
             true
         } else {
             false
@@ -275,7 +268,7 @@ impl DownloadedWalletBackup {
             LabelRestoreBehavior::PreserveCloudBackupClean,
         );
         if let Some(warning) = &labels_outcome.warning {
-            warn!("Failed to restore labels for wallet {}: {}", self.metadata.name, warning.error);
+            warn!("Failed to restore labels for restored wallet: {}", warning.error);
         }
 
         Ok(WalletRestoreOutcome::Restored { labels_warning: labels_outcome.warning })
@@ -292,6 +285,7 @@ mod tests {
         sync::{Arc, Once},
     };
 
+    use crate::wallet::metadata::WalletMetadata;
     use crate::wallet_identity::test_support::ExistingWalletIdentitySetTestExt as _;
 
     #[derive(Debug, Default)]
@@ -432,7 +426,7 @@ mod tests {
         let session = WalletRestoreSession::new(existing_identities);
         let incoming_key = incoming_wallet.duplicate_key().unwrap();
 
-        assert!(!session.should_skip_duplicate_wallet(&incoming_wallet.metadata, &incoming_key));
+        assert!(!session.should_skip_duplicate_wallet(&incoming_key));
     }
 
     #[test]

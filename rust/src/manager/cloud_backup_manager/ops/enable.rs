@@ -1,6 +1,6 @@
 use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::master_key_crypto;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use cove_util::ResultExt as _;
@@ -88,7 +88,6 @@ pub(crate) struct CloudBackupEnableRecoveryPreparation {
     active_critical_key: Zeroizing<[u8; 32]>,
 }
 
-#[derive(Debug)]
 pub(crate) struct CloudBackupEnableRecoveryCompletion {
     pub(crate) context: CloudBackupEnableContext,
     pub(crate) namespace_id: String,
@@ -98,6 +97,21 @@ pub(crate) struct CloudBackupEnableRecoveryCompletion {
     pub(crate) uploaded_wallets: Vec<CloudBackupUploadedWallet>,
     pub(crate) pending_uploads: Vec<PendingVerificationUpload>,
     pub(crate) cleanup_sources: Vec<CleanupSourceNamespace>,
+}
+
+impl std::fmt::Debug for CloudBackupEnableRecoveryCompletion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CloudBackupEnableRecoveryCompletion")
+            .field("context", &self.context)
+            .field("namespace_id", &"<redacted>")
+            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
+            .field("prf_salt", &"<redacted>")
+            .field("active_critical_key", &"<redacted>")
+            .field("uploaded_wallets", &self.uploaded_wallets)
+            .field("pending_uploads", &self.pending_uploads)
+            .field("cleanup_sources", &self.cleanup_sources)
+            .finish()
+    }
 }
 
 pub(crate) enum CloudBackupNoDiscoveryEnablePreparation {
@@ -287,7 +301,6 @@ impl RustCloudBackupManager {
             let wallet_record_ids =
                 match cloud.list_wallet_backups(matched.namespace_id.clone()).await {
                     Ok(wallet_record_ids) => wallet_record_ids,
-                    Err(CloudStorageError::NotFound(_)) => Vec::new(),
                     Err(error) => {
                         return Err(blocking_cloud_error(
                             BlockingCloudStep::Enable,
@@ -336,10 +349,7 @@ impl RustCloudBackupManager {
                             record_id: record_id.clone(),
                             content_revision_hash: None,
                         });
-                        warn!(
-                            "Enable: matched namespace {}/{} listed a missing wallet backup",
-                            namespace.matched.namespace_id, record_id
-                        );
+                        warn!("Enable: matched namespace listed a missing wallet backup");
                         continue;
                     }
                     Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
@@ -348,8 +358,7 @@ impl RustCloudBackupManager {
                             content_revision_hash: None,
                         });
                         warn!(
-                            "Enable: matched namespace {}/{} uses unsupported wallet backup version {version}",
-                            namespace.matched.namespace_id, record_id
+                            "Enable: matched namespace uses unsupported wallet backup version {version}"
                         );
                         continue;
                     }
@@ -361,10 +370,7 @@ impl RustCloudBackupManager {
                             record_id: record_id.clone(),
                             content_revision_hash: None,
                         });
-                        warn!(
-                            "Enable: failed to inspect wallet {}/{} during namespace merge: {error}",
-                            namespace.matched.namespace_id, record_id
-                        );
+                        warn!("Enable: failed to inspect wallet during namespace merge: {error}");
                         continue;
                     }
                 };
@@ -378,10 +384,7 @@ impl RustCloudBackupManager {
                         if is_connectivity_related_issue(&error) {
                             return Err(blocking_cloud_error(BlockingCloudStep::Enable, error));
                         }
-                        warn!(
-                            "Enable: failed to restore wallet {}/{} during namespace merge: {error}",
-                            namespace.matched.namespace_id, record_id
-                        );
+                        warn!("Enable: failed to restore wallet during namespace merge: {error}");
                     }
                 }
             }

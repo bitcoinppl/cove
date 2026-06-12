@@ -267,7 +267,6 @@ impl RustCloudBackupManager {
 
         let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(ids) => ids,
-            Err(CloudStorageError::NotFound(_)) => Vec::new(),
             Err(error) => {
                 return Err(CloudBackupError::cloud_storage_context("list wallet backups", error));
             }
@@ -330,7 +329,6 @@ impl RustCloudBackupManager {
         let cloud = CloudStorage::global_explicit_client();
         let wallet_count = match cloud.list_wallet_backups(namespace).await {
             Ok(wallet_record_ids) => wallet_record_ids.len() as u32,
-            Err(CloudStorageError::NotFound(_)) => 0,
             Err(error) => {
                 warn!("Repair passkey: failed to refresh wallet backups after repair: {error}");
                 Database::global()

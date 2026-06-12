@@ -110,22 +110,19 @@ pub async fn build_wallet_entry(
 ) -> Result<WalletEntry, CloudBackupError> {
     let keychain = Keychain::global();
     let id = &metadata.id;
-    let name = &metadata.name;
 
     let secret = match metadata.wallet_type {
         WalletType::Hot => {
             let mnemonic = keychain.get_wallet_key(id).map_err(|error| {
-                CloudBackupError::Internal(format!("failed to get mnemonic for '{name}': {error}"))
+                CloudBackupError::Internal(format!("failed to get wallet mnemonic: {error}"))
             })?;
             let Some(mnemonic) = mnemonic else {
-                return Err(CloudBackupError::Internal(format!(
-                    "hot wallet '{name}' has no mnemonic"
-                )));
+                return Err(CloudBackupError::Internal("hot wallet has no mnemonic".into()));
             };
 
             CloudWalletSecret::Mnemonic(mnemonic.to_string())
         }
-        WalletType::Cold => build_cold_wallet_secret(keychain, metadata, id, name)?,
+        WalletType::Cold => build_cold_wallet_secret(keychain, metadata, id)?,
         WalletType::XpubOnly | WalletType::WatchOnly => CloudWalletSecret::WatchOnly,
     };
 
@@ -133,13 +130,11 @@ pub async fn build_wallet_entry(
         Ok(Some(xpub)) => Some(xpub.to_string()),
         Ok(None) => None,
         Err(error) => {
-            return Err(CloudBackupError::Internal(format!(
-                "failed to read xpub for '{name}': {error}"
-            )));
+            return Err(CloudBackupError::Internal(format!("failed to read xpub: {error}")));
         }
     };
 
-    let descriptors = backup_descriptors(keychain, metadata, id, name, &secret)?;
+    let descriptors = backup_descriptors(keychain, metadata, id, &secret)?;
 
     let metadata_value = serde_json::to_value(metadata)
         .map_err_prefix("serialize metadata", CloudBackupError::Internal)?;
@@ -178,7 +173,6 @@ fn backup_descriptors(
     keychain: &Keychain,
     metadata: &WalletMetadata,
     id: &crate::wallet::metadata::WalletId,
-    name: &str,
     secret: &CloudWalletSecret,
 ) -> Result<Option<DescriptorPair>, CloudBackupError> {
     match keychain.get_public_descriptor(id) {
@@ -190,18 +184,14 @@ fn backup_descriptors(
         }
         Ok(None) => {}
         Err(error) => {
-            return Err(CloudBackupError::Internal(format!(
-                "failed to read descriptors for '{name}': {error}"
-            )));
+            return Err(CloudBackupError::Internal(format!("failed to read descriptors: {error}")));
         }
     }
 
     match secret {
         CloudWalletSecret::Mnemonic(mnemonic) => {
             let mnemonic = bip39::Mnemonic::from_str(mnemonic).map_err(|error| {
-                CloudBackupError::Internal(format!(
-                    "failed to parse mnemonic for '{name}': {error}"
-                ))
+                CloudBackupError::Internal(format!("failed to parse mnemonic: {error}"))
             })?;
             let descriptors =
                 mnemonic.into_descriptors(None, metadata.network, metadata.address_type);
@@ -211,9 +201,9 @@ fn backup_descriptors(
                 internal: descriptors.internal.extended_descriptor.to_string(),
             }))
         }
-        CloudWalletSecret::TapSignerBackup(_) => Err(CloudBackupError::Internal(format!(
-            "tap signer wallet '{name}' has no public descriptors"
-        ))),
+        CloudWalletSecret::TapSignerBackup(_) => {
+            Err(CloudBackupError::Internal("tap signer wallet has no public descriptors".into()))
+        }
         CloudWalletSecret::Descriptor(_) | CloudWalletSecret::WatchOnly => Ok(None),
     }
 }
@@ -222,7 +212,6 @@ fn build_cold_wallet_secret(
     keychain: &Keychain,
     metadata: &WalletMetadata,
     id: &crate::wallet::metadata::WalletId,
-    name: &str,
 ) -> Result<CloudWalletSecret, CloudBackupError> {
     let is_tap_signer =
         metadata.hardware_metadata.as_ref().is_some_and(|hardware| hardware.is_tap_signer());
@@ -234,12 +223,12 @@ fn build_cold_wallet_secret(
     match keychain.get_tap_signer_backup(id) {
         Ok(Some(backup)) => Ok(CloudWalletSecret::TapSignerBackup(backup)),
         Ok(None) => {
-            warn!("Tap signer wallet '{name}' has no backup, exporting without it");
+            warn!("Tap signer wallet has no backup, exporting without it");
             Ok(CloudWalletSecret::WatchOnly)
         }
-        Err(error) => Err(CloudBackupError::Internal(format!(
-            "failed to read tap signer backup for '{name}': {error}"
-        ))),
+        Err(error) => {
+            Err(CloudBackupError::Internal(format!("failed to read tap signer backup: {error}")))
+        }
     }
 }
 

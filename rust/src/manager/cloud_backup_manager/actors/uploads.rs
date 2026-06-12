@@ -125,18 +125,14 @@ impl CloudBackupUploadWorker {
         };
 
         let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
-        let sync_state = match crate::database::Database::global()
-            .cloud_blob_sync_states
-            .get(&record_id)
-        {
-            Ok(sync_state) => sync_state,
-            Err(error) => {
-                error!(
-                    "Failed to read wallet upload follow-up state for record_id={record_id}: {error}"
-                );
-                return;
-            }
-        };
+        let sync_state =
+            match crate::database::Database::global().cloud_blob_sync_states.get(&record_id) {
+                Ok(sync_state) => sync_state,
+                Err(error) => {
+                    error!("Failed to read wallet upload follow-up state: {error}");
+                    return;
+                }
+            };
 
         let Some(sync_state) = sync_state else {
             return;
@@ -276,14 +272,14 @@ impl CloudBackupUploadWorker {
 
             if authorization_required {
                 warn!(
-                    "Cloud backup upload paused until authorization is restored for wallet_id={wallet_id}: {error_message}"
+                    "Cloud backup upload paused until authorization is restored: {error_message}"
                 );
                 self.reset_wallet_upload_retry_count(&wallet_id);
                 manager.refresh_sync_health();
                 return;
             }
 
-            error!("Cloud backup upload failed for wallet_id={wallet_id}: {error_message}");
+            error!("Cloud backup upload failed: {error_message}");
         } else if succeeded {
             self.reset_wallet_upload_retry_count(&wallet_id);
         }

@@ -27,6 +27,9 @@ pub enum CloudStorageError {
 
     #[error("quota exceeded")]
     QuotaExceeded,
+
+    #[error("invalid namespace: {0}")]
+    InvalidNamespace(String),
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -187,6 +190,8 @@ impl CloudStorageClient {
         namespace: String,
         data: Vec<u8>,
     ) -> Result<(), CloudStorageError> {
+        validate_cloud_backup_namespace_id(&namespace)?;
+
         self.0
             .0
             .upload_master_key_backup(
@@ -204,6 +209,8 @@ impl CloudStorageClient {
         record_id: String,
         data: Vec<u8>,
     ) -> Result<(), CloudStorageError> {
+        validate_cloud_backup_namespace_id(&namespace)?;
+
         let location = remote_layout::wallet_upload_location(&record_id).into();
 
         self.0.0.upload_wallet_backup(namespace, record_id, location, data, self.1).await
@@ -213,6 +220,8 @@ impl CloudStorageClient {
         &self,
         namespace: String,
     ) -> Result<Vec<u8>, CloudStorageError> {
+        validate_cloud_backup_namespace_id(&namespace)?;
+
         self.0
             .0
             .download_master_key_backup(
@@ -228,6 +237,8 @@ impl CloudStorageClient {
         namespace: String,
         record_id: String,
     ) -> Result<Vec<u8>, CloudStorageError> {
+        validate_cloud_backup_namespace_id(&namespace)?;
+
         let read_locations = locations(remote_layout::wallet_read_locations(&record_id));
 
         self.0.0.download_wallet_backup(namespace, record_id, read_locations, self.1).await
@@ -238,23 +249,32 @@ impl CloudStorageClient {
         namespace: String,
         record_id: String,
     ) -> Result<(), CloudStorageError> {
+        validate_cloud_backup_namespace_id(&namespace)?;
+
         let delete_locations = locations(remote_layout::locations_for_record_id(&record_id));
 
         self.0.0.delete_wallet_backup(namespace, record_id, delete_locations, self.1).await
     }
 
     pub async fn delete_namespace(&self, namespace: String) -> Result<(), CloudStorageError> {
+        validate_cloud_backup_namespace_id(&namespace)?;
+
         self.0.0.delete_namespace(namespace, self.1).await
     }
 
     pub async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
-        self.0.0.list_namespaces(self.1).await
+        let namespaces = self.0.0.list_namespaces(self.1).await?;
+        validate_cloud_backup_namespace_ids(&namespaces)?;
+
+        Ok(namespaces)
     }
 
     pub async fn list_wallet_files(
         &self,
         namespace: String,
     ) -> Result<Vec<String>, CloudStorageError> {
+        validate_cloud_backup_namespace_id(&namespace)?;
+
         self.0.0.list_wallet_files(namespace, self.1).await
     }
 
@@ -263,6 +283,8 @@ impl CloudStorageClient {
         namespace: String,
         record_id: String,
     ) -> Result<bool, CloudStorageError> {
+        validate_cloud_backup_namespace_id(&namespace)?;
+
         let upload_locations = locations(remote_layout::locations_for_record_id(&record_id));
 
         self.0.0.is_backup_uploaded(namespace, record_id, upload_locations, self.1).await
@@ -276,6 +298,8 @@ impl CloudStorageClient {
         &self,
         namespace: String,
     ) -> Result<Vec<String>, CloudStorageError> {
+        validate_cloud_backup_namespace_id(&namespace)?;
+
         let filenames = self.0.0.list_wallet_files(namespace, self.1).await?;
         Ok(remote_layout::dedupe_wallet_record_ids(filenames.iter().map(String::as_str)))
     }
@@ -287,6 +311,26 @@ impl CloudStorageClient {
 
 fn locations(relative_paths: Vec<String>) -> Vec<RemoteBackupLocation> {
     relative_paths.into_iter().map(RemoteBackupLocation::from).collect()
+}
+
+pub fn validate_cloud_backup_namespace_id(namespace: &str) -> Result<(), CloudStorageError> {
+    if is_valid_cloud_backup_namespace_id(namespace) {
+        return Ok(());
+    }
+
+    Err(CloudStorageError::InvalidNamespace("expected 32 lowercase hex characters".into()))
+}
+
+pub fn is_valid_cloud_backup_namespace_id(namespace: &str) -> bool {
+    namespace.len() == 32 && namespace.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+fn validate_cloud_backup_namespace_ids(namespaces: &[String]) -> Result<(), CloudStorageError> {
+    for namespace in namespaces {
+        validate_cloud_backup_namespace_id(namespace)?;
+    }
+
+    Ok(())
 }
 
 #[uniffi::export]
@@ -322,10 +366,13 @@ mod tests {
 
     use super::*;
 
+    const VALID_NAMESPACE: &str = "0123456789abcdef0123456789abcdef";
+
     #[derive(Debug)]
     struct TestCloudStorage {
         expected_policy: CloudAccessPolicy,
         expected_policy_used: Arc<AtomicBool>,
+        namespaces: Vec<String>,
         wallet_files: Option<Vec<String>>,
     }
 
@@ -395,7 +442,7 @@ mod tests {
         ) -> Result<Vec<String>, CloudStorageError> {
             if policy == self.expected_policy {
                 self.expected_policy_used.store(true, Ordering::Release);
-                Ok(vec!["namespace-a".into()])
+                Ok(self.namespaces.clone())
             } else {
                 panic!("unexpected cloud access policy")
             }
@@ -444,6 +491,7 @@ mod tests {
         let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
             expected_policy: CloudAccessPolicy::Silent,
             expected_policy_used: expected_policy_used.clone(),
+            namespaces: vec![VALID_NAMESPACE.into()],
             wallet_files: None,
         })));
 
@@ -460,6 +508,7 @@ mod tests {
         let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
             expected_policy: CloudAccessPolicy::ConsentAllowed,
             expected_policy_used: expected_policy_used.clone(),
+            namespaces: vec![VALID_NAMESPACE.into()],
             wallet_files: None,
         })));
 
@@ -475,6 +524,7 @@ mod tests {
         let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
             expected_policy: CloudAccessPolicy::Silent,
             expected_policy_used: Arc::new(AtomicBool::new(false)),
+            namespaces: vec![VALID_NAMESPACE.into()],
             wallet_files: Some(vec![
                 "wallet-record-a.json".into(),
                 "wallets/wallet-record-a.json".into(),
@@ -484,11 +534,43 @@ mod tests {
         })));
 
         let record_ids = block_on_ready(
-            cloud.client(CloudAccessPolicy::Silent).list_wallet_backups("namespace".into()),
+            cloud.client(CloudAccessPolicy::Silent).list_wallet_backups(VALID_NAMESPACE.into()),
         )
         .expect("list wallet backups");
 
         assert_eq!(record_ids, vec!["record-a".to_string(), "record-b".to_string()]);
+    }
+
+    #[test]
+    fn namespace_validator_accepts_derived_shape() {
+        assert!(validate_cloud_backup_namespace_id(VALID_NAMESPACE).is_ok());
+    }
+
+    #[test]
+    fn namespace_validator_rejects_path_or_non_derived_shapes() {
+        let invalid_namespaces =
+            ["", "../secret", "namespace-a", "0123456789ABCDEF0123456789ABCDEF"];
+
+        for namespace in invalid_namespaces {
+            let error = validate_cloud_backup_namespace_id(namespace).unwrap_err();
+
+            assert!(matches!(error, CloudStorageError::InvalidNamespace(_)));
+        }
+    }
+
+    #[test]
+    fn list_namespaces_rejects_invalid_provider_ids() {
+        let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
+            expected_policy: CloudAccessPolicy::Silent,
+            expected_policy_used: Arc::new(AtomicBool::new(false)),
+            namespaces: vec!["../secret".into()],
+            wallet_files: None,
+        })));
+
+        let error =
+            block_on_ready(cloud.client(CloudAccessPolicy::Silent).list_namespaces()).unwrap_err();
+
+        assert!(matches!(error, CloudStorageError::InvalidNamespace(_)));
     }
 
     #[test]
