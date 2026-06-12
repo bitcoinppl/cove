@@ -9080,10 +9080,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func initialLoadState()  -> WalletLoadState
 
     /**
-     * Send entry point for unsigned hot wallet PSBTs
-     *
-     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
-     * PayJoin negotiation is handled in the actor stub.
+     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
+     * direct broadcast otherwise.
      */
     func initiatePayment(psbt: Psbt, payjoinEndpoint: String?) async throws
 
@@ -9794,10 +9792,8 @@ open func initialLoadState() -> WalletLoadState  {
 }
 
     /**
-     * Send entry point for unsigned hot wallet PSBTs
-     *
-     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
-     * PayJoin negotiation is handled in the actor stub.
+     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
+     * direct broadcast otherwise.
      */
 open func initiatePayment(psbt: Psbt, payjoinEndpoint: String?)async throws   {
     return
@@ -34188,6 +34184,7 @@ public enum WalletManagerReconcileMessage {
     )
     case receiveAddressClosed(UInt64
     )
+    case payjoinTxBroadcast
 
 
 
@@ -34261,6 +34258,8 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
 
         case 18: return .receiveAddressClosed(try FfiConverterUInt64.read(from: &buf)
         )
+
+        case 19: return .payjoinTxBroadcast
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -34357,6 +34356,10 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case let .receiveAddressClosed(v1):
             writeInt(&buf, Int32(18))
             FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case .payjoinTxBroadcast:
+            writeInt(&buf, Int32(19))
 
         }
     }
@@ -39893,7 +39896,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 15850) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 58472) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571) {

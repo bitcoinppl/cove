@@ -79,6 +79,10 @@ class WalletManager :
     var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
 
+    // non-null when a payjoin transaction has been broadcast (success or fallback);
+    // TaggedItem ensures a new unique key each time so Compose always re-fires the observer
+    var payjoinTxBroadcast by mutableStateOf<TaggedItem<Unit>?>(null)
+
     // cached transaction details (observable for Compose)
     val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
 
@@ -385,6 +389,10 @@ class WalletManager :
                     receiveAddressIsLoading = false
                     receiveAddressError = null
                 }
+            }
+
+            is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {
+                payjoinTxBroadcast = TaggedItem(Unit)
             }
         }
     }
