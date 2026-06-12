@@ -5,6 +5,7 @@ mod android;
 mod common;
 mod github;
 mod ios;
+mod rebase;
 mod util;
 mod version;
 
@@ -141,6 +142,14 @@ enum Commands {
     #[command(name = "regenerate-bindings")]
     RegenerateBindings,
 
+    /// Rebase the current branch onto a new base after choosing the old base
+    #[command(name = "rebase")]
+    Rebase {
+        /// New base to rebase onto
+        #[arg(default_value = "master")]
+        new_base: String,
+    },
+
     /// Utility commands for development and testing
     #[command(subcommand)]
     Util(UtilCommands),
@@ -251,6 +260,8 @@ fn main() -> Result<()> {
         Commands::InstallDeps => install_deps(cli.verbose),
 
         Commands::RegenerateBindings => github::regenerate_bindings(),
+
+        Commands::Rebase { new_base } => rebase::rebase(&new_base),
 
         Commands::Util(util_cmd) => match util_cmd {
             UtilCommands::SignPsbt { mnemonic, psbt, network, format, output } => {

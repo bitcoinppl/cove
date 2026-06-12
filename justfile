@@ -14,55 +14,8 @@ xtask *args:
 
 # Rebase current branch onto new-base after choosing the old squash-merged base
 [group('utils')]
-[script('bash')]
 rebase new_base="master":
-    set -euo pipefail
-
-    if ! command -v fzf >/dev/null; then
-        echo "error: fzf is required" >&2
-        exit 1
-    fi
-
-    branch="$(git symbolic-ref --quiet --short HEAD || true)"
-    if [ -z "$branch" ]; then
-        echo "error: not on a branch" >&2
-        exit 1
-    fi
-
-    if ! git diff --quiet || ! git diff --cached --quiet; then
-        echo "error: working tree has uncommitted changes" >&2
-        git status --short
-        exit 1
-    fi
-
-    git rev-parse --verify "{{ new_base }}" >/dev/null
-
-    refs="$(
-        {
-            git for-each-ref --format='ref	%(refname:short)	%(subject)' refs/heads refs/remotes |
-                grep -v -F "ref	$branch	" || true
-            git log --format='commit	%h	%s' --date-order --max-count=200 HEAD
-        } | awk '!seen[$2]++'
-    )"
-
-    old_base="$(
-        printf '%s\n' "$refs" |
-            fzf \
-                --delimiter='\t' \
-                --with-nth=1,2,3 \
-                --header="Choose the old squash-merged branch or last old-base commit. Rebase: $branch --onto {{ new_base }}" \
-                --preview='git show --stat --oneline --decorate {2} --' \
-                --preview-window=down,60% |
-            awk -F '\t' '{ print $2 }'
-    )"
-
-    if [ -z "$old_base" ]; then
-        echo "error: no old base selected" >&2
-        exit 1
-    fi
-
-    echo "Rebasing $branch onto {{ new_base }}, excluding commits through $old_base"
-    git rebase --onto "{{ new_base }}" "$old_base" "$branch"
+    just xtask rebase "{{ new_base }}"
 
 # Sign a PSBT and output all formats (base64, hex, binary, bbqr-gif, ur-gif)
 # Requires MNEMONIC env var (set in .envrc or pass directly)
