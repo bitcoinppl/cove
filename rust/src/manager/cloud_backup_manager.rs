@@ -889,6 +889,7 @@ impl PendingVerificationCompletion {
 
     pub(crate) fn is_expired(&self, now: u64, ttl_seconds: u64) -> bool {
         let Some(created_at) = self.created_at else {
+            // legacy persisted completions predate the TTL field and must be restarted
             return true;
         };
 

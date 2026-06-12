@@ -100,10 +100,9 @@ async fn verify_uploaded_wallets(
             })?;
 
         if !uploaded {
-            return Err(CloudBackupError::Internal(format!(
-                "restored wallet record_id={} was not visible in active cloud backup",
-                wallet.record_id
-            )));
+            return Err(CloudBackupError::Internal(
+                "restored wallet was not visible in active cloud backup".into(),
+            ));
         }
     }
 

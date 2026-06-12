@@ -263,8 +263,16 @@ impl CloudStorageClient {
     }
 
     pub async fn list_namespaces(&self) -> Result<Vec<String>, CloudStorageError> {
-        let namespaces = self.0.0.list_namespaces(self.1).await?;
-        validate_cloud_backup_namespace_ids(&namespaces)?;
+        let mut namespaces = self.0.0.list_namespaces(self.1).await?;
+        let original_count = namespaces.len();
+        namespaces.retain(|namespace| is_valid_cloud_backup_namespace_id(namespace));
+
+        let invalid_count = original_count - namespaces.len();
+        if invalid_count > 0 {
+            warn!(
+                "Cloud storage returned {invalid_count} invalid cloud backup namespace folder(s); ignoring them"
+            );
+        }
 
         Ok(namespaces)
     }
@@ -323,14 +331,6 @@ pub fn validate_cloud_backup_namespace_id(namespace: &str) -> Result<(), CloudSt
 
 pub fn is_valid_cloud_backup_namespace_id(namespace: &str) -> bool {
     namespace.len() == 32 && namespace.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
-}
-
-fn validate_cloud_backup_namespace_ids(namespaces: &[String]) -> Result<(), CloudStorageError> {
-    for namespace in namespaces {
-        validate_cloud_backup_namespace_id(namespace)?;
-    }
-
-    Ok(())
 }
 
 #[uniffi::export]
@@ -559,18 +559,18 @@ mod tests {
     }
 
     #[test]
-    fn list_namespaces_rejects_invalid_provider_ids() {
+    fn list_namespaces_filters_invalid_provider_ids() {
         let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
             expected_policy: CloudAccessPolicy::Silent,
             expected_policy_used: Arc::new(AtomicBool::new(false)),
-            namespaces: vec!["../secret".into()],
+            namespaces: vec!["../secret".into(), VALID_NAMESPACE.into()],
             wallet_files: None,
         })));
 
-        let error =
-            block_on_ready(cloud.client(CloudAccessPolicy::Silent).list_namespaces()).unwrap_err();
+        let namespaces =
+            block_on_ready(cloud.client(CloudAccessPolicy::Silent).list_namespaces()).unwrap();
 
-        assert!(matches!(error, CloudStorageError::InvalidNamespace(_)));
+        assert_eq!(namespaces, vec![VALID_NAMESPACE.to_string()]);
     }
 
     #[test]
