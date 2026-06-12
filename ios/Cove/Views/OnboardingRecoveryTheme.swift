@@ -42,43 +42,33 @@ struct OnboardingStatusHero: View {
     var pulse = false
     var iconSize: CGFloat = 24
     var ringSizes: [CGFloat] = [118, 86, 58]
-    @State private var isPulsing = false
 
     var body: some View {
-        ZStack {
-            ForEach(Array(ringSizes.enumerated()), id: \.offset) { index, size in
+        TimelineView(.animation) { context in
+            let ringScale = pulse ? ringScale(at: context.date) : 1
+
+            ZStack {
+                ForEach(Array(ringSizes.enumerated()), id: \.offset) { index, size in
+                    Circle()
+                        .stroke(tint.opacity(ringOpacity(for: index)), lineWidth: 1)
+                        .frame(width: size, height: size)
+                        .scaleEffect(ringScale)
+                }
+
                 Circle()
-                    .stroke(tint.opacity(ringOpacity(for: index)), lineWidth: 1)
-                    .frame(width: size, height: size)
-                    .scaleEffect(ringScale(for: index))
-                    .opacity(ringAnimatedOpacity(for: index))
-                    .animation(
-                        pulse
-                            ? .easeInOut(duration: 1.85)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(index) * 0.12)
-                            : .default,
-                        value: isPulsing
-                    )
+                    .fill(fillColor)
+                    .frame(width: 58, height: 58)
+
+                Circle()
+                    .stroke(tint.opacity(pulse ? 0.88 : 0.7), lineWidth: 1.3)
+                    .frame(width: 58, height: 58)
+
+                Image(systemName: systemImage)
+                    .font(.system(size: iconSize, weight: .semibold))
+                    .foregroundStyle(tint)
             }
-
-            Circle()
-                .fill(fillColor)
-                .frame(width: 58, height: 58)
-
-            Circle()
-                .stroke(tint.opacity(pulse ? 0.88 : 0.7), lineWidth: 1.3)
-                .frame(width: 58, height: 58)
-
-            Image(systemName: systemImage)
-                .font(.system(size: iconSize, weight: .semibold))
-                .foregroundStyle(tint)
         }
         .frame(width: 118, height: 118)
-        .onAppear {
-            guard pulse else { return }
-            isPulsing = true
-        }
     }
 
     private func ringOpacity(for index: Int) -> Double {
@@ -89,16 +79,12 @@ struct OnboardingStatusHero: View {
         }
     }
 
-    private func ringScale(for index: Int) -> CGFloat {
-        guard pulse else { return 1 }
-        let offsets: [CGFloat] = [0.1, 0.07, 0.04]
-        let offset = offsets[min(index, offsets.count - 1)]
-        return isPulsing ? 1 + offset : 1 - (offset * 0.35)
-    }
+    private func ringScale(at date: Date) -> CGFloat {
+        let duration = 1.85
+        let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: duration * 2)
+        let progress = phase <= duration ? phase / duration : 2 - phase / duration
 
-    private func ringAnimatedOpacity(for index: Int) -> Double {
-        guard pulse else { return 1 }
-        return isPulsing ? ringOpacity(for: index) * 0.6 : ringOpacity(for: index) * 1.3
+        return 0.96 + (0.10 * CGFloat(progress))
     }
 }
 
