@@ -932,6 +932,10 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
     }
 
+    static func isValidNamespaceDirectory(_ url: URL) -> Bool {
+        url.hasDirectoryPath && isValidNamespaceID(url.lastPathComponent)
+    }
+
     /// Checks sync health of all files in namespace directories
     func overallSyncHealth() -> CloudSyncHealth {
         guard let namespacesRoot = try? namespacesRootURL() else { return .unavailable }
@@ -950,7 +954,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         var anyFailed = false
         var failureMessage: String?
 
-        for nsDir in namespaceDirs where nsDir.hasDirectoryPath {
+        for nsDir in namespaceDirs where Self.isValidNamespaceDirectory(nsDir) {
             for file in allBackupFiles(in: nsDir) {
                 let state = hasUploadedState(for: file)
                 hasFiles = hasFiles || state.hasFile

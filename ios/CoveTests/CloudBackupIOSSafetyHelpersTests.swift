@@ -17,6 +17,24 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         assertInvalidNamespace("0123456789abcdef")
     }
 
+    func testICloudSyncHealthOnlyScansValidNamespaceDirectories() {
+        XCTAssertTrue(
+            ICloudDriveHelper.isValidNamespaceDirectory(
+                URL(fileURLWithPath: "/tmp/0123456789abcdef0123456789abcdef", isDirectory: true)
+            )
+        )
+        XCTAssertFalse(
+            ICloudDriveHelper.isValidNamespaceDirectory(
+                URL(fileURLWithPath: "/tmp/0123456789ABCDEF0123456789abcdef", isDirectory: true)
+            )
+        )
+        XCTAssertFalse(
+            ICloudDriveHelper.isValidNamespaceDirectory(
+                URL(fileURLWithPath: "/tmp/0123456789abcdef0123456789abcdef.json", isDirectory: false)
+            )
+        )
+    }
+
     func testCatastrophicProbeMappingDistinguishesInconclusiveStates() {
         XCTAssertEqual(CatastrophicErrorView.cloudProbeState(hasBackup: true), .available)
         XCTAssertEqual(CatastrophicErrorView.cloudProbeState(hasBackup: false), .noBackup)
@@ -37,8 +55,9 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             .unreadable("bad data")
         )
 
-        XCTAssertTrue(CatastrophicErrorView.CloudProbeState.inconclusive("cold metadata").allowsRestoreAttempt)
-        XCTAssertTrue(CatastrophicErrorView.CloudProbeState.unreadable("bad data").allowsRestoreAttempt)
+        XCTAssertFalse(CatastrophicErrorView.CloudProbeState.inconclusive("cold metadata").allowsRestoreAttempt)
+        XCTAssertFalse(CatastrophicErrorView.CloudProbeState.unreadable("bad data").allowsRestoreAttempt)
+        XCTAssertTrue(CatastrophicErrorView.CloudProbeState.available.allowsRestoreAttempt)
         XCTAssertTrue(CatastrophicErrorView.CloudProbeState.offline("offline").allowsRetry)
         XCTAssertFalse(CatastrophicErrorView.CloudProbeState.offline("offline").allowsRestoreAttempt)
         XCTAssertFalse(CatastrophicErrorView.CloudProbeState.noBackup.allowsRestoreAttempt)

@@ -80,13 +80,16 @@ internal interface DriveAccountBindingStore {
     fun selectedIdentity(): DriveAccountIdentity?
 
     fun bindIdentity(identity: DriveAccountIdentity)
+
+    fun clearIdentity()
 }
 
 internal class SharedPreferencesDriveAccountBindingStore(
     context: Context,
 ) : DriveAccountBindingStore {
+    internal val appContext: Context = context.applicationContext
     private val preferences =
-        context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     override fun selectedIdentity(): DriveAccountIdentity? {
         val id = preferences.getString(KEY_ID, null)?.takeIf(String::isNotBlank)
@@ -104,6 +107,14 @@ internal class SharedPreferencesDriveAccountBindingStore(
             .edit()
             .putString(KEY_ID, identity.id)
             .putString(KEY_EMAIL, identity.normalizedEmail)
+            .apply()
+    }
+
+    override fun clearIdentity() {
+        preferences
+            .edit()
+            .remove(KEY_ID)
+            .remove(KEY_EMAIL)
             .apply()
     }
 
@@ -130,6 +141,10 @@ internal fun verifyDriveAccountBinding(
     }
 }
 
+internal fun clearCloudBackupDriveAccountBinding(context: Context) {
+    SharedPreferencesDriveAccountBindingStore(context.applicationContext).clearIdentity()
+}
+
 internal interface DriveAuthorization {
     suspend fun accessToken(interactive: Boolean): DriveAccessToken
 
@@ -140,6 +155,7 @@ internal class CachingDriveAuthorization(
     private val delegate: DriveAuthorization,
     private val elapsedRealtime: () -> Long = ::monotonicTimeMs,
     private val cacheWindowMs: Long = ACCESS_TOKEN_CACHE_IDLE_MS,
+    private val cacheKey: () -> Any? = { Unit },
 ) : DriveAuthorization {
     private val tokenMutex = Mutex()
     private var cachedAccessToken: CachedAccessToken? = null
@@ -151,8 +167,9 @@ internal class CachingDriveAuthorization(
     override suspend fun accessToken(interactive: Boolean): DriveAccessToken =
         tokenMutex.withLock {
             val now = elapsedRealtime()
+            val currentCacheKey = cacheKey()
             cachedAccessToken?.let { cached ->
-                if (cached.expiresAtMs > now) {
+                if (cached.cacheKey == currentCacheKey && cached.expiresAtMs > now) {
                     cachedAccessToken = cached.copy(expiresAtMs = now + cacheWindowMs)
                     return@withLock cached.token
                 }
@@ -164,6 +181,7 @@ internal class CachingDriveAuthorization(
             cachedAccessToken = CachedAccessToken(
                 token = token,
                 expiresAtMs = elapsedRealtime() + cacheWindowMs,
+                cacheKey = currentCacheKey,
             )
             token
         }
@@ -181,6 +199,7 @@ internal class CachingDriveAuthorization(
     private data class CachedAccessToken(
         val token: DriveAccessToken,
         val expiresAtMs: Long,
+        val cacheKey: Any?,
     )
 
     companion object {

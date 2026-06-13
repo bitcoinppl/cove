@@ -14,9 +14,9 @@ struct CatastrophicErrorView: View {
 
         var allowsRestoreAttempt: Bool {
             switch self {
-            case .available, .inconclusive, .unreadable:
+            case .available:
                 true
-            case .checking, .noBackup, .offline:
+            case .checking, .noBackup, .offline, .inconclusive, .unreadable:
                 false
             }
         }
@@ -66,7 +66,7 @@ struct CatastrophicErrorView: View {
         Task.detached {
             let cloud = CloudStorage(cloudStorage: CloudStorageAccessImpl())
             do {
-                let exists = try await cloud.hasAnyCloudBackup(policy: .consentAllowed)
+                let exists = try await cloud.hasRestorableCloudBackup(policy: .consentAllowed)
                 await MainActor.run {
                     cloudProbeState = Self.cloudProbeState(hasBackup: exists)
                 }
@@ -215,14 +215,14 @@ private struct CatastrophicErrorContent: View {
             statusCard(
                 icon: "icloud.slash",
                 color: .orange,
-                text: "We couldn’t confirm whether a cloud backup is available. You can retry the check or attempt restore with your passkey"
+                text: "We couldn’t confirm whether a cloud backup is available. Retry the check before restoring from cloud backup"
             )
 
         case .unreadable:
             statusCard(
                 icon: "exclamationmark.triangle.fill",
                 color: .orange,
-                text: "Cloud backup data could not be read. You can retry the check or attempt restore with your passkey"
+                text: "Cloud backup data could not be read. Retry the check before restoring from cloud backup"
             )
         }
     }

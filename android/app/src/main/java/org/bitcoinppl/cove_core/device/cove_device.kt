@@ -886,6 +886,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup(
     ): Short
+    external fun uniffi_cove_device_checksum_method_cloudstorage_has_restorable_cloud_backup(
+    ): Short
     external fun uniffi_cove_device_checksum_method_passkeyaccess_is_prf_supported(
     ): Short
     external fun uniffi_cove_device_checksum_constructor_cloudstorage_new(
@@ -968,6 +970,8 @@ internal object UniffiLib {
     external fun uniffi_cove_device_fn_constructor_cloudstorage_new(`cloudStorage`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(`ptr`: Long,`policy`: RustBuffer.ByValue,
+    ): Long
+    external fun uniffi_cove_device_fn_method_cloudstorage_has_restorable_cloud_backup(`ptr`: Long,`policy`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_device_fn_clone_connectivity(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -1145,6 +1149,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 24202.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_method_cloudstorage_has_restorable_cloud_backup() != 27654.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_passkeyaccess_is_prf_supported() != 31494.toShort()) {
@@ -1744,6 +1751,11 @@ public interface CloudStorageInterface {
      */
     suspend fun `hasAnyCloudBackup`(`policy`: CloudAccessPolicy): kotlin.Boolean
 
+    /**
+     * Check if any valid namespace has a readable master key backup
+     */
+    suspend fun `hasRestorableCloudBackup`(`policy`: CloudAccessPolicy): kotlin.Boolean
+
     companion object
 }
 
@@ -1867,6 +1879,31 @@ open class CloudStorage: Disposable, AutoCloseable, CloudStorageInterface
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(
+                uniffiHandle,
+
+        FfiConverterTypeCloudAccessPolicy.lower(`policy`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_device_rust_future_poll_i8(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_device_rust_future_complete_i8(future, continuation) },
+        { future -> UniffiLib.ffi_cove_device_rust_future_free_i8(future) },
+        // lift function
+        { FfiConverterBoolean.lift(it) },
+        // Error FFI converter
+        CloudStorageException.ErrorHandler,
+    )
+    }
+
+
+    /**
+     * Check if any valid namespace has a readable master key backup
+     */
+    @Throws(CloudStorageException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `hasRestorableCloudBackup`(`policy`: CloudAccessPolicy) : kotlin.Boolean {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_device_fn_method_cloudstorage_has_restorable_cloud_backup(
                 uniffiHandle,
 
         FfiConverterTypeCloudAccessPolicy.lower(`policy`),

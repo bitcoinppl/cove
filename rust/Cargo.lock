@@ -1231,6 +1231,7 @@ dependencies = [
  "minicbor 2.2.1",
  "once_cell",
  "rand 0.10.1",
+ "serde_json",
  "thiserror 2.0.18",
  "tracing",
  "uniffi 0.31.1",

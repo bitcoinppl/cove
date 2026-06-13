@@ -24,4 +24,14 @@ class MainActivityHelpersTest {
 
         assertEquals("wrong google drive account", message)
     }
+
+    @Test
+    fun catastrophicRestoreUnreadableBackupErrorIsUserVisible() {
+        val message =
+            catastrophicCloudRestoreErrorMessage(
+                CloudStorageException.DownloadFailed("master key backup is unreadable"),
+            )
+
+        assertEquals("Cloud Backup data could not be read: master key backup is unreadable", message)
+    }
 }

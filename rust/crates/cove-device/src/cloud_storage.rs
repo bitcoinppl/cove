@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cove_cspp::backup_data::remote_layout;
+use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion, remote_layout};
 use once_cell::sync::OnceCell;
 use tracing::warn;
 
@@ -182,6 +182,14 @@ impl CloudStorage {
     ) -> Result<bool, CloudStorageError> {
         Ok(!self.client(policy).list_namespaces().await?.is_empty())
     }
+
+    /// Check if any valid namespace has a readable master key backup
+    pub async fn has_restorable_cloud_backup(
+        &self,
+        policy: CloudAccessPolicy,
+    ) -> Result<bool, CloudStorageError> {
+        self.client(policy).has_restorable_cloud_backup().await
+    }
 }
 
 impl CloudStorageClient {
@@ -315,6 +323,35 @@ impl CloudStorageClient {
     pub async fn has_any_cloud_backup(&self) -> Result<bool, CloudStorageError> {
         Ok(!self.list_namespaces().await?.is_empty())
     }
+
+    pub async fn has_restorable_cloud_backup(&self) -> Result<bool, CloudStorageError> {
+        let namespaces = self.list_namespaces().await?;
+        let mut unreadable_error = None;
+
+        for namespace in namespaces {
+            let master_json = match self.download_master_key_backup(namespace.clone()).await {
+                Ok(master_json) => master_json,
+                Err(CloudStorageError::NotFound(_)) => continue,
+                Err(error) => return Err(error),
+            };
+
+            match validate_restorable_master_key_backup(&namespace, &master_json) {
+                Ok(()) => return Ok(true),
+                Err(error) => {
+                    warn!(
+                        "Cloud storage returned unreadable cloud backup master key; ignoring namespace"
+                    );
+                    unreadable_error.get_or_insert(error);
+                }
+            }
+        }
+
+        if let Some(error) = unreadable_error {
+            return Err(error);
+        }
+
+        Ok(false)
+    }
 }
 
 fn locations(relative_paths: Vec<String>) -> Vec<RemoteBackupLocation> {
@@ -331,6 +368,28 @@ pub fn validate_cloud_backup_namespace_id(namespace: &str) -> Result<(), CloudSt
 
 pub fn is_valid_cloud_backup_namespace_id(namespace: &str) -> bool {
     namespace.len() == 32 && namespace.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+fn validate_restorable_master_key_backup(
+    namespace: &str,
+    master_json: &[u8],
+) -> Result<(), CloudStorageError> {
+    let encrypted: EncryptedMasterKeyBackup = serde_json::from_slice(master_json)
+        .map_err(|_| CloudStorageError::DownloadFailed("master key backup is unreadable".into()))?;
+
+    encrypted.remote_metadata.normalized_master_key(namespace).map_err(|_| {
+        CloudStorageError::DownloadFailed("master key backup metadata is invalid".into())
+    })?;
+
+    match encrypted.backup_version() {
+        Ok(MasterKeyBackupVersion::V1) => Ok(()),
+        Err(unsupported) => {
+            let version = unsupported.0;
+            Err(CloudStorageError::DownloadFailed(format!(
+                "master key backup version {version} is not supported"
+            )))
+        }
+    }
 }
 
 #[uniffi::export]
@@ -356,6 +415,7 @@ pub fn cloud_backup_locations_sync_health(
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::HashMap,
         future::Future,
         sync::{
             Arc,
@@ -374,6 +434,7 @@ mod tests {
         expected_policy_used: Arc<AtomicBool>,
         namespaces: Vec<String>,
         wallet_files: Option<Vec<String>>,
+        master_key_backups: HashMap<String, Result<Vec<u8>, CloudStorageError>>,
     }
 
     #[async_trait::async_trait]
@@ -401,11 +462,22 @@ mod tests {
 
         async fn download_master_key_backup(
             &self,
-            _namespace: String,
-            _locations: Vec<RemoteBackupLocation>,
-            _policy: CloudAccessPolicy,
+            namespace: String,
+            locations: Vec<RemoteBackupLocation>,
+            policy: CloudAccessPolicy,
         ) -> Result<Vec<u8>, CloudStorageError> {
-            panic!("unused in test")
+            if policy != self.expected_policy {
+                panic!("unexpected cloud access policy")
+            }
+
+            let expected_locations =
+                locations_from_strings(remote_layout::master_key_read_locations());
+            assert_eq!(locations, expected_locations);
+
+            self.master_key_backups
+                .get(&namespace)
+                .cloned()
+                .unwrap_or_else(|| Err(CloudStorageError::NotFound("master key backup".into())))
         }
 
         async fn download_wallet_backup(
@@ -485,6 +557,41 @@ mod tests {
         }
     }
 
+    fn test_storage(
+        expected_policy: CloudAccessPolicy,
+        namespaces: Vec<String>,
+    ) -> TestCloudStorage {
+        TestCloudStorage {
+            expected_policy,
+            expected_policy_used: Arc::new(AtomicBool::new(false)),
+            namespaces,
+            wallet_files: None,
+            master_key_backups: HashMap::new(),
+        }
+    }
+
+    fn cloud_with_storage(storage: TestCloudStorage) -> CloudStorage {
+        CloudStorage(Arc::new(Box::new(storage)))
+    }
+
+    fn locations_from_strings(locations: Vec<String>) -> Vec<RemoteBackupLocation> {
+        locations.into_iter().map(RemoteBackupLocation::from).collect()
+    }
+
+    fn master_key_backup(namespace: &str) -> Vec<u8> {
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        let encrypted = cove_cspp::master_key_crypto::encrypt_master_key_with_remote_metadata(
+            &master_key,
+            &[7; 32],
+            &[9; 32],
+            None,
+            cove_cspp::backup_data::remote_payload::RemotePayloadMetadata::master_key(namespace, 1),
+        )
+        .expect("encrypt master key");
+
+        serde_json::to_vec(&encrypted).expect("serialize master key backup")
+    }
+
     #[test]
     fn silent_client_forwards_silent_policy() {
         let expected_policy_used = Arc::new(AtomicBool::new(false));
@@ -493,6 +600,7 @@ mod tests {
             expected_policy_used: expected_policy_used.clone(),
             namespaces: vec![VALID_NAMESPACE.into()],
             wallet_files: None,
+            master_key_backups: HashMap::new(),
         })));
 
         assert!(
@@ -510,6 +618,7 @@ mod tests {
             expected_policy_used: expected_policy_used.clone(),
             namespaces: vec![VALID_NAMESPACE.into()],
             wallet_files: None,
+            master_key_backups: HashMap::new(),
         })));
 
         assert!(
@@ -531,6 +640,7 @@ mod tests {
                 "wallet-record-b.json".into(),
                 "master-key/masterkey-record.json".into(),
             ]),
+            master_key_backups: HashMap::new(),
         })));
 
         let record_ids = block_on_ready(
@@ -565,6 +675,7 @@ mod tests {
             expected_policy_used: Arc::new(AtomicBool::new(false)),
             namespaces: vec!["../secret".into(), VALID_NAMESPACE.into()],
             wallet_files: None,
+            master_key_backups: HashMap::new(),
         })));
 
         let namespaces =
@@ -580,12 +691,75 @@ mod tests {
             expected_policy_used: Arc::new(AtomicBool::new(false)),
             namespaces: vec!["../secret".into()],
             wallet_files: None,
+            master_key_backups: HashMap::new(),
         })));
 
         let has_backup =
             block_on_ready(cloud.has_any_cloud_backup(CloudAccessPolicy::Silent)).unwrap();
 
         assert!(!has_backup);
+    }
+
+    #[test]
+    fn restorable_cloud_backup_requires_valid_downloadable_master_key() {
+        let mut storage =
+            test_storage(CloudAccessPolicy::ConsentAllowed, vec![VALID_NAMESPACE.into()]);
+        storage
+            .master_key_backups
+            .insert(VALID_NAMESPACE.into(), Ok(master_key_backup(VALID_NAMESPACE)));
+        let cloud = cloud_with_storage(storage);
+
+        let has_backup =
+            block_on_ready(cloud.has_restorable_cloud_backup(CloudAccessPolicy::ConsentAllowed))
+                .unwrap();
+
+        assert!(has_backup);
+    }
+
+    #[test]
+    fn restorable_cloud_backup_ignores_invalid_namespaces_and_missing_master_keys() {
+        let cloud = cloud_with_storage(test_storage(
+            CloudAccessPolicy::Silent,
+            vec!["../secret".into(), VALID_NAMESPACE.into()],
+        ));
+
+        let has_backup =
+            block_on_ready(cloud.has_restorable_cloud_backup(CloudAccessPolicy::Silent)).unwrap();
+
+        assert!(!has_backup);
+    }
+
+    #[test]
+    fn restorable_cloud_backup_reports_unreadable_master_key_when_no_valid_backup_exists() {
+        let mut storage = test_storage(CloudAccessPolicy::Silent, vec![VALID_NAMESPACE.into()]);
+        storage.master_key_backups.insert(VALID_NAMESPACE.into(), Ok(b"not json".to_vec()));
+        let cloud = cloud_with_storage(storage);
+
+        let error = block_on_ready(cloud.has_restorable_cloud_backup(CloudAccessPolicy::Silent))
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            CloudStorageError::DownloadFailed("master key backup is unreadable".into())
+        );
+    }
+
+    #[test]
+    fn restorable_cloud_backup_rejects_wrong_namespace_master_key_metadata() {
+        let other_namespace = "fedcba9876543210fedcba9876543210";
+        let mut storage = test_storage(CloudAccessPolicy::Silent, vec![VALID_NAMESPACE.into()]);
+        storage
+            .master_key_backups
+            .insert(VALID_NAMESPACE.into(), Ok(master_key_backup(other_namespace)));
+        let cloud = cloud_with_storage(storage);
+
+        let error = block_on_ready(cloud.has_restorable_cloud_backup(CloudAccessPolicy::Silent))
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            CloudStorageError::DownloadFailed("master key backup metadata is invalid".into())
+        );
     }
 
     #[test]

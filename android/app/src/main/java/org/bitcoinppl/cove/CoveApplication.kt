@@ -8,6 +8,8 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
 import org.bitcoinppl.cove.cloudbackup.AndroidPasskeyProvider
+import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.device.Device
 import org.bitcoinppl.cove_core.device.CloudStorage
@@ -55,6 +57,9 @@ class CoveApplication : Application() {
             connectivity = Connectivity(connectivityMonitor!!)
             passkeyAccess = PasskeyAccess(AndroidPasskeyProvider(this))
             cloudStorage = CloudStorage(AndroidCloudStorageAccess(this))
+            CloudBackupManager.setOnCloudBackupDisabled {
+                clearCloudBackupDriveAccountBinding(this)
+            }
             Log.d(TAG, "Keychain and device initialized")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize keychain and device", e)

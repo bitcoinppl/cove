@@ -4,6 +4,7 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Status
 import java.io.IOException
+import java.net.HttpURLConnection
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -236,6 +237,19 @@ class AndroidCloudStorageAccessTest {
     }
 
     @Test
+    fun driveAccountBindingCanBeClearedAndRebound() {
+        val store = TestDriveAccountBindingStore()
+        val first = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+        val second = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+
+        verifyDriveAccountBinding(store, first)
+        store.clearIdentity()
+        verifyDriveAccountBinding(store, second)
+
+        assertEquals(second, store.selectedIdentity())
+    }
+
+    @Test
     fun wrongDriveAccountBlocksOperationsBeforeRemoteMutation() =
         runBlocking {
             val selected = DriveAccountIdentity(id = "account-1", email = "person@example.com")
@@ -286,7 +300,61 @@ class AndroidCloudStorageAccessTest {
                 )
             }
             assertEquals(4, authorization.accessRequests.size)
-            assertTrue(authorization.clearedTokens.isEmpty())
+            assertEquals(List(4) { "token-1" }, authorization.clearedTokens)
+        }
+
+    @Test
+    fun cachedWrongDriveAccountTokenIsClearedAfterMismatch() =
+        runBlocking {
+            val selected = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+            val actual = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(selected)
+            val delegate = RecordingDriveAuthorization().apply {
+                account = actual
+            }
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { 0 },
+                cacheWindowMs = 1_000,
+                cacheKey = { store.selectedIdentity() },
+            )
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            repeat(2) {
+                val error = captureError {
+                    storage.listNamespaces(CloudAccessPolicy.SILENT)
+                }
+
+                assertTrue(error is CloudStorageException.AuthorizationRequired)
+            }
+
+            assertEquals(listOf(false, false), delegate.accessRequests)
+            assertEquals(listOf("token-1", "token-1"), delegate.clearedTokens)
+        }
+
+    @Test
+    fun clearingDriveAccountBindingInvalidatesCachedToken() =
+        runBlocking {
+            val first = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+            val second = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(first)
+            val delegate = RecordingDriveAuthorization()
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { 0 },
+                cacheWindowMs = 1_000,
+                cacheKey = { store.selectedIdentity() },
+            )
+
+            assertEquals("token-1", authorization.accessToken(interactive = false).token)
+            assertEquals("token-1", authorization.accessToken(interactive = false).token)
+
+            store.clearIdentity()
+            delegate.token = "token-2"
+            delegate.account = second
+
+            assertEquals("token-2", authorization.accessToken(interactive = false).token)
+            assertEquals(listOf(false, false), delegate.accessRequests)
         }
 
     @Test
@@ -296,6 +364,48 @@ class AndroidCloudStorageAccessTest {
             duplicateDriveFolderNames(listOf("master-key", "wallets", "wallets")),
         )
         assertTrue(duplicateDriveFolderNames(listOf("master-key", "wallets")).isEmpty())
+    }
+
+    @Test
+    fun duplicateDriveFileNamesAreDetected() {
+        assertEquals(
+            setOf("master-key.json"),
+            duplicateDriveFileNames(listOf("master-key.json", "wallet-record.json", "master-key.json")),
+        )
+        assertTrue(duplicateDriveFileNames(listOf("master-key.json", "wallet-record.json")).isEmpty())
+    }
+
+    @Test
+    fun backupFileLocationsRejectDuplicateJsonFiles() {
+        val error =
+            runCatching {
+                driveBackupFileLocations(
+                    listOf("master-key.json", "notes.txt", "master-key.json"),
+                )
+            }.exceptionOrNull()
+
+        assertTrue(error is DriveHttpException)
+        assertEquals(HttpURLConnection.HTTP_CONFLICT, (error as DriveHttpException).statusCode)
+        assertEquals("duplicate google drive file: master-key.json", error.body)
+    }
+
+    @Test
+    fun backupFileLocationsIgnoreNonJsonFilesAndApplyLocation() {
+        assertEquals(
+            listOf("wallets/wallet-record.json"),
+            driveBackupFileLocations(
+                listOf("wallet-record.json", "notes.txt"),
+                { fileName -> "wallets/$fileName" },
+            ),
+        )
+    }
+
+    @Test
+    fun cloudBackupNamespaceValidationMatchesRustShape() {
+        assertTrue(isValidCloudBackupNamespaceId("0123456789abcdef0123456789abcdef"))
+        assertFalse(isValidCloudBackupNamespaceId("0123456789ABCDEF0123456789abcdef"))
+        assertFalse(isValidCloudBackupNamespaceId("../0123456789abcdef0123456789abcd"))
+        assertFalse(isValidCloudBackupNamespaceId("0123456789abcdef"))
     }
 
     @Test
@@ -432,6 +542,7 @@ class AndroidCloudStorageAccessTest {
             DriveHttpException(403, driveErrorBody("insufficientFilePermissions")),
         )
         val disabledApi = mapDriveListError(DriveHttpException(403, disabledDriveApiBody()))
+        val conflict = mapDriveListError(DriveHttpException(409, "duplicate google drive file: master-key.json"))
         val offline = mapDriveListError(IOException("network unavailable"))
 
         assertTrue(notFound is CloudStorageException.NotFound)
@@ -439,6 +550,7 @@ class AndroidCloudStorageAccessTest {
         assertTrue(forbiddenQuota is CloudStorageException.QuotaExceeded)
         assertTrue(forbiddenAuthorization is CloudStorageException.AuthorizationRequired)
         assertTrue(disabledApi is CloudStorageException.NotAvailable)
+        assertTrue(conflict is CloudStorageException.NotAvailable)
         assertTrue(offline is CloudStorageException.Offline)
         assertEquals("drive file", (notFound as CloudStorageException.NotFound).v1)
         assertEquals(
@@ -448,6 +560,10 @@ class AndroidCloudStorageAccessTest {
         assertEquals(
             "google drive API is not enabled for this Google Cloud project",
             (disabledApi as CloudStorageException.NotAvailable).v1,
+        )
+        assertEquals(
+            "duplicate google drive file: master-key.json",
+            (conflict as CloudStorageException.NotAvailable).v1,
         )
         assertEquals("network unavailable", (offline as CloudStorageException.Offline).v1)
     }
@@ -564,6 +680,10 @@ class AndroidCloudStorageAccessTest {
 
         override fun bindIdentity(identity: DriveAccountIdentity) {
             this.identity = identity
+        }
+
+        override fun clearIdentity() {
+            identity = null
         }
     }
 }

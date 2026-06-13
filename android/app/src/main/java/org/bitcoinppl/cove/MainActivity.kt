@@ -85,6 +85,7 @@ import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationPolicy
 import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
 import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
+import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
@@ -121,6 +122,7 @@ import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
+import org.bitcoinppl.cove_core.device.CloudStorage
 import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 import java.time.Instant
@@ -165,6 +167,10 @@ internal fun catastrophicCloudRestoreErrorMessage(error: Throwable): String =
             "Cannot check Google Drive while offline: ${error.v1}"
         is CloudStorageException.NotFound ->
             "No Cloud Backup was found for the selected Google account."
+        is CloudStorageException.DownloadFailed ->
+            "Cloud Backup data could not be read: ${error.v1}"
+        is CloudStorageException.InvalidNamespace ->
+            "Cloud Backup data could not be read."
         is CloudStorageException.QuotaExceeded ->
             "Google Drive quota is exceeded. Cove could not check for a Cloud Backup."
         is CloudStorageException.NotAvailable ->
@@ -336,7 +342,7 @@ class MainActivity : FragmentActivity() {
             fun resetCatastrophicRecoveryAndRetry(logContext: String) {
                 resetCatastrophicCloudRestoreCheck()
                 try {
-                    resetLocalDataForCatastrophicRecovery()
+                    resetLocalDataAndDriveBindingForCatastrophicRecovery()
                     resetBootstrapForRestore()
                     bootstrapError = null
                     needsCatastrophicRecovery = false
@@ -359,8 +365,9 @@ class MainActivity : FragmentActivity() {
                 catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Checking
                 catastrophicCloudRestoreCheckJob = lifecycleScope.launch {
                     try {
-                        val hasBackupFiles = AndroidCloudStorageAccess(this@MainActivity)
-                            .hasCloudBackupFiles(CloudAccessPolicy.CONSENT_ALLOWED)
+                        val hasBackupFiles =
+                            CloudStorage(AndroidCloudStorageAccess(this@MainActivity))
+                                .hasRestorableCloudBackup(CloudAccessPolicy.CONSENT_ALLOWED)
 
                         if (catastrophicRecoveryAttemptId != attemptId || !needsCatastrophicRecovery) {
                             return@launch
@@ -762,11 +769,16 @@ class MainActivity : FragmentActivity() {
         if (!BuildConfig.DEBUG || !intent.getBooleanExtra(UI_TEST_RESET_DATA_EXTRA, false)) return
 
         try {
-            resetLocalDataForCatastrophicRecovery()
+            resetLocalDataAndDriveBindingForCatastrophicRecovery()
             resetBootstrapForRestore()
         } catch (e: Exception) {
             Log.e(TAG, "failed to reset local data for UI tests", e)
         }
+    }
+
+    private fun resetLocalDataAndDriveBindingForCatastrophicRecovery() {
+        resetLocalDataForCatastrophicRecovery()
+        clearCloudBackupDriveAccountBinding(this)
     }
 
     companion object {
