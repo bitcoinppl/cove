@@ -180,7 +180,7 @@ impl CloudStorage {
         &self,
         policy: CloudAccessPolicy,
     ) -> Result<bool, CloudStorageError> {
-        Ok(!self.0.list_namespaces(policy).await?.is_empty())
+        Ok(!self.client(policy).list_namespaces().await?.is_empty())
     }
 }
 
@@ -571,6 +571,21 @@ mod tests {
             block_on_ready(cloud.client(CloudAccessPolicy::Silent).list_namespaces()).unwrap();
 
         assert_eq!(namespaces, vec![VALID_NAMESPACE.to_string()]);
+    }
+
+    #[test]
+    fn has_any_cloud_backup_filters_invalid_provider_ids() {
+        let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
+            expected_policy: CloudAccessPolicy::Silent,
+            expected_policy_used: Arc::new(AtomicBool::new(false)),
+            namespaces: vec!["../secret".into()],
+            wallet_files: None,
+        })));
+
+        let has_backup =
+            block_on_ready(cloud.has_any_cloud_backup(CloudAccessPolicy::Silent)).unwrap();
+
+        assert!(!has_backup);
     }
 
     #[test]

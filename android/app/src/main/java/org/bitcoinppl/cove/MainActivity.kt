@@ -79,6 +79,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationPolicy
@@ -318,12 +319,22 @@ class MainActivity : FragmentActivity() {
             var bootstrapError by remember { mutableStateOf<String?>(null) }
             var needsCatastrophicRecovery by remember { mutableStateOf(false) }
             var bootstrapAttempt by remember { mutableStateOf(0) }
+            var catastrophicRecoveryAttemptId by remember { mutableStateOf(0) }
+            var catastrophicCloudRestoreCheckJob by remember { mutableStateOf<Job?>(null) }
             var bdkMigrationWarning by remember { mutableStateOf<String?>(null) }
             var catastrophicCloudRestoreCheck by remember {
                 mutableStateOf<CatastrophicCloudRestoreCheck>(CatastrophicCloudRestoreCheck.Idle)
             }
 
+            fun resetCatastrophicCloudRestoreCheck() {
+                catastrophicRecoveryAttemptId += 1
+                catastrophicCloudRestoreCheckJob?.cancel()
+                catastrophicCloudRestoreCheckJob = null
+                catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Idle
+            }
+
             fun resetCatastrophicRecoveryAndRetry(logContext: String) {
+                resetCatastrophicCloudRestoreCheck()
                 try {
                     resetLocalDataForCatastrophicRecovery()
                     resetBootstrapForRestore()
@@ -338,21 +349,41 @@ class MainActivity : FragmentActivity() {
             }
 
             fun checkCloudBackupBeforeCatastrophicReset() {
-                lifecycleScope.launch {
-                    catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Checking
+                if (!needsCatastrophicRecovery) {
+                    return
+                }
+
+                catastrophicRecoveryAttemptId += 1
+                val attemptId = catastrophicRecoveryAttemptId
+                catastrophicCloudRestoreCheckJob?.cancel()
+                catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Checking
+                catastrophicCloudRestoreCheckJob = lifecycleScope.launch {
                     try {
                         val hasBackupFiles = AndroidCloudStorageAccess(this@MainActivity)
                             .hasCloudBackupFiles(CloudAccessPolicy.CONSENT_ALLOWED)
+
+                        if (catastrophicRecoveryAttemptId != attemptId || !needsCatastrophicRecovery) {
+                            return@launch
+                        }
+
                         catastrophicCloudRestoreCheck =
                             catastrophicCloudRestoreCheckResult(hasBackupFiles)
                     } catch (error: kotlinx.coroutines.CancellationException) {
                         throw error
                     } catch (error: Throwable) {
+                        if (catastrophicRecoveryAttemptId != attemptId || !needsCatastrophicRecovery) {
+                            return@launch
+                        }
+
                         Log.w(TAG, "[STARTUP] failed to check cloud backup before catastrophic reset", error)
                         catastrophicCloudRestoreCheck =
                             CatastrophicCloudRestoreCheck.Failed(
                                 catastrophicCloudRestoreErrorMessage(error),
                             )
+                    } finally {
+                        if (catastrophicRecoveryAttemptId == attemptId) {
+                            catastrophicCloudRestoreCheckJob = null
+                        }
                     }
                 }
             }
@@ -365,11 +396,10 @@ class MainActivity : FragmentActivity() {
                             checkCloudBackupBeforeCatastrophicReset()
                         },
                         onConfirmRestoreFromCloud = {
-                            catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Idle
                             resetCatastrophicRecoveryAndRetry("restore")
                         },
                         onDismissRestoreFromCloud = {
-                            catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Idle
+                            resetCatastrophicCloudRestoreCheck()
                         },
                         onWipeLocalData = {
                             resetCatastrophicRecoveryAndRetry("wipe")
@@ -491,7 +521,10 @@ class MainActivity : FragmentActivity() {
                             }
 
                             when (val failure = classifyBootstrapFailure(e)) {
-                                BootstrapFailure.CatastrophicRecovery -> needsCatastrophicRecovery = true
+                                BootstrapFailure.CatastrophicRecovery -> {
+                                    resetCatastrophicCloudRestoreCheck()
+                                    needsCatastrophicRecovery = true
+                                }
                                 is BootstrapFailure.Fatal -> bootstrapError = failure.message
                             }
                             return@LaunchedEffect

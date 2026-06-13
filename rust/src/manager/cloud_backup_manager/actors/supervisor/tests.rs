@@ -13,6 +13,8 @@ use crate::manager::cloud_backup_manager::wallets::{
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStore, PendingEnableSessionMaterial};
 
+const VALID_NAMESPACE_ID: &str = "0123456789abcdef0123456789abcdef";
+
 fn test_supervisor_manager() -> Arc<RustCloudBackupManager> {
     let globals = test_globals();
     let manager = RustCloudBackupManager::init();
@@ -30,7 +32,7 @@ fn test_disabling_state() -> PersistedDisablingCloudBackup {
 
     PersistedDisablingCloudBackup {
         previous_configured,
-        namespace_id: "namespace".into(),
+        namespace_id: VALID_NAMESPACE_ID.into(),
         disable_generation: 7,
         started_at: 1,
         delete_started_at: Some(2),
@@ -49,7 +51,7 @@ fn test_staged_passkey(credential_id: Vec<u8>) -> StagedPrfKey {
 
 fn test_runtime_passkey_authorization() -> RuntimePasskeyAuthorization {
     RuntimePasskeyAuthorization {
-        namespace_id: "namespace".into(),
+        namespace_id: VALID_NAMESPACE_ID.into(),
         credential_id: vec![1, 2, 3],
         prf_salt: [9; 32],
     }
