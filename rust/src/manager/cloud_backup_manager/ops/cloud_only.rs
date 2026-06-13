@@ -89,7 +89,7 @@ impl RustCloudBackupManager {
                 Ok(WalletBackupLookup::Found(wallet)) => wallet,
                 Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
                     warn!(
-                        "Cloud-only wallet {record_id} uses unsupported wallet backup version {version}"
+                        "Cloud-only wallet backup uses unsupported wallet backup version {version}"
                     );
 
                     items.push(CloudBackupWalletItem {
@@ -106,14 +106,14 @@ impl RustCloudBackupManager {
                     continue;
                 }
                 Ok(WalletBackupLookup::NotFound) => {
-                    warn!("Failed to load cloud-only wallet {record_id}: not found");
+                    warn!("Failed to load cloud-only wallet backup: not found");
                     continue;
                 }
                 Err(error) => {
                     if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
                         return Err(blocking_cloud_error(BlockingCloudStep::FetchCloudOnly, error));
                     }
-                    warn!("Failed to load cloud-only wallet {record_id}: {error}");
+                    warn!("Failed to load cloud-only wallet backup: {error}");
                     continue;
                 }
             };
@@ -171,7 +171,7 @@ impl RustCloudBackupManager {
             .await
             .map_err(|error| blocking_cloud_error(BlockingCloudStep::RestoreCloudWallet, error))?;
 
-        info!("Restored cloud wallet {record_id}");
+        info!("Restored cloud wallet");
         Ok(outcome)
     }
 

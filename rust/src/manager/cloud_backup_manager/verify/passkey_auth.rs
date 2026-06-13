@@ -6,11 +6,21 @@ use tracing::info;
 use super::session::VerificationSession;
 use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID};
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub(crate) struct AuthenticatedPasskey {
     pub(crate) prf_key: [u8; 32],
     pub(crate) credential_id: Vec<u8>,
     pub(crate) credential_recovered: bool,
+}
+
+impl std::fmt::Debug for AuthenticatedPasskey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AuthenticatedPasskey")
+            .field("prf_key", &"<redacted>")
+            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
+            .field("credential_recovered", &self.credential_recovered)
+            .finish()
+    }
 }
 
 #[derive(Debug, PartialEq)]

@@ -4,6 +4,7 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Status
 import java.io.IOException
+import java.net.HttpURLConnection
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -106,6 +107,7 @@ class AndroidCloudStorageAccessTest {
             val storage =
                 AndroidCloudStorageAccess(
                     FailingDriveAuthorization(AuthorizationRequiredException("consent required")),
+                    TestDriveAccountBindingStore(),
                 )
 
             val error =
@@ -134,18 +136,18 @@ class AndroidCloudStorageAccessTest {
                 cacheWindowMs = 1_000,
             )
 
-            assertEquals("token-1", authorization.accessToken(interactive = false))
-            assertEquals("token-1", authorization.accessToken(interactive = true))
+            assertEquals("token-1", authorization.accessToken(interactive = false).token)
+            assertEquals("token-1", authorization.accessToken(interactive = true).token)
             assertEquals(listOf(false), delegate.accessRequests)
 
             now = 500
             delegate.token = "token-2"
             authorization.clearToken("other-token")
-            assertEquals("token-1", authorization.accessToken(interactive = false))
+            assertEquals("token-1", authorization.accessToken(interactive = false).token)
             assertEquals(listOf(false), delegate.accessRequests)
 
             authorization.clearToken("token-1")
-            assertEquals("token-2", authorization.accessToken(interactive = false))
+            assertEquals("token-2", authorization.accessToken(interactive = false).token)
             assertEquals(listOf(false, false), delegate.accessRequests)
             assertEquals(listOf("other-token", "token-1"), delegate.clearedTokens)
         }
@@ -161,14 +163,14 @@ class AndroidCloudStorageAccessTest {
                 cacheWindowMs = 1_000,
             )
 
-            assertEquals("token-1", authorization.accessToken(interactive = false))
+            assertEquals("token-1", authorization.accessToken(interactive = false).token)
 
             now = 999
-            assertEquals("token-1", authorization.accessToken(interactive = false))
+            assertEquals("token-1", authorization.accessToken(interactive = false).token)
 
             now = 2_000
             delegate.token = "token-2"
-            assertEquals("token-2", authorization.accessToken(interactive = false))
+            assertEquals("token-2", authorization.accessToken(interactive = false).token)
             assertEquals(listOf(false, false), delegate.accessRequests)
         }
 
@@ -182,13 +184,13 @@ class AndroidCloudStorageAccessTest {
                 cacheWindowMs = 1_000,
             )
 
-            assertEquals("token-1", authorization.accessToken(interactive = false))
+            assertEquals("token-1", authorization.accessToken(interactive = false).token)
 
             delegate.token = "token-2"
             val clear = async { authorization.clearToken("token-1") }
             delegate.clearStarted.await()
 
-            val refresh = async { authorization.accessToken(interactive = false) }
+            val refresh = async { authorization.accessToken(interactive = false).token }
             yield()
 
             assertFalse(refresh.isCompleted)
@@ -216,6 +218,204 @@ class AndroidCloudStorageAccessTest {
         assertEquals(
             "google drive authorization was cancelled",
             (listError as CloudStorageException.AuthorizationRequired).v1,
+        )
+    }
+
+    @Test
+    fun driveAccountBindingPersistsFirstAccountAndRejectsMismatch() {
+        val store = TestDriveAccountBindingStore()
+        val first = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+        val sameEmailFallback = DriveAccountIdentity(id = null, email = "PERSON@example.com")
+        val mismatch = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+
+        verifyDriveAccountBinding(store, first)
+        verifyDriveAccountBinding(store, sameEmailFallback)
+
+        val error = runCatching { verifyDriveAccountBinding(store, mismatch) }.exceptionOrNull()
+
+        assertTrue(error is DriveAccountBindingException.Mismatch)
+    }
+
+    @Test
+    fun driveAccountBindingCanBeClearedAndRebound() {
+        val store = TestDriveAccountBindingStore()
+        val first = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+        val second = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+
+        verifyDriveAccountBinding(store, first)
+        store.clearIdentity()
+        verifyDriveAccountBinding(store, second)
+
+        assertEquals(second, store.selectedIdentity())
+    }
+
+    @Test
+    fun wrongDriveAccountBlocksOperationsBeforeRemoteMutation() =
+        runBlocking {
+            val selected = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+            val actual = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+            val authorization = RecordingDriveAuthorization().apply {
+                account = actual
+            }
+            val storage = AndroidCloudStorageAccess(
+                authorization,
+                TestDriveAccountBindingStore(selected),
+            )
+            val namespace = "0123456789abcdef0123456789abcdef"
+            val location = RemoteBackupLocation(relativePath = "master-key/master-key.json")
+
+            val operations =
+                listOf<suspend () -> Unit>(
+                    { storage.listNamespaces(CloudAccessPolicy.SILENT) },
+                    {
+                        storage.uploadMasterKeyBackup(
+                            namespace = namespace,
+                            location = location,
+                            data = byteArrayOf(1, 2, 3),
+                            policy = CloudAccessPolicy.SILENT,
+                        )
+                    },
+                    {
+                        storage.downloadMasterKeyBackup(
+                            namespace = namespace,
+                            locations = listOf(location),
+                            policy = CloudAccessPolicy.SILENT,
+                        )
+                    },
+                    {
+                        storage.deleteNamespace(
+                            namespace = namespace,
+                            policy = CloudAccessPolicy.SILENT,
+                        )
+                    },
+                )
+
+            operations.forEach { operation ->
+                val error = captureError(operation)
+
+                assertTrue(error is CloudStorageException.AuthorizationRequired)
+                assertEquals(
+                    "google drive account does not match the account selected for Cloud Backup",
+                    (error as CloudStorageException.AuthorizationRequired).v1,
+                )
+            }
+            assertEquals(4, authorization.accessRequests.size)
+            assertEquals(List(4) { "token-1" }, authorization.clearedTokens)
+        }
+
+    @Test
+    fun cachedWrongDriveAccountTokenIsClearedAfterMismatch() =
+        runBlocking {
+            val selected = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+            val actual = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(selected)
+            val delegate = RecordingDriveAuthorization().apply {
+                account = actual
+            }
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { 0 },
+                cacheWindowMs = 1_000,
+                cacheKey = { store.selectedIdentity() },
+            )
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            repeat(2) {
+                val error = captureError {
+                    storage.listNamespaces(CloudAccessPolicy.SILENT)
+                }
+
+                assertTrue(error is CloudStorageException.AuthorizationRequired)
+            }
+
+            assertEquals(listOf(false, false), delegate.accessRequests)
+            assertEquals(listOf("token-1", "token-1"), delegate.clearedTokens)
+        }
+
+    @Test
+    fun clearingDriveAccountBindingInvalidatesCachedToken() =
+        runBlocking {
+            val first = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+            val second = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(first)
+            val delegate = RecordingDriveAuthorization()
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { 0 },
+                cacheWindowMs = 1_000,
+                cacheKey = { store.selectedIdentity() },
+            )
+
+            assertEquals("token-1", authorization.accessToken(interactive = false).token)
+            assertEquals("token-1", authorization.accessToken(interactive = false).token)
+
+            store.clearIdentity()
+            delegate.token = "token-2"
+            delegate.account = second
+
+            assertEquals("token-2", authorization.accessToken(interactive = false).token)
+            assertEquals(listOf(false, false), delegate.accessRequests)
+        }
+
+    @Test
+    fun duplicateDriveFolderNamesAreDetected() {
+        assertEquals(
+            setOf("wallets"),
+            duplicateDriveFolderNames(listOf("master-key", "wallets", "wallets")),
+        )
+        assertTrue(duplicateDriveFolderNames(listOf("master-key", "wallets")).isEmpty())
+    }
+
+    @Test
+    fun duplicateDriveFileNamesAreDetected() {
+        assertEquals(
+            setOf("master-key.json"),
+            duplicateDriveFileNames(listOf("master-key.json", "wallet-record.json", "master-key.json")),
+        )
+        assertTrue(duplicateDriveFileNames(listOf("master-key.json", "wallet-record.json")).isEmpty())
+    }
+
+    @Test
+    fun backupFileLocationsRejectDuplicateJsonFiles() {
+        val error =
+            runCatching {
+                driveBackupFileLocations(
+                    listOf("master-key.json", "notes.txt", "master-key.json"),
+                )
+            }.exceptionOrNull()
+
+        assertTrue(error is DriveHttpException)
+        assertEquals(HttpURLConnection.HTTP_CONFLICT, (error as DriveHttpException).statusCode)
+        assertEquals("duplicate google drive file: master-key.json", error.body)
+    }
+
+    @Test
+    fun backupFileLocationsIgnoreNonJsonFilesAndApplyLocation() {
+        assertEquals(
+            listOf("wallets/wallet-record.json"),
+            driveBackupFileLocations(
+                listOf("wallet-record.json", "notes.txt"),
+                { fileName -> "wallets/$fileName" },
+            ),
+        )
+    }
+
+    @Test
+    fun cloudBackupNamespaceValidationMatchesRustShape() {
+        assertTrue(isValidCloudBackupNamespaceId("0123456789abcdef0123456789abcdef"))
+        assertFalse(isValidCloudBackupNamespaceId("0123456789ABCDEF0123456789abcdef"))
+        assertFalse(isValidCloudBackupNamespaceId("../0123456789abcdef0123456789abcd"))
+        assertFalse(isValidCloudBackupNamespaceId("0123456789abcdef"))
+    }
+
+    @Test
+    fun foregroundAuthorizationTimeoutMapsToAuthorizationRequired() {
+        val error = mapDriveListError(ForegroundAuthorizationTimeoutException("google drive authorization timed out"))
+
+        assertTrue(error is CloudStorageException.AuthorizationRequired)
+        assertEquals(
+            "google drive authorization timed out",
+            (error as CloudStorageException.AuthorizationRequired).v1,
         )
     }
 
@@ -257,7 +457,10 @@ class AndroidCloudStorageAccessTest {
     @Test
     fun walletOperationErrorsUseLocationErrorId() =
         runBlocking {
-            val storage = AndroidCloudStorageAccess(FailingDriveAuthorization(DriveHttpException(404, "missing")))
+            val storage = AndroidCloudStorageAccess(
+                FailingDriveAuthorization(DriveHttpException(404, "missing")),
+                TestDriveAccountBindingStore(),
+            )
             val location = RemoteBackupLocation(relativePath = "wallets/wallet-record.json")
 
             val uploadError =
@@ -339,6 +542,7 @@ class AndroidCloudStorageAccessTest {
             DriveHttpException(403, driveErrorBody("insufficientFilePermissions")),
         )
         val disabledApi = mapDriveListError(DriveHttpException(403, disabledDriveApiBody()))
+        val conflict = mapDriveListError(DriveHttpException(409, "duplicate google drive file: master-key.json"))
         val offline = mapDriveListError(IOException("network unavailable"))
 
         assertTrue(notFound is CloudStorageException.NotFound)
@@ -346,6 +550,7 @@ class AndroidCloudStorageAccessTest {
         assertTrue(forbiddenQuota is CloudStorageException.QuotaExceeded)
         assertTrue(forbiddenAuthorization is CloudStorageException.AuthorizationRequired)
         assertTrue(disabledApi is CloudStorageException.NotAvailable)
+        assertTrue(conflict is CloudStorageException.NotAvailable)
         assertTrue(offline is CloudStorageException.Offline)
         assertEquals("drive file", (notFound as CloudStorageException.NotFound).v1)
         assertEquals(
@@ -355,6 +560,10 @@ class AndroidCloudStorageAccessTest {
         assertEquals(
             "google drive API is not enabled for this Google Cloud project",
             (disabledApi as CloudStorageException.NotAvailable).v1,
+        )
+        assertEquals(
+            "duplicate google drive file: master-key.json",
+            (conflict as CloudStorageException.NotAvailable).v1,
         )
         assertEquals("network unavailable", (offline as CloudStorageException.Offline).v1)
     }
@@ -421,7 +630,7 @@ class AndroidCloudStorageAccessTest {
     private class FailingDriveAuthorization(
         private val error: Throwable,
     ) : DriveAuthorization {
-        override suspend fun accessToken(interactive: Boolean): String {
+        override suspend fun accessToken(interactive: Boolean): DriveAccessToken {
             throw error
         }
 
@@ -430,12 +639,13 @@ class AndroidCloudStorageAccessTest {
 
     private class RecordingDriveAuthorization : DriveAuthorization {
         var token = "token-1"
+        var account = DriveAccountIdentity(id = "account-1", email = "person@example.com")
         val accessRequests = mutableListOf<Boolean>()
         val clearedTokens = mutableListOf<String>()
 
-        override suspend fun accessToken(interactive: Boolean): String {
+        override suspend fun accessToken(interactive: Boolean): DriveAccessToken {
             accessRequests.add(interactive)
-            return token
+            return DriveAccessToken(token = token, account = account)
         }
 
         override suspend fun clearToken(token: String) {
@@ -445,20 +655,35 @@ class AndroidCloudStorageAccessTest {
 
     private class BlockingClearDriveAuthorization : DriveAuthorization {
         var token = "token-1"
+        var account = DriveAccountIdentity(id = "account-1", email = "person@example.com")
         val accessRequests = mutableListOf<Boolean>()
         val clearedTokens = mutableListOf<String>()
         val clearStarted = CompletableDeferred<Unit>()
         val finishClear = CompletableDeferred<Unit>()
 
-        override suspend fun accessToken(interactive: Boolean): String {
+        override suspend fun accessToken(interactive: Boolean): DriveAccessToken {
             accessRequests.add(interactive)
-            return token
+            return DriveAccessToken(token = token, account = account)
         }
 
         override suspend fun clearToken(token: String) {
             clearedTokens.add(token)
             clearStarted.complete(Unit)
             finishClear.await()
+        }
+    }
+
+    private class TestDriveAccountBindingStore(
+        private var identity: DriveAccountIdentity? = null,
+    ) : DriveAccountBindingStore {
+        override fun selectedIdentity(): DriveAccountIdentity? = identity
+
+        override fun bindIdentity(identity: DriveAccountIdentity) {
+            this.identity = identity
+        }
+
+        override fun clearIdentity() {
+            identity = null
         }
     }
 }

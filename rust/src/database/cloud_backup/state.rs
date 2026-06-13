@@ -369,6 +369,8 @@ pub struct PersistedPendingVerificationCompletion {
     pub report: PersistedDeepVerificationReport,
     pub namespace_id: String,
     pub uploads: Vec<PersistedPendingVerificationUpload>,
+    #[serde(default)]
+    pub created_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

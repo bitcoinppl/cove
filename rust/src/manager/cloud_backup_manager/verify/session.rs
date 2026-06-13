@@ -281,25 +281,25 @@ impl WalletBackupReadPass {
 
                 if is_local {
                     warn!(
-                        "Cloud backup remote truth found unsupported wallet backup version {version} for record_id={record_id}"
+                        "Cloud backup remote truth found unsupported wallet backup version {version}"
                     );
                     self.remote_wallet_truth.unsupported_record_ids.insert(record_id);
                 }
             }
             Ok(WalletBackupLookup::NotFound) => {
                 if is_listed {
-                    warn!("Verify: failed to download wallet {record_id}: not found");
+                    warn!("Verify: failed to download listed wallet backup: not found");
                     self.failed += 1;
                 }
             }
             Err(error) => {
                 if is_listed {
-                    warn!("Verify: failed to download wallet {record_id}: {error}");
+                    warn!("Verify: failed to download listed wallet backup: {error}");
                     self.failed += 1;
                 }
 
                 if is_local {
-                    warn!("Cloud backup remote truth failed for record_id={record_id}: {error}");
+                    warn!("Cloud backup remote truth failed for wallet backup: {error}");
                     self.remote_wallet_truth.unknown_record_ids.insert(record_id);
                 }
             }

@@ -4,7 +4,7 @@
 //! the write supervisor. It does not mutate manager state directly
 
 use act_zero::{Actor, ActorResult, Addr, Produces, WeakAddr, send};
-use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
+use cove_device::cloud_storage::CloudStorageClient;
 use tracing::warn;
 
 use super::CloudBackupWriteError;
@@ -51,7 +51,6 @@ impl CloudBackupRemoteWriteCommand {
                 cloud.delete_wallet_backup(namespace.clone(), record_id).await?;
                 let wallet_record_ids = match cloud.list_wallet_backups(namespace).await {
                     Ok(wallet_record_ids) => wallet_record_ids,
-                    Err(CloudStorageError::NotFound(_)) => Vec::new(),
                     Err(error) => {
                         return Err(CloudBackupWriteError::cloud_storage_context(
                             "list wallet backups",
@@ -66,7 +65,7 @@ impl CloudBackupRemoteWriteCommand {
                     Ok(ids) => ids.len() as u32,
                     Err(error) => {
                         warn!(
-                            "Finalize wallet uploads: failed to list wallet backups for namespace_id={namespace_id}, falling back to uploaded wallet count: {error}"
+                            "Finalize wallet uploads: failed to list wallet backups, falling back to uploaded wallet count: {error}"
                         );
                         fallback_count
                     }
@@ -119,19 +118,19 @@ impl CloudBackupWriteWorker {
 
 #[cfg(test)]
 mod tests {
-    use cove_device::cloud_storage::CloudStorage;
+    use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 
     use super::*;
     use crate::manager::cloud_backup_manager::ops::test_support::{async_test_lock, test_globals};
 
     #[tokio::test(flavor = "current_thread")]
-    async fn delete_active_wallet_treats_missing_listing_as_empty() {
+    async fn delete_active_wallet_fails_closed_when_listing_is_missing() {
         let _guard = async_test_lock().lock().await;
         cove_tokio::init();
         let globals = test_globals();
         globals.cloud.reset();
 
-        let namespace = "namespace".to_owned();
+        let namespace = "0123456789abcdef0123456789abcdef".to_owned();
         let record_id = "wallet".to_owned();
         globals.cloud.set_wallet_backup(namespace.clone(), record_id.clone(), vec![1, 2, 3]);
         globals.cloud.fail_list_wallet_files_for_namespace(
@@ -146,13 +145,8 @@ mod tests {
         }
         .execute()
         .await
-        .unwrap();
+        .unwrap_err();
 
-        match result {
-            CloudBackupRemoteWriteResult::WalletRecordIds(wallet_record_ids) => {
-                assert!(wallet_record_ids.is_empty());
-            }
-            result => panic!("expected wallet record ids, got {result:?}"),
-        }
+        assert!(result.to_string().contains("wallet files missing"), "{result}");
     }
 }

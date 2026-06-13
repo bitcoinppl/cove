@@ -4,12 +4,31 @@ struct CatastrophicErrorView: View {
     let onRestoreFromCloud: () -> Void
     let onWipeOnly: () -> Void
 
-    enum CloudProbeState {
+    enum CloudProbeState: Equatable {
         case checking
         case available
-        case unavailable
-        case transientError
-        case corrupt
+        case noBackup
+        case offline(String)
+        case inconclusive(String)
+        case unreadable(String)
+
+        var allowsRestoreAttempt: Bool {
+            switch self {
+            case .available:
+                true
+            case .checking, .noBackup, .offline, .inconclusive, .unreadable:
+                false
+            }
+        }
+
+        var allowsRetry: Bool {
+            switch self {
+            case .offline, .inconclusive, .unreadable:
+                true
+            case .checking, .available, .noBackup:
+                false
+            }
+        }
     }
 
     @State private var cloudProbeState: CloudProbeState = .checking
@@ -47,22 +66,17 @@ struct CatastrophicErrorView: View {
         Task.detached {
             let cloud = CloudStorage(cloudStorage: CloudStorageAccessImpl())
             do {
-                let exists = try await cloud.hasAnyCloudBackup(policy: .consentAllowed)
+                let exists = try await cloud.hasRestorableCloudBackup(policy: .consentAllowed)
                 await MainActor.run {
-                    cloudProbeState = exists ? .available : .unavailable
+                    cloudProbeState = Self.cloudProbeState(hasBackup: exists)
                 }
             } catch let error as CloudStorageError {
                 await MainActor.run {
-                    switch error {
-                    case .NotAvailable:
-                        cloudProbeState = .transientError
-                    default:
-                        cloudProbeState = .corrupt
-                    }
+                    cloudProbeState = Self.cloudProbeState(error: error)
                 }
             } catch {
                 await MainActor.run {
-                    cloudProbeState = .corrupt
+                    cloudProbeState = .inconclusive(error.localizedDescription)
                 }
             }
         }
@@ -71,6 +85,28 @@ struct CatastrophicErrorView: View {
     private func contactSupport() {
         if let url = URL(string: "mailto:feedback@covebitcoinwallet.com") {
             UIApplication.shared.open(url)
+        }
+    }
+
+    static func cloudProbeState(hasBackup: Bool) -> CloudProbeState {
+        hasBackup ? .available : .noBackup
+    }
+
+    static func cloudProbeState(error: CloudStorageError) -> CloudProbeState {
+        switch error {
+        case let .Offline(message):
+            .offline(message)
+        case let .NotAvailable(message),
+             let .AuthorizationRequired(message):
+            .inconclusive(message)
+        case .QuotaExceeded:
+            .inconclusive("iCloud storage is full")
+        case .NotFound:
+            .noBackup
+        case let .DownloadFailed(message),
+             let .UploadFailed(message),
+             let .InvalidNamespace(message):
+            .unreadable(message)
         }
     }
 }
@@ -161,46 +197,47 @@ private struct CatastrophicErrorContent: View {
                 text: "A cloud backup is available and can be used to restore this device"
             )
 
-        case .unavailable:
+        case .noBackup:
             statusCard(
                 icon: "icloud.slash",
                 color: .coveLightGray,
                 text: "No cloud backup was detected for this account"
             )
 
-        case .transientError:
+        case .offline:
             statusCard(
                 icon: "wifi.exclamationmark",
                 color: .orange,
-                text: "We couldn’t confirm cloud availability. Network conditions may be unstable, but restore may still work"
+                text: "This device appears to be offline. Reconnect and try the cloud backup check again"
             )
 
-        case .corrupt:
+        case .inconclusive:
+            statusCard(
+                icon: "icloud.slash",
+                color: .orange,
+                text: "We couldn’t confirm whether a cloud backup is available. Retry the check before restoring from cloud backup"
+            )
+
+        case .unreadable:
             statusCard(
                 icon: "exclamationmark.triangle.fill",
                 color: .orange,
-                text: "Cloud backup data may be damaged, but you can still attempt a restore"
+                text: "Cloud backup data could not be read. Retry the check before restoring from cloud backup"
             )
         }
     }
 
     private var actionButtons: some View {
         VStack(spacing: 14) {
-            if case .available = cloudProbeState {
+            if cloudProbeState.allowsRestoreAttempt {
                 restoreButton
             }
 
-            if case .transientError = cloudProbeState {
-                restoreButton
-
+            if cloudProbeState.allowsRetry {
                 Button(action: onRetryCheck) {
                     Text("Retry Check")
                 }
                 .buttonStyle(OnboardingSecondaryButtonStyle())
-            }
-
-            if case .corrupt = cloudProbeState {
-                restoreButton
             }
 
             Button(action: onContactSupport) {

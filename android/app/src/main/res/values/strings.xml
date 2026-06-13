@@ -9,6 +9,11 @@
     <string name="cloud_backup_status_setting_up">Setting up</string>
     <string name="cloud_backup_status_restoring">Restoring</string>
     <string name="cloud_backup_status_active">Active</string>
+    <string name="cloud_backup_status_checking_sync">Checking sync status</string>
+    <string name="cloud_backup_status_syncing">Syncing</string>
+    <string name="cloud_backup_status_no_files">No backup files found</string>
+    <string name="cloud_backup_status_drive_unavailable">Google Drive unavailable</string>
+    <string name="cloud_backup_status_drive_authorization_required">Google Drive access needed: %1$s</string>
     <string name="cloud_backup_status_passkey_missing">Passkey missing</string>
     <string name="cloud_backup_status_passkey_provider_unsupported">Passkey provider unsupported</string>
     <string name="cloud_backup_status_error">%1$s</string>

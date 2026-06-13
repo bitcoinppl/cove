@@ -566,6 +566,11 @@ public protocol CloudStorageProtocol: AnyObject, Sendable {
      */
     func hasAnyCloudBackup(policy: CloudAccessPolicy) async throws  -> Bool
 
+    /**
+     * Check if any valid namespace has a readable master key backup
+     */
+    func hasRestorableCloudBackup(policy: CloudAccessPolicy) async throws  -> Bool
+
 }
 open class CloudStorage: CloudStorageProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -637,6 +642,26 @@ open func hasAnyCloudBackup(policy: CloudAccessPolicy)async throws  -> Bool  {
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_cove_device_fn_method_cloudstorage_has_any_cloud_backup(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeCloudAccessPolicy_lower(policy)
+                )
+            },
+            pollFunc: ffi_cove_device_rust_future_poll_i8,
+            completeFunc: ffi_cove_device_rust_future_complete_i8,
+            freeFunc: ffi_cove_device_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeCloudStorageError_lift
+        )
+}
+
+    /**
+     * Check if any valid namespace has a readable master key backup
+     */
+open func hasRestorableCloudBackup(policy: CloudAccessPolicy)async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_device_fn_method_cloudstorage_has_restorable_cloud_backup(
                     self.uniffiCloneHandle(),
                     FfiConverterTypeCloudAccessPolicy_lower(policy)
                 )
@@ -1501,6 +1526,8 @@ enum CloudStorageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     case NotFound(String
     )
     case QuotaExceeded
+    case InvalidNamespace(String
+    )
 
 
 
@@ -1560,6 +1587,9 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 7: return .QuotaExceeded
+        case 8: return .InvalidNamespace(
+            try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1604,6 +1634,11 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
 
         case .QuotaExceeded:
             writeInt(&buf, Int32(7))
+
+
+        case let .InvalidNamespace(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(v1, into: &buf)
 
         }
     }
@@ -3931,6 +3966,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 24202) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_device_checksum_method_cloudstorage_has_restorable_cloud_backup() != 27654) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_passkeyaccess_is_prf_supported() != 31494) {

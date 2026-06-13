@@ -1,4 +1,4 @@
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::CloudStorage;
 use tracing::{info, warn};
 
 use crate::database::Database;
@@ -36,7 +36,6 @@ impl RustCloudBackupManager {
         let cloud = CloudStorage::global_explicit_client();
         let wallet_record_ids = match cloud.list_wallet_backups(namespace).await {
             Ok(ids) => ids,
-            Err(CloudStorageError::NotFound(_)) => Vec::new(),
             Err(error) => {
                 let error = blocking_cloud_error(
                     BlockingCloudStep::DetailRefresh,
@@ -115,8 +114,7 @@ impl RustCloudBackupManager {
                 Ok(persisted) => persisted,
                 Err(error) => {
                     warn!(
-                        "cleanup_confirmed_pending_blobs: persist confirmed record_id={} failed: {error}",
-                        confirmed_state.record_id()
+                        "cleanup_confirmed_pending_blobs: persist confirmed state failed: {error}"
                     );
                     continue;
                 }

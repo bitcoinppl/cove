@@ -521,9 +521,9 @@ impl From<&CloudStorageError> for CloudStorageIssue {
             CloudStorageError::NotAvailable(_) => Self::Unavailable,
             CloudStorageError::NotFound(_) => Self::NotFound,
             CloudStorageError::QuotaExceeded => Self::QuotaExceeded,
-            CloudStorageError::UploadFailed(_) | CloudStorageError::DownloadFailed(_) => {
-                Self::Other
-            }
+            CloudStorageError::UploadFailed(_)
+            | CloudStorageError::DownloadFailed(_)
+            | CloudStorageError::InvalidNamespace(_) => Self::Other,
         }
     }
 }
@@ -651,6 +651,7 @@ pub(crate) struct PendingVerificationCompletion {
     report: DeepVerificationReport,
     namespace_id: String,
     uploads: Vec<PendingVerificationUpload>,
+    created_at: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -866,7 +867,12 @@ impl PendingVerificationCompletion {
         namespace_id: String,
         uploads: Vec<PendingVerificationUpload>,
     ) -> Self {
-        Self { report, namespace_id, uploads }
+        Self {
+            report,
+            namespace_id,
+            uploads,
+            created_at: Some(jiff::Timestamp::now().as_second().try_into().unwrap_or(0)),
+        }
     }
 
     pub(crate) fn report(&self) -> &DeepVerificationReport {
@@ -881,10 +887,20 @@ impl PendingVerificationCompletion {
         &self.uploads
     }
 
+    pub(crate) fn is_expired(&self, now: u64, ttl_seconds: u64) -> bool {
+        let Some(created_at) = self.created_at else {
+            // legacy persisted completions predate the TTL field and must be restarted
+            return true;
+        };
+
+        now.saturating_sub(created_at) >= ttl_seconds
+    }
+
     fn persisted(&self) -> PersistedPendingVerificationCompletion {
         PersistedPendingVerificationCompletion {
             report: PersistedDeepVerificationReport::from(&self.report),
             namespace_id: self.namespace_id.clone(),
+            created_at: self.created_at,
             uploads: self
                 .uploads
                 .iter()
@@ -898,6 +914,7 @@ impl PendingVerificationCompletion {
         Self {
             report: DeepVerificationReport::from(completion.report),
             namespace_id: completion.namespace_id,
+            created_at: completion.created_at,
             uploads: completion
                 .uploads
                 .into_iter()
@@ -1909,7 +1926,6 @@ impl RustCloudBackupManager {
         for namespace in &namespaces {
             let record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
                 Ok(record_ids) => record_ids,
-                Err(CloudStorageError::NotFound(_)) => Vec::new(),
                 Err(error) => {
                     return Err(blocking_cloud_error(
                         BlockingCloudStep::DetailRefresh,
@@ -2221,15 +2237,16 @@ impl RustCloudBackupManager {
             }
             CloudStorageError::UploadFailed(message)
             | CloudStorageError::DownloadFailed(message)
-            | CloudStorageError::NotFound(message) => CloudSyncHealth::Failed(message),
+            | CloudStorageError::NotFound(message)
+            | CloudStorageError::InvalidNamespace(message) => CloudSyncHealth::Failed(message),
         }
     }
 
     pub(crate) fn mark_wallet_blob_dirty(&self, wallet_id: WalletId) {
-        if !Self::load_persisted_state().is_configured() {
-            return;
-        }
-        if self.cloud_backup_writes_blocked() {
+        if !matches!(
+            Self::load_persisted_state(),
+            PersistedCloudBackupState::Configured(_) | PersistedCloudBackupState::Disabling(_)
+        ) {
             return;
         }
 
@@ -2610,10 +2627,10 @@ impl RustCloudBackupManager {
     ///
     /// Returns immediately if cloud backup isn't enabled (e.g. during restore)
     pub fn backup_new_wallet(&self, metadata: crate::wallet::metadata::WalletMetadata) {
-        if !Self::load_persisted_state().is_configured() {
-            return;
-        }
-        if self.cloud_backup_writes_blocked() {
+        if !matches!(
+            Self::load_persisted_state(),
+            PersistedCloudBackupState::Configured(_) | PersistedCloudBackupState::Disabling(_)
+        ) {
             return;
         }
 
@@ -2902,7 +2919,6 @@ pub(crate) async fn current_namespace_wallet_record_ids(
 ) -> Result<Vec<String>, CloudBackupError> {
     match cloud.list_wallet_backups(current_namespace.to_owned()).await {
         Ok(record_ids) => Ok(record_ids),
-        Err(CloudStorageError::NotFound(_)) => Ok(Vec::new()),
         Err(error) => Err(blocking_cloud_error(
             step,
             CloudBackupError::cloud_storage_context("list wallet backups", error),

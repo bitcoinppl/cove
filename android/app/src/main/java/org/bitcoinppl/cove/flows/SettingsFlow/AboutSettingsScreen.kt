@@ -46,6 +46,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.BuildConfig
 import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
+import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
@@ -194,8 +195,10 @@ fun AboutSettingsScreen(
                         RustCloudBackupManager().use {
                             it.debugResetCloudBackupState()
                         }
+                        clearCloudBackupDriveAccountBinding(context)
                         showResetLocalStateDialog = false
-                        resetLocalStateMessage = "Local backup state reset. Google Drive files are untouched."
+                        resetLocalStateMessage =
+                            "Local backup state and Google Drive account selection reset. Google Drive files are untouched."
                     },
                 ) {
                     Text("Reset")

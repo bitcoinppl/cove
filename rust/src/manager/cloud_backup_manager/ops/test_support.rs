@@ -150,6 +150,7 @@ struct MockCloudState {
     next_upload_wallet_backup_error: Option<CloudStorageError>,
     upload_wallet_backup_error: Option<CloudStorageError>,
     upload_wallet_backup_error_after_successes: Option<(usize, CloudStorageError)>,
+    delete_wallet_backup_error: Option<CloudStorageError>,
     delete_namespace_error: Option<CloudStorageError>,
     list_namespaces_error: Option<CloudStorageError>,
     reflect_uploaded_wallets_in_listing: bool,
@@ -299,6 +300,11 @@ impl MockCloudStorage {
             Some(CloudStorageError::DownloadFailed(message.into()));
     }
 
+    pub(crate) fn fail_delete_wallet_backup(&self, message: &str) {
+        self.state.lock().delete_wallet_backup_error =
+            Some(CloudStorageError::DownloadFailed(message.into()));
+    }
+
     pub(crate) fn fail_delete_namespace_not_found(&self, message: &str) {
         self.state.lock().delete_namespace_error =
             Some(CloudStorageError::NotFound(message.into()));
@@ -314,6 +320,13 @@ impl MockCloudStorage {
 
     pub(crate) fn has_master_key_backup(&self, namespace: &str) -> bool {
         self.state.lock().master_key_backups.contains_key(namespace)
+    }
+
+    pub(crate) fn has_wallet_backup(&self, namespace: &str, record_id: &str) -> bool {
+        self.state
+            .lock()
+            .wallet_backups
+            .contains_key(&(namespace.to_string(), record_id.to_string()))
     }
 
     pub(crate) fn has_namespace(&self, namespace: &str) -> bool {
@@ -504,6 +517,10 @@ impl CloudStorageAccess for MockCloudStorage {
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
         let mut state = self.state.lock();
+        if let Some(error) = state.delete_wallet_backup_error.clone() {
+            return Err(error);
+        }
+
         if record_id == MASTER_KEY_RECORD_ID {
             state.master_key_backups.remove(&namespace);
             return Ok(());

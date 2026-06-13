@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -77,6 +78,20 @@ class ForegroundUiBridgeTest {
                 }
 
             assertNotNull(cancellation)
+        }
+
+    @Test
+    fun requireActivityTimeoutMapsToForegroundAuthorizationTimeout() =
+        runBlocking {
+            val error =
+                try {
+                    ForegroundUiBridge.requireActivity(timeoutMs = 1)
+                    null
+                } catch (error: Exception) {
+                    error
+                }
+
+            assertTrue(error is ForegroundAuthorizationTimeoutException)
         }
 
     private class RecordingAuthorizationLauncher :

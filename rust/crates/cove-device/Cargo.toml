@@ -19,6 +19,7 @@ bip39 = { workspace = true }
 
 # error handling
 thiserror = { workspace = true }
+serde_json = { workspace = true }
 
 # logging
 tracing = { workspace = true }

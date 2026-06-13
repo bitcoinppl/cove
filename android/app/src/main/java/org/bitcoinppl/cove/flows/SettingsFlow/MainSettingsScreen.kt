@@ -94,23 +94,72 @@ import org.bitcoinppl.cove_core.SecuritySheetState
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletSettingsRoute
+import org.bitcoinppl.cove_core.device.CloudSyncHealth
 
 internal fun shouldShowCloudBackupSettings(
     isInDecoyMode: Boolean,
 ): Boolean = !isInDecoyMode
 
+internal sealed class CloudBackupSettingsStatus {
+    data object Off : CloudBackupSettingsStatus()
+    data object SettingUp : CloudBackupSettingsStatus()
+    data object Restoring : CloudBackupSettingsStatus()
+    data object Active : CloudBackupSettingsStatus()
+    data object PasskeyMissing : CloudBackupSettingsStatus()
+    data object PasskeyProviderUnsupported : CloudBackupSettingsStatus()
+    data object CheckingSync : CloudBackupSettingsStatus()
+    data object Syncing : CloudBackupSettingsStatus()
+    data object NoFiles : CloudBackupSettingsStatus()
+    data object DriveUnavailable : CloudBackupSettingsStatus()
+
+    data class Error(
+        val message: String,
+    ) : CloudBackupSettingsStatus()
+
+    data class AuthorizationRequired(
+        val message: String,
+    ) : CloudBackupSettingsStatus()
+}
+
+internal fun cloudBackupSettingsStatus(manager: CloudBackupManager): CloudBackupSettingsStatus =
+    when {
+        manager.isLifecycleDisabled -> CloudBackupSettingsStatus.Off
+        manager.lifecycle is CloudBackupLifecycle.Enabling -> CloudBackupSettingsStatus.SettingUp
+        manager.lifecycle is CloudBackupLifecycle.Restoring -> CloudBackupSettingsStatus.Restoring
+        manager.isPasskeyMissing -> CloudBackupSettingsStatus.PasskeyMissing
+        manager.isUnsupportedPasskeyProvider -> CloudBackupSettingsStatus.PasskeyProviderUnsupported
+        manager.lifecycleFailureMessage != null ->
+            CloudBackupSettingsStatus.Error(manager.lifecycleFailureMessage!!)
+        else ->
+            when (val health = manager.syncHealth) {
+                is CloudSyncHealth.AllUploaded -> CloudBackupSettingsStatus.Active
+                is CloudSyncHealth.Uploading -> CloudBackupSettingsStatus.Syncing
+                is CloudSyncHealth.Unknown -> CloudBackupSettingsStatus.CheckingSync
+                is CloudSyncHealth.NoFiles -> CloudBackupSettingsStatus.NoFiles
+                is CloudSyncHealth.AuthorizationRequired ->
+                    CloudBackupSettingsStatus.AuthorizationRequired(health.v1)
+                is CloudSyncHealth.Unavailable -> CloudBackupSettingsStatus.DriveUnavailable
+                is CloudSyncHealth.Failed -> CloudBackupSettingsStatus.Error(health.v1)
+            }
+    }
+
 @Composable
 private fun cloudBackupSettingsSubtitle(manager: CloudBackupManager): String =
-    when {
-        manager.isLifecycleDisabled -> stringResource(R.string.cloud_backup_status_off)
-        manager.lifecycle is CloudBackupLifecycle.Enabling -> stringResource(R.string.cloud_backup_status_setting_up)
-        manager.lifecycle is CloudBackupLifecycle.Restoring -> stringResource(R.string.cloud_backup_status_restoring)
-        manager.isPasskeyMissing -> stringResource(R.string.cloud_backup_status_passkey_missing)
-        manager.isUnsupportedPasskeyProvider ->
+    when (val status = cloudBackupSettingsStatus(manager)) {
+        is CloudBackupSettingsStatus.Off -> stringResource(R.string.cloud_backup_status_off)
+        is CloudBackupSettingsStatus.SettingUp -> stringResource(R.string.cloud_backup_status_setting_up)
+        is CloudBackupSettingsStatus.Restoring -> stringResource(R.string.cloud_backup_status_restoring)
+        is CloudBackupSettingsStatus.Active -> stringResource(R.string.cloud_backup_status_active)
+        is CloudBackupSettingsStatus.PasskeyMissing -> stringResource(R.string.cloud_backup_status_passkey_missing)
+        is CloudBackupSettingsStatus.PasskeyProviderUnsupported ->
             stringResource(R.string.cloud_backup_status_passkey_provider_unsupported)
-        manager.lifecycleFailureMessage != null ->
-            stringResource(R.string.cloud_backup_status_error, manager.lifecycleFailureMessage!!)
-        else -> stringResource(R.string.cloud_backup_status_active)
+        is CloudBackupSettingsStatus.CheckingSync -> stringResource(R.string.cloud_backup_status_checking_sync)
+        is CloudBackupSettingsStatus.Syncing -> stringResource(R.string.cloud_backup_status_syncing)
+        is CloudBackupSettingsStatus.NoFiles -> stringResource(R.string.cloud_backup_status_no_files)
+        is CloudBackupSettingsStatus.DriveUnavailable -> stringResource(R.string.cloud_backup_status_drive_unavailable)
+        is CloudBackupSettingsStatus.AuthorizationRequired ->
+            stringResource(R.string.cloud_backup_status_drive_authorization_required, status.message)
+        is CloudBackupSettingsStatus.Error -> stringResource(R.string.cloud_backup_status_error, status.message)
     }
 
 @OptIn(ExperimentalMaterial3Api::class)

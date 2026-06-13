@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.cloudbackup
 
+import android.accounts.Account
 import android.app.Activity
 import android.content.Context
 import androidx.activity.result.IntentSenderRequest
@@ -19,8 +20,133 @@ internal class AuthorizationRequiredException(
     cause: Throwable? = null,
 ) : Exception(message, cause)
 
+internal data class DriveAccountIdentity(
+    val id: String?,
+    val email: String?,
+) {
+    init {
+        require(!id.isNullOrBlank() || !email.isNullOrBlank()) {
+            "drive account identity requires id or email"
+        }
+    }
+
+    val normalizedEmail: String?
+        get() = email?.trim()?.lowercase()?.takeIf(String::isNotBlank)
+
+    fun matches(other: DriveAccountIdentity): Boolean {
+        if (!id.isNullOrBlank() && !other.id.isNullOrBlank()) {
+            return id == other.id
+        }
+
+        return normalizedEmail != null && normalizedEmail == other.normalizedEmail
+    }
+
+    fun androidAccount(): Account? =
+        normalizedEmail?.let { Account(it, GOOGLE_ACCOUNT_TYPE) }
+
+    companion object {
+        private const val GOOGLE_ACCOUNT_TYPE = "com.google"
+
+        fun fromAuthorizationResult(result: AuthorizationResult): DriveAccountIdentity? {
+            val account = result.toGoogleSignInAccount()
+            val id = account?.id?.takeIf(String::isNotBlank)
+            val email = account?.email?.takeIf(String::isNotBlank)
+
+            return if (id == null && email == null) {
+                null
+            } else {
+                DriveAccountIdentity(id = id, email = email)
+            }
+        }
+    }
+}
+
+internal data class DriveAccessToken(
+    val token: String,
+    val account: DriveAccountIdentity,
+)
+
+internal sealed class DriveAccountBindingException(
+    message: String,
+) : Exception(message) {
+    class MissingIdentity :
+        DriveAccountBindingException("google drive account identity is unavailable")
+
+    class Mismatch :
+        DriveAccountBindingException("google drive account does not match the account selected for Cloud Backup")
+}
+
+internal interface DriveAccountBindingStore {
+    fun selectedIdentity(): DriveAccountIdentity?
+
+    fun bindIdentity(identity: DriveAccountIdentity)
+
+    fun clearIdentity()
+}
+
+internal class SharedPreferencesDriveAccountBindingStore(
+    context: Context,
+) : DriveAccountBindingStore {
+    internal val appContext: Context = context.applicationContext
+    private val preferences =
+        appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    override fun selectedIdentity(): DriveAccountIdentity? {
+        val id = preferences.getString(KEY_ID, null)?.takeIf(String::isNotBlank)
+        val email = preferences.getString(KEY_EMAIL, null)?.takeIf(String::isNotBlank)
+
+        return if (id == null && email == null) {
+            null
+        } else {
+            DriveAccountIdentity(id = id, email = email)
+        }
+    }
+
+    override fun bindIdentity(identity: DriveAccountIdentity) {
+        preferences
+            .edit()
+            .putString(KEY_ID, identity.id)
+            .putString(KEY_EMAIL, identity.normalizedEmail)
+            .apply()
+    }
+
+    override fun clearIdentity() {
+        preferences
+            .edit()
+            .remove(KEY_ID)
+            .remove(KEY_EMAIL)
+            .apply()
+    }
+
+    companion object {
+        private const val PREFERENCES_NAME = "cove_cloud_backup_drive_account"
+        private const val KEY_ID = "google_account_id"
+        private const val KEY_EMAIL = "google_account_email"
+    }
+}
+
+internal fun verifyDriveAccountBinding(
+    store: DriveAccountBindingStore,
+    identity: DriveAccountIdentity?,
+) {
+    val actual = identity ?: throw DriveAccountBindingException.MissingIdentity()
+    val selected = store.selectedIdentity()
+    if (selected == null) {
+        store.bindIdentity(actual)
+        return
+    }
+
+    if (!selected.matches(actual)) {
+        throw DriveAccountBindingException.Mismatch()
+    }
+}
+
+internal fun clearCloudBackupDriveAccountBinding(context: Context) {
+    SharedPreferencesDriveAccountBindingStore(context.applicationContext).clearIdentity()
+}
+
 internal interface DriveAuthorization {
-    suspend fun accessToken(interactive: Boolean): String
+    suspend fun accessToken(interactive: Boolean): DriveAccessToken
 
     suspend fun clearToken(token: String)
 }
@@ -29,6 +155,7 @@ internal class CachingDriveAuthorization(
     private val delegate: DriveAuthorization,
     private val elapsedRealtime: () -> Long = ::monotonicTimeMs,
     private val cacheWindowMs: Long = ACCESS_TOKEN_CACHE_IDLE_MS,
+    private val cacheKey: () -> Any? = { Unit },
 ) : DriveAuthorization {
     private val tokenMutex = Mutex()
     private var cachedAccessToken: CachedAccessToken? = null
@@ -37,11 +164,12 @@ internal class CachingDriveAuthorization(
         require(cacheWindowMs > 0) { "cacheWindowMs must be positive" }
     }
 
-    override suspend fun accessToken(interactive: Boolean): String =
+    override suspend fun accessToken(interactive: Boolean): DriveAccessToken =
         tokenMutex.withLock {
             val now = elapsedRealtime()
+            val currentCacheKey = cacheKey()
             cachedAccessToken?.let { cached ->
-                if (cached.expiresAtMs > now) {
+                if (cached.cacheKey == currentCacheKey && cached.expiresAtMs > now) {
                     cachedAccessToken = cached.copy(expiresAtMs = now + cacheWindowMs)
                     return@withLock cached.token
                 }
@@ -53,13 +181,14 @@ internal class CachingDriveAuthorization(
             cachedAccessToken = CachedAccessToken(
                 token = token,
                 expiresAtMs = elapsedRealtime() + cacheWindowMs,
+                cacheKey = currentCacheKey,
             )
             token
         }
 
     override suspend fun clearToken(token: String) {
         tokenMutex.withLock {
-            if (cachedAccessToken?.token == token) {
+            if (cachedAccessToken?.token?.token == token) {
                 cachedAccessToken = null
             }
 
@@ -68,8 +197,9 @@ internal class CachingDriveAuthorization(
     }
 
     private data class CachedAccessToken(
-        val token: String,
+        val token: DriveAccessToken,
         val expiresAtMs: Long,
+        val cacheKey: Any?,
     )
 
     companion object {
@@ -79,23 +209,31 @@ internal class CachingDriveAuthorization(
 
 internal class DriveAuthorizationHelper(
     context: Context,
+    private val selectedAccount: () -> DriveAccountIdentity? = { null },
 ) : DriveAuthorization {
     private val appContext = context.applicationContext
     private val client by lazy { Identity.getAuthorizationClient(appContext) }
     private val requestedScopes = listOf(Scope(DRIVE_APP_DATA_SCOPE))
 
-    override suspend fun accessToken(interactive: Boolean): String {
+    override suspend fun accessToken(interactive: Boolean): DriveAccessToken {
+        val requestBuilder =
+            AuthorizationRequest
+                .builder()
+                .setRequestedScopes(requestedScopes)
+
+        selectedAccount()?.androidAccount()?.let(requestBuilder::setAccount)
+
         val authorizationResult = client
-            .authorize(
-                AuthorizationRequest
-                    .builder()
-                    .setRequestedScopes(requestedScopes)
-                    .build(),
-            ).await()
+            .authorize(requestBuilder.build())
+            .await()
 
         val resolved = resolveIfNeeded(authorizationResult, interactive)
-        return resolved.accessToken?.takeIf { it.isNotBlank() }
+        val token = resolved.accessToken?.takeIf { it.isNotBlank() }
             ?: throw IllegalStateException("drive authorization succeeded but returned a blank access token")
+        val identity = DriveAccountIdentity.fromAuthorizationResult(resolved)
+            ?: throw AuthorizationRequiredException("google drive account identity is unavailable")
+
+        return DriveAccessToken(token = token, account = identity)
     }
 
     override suspend fun clearToken(token: String) {

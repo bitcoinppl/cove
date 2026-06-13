@@ -288,11 +288,16 @@ class CloudBackupManager private constructor(
     }
 
     private fun apply(message: CloudBackupReconcileMessage) {
+        val wasDisablingCloudBackup = isDisablingCloudBackup
         when (message) {
             is CloudBackupReconcileMessage.Lifecycle -> state = state.copy(lifecycle = message.v1)
             is CloudBackupReconcileMessage.EnableCompleted -> Unit
         }.let {}
         refreshPersistedEnabledState()
+
+        if (wasDisablingCloudBackup && state.lifecycle is CloudBackupLifecycle.Disabled) {
+            onCloudBackupDisabled?.invoke()
+        }
     }
 
     private fun refreshPersistedEnabledState() {
@@ -311,6 +316,13 @@ class CloudBackupManager private constructor(
 
         @Volatile
         private var instance: CloudBackupManager? = null
+
+        @Volatile
+        private var onCloudBackupDisabled: (() -> Unit)? = null
+
+        fun setOnCloudBackupDisabled(callback: () -> Unit) {
+            onCloudBackupDisabled = callback
+        }
 
         private fun liveManager(): CloudBackupManager {
             val rust = RustCloudBackupManager()

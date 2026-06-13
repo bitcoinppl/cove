@@ -41,13 +41,24 @@ impl SavedPasskeyConfirmationRetry {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct EnableRecoveryFinalization {
     pub(crate) context: CloudBackupEnableContext,
     pub(crate) namespace_id: String,
     pub(crate) active_critical_key: zeroize::Zeroizing<[u8; 32]>,
     pub(crate) pending_uploads: Vec<PendingVerificationUpload>,
     pub(crate) cleanup_sources: Vec<CleanupSourceNamespace>,
+}
+
+impl std::fmt::Debug for EnableRecoveryFinalization {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EnableRecoveryFinalization")
+            .field("context", &self.context)
+            .field("namespace_id", &"<redacted>")
+            .field("active_critical_key", &"<redacted>")
+            .field("pending_uploads_count", &self.pending_uploads.len())
+            .field("cleanup_sources_count", &self.cleanup_sources.len())
+            .finish()
+    }
 }
 
 pub(crate) struct EnableUploadFinalization {
@@ -1207,8 +1218,22 @@ impl CloudBackupSupervisor {
         let should_delete_remote = pending.is_retry_upload();
         let namespace_id = pending.namespace_id();
 
+        if should_delete_remote
+            && let Err(error) = self.delete_pending_enable_remote_master_key(namespace_id).await
+        {
+            self.fail_pending_enable_discard(
+                pending,
+                format!("discard pending cloud backup cleanup failed: {error}"),
+            );
+            return Produces::ok(());
+        }
+
         if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
-            warn!("Discard pending enable failed to clear local cloud backup state: {error}");
+            self.fail_pending_enable_discard(
+                pending,
+                format!("discard pending cloud backup local cleanup failed: {error}"),
+            );
+            return Produces::ok(());
         }
 
         if let Some(manager) = self.manager() {
@@ -1216,42 +1241,33 @@ impl CloudBackupSupervisor {
             manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
         }
 
-        if should_delete_remote {
-            let writes = self.write.clone();
-            cove_tokio::task::spawn(async move {
-                let cloud = CloudStorage::global_explicit_client();
-                let receiver = call!(writes.delete_wallet_backup(
-                    cloud,
-                    namespace_id,
-                    MASTER_KEY_RECORD_ID.to_string()
-                ))
-                .await;
-                let receiver = match receiver {
-                    Ok(receiver) => receiver,
-                    Err(error) => {
-                        warn!(
-                            "Discard pending enable failed to start remote master key delete: {error}"
-                        );
-                        return;
-                    }
-                };
-                match receiver.await {
-                    Ok(result) => {
-                        if let Err(error) = result.into_result() {
-                            warn!(
-                                "Discard pending enable failed to delete remote master key: {error}"
-                            );
-                        }
-                    }
-                    Err(error) => {
-                        warn!(
-                            "Discard pending enable remote master key delete stopped before completion: {error}"
-                        );
-                    }
-                }
-            });
-        }
-
         Produces::ok(())
+    }
+
+    async fn delete_pending_enable_remote_master_key(
+        &self,
+        namespace_id: String,
+    ) -> Result<(), CloudBackupError> {
+        let cloud = CloudStorage::global_explicit_client();
+        let receiver = call!(self.write.delete_wallet_backup(
+            cloud,
+            namespace_id,
+            MASTER_KEY_RECORD_ID.to_string()
+        ))
+        .await
+        .map_err_prefix("start pending enable remote cleanup", CloudBackupError::Internal)?;
+
+        receiver
+            .await
+            .map_err_prefix("wait for pending enable remote cleanup", CloudBackupError::Internal)?
+            .into_result()
+    }
+
+    fn fail_pending_enable_discard(&mut self, pending: PendingEnableSession, message: String) {
+        warn!("{message}");
+        self.pending_enable_session = Some(pending);
+        if let Some(manager) = self.manager() {
+            manager.reconcile_runtime_status(CloudBackupStatus::Error(message));
+        }
     }
 }

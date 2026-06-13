@@ -33,6 +33,46 @@ private enum AlertState: Equatable {
     case extraSetPinError(String)
 }
 
+enum CloudBackupSettingsRowStatus: Equatable {
+    case unverified
+    case confirming
+    case active
+    case verificationRecommended
+    case checkingSync
+    case syncing
+    case noFiles
+    case unavailable
+    case authorizationRequired(String)
+    case failed(String)
+}
+
+func cloudBackupSettingsRowStatus(
+    isUnverified: Bool,
+    hasPendingUploadVerification: Bool,
+    isVerificationStale: Bool,
+    syncHealth: CloudSyncHealth
+) -> CloudBackupSettingsRowStatus {
+    if isUnverified { return .unverified }
+    if hasPendingUploadVerification { return .confirming }
+
+    switch syncHealth {
+    case .allUploaded:
+        return isVerificationStale ? .verificationRecommended : .active
+    case .unknown:
+        return .checkingSync
+    case .uploading:
+        return .syncing
+    case .noFiles:
+        return .noFiles
+    case let .authorizationRequired(message):
+        return .authorizationRequired(message)
+    case .unavailable:
+        return .unavailable
+    case let .failed(message):
+        return .failed(message)
+    }
+}
+
 struct MainSettingsScreen: View {
     @Environment(AppManager.self) private var app
     @Environment(AuthManager.self) private var auth
@@ -314,29 +354,102 @@ struct MainSettingsScreen: View {
 
     @ViewBuilder
     private func cloudBackupEnabledStatus(manager: CloudBackupManager) -> some View {
-        if manager.isUnverified {
-            Image(systemName: "exclamationmark.icloud")
-                .foregroundStyle(Color.statusWarning)
-            Text("Cloud Backup Unverified")
-        } else if manager.hasPendingUploadVerification {
-            Image(systemName: "arrow.clockwise.icloud")
-                .foregroundStyle(Color.statusInfo)
-            Text("Cloud Backup Confirming")
-        } else {
-            Image(
-                systemName: manager.isVerificationStale
-                    ? "exclamationmark.icloud" : "checkmark.icloud"
+        let status = cloudBackupSettingsRowStatus(
+            isUnverified: manager.isUnverified,
+            hasPendingUploadVerification: manager.hasPendingUploadVerification,
+            isVerificationStale: manager.isVerificationStale,
+            syncHealth: manager.syncHealth
+        )
+
+        switch status {
+        case .unverified:
+            cloudBackupStatusContent(
+                symbol: "exclamationmark.icloud",
+                title: "Cloud Backup Unverified",
+                color: Color.statusWarning
             )
-            .foregroundStyle(manager.isVerificationStale ? Color.statusWarning : Color.statusSuccess)
+        case .confirming:
+            cloudBackupStatusContent(
+                symbol: "arrow.clockwise.icloud",
+                title: "Cloud Backup Confirming",
+                color: Color.statusInfo
+            )
+        case .active:
+            cloudBackupStatusContent(
+                symbol: "checkmark.icloud",
+                title: "Cloud Backup Enabled",
+                color: Color.statusSuccess
+            )
+        case .verificationRecommended:
+            cloudBackupStatusContent(
+                symbol: "exclamationmark.icloud",
+                title: "Cloud Backup Enabled",
+                message: "Verification recommended",
+                color: Color.statusWarning
+            )
+        case .checkingSync:
+            cloudBackupStatusContent(
+                symbol: "icloud",
+                title: "Checking Cloud Backup",
+                message: "Checking iCloud sync status",
+                color: Color.secondary
+            )
+        case .syncing:
+            cloudBackupStatusContent(
+                symbol: "arrow.clockwise.icloud",
+                title: "Cloud Backup Syncing",
+                message: "Uploading latest changes",
+                color: Color.statusInfo
+            )
+        case .noFiles:
+            cloudBackupStatusContent(
+                symbol: "icloud.slash",
+                title: "Cloud Backup Needs Attention",
+                message: "No iCloud backup files found",
+                color: Color.statusWarning
+            )
+        case .unavailable:
+            cloudBackupStatusContent(
+                symbol: "exclamationmark.icloud",
+                title: "iCloud Drive Unavailable",
+                message: "Open to review Cloud Backup",
+                color: Color.statusWarning
+            )
+        case let .authorizationRequired(message):
+            cloudBackupStatusContent(
+                symbol: "exclamationmark.icloud",
+                title: "iCloud Access Needed",
+                message: message,
+                color: Color.statusWarning
+            )
+        case let .failed(message):
+            cloudBackupStatusContent(
+                symbol: "exclamationmark.icloud",
+                title: "Cloud Backup Error",
+                message: message,
+                color: Color.statusError
+            )
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Cloud Backup Enabled")
+    @ViewBuilder
+    private func cloudBackupStatusContent(
+        symbol: String,
+        title: String,
+        message: String? = nil,
+        color: Color
+    ) -> some View {
+        Image(systemName: symbol)
+            .foregroundStyle(color)
 
-                if manager.isVerificationStale {
-                    Text("Verification recommended")
-                        .font(.caption2)
-                        .foregroundStyle(Color.statusWarning)
-                }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+
+            if let message {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(color)
+                    .lineLimit(1)
             }
         }
     }
