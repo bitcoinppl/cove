@@ -326,13 +326,16 @@ impl CloudStorageClient {
 
     pub async fn has_restorable_cloud_backup(&self) -> Result<bool, CloudStorageError> {
         let namespaces = self.list_namespaces().await?;
-        let mut unreadable_error = None;
+        let mut fallback_error = None;
 
         for namespace in namespaces {
             let master_json = match self.download_master_key_backup(namespace.clone()).await {
                 Ok(master_json) => master_json,
                 Err(CloudStorageError::NotFound(_)) => continue,
-                Err(error) => return Err(error),
+                Err(error) => {
+                    fallback_error.get_or_insert(error);
+                    continue;
+                }
             };
 
             match validate_restorable_master_key_backup(&namespace, &master_json) {
@@ -341,12 +344,12 @@ impl CloudStorageClient {
                     warn!(
                         "Cloud storage returned unreadable cloud backup master key; ignoring namespace"
                     );
-                    unreadable_error.get_or_insert(error);
+                    fallback_error.get_or_insert(error);
                 }
             }
         }
 
-        if let Some(error) = unreadable_error {
+        if let Some(error) = fallback_error {
             return Err(error);
         }
 
@@ -742,6 +745,27 @@ mod tests {
             error,
             CloudStorageError::DownloadFailed("master key backup is unreadable".into())
         );
+    }
+
+    #[test]
+    fn restorable_cloud_backup_continues_after_namespace_download_error() {
+        let other_namespace = "fedcba9876543210fedcba9876543210";
+        let mut storage = test_storage(
+            CloudAccessPolicy::Silent,
+            vec![VALID_NAMESPACE.into(), other_namespace.into()],
+        );
+        storage
+            .master_key_backups
+            .insert(VALID_NAMESPACE.into(), Err(CloudStorageError::Offline("offline".into())));
+        storage
+            .master_key_backups
+            .insert(other_namespace.into(), Ok(master_key_backup(other_namespace)));
+        let cloud = cloud_with_storage(storage);
+
+        let has_backup =
+            block_on_ready(cloud.has_restorable_cloud_backup(CloudAccessPolicy::Silent)).unwrap();
+
+        assert!(has_backup);
     }
 
     #[test]
