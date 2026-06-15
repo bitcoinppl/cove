@@ -567,7 +567,7 @@ public protocol CloudStorageProtocol: AnyObject, Sendable {
     func hasAnyCloudBackup(policy: CloudAccessPolicy) async throws  -> Bool
 
     /**
-     * Check if any valid namespace has a readable master key backup
+     * Check if any namespace has a structurally valid master key backup
      */
     func hasRestorableCloudBackup(policy: CloudAccessPolicy) async throws  -> Bool
 
@@ -655,7 +655,7 @@ open func hasAnyCloudBackup(policy: CloudAccessPolicy)async throws  -> Bool  {
 }
 
     /**
-     * Check if any valid namespace has a readable master key backup
+     * Check if any namespace has a structurally valid master key backup
      */
 open func hasRestorableCloudBackup(policy: CloudAccessPolicy)async throws  -> Bool  {
     return
@@ -3968,7 +3968,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 24202) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorage_has_restorable_cloud_backup() != 27654) {
+    if (uniffi_cove_device_checksum_method_cloudstorage_has_restorable_cloud_backup() != 31943) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_passkeyaccess_is_prf_supported() != 31494) {

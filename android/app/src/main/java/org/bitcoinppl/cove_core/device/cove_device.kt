@@ -1151,7 +1151,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_cloudstorage_has_any_cloud_backup() != 24202.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorage_has_restorable_cloud_backup() != 27654.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorage_has_restorable_cloud_backup() != 31943.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_passkeyaccess_is_prf_supported() != 31494.toShort()) {
@@ -1752,7 +1752,7 @@ public interface CloudStorageInterface {
     suspend fun `hasAnyCloudBackup`(`policy`: CloudAccessPolicy): kotlin.Boolean
 
     /**
-     * Check if any valid namespace has a readable master key backup
+     * Check if any namespace has a structurally valid master key backup
      */
     suspend fun `hasRestorableCloudBackup`(`policy`: CloudAccessPolicy): kotlin.Boolean
 
@@ -1896,7 +1896,7 @@ open class CloudStorage: Disposable, AutoCloseable, CloudStorageInterface
 
 
     /**
-     * Check if any valid namespace has a readable master key backup
+     * Check if any namespace has a structurally valid master key backup
      */
     @Throws(CloudStorageException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")

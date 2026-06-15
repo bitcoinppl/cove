@@ -58,7 +58,7 @@ internal fun resolveStartupMode(
     cloudBackupLifecycle: CloudBackupLifecycle,
     hasPersistedOnboardingProgress: Boolean,
 ): StartupMode {
-    // mirror CoveApp.swift's app-shell onboarding decision while preserving Android auth and Drive constraints
+    // mirror CoveApp.swift's app-shell onboarding decision
     val shouldStartStartupRestore = !hasWallets && cloudBackupLifecycle is CloudBackupLifecycle.Disabled
     return if (!termsAccepted || hasPersistedOnboardingProgress || shouldStartStartupRestore) {
         StartupMode.ONBOARDING

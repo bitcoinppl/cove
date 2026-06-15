@@ -1376,7 +1376,7 @@ private fun CatastrophicRecoveryView(
             title = { Text("Restore from Cloud Backup?") },
             text = {
                 Text(
-                    "Cove found a Cloud Backup for the selected Google account. This will erase the damaged local data on this device and restart into Cloud Backup restore.",
+                    "Cove found Cloud Backup data for the selected Google account. This will erase the damaged local data on this device, then verify your passkey during restore.",
                 )
             },
             confirmButton = {

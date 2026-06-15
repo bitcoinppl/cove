@@ -56,7 +56,7 @@ struct CatastrophicErrorView: View {
         var message: String {
             switch self {
             case .restore:
-                "Cove found a Cloud Backup for the selected iCloud account. This will erase the damaged local data on this device and start Cloud Backup restore."
+                "Cove found Cloud Backup data for the selected iCloud account. This will erase the damaged local data on this device, then verify your passkey during restore."
             case .wipe:
                 "This will permanently delete all wallet data on this device. Make sure you have your recovery phrases backed up. This cannot be undone."
             }
@@ -232,7 +232,7 @@ private struct CatastrophicErrorContent: View {
             statusCard(
                 icon: "checkmark.circle.fill",
                 color: .lightGreen,
-                text: "A cloud backup is available and can be used to restore this device"
+                text: "Cloud Backup data is available for this account"
             )
 
         case .noBackup:

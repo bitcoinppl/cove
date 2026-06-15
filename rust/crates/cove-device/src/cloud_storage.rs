@@ -183,7 +183,7 @@ impl CloudStorage {
         Ok(!self.client(policy).list_namespaces().await?.is_empty())
     }
 
-    /// Check if any valid namespace has a readable master key backup
+    /// Check if any namespace has a structurally valid master key backup
     pub async fn has_restorable_cloud_backup(
         &self,
         policy: CloudAccessPolicy,
