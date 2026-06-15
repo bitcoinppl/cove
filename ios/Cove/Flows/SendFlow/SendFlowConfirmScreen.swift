@@ -184,6 +184,13 @@ struct SendFlowConfirmScreen: View {
                                     psbt: details.psbt(),
                                     payjoinEndpoint: payjoinEndpoint
                                 )
+                                // for payjoin, stay in .sending — PayjoinTxBroadcast reconcile fires sendState = .sent
+                                if payjoinEndpoint == nil {
+                                    sendState = .sent
+                                    isShowingAlert = true
+                                    auth.unlock()
+                                }
+                                return
                             }
                             sendState = .sent
                             isShowingAlert = true
@@ -216,6 +223,25 @@ struct SendFlowConfirmScreen: View {
                 guard let lockedAt = auth.lockedAt else { return }
                 let sinceLocked = Date.now.timeIntervalSince(lockedAt)
                 if sinceLocked < 5 { auth.lockState = .unlocked }
+            }
+            .onChange(of: manager.payjoinTxBroadcast) { _, uuid in
+                // UUID changes each time so this fires reliably across multiple sends
+                guard uuid != nil, case .sending = sendState else { return }
+                sendState = .sent
+                isShowingAlert = true
+                auth.unlock()
+            }
+            .onChange(of: manager.sendFlowErrorAlert) { _, alert in
+                // payjoin broadcast failure arrives via reconcile (not the catch block),
+                // so we must handle it here to unblock the UI from .sending
+                guard let alert, case .sending = sendState else { return }
+                let errorMessage =
+                    switch alert.item {
+                    case let .signAndBroadcast(error): error
+                    case let .confirmDetails(error): error
+                    }
+                sendState = .error(errorMessage)
+                isShowingErrorAlert = true
             }
             .alert(
                 "Sent!",

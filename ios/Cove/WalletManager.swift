@@ -40,6 +40,10 @@ private extension WalletScanStatus {
     /// errors in SendFlow
     var sendFlowErrorAlert: TaggedItem<SendFlowErrorAlert>? = nil
 
+    /// non-nil when a payjoin transaction has been broadcast (success or fallback);
+    /// UUID changes each time so onChange always fires even across multiple sends
+    var payjoinTxBroadcast: UUID? = nil
+
     /// cached transaction details
     var transactionDetails: [TxId: TransactionDetails] = [:]
 
@@ -299,6 +303,9 @@ private extension WalletScanStatus {
                 receiveAddressIsLoading = false
                 receiveAddressError = nil
             }
+
+        case .payjoinTxBroadcast:
+            self.payjoinTxBroadcast = UUID()
         }
     }
 
