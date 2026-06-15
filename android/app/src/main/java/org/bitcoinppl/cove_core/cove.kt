@@ -4105,7 +4105,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 16336.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 9615.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 30339.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count() != 17456.toShort()) {
@@ -17987,7 +17987,7 @@ public interface RustCloudBackupManagerInterface {
     /**
      * Back up a newly created wallet, fire-and-forget
      *
-     * Returns immediately if cloud backup isn't enabled (e.g. during restore)
+     * Returns immediately unless cloud backup is configured or disabling
      */
     fun `backupNewWallet`(`metadata`: WalletMetadata)
 
@@ -18159,7 +18159,7 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     /**
      * Back up a newly created wallet, fire-and-forget
      *
-     * Returns immediately if cloud backup isn't enabled (e.g. during restore)
+     * Returns immediately unless cloud backup is configured or disabling
      */override fun `backupNewWallet`(`metadata`: WalletMetadata)
         =
     callWithHandle {

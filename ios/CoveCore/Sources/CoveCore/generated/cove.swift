@@ -7284,7 +7284,7 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
     /**
      * Back up a newly created wallet, fire-and-forget
      *
-     * Returns immediately if cloud backup isn't enabled (e.g. during restore)
+     * Returns immediately unless cloud backup is configured or disabling
      */
     func backupNewWallet(metadata: WalletMetadata)
 
@@ -7405,7 +7405,7 @@ public convenience init() {
     /**
      * Back up a newly created wallet, fire-and-forget
      *
-     * Returns immediately if cloud backup isn't enabled (e.g. during restore)
+     * Returns immediately unless cloud backup is configured or disabling
      */
 open func backupNewWallet(metadata: WalletMetadata)  {try! rustCall() {
         uniffiCallStatus in
@@ -39951,7 +39951,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 16336) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 9615) {
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 30339) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count() != 17456) {
