@@ -3983,6 +3983,28 @@ async fn failed_blob_states_recover_only_after_last_failed_wallet_upload_recover
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn corrupt_blob_sync_state_projects_failed_sync_health() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    Database::global()
+        .cloud_blob_sync_states
+        .set(&PersistedCloudBlobSyncState::corrupted(
+            "failed to decode persisted cloud backup blob sync state".into(),
+        ))
+        .unwrap();
+
+    assert!(matches!(
+        manager.compute_sync_health().await,
+        CloudSyncHealth::Failed(message)
+            if message.contains("failed to decode persisted cloud backup blob sync state")
+    ));
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn connectivity_reconnect_preserves_failed_wallet_upload_health() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();

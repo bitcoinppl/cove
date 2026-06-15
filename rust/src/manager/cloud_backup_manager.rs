@@ -2157,14 +2157,20 @@ impl RustCloudBackupManager {
             Err(error) => return CloudSyncHealth::Failed(error.to_string()),
         };
         let sync_states = match Database::global().cloud_blob_sync_states.list() {
-            Ok(states) => states
-                .into_iter()
-                .filter(|state| {
-                    state.namespace_id == namespace
-                        && (state.wallet_id().is_none()
-                            || expected_wallet_record_ids.contains(state.record_id()))
-                })
-                .collect::<Vec<_>>(),
+            Ok(states) => {
+                if let Some(sync_health) = Self::sync_health_from_corrupt_sync_state(&states) {
+                    return sync_health;
+                }
+
+                states
+                    .into_iter()
+                    .filter(|state| {
+                        state.namespace_id == namespace
+                            && (state.wallet_id().is_none()
+                                || expected_wallet_record_ids.contains(state.record_id()))
+                    })
+                    .collect::<Vec<_>>()
+            }
             Err(error) => {
                 return CloudSyncHealth::Failed(format!(
                     "failed to read cloud backup sync states: {error}",
@@ -2266,6 +2272,24 @@ impl RustCloudBackupManager {
         sync_states.iter().find_map(|sync_state| {
             let PersistedCloudBlobState::Failed(failed_state) = &sync_state.state else {
                 return None;
+            };
+
+            Some(CloudSyncHealth::Failed(sync_health_failed_message(sync_state, failed_state)))
+        })
+    }
+
+    fn sync_health_from_corrupt_sync_state(
+        sync_states: &[PersistedCloudBlobSyncState],
+    ) -> Option<CloudSyncHealth> {
+        sync_states.iter().find_map(|sync_state| {
+            if !sync_state.is_corrupted() {
+                return None;
+            }
+
+            let PersistedCloudBlobState::Failed(failed_state) = &sync_state.state else {
+                return Some(CloudSyncHealth::Failed(
+                    "cloud backup sync state could not be decoded".into(),
+                ));
             };
 
             Some(CloudSyncHealth::Failed(sync_health_failed_message(sync_state, failed_state)))

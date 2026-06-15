@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::wallet::metadata::WalletId;
 
+pub(crate) const CORRUPT_BLOB_SYNC_NAMESPACE_ID: &str = "__corrupt_cloud_backup_blob_sync_state__";
+pub(crate) const CORRUPT_BLOB_SYNC_RECORD_ID: &str = "__corrupt_cloud_backup_blob_sync_state__";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PersistedCloudBackupStatus {
     Disabled,
@@ -411,6 +414,7 @@ pub struct PersistedCloudBlobSyncState {
 pub enum CloudBackupRecordKey {
     MasterKeyWrapper,
     Wallet(WalletId, String),
+    Corrupted(String),
 }
 
 impl PersistedCloudBlobSyncState {
@@ -433,6 +437,20 @@ impl PersistedCloudBlobSyncState {
         state: PersistedCloudBlobState,
     ) -> Self {
         Self { namespace_id, record_key, state }
+    }
+
+    pub fn corrupted(error: String) -> Self {
+        Self {
+            namespace_id: CORRUPT_BLOB_SYNC_NAMESPACE_ID.to_string(),
+            record_key: CloudBackupRecordKey::Corrupted(CORRUPT_BLOB_SYNC_RECORD_ID.to_string()),
+            state: PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                revision_hash: None,
+                retryable: false,
+                issue: None,
+                error,
+                failed_at: 0,
+            }),
+        }
     }
 
     pub fn record_key(&self) -> &CloudBackupRecordKey {
@@ -459,6 +477,10 @@ impl PersistedCloudBlobSyncState {
         self.record_key.is_wallet()
     }
 
+    pub fn is_corrupted(&self) -> bool {
+        self.record_key.is_corrupted()
+    }
+
     pub fn is_dirty(&self) -> bool {
         matches!(self.state, PersistedCloudBlobState::Dirty(_))
     }
@@ -477,12 +499,13 @@ impl CloudBackupRecordKey {
         match self {
             Self::MasterKeyWrapper => Self::master_key_record_id(),
             Self::Wallet(_, record_id) => record_id,
+            Self::Corrupted(record_id) => record_id,
         }
     }
 
     pub fn wallet_id(&self) -> Option<&WalletId> {
         match self {
-            Self::MasterKeyWrapper => None,
+            Self::MasterKeyWrapper | Self::Corrupted(_) => None,
             Self::Wallet(wallet_id, _) => Some(wallet_id),
         }
     }
@@ -495,10 +518,15 @@ impl CloudBackupRecordKey {
         matches!(self, Self::Wallet(_, _))
     }
 
+    pub fn is_corrupted(&self) -> bool {
+        matches!(self, Self::Corrupted(_))
+    }
+
     pub fn into_parts(self) -> (Option<WalletId>, String) {
         match self {
             Self::MasterKeyWrapper => (None, MASTER_KEY_RECORD_ID.to_string()),
             Self::Wallet(wallet_id, record_id) => (Some(wallet_id), record_id),
+            Self::Corrupted(record_id) => (None, record_id),
         }
     }
 }

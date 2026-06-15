@@ -1,9 +1,6 @@
 use tracing::error;
 
-use super::{
-    CloudBlobFailedState, PersistedCloudBackupState, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState,
-};
+use super::{PersistedCloudBackupState, PersistedCloudBlobSyncState};
 use ::redb::{TableDefinition, TypeName, Value};
 
 pub(crate) const CLOUD_BACKUP_STATE_TABLE: TableDefinition<&'static str, CloudBackupStateJson> =
@@ -12,8 +9,6 @@ pub(crate) const CLOUD_BLOB_SYNC_STATE_TABLE: TableDefinition<
     &'static str,
     CloudBlobSyncStateJson,
 > = TableDefinition::new("cloud_blob_sync_state");
-
-const CORRUPT_BLOB_SYNC_NAMESPACE_ID: &str = "__corrupt_cloud_backup_blob_sync_state__";
 
 #[derive(Debug)]
 pub(crate) struct CloudBackupStateJson;
@@ -99,23 +94,17 @@ impl Value for CloudBlobSyncStateJson {
 
 impl From<serde_json::Error> for PersistedCloudBlobSyncState {
     fn from(error: serde_json::Error) -> Self {
-        // redb value decoding cannot report an error, so return a non-trusting tombstone
-        PersistedCloudBlobSyncState::master_key_wrapper(
-            CORRUPT_BLOB_SYNC_NAMESPACE_ID.into(),
-            PersistedCloudBlobState::Failed(CloudBlobFailedState {
-                revision_hash: None,
-                retryable: false,
-                issue: None,
-                error: format!("failed to decode persisted cloud backup blob sync state: {error}"),
-                failed_at: 0,
-            }),
-        )
+        // redb value decoding cannot report an error, so return a typed corrupt tombstone
+        PersistedCloudBlobSyncState::corrupted(format!(
+            "failed to decode persisted cloud backup blob sync state: {error}"
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::cloud_backup::{CloudBlobFailedState, PersistedCloudBlobState};
 
     #[test]
     fn corrupt_cloud_backup_state_json_decodes_to_corrupted_state() {
@@ -131,8 +120,12 @@ mod tests {
     fn corrupt_cloud_blob_sync_state_json_decodes_to_failed_tombstone() {
         let state = <CloudBlobSyncStateJson as Value>::from_bytes(b"{not json");
 
-        assert_eq!(state.namespace_id, CORRUPT_BLOB_SYNC_NAMESPACE_ID);
-        assert!(state.is_master_key_wrapper());
+        assert!(state.is_corrupted());
+        assert!(!state.is_master_key_wrapper());
+        assert_eq!(
+            state.record_id(),
+            crate::database::cloud_backup::state::CORRUPT_BLOB_SYNC_RECORD_ID
+        );
         match state.state {
             PersistedCloudBlobState::Failed(CloudBlobFailedState {
                 retryable,

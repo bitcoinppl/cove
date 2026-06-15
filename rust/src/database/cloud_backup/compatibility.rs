@@ -390,6 +390,7 @@ impl From<&PersistedCloudBlobSyncState> for PersistedLegacyCloudBlobSyncState {
 enum PersistedCloudBlobRecordKey {
     MasterKeyWrapper,
     Wallet { wallet_id: WalletId, record_id: String },
+    Corrupted { record_id: String },
 }
 
 impl PersistedCloudBlobRecordKey {
@@ -399,6 +400,7 @@ impl PersistedCloudBlobRecordKey {
             CloudBackupRecordKey::Wallet(wallet_id, record_id) => {
                 Self::Wallet { wallet_id, record_id }
             }
+            CloudBackupRecordKey::Corrupted(record_id) => Self::Corrupted { record_id },
         }
     }
 
@@ -408,6 +410,7 @@ impl PersistedCloudBlobRecordKey {
             Self::Wallet { wallet_id, record_id } => {
                 CloudBackupRecordKey::Wallet(wallet_id, record_id)
             }
+            Self::Corrupted { record_id } => CloudBackupRecordKey::Corrupted(record_id),
         }
     }
 }
@@ -720,6 +723,45 @@ mod tests {
         assert_eq!(encoded["record_key"]["record_id"], "record-a");
         assert!(encoded.get("wallet_id").is_none());
         assert!(encoded.get("record_id").is_none());
+    }
+
+    #[test]
+    fn blob_sync_state_serializes_corrupt_domain_shape() {
+        let state = PersistedCloudBlobSyncState::corrupted("decode failed".into());
+
+        let encoded = serde_json::to_value(&state).unwrap();
+
+        assert_eq!(encoded["version"], 1);
+        assert_eq!(encoded["record_key"]["kind"], "Corrupted");
+        assert_eq!(
+            encoded["record_key"]["record_id"],
+            crate::database::cloud_backup::state::CORRUPT_BLOB_SYNC_RECORD_ID
+        );
+    }
+
+    #[test]
+    fn blob_sync_state_accepts_corrupt_domain_json() {
+        let state: PersistedCloudBlobSyncState = serde_json::from_value(serde_json::json!({
+            "version": 1,
+            "namespace_id": "ns-1",
+            "record_key": {
+                "kind": "Corrupted",
+                "record_id": "__corrupt_cloud_backup_blob_sync_state__"
+            },
+            "state": {
+                "Failed": {
+                    "revision_hash": null,
+                    "retryable": false,
+                    "issue": null,
+                    "error": "decode failed",
+                    "failed_at": 0
+                }
+            }
+        }))
+        .unwrap();
+
+        assert!(state.is_corrupted());
+        assert!(!state.is_master_key_wrapper());
     }
 
     #[test]

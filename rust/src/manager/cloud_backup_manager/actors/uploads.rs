@@ -306,7 +306,7 @@ impl CloudBackupUploadWorker {
         for sync_state in states {
             let wallet_id = match sync_state.record_key() {
                 CloudBackupRecordKey::Wallet(wallet_id, _) => wallet_id.clone(),
-                CloudBackupRecordKey::MasterKeyWrapper => {
+                CloudBackupRecordKey::MasterKeyWrapper | CloudBackupRecordKey::Corrupted(_) => {
                     continue;
                 }
             };

@@ -359,7 +359,7 @@ impl PendingUploadVerifier {
     fn schedule_retry_if_needed(&self, sync_state: &PersistedCloudBlobSyncState) {
         let wallet_id = match sync_state.record_key() {
             CloudBackupRecordKey::Wallet(wallet_id, _) => wallet_id.clone(),
-            CloudBackupRecordKey::MasterKeyWrapper => {
+            CloudBackupRecordKey::MasterKeyWrapper | CloudBackupRecordKey::Corrupted(_) => {
                 return;
             }
         };
