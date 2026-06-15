@@ -254,10 +254,13 @@ class MainActivity : FragmentActivity() {
                 catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Idle
             }
 
-            fun resetCatastrophicRecoveryAndRetry(logContext: String) {
+            fun resetCatastrophicRecoveryAndRetry(
+                logContext: String,
+                clearDriveAccountBinding: Boolean,
+            ) {
                 resetCatastrophicCloudRestoreCheck()
                 try {
-                    resetLocalDataAndDriveBindingForCatastrophicRecovery()
+                    resetCatastrophicLocalData(clearDriveAccountBinding)
                     resetBootstrapForRestore()
                     bootstrapError = null
                     needsCatastrophicRecovery = false
@@ -318,13 +321,19 @@ class MainActivity : FragmentActivity() {
                             checkCloudBackupBeforeCatastrophicReset()
                         },
                         onConfirmRestoreFromCloud = {
-                            resetCatastrophicRecoveryAndRetry("restore")
+                            resetCatastrophicRecoveryAndRetry(
+                                logContext = "restore",
+                                clearDriveAccountBinding = false,
+                            )
                         },
                         onDismissRestoreFromCloud = {
                             resetCatastrophicCloudRestoreCheck()
                         },
                         onWipeLocalData = {
-                            resetCatastrophicRecoveryAndRetry("wipe")
+                            resetCatastrophicRecoveryAndRetry(
+                                logContext = "wipe",
+                                clearDriveAccountBinding = true,
+                            )
                         },
                         onContactSupport = {
                             val intent =
@@ -692,8 +701,14 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun resetLocalDataAndDriveBindingForCatastrophicRecovery() {
+        resetCatastrophicLocalData(clearDriveAccountBinding = true)
+    }
+
+    private fun resetCatastrophicLocalData(clearDriveAccountBinding: Boolean) {
         resetLocalDataForCatastrophicRecovery()
-        clearCloudBackupDriveAccountBinding(this)
+        if (clearDriveAccountBinding) {
+            clearCloudBackupDriveAccountBinding(this)
+        }
     }
 
     companion object {
