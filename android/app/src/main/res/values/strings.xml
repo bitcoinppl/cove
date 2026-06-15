@@ -6,9 +6,13 @@
     <string name="title_settings_appearance">Appearance</string>
     <string name="title_cloud_backup">Cloud Backup</string>
     <string name="cloud_backup_status_off">Off</string>
+    <string name="cloud_backup_status_disabling">Disabling</string>
     <string name="cloud_backup_status_setting_up">Setting up</string>
     <string name="cloud_backup_status_restoring">Restoring</string>
     <string name="cloud_backup_status_active">Active</string>
+    <string name="cloud_backup_status_unverified">Unverified</string>
+    <string name="cloud_backup_status_confirming">Confirming</string>
+    <string name="cloud_backup_status_verification_recommended">Verification recommended</string>
     <string name="cloud_backup_status_checking_sync">Checking sync status</string>
     <string name="cloud_backup_status_syncing">Syncing</string>
     <string name="cloud_backup_status_no_files">No backup files found</string>

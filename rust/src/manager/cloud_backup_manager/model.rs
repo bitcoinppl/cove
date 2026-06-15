@@ -7,7 +7,7 @@
 use super::{
     CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext,
     CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupPasskeyChoiceIntent,
-    CloudBackupPasskeyHint, CloudBackupRootPrompt, CloudBackupStatus,
+    CloudBackupPasskeyHint, CloudBackupRootPrompt, CloudBackupSettingsRowStatus, CloudBackupStatus,
     CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
     CloudBackupVerificationReason, CloudOnlyOperation, CloudOnlyState, DeepVerificationFailure,
     DeepVerificationReport, OtherBackupsOperation, PendingUploadVerificationState, RecoveryAction,
@@ -16,8 +16,10 @@ use super::{
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use cove_device::cloud_storage::CloudSyncHealth;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE: &str = "cloud authorization required";
+const STALE_VERIFICATION_THRESHOLD: Duration = Duration::from_secs(60 * 60 * 24 * 30);
 
 /// Private reducer wrapper that projects public Cloud Backup state
 #[derive(Debug, Clone, Default)]
@@ -141,7 +143,10 @@ impl Default for CloudBackupConfiguredReducerState {
 
 impl CloudBackupReducerState {
     fn public_state(&self) -> super::CloudBackupState {
-        super::CloudBackupState { lifecycle: self.public_lifecycle() }
+        super::CloudBackupState {
+            lifecycle: self.public_lifecycle(),
+            settings_row_status: self.settings_row_status(),
+        }
     }
 
     fn public_lifecycle(&self) -> CloudBackupLifecycle {
@@ -365,6 +370,75 @@ impl CloudBackupReducerState {
                 CloudBackupStatus::Error(failure.message.clone())
             }
         }
+    }
+
+    fn settings_row_status(&self) -> CloudBackupSettingsRowStatus {
+        match self.status() {
+            CloudBackupStatus::Disabled => return CloudBackupSettingsRowStatus::Disabled,
+            CloudBackupStatus::Disabling => return CloudBackupSettingsRowStatus::Disabling,
+            CloudBackupStatus::Enabling => return CloudBackupSettingsRowStatus::SettingUp,
+            CloudBackupStatus::Restoring => return CloudBackupSettingsRowStatus::Restoring,
+            CloudBackupStatus::PasskeyMissing => {
+                return CloudBackupSettingsRowStatus::PasskeyMissing;
+            }
+            CloudBackupStatus::UnsupportedPasskeyProvider => {
+                return CloudBackupSettingsRowStatus::PasskeyProviderUnsupported;
+            }
+            CloudBackupStatus::Error(message) => {
+                return CloudBackupSettingsRowStatus::Error(message);
+            }
+            CloudBackupStatus::Enabled => {}
+        }
+
+        if matches!(
+            self.configured.verification,
+            CloudBackupVerificationState::AwaitingUploadConfirmation
+        ) {
+            return CloudBackupSettingsRowStatus::Confirming;
+        }
+
+        if matches!(self.configured.verification, CloudBackupVerificationState::Required) {
+            return CloudBackupSettingsRowStatus::Unverified;
+        }
+
+        match &self.sync_health {
+            CloudSyncHealth::AllUploaded if self.is_verification_stale() => {
+                CloudBackupSettingsRowStatus::VerificationRecommended
+            }
+            CloudSyncHealth::AllUploaded => CloudBackupSettingsRowStatus::Active,
+            CloudSyncHealth::Uploading => CloudBackupSettingsRowStatus::Syncing,
+            CloudSyncHealth::Unknown => CloudBackupSettingsRowStatus::CheckingSync,
+            CloudSyncHealth::NoFiles => CloudBackupSettingsRowStatus::NoFiles,
+            CloudSyncHealth::AuthorizationRequired(message) => {
+                CloudBackupSettingsRowStatus::AuthorizationRequired(message.clone())
+            }
+            CloudSyncHealth::Unavailable => CloudBackupSettingsRowStatus::DriveUnavailable,
+            CloudSyncHealth::Failed(message) => {
+                CloudBackupSettingsRowStatus::Error(message.clone())
+            }
+        }
+    }
+
+    fn is_verification_stale(&self) -> bool {
+        if !matches!(self.configured.passkey, CloudBackupPasskeyState::Available) {
+            return false;
+        }
+
+        let CloudBackupVerificationState::Verified { last_verified_at, .. } =
+            self.configured.verification
+        else {
+            return false;
+        };
+
+        let Some(last_verified_at) = last_verified_at else {
+            return true;
+        };
+
+        let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) else {
+            return false;
+        };
+
+        now.as_secs().saturating_sub(last_verified_at) >= STALE_VERIFICATION_THRESHOLD.as_secs()
     }
 
     fn active_operation(&self) -> Option<CloudBackupExclusiveOperationClaim> {
@@ -1374,11 +1448,61 @@ mod tests {
         )
     }
 
+    fn configured_state(
+        verification: CloudBackupVerificationState,
+        sync_health: CloudSyncHealth,
+    ) -> CloudBackupReducerState {
+        let mut state = CloudBackupReducerState::default();
+        state.phase = CloudBackupLifecyclePhase::Configured;
+        state.configured.passkey = CloudBackupPasskeyState::Available;
+        state.configured.verification = verification;
+        state.sync_health = sync_health;
+        state
+    }
+
     #[test]
     fn disabled_projects_disabled_lifecycle() {
         let model = CloudBackupStateReducer::default();
 
         assert_eq!(model.public_state().lifecycle, CloudBackupLifecycle::Disabled);
+        assert_eq!(
+            model.public_state().settings_row_status,
+            CloudBackupSettingsRowStatus::Disabled
+        );
+    }
+
+    #[test]
+    fn settings_row_status_projects_sync_health() {
+        let state = configured_state(
+            CloudBackupVerificationState::NotVerified,
+            CloudSyncHealth::AuthorizationRequired("wrong account".into()),
+        );
+
+        assert_eq!(
+            state.settings_row_status(),
+            CloudBackupSettingsRowStatus::AuthorizationRequired("wrong account".into())
+        );
+    }
+
+    #[test]
+    fn settings_row_status_prioritizes_verification_before_sync_health() {
+        let state =
+            configured_state(CloudBackupVerificationState::Required, CloudSyncHealth::AllUploaded);
+
+        assert_eq!(state.settings_row_status(), CloudBackupSettingsRowStatus::Unverified);
+    }
+
+    #[test]
+    fn settings_row_status_recommends_stale_verification() {
+        let state = configured_state(
+            CloudBackupVerificationState::Verified { report: None, last_verified_at: Some(0) },
+            CloudSyncHealth::AllUploaded,
+        );
+
+        assert_eq!(
+            state.settings_row_status(),
+            CloudBackupSettingsRowStatus::VerificationRecommended
+        );
     }
 
     #[test]

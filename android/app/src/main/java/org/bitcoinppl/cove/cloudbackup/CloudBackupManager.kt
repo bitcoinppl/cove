@@ -24,6 +24,7 @@ import org.bitcoinppl.cove_core.CloudBackupProgress
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupState
+import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.CloudBackupSyncState
@@ -74,6 +75,9 @@ class CloudBackupManager private constructor(
 
     val lifecycle: CloudBackupLifecycle
         get() = state.lifecycle
+
+    val settingsRowStatus: CloudBackupSettingsRowStatus
+        get() = state.settingsRowStatus
 
     val configuredState
         get() = (state.lifecycle as? CloudBackupLifecycle.Configured)?.v1
@@ -290,7 +294,8 @@ class CloudBackupManager private constructor(
     private fun apply(message: CloudBackupReconcileMessage) {
         val wasDisablingCloudBackup = isDisablingCloudBackup
         when (message) {
-            is CloudBackupReconcileMessage.Lifecycle -> state = state.copy(lifecycle = message.v1)
+            is CloudBackupReconcileMessage.Lifecycle ->
+                state = state.copy(lifecycle = message.v1, settingsRowStatus = message.v2)
             is CloudBackupReconcileMessage.EnableCompleted -> Unit
         }.let {}
         refreshPersistedEnabledState()

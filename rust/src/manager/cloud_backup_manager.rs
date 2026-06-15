@@ -110,6 +110,27 @@ pub enum CloudBackupStatus {
     Error(String),
 }
 
+/// Shared settings row state projected for Swift and Kotlin presentation
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudBackupSettingsRowStatus {
+    Disabled,
+    Disabling,
+    SettingUp,
+    Restoring,
+    Active,
+    PasskeyMissing,
+    PasskeyProviderUnsupported,
+    Unverified,
+    Confirming,
+    VerificationRecommended,
+    CheckingSync,
+    Syncing,
+    NoFiles,
+    DriveUnavailable,
+    Error(String),
+    AuthorizationRequired(String),
+}
+
 /// Whether saved passkey confirmation was user-triggered or flow-triggered
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SavedPasskeyConfirmationMode {
@@ -212,7 +233,7 @@ pub(crate) enum CloudBackupDisableOutcome {
 /// Typed state delta sent from Rust to Swift and Kotlin reconcilers
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
-    Lifecycle(Box<CloudBackupLifecycle>),
+    Lifecycle(Box<CloudBackupLifecycle>, CloudBackupSettingsRowStatus),
     EnableCompleted(CloudBackupEnableContext),
 }
 
@@ -408,11 +429,15 @@ pub struct CloudBackupRetryContext {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CloudBackupState {
     pub lifecycle: CloudBackupLifecycle,
+    pub settings_row_status: CloudBackupSettingsRowStatus,
 }
 
 impl Default for CloudBackupState {
     fn default() -> Self {
-        Self { lifecycle: CloudBackupLifecycle::Disabled }
+        Self {
+            lifecycle: CloudBackupLifecycle::Disabled,
+            settings_row_status: CloudBackupSettingsRowStatus::Disabled,
+        }
     }
 }
 
@@ -1340,18 +1365,21 @@ impl RustCloudBackupManager {
     }
 
     fn apply_model_event(&self, event: CloudBackupStateReducerEvent) -> bool {
-        match self.state.write().apply_event(event) {
-            Ok(effects) => {
-                self.send_model_effects(effects);
-                true
-            }
+        let effects = match self.state.write().apply_event(event) {
+            Ok(effects) => effects,
             Err(rejection) => match rejection {},
-        }
+        };
+
+        self.send_model_effects(effects);
+        true
     }
 
     fn send_model_effects(&self, effects: CloudBackupStateReducerEffects) {
         if let Some(lifecycle) = effects.lifecycle {
-            self.send(Message::Lifecycle(Box::new(lifecycle)));
+            self.send(Message::Lifecycle(
+                Box::new(lifecycle),
+                self.state.read().public_state().settings_row_status,
+            ));
         }
 
         if let Some(context) = effects.enable_completed {

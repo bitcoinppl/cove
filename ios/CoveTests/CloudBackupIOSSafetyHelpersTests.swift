@@ -63,45 +63,6 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertFalse(CatastrophicErrorView.CloudProbeState.noBackup.allowsRestoreAttempt)
     }
 
-    func testSettingsRowDoesNotShowActiveForUnhealthySyncHealth() {
-        XCTAssertEqual(
-            cloudBackupSettingsRowStatus(
-                isUnverified: false,
-                hasPendingUploadVerification: false,
-                isVerificationStale: false,
-                syncHealth: .allUploaded
-            ),
-            .active
-        )
-        XCTAssertEqual(
-            cloudBackupSettingsRowStatus(
-                isUnverified: false,
-                hasPendingUploadVerification: false,
-                isVerificationStale: false,
-                syncHealth: .unavailable
-            ),
-            .unavailable
-        )
-        XCTAssertEqual(
-            cloudBackupSettingsRowStatus(
-                isUnverified: false,
-                hasPendingUploadVerification: false,
-                isVerificationStale: false,
-                syncHealth: .authorizationRequired("auth required")
-            ),
-            .authorizationRequired("auth required")
-        )
-        XCTAssertEqual(
-            cloudBackupSettingsRowStatus(
-                isUnverified: false,
-                hasPendingUploadVerification: false,
-                isVerificationStale: false,
-                syncHealth: .failed("sync failed")
-            ),
-            .failed("sync failed")
-        )
-    }
-
     func testDetailHeaderUsesActiveOnlyForConfirmedUploads() {
         XCTAssertEqual(
             cloudBackupDetailHeaderTitle(syncHealth: .allUploaded),

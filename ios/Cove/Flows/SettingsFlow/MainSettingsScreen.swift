@@ -33,46 +33,6 @@ private enum AlertState: Equatable {
     case extraSetPinError(String)
 }
 
-enum CloudBackupSettingsRowStatus: Equatable {
-    case unverified
-    case confirming
-    case active
-    case verificationRecommended
-    case checkingSync
-    case syncing
-    case noFiles
-    case unavailable
-    case authorizationRequired(String)
-    case failed(String)
-}
-
-func cloudBackupSettingsRowStatus(
-    isUnverified: Bool,
-    hasPendingUploadVerification: Bool,
-    isVerificationStale: Bool,
-    syncHealth: CloudSyncHealth
-) -> CloudBackupSettingsRowStatus {
-    if isUnverified { return .unverified }
-    if hasPendingUploadVerification { return .confirming }
-
-    switch syncHealth {
-    case .allUploaded:
-        return isVerificationStale ? .verificationRecommended : .active
-    case .unknown:
-        return .checkingSync
-    case .uploading:
-        return .syncing
-    case .noFiles:
-        return .noFiles
-    case let .authorizationRequired(message):
-        return .authorizationRequired(message)
-    case .unavailable:
-        return .unavailable
-    case let .failed(message):
-        return .failed(message)
-    }
-}
-
 struct MainSettingsScreen: View {
     @Environment(AppManager.self) private var app
     @Environment(AuthManager.self) private var auth
@@ -354,14 +314,29 @@ struct MainSettingsScreen: View {
 
     @ViewBuilder
     private func cloudBackupEnabledStatus(manager: CloudBackupManager) -> some View {
-        let status = cloudBackupSettingsRowStatus(
-            isUnverified: manager.isUnverified,
-            hasPendingUploadVerification: manager.hasPendingUploadVerification,
-            isVerificationStale: manager.isVerificationStale,
-            syncHealth: manager.syncHealth
-        )
+        let status = manager.settingsRowStatus
 
         switch status {
+        case .disabled, .disabling, .settingUp, .restoring:
+            cloudBackupStatusContent(
+                symbol: "icloud",
+                title: "Cloud Backup",
+                color: Color.secondary
+            )
+        case .passkeyMissing:
+            cloudBackupStatusContent(
+                symbol: "exclamationmark.icloud.fill",
+                title: "Cloud Backup Passkey Missing",
+                message: "Backups can't be restored until you add a new passkey",
+                color: Color.statusWarning
+            )
+        case .passkeyProviderUnsupported:
+            cloudBackupStatusContent(
+                symbol: "exclamationmark.icloud.fill",
+                title: "Cloud Backup Passkey Unsupported",
+                message: "Open to choose a supported passkey provider",
+                color: Color.statusWarning
+            )
         case .unverified:
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud",
@@ -408,7 +383,7 @@ struct MainSettingsScreen: View {
                 message: "No iCloud backup files found",
                 color: Color.statusWarning
             )
-        case .unavailable:
+        case .driveUnavailable:
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud",
                 title: "iCloud Drive Unavailable",
@@ -422,7 +397,7 @@ struct MainSettingsScreen: View {
                 message: message,
                 color: Color.statusWarning
             )
-        case let .failed(message):
+        case let .error(message):
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud",
                 title: "Cloud Backup Error",

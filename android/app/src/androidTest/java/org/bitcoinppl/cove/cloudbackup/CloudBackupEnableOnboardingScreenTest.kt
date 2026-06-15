@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupState
+import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
 import org.junit.Rule
 import org.junit.Test
 
@@ -25,7 +26,13 @@ class CloudBackupEnableOnboardingScreenTest {
         compose.setContent {
             CoveTheme(darkTheme = true) {
                 CloudBackupScreenFrame(
-                    manager = CloudBackupManager(CloudBackupState(CloudBackupLifecycle.Disabled)),
+                    manager =
+                        CloudBackupManager(
+                            CloudBackupState(
+                                CloudBackupLifecycle.Disabled,
+                                CloudBackupSettingsRowStatus.Disabled,
+                            ),
+                        ),
                     onBack = {},
                     onRecreate = {},
                     onReinitialize = {},
