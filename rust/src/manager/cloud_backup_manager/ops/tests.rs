@@ -46,7 +46,7 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableOutcome,
     CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupKeychain,
     CloudBackupLifecycle, CloudBackupManagerAction, CloudBackupOtherBackupsState,
-    CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
+    CloudBackupPasskeyChoiceIntent, CloudBackupRestoreEvent, CloudBackupRootPrompt,
     CloudBackupVerificationOutcome, CloudBackupVerificationPresentation,
     CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
     DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
@@ -7192,6 +7192,74 @@ async fn restore_missing_wallet_listing_fails_closed_without_finalizing_empty_st
     assert!(error.to_string().contains("wallet files missing"), "{error}");
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(7));
     assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(existing_namespace));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restore_activation_upload_failure_does_not_mark_backup_enabled() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let wallet = xpub_only_wallet_metadata();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    let prf_key = [7u8; 32];
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &prf_key, &[9; 32]).unwrap();
+
+    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted).unwrap());
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        record_id.clone(),
+        encrypted_wallet_backup_bytes(&wallet, &master_key, "restore-revision", 1).await,
+    );
+    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+    globals.cloud.fail_wallet_backup_upload("activation upload failed");
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+
+    let (sender, receiver) = flume::bounded(1);
+    call!(manager.supervisor.start_restore_from_cloud_backup_with_events(sender)).await.unwrap();
+
+    let failure_message = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            match receiver.recv_async().await.expect("receive restore event") {
+                CloudBackupRestoreEvent::Progress(_) => {}
+                CloudBackupRestoreEvent::Failed(message) => break message,
+                other => panic!("expected restore failure event, got {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("restore failure event");
+
+    assert!(failure_message.contains("activation upload failed"), "{failure_message}");
+    wait_for_test_condition(
+        Duration::from_secs(1),
+        "restore failure should update lifecycle",
+        || {
+            matches!(
+                manager.state().lifecycle,
+                CloudBackupLifecycle::Failed(failure)
+                    if failure.message.contains("activation upload failed")
+            )
+        },
+    )
+    .await;
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+    assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
 }
 
 #[tokio::test(flavor = "current_thread")]
