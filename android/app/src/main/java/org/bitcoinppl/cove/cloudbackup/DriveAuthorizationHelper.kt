@@ -128,11 +128,14 @@ internal class SharedPreferencesDriveAccountBindingStore(
 internal fun verifyDriveAccountBinding(
     store: DriveAccountBindingStore,
     identity: DriveAccountIdentity?,
+    bindIfMissing: Boolean = true,
 ) {
     val actual = identity ?: throw DriveAccountBindingException.MissingIdentity()
     val selected = store.selectedIdentity()
     if (selected == null) {
-        store.bindIdentity(actual)
+        if (bindIfMissing) {
+            store.bindIdentity(actual)
+        }
         return
     }
 
@@ -168,6 +171,11 @@ internal class CachingDriveAuthorization(
         tokenMutex.withLock {
             val now = elapsedRealtime()
             val currentCacheKey = cacheKey()
+            if (currentCacheKey == null) {
+                cachedAccessToken = null
+                return@withLock delegate.accessToken(interactive)
+            }
+
             cachedAccessToken?.let { cached ->
                 if (cached.cacheKey == currentCacheKey && cached.expiresAtMs > now) {
                     cachedAccessToken = cached.copy(expiresAtMs = now + cacheWindowMs)

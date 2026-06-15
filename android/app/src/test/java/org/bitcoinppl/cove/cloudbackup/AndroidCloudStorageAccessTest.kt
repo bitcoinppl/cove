@@ -175,6 +175,25 @@ class AndroidCloudStorageAccessTest {
         }
 
     @Test
+    fun cachingDriveAuthorizationDoesNotCacheWhenCacheKeyIsUnavailable() =
+        runBlocking {
+            val delegate = RecordingDriveAuthorization()
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { 0 },
+                cacheWindowMs = 1_000,
+                cacheKey = { null },
+            )
+
+            assertEquals("token-1", authorization.accessToken(interactive = false).token)
+
+            delegate.token = "token-2"
+
+            assertEquals("token-2", authorization.accessToken(interactive = false).token)
+            assertEquals(listOf(false, false), delegate.accessRequests)
+        }
+
+    @Test
     fun cachingDriveAuthorizationDoesNotRefreshWhileClearIsRunning() =
         runTest {
             val delegate = BlockingClearDriveAuthorization()
@@ -234,6 +253,16 @@ class AndroidCloudStorageAccessTest {
         val error = runCatching { verifyDriveAccountBinding(store, mismatch) }.exceptionOrNull()
 
         assertTrue(error is DriveAccountBindingException.Mismatch)
+    }
+
+    @Test
+    fun driveAccountBindingValidationDoesNotPersistUnverifiedAccount() {
+        val store = TestDriveAccountBindingStore()
+        val probe = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+
+        verifyDriveAccountBinding(store, probe, bindIfMissing = false)
+
+        assertEquals(null, store.selectedIdentity())
     }
 
     @Test
@@ -354,7 +383,9 @@ class AndroidCloudStorageAccessTest {
             delegate.account = second
 
             assertEquals("token-2", authorization.accessToken(interactive = false).token)
-            assertEquals(listOf(false, false), delegate.accessRequests)
+            delegate.token = "token-3"
+            assertEquals("token-3", authorization.accessToken(interactive = false).token)
+            assertEquals(listOf(false, false, false), delegate.accessRequests)
         }
 
     @Test
