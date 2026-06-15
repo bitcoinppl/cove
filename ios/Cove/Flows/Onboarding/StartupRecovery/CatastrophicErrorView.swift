@@ -64,20 +64,10 @@ struct CatastrophicErrorView: View {
 
     private func probeCloud() {
         Task.detached {
-            let cloud = CloudStorage(cloudStorage: CloudStorageAccessImpl())
-            do {
-                let exists = try await cloud.hasRestorableCloudBackup(policy: .consentAllowed)
-                await MainActor.run {
-                    cloudProbeState = Self.cloudProbeState(hasBackup: exists)
-                }
-            } catch let error as CloudStorageError {
-                await MainActor.run {
-                    cloudProbeState = Self.cloudProbeState(error: error)
-                }
-            } catch {
-                await MainActor.run {
-                    cloudProbeState = .inconclusive(error.localizedDescription)
-                }
+            let result = await checkCatastrophicCloudRestoreBackup(provider: .iCloudDrive)
+
+            await MainActor.run {
+                cloudProbeState = Self.cloudProbeState(result: result)
             }
         }
     }
@@ -88,24 +78,17 @@ struct CatastrophicErrorView: View {
         }
     }
 
-    static func cloudProbeState(hasBackup: Bool) -> CloudProbeState {
-        hasBackup ? .available : .noBackup
-    }
-
-    static func cloudProbeState(error: CloudStorageError) -> CloudProbeState {
-        switch error {
-        case let .Offline(message):
-            .offline(message)
-        case let .NotAvailable(message),
-             let .AuthorizationRequired(message):
-            .inconclusive(message)
-        case .QuotaExceeded:
-            .inconclusive("iCloud storage is full")
-        case .NotFound:
+    static func cloudProbeState(result: CatastrophicCloudRestoreResult) -> CloudProbeState {
+        switch result {
+        case .backupFound:
+            .available
+        case .noBackupFound:
             .noBackup
-        case let .DownloadFailed(message),
-             let .UploadFailed(message),
-             let .InvalidNamespace(message):
+        case let .offline(message):
+            .offline(message)
+        case let .inconclusive(message):
+            .inconclusive(message)
+        case let .unreadable(message):
             .unreadable(message)
         }
     }

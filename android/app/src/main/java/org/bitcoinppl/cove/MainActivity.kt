@@ -84,7 +84,6 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationPolicy
 import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
-import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
@@ -98,6 +97,7 @@ import org.bitcoinppl.cove_core.bootstrap
 import org.bitcoinppl.cove_core.activeMigration
 import org.bitcoinppl.cove_core.bootstrapProgress
 import org.bitcoinppl.cove_core.cancelBootstrap
+import org.bitcoinppl.cove_core.checkCatastrophicCloudRestoreBackup
 import org.bitcoinppl.cove_core.resetBootstrapForRestore
 import org.bitcoinppl.cove_core.resetLocalDataForCatastrophicRecovery
 import org.bitcoinppl.cove_core.startupDiagnosticTextReport
@@ -107,6 +107,8 @@ import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.AlertDisplayType
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.CatastrophicCloudRestoreProvider
+import org.bitcoinppl.cove_core.CatastrophicCloudRestoreResult
 import org.bitcoinppl.cove_core.ColdWalletRoute
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.GlobalConfigKey
@@ -120,8 +122,6 @@ import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletType
-import org.bitcoinppl.cove_core.device.CloudAccessPolicy
-import org.bitcoinppl.cove_core.device.CloudStorage
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 import java.time.Instant
 
@@ -283,16 +283,17 @@ class MainActivity : FragmentActivity() {
                 catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Checking
                 catastrophicCloudRestoreCheckJob = lifecycleScope.launch {
                     try {
-                        val hasBackupFiles =
-                            CloudStorage(AndroidCloudStorageAccess(this@MainActivity))
-                                .hasRestorableCloudBackup(CloudAccessPolicy.CONSENT_ALLOWED)
+                        val result =
+                            checkCatastrophicCloudRestoreBackup(
+                                CatastrophicCloudRestoreProvider.GOOGLE_DRIVE,
+                            )
 
                         if (catastrophicRecoveryAttemptId != attemptId || !needsCatastrophicRecovery) {
                             return@launch
                         }
 
                         catastrophicCloudRestoreCheck =
-                            catastrophicCloudRestoreCheckResult(hasBackupFiles)
+                            CatastrophicCloudRestoreCheck.Complete(result)
                     } catch (error: kotlinx.coroutines.CancellationException) {
                         throw error
                     } catch (error: Throwable) {
@@ -302,8 +303,10 @@ class MainActivity : FragmentActivity() {
 
                         Log.w(TAG, "[STARTUP] failed to check cloud backup before catastrophic reset", error)
                         catastrophicCloudRestoreCheck =
-                            CatastrophicCloudRestoreCheck.Failed(
-                                catastrophicCloudRestoreErrorMessage(error),
+                            CatastrophicCloudRestoreCheck.Complete(
+                                CatastrophicCloudRestoreResult.Inconclusive(
+                                    "Cove could not check for a Cloud Backup.",
+                                ),
                             )
                     } finally {
                         if (catastrophicRecoveryAttemptId == attemptId) {
@@ -1268,6 +1271,8 @@ private fun CatastrophicRecoveryView(
     onContactSupport: () -> Unit,
 ) {
     var showWipeConfirmation by remember { mutableStateOf(false) }
+    val cloudRestoreResult =
+        (cloudRestoreCheck as? CatastrophicCloudRestoreCheck.Complete)?.result
 
     BackHandler(enabled = true) {}
 
@@ -1311,10 +1316,11 @@ private fun CatastrophicRecoveryView(
                     },
                 )
             }
-            if (cloudRestoreCheck is CatastrophicCloudRestoreCheck.Failed) {
+            val failureMessage = cloudRestoreResult?.failureMessage
+            if (failureMessage != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    cloudRestoreCheck.message,
+                    failureMessage,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -1361,7 +1367,7 @@ private fun CatastrophicRecoveryView(
         )
     }
 
-    if (cloudRestoreCheck is CatastrophicCloudRestoreCheck.BackupFound) {
+    if (cloudRestoreResult is CatastrophicCloudRestoreResult.BackupFound) {
         AlertDialog(
             onDismissRequest = onDismissRestoreFromCloud,
             title = { Text("Restore from Cloud Backup?") },

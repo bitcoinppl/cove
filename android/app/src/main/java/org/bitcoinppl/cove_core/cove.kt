@@ -1097,6 +1097,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_updatepricesifneeded(
     ): Short
+    external fun uniffi_cove_checksum_func_check_catastrophic_cloud_restore_backup(
+    ): Short
     external fun uniffi_cove_checksum_func_cspp_master_key_directory(
     ): Short
     external fun uniffi_cove_checksum_func_cspp_master_key_filename(
@@ -3377,6 +3379,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_func_updatepricesifneeded(
     ): Long
+    external fun uniffi_cove_fn_func_check_catastrophic_cloud_restore_backup(`provider`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_func_cspp_master_key_directory(uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_cspp_master_key_filename(uniffi_out_err: UniffiRustCallStatus,
@@ -3610,6 +3614,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_updatepricesifneeded() != 5753.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_check_catastrophic_cloud_restore_backup() != 2763.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_cspp_master_key_directory() != 24318.toShort()) {
@@ -34354,6 +34361,185 @@ public object FfiConverterTypeByteReaderError : FfiConverterRustBuffer<ByteReade
 
 
 
+enum class CatastrophicCloudRestoreProvider {
+
+    I_CLOUD_DRIVE,
+    GOOGLE_DRIVE;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCatastrophicCloudRestoreProvider: FfiConverterRustBuffer<CatastrophicCloudRestoreProvider> {
+    override fun read(buf: ByteBuffer) = try {
+        CatastrophicCloudRestoreProvider.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CatastrophicCloudRestoreProvider) = 4UL
+
+    override fun write(value: CatastrophicCloudRestoreProvider, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+sealed class CatastrophicCloudRestoreResult {
+
+    object BackupFound : CatastrophicCloudRestoreResult()
+
+
+    data class NoBackupFound(
+        val `message`: kotlin.String) : CatastrophicCloudRestoreResult()
+
+    {
+
+
+        companion object
+    }
+
+    data class Offline(
+        val `message`: kotlin.String) : CatastrophicCloudRestoreResult()
+
+    {
+
+
+        companion object
+    }
+
+    data class Unreadable(
+        val `message`: kotlin.String) : CatastrophicCloudRestoreResult()
+
+    {
+
+
+        companion object
+    }
+
+    data class Inconclusive(
+        val `message`: kotlin.String) : CatastrophicCloudRestoreResult()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCatastrophicCloudRestoreResult : FfiConverterRustBuffer<CatastrophicCloudRestoreResult>{
+    override fun read(buf: ByteBuffer): CatastrophicCloudRestoreResult {
+        return when(buf.getInt()) {
+            1 -> CatastrophicCloudRestoreResult.BackupFound
+            2 -> CatastrophicCloudRestoreResult.NoBackupFound(
+                FfiConverterString.read(buf),
+                )
+            3 -> CatastrophicCloudRestoreResult.Offline(
+                FfiConverterString.read(buf),
+                )
+            4 -> CatastrophicCloudRestoreResult.Unreadable(
+                FfiConverterString.read(buf),
+                )
+            5 -> CatastrophicCloudRestoreResult.Inconclusive(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CatastrophicCloudRestoreResult): ULong = when(value) {
+        is CatastrophicCloudRestoreResult.BackupFound -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CatastrophicCloudRestoreResult.NoBackupFound -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is CatastrophicCloudRestoreResult.Offline -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is CatastrophicCloudRestoreResult.Unreadable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is CatastrophicCloudRestoreResult.Inconclusive -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+    }
+
+    override fun write(value: CatastrophicCloudRestoreResult, buf: ByteBuffer) {
+        when(value) {
+            is CatastrophicCloudRestoreResult.BackupFound -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CatastrophicCloudRestoreResult.NoBackupFound -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is CatastrophicCloudRestoreResult.Offline -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is CatastrophicCloudRestoreResult.Unreadable -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is CatastrophicCloudRestoreResult.Inconclusive -> {
+                buf.putInt(5)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
 
 sealed class CatastrophicRecoveryException: kotlin.Exception() {
 
@@ -58283,6 +58469,21 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
         // lift function
         { Unit },
 
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `checkCatastrophicCloudRestoreBackup`(`provider`: CatastrophicCloudRestoreProvider) : CatastrophicCloudRestoreResult {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_cove_fn_func_check_catastrophic_cloud_restore_backup(
+        FfiConverterTypeCatastrophicCloudRestoreProvider.lower(`provider`),),
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeCatastrophicCloudRestoreResult.lift(it) },
         // Error FFI converter
         UniffiNullRustCallStatusErrorHandler,
     )

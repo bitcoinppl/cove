@@ -17,7 +17,7 @@ use std::time::Duration;
 use act_zero::{Addr, call, send};
 use cove_cspp::backup_data::{MASTER_KEY_RECORD_ID, wallet_record_id};
 use cove_device::cloud_storage::{
-    CloudStorage, CloudStorageClient, CloudStorageError, CloudSyncHealth,
+    CloudAccessPolicy, CloudStorage, CloudStorageClient, CloudStorageError, CloudSyncHealth,
 };
 use cove_tokio::task::spawn_actor;
 use cove_util::ResultExt as _;
@@ -1126,6 +1126,37 @@ impl CloudBackupError {
 pub enum CatastrophicRecoveryError {
     #[error("{0}")]
     Failure(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum CatastrophicCloudRestoreResult {
+    BackupFound,
+    NoBackupFound { message: String },
+    Offline { message: String },
+    Unreadable { message: String },
+    Inconclusive { message: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CatastrophicCloudRestoreProvider {
+    ICloudDrive,
+    GoogleDrive,
+}
+
+impl CatastrophicCloudRestoreProvider {
+    fn storage_name(self) -> &'static str {
+        match self {
+            Self::ICloudDrive => "iCloud",
+            Self::GoogleDrive => "Google Drive",
+        }
+    }
+
+    fn account_name(self) -> &'static str {
+        match self {
+            Self::ICloudDrive => "iCloud account",
+            Self::GoogleDrive => "Google account",
+        }
+    }
 }
 
 #[uniffi::export(callback_interface)]
@@ -2741,6 +2772,79 @@ pub fn reset_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRe
     reinit_database_after_catastrophic_recovery()
 }
 
+#[uniffi::export]
+pub async fn check_catastrophic_cloud_restore_backup(
+    provider: CatastrophicCloudRestoreProvider,
+) -> CatastrophicCloudRestoreResult {
+    catastrophic_cloud_restore_check_result(
+        CloudStorage::global().has_restorable_cloud_backup(CloudAccessPolicy::ConsentAllowed).await,
+        provider,
+    )
+}
+
+fn catastrophic_cloud_restore_check_result(
+    result: Result<bool, CloudStorageError>,
+    provider: CatastrophicCloudRestoreProvider,
+) -> CatastrophicCloudRestoreResult {
+    match result {
+        Ok(true) => CatastrophicCloudRestoreResult::BackupFound,
+        Ok(false) => CatastrophicCloudRestoreResult::NoBackupFound {
+            message: format!(
+                "No Cloud Backup was found for the selected {}.",
+                provider.account_name()
+            ),
+        },
+        Err(error) => catastrophic_cloud_restore_error(error, provider),
+    }
+}
+
+fn catastrophic_cloud_restore_error(
+    error: CloudStorageError,
+    provider: CatastrophicCloudRestoreProvider,
+) -> CatastrophicCloudRestoreResult {
+    match error {
+        CloudStorageError::AuthorizationRequired(message) => {
+            if message.trim().is_empty() {
+                return CatastrophicCloudRestoreResult::Inconclusive {
+                    message: format!(
+                        "{} access is required before local data can be reset.",
+                        provider.storage_name()
+                    ),
+                };
+            }
+
+            CatastrophicCloudRestoreResult::Inconclusive { message }
+        }
+        CloudStorageError::Offline(message) => CatastrophicCloudRestoreResult::Offline {
+            message: format!("Cannot check {} while offline: {message}", provider.storage_name()),
+        },
+        CloudStorageError::NotFound(_) => CatastrophicCloudRestoreResult::NoBackupFound {
+            message: format!(
+                "No Cloud Backup was found for the selected {}.",
+                provider.account_name()
+            ),
+        },
+        CloudStorageError::DownloadFailed(message) => CatastrophicCloudRestoreResult::Unreadable {
+            message: format!("Cloud Backup data could not be read: {message}"),
+        },
+        CloudStorageError::InvalidNamespace(_) => CatastrophicCloudRestoreResult::Unreadable {
+            message: "Cloud Backup data could not be read.".into(),
+        },
+        CloudStorageError::QuotaExceeded => CatastrophicCloudRestoreResult::Inconclusive {
+            message: format!(
+                "{} quota is exceeded. Cove could not check for a Cloud Backup.",
+                provider.storage_name()
+            ),
+        },
+        CloudStorageError::NotAvailable(message) => CatastrophicCloudRestoreResult::Inconclusive {
+            message: format!("{} is unavailable: {message}", provider.storage_name()),
+        },
+        CloudStorageError::UploadFailed(message) => {
+            CatastrophicCloudRestoreResult::Inconclusive { message }
+        }
+    }
+}
+
 fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {
     use crate::database::migration::log_remove_file;
 
@@ -3112,6 +3216,28 @@ mod tests {
             CloudStorageIssue::from(&CloudStorageError::NotFound("wallet".into())),
             CloudStorageIssue::NotFound
         );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_check_result_reports_backup_found() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Ok(true),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::BackupFound
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_check_result_reports_no_backup_found() {
+        assert!(matches!(
+            catastrophic_cloud_restore_check_result(
+                Ok(false),
+                CatastrophicCloudRestoreProvider::ICloudDrive
+            ),
+            CatastrophicCloudRestoreResult::NoBackupFound { .. }
+        ));
     }
 
     #[test]

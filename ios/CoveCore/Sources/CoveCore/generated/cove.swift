@@ -19308,6 +19308,171 @@ public func FfiConverterTypeByteReaderError_lower(_ value: ByteReaderError) -> R
 }
 
 
+
+public enum CatastrophicCloudRestoreProvider: Equatable, Hashable {
+
+    case iCloudDrive
+    case googleDrive
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CatastrophicCloudRestoreProvider: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCatastrophicCloudRestoreProvider: FfiConverterRustBuffer {
+    typealias SwiftType = CatastrophicCloudRestoreProvider
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CatastrophicCloudRestoreProvider {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .iCloudDrive
+
+        case 2: return .googleDrive
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CatastrophicCloudRestoreProvider, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .iCloudDrive:
+            writeInt(&buf, Int32(1))
+
+
+        case .googleDrive:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCatastrophicCloudRestoreProvider_lift(_ buf: RustBuffer) throws -> CatastrophicCloudRestoreProvider {
+    return try FfiConverterTypeCatastrophicCloudRestoreProvider.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCatastrophicCloudRestoreProvider_lower(_ value: CatastrophicCloudRestoreProvider) -> RustBuffer {
+    return FfiConverterTypeCatastrophicCloudRestoreProvider.lower(value)
+}
+
+
+
+
+public enum CatastrophicCloudRestoreResult: Equatable, Hashable {
+
+    case backupFound
+    case noBackupFound(message: String
+    )
+    case offline(message: String
+    )
+    case unreadable(message: String
+    )
+    case inconclusive(message: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CatastrophicCloudRestoreResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCatastrophicCloudRestoreResult: FfiConverterRustBuffer {
+    typealias SwiftType = CatastrophicCloudRestoreResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CatastrophicCloudRestoreResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .backupFound
+
+        case 2: return .noBackupFound(message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 3: return .offline(message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 4: return .unreadable(message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 5: return .inconclusive(message: try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CatastrophicCloudRestoreResult, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .backupFound:
+            writeInt(&buf, Int32(1))
+
+
+        case let .noBackupFound(message):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(message, into: &buf)
+
+
+        case let .offline(message):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(message, into: &buf)
+
+
+        case let .unreadable(message):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(message, into: &buf)
+
+
+        case let .inconclusive(message):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(message, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCatastrophicCloudRestoreResult_lift(_ buf: RustBuffer) throws -> CatastrophicCloudRestoreResult {
+    return try FfiConverterTypeCatastrophicCloudRestoreResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCatastrophicCloudRestoreResult_lower(_ value: CatastrophicCloudRestoreResult) -> RustBuffer {
+    return FfiConverterTypeCatastrophicCloudRestoreResult.lower(value)
+}
+
+
+
 public
 enum CatastrophicRecoveryError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -38923,6 +39088,21 @@ public func updatePricesIfNeeded()async   {
 
         )
 }
+public func checkCatastrophicCloudRestoreBackup(provider: CatastrophicCloudRestoreProvider)async  -> CatastrophicCloudRestoreResult  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_func_check_catastrophic_cloud_restore_backup(FfiConverterTypeCatastrophicCloudRestoreProvider_lower(provider)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCatastrophicCloudRestoreResult_lift,
+            errorHandler: nil
+
+        )
+}
 public func csppMasterKeyDirectory() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -39280,6 +39460,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_updatepricesifneeded() != 5753) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_check_catastrophic_cloud_restore_backup() != 2763) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_cspp_master_key_directory() != 24318) {
