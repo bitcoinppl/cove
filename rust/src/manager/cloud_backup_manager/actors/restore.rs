@@ -11,8 +11,7 @@ use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::ops::try_restore_from_local_master_key;
 use crate::manager::cloud_backup_manager::wallets::{
     DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher,
-    PreparedWalletBackup, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
-    WalletRestoreSession,
+    WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
 
 use crate::manager::cloud_backup_manager::{
@@ -25,7 +24,10 @@ use crate::manager::cloud_backup_manager::{
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 
-use super::{CloudBackupSupervisor, CloudBackupWriteClient};
+use super::{
+    CloudBackupSupervisor, CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode,
+    CloudBackupWriteClient,
+};
 
 #[derive(Clone, Debug)]
 pub(crate) enum CloudBackupRestoreEvent {
@@ -81,32 +83,6 @@ async fn lookup_wallet_backup(
 ) -> (String, Result<WalletBackupLookup<DownloadedWalletBackup>, CloudBackupError>) {
     let lookup = reader.lookup(&record_id).await;
     (record_id, lookup)
-}
-
-async fn verify_uploaded_wallets(
-    cloud: &CloudStorageClient,
-    namespace_id: &str,
-    uploaded_wallets: &[PreparedWalletBackup],
-) -> Result<(), CloudBackupError> {
-    for wallet in uploaded_wallets {
-        let uploaded = cloud
-            .is_backup_uploaded(namespace_id.to_string(), wallet.record_id.clone())
-            .await
-            .map_err(|error| {
-                blocking_cloud_error(
-                    BlockingCloudStep::Restore,
-                    CloudBackupError::cloud_storage_context("verify restored wallet upload", error),
-                )
-            })?;
-
-        if !uploaded {
-            return Err(CloudBackupError::Internal(
-                "restored wallet was not visible in active cloud backup".into(),
-            ));
-        }
-    }
-
-    Ok(())
 }
 
 #[derive(Clone, Debug)]
@@ -387,9 +363,6 @@ impl RestoreOperation {
                 .upload_all_wallets(&writes, &cloud, &active.namespace_id, &critical_key)
                 .await
                 .map_err(|error| blocking_cloud_error(BlockingCloudStep::Restore, error))?;
-
-            verify_uploaded_wallets(&cloud, &active.namespace_id, &uploaded_wallets).await?;
-            let active_wallet_count = uploaded_wallets.len() as u32;
             let master_key =
                 cove_cspp::master_key::MasterKey::from_bytes(*active.master_key.as_bytes());
             let passkey = active.passkey.as_ref().map(|passkey| RestoredPasskeyMaterial {
@@ -398,14 +371,25 @@ impl RestoreOperation {
             });
 
             self.save_keychain_state(master_key, passkey, active.namespace_id.clone()).await?;
-            let now = u64::try_from(jiff::Timestamp::now().as_second())
-                .map_err(|_| CloudBackupError::Internal("invalid system clock".into()))?;
-
-            let state = PersistedCloudBackupState::default()
-                .mark_enabled_preserving_verification(now, active_wallet_count);
-
-            self.persist_cloud_backup_state(state, "persist restored cloud backup state".into())
-                .await?;
+            let uploaded_wallets = uploaded_wallets
+                .into_iter()
+                .map(|wallet| {
+                    CloudBackupUploadedWallet::new(
+                        wallet.metadata.id,
+                        wallet.record_id,
+                        wallet.revision_hash,
+                    )
+                })
+                .collect();
+            writes
+                .finalize_uploaded_wallets(
+                    cloud.clone(),
+                    active.namespace_id.clone(),
+                    uploaded_wallets,
+                    CloudBackupUploadedWalletsStateMode::PreserveVerification,
+                )
+                .await
+                .map_err(|error| blocking_cloud_error(BlockingCloudStep::Restore, error))?;
 
             CloudBackupStatus::Enabled
         } else if skipped_duplicate_count > 0 {

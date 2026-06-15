@@ -154,6 +154,7 @@ struct MockCloudState {
     delete_namespace_error: Option<CloudStorageError>,
     list_namespaces_error: Option<CloudStorageError>,
     reflect_uploaded_wallets_in_listing: bool,
+    uploaded_wallets_pending_confirmation: bool,
     uploaded_wallet_backups: Vec<(String, String)>,
     wallet_backup_success_count: usize,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
@@ -312,6 +313,10 @@ impl MockCloudStorage {
 
     pub(crate) fn set_reflect_uploaded_wallets_in_listing(&self, enabled: bool) {
         self.state.lock().reflect_uploaded_wallets_in_listing = enabled;
+    }
+
+    pub(crate) fn set_uploaded_wallets_pending_confirmation(&self, enabled: bool) {
+        self.state.lock().uploaded_wallets_pending_confirmation = enabled;
     }
 
     pub(crate) fn uploaded_wallet_backup_count(&self) -> usize {
@@ -628,6 +633,12 @@ impl CloudStorageAccess for MockCloudStorage {
         let state = self.state.lock();
         if record_id == MASTER_KEY_RECORD_ID {
             return Ok(state.master_key_backups.contains_key(&namespace));
+        }
+
+        if state.uploaded_wallets_pending_confirmation
+            && state.uploaded_wallet_backups.contains(&(namespace.clone(), record_id.clone()))
+        {
+            return Ok(false);
         }
 
         Ok(state.wallet_backups.contains_key(&(namespace, record_id)))

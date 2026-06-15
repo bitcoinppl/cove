@@ -6907,6 +6907,58 @@ async fn restore_counts_unsupported_wallet_versions_as_failures() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn restore_succeeds_when_cloud_upload_confirmation_lags() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+    globals
+        .cloud
+        .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
+    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
+
+    let wallet = xpub_only_wallet_metadata();
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+
+    let record_id = wallet_record_id(wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        record_id.clone(),
+        encrypted_wallet_backup_bytes(&wallet, &master_key, "restored-revision", 1).await,
+    );
+    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+    globals.cloud.set_uploaded_wallets_pending_confirmation(true);
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(report.wallets_restored, 1);
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Enabled
+    );
+    let sync_state = Database::global().cloud_blob_sync_states.get(&record_id).unwrap();
+    assert!(
+        matches!(
+            sync_state,
+            Some(PersistedCloudBlobSyncState {
+                state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
+                    | PersistedCloudBlobState::Confirmed(_),
+                ..
+            })
+        ),
+        "unexpected sync state: {sync_state:?}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
