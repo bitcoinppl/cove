@@ -33,7 +33,6 @@ impl CloudBackupUploadedWallet {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum CloudBackupUploadedWalletsStateMode {
     PreserveVerification,
-    PreserveVerificationWithUploadedCount,
     ResetVerification,
 }
 

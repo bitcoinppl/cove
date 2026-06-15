@@ -7020,7 +7020,7 @@ async fn restore_counts_unsupported_wallet_versions_as_failures() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn restore_succeeds_when_cloud_upload_confirmation_lags() {
+async fn restore_queues_reupload_when_cloud_upload_confirmation_lags() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -7061,14 +7061,11 @@ async fn restore_succeeds_when_cloud_upload_confirmation_lags() {
     assert!(
         matches!(
             sync_state,
-            Some(PersistedCloudBlobSyncState {
-                state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
-                    | PersistedCloudBlobState::Confirmed(_),
-                ..
-            })
+            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
         ),
         "unexpected sync state: {sync_state:?}"
     );
+    assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 0);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -7155,8 +7152,14 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
     assert!(report.failed_wallet_errors.is_empty(), "{:?}", report.failed_wallet_errors);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(2));
     let active_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
-    assert!(globals.cloud.has_wallet_backup(&active_namespace, &first_record_id));
-    assert!(globals.cloud.has_wallet_backup(&active_namespace, &second_record_id));
+    for record_id in [&first_record_id, &second_record_id] {
+        let sync_state = Database::global().cloud_blob_sync_states.get(record_id).unwrap().unwrap();
+        assert_eq!(sync_state.namespace_id, active_namespace);
+        assert!(
+            matches!(sync_state.state, PersistedCloudBlobState::Dirty(_)),
+            "unexpected sync state: {sync_state:?}"
+        );
+    }
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -7195,7 +7198,7 @@ async fn restore_missing_wallet_listing_fails_closed_without_finalizing_empty_st
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn restore_activation_upload_failure_does_not_mark_backup_enabled() {
+async fn restore_activation_upload_failure_keeps_restore_successful_and_queues_upload() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -7219,7 +7222,9 @@ async fn restore_activation_upload_failure_does_not_mark_backup_enabled() {
         record_id.clone(),
         encrypted_wallet_backup_bytes(&wallet, &master_key, "restore-revision", 1).await,
     );
-    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+    globals
+        .cloud
+        .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id(&record_id)]);
     globals.cloud.fail_wallet_backup_upload("activation upload failed");
     globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: prf_key.to_vec(),
@@ -7230,36 +7235,42 @@ async fn restore_activation_upload_failure_does_not_mark_backup_enabled() {
     let (sender, receiver) = flume::bounded(1);
     call!(manager.supervisor.start_restore_from_cloud_backup_with_events(sender)).await.unwrap();
 
-    let failure_message = tokio::time::timeout(Duration::from_secs(1), async {
+    let report = tokio::time::timeout(Duration::from_secs(1), async {
         loop {
             match receiver.recv_async().await.expect("receive restore event") {
                 CloudBackupRestoreEvent::Progress(_) => {}
-                CloudBackupRestoreEvent::Failed(message) => break message,
-                other => panic!("expected restore failure event, got {other:?}"),
+                CloudBackupRestoreEvent::Complete(report) => break report,
+                CloudBackupRestoreEvent::Failed(message) => {
+                    panic!("restore should complete before background upload failure: {message}");
+                }
+                other => panic!("expected restore completion event, got {other:?}"),
             }
         }
     })
     .await
-    .expect("restore failure event");
+    .expect("restore completion event");
 
-    assert!(failure_message.contains("activation upload failed"), "{failure_message}");
+    assert_eq!(report.wallets_restored, 1);
     wait_for_test_condition(
         Duration::from_secs(1),
-        "restore failure should update lifecycle",
-        || {
-            matches!(
-                manager.state().lifecycle,
-                CloudBackupLifecycle::Failed(failure)
-                    if failure.message.contains("activation upload failed")
-            )
-        },
+        "background reupload should be attempted after restore",
+        || globals.cloud.wallet_backup_upload_attempt_count() > 0,
     )
     .await;
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
-        PersistedCloudBackupStatus::Disabled
+        PersistedCloudBackupStatus::Enabled
     );
-    assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
+    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(namespace.clone()));
+    let sync_state = Database::global().cloud_blob_sync_states.get(&record_id).unwrap().unwrap();
+    assert_eq!(sync_state.namespace_id, namespace);
+    assert!(
+        matches!(
+            sync_state.state,
+            PersistedCloudBlobState::Failed(CloudBlobFailedState { retryable: true, .. })
+        ),
+        "unexpected sync state: {sync_state:?}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -7305,6 +7316,58 @@ async fn restore_all_duplicate_wallets_preserves_existing_configured_state() {
     );
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(7));
     assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(existing_namespace));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restore_all_duplicate_wallets_activates_namespace_when_persisted_state_is_empty() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let duplicate_wallet = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![duplicate_wallet.clone()]);
+
+    let prf_key = [7u8; 32];
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &prf_key, &[9; 32]).unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(duplicate_wallet.id.as_ref());
+    globals.cloud.set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted).unwrap());
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        record_id.clone(),
+        encrypted_wallet_backup_bytes(&duplicate_wallet, &master_key, "duplicate-revision", 1)
+            .await,
+    );
+    globals
+        .cloud
+        .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id(&record_id)]);
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(report.wallets_restored, 0);
+    assert_eq!(report.wallets_failed, 0);
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Enabled
+    );
+    assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(1));
+    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(namespace.clone()));
+    let sync_state = Database::global().cloud_blob_sync_states.get(&record_id).unwrap().unwrap();
+    assert_eq!(sync_state.namespace_id, namespace);
+    assert!(
+        matches!(sync_state.state, PersistedCloudBlobState::Dirty(_)),
+        "unexpected sync state: {sync_state:?}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

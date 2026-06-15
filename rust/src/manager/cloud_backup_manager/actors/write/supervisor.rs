@@ -530,9 +530,6 @@ impl CloudBackupWriteSupervisor {
                     CloudBackupUploadedWalletsStateMode::PreserveVerification => {
                         CloudBackupStore::global().persist_enabled(wallet_count)?;
                     }
-                    CloudBackupUploadedWalletsStateMode::PreserveVerificationWithUploadedCount => {
-                        CloudBackupStore::global().persist_enabled(uploaded_wallets.len() as u32)?;
-                    }
                     CloudBackupUploadedWalletsStateMode::ResetVerification => {
                         CloudBackupStore::global()
                             .persist_enabled_reset_verification(wallet_count)?;

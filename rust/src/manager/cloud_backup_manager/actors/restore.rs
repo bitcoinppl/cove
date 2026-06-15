@@ -25,10 +25,7 @@ use crate::manager::cloud_backup_manager::{
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 
-use super::{
-    CloudBackupSupervisor, CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode,
-    CloudBackupWriteClient,
-};
+use super::CloudBackupSupervisor;
 
 #[derive(Clone, Debug)]
 pub(crate) enum CloudBackupRestoreEvent {
@@ -314,6 +311,7 @@ impl RestoreOperation {
         .await?;
 
         let mut first_success_namespace_index = None;
+        let mut first_duplicate_namespace_index = None;
         let mut skipped_duplicate_count = 0;
         for (index, (namespace_index, (_record_id, wallet))) in
             downloaded_wallets.iter().enumerate()
@@ -329,6 +327,7 @@ impl RestoreOperation {
                     }
                 }
                 Ok(WalletRestoreOutcome::SkippedDuplicate) => {
+                    first_duplicate_namespace_index.get_or_insert(*namespace_index);
                     skipped_duplicate_count += 1;
                 }
                 Err(CloudBackupError::Cancelled) => return Err(CloudBackupError::Cancelled),
@@ -353,21 +352,31 @@ impl RestoreOperation {
             return Err(CloudBackupError::Internal("all wallets failed to restore".into()));
         }
 
-        let active_namespace = first_success_namespace_index
+        let restored_namespace = first_success_namespace_index
+            .and_then(|index| namespace_wallets.get(index))
+            .map(|(namespace, _)| namespace);
+        let duplicate_namespace = first_duplicate_namespace_index
             .and_then(|index| namespace_wallets.get(index))
             .map(|(namespace, _)| namespace);
 
-        let restored_status = match active_namespace {
+        let restored_status = match restored_namespace {
             Some(active) => {
-                self.activate_restored_namespace(manager, &cloud, active).await?;
+                self.activate_restored_namespace(manager, active).await?;
 
                 CloudBackupStatus::Enabled
             }
 
             None if skipped_duplicate_count > 0 => {
                 let state = RustCloudBackupManager::load_persisted_state();
+                if matches!(state, PersistedCloudBackupState::Disabled)
+                    && let Some(active) = duplicate_namespace
+                {
+                    self.activate_restored_namespace(manager, active).await?;
 
-                RustCloudBackupManager::runtime_status_for(&state)
+                    CloudBackupStatus::Enabled
+                } else {
+                    RustCloudBackupManager::runtime_status_for(&state)
+                }
             }
 
             None => {
@@ -398,45 +407,29 @@ impl RestoreOperation {
     async fn activate_restored_namespace(
         &self,
         manager: &RustCloudBackupManager,
-        cloud: &CloudStorageClient,
         active: &RestorableNamespace,
     ) -> Result<(), CloudBackupError> {
-        let critical_key = Zeroizing::new(active.master_key.critical_data_key());
-        let writes = CloudBackupWriteClient::for_operation(
-            manager.cloud_writes.clone(),
-            self.operation_claim,
-        );
-
-        let uploaded_wallets = CloudBackupStore::global()
-            .upload_all_wallets(&writes, cloud, &active.namespace_id, &critical_key)
-            .await
-            .map_err(|error| blocking_cloud_error(BlockingCloudStep::Restore, error))?;
-
         let master_key = MasterKey::from_bytes(*active.master_key.as_bytes());
         let passkey = active.passkey.as_ref().map(RestoredPasskeyMaterial::from);
+        let wallets = CloudBackupStore::global().all_wallets()?;
+        let wallet_count = wallets.len() as u32;
 
         self.save_keychain_state(master_key, passkey, active.namespace_id.clone()).await?;
 
-        let uploaded_wallets = uploaded_wallets
-            .into_iter()
-            .map(|wallet| {
-                CloudBackupUploadedWallet::new(
-                    wallet.metadata.id,
-                    wallet.record_id,
-                    wallet.revision_hash,
-                )
-            })
-            .collect();
+        let enabled_state = RustCloudBackupManager::load_persisted_state()
+            .mark_enabled_preserving_verification(
+                crate::manager::cloud_backup_manager::current_timestamp(),
+                wallet_count,
+            );
+        self.persist_cloud_backup_state(
+            enabled_state,
+            "persist restored cloud backup state".into(),
+        )
+        .await?;
 
-        writes
-            .finalize_uploaded_wallets(
-                cloud.clone(),
-                active.namespace_id.clone(),
-                uploaded_wallets,
-                CloudBackupUploadedWalletsStateMode::PreserveVerificationWithUploadedCount,
-            )
-            .await
-            .map_err(|error| blocking_cloud_error(BlockingCloudStep::Restore, error))?;
+        manager.mark_wallet_blobs_dirty_for_background_upload(
+            wallets.into_iter().map(|wallet| wallet.id),
+        )?;
 
         Ok(())
     }

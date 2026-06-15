@@ -336,13 +336,6 @@ impl MockCloudStorage {
         self.state.lock().master_key_backups.contains_key(namespace)
     }
 
-    pub(crate) fn has_wallet_backup(&self, namespace: &str, record_id: &str) -> bool {
-        self.state
-            .lock()
-            .wallet_backups
-            .contains_key(&(namespace.to_string(), record_id.to_string()))
-    }
-
     pub(crate) fn has_namespace(&self, namespace: &str) -> bool {
         let state = self.state.lock();
         state.master_key_backups.contains_key(namespace)

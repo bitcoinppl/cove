@@ -357,6 +357,12 @@ impl CloudBackupSupervisor {
         self.active_operation = None;
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_finished(claim);
+            if claim.operation() == CloudBackupExclusiveOperation::Restore
+                && let Err(error) =
+                    call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await
+            {
+                warn!("Failed to resume wallet uploads after restore: {error}");
+            }
         }
 
         Produces::ok(())
