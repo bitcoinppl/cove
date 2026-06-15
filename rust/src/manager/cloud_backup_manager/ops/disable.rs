@@ -11,9 +11,9 @@ use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedDisablingCloudBackup};
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CloudBackupDisableOutcome, CloudBackupError, CloudBackupKeychain,
-    CloudBackupOtherBackupsState, CloudBackupStatus, CloudOnlyOperation, OtherBackupsOperation,
-    RustCloudBackupManager,
+    BlockingCloudStep, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupDisableOutcome,
+    CloudBackupError, CloudBackupKeychain, CloudBackupOtherBackupsState, CloudBackupStatus,
+    CloudOnlyOperation, OtherBackupsOperation, RustCloudBackupManager,
 };
 
 const DISABLE_BLOCKING_MESSAGE: &str =
@@ -73,6 +73,14 @@ impl RustCloudBackupManager {
             PersistedCloudBackupState::Disabled => {
                 self.reconcile_runtime_status(CloudBackupStatus::Disabled);
                 return Ok(CloudBackupDisablePreparation::AlreadyDisabled);
+            }
+            PersistedCloudBackupState::Corrupted { .. } => {
+                self.reconcile_runtime_status(CloudBackupStatus::Error(
+                    CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into(),
+                ));
+                return Err(CloudBackupError::Internal(
+                    CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into(),
+                ));
             }
         };
 
@@ -291,7 +299,9 @@ impl RustCloudBackupManager {
                 disabling.delete_started_at.is_none()
             }
             PersistedCloudBackupState::Configured(_) => false,
-            PersistedCloudBackupState::Disabled => false,
+            PersistedCloudBackupState::Disabled | PersistedCloudBackupState::Corrupted { .. } => {
+                false
+            }
         }
     }
 
@@ -305,6 +315,11 @@ impl RustCloudBackupManager {
             }
             PersistedCloudBackupState::Disabled => {
                 return Ok(CloudBackupKeepEnabledPreparation::AlreadyDisabled);
+            }
+            PersistedCloudBackupState::Corrupted { .. } => {
+                return Err(CloudBackupError::Internal(
+                    CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into(),
+                ));
             }
         };
 
@@ -335,7 +350,8 @@ impl RustCloudBackupManager {
                 if current.disable_generation == disabling.disable_generation => {}
             PersistedCloudBackupState::Disabling(_)
             | PersistedCloudBackupState::Configured(_)
-            | PersistedCloudBackupState::Disabled => return Ok(false),
+            | PersistedCloudBackupState::Disabled
+            | PersistedCloudBackupState::Corrupted { .. } => return Ok(false),
         }
 
         Database::global()
@@ -348,7 +364,8 @@ impl RustCloudBackupManager {
 
     pub(crate) fn finish_keep_cloud_backup_enabled(&self) {
         let runtime_status = match Self::load_persisted_state() {
-            state @ PersistedCloudBackupState::Configured(_) => Self::runtime_status_for(&state),
+            state @ (PersistedCloudBackupState::Configured(_)
+            | PersistedCloudBackupState::Corrupted { .. }) => Self::runtime_status_for(&state),
             _ => CloudBackupStatus::Enabled,
         };
 

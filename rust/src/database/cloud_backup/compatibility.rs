@@ -78,6 +78,9 @@ impl From<PersistedLegacyCloudBackupState> for PersistedCloudBackupState {
         if matches!(state.status, PersistedCloudBackupStatus::Disabled) {
             return Self::Disabled;
         }
+        if matches!(state.status, PersistedCloudBackupStatus::Corrupted) {
+            return Self::corrupted("legacy persisted cloud backup state was marked corrupted");
+        }
 
         Self::Configured(PersistedConfiguredCloudBackup {
             passkey: legacy_passkey_state(state.status),
@@ -103,6 +106,7 @@ fn legacy_passkey_state(status: PersistedCloudBackupStatus) -> PersistedPasskeyS
         | PersistedCloudBackupStatus::Enabled
         | PersistedCloudBackupStatus::Unverified
         | PersistedCloudBackupStatus::Disabling => PersistedPasskeyState::Available,
+        PersistedCloudBackupStatus::Corrupted => PersistedPasskeyState::Missing,
     }
 }
 
@@ -210,6 +214,9 @@ impl PersistedCloudBackupDomainRecord {
             PersistedCloudBackupState::Disabling(disabling) => {
                 PersistedBackupRecord::Disabling(disabling.clone())
             }
+            PersistedCloudBackupState::Corrupted { error } => {
+                PersistedBackupRecord::Corrupted { error: error.clone() }
+            }
         };
 
         Self { version: 2, backup }
@@ -230,6 +237,9 @@ impl PersistedCloudBackupDomainRecord {
             }
             PersistedBackupRecord::Disabling(disabling) => {
                 Ok(PersistedCloudBackupState::Disabling(disabling))
+            }
+            PersistedBackupRecord::Corrupted { error } => {
+                Ok(PersistedCloudBackupState::Corrupted { error })
             }
         }
     }
@@ -257,6 +267,7 @@ enum PersistedBackupRecord {
     Disabled,
     Configured(PersistedConfiguredCloudBackup),
     Disabling(PersistedDisablingCloudBackup),
+    Corrupted { error: String },
 }
 
 impl Serialize for PersistedCloudBlobSyncState {
@@ -470,6 +481,34 @@ mod tests {
         assert_eq!(encoded["backup"]["data"]["sync"]["wallet_count"], 2);
         assert!(encoded.get("status").is_none());
         assert!(encoded.get("last_sync").is_none());
+    }
+
+    #[test]
+    fn cloud_backup_state_serializes_corrupted_domain_shape() {
+        let state = PersistedCloudBackupState::corrupted("decode failed");
+
+        let encoded = serde_json::to_value(&state).unwrap();
+
+        assert_eq!(encoded["version"], 2);
+        assert_eq!(encoded["backup"]["state"], "Corrupted");
+        assert_eq!(encoded["backup"]["data"]["error"], "decode failed");
+    }
+
+    #[test]
+    fn cloud_backup_state_accepts_corrupted_domain_json() {
+        let state: PersistedCloudBackupState = serde_json::from_value(serde_json::json!({
+            "version": 2,
+            "backup": {
+                "state": "Corrupted",
+                "data": {
+                    "error": "decode failed"
+                }
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(state, PersistedCloudBackupState::corrupted("decode failed"));
+        assert_eq!(state.status(), PersistedCloudBackupStatus::Corrupted);
     }
 
     #[test]

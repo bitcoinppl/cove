@@ -39,7 +39,7 @@ impl Value for CloudBackupStateJson {
     {
         serde_json::from_slice(data).unwrap_or_else(|error| {
             error!("Failed to decode persisted cloud backup state: {error}");
-            PersistedCloudBackupState::Disabled
+            PersistedCloudBackupState::corrupted("local cloud backup state could not be decoded")
         })
     }
 
@@ -118,10 +118,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn corrupt_cloud_backup_state_json_decodes_to_disabled() {
+    fn corrupt_cloud_backup_state_json_decodes_to_corrupted_state() {
         let state = <CloudBackupStateJson as Value>::from_bytes(b"{not json");
 
-        assert_eq!(state, PersistedCloudBackupState::Disabled);
+        assert_eq!(
+            state,
+            PersistedCloudBackupState::corrupted("local cloud backup state could not be decoded")
+        );
     }
 
     #[test]

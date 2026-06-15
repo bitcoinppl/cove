@@ -31,17 +31,58 @@ struct CatastrophicErrorView: View {
         }
     }
 
+    private enum RecoveryConfirmation: Identifiable {
+        case restore
+        case wipe
+
+        var id: String {
+            switch self {
+            case .restore:
+                "restore"
+            case .wipe:
+                "wipe"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .restore:
+                "Restore from Cloud Backup?"
+            case .wipe:
+                "Wipe All Local Data?"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .restore:
+                "Cove found a Cloud Backup for the selected iCloud account. This will erase the damaged local data on this device and start Cloud Backup restore."
+            case .wipe:
+                "This will permanently delete all wallet data on this device. Make sure you have your recovery phrases backed up. This cannot be undone."
+            }
+        }
+
+        var actionTitle: String {
+            switch self {
+            case .restore:
+                "Erase and Restore"
+            case .wipe:
+                "Wipe Data"
+            }
+        }
+    }
+
     @State private var cloudProbeState: CloudProbeState = .checking
     @State private var cloudProbeTask: Task<Void, Never>?
-    @State private var showWipeConfirmation = false
+    @State private var recoveryConfirmation: RecoveryConfirmation?
 
     var body: some View {
         CatastrophicErrorContent(
             cloudProbeState: cloudProbeState,
-            onRestoreFromCloud: onRestoreFromCloud,
+            onRestoreFromCloud: { recoveryConfirmation = .restore },
             onRetryCheck: retryProbe,
             onContactSupport: contactSupport,
-            onWipeOnly: { showWipeConfirmation = true }
+            onWipeOnly: { recoveryConfirmation = .wipe }
         )
         .task {
             probeCloud()
@@ -50,14 +91,19 @@ struct CatastrophicErrorView: View {
             cloudProbeTask?.cancel()
             cloudProbeTask = nil
         }
-        .alert("Wipe All Local Data?", isPresented: $showWipeConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Wipe Data", role: .destructive) {
-                onWipeOnly()
-            }
-        } message: {
-            Text(
-                "This will permanently delete all wallet data on this device. Make sure you have your recovery phrases backed up. This cannot be undone."
+        .alert(item: $recoveryConfirmation) { confirmation in
+            Alert(
+                title: Text(confirmation.title),
+                message: Text(confirmation.message),
+                primaryButton: .destructive(Text(confirmation.actionTitle)) {
+                    switch confirmation {
+                    case .restore:
+                        onRestoreFromCloud()
+                    case .wipe:
+                        onWipeOnly()
+                    }
+                },
+                secondaryButton: .cancel()
             )
         }
     }

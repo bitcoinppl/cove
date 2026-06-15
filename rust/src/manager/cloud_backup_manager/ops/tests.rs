@@ -82,7 +82,9 @@ fn pending_enable_awaiting_confirmation(
 fn current_disable_generation() -> Option<u64> {
     match RustCloudBackupManager::load_persisted_state() {
         PersistedCloudBackupState::Disabling(disabling) => Some(disabling.disable_generation),
-        PersistedCloudBackupState::Configured(_) | PersistedCloudBackupState::Disabled => None,
+        PersistedCloudBackupState::Configured(_)
+        | PersistedCloudBackupState::Disabled
+        | PersistedCloudBackupState::Corrupted { .. } => None,
     }
 }
 

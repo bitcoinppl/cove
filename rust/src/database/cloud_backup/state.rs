@@ -10,6 +10,7 @@ pub enum PersistedCloudBackupStatus {
     Unverified,
     PasskeyMissing,
     Disabling,
+    Corrupted,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -18,14 +19,22 @@ pub enum PersistedCloudBackupState {
     Disabled,
     Configured(PersistedConfiguredCloudBackup),
     Disabling(PersistedDisablingCloudBackup),
+    Corrupted {
+        error: String,
+    },
 }
 
 impl PersistedCloudBackupState {
+    pub fn corrupted(error: impl Into<String>) -> Self {
+        Self::Corrupted { error: error.into() }
+    }
+
     pub fn status(&self) -> PersistedCloudBackupStatus {
         match self {
             Self::Disabled => PersistedCloudBackupStatus::Disabled,
             Self::Configured(configured) => configured.status(),
             Self::Disabling(_) => PersistedCloudBackupStatus::Disabling,
+            Self::Corrupted { .. } => PersistedCloudBackupStatus::Corrupted,
         }
     }
 
@@ -40,7 +49,7 @@ impl PersistedCloudBackupState {
     pub fn disabling(&self) -> Option<&PersistedDisablingCloudBackup> {
         match self {
             Self::Disabling(disabling) => Some(disabling),
-            Self::Disabled | Self::Configured(_) => None,
+            Self::Disabled | Self::Configured(_) | Self::Corrupted { .. } => None,
         }
     }
 
@@ -54,7 +63,7 @@ impl PersistedCloudBackupState {
 
     pub fn last_sync(&self) -> Option<u64> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.sync.last_sync,
             Self::Disabling(disabling) => disabling.previous_configured.sync.last_sync,
         }
@@ -62,7 +71,7 @@ impl PersistedCloudBackupState {
 
     pub fn wallet_count(&self) -> Option<u32> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.sync.wallet_count,
             Self::Disabling(disabling) => disabling.previous_configured.sync.wallet_count,
         }
@@ -70,7 +79,7 @@ impl PersistedCloudBackupState {
 
     pub fn last_verified_at(&self) -> Option<u64> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.verification.last_verified_at(),
             Self::Disabling(disabling) => {
                 disabling.previous_configured.verification.last_verified_at()
@@ -80,7 +89,7 @@ impl PersistedCloudBackupState {
 
     pub fn last_verification_requested_at(&self) -> Option<u64> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.verification.requested_at(),
             Self::Disabling(disabling) => disabling.previous_configured.verification.requested_at(),
         }
@@ -88,7 +97,7 @@ impl PersistedCloudBackupState {
 
     pub fn last_verification_dismissed_at(&self) -> Option<u64> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.verification.dismissed_at(),
             Self::Disabling(disabling) => disabling.previous_configured.verification.dismissed_at(),
         }
@@ -98,7 +107,7 @@ impl PersistedCloudBackupState {
         &self,
     ) -> Option<&PersistedPendingVerificationCompletion> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.pending_verification_completion.as_ref(),
             Self::Disabling(disabling) => {
                 disabling.previous_configured.pending_verification_completion.as_ref()
@@ -146,10 +155,12 @@ impl PersistedCloudBackupState {
     pub fn mark_enabled_preserving_verification(&self, last_sync: u64, wallet_count: u32) -> Self {
         let verification = match self {
             Self::Configured(configured) => configured.verification.clone(),
-            Self::Disabled => PersistedBackupVerificationState::NotVerified {
-                requested_at: None,
-                dismissed_at: None,
-            },
+            Self::Disabled | Self::Corrupted { .. } => {
+                PersistedBackupVerificationState::NotVerified {
+                    requested_at: None,
+                    dismissed_at: None,
+                }
+            }
             Self::Disabling(disabling) => disabling.previous_configured.verification.clone(),
         };
 

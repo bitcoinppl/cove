@@ -60,7 +60,8 @@ impl IntegrityDowngrade {
                 PersistedCloudBackupStatus::Unverified => Some(current.clone()),
                 PersistedCloudBackupStatus::PasskeyMissing
                 | PersistedCloudBackupStatus::Disabling
-                | PersistedCloudBackupStatus::Disabled => None,
+                | PersistedCloudBackupStatus::Disabled
+                | PersistedCloudBackupStatus::Corrupted => None,
             },
         }
     }
@@ -180,7 +181,10 @@ impl RustCloudBackupManager {
 
     pub(crate) fn persist_verification_result(&self, result: &DeepVerificationResult) {
         let current = RustCloudBackupManager::load_persisted_state();
-        if matches!(current.status(), PersistedCloudBackupStatus::Disabled) {
+        if matches!(
+            current.status(),
+            PersistedCloudBackupStatus::Disabled | PersistedCloudBackupStatus::Corrupted
+        ) {
             return;
         }
 
@@ -231,7 +235,8 @@ impl RustCloudBackupManager {
             }
             PersistedCloudBackupStatus::PasskeyMissing
             | PersistedCloudBackupStatus::Disabling
-            | PersistedCloudBackupStatus::Disabled => {}
+            | PersistedCloudBackupStatus::Disabled
+            | PersistedCloudBackupStatus::Corrupted => {}
         }
     }
 

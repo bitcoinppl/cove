@@ -91,6 +91,10 @@ type LocalWalletSecret = crate::backup::model::WalletSecret;
 const PASSKEY_RP_ID: &str = "covebitcoinwallet.com";
 pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str =
     "master key backup is missing from cloud storage";
+pub(crate) const CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE: &str = concat!(
+    "Cloud Backup local state could not be read. ",
+    "Contact support before changing Cloud Backup settings."
+);
 pub(super) const CLOUD_BACKUP_IO_CONCURRENCY: usize = 4;
 type Message = CloudBackupReconcileMessage;
 
@@ -1194,6 +1198,9 @@ impl RustCloudBackupManager {
                 CloudBackupStatus::Enabled
             }
             PersistedCloudBackupStatus::PasskeyMissing => CloudBackupStatus::PasskeyMissing,
+            PersistedCloudBackupStatus::Corrupted => {
+                CloudBackupStatus::Error(CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into())
+            }
         }
     }
 
@@ -2306,6 +2313,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn mark_wallet_blob_dirty(&self, wallet_id: WalletId) {
+        // disabling can be canceled, so wallet changes still need queued uploads
         if !matches!(
             Self::load_persisted_state(),
             PersistedCloudBackupState::Configured(_) | PersistedCloudBackupState::Disabling(_)
@@ -2688,8 +2696,9 @@ impl RustCloudBackupManager {
 
     /// Back up a newly created wallet, fire-and-forget
     ///
-    /// Returns immediately if cloud backup isn't enabled (e.g. during restore)
+    /// Returns immediately unless cloud backup is configured or disabling
     pub fn backup_new_wallet(&self, metadata: crate::wallet::metadata::WalletMetadata) {
+        // disabling can be canceled, so new wallets still need queued uploads
         if !matches!(
             Self::load_persisted_state(),
             PersistedCloudBackupState::Configured(_) | PersistedCloudBackupState::Disabling(_)
@@ -3223,6 +3232,16 @@ mod tests {
     }
 
     #[test]
+    fn corrupted_persisted_state_projects_runtime_error() {
+        assert_eq!(
+            RustCloudBackupManager::runtime_status_for(&PersistedCloudBackupState::corrupted(
+                "decode failed"
+            )),
+            CloudBackupStatus::Error(CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into())
+        );
+    }
+
+    #[test]
     fn pending_verification_completion_expires_future_created_at() {
         let completion = PendingVerificationCompletion {
             report: DeepVerificationReport {
@@ -3262,6 +3281,122 @@ mod tests {
             ),
             CatastrophicCloudRestoreResult::NoBackupFound { .. }
         ));
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_requires_access_for_blank_authorization_message() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::AuthorizationRequired(" ".into())),
+                CatastrophicCloudRestoreProvider::ICloudDrive
+            ),
+            CatastrophicCloudRestoreResult::Inconclusive {
+                message: "iCloud access is required before local data can be reset.".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_preserves_authorization_message() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::AuthorizationRequired("sign in before continuing".into())),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::Inconclusive {
+                message: "sign in before continuing".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_offline_state() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::Offline("offline".into())),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::Offline {
+                message: "Cannot check Google Drive while offline: offline".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_treats_not_found_as_no_backup() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::NotFound("namespace".into())),
+                CatastrophicCloudRestoreProvider::ICloudDrive
+            ),
+            CatastrophicCloudRestoreResult::NoBackupFound {
+                message: "No Cloud Backup was found for the selected iCloud account.".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_unreadable_download_failure() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::DownloadFailed("bad json".into())),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::Unreadable {
+                message: "Cloud Backup data could not be read: bad json".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_unreadable_invalid_namespace() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::InvalidNamespace("bad namespace".into())),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::Unreadable {
+                message: "Cloud Backup data could not be read.".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_quota_as_inconclusive() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::QuotaExceeded),
+                CatastrophicCloudRestoreProvider::ICloudDrive
+            ),
+            CatastrophicCloudRestoreResult::Inconclusive {
+                message: "iCloud quota is exceeded. Cove could not check for a Cloud Backup."
+                    .into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_provider_unavailable_as_inconclusive() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::NotAvailable("service unavailable".into())),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::Inconclusive {
+                message: "Google Drive is unavailable: service unavailable".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_upload_failure_as_inconclusive() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::UploadFailed("upload failed".into())),
+                CatastrophicCloudRestoreProvider::ICloudDrive
+            ),
+            CatastrophicCloudRestoreResult::Inconclusive { message: "upload failed".into() }
+        );
     }
 
     #[test]
