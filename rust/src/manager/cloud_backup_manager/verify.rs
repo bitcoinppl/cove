@@ -192,7 +192,7 @@ impl RustCloudBackupManager {
         match result {
             DeepVerificationResult::Verified(_) => {
                 new_state
-                    .mark_verified_at(jiff::Timestamp::now().as_second().try_into().unwrap_or(0));
+                    .mark_verified_at(crate::manager::cloud_backup_manager::current_timestamp());
             }
             DeepVerificationResult::AwaitingUploadConfirmation(_) => return,
             DeepVerificationResult::PasskeyConfirmed(_) => return,
@@ -223,7 +223,7 @@ impl RustCloudBackupManager {
                 };
 
                 new_state.mark_verification_required(Some(
-                    jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+                    crate::manager::cloud_backup_manager::current_timestamp(),
                 ));
 
                 if let Err(error) = self.persist_cloud_backup_state(

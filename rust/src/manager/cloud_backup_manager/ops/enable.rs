@@ -697,7 +697,7 @@ impl RustCloudBackupManager {
         let namespace_id = ready.master_key.namespace_id();
         let cloud = CloudStorage::global_explicit_client();
 
-        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let uploaded_at = crate::manager::cloud_backup_manager::current_timestamp();
         let encrypted_master = master_key_crypto::encrypt_master_key_with_remote_metadata(
             &ready.master_key,
             &ready.passkey.prf_key,

@@ -98,6 +98,10 @@ pub(crate) const CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE: &str = concat!(
 pub(super) const CLOUD_BACKUP_IO_CONCURRENCY: usize = 4;
 type Message = CloudBackupReconcileMessage;
 
+pub(crate) fn current_timestamp() -> u64 {
+    jiff::Timestamp::now().as_second().try_into().unwrap_or(0)
+}
+
 pub static CLOUD_BACKUP_MANAGER: LazyLock<Arc<RustCloudBackupManager>> =
     LazyLock::new(RustCloudBackupManager::init);
 
@@ -900,7 +904,7 @@ impl PendingVerificationCompletion {
             report,
             namespace_id,
             uploads,
-            created_at: Some(jiff::Timestamp::now().as_second().try_into().unwrap_or(0)),
+            created_at: Some(crate::manager::cloud_backup_manager::current_timestamp()),
         }
     }
 
@@ -918,7 +922,7 @@ impl PendingVerificationCompletion {
 
     pub(crate) fn is_expired(&self, now: u64, ttl_seconds: u64) -> bool {
         let Some(created_at) = self.created_at else {
-            // legacy persisted completions predate the TTL field and must be restarted
+            // legacy persisted completions predate created_at and must be restarted
             return true;
         };
 
@@ -2118,7 +2122,7 @@ impl RustCloudBackupManager {
 
     pub(crate) fn dismiss_verification_prompt_impl(&self) -> Result<(), CloudBackupError> {
         let mut state = Self::load_persisted_state();
-        let dismissed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let dismissed_at = crate::manager::cloud_backup_manager::current_timestamp();
         if !state.dismiss_verification_request(dismissed_at) {
             return Ok(());
         }
@@ -2326,7 +2330,7 @@ impl RustCloudBackupManager {
             return;
         };
 
-        let changed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let changed_at = crate::manager::cloud_backup_manager::current_timestamp();
         let record_id = wallet_record_id(wallet_id.as_ref());
         let sync_state = PersistedCloudBlobSyncState::wallet(
             namespace_id,
@@ -2382,7 +2386,7 @@ impl RustCloudBackupManager {
         &self,
         sync_state: &PersistedCloudBlobSyncState,
     ) -> bool {
-        let changed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let changed_at = crate::manager::cloud_backup_manager::current_timestamp();
 
         match self.replace_blob_state_if_current(
             sync_state,

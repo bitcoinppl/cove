@@ -35,7 +35,10 @@ impl RustCloudBackupManager {
     pub(crate) async fn finalize_pending_verification_if_ready(&self) {
         let Some(completion) = self.pending_verification_completion() else { return };
 
-        if completion.is_expired(current_timestamp(), PENDING_VERIFICATION_COMPLETION_TTL_SECONDS) {
+        if completion.is_expired(
+            crate::manager::cloud_backup_manager::current_timestamp(),
+            PENDING_VERIFICATION_COMPLETION_TTL_SECONDS,
+        ) {
             self.expire_pending_verification_completion(completion);
             return;
         }
@@ -336,8 +339,4 @@ impl RustCloudBackupManager {
         let source = self.current_verification_source();
         self.apply_verification_effect(CloudBackupVerificationCoordinator::fail(source, failure));
     }
-}
-
-fn current_timestamp() -> u64 {
-    jiff::Timestamp::now().as_second().try_into().unwrap_or(0)
 }

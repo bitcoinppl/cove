@@ -373,7 +373,7 @@ fn passkey_provider_hint(
         PasskeyRegistrationPlatform::Ios => BackupPasskeyRegistrationPlatform::Ios,
         PasskeyRegistrationPlatform::Android => BackupPasskeyRegistrationPlatform::Android,
     };
-    let registered_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+    let registered_at = crate::manager::cloud_backup_manager::current_timestamp();
 
     debug!(
         "Captured passkey provider hint aaguid={} registered_platform={registered_platform:?} registered_at={registered_at} name_suffix={name_suffix}",

@@ -897,7 +897,7 @@ fn clear_local_wallets() {
 pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
-    let changed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+    let changed_at = crate::manager::cloud_backup_manager::current_timestamp();
 
     Database::global()
         .cloud_blob_sync_states
@@ -936,7 +936,7 @@ pub(crate) fn persist_failed_blob_state_with_issue(
 ) {
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
-    let failed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+    let failed_at = crate::manager::cloud_backup_manager::current_timestamp();
 
     Database::global()
         .cloud_blob_sync_states

@@ -80,7 +80,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        let confirmed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let confirmed_at = crate::manager::cloud_backup_manager::current_timestamp();
         let mut updated = false;
 
         for state in states {

@@ -50,7 +50,7 @@ impl RustCloudBackupManager {
         let disabling = match Self::load_persisted_state() {
             PersistedCloudBackupState::Configured(configured) => {
                 let namespace_id = self.current_namespace_id()?;
-                let now = current_timestamp();
+                let now = crate::manager::cloud_backup_manager::current_timestamp();
                 let disabling = PersistedDisablingCloudBackup {
                     previous_configured: configured,
                     namespace_id,
@@ -142,7 +142,8 @@ impl RustCloudBackupManager {
             return Ok(None);
         };
 
-        disabling.delete_started_at = Some(current_timestamp());
+        disabling.delete_started_at =
+            Some(crate::manager::cloud_backup_manager::current_timestamp());
         disabling.last_error = None;
         disabling.retry_after = None;
         self.persist_disabling_state(&disabling, "persist cloud backup delete start")?;
@@ -238,7 +239,8 @@ impl RustCloudBackupManager {
         message: String,
     ) -> Result<(), CloudBackupError> {
         disabling.last_error = Some(message);
-        disabling.retry_after = Some(current_timestamp().saturating_add(5));
+        disabling.retry_after =
+            Some(crate::manager::cloud_backup_manager::current_timestamp().saturating_add(5));
         self.persist_disabling_state(&disabling, "persist cloud backup disable failure")
     }
 
@@ -413,10 +415,6 @@ async fn list_active_wallets_for_disable(
             }
         }
     }
-}
-
-fn current_timestamp() -> u64 {
-    jiff::Timestamp::now().as_second().try_into().unwrap_or(0)
 }
 
 fn next_disable_generation() -> u64 {

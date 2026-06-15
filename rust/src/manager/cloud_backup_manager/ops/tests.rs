@@ -401,7 +401,7 @@ fn persist_pending_master_key_confirmation(namespace_id: String, revision_hash: 
             PersistedCloudBlobState::UploadedPendingConfirmation(
                 CloudBlobUploadedPendingConfirmationState {
                     revision_hash: revision_hash.into(),
-                    uploaded_at: jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+                    uploaded_at: crate::manager::cloud_backup_manager::current_timestamp(),
                     attempt_count: 0,
                     last_checked_at: None,
                 },
@@ -903,7 +903,7 @@ async fn start_verification_with_pending_upload_consumes_prompt_decision() {
             &namespace_id,
             CloudBackupRecordKey::Wallet(metadata.id, record_id),
             "pending-revision".into(),
-            jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+            crate::manager::cloud_backup_manager::current_timestamp(),
         )
         .unwrap();
     assert_eq!(manager.model_snapshot().root_prompt, CloudBackupRootPrompt::Verification);
@@ -5121,7 +5121,7 @@ async fn upload_wallet_if_dirty_skips_fresh_uploading_state() {
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     persist_uploading_blob_state(
         metadata.id.clone(),
-        jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+        crate::manager::cloud_backup_manager::current_timestamp(),
     );
 
     manager.do_upload_wallet_if_dirty(&metadata.id).await.unwrap();
@@ -5743,7 +5743,7 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
             &namespace_id,
             CloudBackupRecordKey::Wallet(metadata.id, record_id.clone()),
             prepared.revision_hash.clone(),
-            jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+            crate::manager::cloud_backup_manager::current_timestamp(),
         )
         .unwrap();
     manager.replace_pending_verification_completion(PendingVerificationCompletion::new(

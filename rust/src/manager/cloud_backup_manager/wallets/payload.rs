@@ -151,7 +151,7 @@ pub async fn build_wallet_entry(
         &xpub,
     )?;
     let content_revision_hash = revision_payload.content_revision_hash()?;
-    let updated_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+    let updated_at = crate::manager::cloud_backup_manager::current_timestamp();
 
     Ok(WalletEntry {
         wallet_id: id.to_string(),

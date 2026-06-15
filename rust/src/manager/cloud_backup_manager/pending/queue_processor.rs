@@ -301,7 +301,7 @@ impl PendingUploadVerifier {
         current: &CloudBlobUploadedPendingConfirmationState,
         result: &BlobCheckResult,
     ) -> PersistedCloudBlobSyncState {
-        let checked_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let checked_at = crate::manager::cloud_backup_manager::current_timestamp();
         let next_attempt_count = current.attempt_count + 1;
 
         let state = match result {

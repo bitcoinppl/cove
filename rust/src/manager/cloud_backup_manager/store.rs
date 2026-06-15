@@ -39,7 +39,7 @@ impl CloudBackupStore {
         self.0
             .cloud_backup_state
             .set(&PersistedCloudBackupState::mark_enabled_reset_verification(
-                jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+                crate::manager::cloud_backup_manager::current_timestamp(),
                 wallet_count,
             ))
             .map_err_prefix("persist cloud backup state", CloudBackupError::Internal)
@@ -141,7 +141,7 @@ impl CloudBackupStore {
         &self,
         wallet_count: u32,
     ) -> Result<(), CloudBackupError> {
-        let now = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let now = crate::manager::cloud_backup_manager::current_timestamp();
         let current = self
             .0
             .cloud_backup_state
