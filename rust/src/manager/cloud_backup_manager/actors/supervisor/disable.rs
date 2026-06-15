@@ -418,14 +418,16 @@ impl CloudBackupSupervisor {
                 if let Err(error) =
                     call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await
                 {
-                    warn!("Failed to resume cloud backup uploads after Keep Enabled: {error}");
+                    error!("Failed to resume cloud backup uploads after Keep Enabled: {error}");
+                    manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(error.to_string()));
                 }
                 if let Err(error) =
                     call!(self.uploads.ensure_pending_upload_verification_loop()).await
                 {
-                    warn!(
+                    error!(
                         "Failed to resume pending cloud backup verification after Keep Enabled: {error}"
                     );
+                    manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(error.to_string()));
                 }
                 manager.refresh_sync_health();
 

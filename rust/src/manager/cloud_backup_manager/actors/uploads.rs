@@ -15,7 +15,8 @@ use crate::manager::cloud_backup_manager::pending::{
     build_pending_upload_backoff,
 };
 use crate::manager::cloud_backup_manager::{
-    RustCloudBackupManager, WalletId, live_upload_retry_delay_for_attempt,
+    CloudBackupError, CloudBackupSyncOutcome, RustCloudBackupManager, WalletId,
+    live_upload_retry_delay_for_attempt,
 };
 
 #[derive(Debug)]
@@ -292,8 +293,12 @@ impl CloudBackupUploadWorker {
         let states = match crate::database::Database::global().cloud_blob_sync_states.list() {
             Ok(states) => states,
             Err(error) => {
-                error!("Failed to load cloud blob sync states on startup: {error}");
-                return Produces::ok(());
+                let message = format!("failed to load cloud blob sync states on startup: {error}");
+                error!("{message}");
+                if let Some(manager) = self.manager() {
+                    manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(message.clone()));
+                }
+                return Err(CloudBackupError::Internal(message).into());
             }
         };
 
