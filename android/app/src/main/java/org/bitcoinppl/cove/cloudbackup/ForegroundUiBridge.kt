@@ -20,6 +20,7 @@ internal class ForegroundAuthorizationTimeoutException(
 
 object ForegroundUiBridge {
     private const val FOREGROUND_ACTIVITY_TIMEOUT_MS = 30_000L
+    private const val AUTHORIZATION_RESULT_TIMEOUT_MS = 5 * 60_000L
 
     private val currentActivity = MutableStateFlow<FragmentActivity?>(null)
     private val authorizationLock = Any()
@@ -86,7 +87,7 @@ object ForegroundUiBridge {
 
     suspend fun launchAuthorization(
         request: IntentSenderRequest,
-        timeoutMs: Long = FOREGROUND_ACTIVITY_TIMEOUT_MS,
+        timeoutMs: Long = AUTHORIZATION_RESULT_TIMEOUT_MS,
     ): ActivityResult = withContext(Dispatchers.Main.immediate) {
         val deferred = CompletableDeferred<ActivityResult>()
         try {
