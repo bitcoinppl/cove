@@ -316,39 +316,42 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            if (!bootstrapped) {
-                if (needsCatastrophicRecovery) {
-                    CatastrophicRecoveryView(
-                        cloudRestoreCheck = catastrophicCloudRestoreCheck,
-                        onRestoreFromCloud = {
-                            checkCloudBackupBeforeCatastrophicReset()
-                        },
-                        onConfirmRestoreFromCloud = {
-                            resetCatastrophicRecoveryAndRetry(
-                                logContext = "restore",
-                                clearDriveAccountBinding = false,
-                            )
-                        },
-                        onDismissRestoreFromCloud = {
-                            resetCatastrophicCloudRestoreCheck()
-                        },
-                        onWipeLocalData = {
-                            resetCatastrophicRecoveryAndRetry(
-                                logContext = "wipe",
-                                clearDriveAccountBinding = true,
-                            )
-                        },
-                        onContactSupport = {
-                            val intent =
-                                Intent(Intent.ACTION_SENDTO).apply {
-                                    data = Uri.parse("mailto:feedback@covebitcoinwallet.com")
-                                }
-                            runCatching { startActivity(intent) }.onFailure { error ->
-                                Log.w(TAG, "[STARTUP] failed to open support email", error)
+            if (!bootstrapped && needsCatastrophicRecovery) {
+                CatastrophicRecoveryView(
+                    cloudRestoreCheck = catastrophicCloudRestoreCheck,
+                    onRestoreFromCloud = {
+                        checkCloudBackupBeforeCatastrophicReset()
+                    },
+                    onConfirmRestoreFromCloud = {
+                        resetCatastrophicRecoveryAndRetry(
+                            logContext = "restore",
+                            clearDriveAccountBinding = false,
+                        )
+                    },
+                    onDismissRestoreFromCloud = {
+                        resetCatastrophicCloudRestoreCheck()
+                    },
+                    onWipeLocalData = {
+                        resetCatastrophicRecoveryAndRetry(
+                            logContext = "wipe",
+                            clearDriveAccountBinding = true,
+                        )
+                    },
+                    onContactSupport = {
+                        val intent =
+                            Intent(Intent.ACTION_SENDTO).apply {
+                                data = Uri.parse("mailto:feedback@covebitcoinwallet.com")
                             }
-                        },
-                    )
-                } else if (bootstrapError != null) {
+                        runCatching { startActivity(intent) }.onFailure { error ->
+                            Log.w(TAG, "[STARTUP] failed to open support email", error)
+                        }
+                    },
+                )
+                return@setContent
+            }
+
+            if (!bootstrapped) {
+                if (bootstrapError != null) {
                     BootstrapErrorView(
                         errorMessage = bootstrapError!!,
                         onCopyDiagnostics = {
