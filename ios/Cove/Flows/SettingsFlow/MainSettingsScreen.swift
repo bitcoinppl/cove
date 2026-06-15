@@ -275,15 +275,8 @@ struct MainSettingsScreen: View {
                     cloudBackupRestoringRow
                 case let .failed(failure):
                     cloudBackupErrorContent(message: failure.message)
-                case let .configured(configured):
-                    switch configured.passkey {
-                    case .available:
-                        cloudBackupEnabledRow(manager: manager)
-                    case .missing, .needsRepair:
-                        cloudBackupPasskeyMissingRow
-                    case .unsupportedProvider:
-                        cloudBackupUnsupportedProviderRow
-                    }
+                case .configured:
+                    cloudBackupEnabledRow(manager: manager)
                 }
             }
         }
@@ -438,48 +431,6 @@ struct MainSettingsScreen: View {
                     .foregroundStyle(color)
                     .lineLimit(1)
             }
-        }
-    }
-
-    private var cloudBackupPasskeyMissingRow: some View {
-        cloudBackupActionRow(
-            icon: "exclamationmark.icloud.fill",
-            title: "Cloud Backup Passkey Missing",
-            message: "Backups can't be restored until you add a new passkey"
-        )
-    }
-
-    private var cloudBackupUnsupportedProviderRow: some View {
-        cloudBackupActionRow(
-            icon: "exclamationmark.shield.fill",
-            title: "Supported Password Manager Required",
-            message: "Use Apple Passwords, 1Password, or Bitwarden"
-        )
-    }
-
-    private func cloudBackupActionRow(icon: String, title: String, message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .foregroundStyle(Color.statusError)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .foregroundStyle(Color.statusError)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-
-                Text(message)
-                    .font(.caption2)
-                    .foregroundStyle(Color.statusError.opacity(0.5))
-                    .lineLimit(1)
-            }
-
-            Spacer()
-            settingsChevron
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            app.pushRoute(Route.settings(.cloudBackup))
         }
     }
 

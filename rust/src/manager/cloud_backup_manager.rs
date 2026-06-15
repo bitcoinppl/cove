@@ -1422,10 +1422,10 @@ impl RustCloudBackupManager {
 
     fn send_model_effects(&self, effects: CloudBackupStateReducerEffects) {
         if let Some(lifecycle) = effects.lifecycle {
-            let settings_row_status = effects
-                .lifecycle_settings_row_status
-                .expect("lifecycle effects include settings row status");
-            self.send(Message::Lifecycle(Box::new(lifecycle), settings_row_status));
+            self.send(Message::Lifecycle(
+                Box::new(lifecycle.lifecycle),
+                lifecycle.settings_row_status,
+            ));
         }
 
         if let Some(context) = effects.enable_completed {
