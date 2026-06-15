@@ -1261,6 +1261,10 @@ impl CloudBackupSupervisor {
             .await
             .map_err_prefix("wait for pending enable remote cleanup", CloudBackupError::Internal)?
             .into_result()
+            .or_else(|error| match error {
+                CloudBackupError::CloudStorage(CloudStorageError::NotFound(_)) => Ok(()),
+                error => Err(error),
+            })
     }
 
     fn fail_pending_enable_discard(&mut self, pending: PendingEnableSession, message: String) {

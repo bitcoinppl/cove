@@ -6395,6 +6395,47 @@ async fn discard_pending_enable_retry_upload_deletes_remote_master_key() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn discard_pending_enable_retry_upload_treats_missing_remote_master_key_as_deleted() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    cspp.save_master_key(&master_key).unwrap();
+    globals.cloud.fail_delete_wallet_backup_not_found("already deleted");
+    replace_pending_enable_session_for_test(
+        &manager,
+        PendingEnableSession::retry_upload(
+            master_key,
+            UnpersistedPrfKey {
+                prf_key: [7; 32],
+                prf_salt: [9; 32],
+                credential_id: vec![1, 2, 3],
+                provider_hint: None,
+            },
+            CloudBackupEnableContext::settings_manual(),
+        ),
+    )
+    .await;
+
+    manager.discard_pending_enable_cloud_backup();
+
+    wait_for_test_condition(
+        Duration::from_secs(1),
+        "pending enable session should be discarded after missing remote cleanup",
+        || cspp.load_master_key_from_store().unwrap().is_none(),
+    )
+    .await;
+
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    assert!(cspp.load_master_key_from_store().unwrap().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_retry_upload_keeps_pending_state_when_remote_cleanup_fails() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();

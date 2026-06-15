@@ -315,6 +315,11 @@ impl MockCloudStorage {
             Some(CloudStorageError::DownloadFailed(message.into()));
     }
 
+    pub(crate) fn fail_delete_wallet_backup_not_found(&self, message: &str) {
+        self.state.lock().delete_wallet_backup_error =
+            Some(CloudStorageError::NotFound(message.into()));
+    }
+
     pub(crate) fn fail_delete_namespace_not_found(&self, message: &str) {
         self.state.lock().delete_namespace_error =
             Some(CloudStorageError::NotFound(message.into()));
