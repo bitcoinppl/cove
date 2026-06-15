@@ -323,6 +323,7 @@ struct MainSettingsScreen: View {
                 title: "Cloud Backup",
                 color: Color.secondary
             )
+
         case .passkeyMissing:
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud.fill",
@@ -330,6 +331,7 @@ struct MainSettingsScreen: View {
                 message: "Backups can't be restored until you add a new passkey",
                 color: Color.statusWarning
             )
+
         case .passkeyProviderUnsupported:
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud.fill",
@@ -337,24 +339,28 @@ struct MainSettingsScreen: View {
                 message: "Open to choose a supported passkey provider",
                 color: Color.statusWarning
             )
+
         case .unverified:
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud",
                 title: "Cloud Backup Unverified",
                 color: Color.statusWarning
             )
+
         case .confirming:
             cloudBackupStatusContent(
                 symbol: "arrow.clockwise.icloud",
                 title: "Cloud Backup Confirming",
                 color: Color.statusInfo
             )
+
         case .active:
             cloudBackupStatusContent(
                 symbol: "checkmark.icloud",
                 title: "Cloud Backup Enabled",
                 color: Color.statusSuccess
             )
+
         case .verificationRecommended:
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud",
@@ -362,6 +368,7 @@ struct MainSettingsScreen: View {
                 message: "Verification recommended",
                 color: Color.statusWarning
             )
+
         case .checkingSync:
             cloudBackupStatusContent(
                 symbol: "icloud",
@@ -369,6 +376,7 @@ struct MainSettingsScreen: View {
                 message: "Checking iCloud sync status",
                 color: Color.secondary
             )
+
         case .syncing:
             cloudBackupStatusContent(
                 symbol: "arrow.clockwise.icloud",
@@ -376,6 +384,7 @@ struct MainSettingsScreen: View {
                 message: "Uploading latest changes",
                 color: Color.statusInfo
             )
+
         case .noFiles:
             cloudBackupStatusContent(
                 symbol: "icloud.slash",
@@ -383,6 +392,7 @@ struct MainSettingsScreen: View {
                 message: "No iCloud backup files found",
                 color: Color.statusWarning
             )
+
         case .driveUnavailable:
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud",
@@ -390,6 +400,7 @@ struct MainSettingsScreen: View {
                 message: "Open to review Cloud Backup",
                 color: Color.statusWarning
             )
+
         case let .authorizationRequired(message):
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud",
@@ -397,6 +408,7 @@ struct MainSettingsScreen: View {
                 message: message,
                 color: Color.statusWarning
             )
+
         case let .error(message):
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud",

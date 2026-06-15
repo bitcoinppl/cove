@@ -1,36 +1,28 @@
 package org.bitcoinppl.cove
 
-import org.bitcoinppl.cove_core.device.CloudStorageException
+import org.bitcoinppl.cove_core.CatastrophicCloudRestoreResult
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MainActivityHelpersTest {
     @Test
-    fun catastrophicRestoreCheckRequiresFoundBackupBeforeConfirmation() {
-        assertTrue(catastrophicCloudRestoreCheckResult(false) is CatastrophicCloudRestoreCheck.Failed)
-        assertEquals(
-            CatastrophicCloudRestoreCheck.BackupFound,
-            catastrophicCloudRestoreCheckResult(true),
-        )
+    fun catastrophicRestoreBackupFoundHasNoFailureMessage() {
+        assertEquals(null, CatastrophicCloudRestoreResult.BackupFound.failureMessage)
     }
 
     @Test
     fun catastrophicRestoreAuthorizationErrorIsUserVisible() {
-        val message =
-            catastrophicCloudRestoreErrorMessage(
-                CloudStorageException.AuthorizationRequired("wrong google drive account"),
-            )
+        val message = CatastrophicCloudRestoreResult.Inconclusive("wrong google drive account")
+            .failureMessage
 
         assertEquals("wrong google drive account", message)
     }
 
     @Test
     fun catastrophicRestoreUnreadableBackupErrorIsUserVisible() {
-        val message =
-            catastrophicCloudRestoreErrorMessage(
-                CloudStorageException.DownloadFailed("master key backup is unreadable"),
-            )
+        val message = CatastrophicCloudRestoreResult.Unreadable(
+            "Cloud Backup data could not be read: master key backup is unreadable",
+        ).failureMessage
 
         assertEquals("Cloud Backup data could not be read: master key backup is unreadable", message)
     }

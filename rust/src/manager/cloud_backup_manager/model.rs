@@ -390,9 +390,9 @@ impl CloudBackupReducerState {
             CloudBackupStatus::Enabled => {}
         }
 
-        if matches!(
-            self.configured.verification,
-            CloudBackupVerificationState::AwaitingUploadConfirmation
+        if !matches!(
+            self.configured.pending_upload_verification,
+            PendingUploadVerificationState::Idle
         ) {
             return CloudBackupSettingsRowStatus::Confirming;
         }
@@ -995,6 +995,7 @@ pub(crate) enum CloudBackupStateReducerEventRejection {}
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct CloudBackupStateReducerEffects {
     pub(crate) lifecycle: Option<CloudBackupLifecycle>,
+    pub(crate) lifecycle_settings_row_status: Option<CloudBackupSettingsRowStatus>,
     pub(crate) enable_completed: Option<CloudBackupEnableContext>,
     pub(crate) status_changed: bool,
     pub(crate) verification_presentation_changed: bool,
@@ -1355,6 +1356,7 @@ impl CloudBackupStateReducer {
         let lifecycle = self.state.public_lifecycle();
         if lifecycle != previous_lifecycle {
             effects.lifecycle = Some(lifecycle);
+            effects.lifecycle_settings_row_status = Some(self.state.settings_row_status());
         }
 
         let status = self.state.status();
@@ -1497,6 +1499,23 @@ mod tests {
     }
 
     #[test]
+    fn settings_row_status_projects_pending_upload_confirmation() {
+        let mut state = configured_state(
+            CloudBackupVerificationState::NotVerified,
+            CloudSyncHealth::AllUploaded,
+        );
+
+        state.configured.pending_upload_verification = PendingUploadVerificationState::Confirming;
+
+        assert_eq!(state.settings_row_status(), CloudBackupSettingsRowStatus::Confirming);
+
+        state.configured.pending_upload_verification =
+            PendingUploadVerificationState::BlockedOnAuthorization;
+
+        assert_eq!(state.settings_row_status(), CloudBackupSettingsRowStatus::Confirming);
+    }
+
+    #[test]
     fn settings_row_status_recommends_stale_verification() {
         let state = configured_state(
             CloudBackupVerificationState::Verified { report: None, last_verified_at: Some(0) },
@@ -1557,6 +1576,10 @@ mod tests {
         assert_eq!(
             effects.lifecycle,
             Some(CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::DiscoveringExistingBackup)),
+        );
+        assert_eq!(
+            effects.lifecycle_settings_row_status,
+            Some(CloudBackupSettingsRowStatus::SettingUp)
         );
     }
 

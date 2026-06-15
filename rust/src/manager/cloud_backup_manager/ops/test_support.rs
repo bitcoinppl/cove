@@ -212,6 +212,15 @@ impl MockCloudStorage {
             .insert((namespace, record_id), CloudStorageError::Offline(message.into()));
     }
 
+    pub(crate) fn fail_wallet_backup_download(
+        &self,
+        namespace: String,
+        record_id: String,
+        error: CloudStorageError,
+    ) {
+        self.state.lock().wallet_backup_download_errors.insert((namespace, record_id), error);
+    }
+
     pub(crate) fn fail_list_wallet_files(&self, message: &str) {
         self.state.lock().list_wallet_files_error =
             Some(CloudStorageError::DownloadFailed(message.into()));

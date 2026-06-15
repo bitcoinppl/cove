@@ -301,7 +301,11 @@ class CloudBackupManager private constructor(
         refreshPersistedEnabledState()
 
         if (wasDisablingCloudBackup && state.lifecycle is CloudBackupLifecycle.Disabled) {
-            onCloudBackupDisabled?.invoke()
+            try {
+                onCloudBackupDisabled?.invoke()
+            } catch (error: Exception) {
+                Log.e(TAG, "cloud backup disabled callback failed", error)
+            }
         }
     }
 

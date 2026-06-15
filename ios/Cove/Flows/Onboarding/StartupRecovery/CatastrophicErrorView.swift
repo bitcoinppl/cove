@@ -32,6 +32,7 @@ struct CatastrophicErrorView: View {
     }
 
     @State private var cloudProbeState: CloudProbeState = .checking
+    @State private var cloudProbeTask: Task<Void, Never>?
     @State private var showWipeConfirmation = false
 
     var body: some View {
@@ -44,6 +45,10 @@ struct CatastrophicErrorView: View {
         )
         .task {
             probeCloud()
+        }
+        .onDisappear {
+            cloudProbeTask?.cancel()
+            cloudProbeTask = nil
         }
         .alert("Wipe All Local Data?", isPresented: $showWipeConfirmation) {
             Button("Cancel", role: .cancel) {}
@@ -58,15 +63,19 @@ struct CatastrophicErrorView: View {
     }
 
     private func retryProbe() {
+        cloudProbeTask?.cancel()
         cloudProbeState = .checking
         probeCloud()
     }
 
     private func probeCloud() {
-        Task.detached {
+        cloudProbeTask?.cancel()
+        cloudProbeTask = Task.detached {
             let result = await checkCatastrophicCloudRestoreBackup(provider: .iCloudDrive)
+            guard !Task.isCancelled else { return }
 
             await MainActor.run {
+                guard !Task.isCancelled else { return }
                 cloudProbeState = Self.cloudProbeState(result: result)
             }
         }

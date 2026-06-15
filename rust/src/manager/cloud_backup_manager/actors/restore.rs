@@ -346,7 +346,8 @@ impl RestoreOperation {
             .await?;
         }
 
-        if report.wallets_restored == 0 && report.wallets_failed > 0 {
+        if report.wallets_restored == 0 && report.wallets_failed > 0 && skipped_duplicate_count == 0
+        {
             self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
             return Err(CloudBackupError::Internal("all wallets failed to restore".into()));
         }
@@ -460,9 +461,10 @@ impl RestoreOperation {
                     if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
                         return Err(blocking_cloud_error(BlockingCloudStep::Restore, error));
                     }
+                    let error = "wallet backup could not be read".to_string();
                     warn!("Failed to download wallet backup: {error}");
                     report.wallets_failed += 1;
-                    report.failed_wallet_errors.push(error.to_string());
+                    report.failed_wallet_errors.push(error);
                 }
             }
 

@@ -918,6 +918,10 @@ impl PendingVerificationCompletion {
             return true;
         };
 
+        if created_at > now {
+            return true;
+        }
+
         now.saturating_sub(created_at) >= ttl_seconds
     }
 
@@ -1407,10 +1411,10 @@ impl RustCloudBackupManager {
 
     fn send_model_effects(&self, effects: CloudBackupStateReducerEffects) {
         if let Some(lifecycle) = effects.lifecycle {
-            self.send(Message::Lifecycle(
-                Box::new(lifecycle),
-                self.state.read().public_state().settings_row_status,
-            ));
+            let settings_row_status = effects
+                .lifecycle_settings_row_status
+                .expect("lifecycle effects include settings row status");
+            self.send(Message::Lifecycle(Box::new(lifecycle), settings_row_status));
         }
 
         if let Some(context) = effects.enable_completed {
@@ -3216,6 +3220,26 @@ mod tests {
             CloudStorageIssue::from(&CloudStorageError::NotFound("wallet".into())),
             CloudStorageIssue::NotFound
         );
+    }
+
+    #[test]
+    fn pending_verification_completion_expires_future_created_at() {
+        let completion = PendingVerificationCompletion {
+            report: DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace_id: "namespace".into(),
+            uploads: Vec::new(),
+            created_at: Some(11),
+        };
+
+        assert!(completion.is_expired(10, 60));
     }
 
     #[test]
