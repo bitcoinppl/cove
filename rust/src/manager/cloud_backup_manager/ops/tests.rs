@@ -34,6 +34,7 @@ use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim,
 };
+use crate::manager::cloud_backup_manager::verify::CloudBackupDeepVerificationStep;
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, WalletRestoreOutcome, WalletRestoreSession,
 };
@@ -41,10 +42,11 @@ use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, StagedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
-    CLOUD_BACKUP_MANAGER, CloudBackupDetailResult, CloudBackupDisableOutcome,
-    CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupEnablePromptChoice,
-    CloudBackupEnableState, CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
-    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
+    CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupDetailResult,
+    CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableOutcome,
+    CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupKeychain,
+    CloudBackupLifecycle, CloudBackupManagerAction, CloudBackupOtherBackupsState,
+    CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
     CloudBackupVerificationOutcome, CloudBackupVerificationPresentation,
     CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
     DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
@@ -1522,6 +1524,34 @@ async fn enable_create_new_succeeds_with_new_passkey_auth() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn enable_create_new_recovers_from_corrupted_persisted_state() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    manager
+        .persist_cloud_backup_state(
+            &PersistedCloudBackupState::corrupted("decode failed"),
+            "persist corrupt state for test",
+        )
+        .unwrap();
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+    globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+
+    enable_cloud_backup_create_new(&manager).await.unwrap();
+    confirm_saved_passkey_session(&manager).await;
+
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Unverified
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn detail_entry_starts_discoverable_verification_without_runtime_authorization() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -1617,6 +1647,32 @@ async fn deep_verify_authenticates_before_loading_wallet_inventory() {
 
     assert_eq!(globals.passkey.discover_count(), discover_count + 1);
     assert_eq!(globals.cloud.list_wallet_files_attempt_count(), list_count);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn deep_verify_corrupted_persisted_state_short_circuits() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    manager
+        .persist_cloud_backup_state(
+            &PersistedCloudBackupState::corrupted("decode failed"),
+            "persist corrupt state for test",
+        )
+        .unwrap();
+    globals.cloud.fail_list_namespaces("verify should not read cloud storage");
+    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+
+    let step = manager.prepare_deep_verify_cloud_backup(true).await;
+
+    assert!(matches!(
+        step,
+        CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled)
+    ));
+    assert_eq!(globals.passkey.discover_count(), 0);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2993,6 +3049,39 @@ async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisti
         Some(CloudBackupExclusiveOperation::RecreateManifest)
     );
     manager.project_exclusive_operation_finished(claim);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disable_corrupted_persisted_state_fails_closed() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    manager
+        .persist_cloud_backup_state(
+            &PersistedCloudBackupState::corrupted("decode failed"),
+            "persist corrupt state for test",
+        )
+        .unwrap();
+    globals.cloud.fail_list_wallet_files("disable should not inspect cloud wallets");
+
+    let error = manager.prepare_disable_cloud_backup().await.unwrap_err();
+
+    assert!(matches!(
+        error,
+        CloudBackupError::Internal(message) if message == CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE
+    ));
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Corrupted
+    );
+    assert!(matches!(
+        manager.current_status(),
+        CloudBackupStatus::Error(message) if message == CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE
+    ));
+    assert_eq!(globals.cloud.list_wallet_files_attempt_count(), 0);
 }
 
 #[tokio::test(flavor = "current_thread")]
