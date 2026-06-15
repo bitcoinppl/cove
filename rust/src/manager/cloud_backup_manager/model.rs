@@ -1452,12 +1452,16 @@ mod tests {
         verification: CloudBackupVerificationState,
         sync_health: CloudSyncHealth,
     ) -> CloudBackupReducerState {
-        let mut state = CloudBackupReducerState::default();
-        state.phase = CloudBackupLifecyclePhase::Configured;
-        state.configured.passkey = CloudBackupPasskeyState::Available;
-        state.configured.verification = verification;
-        state.sync_health = sync_health;
-        state
+        CloudBackupReducerState {
+            phase: CloudBackupLifecyclePhase::Configured,
+            configured: CloudBackupConfiguredReducerState {
+                passkey: CloudBackupPasskeyState::Available,
+                verification,
+                ..Default::default()
+            },
+            sync_health,
+            ..Default::default()
+        }
     }
 
     #[test]

@@ -386,7 +386,7 @@ impl RestoreOperation {
                     cloud.clone(),
                     active.namespace_id.clone(),
                     uploaded_wallets,
-                    CloudBackupUploadedWalletsStateMode::PreserveVerification,
+                    CloudBackupUploadedWalletsStateMode::PreserveVerificationWithUploadedCount,
                 )
                 .await
                 .map_err(|error| blocking_cloud_error(BlockingCloudStep::Restore, error))?;
