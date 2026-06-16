@@ -16,6 +16,7 @@ import org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupState
+import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
 import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
@@ -151,6 +152,7 @@ private fun cloudBackupPreviewState(): CloudBackupState {
                     verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
                 ),
             ),
+        settingsRowStatus = CloudBackupSettingsRowStatus.Syncing,
     )
 }
 

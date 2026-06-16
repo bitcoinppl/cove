@@ -150,9 +150,11 @@ struct MockCloudState {
     next_upload_wallet_backup_error: Option<CloudStorageError>,
     upload_wallet_backup_error: Option<CloudStorageError>,
     upload_wallet_backup_error_after_successes: Option<(usize, CloudStorageError)>,
+    delete_wallet_backup_error: Option<CloudStorageError>,
     delete_namespace_error: Option<CloudStorageError>,
     list_namespaces_error: Option<CloudStorageError>,
     reflect_uploaded_wallets_in_listing: bool,
+    uploaded_wallets_pending_confirmation: bool,
     uploaded_wallet_backups: Vec<(String, String)>,
     wallet_backup_success_count: usize,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
@@ -208,6 +210,15 @@ impl MockCloudStorage {
             .lock()
             .wallet_backup_download_errors
             .insert((namespace, record_id), CloudStorageError::Offline(message.into()));
+    }
+
+    pub(crate) fn fail_wallet_backup_download(
+        &self,
+        namespace: String,
+        record_id: String,
+        error: CloudStorageError,
+    ) {
+        self.state.lock().wallet_backup_download_errors.insert((namespace, record_id), error);
     }
 
     pub(crate) fn fail_list_wallet_files(&self, message: &str) {
@@ -299,6 +310,16 @@ impl MockCloudStorage {
             Some(CloudStorageError::DownloadFailed(message.into()));
     }
 
+    pub(crate) fn fail_delete_wallet_backup(&self, message: &str) {
+        self.state.lock().delete_wallet_backup_error =
+            Some(CloudStorageError::DownloadFailed(message.into()));
+    }
+
+    pub(crate) fn fail_delete_wallet_backup_not_found(&self, message: &str) {
+        self.state.lock().delete_wallet_backup_error =
+            Some(CloudStorageError::NotFound(message.into()));
+    }
+
     pub(crate) fn fail_delete_namespace_not_found(&self, message: &str) {
         self.state.lock().delete_namespace_error =
             Some(CloudStorageError::NotFound(message.into()));
@@ -306,6 +327,10 @@ impl MockCloudStorage {
 
     pub(crate) fn set_reflect_uploaded_wallets_in_listing(&self, enabled: bool) {
         self.state.lock().reflect_uploaded_wallets_in_listing = enabled;
+    }
+
+    pub(crate) fn set_uploaded_wallets_pending_confirmation(&self, enabled: bool) {
+        self.state.lock().uploaded_wallets_pending_confirmation = enabled;
     }
 
     pub(crate) fn uploaded_wallet_backup_count(&self) -> usize {
@@ -504,6 +529,10 @@ impl CloudStorageAccess for MockCloudStorage {
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
         let mut state = self.state.lock();
+        if let Some(error) = state.delete_wallet_backup_error.clone() {
+            return Err(error);
+        }
+
         if record_id == MASTER_KEY_RECORD_ID {
             state.master_key_backups.remove(&namespace);
             return Ok(());
@@ -611,6 +640,12 @@ impl CloudStorageAccess for MockCloudStorage {
         let state = self.state.lock();
         if record_id == MASTER_KEY_RECORD_ID {
             return Ok(state.master_key_backups.contains_key(&namespace));
+        }
+
+        if state.uploaded_wallets_pending_confirmation
+            && state.uploaded_wallet_backups.contains(&(namespace.clone(), record_id.clone()))
+        {
+            return Ok(false);
         }
 
         Ok(state.wallet_backups.contains_key(&(namespace, record_id)))
@@ -860,7 +895,7 @@ fn clear_local_wallets() {
 pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
-    let changed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+    let changed_at = crate::manager::cloud_backup_manager::current_timestamp();
 
     Database::global()
         .cloud_blob_sync_states
@@ -899,7 +934,7 @@ pub(crate) fn persist_failed_blob_state_with_issue(
 ) {
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
-    let failed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+    let failed_at = crate::manager::cloud_backup_manager::current_timestamp();
 
     Database::global()
         .cloud_blob_sync_states

@@ -10,6 +10,7 @@ import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupState
+import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
 import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
@@ -324,6 +325,7 @@ class CloudBackupRegressionHelpersTest {
                             verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
                         ),
                     ),
+                settingsRowStatus = CloudBackupSettingsRowStatus.CheckingSync,
             )
 
         return CloudBackupManager(state)

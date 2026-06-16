@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
@@ -78,10 +79,12 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationPolicy
 import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
+import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
@@ -94,6 +97,7 @@ import org.bitcoinppl.cove_core.bootstrap
 import org.bitcoinppl.cove_core.activeMigration
 import org.bitcoinppl.cove_core.bootstrapProgress
 import org.bitcoinppl.cove_core.cancelBootstrap
+import org.bitcoinppl.cove_core.checkCatastrophicCloudRestoreBackup
 import org.bitcoinppl.cove_core.resetBootstrapForRestore
 import org.bitcoinppl.cove_core.resetLocalDataForCatastrophicRecovery
 import org.bitcoinppl.cove_core.startupDiagnosticTextReport
@@ -103,6 +107,8 @@ import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.AlertDisplayType
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.CatastrophicCloudRestoreProvider
+import org.bitcoinppl.cove_core.CatastrophicCloudRestoreResult
 import org.bitcoinppl.cove_core.ColdWalletRoute
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.GlobalConfigKey
@@ -110,7 +116,6 @@ import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.ImportType
 import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.NumberOfBip39Words
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
@@ -119,50 +124,6 @@ import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.ColorSchemeSelection
 import java.time.Instant
-
-internal enum class StartupMode {
-    ONBOARDING,
-    READY,
-}
-
-internal sealed class BootstrapFailure {
-    data object CatastrophicRecovery : BootstrapFailure()
-
-    data class Fatal(
-        val message: String,
-    ) : BootstrapFailure()
-}
-
-internal fun classifyBootstrapFailure(error: Exception): BootstrapFailure =
-    when (error) {
-        is AppInitException.DatabaseKeyMismatch -> BootstrapFailure.CatastrophicRecovery
-        is AppInitException.AlreadyCalled ->
-            BootstrapFailure.Fatal("App initialization error. Please force-quit and restart.")
-        is AppInitException.Cancelled ->
-            BootstrapFailure.Fatal(
-                "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com",
-            )
-        else -> BootstrapFailure.Fatal(error.message ?: "Unknown error")
-    }
-
-internal fun hasPersistedOnboardingProgress(
-    persistedProgress: String?,
-): Boolean = !persistedProgress.isNullOrBlank()
-
-internal fun resolveStartupMode(
-    termsAccepted: Boolean,
-    hasWallets: Boolean,
-    cloudBackupLifecycle: CloudBackupLifecycle,
-    hasPersistedOnboardingProgress: Boolean,
-): StartupMode {
-    // mirror CoveApp.swift's app-shell onboarding decision while preserving Android auth and Drive constraints
-    val shouldStartStartupRestore = !hasWallets && cloudBackupLifecycle is CloudBackupLifecycle.Disabled
-    return if (!termsAccepted || hasPersistedOnboardingProgress || shouldStartStartupRestore) {
-        StartupMode.ONBOARDING
-    } else {
-        StartupMode.READY
-    }
-}
 
 private fun startupDiagnosticsReport(errorMessage: String): String {
     return buildString {
@@ -279,11 +240,27 @@ class MainActivity : FragmentActivity() {
             var bootstrapError by remember { mutableStateOf<String?>(null) }
             var needsCatastrophicRecovery by remember { mutableStateOf(false) }
             var bootstrapAttempt by remember { mutableStateOf(0) }
+            var catastrophicRecoveryAttemptId by remember { mutableStateOf(0) }
+            var catastrophicCloudRestoreCheckJob by remember { mutableStateOf<Job?>(null) }
             var bdkMigrationWarning by remember { mutableStateOf<String?>(null) }
+            var catastrophicCloudRestoreCheck by remember {
+                mutableStateOf<CatastrophicCloudRestoreCheck>(CatastrophicCloudRestoreCheck.Idle)
+            }
 
-            fun resetCatastrophicRecoveryAndRetry(logContext: String) {
+            fun resetCatastrophicCloudRestoreCheck() {
+                catastrophicRecoveryAttemptId += 1
+                catastrophicCloudRestoreCheckJob?.cancel()
+                catastrophicCloudRestoreCheckJob = null
+                catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Idle
+            }
+
+            fun resetCatastrophicRecoveryAndRetry(
+                logContext: String,
+                clearDriveAccountBinding: Boolean,
+            ) {
+                resetCatastrophicCloudRestoreCheck()
                 try {
-                    resetLocalDataForCatastrophicRecovery()
+                    resetCatastrophicLocalData(clearDriveAccountBinding)
                     resetBootstrapForRestore()
                     bootstrapError = null
                     needsCatastrophicRecovery = false
@@ -295,26 +272,86 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            if (!bootstrapped) {
-                if (needsCatastrophicRecovery) {
-                    CatastrophicRecoveryView(
-                        onRestoreFromCloud = {
-                            resetCatastrophicRecoveryAndRetry("reset")
-                        },
-                        onWipeLocalData = {
-                            resetCatastrophicRecoveryAndRetry("wipe")
-                        },
-                        onContactSupport = {
-                            val intent =
-                                Intent(Intent.ACTION_SENDTO).apply {
-                                    data = Uri.parse("mailto:feedback@covebitcoinwallet.com")
-                                }
-                            runCatching { startActivity(intent) }.onFailure { error ->
-                                Log.w(TAG, "[STARTUP] failed to open support email", error)
+            fun checkCloudBackupBeforeCatastrophicReset() {
+                if (!needsCatastrophicRecovery) {
+                    return
+                }
+
+                catastrophicRecoveryAttemptId += 1
+                val attemptId = catastrophicRecoveryAttemptId
+                catastrophicCloudRestoreCheckJob?.cancel()
+                catastrophicCloudRestoreCheck = CatastrophicCloudRestoreCheck.Checking
+                catastrophicCloudRestoreCheckJob = lifecycleScope.launch {
+                    try {
+                        val result =
+                            checkCatastrophicCloudRestoreBackup(
+                                CatastrophicCloudRestoreProvider.GOOGLE_DRIVE,
+                            )
+
+                        if (catastrophicRecoveryAttemptId != attemptId || !needsCatastrophicRecovery) {
+                            return@launch
+                        }
+
+                        catastrophicCloudRestoreCheck =
+                            CatastrophicCloudRestoreCheck.Complete(result)
+                    } catch (error: kotlinx.coroutines.CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        if (catastrophicRecoveryAttemptId != attemptId || !needsCatastrophicRecovery) {
+                            return@launch
+                        }
+
+                        Log.w(TAG, "[STARTUP] failed to check cloud backup before catastrophic reset", error)
+                        catastrophicCloudRestoreCheck =
+                            CatastrophicCloudRestoreCheck.Complete(
+                                CatastrophicCloudRestoreResult.Inconclusive(
+                                    "Cove could not check for a Cloud Backup.",
+                                ),
+                            )
+                    } finally {
+                        if (catastrophicRecoveryAttemptId == attemptId) {
+                            catastrophicCloudRestoreCheckJob = null
+                        }
+                    }
+                }
+            }
+
+            if (!bootstrapped && needsCatastrophicRecovery) {
+                CatastrophicRecoveryView(
+                    cloudRestoreCheck = catastrophicCloudRestoreCheck,
+                    onRestoreFromCloud = {
+                        checkCloudBackupBeforeCatastrophicReset()
+                    },
+                    onConfirmRestoreFromCloud = {
+                        resetCatastrophicRecoveryAndRetry(
+                            logContext = "restore",
+                            clearDriveAccountBinding = false,
+                        )
+                    },
+                    onDismissRestoreFromCloud = {
+                        resetCatastrophicCloudRestoreCheck()
+                    },
+                    onWipeLocalData = {
+                        resetCatastrophicRecoveryAndRetry(
+                            logContext = "wipe",
+                            clearDriveAccountBinding = true,
+                        )
+                    },
+                    onContactSupport = {
+                        val intent =
+                            Intent(Intent.ACTION_SENDTO).apply {
+                                data = Uri.parse("mailto:feedback@covebitcoinwallet.com")
                             }
-                        },
-                    )
-                } else if (bootstrapError != null) {
+                        runCatching { startActivity(intent) }.onFailure { error ->
+                            Log.w(TAG, "[STARTUP] failed to open support email", error)
+                        }
+                    },
+                )
+                return@setContent
+            }
+
+            if (!bootstrapped) {
+                if (bootstrapError != null) {
                     BootstrapErrorView(
                         errorMessage = bootstrapError!!,
                         onCopyDiagnostics = {
@@ -421,7 +458,10 @@ class MainActivity : FragmentActivity() {
                             }
 
                             when (val failure = classifyBootstrapFailure(e)) {
-                                BootstrapFailure.CatastrophicRecovery -> needsCatastrophicRecovery = true
+                                BootstrapFailure.CatastrophicRecovery -> {
+                                    resetCatastrophicCloudRestoreCheck()
+                                    needsCatastrophicRecovery = true
+                                }
                                 is BootstrapFailure.Fatal -> bootstrapError = failure.message
                             }
                             return@LaunchedEffect
@@ -659,10 +699,21 @@ class MainActivity : FragmentActivity() {
         if (!BuildConfig.DEBUG || !intent.getBooleanExtra(UI_TEST_RESET_DATA_EXTRA, false)) return
 
         try {
-            resetLocalDataForCatastrophicRecovery()
+            resetLocalDataAndDriveBindingForCatastrophicRecovery()
             resetBootstrapForRestore()
         } catch (e: Exception) {
             Log.e(TAG, "failed to reset local data for UI tests", e)
+        }
+    }
+
+    private fun resetLocalDataAndDriveBindingForCatastrophicRecovery() {
+        resetCatastrophicLocalData(clearDriveAccountBinding = true)
+    }
+
+    private fun resetCatastrophicLocalData(clearDriveAccountBinding: Boolean) {
+        resetLocalDataForCatastrophicRecovery()
+        if (clearDriveAccountBinding) {
+            clearCloudBackupDriveAccountBinding(this)
         }
     }
 
@@ -1215,11 +1266,16 @@ private fun GlobalAlertDialog(
 
 @Composable
 private fun CatastrophicRecoveryView(
+    cloudRestoreCheck: CatastrophicCloudRestoreCheck,
     onRestoreFromCloud: () -> Unit,
+    onConfirmRestoreFromCloud: () -> Unit,
+    onDismissRestoreFromCloud: () -> Unit,
     onWipeLocalData: () -> Unit,
     onContactSupport: () -> Unit,
 ) {
     var showWipeConfirmation by remember { mutableStateOf(false) }
+    val cloudRestoreResult =
+        (cloudRestoreCheck as? CatastrophicCloudRestoreCheck.Complete)?.result
 
     BackHandler(enabled = true) {}
 
@@ -1245,9 +1301,32 @@ private fun CatastrophicRecoveryView(
             Spacer(modifier = Modifier.height(28.dp))
             FilledTonalButton(
                 onClick = onRestoreFromCloud,
+                enabled = cloudRestoreCheck !is CatastrophicCloudRestoreCheck.Checking,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Restore from Cloud Backup")
+                if (cloudRestoreCheck is CatastrophicCloudRestoreCheck.Checking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    if (cloudRestoreCheck is CatastrophicCloudRestoreCheck.Checking) {
+                        "Checking Cloud Backup"
+                    } else {
+                        "Restore from Cloud Backup"
+                    },
+                )
+            }
+            val failureMessage = cloudRestoreResult?.failureMessage
+            if (failureMessage != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    failureMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
             Spacer(modifier = Modifier.height(8.dp))
             TextButton(
@@ -1287,6 +1366,26 @@ private fun CatastrophicRecoveryView(
             },
             dismissButton = {
                 TextButton(onClick = { showWipeConfirmation = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (cloudRestoreResult is CatastrophicCloudRestoreResult.BackupFound) {
+        AlertDialog(
+            onDismissRequest = onDismissRestoreFromCloud,
+            title = { Text("Restore from Cloud Backup?") },
+            text = {
+                Text(
+                    "Cove found Cloud Backup data for the selected Google account. This will erase the damaged local data on this device, then verify your passkey during restore.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = onConfirmRestoreFromCloud) {
+                    Text("Erase and Restore", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissRestoreFromCloud) { Text("Cancel") }
             },
         )
     }

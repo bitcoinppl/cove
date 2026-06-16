@@ -83,7 +83,7 @@ import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthManagerException
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.GlobalFlagKey
 import org.bitcoinppl.cove_core.Route
@@ -101,16 +101,26 @@ internal fun shouldShowCloudBackupSettings(
 
 @Composable
 private fun cloudBackupSettingsSubtitle(manager: CloudBackupManager): String =
-    when {
-        manager.isLifecycleDisabled -> stringResource(R.string.cloud_backup_status_off)
-        manager.lifecycle is CloudBackupLifecycle.Enabling -> stringResource(R.string.cloud_backup_status_setting_up)
-        manager.lifecycle is CloudBackupLifecycle.Restoring -> stringResource(R.string.cloud_backup_status_restoring)
-        manager.isPasskeyMissing -> stringResource(R.string.cloud_backup_status_passkey_missing)
-        manager.isUnsupportedPasskeyProvider ->
+    when (val status = manager.settingsRowStatus) {
+        is CloudBackupSettingsRowStatus.Disabled -> stringResource(R.string.cloud_backup_status_off)
+        is CloudBackupSettingsRowStatus.Disabling -> stringResource(R.string.cloud_backup_status_disabling)
+        is CloudBackupSettingsRowStatus.SettingUp -> stringResource(R.string.cloud_backup_status_setting_up)
+        is CloudBackupSettingsRowStatus.Restoring -> stringResource(R.string.cloud_backup_status_restoring)
+        is CloudBackupSettingsRowStatus.Active -> stringResource(R.string.cloud_backup_status_active)
+        is CloudBackupSettingsRowStatus.PasskeyMissing -> stringResource(R.string.cloud_backup_status_passkey_missing)
+        is CloudBackupSettingsRowStatus.PasskeyProviderUnsupported ->
             stringResource(R.string.cloud_backup_status_passkey_provider_unsupported)
-        manager.lifecycleFailureMessage != null ->
-            stringResource(R.string.cloud_backup_status_error, manager.lifecycleFailureMessage!!)
-        else -> stringResource(R.string.cloud_backup_status_active)
+        is CloudBackupSettingsRowStatus.Unverified -> stringResource(R.string.cloud_backup_status_unverified)
+        is CloudBackupSettingsRowStatus.Confirming -> stringResource(R.string.cloud_backup_status_confirming)
+        is CloudBackupSettingsRowStatus.VerificationRecommended ->
+            stringResource(R.string.cloud_backup_status_verification_recommended)
+        is CloudBackupSettingsRowStatus.CheckingSync -> stringResource(R.string.cloud_backup_status_checking_sync)
+        is CloudBackupSettingsRowStatus.Syncing -> stringResource(R.string.cloud_backup_status_syncing)
+        is CloudBackupSettingsRowStatus.NoFiles -> stringResource(R.string.cloud_backup_status_no_files)
+        is CloudBackupSettingsRowStatus.DriveUnavailable -> stringResource(R.string.cloud_backup_status_drive_unavailable)
+        is CloudBackupSettingsRowStatus.AuthorizationRequired ->
+            stringResource(R.string.cloud_backup_status_drive_authorization_required, status.v1)
+        is CloudBackupSettingsRowStatus.Error -> stringResource(R.string.cloud_backup_status_error, status.v1)
     }
 
 @OptIn(ExperimentalMaterial3Api::class)

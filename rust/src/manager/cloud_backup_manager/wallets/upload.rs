@@ -156,7 +156,7 @@ impl RustCloudBackupManager {
         let mut uploaded_wallets = Vec::with_capacity(wallets.len());
 
         for (index, metadata) in wallets.iter().enumerate() {
-            info!("Backup: uploading wallet {}/{} '{}'", index + 1, wallets.len(), metadata.name);
+            info!("Backup: uploading wallet {}/{}", index + 1, wallets.len());
             let prepared_upload = match prepare_cloud_wallet_upload(
                 metadata,
                 &batch.namespace,
@@ -228,7 +228,7 @@ impl RustCloudBackupManager {
         let mut uploaded_wallets = Vec::with_capacity(wallets.len());
 
         for (index, metadata) in wallets.iter().enumerate() {
-            info!("Backup: uploading wallet {}/{} '{}'", index + 1, wallets.len(), metadata.name);
+            info!("Backup: uploading wallet {}/{}", index + 1, wallets.len());
             let prepared_upload =
                 match prepare_cloud_wallet_upload(metadata, namespace, critical_key).await {
                     Ok(prepared_upload) => prepared_upload,
@@ -365,7 +365,7 @@ impl RustCloudBackupManager {
         let uploading_state =
             current_state.with_state(PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
                 revision_hash: prepared.revision_hash.clone(),
-                started_at: jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+                started_at: crate::manager::cloud_backup_manager::current_timestamp(),
             }));
 
         let wrote_uploading = Database::global()
@@ -376,7 +376,7 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
-        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let uploaded_at = crate::manager::cloud_backup_manager::current_timestamp();
         let completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation_if_current(
             uploading_state.clone(),
             prepared.revision_hash.clone(),
@@ -473,7 +473,7 @@ impl RustCloudBackupManager {
 
         let dirty_state =
             current_state.with_state(PersistedCloudBlobState::Dirty(CloudBlobDirtyState {
-                changed_at: jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+                changed_at: crate::manager::cloud_backup_manager::current_timestamp(),
             }));
         let wrote_dirty = Database::global()
             .cloud_blob_sync_states
@@ -581,7 +581,7 @@ impl RustCloudBackupManager {
     }
 
     fn is_stale_uploading_state(started_at: u64) -> bool {
-        let now: u64 = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let now: u64 = crate::manager::cloud_backup_manager::current_timestamp();
         now.saturating_sub(started_at) >= STALE_UPLOADING_RETRY_THRESHOLD_SECS
     }
 

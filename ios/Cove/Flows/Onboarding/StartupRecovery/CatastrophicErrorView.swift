@@ -4,66 +4,125 @@ struct CatastrophicErrorView: View {
     let onRestoreFromCloud: () -> Void
     let onWipeOnly: () -> Void
 
-    enum CloudProbeState {
+    enum CloudProbeState: Equatable {
         case checking
         case available
-        case unavailable
-        case transientError
-        case corrupt
+        case noBackup
+        case offline(String)
+        case inconclusive(String)
+        case unreadable(String)
+
+        var allowsRestoreAttempt: Bool {
+            switch self {
+            case .available:
+                true
+            case .checking, .noBackup, .offline, .inconclusive, .unreadable:
+                false
+            }
+        }
+
+        var allowsRetry: Bool {
+            switch self {
+            case .offline, .inconclusive, .unreadable:
+                true
+            case .checking, .available, .noBackup:
+                false
+            }
+        }
+    }
+
+    private enum RecoveryConfirmation: Identifiable {
+        case restore
+        case wipe
+
+        var id: String {
+            switch self {
+            case .restore:
+                "restore"
+            case .wipe:
+                "wipe"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .restore:
+                "Restore from Cloud Backup?"
+            case .wipe:
+                "Wipe All Local Data?"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .restore:
+                "Cove found Cloud Backup data for the selected iCloud account. This will erase the damaged local data on this device, then verify your passkey during restore."
+            case .wipe:
+                "This will permanently delete all wallet data on this device. Make sure you have your recovery phrases backed up. This cannot be undone."
+            }
+        }
+
+        var actionTitle: String {
+            switch self {
+            case .restore:
+                "Erase and Restore"
+            case .wipe:
+                "Wipe Data"
+            }
+        }
     }
 
     @State private var cloudProbeState: CloudProbeState = .checking
-    @State private var showWipeConfirmation = false
+    @State private var cloudProbeTask: Task<Void, Never>?
+    @State private var recoveryConfirmation: RecoveryConfirmation?
 
     var body: some View {
         CatastrophicErrorContent(
             cloudProbeState: cloudProbeState,
-            onRestoreFromCloud: onRestoreFromCloud,
+            onRestoreFromCloud: { recoveryConfirmation = .restore },
             onRetryCheck: retryProbe,
             onContactSupport: contactSupport,
-            onWipeOnly: { showWipeConfirmation = true }
+            onWipeOnly: { recoveryConfirmation = .wipe }
         )
         .task {
             probeCloud()
         }
-        .alert("Wipe All Local Data?", isPresented: $showWipeConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Wipe Data", role: .destructive) {
-                onWipeOnly()
-            }
-        } message: {
-            Text(
-                "This will permanently delete all wallet data on this device. Make sure you have your recovery phrases backed up. This cannot be undone."
+        .onDisappear {
+            cloudProbeTask?.cancel()
+            cloudProbeTask = nil
+        }
+        .alert(item: $recoveryConfirmation) { confirmation in
+            Alert(
+                title: Text(confirmation.title),
+                message: Text(confirmation.message),
+                primaryButton: .destructive(Text(confirmation.actionTitle)) {
+                    switch confirmation {
+                    case .restore:
+                        onRestoreFromCloud()
+                    case .wipe:
+                        onWipeOnly()
+                    }
+                },
+                secondaryButton: .cancel()
             )
         }
     }
 
     private func retryProbe() {
+        cloudProbeTask?.cancel()
         cloudProbeState = .checking
         probeCloud()
     }
 
     private func probeCloud() {
-        Task.detached {
-            let cloud = CloudStorage(cloudStorage: CloudStorageAccessImpl())
-            do {
-                let exists = try await cloud.hasAnyCloudBackup(policy: .consentAllowed)
-                await MainActor.run {
-                    cloudProbeState = exists ? .available : .unavailable
-                }
-            } catch let error as CloudStorageError {
-                await MainActor.run {
-                    switch error {
-                    case .NotAvailable:
-                        cloudProbeState = .transientError
-                    default:
-                        cloudProbeState = .corrupt
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    cloudProbeState = .corrupt
-                }
+        cloudProbeTask?.cancel()
+        cloudProbeTask = Task.detached {
+            let result = await checkCatastrophicCloudRestoreBackup(provider: .iCloudDrive)
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard !Task.isCancelled else { return }
+                cloudProbeState = Self.cloudProbeState(result: result)
             }
         }
     }
@@ -71,6 +130,21 @@ struct CatastrophicErrorView: View {
     private func contactSupport() {
         if let url = URL(string: "mailto:feedback@covebitcoinwallet.com") {
             UIApplication.shared.open(url)
+        }
+    }
+
+    static func cloudProbeState(result: CatastrophicCloudRestoreResult) -> CloudProbeState {
+        switch result {
+        case .backupFound:
+            .available
+        case .noBackupFound:
+            .noBackup
+        case let .offline(message):
+            .offline(message)
+        case let .inconclusive(message):
+            .inconclusive(message)
+        case let .unreadable(message):
+            .unreadable(message)
         }
     }
 }
@@ -158,49 +232,50 @@ private struct CatastrophicErrorContent: View {
             statusCard(
                 icon: "checkmark.circle.fill",
                 color: .lightGreen,
-                text: "A cloud backup is available and can be used to restore this device"
+                text: "Cloud Backup data is available for this account"
             )
 
-        case .unavailable:
+        case .noBackup:
             statusCard(
                 icon: "icloud.slash",
                 color: .coveLightGray,
                 text: "No cloud backup was detected for this account"
             )
 
-        case .transientError:
+        case .offline:
             statusCard(
                 icon: "wifi.exclamationmark",
                 color: .orange,
-                text: "We couldn’t confirm cloud availability. Network conditions may be unstable, but restore may still work"
+                text: "This device appears to be offline. Reconnect and try the cloud backup check again"
             )
 
-        case .corrupt:
+        case .inconclusive:
+            statusCard(
+                icon: "icloud.slash",
+                color: .orange,
+                text: "We couldn’t confirm whether a cloud backup is available. Retry the check before restoring from cloud backup"
+            )
+
+        case .unreadable:
             statusCard(
                 icon: "exclamationmark.triangle.fill",
                 color: .orange,
-                text: "Cloud backup data may be damaged, but you can still attempt a restore"
+                text: "Cloud backup data could not be read. Retry the check before restoring from cloud backup"
             )
         }
     }
 
     private var actionButtons: some View {
         VStack(spacing: 14) {
-            if case .available = cloudProbeState {
+            if cloudProbeState.allowsRestoreAttempt {
                 restoreButton
             }
 
-            if case .transientError = cloudProbeState {
-                restoreButton
-
+            if cloudProbeState.allowsRetry {
                 Button(action: onRetryCheck) {
                     Text("Retry Check")
                 }
                 .buttonStyle(OnboardingSecondaryButtonStyle())
-            }
-
-            if case .corrupt = cloudProbeState {
-                restoreButton
             }
 
             Button(action: onContactSupport) {

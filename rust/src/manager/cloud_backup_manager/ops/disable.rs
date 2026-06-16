@@ -11,9 +11,9 @@ use crate::database::Database;
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedDisablingCloudBackup};
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CloudBackupDisableOutcome, CloudBackupError, CloudBackupKeychain,
-    CloudBackupOtherBackupsState, CloudBackupStatus, CloudOnlyOperation, OtherBackupsOperation,
-    RustCloudBackupManager,
+    BlockingCloudStep, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupDisableOutcome,
+    CloudBackupError, CloudBackupKeychain, CloudBackupOtherBackupsState, CloudBackupStatus,
+    CloudOnlyOperation, OtherBackupsOperation, RustCloudBackupManager,
 };
 
 const DISABLE_BLOCKING_MESSAGE: &str =
@@ -50,7 +50,7 @@ impl RustCloudBackupManager {
         let disabling = match Self::load_persisted_state() {
             PersistedCloudBackupState::Configured(configured) => {
                 let namespace_id = self.current_namespace_id()?;
-                let now = current_timestamp();
+                let now = crate::manager::cloud_backup_manager::current_timestamp();
                 let disabling = PersistedDisablingCloudBackup {
                     previous_configured: configured,
                     namespace_id,
@@ -73,6 +73,14 @@ impl RustCloudBackupManager {
             PersistedCloudBackupState::Disabled => {
                 self.reconcile_runtime_status(CloudBackupStatus::Disabled);
                 return Ok(CloudBackupDisablePreparation::AlreadyDisabled);
+            }
+            PersistedCloudBackupState::Corrupted { .. } => {
+                self.reconcile_runtime_status(CloudBackupStatus::Error(
+                    CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into(),
+                ));
+                return Err(CloudBackupError::Internal(
+                    CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into(),
+                ));
             }
         };
 
@@ -134,7 +142,8 @@ impl RustCloudBackupManager {
             return Ok(None);
         };
 
-        disabling.delete_started_at = Some(current_timestamp());
+        disabling.delete_started_at =
+            Some(crate::manager::cloud_backup_manager::current_timestamp());
         disabling.last_error = None;
         disabling.retry_after = None;
         self.persist_disabling_state(&disabling, "persist cloud backup delete start")?;
@@ -230,7 +239,8 @@ impl RustCloudBackupManager {
         message: String,
     ) -> Result<(), CloudBackupError> {
         disabling.last_error = Some(message);
-        disabling.retry_after = Some(current_timestamp().saturating_add(5));
+        disabling.retry_after =
+            Some(crate::manager::cloud_backup_manager::current_timestamp().saturating_add(5));
         self.persist_disabling_state(&disabling, "persist cloud backup disable failure")
     }
 
@@ -291,7 +301,9 @@ impl RustCloudBackupManager {
                 disabling.delete_started_at.is_none()
             }
             PersistedCloudBackupState::Configured(_) => false,
-            PersistedCloudBackupState::Disabled => false,
+            PersistedCloudBackupState::Disabled | PersistedCloudBackupState::Corrupted { .. } => {
+                false
+            }
         }
     }
 
@@ -305,6 +317,11 @@ impl RustCloudBackupManager {
             }
             PersistedCloudBackupState::Disabled => {
                 return Ok(CloudBackupKeepEnabledPreparation::AlreadyDisabled);
+            }
+            PersistedCloudBackupState::Corrupted { .. } => {
+                return Err(CloudBackupError::Internal(
+                    CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into(),
+                ));
             }
         };
 
@@ -335,7 +352,8 @@ impl RustCloudBackupManager {
                 if current.disable_generation == disabling.disable_generation => {}
             PersistedCloudBackupState::Disabling(_)
             | PersistedCloudBackupState::Configured(_)
-            | PersistedCloudBackupState::Disabled => return Ok(false),
+            | PersistedCloudBackupState::Disabled
+            | PersistedCloudBackupState::Corrupted { .. } => return Ok(false),
         }
 
         Database::global()
@@ -348,7 +366,8 @@ impl RustCloudBackupManager {
 
     pub(crate) fn finish_keep_cloud_backup_enabled(&self) {
         let runtime_status = match Self::load_persisted_state() {
-            state @ PersistedCloudBackupState::Configured(_) => Self::runtime_status_for(&state),
+            state @ (PersistedCloudBackupState::Configured(_)
+            | PersistedCloudBackupState::Corrupted { .. }) => Self::runtime_status_for(&state),
             _ => CloudBackupStatus::Enabled,
         };
 
@@ -378,7 +397,13 @@ async fn list_active_wallets_for_disable(
             Ok(record_ids) => return Ok(record_ids.into_iter().collect()),
             Err(CloudStorageError::NotFound(_)) => {
                 let Some(delay) = backoff.next() else {
-                    return Ok(HashSet::new());
+                    return Err(blocking_cloud_error(
+                        BlockingCloudStep::Disable,
+                        CloudBackupError::cloud_storage_context(
+                            "list wallet backups",
+                            CloudStorageError::NotFound(namespace_id.to_owned()),
+                        ),
+                    ));
                 };
                 tokio::time::sleep(delay).await;
             }
@@ -390,10 +415,6 @@ async fn list_active_wallets_for_disable(
             }
         }
     }
-}
-
-fn current_timestamp() -> u64 {
-    jiff::Timestamp::now().as_second().try_into().unwrap_or(0)
 }
 
 fn next_disable_generation() -> u64 {

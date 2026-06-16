@@ -37,6 +37,10 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         state.lifecycle
     }
 
+    var settingsRowStatus: CloudBackupSettingsRowStatus {
+        state.settingsRowStatus
+    }
+
     var configuredState: CloudBackupConfiguredState? {
         guard case let .configured(configured) = state.lifecycle else { return nil }
         return configured
@@ -252,8 +256,9 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
 
     private func apply(_ message: Message) {
         switch message {
-        case let .lifecycle(lifecycle):
+        case let .lifecycle(lifecycle, settingsRowStatus):
             state.lifecycle = lifecycle
+            state.settingsRowStatus = settingsRowStatus
         case let .enableCompleted(context):
             enableCompletion = TaggedItem(context)
         }

@@ -415,6 +415,22 @@ impl CloudBackupSupervisor {
                 }
 
                 manager.finish_keep_cloud_backup_enabled();
+                if let Err(error) =
+                    call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await
+                {
+                    error!("Failed to resume cloud backup uploads after Keep Enabled: {error}");
+                    manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(error.to_string()));
+                }
+                if let Err(error) =
+                    call!(self.uploads.ensure_pending_upload_verification_loop()).await
+                {
+                    error!(
+                        "Failed to resume pending cloud backup verification after Keep Enabled: {error}"
+                    );
+                    manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(error.to_string()));
+                }
+                manager.refresh_sync_health();
+
                 if let Some(claim) = self.active_operation
                     && claim.operation() == CloudBackupExclusiveOperation::Disable
                 {

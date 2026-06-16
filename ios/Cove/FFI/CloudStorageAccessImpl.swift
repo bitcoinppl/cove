@@ -139,6 +139,7 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
 
     func listWalletFiles(namespace: String, policy _: CloudAccessPolicy) async throws -> [String] {
         try await run {
+            let namespace = try self.helper.validateNamespace(namespace)
             let namespacesRoot = try self.helper.namespacesRootReadURL()
             let namespaces = try self.helper.listSubdirectories(parentPath: namespacesRoot.path)
             guard namespaces.contains(namespace) else { throw CloudStorageError.NotFound(namespace) }

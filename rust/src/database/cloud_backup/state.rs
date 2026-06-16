@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::wallet::metadata::WalletId;
 
+pub(crate) const CORRUPT_BLOB_SYNC_NAMESPACE_ID: &str = "__corrupt_cloud_backup_blob_sync_state__";
+pub(crate) const CORRUPT_BLOB_SYNC_RECORD_ID: &str = "__corrupt_cloud_backup_blob_sync_state__";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PersistedCloudBackupStatus {
     Disabled,
@@ -10,6 +13,7 @@ pub enum PersistedCloudBackupStatus {
     Unverified,
     PasskeyMissing,
     Disabling,
+    Corrupted,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -18,14 +22,22 @@ pub enum PersistedCloudBackupState {
     Disabled,
     Configured(PersistedConfiguredCloudBackup),
     Disabling(PersistedDisablingCloudBackup),
+    Corrupted {
+        error: String,
+    },
 }
 
 impl PersistedCloudBackupState {
+    pub fn corrupted(error: impl Into<String>) -> Self {
+        Self::Corrupted { error: error.into() }
+    }
+
     pub fn status(&self) -> PersistedCloudBackupStatus {
         match self {
             Self::Disabled => PersistedCloudBackupStatus::Disabled,
             Self::Configured(configured) => configured.status(),
             Self::Disabling(_) => PersistedCloudBackupStatus::Disabling,
+            Self::Corrupted { .. } => PersistedCloudBackupStatus::Corrupted,
         }
     }
 
@@ -40,7 +52,7 @@ impl PersistedCloudBackupState {
     pub fn disabling(&self) -> Option<&PersistedDisablingCloudBackup> {
         match self {
             Self::Disabling(disabling) => Some(disabling),
-            Self::Disabled | Self::Configured(_) => None,
+            Self::Disabled | Self::Configured(_) | Self::Corrupted { .. } => None,
         }
     }
 
@@ -54,7 +66,7 @@ impl PersistedCloudBackupState {
 
     pub fn last_sync(&self) -> Option<u64> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.sync.last_sync,
             Self::Disabling(disabling) => disabling.previous_configured.sync.last_sync,
         }
@@ -62,7 +74,7 @@ impl PersistedCloudBackupState {
 
     pub fn wallet_count(&self) -> Option<u32> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.sync.wallet_count,
             Self::Disabling(disabling) => disabling.previous_configured.sync.wallet_count,
         }
@@ -70,7 +82,7 @@ impl PersistedCloudBackupState {
 
     pub fn last_verified_at(&self) -> Option<u64> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.verification.last_verified_at(),
             Self::Disabling(disabling) => {
                 disabling.previous_configured.verification.last_verified_at()
@@ -80,7 +92,7 @@ impl PersistedCloudBackupState {
 
     pub fn last_verification_requested_at(&self) -> Option<u64> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.verification.requested_at(),
             Self::Disabling(disabling) => disabling.previous_configured.verification.requested_at(),
         }
@@ -88,7 +100,7 @@ impl PersistedCloudBackupState {
 
     pub fn last_verification_dismissed_at(&self) -> Option<u64> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.verification.dismissed_at(),
             Self::Disabling(disabling) => disabling.previous_configured.verification.dismissed_at(),
         }
@@ -98,7 +110,7 @@ impl PersistedCloudBackupState {
         &self,
     ) -> Option<&PersistedPendingVerificationCompletion> {
         match self {
-            Self::Disabled => None,
+            Self::Disabled | Self::Corrupted { .. } => None,
             Self::Configured(configured) => configured.pending_verification_completion.as_ref(),
             Self::Disabling(disabling) => {
                 disabling.previous_configured.pending_verification_completion.as_ref()
@@ -146,10 +158,12 @@ impl PersistedCloudBackupState {
     pub fn mark_enabled_preserving_verification(&self, last_sync: u64, wallet_count: u32) -> Self {
         let verification = match self {
             Self::Configured(configured) => configured.verification.clone(),
-            Self::Disabled => PersistedBackupVerificationState::NotVerified {
-                requested_at: None,
-                dismissed_at: None,
-            },
+            Self::Disabled | Self::Corrupted { .. } => {
+                PersistedBackupVerificationState::NotVerified {
+                    requested_at: None,
+                    dismissed_at: None,
+                }
+            }
             Self::Disabling(disabling) => disabling.previous_configured.verification.clone(),
         };
 
@@ -369,6 +383,8 @@ pub struct PersistedPendingVerificationCompletion {
     pub report: PersistedDeepVerificationReport,
     pub namespace_id: String,
     pub uploads: Vec<PersistedPendingVerificationUpload>,
+    #[serde(default)]
+    pub created_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -398,6 +414,7 @@ pub struct PersistedCloudBlobSyncState {
 pub enum CloudBackupRecordKey {
     MasterKeyWrapper,
     Wallet(WalletId, String),
+    Corrupted(String),
 }
 
 impl PersistedCloudBlobSyncState {
@@ -420,6 +437,20 @@ impl PersistedCloudBlobSyncState {
         state: PersistedCloudBlobState,
     ) -> Self {
         Self { namespace_id, record_key, state }
+    }
+
+    pub fn corrupted(error: String) -> Self {
+        Self {
+            namespace_id: CORRUPT_BLOB_SYNC_NAMESPACE_ID.to_string(),
+            record_key: CloudBackupRecordKey::Corrupted(CORRUPT_BLOB_SYNC_RECORD_ID.to_string()),
+            state: PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                revision_hash: None,
+                retryable: false,
+                issue: None,
+                error,
+                failed_at: 0,
+            }),
+        }
     }
 
     pub fn record_key(&self) -> &CloudBackupRecordKey {
@@ -446,6 +477,10 @@ impl PersistedCloudBlobSyncState {
         self.record_key.is_wallet()
     }
 
+    pub fn is_corrupted(&self) -> bool {
+        self.record_key.is_corrupted()
+    }
+
     pub fn is_dirty(&self) -> bool {
         matches!(self.state, PersistedCloudBlobState::Dirty(_))
     }
@@ -464,12 +499,13 @@ impl CloudBackupRecordKey {
         match self {
             Self::MasterKeyWrapper => Self::master_key_record_id(),
             Self::Wallet(_, record_id) => record_id,
+            Self::Corrupted(record_id) => record_id,
         }
     }
 
     pub fn wallet_id(&self) -> Option<&WalletId> {
         match self {
-            Self::MasterKeyWrapper => None,
+            Self::MasterKeyWrapper | Self::Corrupted(_) => None,
             Self::Wallet(wallet_id, _) => Some(wallet_id),
         }
     }
@@ -482,10 +518,15 @@ impl CloudBackupRecordKey {
         matches!(self, Self::Wallet(_, _))
     }
 
+    pub fn is_corrupted(&self) -> bool {
+        matches!(self, Self::Corrupted(_))
+    }
+
     pub fn into_parts(self) -> (Option<WalletId>, String) {
         match self {
             Self::MasterKeyWrapper => (None, MASTER_KEY_RECORD_ID.to_string()),
             Self::Wallet(wallet_id, record_id) => (Some(wallet_id), record_id),
+            Self::Corrupted(record_id) => (None, record_id),
         }
     }
 }

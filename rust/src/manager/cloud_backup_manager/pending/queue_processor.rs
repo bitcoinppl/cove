@@ -95,8 +95,7 @@ impl PendingUploadVerifier {
 
             if let BlobCheckResult::AuthorizationRequired { error } = &result {
                 warn!(
-                    "Pending upload verification: paused until cloud authorization is restored record_id={} error={error}",
-                    sync_state.record_id()
+                    "Pending upload verification: paused until cloud authorization is restored error={error}"
                 );
                 // pause without changing blob state so authorization recovery can resume
                 blocked_on_authorization = true;
@@ -302,7 +301,7 @@ impl PendingUploadVerifier {
         current: &CloudBlobUploadedPendingConfirmationState,
         result: &BlobCheckResult,
     ) -> PersistedCloudBlobSyncState {
-        let checked_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let checked_at = crate::manager::cloud_backup_manager::current_timestamp();
         let next_attempt_count = current.attempt_count + 1;
 
         let state = match result {
@@ -360,7 +359,7 @@ impl PendingUploadVerifier {
     fn schedule_retry_if_needed(&self, sync_state: &PersistedCloudBlobSyncState) {
         let wallet_id = match sync_state.record_key() {
             CloudBackupRecordKey::Wallet(wallet_id, _) => wallet_id.clone(),
-            CloudBackupRecordKey::MasterKeyWrapper => {
+            CloudBackupRecordKey::MasterKeyWrapper | CloudBackupRecordKey::Corrupted(_) => {
                 return;
             }
         };
@@ -393,8 +392,7 @@ impl PendingUploadVerifier {
             }
             (PersistedCloudBlobState::Dirty(_), BlobCheckResult::NotYetUploaded) => {
                 warn!(
-                    "Pending upload verification: retrying wallet upload after repeated missing remote confirmation record_id={}",
-                    sync_state.record_id(),
+                    "Pending upload verification: retrying wallet upload after repeated missing remote confirmation"
                 );
             }
             (
@@ -411,8 +409,7 @@ impl PendingUploadVerifier {
             }
             (PersistedCloudBlobState::Dirty(_), BlobCheckResult::Stale(remote_revision)) => {
                 warn!(
-                    "Pending upload verification: retrying wallet upload after repeated stale remote revision record_id={} remote_revision={remote_revision}",
-                    sync_state.record_id(),
+                    "Pending upload verification: retrying wallet upload after repeated stale remote revision remote_revision={remote_revision}"
                 );
             }
             (
@@ -420,25 +417,20 @@ impl PendingUploadVerifier {
                 BlobCheckResult::Failed { error, .. },
             ) => {
                 warn!(
-                    "Pending upload verification: check failed record_id={} attempts={} checked_at={} error={error}",
-                    sync_state.record_id(),
+                    "Pending upload verification: check failed attempts={} checked_at={} error={error}",
                     state.attempt_count,
                     state.last_checked_at.unwrap_or_default()
                 );
             }
             (PersistedCloudBlobState::Failed(_), BlobCheckResult::Failed { error, .. }) => {
-                warn!(
-                    "Pending upload verification: terminal failure record_id={} error={error}",
-                    sync_state.record_id(),
-                );
+                warn!("Pending upload verification: terminal failure error={error}");
             }
             (
                 PersistedCloudBlobState::UploadedPendingConfirmation(state),
                 BlobCheckResult::AuthorizationRequired { error },
             ) => {
                 warn!(
-                    "Pending upload verification: authorization required record_id={} attempts={} checked_at={} error={error}",
-                    sync_state.record_id(),
+                    "Pending upload verification: authorization required attempts={} checked_at={} error={error}",
                     state.attempt_count,
                     state.last_checked_at.unwrap_or_default()
                 );

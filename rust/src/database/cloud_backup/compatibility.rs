@@ -78,6 +78,9 @@ impl From<PersistedLegacyCloudBackupState> for PersistedCloudBackupState {
         if matches!(state.status, PersistedCloudBackupStatus::Disabled) {
             return Self::Disabled;
         }
+        if matches!(state.status, PersistedCloudBackupStatus::Corrupted) {
+            return Self::corrupted("legacy persisted cloud backup state was marked corrupted");
+        }
 
         Self::Configured(PersistedConfiguredCloudBackup {
             passkey: legacy_passkey_state(state.status),
@@ -103,6 +106,7 @@ fn legacy_passkey_state(status: PersistedCloudBackupStatus) -> PersistedPasskeyS
         | PersistedCloudBackupStatus::Enabled
         | PersistedCloudBackupStatus::Unverified
         | PersistedCloudBackupStatus::Disabling => PersistedPasskeyState::Available,
+        PersistedCloudBackupStatus::Corrupted => PersistedPasskeyState::Missing,
     }
 }
 
@@ -210,6 +214,9 @@ impl PersistedCloudBackupDomainRecord {
             PersistedCloudBackupState::Disabling(disabling) => {
                 PersistedBackupRecord::Disabling(disabling.clone())
             }
+            PersistedCloudBackupState::Corrupted { error } => {
+                PersistedBackupRecord::Corrupted { error: error.clone() }
+            }
         };
 
         Self { version: 2, backup }
@@ -230,6 +237,9 @@ impl PersistedCloudBackupDomainRecord {
             }
             PersistedBackupRecord::Disabling(disabling) => {
                 Ok(PersistedCloudBackupState::Disabling(disabling))
+            }
+            PersistedBackupRecord::Corrupted { error } => {
+                Ok(PersistedCloudBackupState::Corrupted { error })
             }
         }
     }
@@ -257,6 +267,7 @@ enum PersistedBackupRecord {
     Disabled,
     Configured(PersistedConfiguredCloudBackup),
     Disabling(PersistedDisablingCloudBackup),
+    Corrupted { error: String },
 }
 
 impl Serialize for PersistedCloudBlobSyncState {
@@ -379,6 +390,7 @@ impl From<&PersistedCloudBlobSyncState> for PersistedLegacyCloudBlobSyncState {
 enum PersistedCloudBlobRecordKey {
     MasterKeyWrapper,
     Wallet { wallet_id: WalletId, record_id: String },
+    Corrupted { record_id: String },
 }
 
 impl PersistedCloudBlobRecordKey {
@@ -388,6 +400,7 @@ impl PersistedCloudBlobRecordKey {
             CloudBackupRecordKey::Wallet(wallet_id, record_id) => {
                 Self::Wallet { wallet_id, record_id }
             }
+            CloudBackupRecordKey::Corrupted(record_id) => Self::Corrupted { record_id },
         }
     }
 
@@ -397,6 +410,7 @@ impl PersistedCloudBlobRecordKey {
             Self::Wallet { wallet_id, record_id } => {
                 CloudBackupRecordKey::Wallet(wallet_id, record_id)
             }
+            Self::Corrupted { record_id } => CloudBackupRecordKey::Corrupted(record_id),
         }
     }
 }
@@ -473,6 +487,34 @@ mod tests {
     }
 
     #[test]
+    fn cloud_backup_state_serializes_corrupted_domain_shape() {
+        let state = PersistedCloudBackupState::corrupted("decode failed");
+
+        let encoded = serde_json::to_value(&state).unwrap();
+
+        assert_eq!(encoded["version"], 2);
+        assert_eq!(encoded["backup"]["state"], "Corrupted");
+        assert_eq!(encoded["backup"]["data"]["error"], "decode failed");
+    }
+
+    #[test]
+    fn cloud_backup_state_accepts_corrupted_domain_json() {
+        let state: PersistedCloudBackupState = serde_json::from_value(serde_json::json!({
+            "version": 2,
+            "backup": {
+                "state": "Corrupted",
+                "data": {
+                    "error": "decode failed"
+                }
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(state, PersistedCloudBackupState::corrupted("decode failed"));
+        assert_eq!(state.status(), PersistedCloudBackupStatus::Corrupted);
+    }
+
+    #[test]
     fn cloud_backup_state_accepts_v1_domain_json() {
         let state: PersistedCloudBackupState = serde_json::from_value(serde_json::json!({
             "version": 1,
@@ -541,6 +583,46 @@ mod tests {
         assert_eq!(state.status(), PersistedCloudBackupStatus::Disabling);
         assert_eq!(state.last_sync(), Some(10));
         assert_eq!(state.wallet_count(), Some(2));
+    }
+
+    #[test]
+    fn cloud_backup_state_accepts_pending_verification_completion_without_created_at() {
+        let state: PersistedCloudBackupState = serde_json::from_value(serde_json::json!({
+            "version": 2,
+            "backup": {
+                "state": "Configured",
+                "data": {
+                    "passkey": "Available",
+                    "verification": {
+                        "state": "NotVerified",
+                        "data": {}
+                    },
+                    "sync": {},
+                    "pending_verification_completion": {
+                        "report": {
+                            "master_key_wrapper_repaired": false,
+                            "local_master_key_repaired": false,
+                            "credential_recovered": false,
+                            "wallets_verified": 0,
+                            "wallets_failed": 0,
+                            "wallets_unsupported": 0
+                        },
+                        "namespace_id": "0123456789abcdef0123456789abcdef",
+                        "uploads": ["MasterKeyWrapper"]
+                    }
+                }
+            }
+        }))
+        .unwrap();
+
+        let PersistedCloudBackupState::Configured(configured) = state else {
+            panic!("expected configured cloud backup state");
+        };
+        let completion =
+            configured.pending_verification_completion.expect("pending verification completion");
+
+        assert_eq!(completion.created_at, None);
+        assert_eq!(completion.uploads, vec![PersistedPendingVerificationUpload::MasterKeyWrapper]);
     }
 
     #[test]
@@ -641,6 +723,45 @@ mod tests {
         assert_eq!(encoded["record_key"]["record_id"], "record-a");
         assert!(encoded.get("wallet_id").is_none());
         assert!(encoded.get("record_id").is_none());
+    }
+
+    #[test]
+    fn blob_sync_state_serializes_corrupt_domain_shape() {
+        let state = PersistedCloudBlobSyncState::corrupted("decode failed".into());
+
+        let encoded = serde_json::to_value(&state).unwrap();
+
+        assert_eq!(encoded["version"], 1);
+        assert_eq!(encoded["record_key"]["kind"], "Corrupted");
+        assert_eq!(
+            encoded["record_key"]["record_id"],
+            crate::database::cloud_backup::state::CORRUPT_BLOB_SYNC_RECORD_ID
+        );
+    }
+
+    #[test]
+    fn blob_sync_state_accepts_corrupt_domain_json() {
+        let state: PersistedCloudBlobSyncState = serde_json::from_value(serde_json::json!({
+            "version": 1,
+            "namespace_id": "ns-1",
+            "record_key": {
+                "kind": "Corrupted",
+                "record_id": "__corrupt_cloud_backup_blob_sync_state__"
+            },
+            "state": {
+                "Failed": {
+                    "revision_hash": null,
+                    "retryable": false,
+                    "issue": null,
+                    "error": "decode failed",
+                    "failed_at": 0
+                }
+            }
+        }))
+        .unwrap();
+
+        assert!(state.is_corrupted());
+        assert!(!state.is_master_key_wrapper());
     }
 
     #[test]

@@ -24,6 +24,7 @@ import org.bitcoinppl.cove_core.CloudBackupProgress
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupState
+import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.CloudBackupSyncState
@@ -58,7 +59,11 @@ class CloudBackupManager private constructor(
     var isCloudBackupEnabled by mutableStateOf(runCatching { rust?.isCloudBackupEnabled() == true }.getOrDefault(false))
         private set
 
+    private var hasReconciledDisabledState = false
+
     init {
+        refreshPersistedEnabledState()
+
         if (startLiveUpdates && rust != null) {
             rust.listenForUpdates(this)
             rustScope.launch {
@@ -74,6 +79,9 @@ class CloudBackupManager private constructor(
 
     val lifecycle: CloudBackupLifecycle
         get() = state.lifecycle
+
+    val settingsRowStatus: CloudBackupSettingsRowStatus
+        get() = state.settingsRowStatus
 
     val configuredState
         get() = (state.lifecycle as? CloudBackupLifecycle.Configured)?.v1
@@ -288,16 +296,49 @@ class CloudBackupManager private constructor(
     }
 
     private fun apply(message: CloudBackupReconcileMessage) {
+        val wasDisablingCloudBackup = isDisablingCloudBackup
         when (message) {
-            is CloudBackupReconcileMessage.Lifecycle -> state = state.copy(lifecycle = message.v1)
+            is CloudBackupReconcileMessage.Lifecycle ->
+                state = state.copy(lifecycle = message.v1, settingsRowStatus = message.v2)
             is CloudBackupReconcileMessage.EnableCompleted -> Unit
         }.let {}
-        refreshPersistedEnabledState()
+
+        refreshPersistedEnabledState(forceDisabledNotification = wasDisablingCloudBackup)
     }
 
-    private fun refreshPersistedEnabledState() {
+    private fun refreshPersistedEnabledState(forceDisabledNotification: Boolean = false) {
         isCloudBackupEnabled = runCatching { rust?.isCloudBackupEnabled() == true }
             .getOrDefault(isCloudBackupEnabled)
+
+        reconcileDisabledState(forceNotification = forceDisabledNotification)
+    }
+
+    private fun reconcileDisabledState(forceNotification: Boolean = false) {
+        if (rust == null) return
+
+        if (state.lifecycle !is CloudBackupLifecycle.Disabled) {
+            hasReconciledDisabledState = false
+            return
+        }
+
+        if (isCloudBackupEnabled && !forceNotification) return
+        if (hasReconciledDisabledState) return
+
+        if (notifyCloudBackupDisabled()) {
+            hasReconciledDisabledState = true
+        }
+    }
+
+    private fun notifyCloudBackupDisabled(): Boolean {
+        val callback = onCloudBackupDisabled ?: return false
+
+        try {
+            callback()
+        } catch (error: Exception) {
+            Log.e(TAG, "cloud backup disabled callback failed", error)
+        }
+
+        return true
     }
 
     override fun close() {
@@ -311,6 +352,13 @@ class CloudBackupManager private constructor(
 
         @Volatile
         private var instance: CloudBackupManager? = null
+
+        @Volatile
+        private var onCloudBackupDisabled: (() -> Unit)? = null
+
+        fun setOnCloudBackupDisabled(callback: () -> Unit) {
+            onCloudBackupDisabled = callback
+        }
 
         private fun liveManager(): CloudBackupManager {
             val rust = RustCloudBackupManager()

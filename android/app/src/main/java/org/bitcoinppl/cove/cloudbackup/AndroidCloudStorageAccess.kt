@@ -177,6 +177,12 @@ private fun DriveHttpException.forbiddenError(fallback: String): CloudStorageExc
 private fun AuthorizationRequiredException.cloudStorageMessage(): String =
     message?.takeIf(String::isNotBlank) ?: "google drive authorization is required"
 
+private fun DriveAccountBindingException.cloudStorageMessage(): String =
+    message?.takeIf(String::isNotBlank) ?: "google drive account is unavailable"
+
+private fun ForegroundAuthorizationTimeoutException.cloudStorageMessage(): String =
+    message?.takeIf(String::isNotBlank) ?: "google drive authorization timed out"
+
 private fun ApiException.cloudStorageMessage(prefix: String): String {
     val status = CommonStatusCodes.getStatusCodeString(statusCode)
     val details = message
@@ -196,8 +202,48 @@ private fun logDriveWarning(message: String, error: Throwable) {
 
 internal fun monotonicTimeMs(): Long = System.nanoTime() / 1_000_000L
 
+internal fun duplicateDriveFolderNames(folderNames: List<String>): Set<String> =
+    folderNames
+        .groupingBy { it }
+        .eachCount()
+        .filterValues { it > 1 }
+        .keys
+
+internal fun duplicateDriveFileNames(fileNames: List<String>): Set<String> =
+    fileNames
+        .groupingBy { it }
+        .eachCount()
+        .filterValues { it > 1 }
+        .keys
+
+private fun duplicateDriveFolderException(folderName: String): DriveHttpException =
+    DriveHttpException(HttpURLConnection.HTTP_CONFLICT, "duplicate google drive folder: $folderName")
+
+private fun duplicateDriveFileException(fileName: String): DriveHttpException =
+    DriveHttpException(HttpURLConnection.HTTP_CONFLICT, "duplicate google drive file: $fileName")
+
+internal fun driveBackupFileLocations(
+    fileNames: List<String>,
+    locationForFileName: (String) -> String = { it },
+): List<String> {
+    val jsonFileNames = fileNames.filter { it.endsWith(".json") }
+    val duplicates = duplicateDriveFileNames(jsonFileNames)
+    if (duplicates.isNotEmpty()) {
+        throw duplicateDriveFileException(duplicates.first())
+    }
+
+    return jsonFileNames.map(locationForFileName)
+}
+
+internal fun isValidCloudBackupNamespaceId(namespace: String): Boolean =
+    namespace.length == 32 && namespace.all { it in '0'..'9' || it in 'a'..'f' }
+
 internal fun mapDriveUploadError(error: Throwable, target: String): CloudStorageException =
     when (error) {
+        is DriveAccountBindingException ->
+            CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
+        is ForegroundAuthorizationTimeoutException ->
+            CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is AuthorizationRequiredException ->
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is ApiException ->
@@ -237,6 +283,10 @@ internal fun mapDriveDeleteError(error: Throwable, target: String): CloudStorage
 
 internal fun mapDriveListError(error: Throwable): CloudStorageException =
     when (error) {
+        is DriveAccountBindingException ->
+            CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
+        is ForegroundAuthorizationTimeoutException ->
+            CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is AuthorizationRequiredException ->
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is ApiException ->
@@ -250,6 +300,10 @@ internal fun mapDriveListError(error: Throwable): CloudStorageException =
                 HttpURLConnection.HTTP_UNAUTHORIZED ->
                     CloudStorageException.AuthorizationRequired("google drive authorization is required")
                 HTTP_TOO_MANY_REQUESTS -> CloudStorageException.QuotaExceeded()
+                HttpURLConnection.HTTP_CONFLICT ->
+                    CloudStorageException.NotAvailable(
+                        error.body.ifBlank { "conflicting google drive backup data" },
+                    )
                 HttpURLConnection.HTTP_NOT_FOUND -> CloudStorageException.NotFound("drive file")
                 HttpURLConnection.HTTP_FORBIDDEN ->
                     error.forbiddenError("drive listing was rejected")
@@ -267,9 +321,20 @@ internal class DriveHttpException(
 
 class AndroidCloudStorageAccess internal constructor(
     private val driveAuthorization: DriveAuthorization,
+    private val accountBindingStore: DriveAccountBindingStore,
 ) : CloudStorageAccess {
     constructor(context: Context) : this(
-        CachingDriveAuthorization(DriveAuthorizationHelper(context)),
+        SharedPreferencesDriveAccountBindingStore(context.applicationContext),
+    )
+
+    private constructor(accountBindingStore: SharedPreferencesDriveAccountBindingStore) : this(
+        CachingDriveAuthorization(
+            DriveAuthorizationHelper(accountBindingStore.appContext) {
+                accountBindingStore.selectedIdentity()
+            },
+            cacheKey = { accountBindingStore.selectedIdentity() },
+        ),
+        accountBindingStore,
     )
 
     private val namespacesRootFolderMutex = Mutex()
@@ -290,6 +355,7 @@ class AndroidCloudStorageAccess internal constructor(
             onError = { error ->
                 mapDriveUploadError(error, location.errorId("master key backup"))
             },
+            bindAccountOnSuccess = { true },
         ) { token ->
             val namespaceFolderId = ensureNamespaceFolderId(token, namespace)
             val parentId = ensureLocationParentFolderId(token, namespaceFolderId, location)
@@ -312,6 +378,7 @@ class AndroidCloudStorageAccess internal constructor(
         runDriveOperation(
             interactive = policy.allowsConsent(),
             onError = { error -> mapDriveUploadError(error, location.errorId(recordId)) },
+            bindAccountOnSuccess = { true },
         ) { token ->
             val namespaceFolderId = ensureNamespaceFolderId(token, namespace)
             val parentId = ensureLocationParentFolderId(token, namespaceFolderId, location)
@@ -358,6 +425,7 @@ class AndroidCloudStorageAccess internal constructor(
                 val errorId = locations.firstOrNull()?.errorId(recordId) ?: recordId
                 mapDriveDownloadError(error, errorId)
             },
+            bindAccountOnSuccess = { true },
         ) { token ->
             val namespaceFolderId = requireNamespaceFolderId(token, namespace)
             val fileId =
@@ -404,7 +472,7 @@ class AndroidCloudStorageAccess internal constructor(
                     )
                 } catch (error: Throwable) {
                     if (error is CancellationException) throw error
-                    Log.w("AndroidCloudStorage", "failed to delete drive file id=${file.id}", error)
+                    Log.w("AndroidCloudStorage", "failed to delete drive backup file", error)
                     failures.add(DriveDeleteFailure(fileId = file.id, error = error))
                 }
             }
@@ -456,6 +524,7 @@ class AndroidCloudStorageAccess internal constructor(
         runDriveOperation(
             interactive = policy.allowsConsent(),
             onError = { error -> mapDriveListError(error) },
+            bindAccountOnSuccess = { uploaded -> uploaded },
         ) { token ->
             val namespaceFolderId = findNamespaceFolderId(token, namespace) ?: return@runDriveOperation false
             findFileAtLocations(token, namespaceFolderId, locations) != null
@@ -467,26 +536,7 @@ class AndroidCloudStorageAccess internal constructor(
                 interactive = policy.allowsConsent(),
                 onError = { error -> throw error },
             ) { token ->
-                val namespacesRootId = findNamespacesRootFolderId(token) ?: return@runDriveOperation CloudSyncHealth.NoFiles
-                val namespaces =
-                    listChildren(
-                        token = token,
-                        parentId = namespacesRootId,
-                        foldersOnly = true,
-                    )
-                if (namespaces.isEmpty()) {
-                    return@runDriveOperation CloudSyncHealth.NoFiles
-                }
-
-                val namespaceFiles =
-                    namespaces.map { namespace ->
-                        listBackupLocations(
-                            token = token,
-                            namespaceFolderId = namespace.id,
-                        )
-                    }
-
-                cloudBackupLocationsSyncHealth(namespaceFiles)
+                cloudBackupLocationsSyncHealth(listNamespaceBackupLocations(token))
             }
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
@@ -736,6 +786,7 @@ class AndroidCloudStorageAccess internal constructor(
         runDriveOperation(
             interactive = interactive,
             onError = { error -> mapDriveListError(error) },
+            bindAccountOnSuccess = { true },
         ) { token ->
             val namespaceFolderId = requireNamespaceFolderId(token, namespace)
             listBackupLocations(
@@ -757,38 +808,63 @@ class AndroidCloudStorageAccess internal constructor(
 
         val locations =
             immediateChildren
-                .filterNot { it.isFolder }
-                .map { it.name }
-                .filter { it.endsWith(".json") }
+                .backupFileLocations { it }
                 .toMutableList()
 
         immediateChildren
-            .firstOrNull { it.isFolder && it.name == DrivePaths.masterKeyFolderName }
+            .singleFolderChild(DrivePaths.masterKeyFolderName)
             ?.let { masterKeyFolder ->
                 listChildren(
                     token = token,
                     parentId = masterKeyFolder.id,
                     foldersOnly = false,
-                ).filterNot { it.isFolder }
-                    .map { "${DrivePaths.masterKeyFolderName}/${it.name}" }
-                    .filter { it.endsWith(".json") }
+                ).backupFileLocations { "${DrivePaths.masterKeyFolderName}/$it" }
                     .let(locations::addAll)
             }
 
         immediateChildren
-            .firstOrNull { it.isFolder && it.name == DrivePaths.walletsFolderName }
+            .singleFolderChild(DrivePaths.walletsFolderName)
             ?.let { walletsFolder ->
                 listChildren(
                     token = token,
                     parentId = walletsFolder.id,
                     foldersOnly = false,
-                ).filterNot { it.isFolder }
-                    .map { DrivePaths.walletLocationForFileName(it.name) }
-                    .filter { it.endsWith(".json") }
+                ).backupFileLocations(DrivePaths::walletLocationForFileName)
                     .let(locations::addAll)
             }
 
-        return locations.distinct()
+        return locations
+    }
+
+    private suspend fun listNamespaceBackupLocations(token: String): List<List<String>> {
+        val namespacesRootId = findNamespacesRootFolderId(token) ?: return emptyList()
+
+        return listNamespaceFolders(token, namespacesRootId)
+            .filter { namespace -> isValidCloudBackupNamespaceId(namespace.name) }
+            .map { namespace ->
+                listBackupLocations(
+                    token = token,
+                    namespaceFolderId = namespace.id,
+                )
+            }
+    }
+
+    private suspend fun listNamespaceFolders(
+        token: String,
+        namespacesRootId: String,
+    ): List<DriveFileMetadata> {
+        val namespaces =
+            listChildren(
+                token = token,
+                parentId = namespacesRootId,
+                foldersOnly = true,
+            )
+        val duplicates = duplicateDriveFolderNames(namespaces.map { it.name })
+        if (duplicates.isNotEmpty()) {
+            throw duplicateDriveFolderException("namespace")
+        }
+
+        return namespaces
     }
 
     private suspend fun listNamespaces(
@@ -799,11 +875,7 @@ class AndroidCloudStorageAccess internal constructor(
             onError = { error -> mapDriveListError(error) },
         ) { token ->
             val namespacesRootId = findNamespacesRootFolderId(token) ?: return@runDriveOperation emptyList()
-            listChildren(
-                token = token,
-                parentId = namespacesRootId,
-                foldersOnly = true,
-            ).map { it.name }
+            listNamespaceFolders(token, namespacesRootId).map { it.name }
         }
 
     private fun buildMultipartBody(
@@ -895,18 +967,31 @@ class AndroidCloudStorageAccess internal constructor(
         parentId: String,
         fileName: String,
         foldersOnly: Boolean = false,
-    ): DriveFileMetadata? =
-        listChildren(token, parentId, foldersOnly).firstOrNull { it.name == fileName }
+    ): DriveFileMetadata? {
+        val matches =
+            listChildren(token, parentId, foldersOnly)
+                .filter { it.name == fileName && (foldersOnly || !it.isFolder) }
+        if (matches.size > 1) {
+            if (foldersOnly) {
+                throw duplicateDriveFolderException(fileName)
+            }
+
+            throw duplicateDriveFileException(fileName)
+        }
+
+        return matches.firstOrNull()
+    }
 
     private suspend fun <T> runDriveOperation(
         interactive: Boolean,
         onError: (Throwable) -> CloudStorageException,
+        bindAccountOnSuccess: (T) -> Boolean = { false },
         block: suspend (token: String) -> T,
     ): T {
         val started = monotonicTimeMs()
-        val firstToken =
+        val firstAccess =
             try {
-                driveAuthorization.accessToken(interactive)
+                verifiedDriveAccessToken(interactive)
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 logDriveWarning("failed to get google drive access token", error)
@@ -914,24 +999,24 @@ class AndroidCloudStorageAccess internal constructor(
             }
 
         try {
-            return block(firstToken).also {
-                Log.d(
-                    "AndroidCloudStorage",
-                    "drive operation elapsed_ms=${monotonicTimeMs() - started}",
-                )
-            }
+            return finishDriveOperation(
+                started = started,
+                access = firstAccess,
+                result = block(firstAccess.token),
+                bindAccountOnSuccess = bindAccountOnSuccess,
+            )
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             if (error is DriveHttpException && error.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
                 runCatching {
-                    driveAuthorization.clearToken(firstToken)
+                    driveAuthorization.clearToken(firstAccess.token)
                 }.onFailure { tokenError ->
                     Log.w("AndroidCloudStorage", "failed to clear expired drive token", tokenError)
                 }
 
-                val retryToken =
+                val retryAccess =
                     try {
-                        driveAuthorization.accessToken(interactive)
+                        verifiedDriveAccessToken(interactive)
                     } catch (retryTokenError: Throwable) {
                         if (retryTokenError is CancellationException) throw retryTokenError
                         logDriveWarning("failed to refresh google drive access token", retryTokenError)
@@ -939,21 +1024,72 @@ class AndroidCloudStorageAccess internal constructor(
                     }
 
                 try {
-                    return block(retryToken).also {
-                        Log.d(
-                            "AndroidCloudStorage",
-                            "drive operation retry elapsed_ms=${monotonicTimeMs() - started}",
-                        )
-                    }
+                    return finishDriveOperation(
+                        started = started,
+                        access = retryAccess,
+                        result = block(retryAccess.token),
+                        bindAccountOnSuccess = bindAccountOnSuccess,
+                        retry = true,
+                    )
                 } catch (retryError: Throwable) {
                     if (retryError is CancellationException) throw retryError
-                    clearRejectedAuthorizationToken(retryToken, retryError)
+                    clearRejectedAuthorizationToken(retryAccess.token, retryError)
                     throw onError(retryError)
                 }
             }
 
-            clearRejectedAuthorizationToken(firstToken, error)
+            clearRejectedAuthorizationToken(firstAccess.token, error)
             throw onError(error)
+        }
+    }
+
+    private suspend fun verifiedDriveAccessToken(interactive: Boolean): DriveAccessToken {
+        val access = driveAuthorization.accessToken(interactive)
+        try {
+            verifyDriveAccountBinding(accountBindingStore, access.account, bindIfMissing = false)
+        } catch (error: DriveAccountBindingException) {
+            runCatching {
+                driveAuthorization.clearToken(access.token)
+            }.onFailure { tokenError ->
+                Log.w("AndroidCloudStorage", "failed to clear mismatched drive token", tokenError)
+            }
+
+            throw error
+        }
+
+        return access
+    }
+
+    private suspend fun <T> finishDriveOperation(
+        started: Long,
+        access: DriveAccessToken,
+        result: T,
+        bindAccountOnSuccess: (T) -> Boolean,
+        retry: Boolean = false,
+    ): T {
+        if (bindAccountOnSuccess(result)) {
+            bindDriveAccountAfterSuccessfulOperation(access)
+        }
+
+        val retryLabel = if (retry) " retry" else ""
+        Log.d(
+            "AndroidCloudStorage",
+            "drive operation$retryLabel elapsed_ms=${monotonicTimeMs() - started}",
+        )
+        return result
+    }
+
+    private suspend fun bindDriveAccountAfterSuccessfulOperation(access: DriveAccessToken) {
+        try {
+            verifyDriveAccountBinding(accountBindingStore, access.account)
+        } catch (error: DriveAccountBindingException) {
+            runCatching {
+                driveAuthorization.clearToken(access.token)
+            }.onFailure { tokenError ->
+                Log.w("AndroidCloudStorage", "failed to clear mismatched drive token", tokenError)
+            }
+
+            throw error
         }
     }
 
@@ -1006,10 +1142,7 @@ class AndroidCloudStorageAccess internal constructor(
 
             if (statusCode !in 200..299) {
                 val responseText = responseBody.toString(Charsets.UTF_8)
-                Log.w(
-                    "AndroidCloudStorage",
-                    "google drive request failed method=$method url=$url status=$statusCode body=$responseText",
-                )
+                Log.w("AndroidCloudStorage", "google drive request failed method=$method status=$statusCode")
                 throw DriveHttpException(statusCode, responseText)
             }
 
@@ -1037,6 +1170,23 @@ class AndroidCloudStorageAccess internal constructor(
             get() = mimeType == DriveApi.FOLDER_MIME_TYPE
     }
 
+    private fun List<DriveFileMetadata>.singleFolderChild(folderName: String): DriveFileMetadata? {
+        val matches = filter { it.isFolder && it.name == folderName }
+        if (matches.size > 1) {
+            throw duplicateDriveFolderException(folderName)
+        }
+
+        return matches.firstOrNull()
+    }
+
+    private fun List<DriveFileMetadata>.backupFileLocations(
+        locationForFileName: (String) -> String,
+    ): List<String> =
+        driveBackupFileLocations(
+            fileNames = filterNot { it.isFolder }.map { it.name },
+            locationForFileName = locationForFileName,
+        )
+
     private data class DriveDeleteFailure(
         val fileId: String,
         val error: Throwable,
@@ -1054,7 +1204,7 @@ class AndroidCloudStorageAccess internal constructor(
                 separator = "; ",
                 prefix = "failed to delete drive files: ",
             ) { failure ->
-                "id=${failure.fileId} ${deleteFailureDetail(failure.error)}"
+                deleteFailureDetail(failure.error)
             }
 
         return DriveHttpException(statusCode, body).apply {
@@ -1065,7 +1215,7 @@ class AndroidCloudStorageAccess internal constructor(
     private fun deleteFailureDetail(error: Throwable): String =
         when (error) {
             is DriveHttpException ->
-                "status=${error.statusCode} body=${error.body.ifBlank { "empty response" }}"
+                "status=${error.statusCode}"
             else ->
                 "${error::class.java.simpleName}: ${error.message ?: "no message"}"
         }

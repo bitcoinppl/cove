@@ -70,25 +70,22 @@ impl RustCloudBackupManager {
                     Ok(WalletBackupLookup::Found(wallet)) => wallet,
                     Ok(WalletBackupLookup::NotFound) => {
                         warn!(
-                            "Failed to recover wallet {}/{} from other backup: listed wallet backup is missing",
-                            namespace.namespace_id, record_id
+                            "Failed to recover wallet from other backup: listed wallet backup is missing"
                         );
                         report.wallets_failed += 1;
-                        report.failed_wallet_errors.push(format!(
-                            "{} was listed but missing from cloud backup",
-                            record_id
-                        ));
+                        report
+                            .failed_wallet_errors
+                            .push("wallet was listed but missing from cloud backup".to_string());
                         continue;
                     }
 
                     Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
                         warn!(
-                            "Failed to recover wallet {}/{} from other backup: unsupported wallet backup version {version}",
-                            namespace.namespace_id, record_id
+                            "Failed to recover wallet from other backup: unsupported wallet backup version {version}"
                         );
                         report.wallets_failed += 1;
                         report.failed_wallet_errors.push(format!(
-                            "{record_id} uses unsupported wallet backup version {version}"
+                            "wallet uses unsupported wallet backup version {version}"
                         ));
                         continue;
                     }
@@ -100,10 +97,7 @@ impl RustCloudBackupManager {
                                 error,
                             ));
                         }
-                        warn!(
-                            "Failed to recover wallet {}/{} from other backup: {error}",
-                            namespace.namespace_id, record_id
-                        );
+                        warn!("Failed to recover wallet from other backup: {error}");
                         report.wallets_failed += 1;
                         report.failed_wallet_errors.push(error.to_string());
                         continue;
@@ -129,10 +123,7 @@ impl RustCloudBackupManager {
                                 error,
                             ));
                         }
-                        warn!(
-                            "Failed to recover wallet {}/{} from other backup: {error}",
-                            namespace.namespace_id, record_id
-                        );
+                        warn!("Failed to recover wallet from other backup: {error}");
                         report.wallets_failed += 1;
                         report.failed_wallet_errors.push(error.to_string());
                     }

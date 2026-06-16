@@ -92,27 +92,56 @@ pub enum PasskeyRegistrationPlatform {
     Android,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+#[derive(Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct PasskeyRegistrationResult {
     pub credential_id: Vec<u8>,
     pub provider_aaguid: String,
     pub registered_platform: PasskeyRegistrationPlatform,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+impl std::fmt::Debug for PasskeyRegistrationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PasskeyRegistrationResult")
+            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
+            .field("provider_aaguid", &"<redacted>")
+            .field("registered_platform", &self.registered_platform)
+            .finish()
+    }
+}
+
+#[derive(Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct PasskeyRegistrationUser {
     pub id: Vec<u8>,
     pub name: String,
     pub display_name: String,
 }
 
+impl std::fmt::Debug for PasskeyRegistrationUser {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PasskeyRegistrationUser")
+            .field("id", &format_args!("<redacted len={}>", self.id.len()))
+            .field("name", &self.name)
+            .field("display_name", &self.display_name)
+            .finish()
+    }
+}
+
 /// Result from discovering a synced passkey during restore
-#[derive(Debug, uniffi::Record)]
+#[derive(uniffi::Record)]
 pub struct DiscoveredPasskeyResult {
     /// 32-byte PRF key
     pub prf_output: Vec<u8>,
     /// Discovered credential ID, persisted to local keychain
     pub credential_id: Vec<u8>,
+}
+
+impl std::fmt::Debug for DiscoveredPasskeyResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DiscoveredPasskeyResult")
+            .field("prf_output", &format_args!("<redacted len={}>", self.prf_output.len()))
+            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
+            .finish()
+    }
 }
 
 #[uniffi::export(callback_interface)]
@@ -349,6 +378,19 @@ mod tests {
         let attestation_object = attestation_object(&auth_data);
 
         assert_eq!(attestation_auth_data(&attestation_object).unwrap(), auth_data);
+    }
+
+    #[test]
+    fn discovered_passkey_debug_redacts_prf_output() {
+        let result =
+            DiscoveredPasskeyResult { prf_output: vec![10, 20, 30], credential_id: vec![1, 2, 3] };
+
+        let debug = format!("{result:?}");
+
+        assert!(debug.contains("prf_output: <redacted len=3>"));
+        assert!(debug.contains("credential_id: <redacted len=3>"));
+        assert!(!debug.contains("[10, 20, 30]"));
+        assert!(!debug.contains("[1, 2, 3]"));
     }
 
     #[test]

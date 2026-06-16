@@ -17,7 +17,7 @@ use std::time::Duration;
 use act_zero::{Addr, call, send};
 use cove_cspp::backup_data::{MASTER_KEY_RECORD_ID, wallet_record_id};
 use cove_device::cloud_storage::{
-    CloudStorage, CloudStorageClient, CloudStorageError, CloudSyncHealth,
+    CloudAccessPolicy, CloudStorage, CloudStorageClient, CloudStorageError, CloudSyncHealth,
 };
 use cove_tokio::task::spawn_actor;
 use cove_util::ResultExt as _;
@@ -91,8 +91,16 @@ type LocalWalletSecret = crate::backup::model::WalletSecret;
 const PASSKEY_RP_ID: &str = "covebitcoinwallet.com";
 pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str =
     "master key backup is missing from cloud storage";
+pub(crate) const CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE: &str = concat!(
+    "Cloud Backup local state could not be read. ",
+    "Contact support before changing Cloud Backup settings."
+);
 pub(super) const CLOUD_BACKUP_IO_CONCURRENCY: usize = 4;
 type Message = CloudBackupReconcileMessage;
+
+pub(crate) fn current_timestamp() -> u64 {
+    jiff::Timestamp::now().as_second().try_into().unwrap_or(0)
+}
 
 pub static CLOUD_BACKUP_MANAGER: LazyLock<Arc<RustCloudBackupManager>> =
     LazyLock::new(RustCloudBackupManager::init);
@@ -108,6 +116,27 @@ pub enum CloudBackupStatus {
     PasskeyMissing,
     UnsupportedPasskeyProvider,
     Error(String),
+}
+
+/// Shared settings row state projected for Swift and Kotlin presentation
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudBackupSettingsRowStatus {
+    Disabled,
+    Disabling,
+    SettingUp,
+    Restoring,
+    Active,
+    PasskeyMissing,
+    PasskeyProviderUnsupported,
+    Unverified,
+    Confirming,
+    VerificationRecommended,
+    CheckingSync,
+    Syncing,
+    NoFiles,
+    DriveUnavailable,
+    Error(String),
+    AuthorizationRequired(String),
 }
 
 /// Whether saved passkey confirmation was user-triggered or flow-triggered
@@ -212,7 +241,7 @@ pub(crate) enum CloudBackupDisableOutcome {
 /// Typed state delta sent from Rust to Swift and Kotlin reconcilers
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
-    Lifecycle(Box<CloudBackupLifecycle>),
+    Lifecycle(Box<CloudBackupLifecycle>, CloudBackupSettingsRowStatus),
     EnableCompleted(CloudBackupEnableContext),
 }
 
@@ -408,11 +437,15 @@ pub struct CloudBackupRetryContext {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CloudBackupState {
     pub lifecycle: CloudBackupLifecycle,
+    pub settings_row_status: CloudBackupSettingsRowStatus,
 }
 
 impl Default for CloudBackupState {
     fn default() -> Self {
-        Self { lifecycle: CloudBackupLifecycle::Disabled }
+        Self {
+            lifecycle: CloudBackupLifecycle::Disabled,
+            settings_row_status: CloudBackupSettingsRowStatus::Disabled,
+        }
     }
 }
 
@@ -521,9 +554,9 @@ impl From<&CloudStorageError> for CloudStorageIssue {
             CloudStorageError::NotAvailable(_) => Self::Unavailable,
             CloudStorageError::NotFound(_) => Self::NotFound,
             CloudStorageError::QuotaExceeded => Self::QuotaExceeded,
-            CloudStorageError::UploadFailed(_) | CloudStorageError::DownloadFailed(_) => {
-                Self::Other
-            }
+            CloudStorageError::UploadFailed(_)
+            | CloudStorageError::DownloadFailed(_)
+            | CloudStorageError::InvalidNamespace(_) => Self::Other,
         }
     }
 }
@@ -651,6 +684,7 @@ pub(crate) struct PendingVerificationCompletion {
     report: DeepVerificationReport,
     namespace_id: String,
     uploads: Vec<PendingVerificationUpload>,
+    created_at: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -866,7 +900,12 @@ impl PendingVerificationCompletion {
         namespace_id: String,
         uploads: Vec<PendingVerificationUpload>,
     ) -> Self {
-        Self { report, namespace_id, uploads }
+        Self {
+            report,
+            namespace_id,
+            uploads,
+            created_at: Some(crate::manager::cloud_backup_manager::current_timestamp()),
+        }
     }
 
     pub(crate) fn report(&self) -> &DeepVerificationReport {
@@ -881,10 +920,24 @@ impl PendingVerificationCompletion {
         &self.uploads
     }
 
+    pub(crate) fn is_expired(&self, now: u64, ttl_seconds: u64) -> bool {
+        let Some(created_at) = self.created_at else {
+            // legacy persisted completions predate created_at and must be restarted
+            return true;
+        };
+
+        if created_at > now {
+            return true;
+        }
+
+        now.saturating_sub(created_at) >= ttl_seconds
+    }
+
     fn persisted(&self) -> PersistedPendingVerificationCompletion {
         PersistedPendingVerificationCompletion {
             report: PersistedDeepVerificationReport::from(&self.report),
             namespace_id: self.namespace_id.clone(),
+            created_at: self.created_at,
             uploads: self
                 .uploads
                 .iter()
@@ -898,6 +951,7 @@ impl PendingVerificationCompletion {
         Self {
             report: DeepVerificationReport::from(completion.report),
             namespace_id: completion.namespace_id,
+            created_at: completion.created_at,
             uploads: completion
                 .uploads
                 .into_iter()
@@ -1086,6 +1140,37 @@ pub enum CatastrophicRecoveryError {
     Failure(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum CatastrophicCloudRestoreResult {
+    BackupFound,
+    NoBackupFound { message: String },
+    Offline { message: String },
+    Unreadable { message: String },
+    Inconclusive { message: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CatastrophicCloudRestoreProvider {
+    ICloudDrive,
+    GoogleDrive,
+}
+
+impl CatastrophicCloudRestoreProvider {
+    fn storage_name(self) -> &'static str {
+        match self {
+            Self::ICloudDrive => "iCloud",
+            Self::GoogleDrive => "Google Drive",
+        }
+    }
+
+    fn account_name(self) -> &'static str {
+        match self {
+            Self::ICloudDrive => "iCloud account",
+            Self::GoogleDrive => "Google account",
+        }
+    }
+}
+
 #[uniffi::export(callback_interface)]
 pub trait CloudBackupManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     fn reconcile(&self, message: CloudBackupReconcileMessage);
@@ -1117,6 +1202,9 @@ impl RustCloudBackupManager {
                 CloudBackupStatus::Enabled
             }
             PersistedCloudBackupStatus::PasskeyMissing => CloudBackupStatus::PasskeyMissing,
+            PersistedCloudBackupStatus::Corrupted => {
+                CloudBackupStatus::Error(CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into())
+            }
         }
     }
 
@@ -1323,18 +1411,21 @@ impl RustCloudBackupManager {
     }
 
     fn apply_model_event(&self, event: CloudBackupStateReducerEvent) -> bool {
-        match self.state.write().apply_event(event) {
-            Ok(effects) => {
-                self.send_model_effects(effects);
-                true
-            }
+        let effects = match self.state.write().apply_event(event) {
+            Ok(effects) => effects,
             Err(rejection) => match rejection {},
-        }
+        };
+
+        self.send_model_effects(effects);
+        true
     }
 
     fn send_model_effects(&self, effects: CloudBackupStateReducerEffects) {
         if let Some(lifecycle) = effects.lifecycle {
-            self.send(Message::Lifecycle(Box::new(lifecycle)));
+            self.send(Message::Lifecycle(
+                Box::new(lifecycle.lifecycle),
+                lifecycle.settings_row_status,
+            ));
         }
 
         if let Some(context) = effects.enable_completed {
@@ -1909,7 +2000,6 @@ impl RustCloudBackupManager {
         for namespace in &namespaces {
             let record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
                 Ok(record_ids) => record_ids,
-                Err(CloudStorageError::NotFound(_)) => Vec::new(),
                 Err(error) => {
                     return Err(blocking_cloud_error(
                         BlockingCloudStep::DetailRefresh,
@@ -2032,7 +2122,7 @@ impl RustCloudBackupManager {
 
     pub(crate) fn dismiss_verification_prompt_impl(&self) -> Result<(), CloudBackupError> {
         let mut state = Self::load_persisted_state();
-        let dismissed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let dismissed_at = crate::manager::cloud_backup_manager::current_timestamp();
         if !state.dismiss_verification_request(dismissed_at) {
             return Ok(());
         }
@@ -2067,14 +2157,20 @@ impl RustCloudBackupManager {
             Err(error) => return CloudSyncHealth::Failed(error.to_string()),
         };
         let sync_states = match Database::global().cloud_blob_sync_states.list() {
-            Ok(states) => states
-                .into_iter()
-                .filter(|state| {
-                    state.namespace_id == namespace
-                        && (state.wallet_id().is_none()
-                            || expected_wallet_record_ids.contains(state.record_id()))
-                })
-                .collect::<Vec<_>>(),
+            Ok(states) => {
+                if let Some(sync_health) = Self::sync_health_from_corrupt_sync_state(&states) {
+                    return sync_health;
+                }
+
+                states
+                    .into_iter()
+                    .filter(|state| {
+                        state.namespace_id == namespace
+                            && (state.wallet_id().is_none()
+                                || expected_wallet_record_ids.contains(state.record_id()))
+                    })
+                    .collect::<Vec<_>>()
+            }
             Err(error) => {
                 return CloudSyncHealth::Failed(format!(
                     "failed to read cloud backup sync states: {error}",
@@ -2182,6 +2278,24 @@ impl RustCloudBackupManager {
         })
     }
 
+    fn sync_health_from_corrupt_sync_state(
+        sync_states: &[PersistedCloudBlobSyncState],
+    ) -> Option<CloudSyncHealth> {
+        sync_states.iter().find_map(|sync_state| {
+            if !sync_state.is_corrupted() {
+                return None;
+            }
+
+            let PersistedCloudBlobState::Failed(failed_state) = &sync_state.state else {
+                return Some(CloudSyncHealth::Failed(
+                    "cloud backup sync state could not be decoded".into(),
+                ));
+            };
+
+            Some(CloudSyncHealth::Failed(sync_health_failed_message(sync_state, failed_state)))
+        })
+    }
+
     fn sync_health_has_pending_wallet_upload(sync_states: &[PersistedCloudBlobSyncState]) -> bool {
         sync_states.iter().any(|sync_state| {
             sync_state.is_wallet_record()
@@ -2221,15 +2335,17 @@ impl RustCloudBackupManager {
             }
             CloudStorageError::UploadFailed(message)
             | CloudStorageError::DownloadFailed(message)
-            | CloudStorageError::NotFound(message) => CloudSyncHealth::Failed(message),
+            | CloudStorageError::NotFound(message)
+            | CloudStorageError::InvalidNamespace(message) => CloudSyncHealth::Failed(message),
         }
     }
 
     pub(crate) fn mark_wallet_blob_dirty(&self, wallet_id: WalletId) {
-        if !Self::load_persisted_state().is_configured() {
-            return;
-        }
-        if self.cloud_backup_writes_blocked() {
+        // disabling can be canceled, so wallet changes still need queued uploads
+        if !matches!(
+            Self::load_persisted_state(),
+            PersistedCloudBackupState::Configured(_) | PersistedCloudBackupState::Disabling(_)
+        ) {
             return;
         }
 
@@ -2238,7 +2354,7 @@ impl RustCloudBackupManager {
             return;
         };
 
-        let changed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let changed_at = crate::manager::cloud_backup_manager::current_timestamp();
         let record_id = wallet_record_id(wallet_id.as_ref());
         let sync_state = PersistedCloudBlobSyncState::wallet(
             namespace_id,
@@ -2257,6 +2373,36 @@ impl RustCloudBackupManager {
         }
 
         self.schedule_wallet_upload(wallet_id, false);
+    }
+
+    pub(crate) fn mark_wallet_blobs_dirty_for_background_upload<I>(
+        &self,
+        wallet_ids: I,
+    ) -> Result<(), CloudBackupError>
+    where
+        I: IntoIterator<Item = WalletId>,
+    {
+        let namespace_id = self.current_namespace_id()?;
+        let changed_at = crate::manager::cloud_backup_manager::current_timestamp();
+
+        for wallet_id in wallet_ids {
+            let record_id = wallet_record_id(wallet_id.as_ref());
+            let sync_state = PersistedCloudBlobSyncState::wallet(
+                namespace_id.clone(),
+                wallet_id,
+                record_id,
+                PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
+            );
+
+            Database::global()
+                .cloud_blob_sync_states
+                .set(&sync_state)
+                .map_err_prefix("persist dirty cloud backup state", CloudBackupError::Internal)?;
+        }
+
+        self.refresh_sync_health();
+
+        Ok(())
     }
 
     pub(crate) fn handle_wallet_metadata_update(
@@ -2294,7 +2440,7 @@ impl RustCloudBackupManager {
         &self,
         sync_state: &PersistedCloudBlobSyncState,
     ) -> bool {
-        let changed_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let changed_at = crate::manager::cloud_backup_manager::current_timestamp();
 
         match self.replace_blob_state_if_current(
             sync_state,
@@ -2608,12 +2754,13 @@ impl RustCloudBackupManager {
 
     /// Back up a newly created wallet, fire-and-forget
     ///
-    /// Returns immediately if cloud backup isn't enabled (e.g. during restore)
+    /// Returns immediately unless cloud backup is configured or disabling
     pub fn backup_new_wallet(&self, metadata: crate::wallet::metadata::WalletMetadata) {
-        if !Self::load_persisted_state().is_configured() {
-            return;
-        }
-        if self.cloud_backup_writes_blocked() {
+        // disabling can be canceled, so new wallets still need queued uploads
+        if !matches!(
+            Self::load_persisted_state(),
+            PersistedCloudBackupState::Configured(_) | PersistedCloudBackupState::Disabling(_)
+        ) {
             return;
         }
 
@@ -2694,6 +2841,79 @@ pub fn reset_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRe
     wipe_local_data_for_catastrophic_recovery()?;
     clear_in_process_cloud_backup_state_for_catastrophic_recovery();
     reinit_database_after_catastrophic_recovery()
+}
+
+#[uniffi::export]
+pub async fn check_catastrophic_cloud_restore_backup(
+    provider: CatastrophicCloudRestoreProvider,
+) -> CatastrophicCloudRestoreResult {
+    catastrophic_cloud_restore_check_result(
+        CloudStorage::global().has_restorable_cloud_backup(CloudAccessPolicy::ConsentAllowed).await,
+        provider,
+    )
+}
+
+fn catastrophic_cloud_restore_check_result(
+    result: Result<bool, CloudStorageError>,
+    provider: CatastrophicCloudRestoreProvider,
+) -> CatastrophicCloudRestoreResult {
+    match result {
+        Ok(true) => CatastrophicCloudRestoreResult::BackupFound,
+        Ok(false) => CatastrophicCloudRestoreResult::NoBackupFound {
+            message: format!(
+                "No Cloud Backup was found for the selected {}.",
+                provider.account_name()
+            ),
+        },
+        Err(error) => catastrophic_cloud_restore_error(error, provider),
+    }
+}
+
+fn catastrophic_cloud_restore_error(
+    error: CloudStorageError,
+    provider: CatastrophicCloudRestoreProvider,
+) -> CatastrophicCloudRestoreResult {
+    match error {
+        CloudStorageError::AuthorizationRequired(message) => {
+            if message.trim().is_empty() {
+                return CatastrophicCloudRestoreResult::Inconclusive {
+                    message: format!(
+                        "{} access is required before local data can be reset.",
+                        provider.storage_name()
+                    ),
+                };
+            }
+
+            CatastrophicCloudRestoreResult::Inconclusive { message }
+        }
+        CloudStorageError::Offline(message) => CatastrophicCloudRestoreResult::Offline {
+            message: format!("Cannot check {} while offline: {message}", provider.storage_name()),
+        },
+        CloudStorageError::NotFound(_) => CatastrophicCloudRestoreResult::NoBackupFound {
+            message: format!(
+                "No Cloud Backup was found for the selected {}.",
+                provider.account_name()
+            ),
+        },
+        CloudStorageError::DownloadFailed(message) => CatastrophicCloudRestoreResult::Unreadable {
+            message: format!("Cloud Backup data could not be read: {message}"),
+        },
+        CloudStorageError::InvalidNamespace(_) => CatastrophicCloudRestoreResult::Unreadable {
+            message: "Cloud Backup data could not be read.".into(),
+        },
+        CloudStorageError::QuotaExceeded => CatastrophicCloudRestoreResult::Inconclusive {
+            message: format!(
+                "{} quota is exceeded. Cove could not check for a Cloud Backup.",
+                provider.storage_name()
+            ),
+        },
+        CloudStorageError::NotAvailable(message) => CatastrophicCloudRestoreResult::Inconclusive {
+            message: format!("{} is unavailable: {message}", provider.storage_name()),
+        },
+        CloudStorageError::UploadFailed(message) => {
+            CatastrophicCloudRestoreResult::Inconclusive { message }
+        }
+    }
 }
 
 fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {
@@ -2902,7 +3122,6 @@ pub(crate) async fn current_namespace_wallet_record_ids(
 ) -> Result<Vec<String>, CloudBackupError> {
     match cloud.list_wallet_backups(current_namespace.to_owned()).await {
         Ok(record_ids) => Ok(record_ids),
-        Err(CloudStorageError::NotFound(_)) => Ok(Vec::new()),
         Err(error) => Err(blocking_cloud_error(
             step,
             CloudBackupError::cloud_storage_context("list wallet backups", error),
@@ -3067,6 +3286,174 @@ mod tests {
         assert_eq!(
             CloudStorageIssue::from(&CloudStorageError::NotFound("wallet".into())),
             CloudStorageIssue::NotFound
+        );
+    }
+
+    #[test]
+    fn corrupted_persisted_state_projects_runtime_error() {
+        assert_eq!(
+            RustCloudBackupManager::runtime_status_for(&PersistedCloudBackupState::corrupted(
+                "decode failed"
+            )),
+            CloudBackupStatus::Error(CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into())
+        );
+    }
+
+    #[test]
+    fn pending_verification_completion_expires_future_created_at() {
+        let completion = PendingVerificationCompletion {
+            report: DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace_id: "namespace".into(),
+            uploads: Vec::new(),
+            created_at: Some(11),
+        };
+
+        assert!(completion.is_expired(10, 60));
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_check_result_reports_backup_found() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Ok(true),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::BackupFound
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_check_result_reports_no_backup_found() {
+        assert!(matches!(
+            catastrophic_cloud_restore_check_result(
+                Ok(false),
+                CatastrophicCloudRestoreProvider::ICloudDrive
+            ),
+            CatastrophicCloudRestoreResult::NoBackupFound { .. }
+        ));
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_requires_access_for_blank_authorization_message() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::AuthorizationRequired(" ".into())),
+                CatastrophicCloudRestoreProvider::ICloudDrive
+            ),
+            CatastrophicCloudRestoreResult::Inconclusive {
+                message: "iCloud access is required before local data can be reset.".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_preserves_authorization_message() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::AuthorizationRequired("sign in before continuing".into())),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::Inconclusive {
+                message: "sign in before continuing".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_offline_state() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::Offline("offline".into())),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::Offline {
+                message: "Cannot check Google Drive while offline: offline".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_treats_not_found_as_no_backup() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::NotFound("namespace".into())),
+                CatastrophicCloudRestoreProvider::ICloudDrive
+            ),
+            CatastrophicCloudRestoreResult::NoBackupFound {
+                message: "No Cloud Backup was found for the selected iCloud account.".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_unreadable_download_failure() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::DownloadFailed("bad json".into())),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::Unreadable {
+                message: "Cloud Backup data could not be read: bad json".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_unreadable_invalid_namespace() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::InvalidNamespace("bad namespace".into())),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::Unreadable {
+                message: "Cloud Backup data could not be read.".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_quota_as_inconclusive() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::QuotaExceeded),
+                CatastrophicCloudRestoreProvider::ICloudDrive
+            ),
+            CatastrophicCloudRestoreResult::Inconclusive {
+                message: "iCloud quota is exceeded. Cove could not check for a Cloud Backup."
+                    .into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_provider_unavailable_as_inconclusive() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::NotAvailable("service unavailable".into())),
+                CatastrophicCloudRestoreProvider::GoogleDrive
+            ),
+            CatastrophicCloudRestoreResult::Inconclusive {
+                message: "Google Drive is unavailable: service unavailable".into()
+            }
+        );
+    }
+
+    #[test]
+    fn catastrophic_cloud_restore_error_reports_upload_failure_as_inconclusive() {
+        assert_eq!(
+            catastrophic_cloud_restore_check_result(
+                Err(CloudStorageError::UploadFailed("upload failed".into())),
+                CatastrophicCloudRestoreProvider::ICloudDrive
+            ),
+            CatastrophicCloudRestoreResult::Inconclusive { message: "upload failed".into() }
         );
     }
 

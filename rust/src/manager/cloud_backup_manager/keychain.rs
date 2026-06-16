@@ -72,7 +72,9 @@ impl CloudBackupKeychain {
     pub(crate) fn load_credential_id(&self) -> Option<Vec<u8>> {
         self.0.get(CSPP_CREDENTIAL_ID_KEY.into()).and_then(|hex_str| {
             hex::decode(hex_str)
-                .inspect_err(|error| warn!("Failed to decode stored credential_id: {error}"))
+                .inspect_err(|error| {
+                    warn!("Failed to decode stored cloud backup passkey metadata: {error}")
+                })
                 .ok()
         })
     }
@@ -80,10 +82,17 @@ impl CloudBackupKeychain {
     pub(crate) fn load_prf_salt(&self) -> Option<[u8; 32]> {
         self.0.get(CSPP_PRF_SALT_KEY.into()).and_then(|hex_str| {
             hex::decode(hex_str)
-                .inspect_err(|error| warn!("Failed to decode stored prf_salt: {error}"))
+                .inspect_err(|error| {
+                    warn!("Failed to decode stored cloud backup passkey metadata: {error}")
+                })
                 .ok()
                 .and_then(|bytes| {
-                    bytes.try_into().inspect_err(|_| warn!("Stored prf_salt is not 32 bytes")).ok()
+                    bytes
+                        .try_into()
+                        .inspect_err(|_| {
+                            warn!("Stored cloud backup passkey metadata has invalid length")
+                        })
+                        .ok()
                 })
         })
     }
@@ -188,7 +197,7 @@ impl CloudBackupKeychain {
 
     fn delete_keychain_item_if_present(&self, key: &str) -> Result<(), KeychainError> {
         if self.0.get(key.to_owned()).is_some() && !self.0.delete(key.to_owned()) {
-            warn!("Failed to delete cloud backup keychain item key={key}");
+            warn!("Failed to delete cloud backup keychain item");
             return Err(KeychainError::Delete);
         }
 

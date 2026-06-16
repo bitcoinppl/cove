@@ -1097,6 +1097,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_updatepricesifneeded(
     ): Short
+    external fun uniffi_cove_checksum_func_check_catastrophic_cloud_restore_backup(
+    ): Short
     external fun uniffi_cove_checksum_func_cspp_master_key_directory(
     ): Short
     external fun uniffi_cove_checksum_func_cspp_master_key_filename(
@@ -3377,6 +3379,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_func_updatepricesifneeded(
     ): Long
+    external fun uniffi_cove_fn_func_check_catastrophic_cloud_restore_backup(`provider`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_func_cspp_master_key_directory(uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_cspp_master_key_filename(uniffi_out_err: UniffiRustCallStatus,
@@ -3610,6 +3614,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_updatepricesifneeded() != 5753.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_check_catastrophic_cloud_restore_backup() != 2763.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_cspp_master_key_directory() != 24318.toShort()) {
@@ -4098,7 +4105,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_security_action() != 16336.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 9615.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_new_wallet() != 30339.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count() != 17456.toShort()) {
@@ -17980,7 +17987,7 @@ public interface RustCloudBackupManagerInterface {
     /**
      * Back up a newly created wallet, fire-and-forget
      *
-     * Returns immediately if cloud backup isn't enabled (e.g. during restore)
+     * Returns immediately unless cloud backup is configured or disabling
      */
     fun `backupNewWallet`(`metadata`: WalletMetadata)
 
@@ -18152,7 +18159,7 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     /**
      * Back up a newly created wallet, fire-and-forget
      *
-     * Returns immediately if cloud backup isn't enabled (e.g. during restore)
+     * Returns immediately unless cloud backup is configured or disabling
      */override fun `backupNewWallet`(`metadata`: WalletMetadata)
         =
     callWithHandle {
@@ -28562,6 +28569,8 @@ public object FfiConverterTypeCloudBackupRetryContext: FfiConverterRustBuffer<Cl
  */
 data class CloudBackupState (
     var `lifecycle`: CloudBackupLifecycle
+    ,
+    var `settingsRowStatus`: CloudBackupSettingsRowStatus
 
 ){
 
@@ -28579,15 +28588,18 @@ public object FfiConverterTypeCloudBackupState: FfiConverterRustBuffer<CloudBack
     override fun read(buf: ByteBuffer): CloudBackupState {
         return CloudBackupState(
             FfiConverterTypeCloudBackupLifecycle.read(buf),
+            FfiConverterTypeCloudBackupSettingsRowStatus.read(buf),
         )
     }
 
     override fun allocationSize(value: CloudBackupState) = (
-            FfiConverterTypeCloudBackupLifecycle.allocationSize(value.`lifecycle`)
+            FfiConverterTypeCloudBackupLifecycle.allocationSize(value.`lifecycle`) +
+            FfiConverterTypeCloudBackupSettingsRowStatus.allocationSize(value.`settingsRowStatus`)
     )
 
     override fun write(value: CloudBackupState, buf: ByteBuffer) {
             FfiConverterTypeCloudBackupLifecycle.write(value.`lifecycle`, buf)
+            FfiConverterTypeCloudBackupSettingsRowStatus.write(value.`settingsRowStatus`, buf)
     }
 }
 
@@ -34349,6 +34361,185 @@ public object FfiConverterTypeByteReaderError : FfiConverterRustBuffer<ByteReade
 
 
 
+enum class CatastrophicCloudRestoreProvider {
+
+    I_CLOUD_DRIVE,
+    GOOGLE_DRIVE;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCatastrophicCloudRestoreProvider: FfiConverterRustBuffer<CatastrophicCloudRestoreProvider> {
+    override fun read(buf: ByteBuffer) = try {
+        CatastrophicCloudRestoreProvider.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CatastrophicCloudRestoreProvider) = 4UL
+
+    override fun write(value: CatastrophicCloudRestoreProvider, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+sealed class CatastrophicCloudRestoreResult {
+
+    object BackupFound : CatastrophicCloudRestoreResult()
+
+
+    data class NoBackupFound(
+        val `message`: kotlin.String) : CatastrophicCloudRestoreResult()
+
+    {
+
+
+        companion object
+    }
+
+    data class Offline(
+        val `message`: kotlin.String) : CatastrophicCloudRestoreResult()
+
+    {
+
+
+        companion object
+    }
+
+    data class Unreadable(
+        val `message`: kotlin.String) : CatastrophicCloudRestoreResult()
+
+    {
+
+
+        companion object
+    }
+
+    data class Inconclusive(
+        val `message`: kotlin.String) : CatastrophicCloudRestoreResult()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCatastrophicCloudRestoreResult : FfiConverterRustBuffer<CatastrophicCloudRestoreResult>{
+    override fun read(buf: ByteBuffer): CatastrophicCloudRestoreResult {
+        return when(buf.getInt()) {
+            1 -> CatastrophicCloudRestoreResult.BackupFound
+            2 -> CatastrophicCloudRestoreResult.NoBackupFound(
+                FfiConverterString.read(buf),
+                )
+            3 -> CatastrophicCloudRestoreResult.Offline(
+                FfiConverterString.read(buf),
+                )
+            4 -> CatastrophicCloudRestoreResult.Unreadable(
+                FfiConverterString.read(buf),
+                )
+            5 -> CatastrophicCloudRestoreResult.Inconclusive(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CatastrophicCloudRestoreResult): ULong = when(value) {
+        is CatastrophicCloudRestoreResult.BackupFound -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CatastrophicCloudRestoreResult.NoBackupFound -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is CatastrophicCloudRestoreResult.Offline -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is CatastrophicCloudRestoreResult.Unreadable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is CatastrophicCloudRestoreResult.Inconclusive -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+    }
+
+    override fun write(value: CatastrophicCloudRestoreResult, buf: ByteBuffer) {
+        when(value) {
+            is CatastrophicCloudRestoreResult.BackupFound -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CatastrophicCloudRestoreResult.NoBackupFound -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is CatastrophicCloudRestoreResult.Offline -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is CatastrophicCloudRestoreResult.Unreadable -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is CatastrophicCloudRestoreResult.Inconclusive -> {
+                buf.putInt(5)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
 
 sealed class CatastrophicRecoveryException: kotlin.Exception() {
 
@@ -36150,7 +36341,8 @@ public object FfiConverterTypeCloudBackupPasskeyState : FfiConverterRustBuffer<C
 sealed class CloudBackupReconcileMessage {
 
     data class Lifecycle(
-        val v1: CloudBackupLifecycle) : CloudBackupReconcileMessage()
+        val v1: CloudBackupLifecycle,
+        val v2: org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus) : CloudBackupReconcileMessage()
 
     {
 
@@ -36185,6 +36377,7 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
         return when(buf.getInt()) {
             1 -> CloudBackupReconcileMessage.Lifecycle(
                 FfiConverterTypeCloudBackupLifecycle.read(buf),
+                FfiConverterTypeCloudBackupSettingsRowStatus.read(buf),
                 )
             2 -> CloudBackupReconcileMessage.EnableCompleted(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
@@ -36199,6 +36392,7 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             (
                 4UL
                 + FfiConverterTypeCloudBackupLifecycle.allocationSize(value.v1)
+                + FfiConverterTypeCloudBackupSettingsRowStatus.allocationSize(value.v2)
             )
         }
         is CloudBackupReconcileMessage.EnableCompleted -> {
@@ -36215,6 +36409,7 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             is CloudBackupReconcileMessage.Lifecycle -> {
                 buf.putInt(1)
                 FfiConverterTypeCloudBackupLifecycle.write(value.v1, buf)
+                FfiConverterTypeCloudBackupSettingsRowStatus.write(value.v2, buf)
                 Unit
             }
             is CloudBackupReconcileMessage.EnableCompleted -> {
@@ -36533,6 +36728,288 @@ public object FfiConverterTypeCloudBackupRootPrompt : FfiConverterRustBuffer<Clo
             }
             is CloudBackupRootPrompt.Verification -> {
                 buf.putInt(5)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Shared settings row state projected for Swift and Kotlin presentation
+ */
+sealed class CloudBackupSettingsRowStatus {
+
+    object Disabled : CloudBackupSettingsRowStatus()
+
+
+    object Disabling : CloudBackupSettingsRowStatus()
+
+
+    object SettingUp : CloudBackupSettingsRowStatus()
+
+
+    object Restoring : CloudBackupSettingsRowStatus()
+
+
+    object Active : CloudBackupSettingsRowStatus()
+
+
+    object PasskeyMissing : CloudBackupSettingsRowStatus()
+
+
+    object PasskeyProviderUnsupported : CloudBackupSettingsRowStatus()
+
+
+    object Unverified : CloudBackupSettingsRowStatus()
+
+
+    object Confirming : CloudBackupSettingsRowStatus()
+
+
+    object VerificationRecommended : CloudBackupSettingsRowStatus()
+
+
+    object CheckingSync : CloudBackupSettingsRowStatus()
+
+
+    object Syncing : CloudBackupSettingsRowStatus()
+
+
+    object NoFiles : CloudBackupSettingsRowStatus()
+
+
+    object DriveUnavailable : CloudBackupSettingsRowStatus()
+
+
+    data class Error(
+        val v1: kotlin.String) : CloudBackupSettingsRowStatus()
+
+    {
+
+
+        companion object
+    }
+
+    data class AuthorizationRequired(
+        val v1: kotlin.String) : CloudBackupSettingsRowStatus()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupSettingsRowStatus : FfiConverterRustBuffer<CloudBackupSettingsRowStatus>{
+    override fun read(buf: ByteBuffer): CloudBackupSettingsRowStatus {
+        return when(buf.getInt()) {
+            1 -> CloudBackupSettingsRowStatus.Disabled
+            2 -> CloudBackupSettingsRowStatus.Disabling
+            3 -> CloudBackupSettingsRowStatus.SettingUp
+            4 -> CloudBackupSettingsRowStatus.Restoring
+            5 -> CloudBackupSettingsRowStatus.Active
+            6 -> CloudBackupSettingsRowStatus.PasskeyMissing
+            7 -> CloudBackupSettingsRowStatus.PasskeyProviderUnsupported
+            8 -> CloudBackupSettingsRowStatus.Unverified
+            9 -> CloudBackupSettingsRowStatus.Confirming
+            10 -> CloudBackupSettingsRowStatus.VerificationRecommended
+            11 -> CloudBackupSettingsRowStatus.CheckingSync
+            12 -> CloudBackupSettingsRowStatus.Syncing
+            13 -> CloudBackupSettingsRowStatus.NoFiles
+            14 -> CloudBackupSettingsRowStatus.DriveUnavailable
+            15 -> CloudBackupSettingsRowStatus.Error(
+                FfiConverterString.read(buf),
+                )
+            16 -> CloudBackupSettingsRowStatus.AuthorizationRequired(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupSettingsRowStatus): ULong = when(value) {
+        is CloudBackupSettingsRowStatus.Disabled -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.Disabling -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.SettingUp -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.Restoring -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.Active -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.PasskeyMissing -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.PasskeyProviderUnsupported -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.Unverified -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.Confirming -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.VerificationRecommended -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.CheckingSync -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.Syncing -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.NoFiles -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.DriveUnavailable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupSettingsRowStatus.Error -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupSettingsRowStatus.AuthorizationRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupSettingsRowStatus, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupSettingsRowStatus.Disabled -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.Disabling -> {
+                buf.putInt(2)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.SettingUp -> {
+                buf.putInt(3)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.Restoring -> {
+                buf.putInt(4)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.Active -> {
+                buf.putInt(5)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.PasskeyMissing -> {
+                buf.putInt(6)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.PasskeyProviderUnsupported -> {
+                buf.putInt(7)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.Unverified -> {
+                buf.putInt(8)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.Confirming -> {
+                buf.putInt(9)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.VerificationRecommended -> {
+                buf.putInt(10)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.CheckingSync -> {
+                buf.putInt(11)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.Syncing -> {
+                buf.putInt(12)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.NoFiles -> {
+                buf.putInt(13)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.DriveUnavailable -> {
+                buf.putInt(14)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.Error -> {
+                buf.putInt(15)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.AuthorizationRequired -> {
+                buf.putInt(16)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -57992,6 +58469,21 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
         // lift function
         { Unit },
 
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `checkCatastrophicCloudRestoreBackup`(`provider`: CatastrophicCloudRestoreProvider) : CatastrophicCloudRestoreResult {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_cove_fn_func_check_catastrophic_cloud_restore_backup(
+        FfiConverterTypeCatastrophicCloudRestoreProvider.lower(`provider`),),
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeCatastrophicCloudRestoreResult.lift(it) },
         // Error FFI converter
         UniffiNullRustCallStatusErrorHandler,
     )

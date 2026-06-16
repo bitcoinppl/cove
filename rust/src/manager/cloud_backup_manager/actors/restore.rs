@@ -1,5 +1,6 @@
 use act_zero::{Addr, call};
-use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
+use cove_cspp::master_key::MasterKey;
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use cove_util::ResultExt as _;
@@ -17,8 +18,8 @@ use crate::manager::cloud_backup_manager::wallets::{
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupEnableOutcome, CloudBackupError,
     CloudBackupRestoreFlow, CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupStatus,
-    CloudStorageIssue, RustCloudBackupManager, blocking_cloud_error, is_connectivity_related_issue,
-    offline_error_for_step,
+    CloudBackupStore, CloudStorageIssue, RustCloudBackupManager, blocking_cloud_error,
+    is_connectivity_related_issue, offline_error_for_step,
 };
 
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
@@ -36,7 +37,7 @@ pub(crate) enum CloudBackupRestoreEvent {
 
 struct RestorableNamespace {
     namespace_id: String,
-    master_key: cove_cspp::master_key::MasterKey,
+    master_key: MasterKey,
     passkey: Option<RestorableNamespacePasskey>,
 }
 
@@ -178,7 +179,7 @@ impl RestoreOperation {
 
     pub(crate) async fn save_keychain_state(
         &self,
-        master_key: cove_cspp::master_key::MasterKey,
+        master_key: MasterKey,
         passkey: Option<RestoredPasskeyMaterial>,
         namespace_id: String,
     ) -> Result<(), CloudBackupError> {
@@ -243,7 +244,6 @@ impl RestoreOperation {
             let wallet_record_ids =
                 match cloud.list_wallet_backups(namespace.namespace_id.clone()).await {
                     Ok(wallet_record_ids) => wallet_record_ids,
-                    Err(CloudStorageError::NotFound(_)) => Vec::new(),
                     Err(error) => {
                         return Err(blocking_cloud_error(
                             BlockingCloudStep::Restore,
@@ -311,24 +311,28 @@ impl RestoreOperation {
         .await?;
 
         let mut first_success_namespace_index = None;
-        let mut restored_wallet_count = 0;
-        for (index, (namespace_index, (record_id, wallet))) in downloaded_wallets.iter().enumerate()
+        let mut first_duplicate_namespace_index = None;
+        let mut skipped_duplicate_count = 0;
+        for (index, (namespace_index, (_record_id, wallet))) in
+            downloaded_wallets.iter().enumerate()
         {
             self.ensure_current().await?;
             match restore_session.restore_downloaded(wallet) {
                 Ok(WalletRestoreOutcome::Restored { labels_warning }) => {
                     first_success_namespace_index.get_or_insert(*namespace_index);
-                    restored_wallet_count += 1;
                     report.wallets_restored += 1;
                     if let Some(warning) = labels_warning {
                         report.labels_failed_wallet_names.push(warning.wallet_name);
                         report.labels_failed_errors.push(warning.error);
                     }
                 }
-                Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
+                Ok(WalletRestoreOutcome::SkippedDuplicate) => {
+                    first_duplicate_namespace_index.get_or_insert(*namespace_index);
+                    skipped_duplicate_count += 1;
+                }
                 Err(CloudBackupError::Cancelled) => return Err(CloudBackupError::Cancelled),
                 Err(error) => {
-                    warn!("Failed to restore wallet {record_id}: {error}");
+                    warn!("Failed to restore wallet backup: {error}");
                     report.wallets_failed += 1;
                     report.failed_wallet_errors.push(error.to_string());
                 }
@@ -342,44 +346,53 @@ impl RestoreOperation {
             .await?;
         }
 
-        if report.wallets_restored == 0 && report.wallets_failed > 0 {
+        if report.wallets_restored == 0 && report.wallets_failed > 0 && skipped_duplicate_count == 0
+        {
             self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
             return Err(CloudBackupError::Internal("all wallets failed to restore".into()));
         }
 
-        let restored_status = if let Some(active_namespace_index) = first_success_namespace_index
-            && let Some((active, _)) = namespace_wallets.get(active_namespace_index)
-        {
-            let master_key =
-                cove_cspp::master_key::MasterKey::from_bytes(*active.master_key.as_bytes());
-            let passkey = active.passkey.as_ref().map(|passkey| RestoredPasskeyMaterial {
-                credential_id: passkey.credential_id.clone(),
-                prf_salt: passkey.prf_salt,
-            });
+        let restored_namespace = first_success_namespace_index
+            .and_then(|index| namespace_wallets.get(index))
+            .map(|(namespace, _)| namespace);
+        let duplicate_namespace = first_duplicate_namespace_index
+            .and_then(|index| namespace_wallets.get(index))
+            .map(|(namespace, _)| namespace);
 
-            self.save_keychain_state(master_key, passkey, active.namespace_id.clone()).await?;
-            let now = u64::try_from(jiff::Timestamp::now().as_second())
-                .map_err(|_| CloudBackupError::Internal("invalid system clock".into()))?;
+        let restored_status = match restored_namespace {
+            Some(active) => {
+                self.activate_restored_namespace(manager, active).await?;
 
-            let state = PersistedCloudBackupState::default()
-                .mark_enabled_preserving_verification(now, restored_wallet_count);
+                CloudBackupStatus::Enabled
+            }
 
-            self.persist_cloud_backup_state(state, "persist restored cloud backup state".into())
+            None if skipped_duplicate_count > 0 => {
+                let state = RustCloudBackupManager::load_persisted_state();
+                if matches!(state, PersistedCloudBackupState::Disabled)
+                    && let Some(active) = duplicate_namespace
+                {
+                    self.activate_restored_namespace(manager, active).await?;
+
+                    CloudBackupStatus::Enabled
+                } else {
+                    RustCloudBackupManager::runtime_status_for(&state)
+                }
+            }
+
+            None => {
+                self.persist_cloud_backup_state(
+                    PersistedCloudBackupState::default(),
+                    "persist empty restored cloud backup state".into(),
+                )
                 .await?;
 
-            CloudBackupStatus::Enabled
-        } else {
-            self.persist_cloud_backup_state(
-                PersistedCloudBackupState::default(),
-                "persist empty restored cloud backup state".into(),
-            )
-            .await?;
-
-            CloudBackupStatus::Disabled
+                CloudBackupStatus::Disabled
+            }
         };
 
         self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
         self.apply_status(restored_status).await?;
+
         info!("Cloud backup restore complete");
         Ok(report)
     }
@@ -389,6 +402,36 @@ impl RestoreOperation {
         flow: CloudBackupRestoreFlow,
     ) -> Result<(), CloudBackupError> {
         self.apply_outcome(CloudBackupRestoreOutcome::ProgressReported(flow)).await
+    }
+
+    async fn activate_restored_namespace(
+        &self,
+        manager: &RustCloudBackupManager,
+        active: &RestorableNamespace,
+    ) -> Result<(), CloudBackupError> {
+        let master_key = MasterKey::from_bytes(*active.master_key.as_bytes());
+        let passkey = active.passkey.as_ref().map(RestoredPasskeyMaterial::from);
+        let wallets = CloudBackupStore::global().all_wallets()?;
+        let wallet_count = wallets.len() as u32;
+
+        self.save_keychain_state(master_key, passkey, active.namespace_id.clone()).await?;
+
+        let enabled_state = RustCloudBackupManager::load_persisted_state()
+            .mark_enabled_preserving_verification(
+                crate::manager::cloud_backup_manager::current_timestamp(),
+                wallet_count,
+            );
+        self.persist_cloud_backup_state(
+            enabled_state,
+            "persist restored cloud backup state".into(),
+        )
+        .await?;
+
+        manager.mark_wallet_blobs_dirty_for_background_upload(
+            wallets.into_iter().map(|wallet| wallet.id),
+        )?;
+
+        Ok(())
     }
 
     async fn download_wallets_for_restore(
@@ -417,17 +460,14 @@ impl RestoreOperation {
                     downloaded_wallets.push((record_name.clone(), wallet));
                 }
                 Ok(WalletBackupLookup::NotFound) => {
-                    let error =
-                        format!("wallet {record_name} was listed but missing from cloud backup");
-                    warn!("Failed to download wallet {record_name}: {error}");
+                    let error = "wallet was listed but missing from cloud backup".to_string();
+                    warn!("Failed to download wallet backup: {error}");
                     report.wallets_failed += 1;
                     report.failed_wallet_errors.push(error);
                 }
                 Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
-                    let error = format!(
-                        "wallet {record_name} uses unsupported wallet backup version {version}"
-                    );
-                    warn!("Failed to download wallet {record_name}: {error}");
+                    let error = format!("wallet uses unsupported wallet backup version {version}");
+                    warn!("Failed to download wallet backup: {error}");
                     report.wallets_failed += 1;
                     report.failed_wallet_errors.push(error);
                 }
@@ -435,9 +475,10 @@ impl RestoreOperation {
                     if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
                         return Err(blocking_cloud_error(BlockingCloudStep::Restore, error));
                     }
-                    warn!("Failed to download wallet {record_name}: {error}");
+                    let error = "wallet backup could not be read".to_string();
+                    warn!("Failed to download wallet backup: {error}");
                     report.wallets_failed += 1;
-                    report.failed_wallet_errors.push(error.to_string());
+                    report.failed_wallet_errors.push(error);
                 }
             }
 
@@ -499,14 +540,28 @@ impl RestoreOperation {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct RestoredPasskeyMaterial {
     pub(crate) credential_id: Vec<u8>,
     pub(crate) prf_salt: [u8; 32],
 }
 
+impl From<&RestorableNamespacePasskey> for RestoredPasskeyMaterial {
+    fn from(passkey: &RestorableNamespacePasskey) -> Self {
+        Self { credential_id: passkey.credential_id.clone(), prf_salt: passkey.prf_salt }
+    }
+}
+
+impl std::fmt::Debug for RestoredPasskeyMaterial {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RestoredPasskeyMaterial")
+            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
+            .field("prf_salt", &"<redacted>")
+            .finish()
+    }
+}
+
 pub(crate) fn save_restore_keychain_entries(
-    master_key: cove_cspp::master_key::MasterKey,
+    master_key: MasterKey,
     passkey: Option<RestoredPasskeyMaterial>,
     namespace_id: String,
 ) -> Result<(), CloudBackupError> {

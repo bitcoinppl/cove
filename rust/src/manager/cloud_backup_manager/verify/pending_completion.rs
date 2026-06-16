@@ -29,9 +29,19 @@ enum FinalizePendingVerificationResult {
     Completed(DeepVerificationReport),
 }
 
+const PENDING_VERIFICATION_COMPLETION_TTL_SECONDS: u64 = 24 * 60 * 60;
+
 impl RustCloudBackupManager {
     pub(crate) async fn finalize_pending_verification_if_ready(&self) {
         let Some(completion) = self.pending_verification_completion() else { return };
+
+        if completion.is_expired(
+            crate::manager::cloud_backup_manager::current_timestamp(),
+            PENDING_VERIFICATION_COMPLETION_TTL_SECONDS,
+        ) {
+            self.expire_pending_verification_completion(completion);
+            return;
+        }
 
         if !self.pending_verification_uploads_confirmed(&completion).await {
             return;
@@ -45,6 +55,15 @@ impl RustCloudBackupManager {
             Err(failure) => self.apply_failed_verification(*failure),
         }
 
+        self.clear_pending_verification_completion();
+    }
+
+    fn expire_pending_verification_completion(&self, completion: PendingVerificationCompletion) {
+        self.apply_failed_verification(DeepVerificationFailure::retry(
+            "cloud backup upload confirmation expired; start verification again",
+            completion.report().detail.clone(),
+            None,
+        ));
         self.clear_pending_verification_completion();
     }
 
@@ -108,11 +127,9 @@ impl RustCloudBackupManager {
         match Self::remote_pending_upload_exists(completion, upload).await {
             Ok(exists) => exists,
             Err(error) => {
-                let namespace_id = completion.namespace_id();
-                let record_id = upload.record_id();
                 let expected_revision = upload.expected_revision();
                 error!(
-                    "remote_pending_upload_exists failed for namespace_id={namespace_id} record_id={record_id} expected_revision={expected_revision}: {error:?}"
+                    "remote_pending_upload_exists failed for pending upload expected_revision={expected_revision}: {error:?}"
                 );
                 false
             }
@@ -263,25 +280,25 @@ impl RustCloudBackupManager {
                 if summary.revision_hash != expected_revision =>
             {
                 warn!(
-                    "Pending verification: wallet {record_id} is still stale expected_revision={} actual_revision={}",
+                    "Pending verification: wallet backup is still stale expected_revision={} actual_revision={}",
                     expected_revision, summary.revision_hash
                 );
                 Ok(PendingWalletVerificationOutcome::Pending)
             }
             Ok(WalletBackupLookup::Found(_)) => Ok(PendingWalletVerificationOutcome::Verified),
             Ok(WalletBackupLookup::NotFound) => {
-                warn!("Pending verification: wallet {record_id} is not ready yet: not found");
+                warn!("Pending verification: wallet backup is not ready yet: not found");
                 Ok(PendingWalletVerificationOutcome::Pending)
             }
             Ok(WalletBackupLookup::UnsupportedVersion(_)) => {
                 Ok(PendingWalletVerificationOutcome::Unsupported)
             }
             Err(error) if error.is_cloud_error() => {
-                warn!("Pending verification: wallet {record_id} is not ready yet: {error}");
+                warn!("Pending verification: wallet backup is not ready yet: {error}");
                 Ok(PendingWalletVerificationOutcome::Pending)
             }
             Err(error) => {
-                warn!("Pending verification: failed to decrypt wallet {record_id}: {error}");
+                warn!("Pending verification: failed to decrypt wallet backup: {error}");
                 Ok(PendingWalletVerificationOutcome::Failed)
             }
         }

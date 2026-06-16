@@ -164,44 +164,31 @@ async fn verify_source_in_active_namespace(
 
     for expected in &source.expected_wallets {
         let Some(expected_revision) = expected.content_revision_hash.as_ref() else {
-            warn!(
-                "Skipping cloud backup namespace cleanup namespace={} record_id={} reason=source_unverified",
-                source.namespace_id, expected.record_id
-            );
+            warn!("Skipping cloud backup namespace cleanup reason=source_unverified");
             return Ok(false);
         };
 
         if !active_record_ids.contains(&expected.record_id) {
-            warn!(
-                "Skipping cloud backup namespace cleanup namespace={} record_id={} reason=missing_active_record",
-                source.namespace_id, expected.record_id
-            );
+            warn!("Skipping cloud backup namespace cleanup reason=missing_active_record");
             return Ok(false);
         }
 
         let active_entry = match active_reader.lookup_entry(&expected.record_id).await? {
             WalletBackupLookup::Found(entry) => entry,
             WalletBackupLookup::NotFound => {
-                warn!(
-                    "Skipping cloud backup namespace cleanup namespace={} record_id={} reason=active_record_not_found",
-                    source.namespace_id, expected.record_id
-                );
+                warn!("Skipping cloud backup namespace cleanup reason=active_record_not_found");
                 return Ok(false);
             }
             WalletBackupLookup::UnsupportedVersion(version) => {
                 warn!(
-                    "Skipping cloud backup namespace cleanup namespace={} record_id={} reason=unsupported_active_version version={version}",
-                    source.namespace_id, expected.record_id
+                    "Skipping cloud backup namespace cleanup reason=unsupported_active_version version={version}"
                 );
                 return Ok(false);
             }
         };
 
         if !matches_revision_hash(&active_entry, expected_revision) {
-            warn!(
-                "Skipping cloud backup namespace cleanup namespace={} record_id={} reason=revision_mismatch",
-                source.namespace_id, expected.record_id
-            );
+            warn!("Skipping cloud backup namespace cleanup reason=revision_mismatch");
             return Ok(false);
         }
     }

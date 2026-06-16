@@ -565,7 +565,7 @@ impl CloudBackupWriteSupervisor {
         namespace_id: &str,
         uploaded_wallets: &[CloudBackupUploadedWallet],
     ) -> Result<(), CloudBackupError> {
-        let uploaded_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+        let uploaded_at = crate::manager::cloud_backup_manager::current_timestamp();
         for wallet in uploaded_wallets {
             manager
                 .mark_wallet_uploaded_pending_confirmation_if_revision_current(

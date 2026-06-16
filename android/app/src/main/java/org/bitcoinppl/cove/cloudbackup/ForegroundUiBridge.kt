@@ -6,14 +6,21 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
+internal class ForegroundAuthorizationTimeoutException(
+    message: String,
+    cause: Throwable? = null,
+) : Exception(message, cause)
+
 object ForegroundUiBridge {
     private const val FOREGROUND_ACTIVITY_TIMEOUT_MS = 30_000L
+    private const val AUTHORIZATION_RESULT_TIMEOUT_MS = 5 * 60_000L
 
     private val currentActivity = MutableStateFlow<FragmentActivity?>(null)
     private val authorizationLock = Any()
@@ -65,14 +72,22 @@ object ForegroundUiBridge {
     suspend fun requireActivity(
         timeoutMs: Long = FOREGROUND_ACTIVITY_TIMEOUT_MS,
     ): FragmentActivity =
-        withTimeout(timeoutMs) {
-            currentActivity
-                .filterNotNull()
-                .first()
+        try {
+            withTimeout(timeoutMs) {
+                currentActivity
+                    .filterNotNull()
+                    .first()
+            }
+        } catch (error: TimeoutCancellationException) {
+            throw ForegroundAuthorizationTimeoutException(
+                "foreground activity was unavailable for authorization",
+                error,
+            )
         }
 
     suspend fun launchAuthorization(
         request: IntentSenderRequest,
+        timeoutMs: Long = AUTHORIZATION_RESULT_TIMEOUT_MS,
     ): ActivityResult = withContext(Dispatchers.Main.immediate) {
         val deferred = CompletableDeferred<ActivityResult>()
         try {
@@ -85,7 +100,16 @@ object ForegroundUiBridge {
                 launcher.launch(request)
             }
 
-            deferred.await()
+            try {
+                withTimeout(timeoutMs) {
+                    deferred.await()
+                }
+            } catch (error: TimeoutCancellationException) {
+                throw ForegroundAuthorizationTimeoutException(
+                    "google drive authorization timed out",
+                    error,
+                )
+            }
         } finally {
             synchronized(authorizationLock) {
                 if (pendingAuthorizationResult === deferred) {

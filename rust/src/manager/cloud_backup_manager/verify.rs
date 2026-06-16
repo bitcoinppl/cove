@@ -60,7 +60,8 @@ impl IntegrityDowngrade {
                 PersistedCloudBackupStatus::Unverified => Some(current.clone()),
                 PersistedCloudBackupStatus::PasskeyMissing
                 | PersistedCloudBackupStatus::Disabling
-                | PersistedCloudBackupStatus::Disabled => None,
+                | PersistedCloudBackupStatus::Disabled
+                | PersistedCloudBackupStatus::Corrupted => None,
             },
         }
     }
@@ -180,7 +181,10 @@ impl RustCloudBackupManager {
 
     pub(crate) fn persist_verification_result(&self, result: &DeepVerificationResult) {
         let current = RustCloudBackupManager::load_persisted_state();
-        if matches!(current.status(), PersistedCloudBackupStatus::Disabled) {
+        if matches!(
+            current.status(),
+            PersistedCloudBackupStatus::Disabled | PersistedCloudBackupStatus::Corrupted
+        ) {
             return;
         }
 
@@ -188,7 +192,7 @@ impl RustCloudBackupManager {
         match result {
             DeepVerificationResult::Verified(_) => {
                 new_state
-                    .mark_verified_at(jiff::Timestamp::now().as_second().try_into().unwrap_or(0));
+                    .mark_verified_at(crate::manager::cloud_backup_manager::current_timestamp());
             }
             DeepVerificationResult::AwaitingUploadConfirmation(_) => return,
             DeepVerificationResult::PasskeyConfirmed(_) => return,
@@ -219,7 +223,7 @@ impl RustCloudBackupManager {
                 };
 
                 new_state.mark_verification_required(Some(
-                    jiff::Timestamp::now().as_second().try_into().unwrap_or(0),
+                    crate::manager::cloud_backup_manager::current_timestamp(),
                 ));
 
                 if let Err(error) = self.persist_cloud_backup_state(
@@ -231,7 +235,8 @@ impl RustCloudBackupManager {
             }
             PersistedCloudBackupStatus::PasskeyMissing
             | PersistedCloudBackupStatus::Disabling
-            | PersistedCloudBackupStatus::Disabled => {}
+            | PersistedCloudBackupStatus::Disabled
+            | PersistedCloudBackupStatus::Corrupted => {}
         }
     }
 
@@ -267,7 +272,6 @@ impl RustCloudBackupManager {
 
         let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
             Ok(ids) => ids,
-            Err(CloudStorageError::NotFound(_)) => Vec::new(),
             Err(error) => {
                 return Err(CloudBackupError::cloud_storage_context("list wallet backups", error));
             }
@@ -330,7 +334,6 @@ impl RustCloudBackupManager {
         let cloud = CloudStorage::global_explicit_client();
         let wallet_count = match cloud.list_wallet_backups(namespace).await {
             Ok(wallet_record_ids) => wallet_record_ids.len() as u32,
-            Err(CloudStorageError::NotFound(_)) => 0,
             Err(error) => {
                 warn!("Repair passkey: failed to refresh wallet backups after repair: {error}");
                 Database::global()

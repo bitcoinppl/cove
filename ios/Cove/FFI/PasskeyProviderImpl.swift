@@ -148,7 +148,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
 
         if gotResult == .timedOut {
             Log.warn(
-                "[PASSKEY] presence check timed out after 1s rpId=\(rpId) credential=\(credentialSummary)"
+                "[PASSKEY] presence check timed out after 1s"
             )
             DispatchQueue.main.async { controller.cancel() }
             return .indeterminate

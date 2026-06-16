@@ -234,7 +234,7 @@ struct HeaderSection: View {
                 headerIcon
                     .font(.largeTitle)
 
-                Text("Cloud Backup Active")
+                Text(cloudBackupDetailHeaderTitle(syncHealth: syncHealth))
                     .fontWeight(.semibold)
 
                 if let lastSync {
@@ -252,25 +252,23 @@ struct HeaderSection: View {
 
     @ViewBuilder
     private var headerIcon: some View {
+        let image = Image(systemName: cloudBackupDetailHeaderIconName(syncHealth: syncHealth))
+
         switch syncHealth {
         case .unknown:
-            Image(systemName: "icloud")
-                .foregroundColor(.secondary)
-        case .allUploaded, .noFiles:
-            Image(systemName: "checkmark.icloud.fill")
+            image.foregroundColor(.secondary)
+        case .allUploaded:
+            image
                 .foregroundColor(.statusSuccess)
         case .uploading:
-            Image(systemName: "arrow.clockwise.icloud.fill")
+            image
                 .foregroundColor(.statusInfo)
         case .failed:
-            Image(systemName: "exclamationmark.icloud.fill")
+            image
                 .foregroundColor(.statusError)
-        case .authorizationRequired:
-            Image(systemName: "exclamationmark.icloud.fill")
+        case .authorizationRequired, .noFiles, .unavailable:
+            image
                 .foregroundColor(.statusWarning)
-        case .unavailable:
-            Image(systemName: "checkmark.icloud.fill")
-                .foregroundColor(.statusSuccess)
         }
     }
 
@@ -305,14 +303,48 @@ struct HeaderSection: View {
             Label("iCloud Drive access needs to be reconnected", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(Color.statusWarning)
-        case .noFiles, .unavailable:
-            EmptyView()
+        case .noFiles:
+            Label("No iCloud backup files uploaded yet", systemImage: "icloud.slash")
+                .font(.caption)
+                .foregroundStyle(Color.statusWarning)
+        case .unavailable:
+            Label("iCloud Drive is unavailable", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(Color.statusWarning)
         }
     }
 
     private func formatDate(_ timestamp: UInt64) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
         return date.formatted(date: .abbreviated, time: .shortened)
+    }
+}
+
+func cloudBackupDetailHeaderTitle(syncHealth: CloudSyncHealth) -> String {
+    switch syncHealth {
+    case .allUploaded:
+        "Cloud Backup Active"
+    case .uploading:
+        "Cloud Backup Syncing"
+    case .unknown:
+        "Checking Cloud Backup"
+    case .noFiles, .authorizationRequired, .unavailable, .failed:
+        "Cloud Backup Needs Attention"
+    }
+}
+
+func cloudBackupDetailHeaderIconName(syncHealth: CloudSyncHealth) -> String {
+    switch syncHealth {
+    case .allUploaded:
+        "checkmark.icloud.fill"
+    case .uploading:
+        "arrow.clockwise.icloud.fill"
+    case .unknown:
+        "icloud"
+    case .noFiles:
+        "icloud.slash"
+    case .authorizationRequired, .unavailable, .failed:
+        "exclamationmark.icloud.fill"
     }
 }
 

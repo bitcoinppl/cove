@@ -120,6 +120,7 @@ internal fun CloudBackupHeaderSection(
     syncHealth: CloudSyncHealth,
 ) {
     val colors = cloudBackupVisualColors()
+    val title = cloudBackupHeaderTitle(syncHealth)
 
     val (icon, tint, label) =
         when (syncHealth) {
@@ -161,7 +162,7 @@ internal fun CloudBackupHeaderSection(
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 Text(
-                    "Cloud Backup Active",
+                    title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.primaryText,
@@ -202,6 +203,18 @@ internal fun CloudBackupHeaderSection(
         }
     }
 }
+
+internal fun cloudBackupHeaderTitle(syncHealth: CloudSyncHealth): String =
+    when (syncHealth) {
+        is CloudSyncHealth.AllUploaded -> "Cloud Backup Active"
+        is CloudSyncHealth.Uploading -> "Cloud Backup Syncing"
+        is CloudSyncHealth.Unknown -> "Checking Cloud Backup"
+        is CloudSyncHealth.NoFiles,
+        is CloudSyncHealth.AuthorizationRequired,
+        is CloudSyncHealth.Unavailable,
+        is CloudSyncHealth.Failed,
+        -> "Cloud Backup Needs Attention"
+    }
 
 @Composable
 internal fun WalletSections(

@@ -373,7 +373,7 @@ fn passkey_provider_hint(
         PasskeyRegistrationPlatform::Ios => BackupPasskeyRegistrationPlatform::Ios,
         PasskeyRegistrationPlatform::Android => BackupPasskeyRegistrationPlatform::Android,
     };
-    let registered_at = jiff::Timestamp::now().as_second().try_into().unwrap_or(0);
+    let registered_at = crate::manager::cloud_backup_manager::current_timestamp();
 
     debug!(
         "Captured passkey provider hint aaguid={} registered_platform={registered_platform:?} registered_at={registered_at} name_suffix={name_suffix}",
@@ -418,7 +418,7 @@ impl NamespacePasskeyMatcher {
             let Ok(master_json) =
                 self.cloud.download_master_key_backup(namespace.clone()).await.inspect_err(
                     |error| {
-                        warn!("Failed to download master key for namespace {namespace}: {error}");
+                        warn!("Failed to download cloud backup master key: {error}");
                         had_download_failures = true;
                     },
                 )
@@ -428,7 +428,7 @@ impl NamespacePasskeyMatcher {
 
             let Ok(encrypted) = serde_json::from_slice::<EncryptedMasterKeyBackup>(&master_json)
                 .inspect_err(|error| {
-                    warn!("Failed to deserialize master key for namespace {namespace}: {error}");
+                    warn!("Failed to deserialize cloud backup master key: {error}");
                     had_download_failures = true;
                 })
             else {
@@ -512,7 +512,7 @@ impl NamespacePasskeyMatcher {
                     return Err(CloudBackupError::UnsupportedPasskeyProvider);
                 }
                 Err(error) => {
-                    warn!("Failed targeted passkey auth for namespace {namespace_id}: {error}");
+                    warn!("Failed targeted passkey auth for cloud backup namespace: {error}");
                     had_download_failures = true;
                     continue;
                 }

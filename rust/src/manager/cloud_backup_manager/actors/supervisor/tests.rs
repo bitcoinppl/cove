@@ -13,6 +13,8 @@ use crate::manager::cloud_backup_manager::wallets::{
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStore, PendingEnableSessionMaterial};
 
+const VALID_NAMESPACE_ID: &str = "0123456789abcdef0123456789abcdef";
+
 fn test_supervisor_manager() -> Arc<RustCloudBackupManager> {
     let globals = test_globals();
     let manager = RustCloudBackupManager::init();
@@ -30,7 +32,7 @@ fn test_disabling_state() -> PersistedDisablingCloudBackup {
 
     PersistedDisablingCloudBackup {
         previous_configured,
-        namespace_id: "namespace".into(),
+        namespace_id: VALID_NAMESPACE_ID.into(),
         disable_generation: 7,
         started_at: 1,
         delete_started_at: Some(2),
@@ -49,7 +51,7 @@ fn test_staged_passkey(credential_id: Vec<u8>) -> StagedPrfKey {
 
 fn test_runtime_passkey_authorization() -> RuntimePasskeyAuthorization {
     RuntimePasskeyAuthorization {
-        namespace_id: "namespace".into(),
+        namespace_id: VALID_NAMESPACE_ID.into(),
         credential_id: vec![1, 2, 3],
         prf_salt: [9; 32],
     }
@@ -76,6 +78,70 @@ fn test_enable_upload_finalization() -> EnableUploadFinalization {
         encrypted_master,
         pending_uploads: Vec::new(),
     }
+}
+
+#[test]
+fn enable_recovery_finalization_debug_redacts_nested_items() {
+    let finalization = EnableRecoveryFinalization {
+        context: CloudBackupEnableContext::settings_manual(),
+        namespace_id: "active-namespace-secret".into(),
+        active_critical_key: zeroize::Zeroizing::new([0; 32]),
+        pending_uploads: vec![PendingVerificationUpload::new(
+            "pending-wallet-record-secret".into(),
+            "pending-wallet-revision-secret".into(),
+        )],
+        cleanup_sources: vec![CleanupSourceNamespace {
+            namespace_id: "cleanup-namespace-secret".into(),
+            expected_wallets: Vec::new(),
+        }],
+    };
+
+    let debug = format!("{finalization:?}");
+
+    assert!(debug.contains("pending_uploads_count: 1"), "{debug}");
+    assert!(debug.contains("cleanup_sources_count: 1"), "{debug}");
+    assert!(!debug.contains("active-namespace-secret"), "{debug}");
+    assert!(!debug.contains("pending-wallet-record-secret"), "{debug}");
+    assert!(!debug.contains("pending-wallet-revision-secret"), "{debug}");
+    assert!(!debug.contains("cleanup-namespace-secret"), "{debug}");
+}
+
+#[test]
+fn enable_recovery_completion_debug_redacts_nested_items() {
+    let completion = CloudBackupEnableRecoveryCompletion {
+        context: CloudBackupEnableContext::settings_manual(),
+        namespace_id: "active-namespace-secret".into(),
+        credential_id: vec![1, 2, 3],
+        prf_salt: [9; 32],
+        active_critical_key: zeroize::Zeroizing::new([0; 32]),
+        uploaded_wallets: vec![CloudBackupUploadedWallet::new(
+            WalletId::from("uploaded-wallet-id-secret".to_string()),
+            "uploaded-wallet-record-secret".into(),
+            "uploaded-wallet-revision-secret".into(),
+        )],
+        pending_uploads: vec![PendingVerificationUpload::new(
+            "pending-wallet-record-secret".into(),
+            "pending-wallet-revision-secret".into(),
+        )],
+        cleanup_sources: vec![CleanupSourceNamespace {
+            namespace_id: "cleanup-namespace-secret".into(),
+            expected_wallets: Vec::new(),
+        }],
+    };
+
+    let debug = format!("{completion:?}");
+
+    assert!(debug.contains("uploaded_wallets_count: 1"), "{debug}");
+    assert!(debug.contains("pending_uploads_count: 1"), "{debug}");
+    assert!(debug.contains("cleanup_sources_count: 1"), "{debug}");
+    assert!(debug.contains("credential_id: <redacted len=3>"), "{debug}");
+    assert!(!debug.contains("active-namespace-secret"), "{debug}");
+    assert!(!debug.contains("uploaded-wallet-id-secret"), "{debug}");
+    assert!(!debug.contains("uploaded-wallet-record-secret"), "{debug}");
+    assert!(!debug.contains("uploaded-wallet-revision-secret"), "{debug}");
+    assert!(!debug.contains("pending-wallet-record-secret"), "{debug}");
+    assert!(!debug.contains("pending-wallet-revision-secret"), "{debug}");
+    assert!(!debug.contains("cleanup-namespace-secret"), "{debug}");
 }
 
 fn awaiting_force_new_session(
@@ -1809,12 +1875,13 @@ async fn supervisor_routes_write_blocker_commands_to_write_supervisor() {
     let writes = spawn_actor(CloudBackupWriteSupervisor::new(Weak::new()));
     let mut supervisor = CloudBackupSupervisor::new(Arc::downgrade(&manager), writes.clone());
     let blocker = CloudBackupWriteBlocker::Disabling { operation_id: 9 };
+    let namespace = "0123456789abcdef0123456789abcdef";
 
     call!(writes.block(blocker)).await.unwrap();
 
     let blocked_write = call!(writes.upload_wallet_backup(
         CloudStorage::global_explicit_client(),
-        "namespace".into(),
+        namespace.into(),
         "record".into(),
         vec![1, 2, 3]
     ))
@@ -1829,7 +1896,7 @@ async fn supervisor_routes_write_blocker_commands_to_write_supervisor() {
 
     let allowed_write = call!(writes.upload_wallet_backup(
         CloudStorage::global_explicit_client(),
-        "namespace".into(),
+        namespace.into(),
         "record".into(),
         vec![1, 2, 3]
     ))
