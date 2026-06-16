@@ -31,12 +31,11 @@ const IOS_PROJECT: &str = "Cove.xcodeproj";
 const IOS_SCHEME: &str = "Cove";
 const IOS_APP_NAME: &str = "Cove";
 const IOS_BUNDLE_ID: &str = "org.bitcoinppl.cove";
+const IOS_ASSOCIATED_DOMAIN: &str = "covebitcoinwallet.com";
 const IOS_CONFIGURATION_DEBUG: &str = "Debug";
 const IOS_CONFIGURATION_RELEASE: &str = "Release";
 const IOS_TEAM_ID: &str = "Q8UP8C53Y8";
 const IOS_GENERIC_DEVICE_DESTINATION: &str = "generic/platform=iOS";
-// clear the project-level Apple Development identity so export can resolve distribution signing
-const IOS_TESTFLIGHT_CODE_SIGN_IDENTITY: &str = "";
 const IOS_SIMULATOR_DESTINATION: &str = "platform=iOS Simulator,name=iPhone 15 Pro,OS=latest";
 const XCODE_DERIVED_DATA_PATH: &str = "Library/Developer/Xcode/DerivedData";
 const IOS_SIMULATOR_DERIVED_DATA_DIR: &str = "Cove-simulator-run";
@@ -402,12 +401,15 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
 pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
     validate_testflight_credentials(&sh, &options)?;
+
+    // fail before bumping/building if Apple has not associated this TestFlight app id
+    validate_testflight_associated_domain(&sh)?;
     let project_snapshot = crate::version::snapshot_ios_project(&sh)?;
 
     let result = (|| {
         crate::version::bump_ios_build_number(&sh)?;
         build_ios(IosBuildType::Custom("release-speed"), true, false, verbose)?;
-        upload_testflight(options, verbose)
+        upload_testflight_inner(options, verbose, false)
     })();
 
     if let Err(error) = result {
@@ -436,6 +438,14 @@ fn validate_testflight_credentials(sh: &Shell, options: &TestflightUploadOptions
 }
 
 pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
+    upload_testflight_inner(options, verbose, true)
+}
+
+fn upload_testflight_inner(
+    options: TestflightUploadOptions,
+    verbose: bool,
+    validate_associated_domain: bool,
+) -> Result<()> {
     let sh = Shell::new()?;
 
     if !command_exists("xcodebuild") {
@@ -444,6 +454,9 @@ pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Res
     }
 
     let api_credentials = TestflightApiCredentials::from_options(&sh, &options)?;
+    if validate_associated_domain {
+        validate_testflight_associated_domain(&sh)?;
+    }
 
     sh.change_dir("../ios");
 
@@ -462,9 +475,12 @@ pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Res
     let api_key_id = &api_credentials.api_key_id;
     let api_issuer_id = &api_credentials.api_issuer_id;
     let xcode_path = xcode_distribution_path();
+
+    // use the Release target's signing settings so CLI archives match Xcode archives
+    // overriding CODE_SIGN_IDENTITY here can produce TestFlight-only passkey association failures
     let archive_cmd = cmd!(
         sh,
-        "xcodebuild -project {IOS_PROJECT} -scheme {IOS_SCHEME} -configuration {IOS_CONFIGURATION_RELEASE} -destination {IOS_GENERIC_DEVICE_DESTINATION} -archivePath {archive_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id} CODE_SIGN_IDENTITY={IOS_TESTFLIGHT_CODE_SIGN_IDENTITY} archive"
+        "xcodebuild -project {IOS_PROJECT} -scheme {IOS_SCHEME} -configuration {IOS_CONFIGURATION_RELEASE} -destination {IOS_GENERIC_DEVICE_DESTINATION} -archivePath {archive_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id} archive"
     )
     .env("PATH", &xcode_path);
     run_xcodebuild(archive_cmd, verbose, "Failed to archive iOS app")?;
@@ -480,6 +496,70 @@ pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Res
     print_success("Uploaded iOS archive to App Store Connect");
 
     Ok(())
+}
+
+fn validate_testflight_associated_domain(sh: &Shell) -> Result<()> {
+    if !command_exists("curl") {
+        color_eyre::eyre::bail!("curl not found; needed to verify TestFlight passkey domain");
+    }
+
+    let app_identifier = testflight_app_identifier();
+    for url in testflight_aasa_urls() {
+        let output = cmd!(sh, "curl -LfsS {url}")
+            .quiet()
+            .ignore_status()
+            .output()
+            .wrap_err_with(|| format!("Failed to fetch associated-domain file from {url}"))?;
+
+        if !output.status.success() {
+            let stderr =
+                String::from_utf8(output.stderr).unwrap_or_else(|_| "<non-utf8 stderr>".into());
+            color_eyre::eyre::bail!(
+                "failed to fetch associated-domain file from {url}: {}",
+                non_empty_output(&stderr, "<empty>")
+            );
+        }
+
+        let body = String::from_utf8(output.stdout)
+            .wrap_err_with(|| format!("Associated-domain file from {url} was not valid UTF-8"))?;
+        ensure_aasa_webcredentials_app(&body, &app_identifier)
+            .wrap_err_with(|| format!("Invalid associated-domain file at {url}"))?;
+    }
+
+    print_success(&format!(
+        "Verified passkey associated domain {} for {}",
+        IOS_ASSOCIATED_DOMAIN, app_identifier
+    ));
+
+    Ok(())
+}
+
+fn testflight_app_identifier() -> String {
+    format!("{IOS_TEAM_ID}.{IOS_BUNDLE_ID}")
+}
+
+fn testflight_aasa_urls() -> [String; 2] {
+    [
+        format!("https://{IOS_ASSOCIATED_DOMAIN}/.well-known/apple-app-site-association"),
+        format!("https://app-site-association.cdn-apple.com/a/v1/{IOS_ASSOCIATED_DOMAIN}"),
+    ]
+}
+
+fn ensure_aasa_webcredentials_app(body: &str, app_identifier: &str) -> Result<()> {
+    let value: serde_json::Value =
+        serde_json::from_str(body).wrap_err("failed to parse apple-app-site-association JSON")?;
+    let apps = value
+        .get("webcredentials")
+        .and_then(|webcredentials| webcredentials.get("apps"))
+        .and_then(|apps| apps.as_array())
+        .ok_or_else(|| eyre!("missing `webcredentials.apps`"))?;
+
+    if apps.iter().any(|app| app.as_str() == Some(app_identifier)) {
+        return Ok(());
+    }
+
+    let listed_apps = apps.iter().filter_map(|app| app.as_str()).collect::<Vec<_>>().join(", ");
+    Err(eyre!("`webcredentials.apps` does not include {app_identifier}; found [{}]", listed_apps))
 }
 
 struct TestflightApiCredentials {
@@ -947,7 +1027,9 @@ fn parse_device_detail(output: &str, prefix: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_pem_text, simulator_line_matches_device};
+    use super::{
+        ensure_aasa_webcredentials_app, normalize_pem_text, simulator_line_matches_device,
+    };
 
     const VALID_PEM: &str = "\
 -----BEGIN PRIVATE KEY-----
@@ -1040,5 +1122,34 @@ ABC123
 ";
 
         assert!(normalize_pem_text(pem).is_err());
+    }
+
+    #[test]
+    fn aasa_webcredentials_accepts_testflight_app_identifier() {
+        let body = r#"{
+            "webcredentials": {
+                "apps": ["Q8UP8C53Y8.org.bitcoinppl.cove"]
+            }
+        }"#;
+
+        assert!(ensure_aasa_webcredentials_app(body, "Q8UP8C53Y8.org.bitcoinppl.cove").is_ok());
+    }
+
+    #[test]
+    fn aasa_webcredentials_rejects_missing_app_identifier() {
+        let body = r#"{
+            "webcredentials": {
+                "apps": ["Q8UP8C53Y8.org.bitcoinppl.other"]
+            }
+        }"#;
+
+        assert!(ensure_aasa_webcredentials_app(body, "Q8UP8C53Y8.org.bitcoinppl.cove").is_err());
+    }
+
+    #[test]
+    fn aasa_webcredentials_rejects_missing_apps() {
+        let body = r#"{"applinks": {"apps": []}}"#;
+
+        assert!(ensure_aasa_webcredentials_app(body, "Q8UP8C53Y8.org.bitcoinppl.cove").is_err());
     }
 }

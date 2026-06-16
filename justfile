@@ -94,7 +94,7 @@ alias bar := build-android-release
 # Build signed AAB for Google Play, copy to Downloads
 [group('build')]
 bundle-android: build-android-release
-    cd android && ./gradlew --stop"
+    cd android && ./gradlew --stop
     just xtask bundle-android && just say "done android bundle"
 
 alias bua := bundle-android
@@ -114,6 +114,8 @@ build-ios-release:
 alias bir := build-ios-release
 
 # Bump iOS build, build release bindings, then upload to TestFlight
+# keep this path aligned with Xcode archives; passkeys fail in TestFlight if CLI signing diverges
+# xtask verifies Apple's AASA CDN before upload
 [group('build')]
 testflight:
     just xtask testflight

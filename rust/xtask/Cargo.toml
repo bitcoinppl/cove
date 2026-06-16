@@ -9,6 +9,7 @@ clap = { version = "4.6.1", features = ["derive", "env"] }
 color-eyre = "0.6.5"
 xshell = "0.2.7"
 colored = "3.1.1"
+serde_json = { workspace = true }
 
 # for util sign-psbt
 bdk_wallet = { version = "3.0.0", features = ["keys-bip39"] }
