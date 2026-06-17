@@ -1191,7 +1191,8 @@ class AndroidCloudStorageAccess internal constructor(
     }
 
     private suspend fun DriveAccessToken.withResolvedAccountIdentity(): DriveAccessToken {
-        if (account?.isComplete == true) {
+        val selectedAccount = accountBindingStore.selectedIdentity()
+        if (account?.isComplete == true && !account.missingSelectedDrivePermissionId(selectedAccount)) {
             return this
         }
 
@@ -1204,6 +1205,11 @@ class AndroidCloudStorageAccess internal constructor(
             copy(account = mergedAccount)
         }
     }
+
+    private fun DriveAccountIdentity.missingSelectedDrivePermissionId(
+        selectedAccount: DriveAccountIdentity?,
+    ): Boolean =
+        drivePermissionId == null && selectedAccount?.drivePermissionId != null
 
     private suspend fun driveAccountIdentity(token: String): DriveAccountIdentity? {
         try {

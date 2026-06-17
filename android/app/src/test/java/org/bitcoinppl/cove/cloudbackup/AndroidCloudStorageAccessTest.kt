@@ -602,6 +602,67 @@ class AndroidCloudStorageAccessTest {
         }
 
     @Test
+    fun storedDrivePermissionIdIsResolvedBeforeBindingVerification() =
+        runBlocking {
+            TestDriveServer().use { server ->
+                server.enqueue(
+                    HttpURLConnection.HTTP_OK,
+                    """
+                    {
+                        "user": {
+                            "permissionId": "permission-1"
+                        }
+                    }
+                    """.trimIndent(),
+                )
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+
+                val store = TestDriveAccountBindingStore(
+                    DriveAccountIdentity(drivePermissionId = "permission-1", email = null),
+                )
+                val delegate = RecordingDriveAuthorization().apply {
+                    account = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+                }
+                val authorization = CachingDriveAuthorization(
+                    delegate = delegate,
+                    elapsedRealtime = { 0 },
+                    cacheWindowMs = 1_000,
+                    cacheKey = { store.selectedIdentity() },
+                )
+                val storage = AndroidCloudStorageAccess(
+                    driveAuthorization = authorization,
+                    accountBindingStore = store,
+                    driveApiEndpoints = DriveApiEndpoints(
+                        aboutEndpoint = "${server.baseUrl}/about",
+                        filesEndpoint = "${server.baseUrl}/files",
+                        uploadEndpoint = "${server.baseUrl}/upload",
+                    ),
+                    drivePathNamesProvider = { testDrivePathNames },
+                )
+
+                val result = runCatching {
+                    storage.listNamespaces(CloudAccessPolicy.SILENT)
+                }
+
+                assertTrue(
+                    cloudStorageFailureMessage(result.exceptionOrNull()),
+                    result.isSuccess,
+                )
+                assertEquals(emptyList<String>(), result.getOrNull())
+                assertEquals(listOf(false), delegate.accessRequests)
+                assertTrue(delegate.clearedTokens.isEmpty())
+
+                val requests = server.requests()
+                assertEquals(listOf("/about", "/files"), requests.map { it.path.substringBefore("?") })
+                assertTrue(requests.first().path.contains("permissionId"))
+                assertEquals(
+                    listOf("Bearer token-1", "Bearer token-1"),
+                    requests.map { it.authorization },
+                )
+            }
+        }
+
+    @Test
     fun constrainedAuthorizationWithoutIdentityIsVerifiedThroughDriveAbout() =
         runBlocking {
             TestDriveServer().use { server ->
