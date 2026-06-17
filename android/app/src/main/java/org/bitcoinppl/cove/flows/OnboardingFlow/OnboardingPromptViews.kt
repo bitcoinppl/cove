@@ -102,7 +102,7 @@ internal fun CloudCheckContent() {
             Spacer(modifier = Modifier.size(10.dp))
 
             Text(
-                text = "This only takes a moment",
+                text = "This can take a few minutes, please be patient",
                 color = OnboardingTextSecondary,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,

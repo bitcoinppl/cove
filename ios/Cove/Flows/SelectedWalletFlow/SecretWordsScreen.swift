@@ -26,6 +26,23 @@ struct SecretWordsScreen: View {
         (words?.words().count ?? 24) / numberOfColumns
     }
 
+    private func presentSeedQrAlert() {
+        guard !showSeedQrAlert, !showSeedQrSheet else {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !showSeedQrAlert, !showSeedQrSheet else { return }
+                showSeedQrAlert = true
+            }
+            return
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !showSeedQrAlert, !showSeedQrSheet else { return }
+            showSeedQrAlert = true
+        }
+    }
+
     var body: some View {
         VStack {
             Spacer()
@@ -107,20 +124,23 @@ struct SecretWordsScreen: View {
             do { words = try Mnemonic(id: id) } catch { errorMessage = error.localizedDescription }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .adaptiveToolbarStyle()
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { showSeedQrAlert = true }) {
+                Button(action: presentSeedQrAlert) {
                     Image(systemName: "qrcode")
                         .foregroundStyle(.white)
                 }
+                .accessibilityLabel("Show Seed QR")
             }
         }
         .alert("Show Seed QR?", isPresented: $showSeedQrAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Show QR Code") { showSeedQrSheet = true }
         } message: {
-            Text("Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to.")
+            Text(
+                "Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to."
+            )
         }
         .sheet(isPresented: $showSeedQrSheet) {
             if let words {
@@ -136,7 +156,6 @@ struct SecretWordsScreen: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
-        .tint(.white)
     }
 }
 
