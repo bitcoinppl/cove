@@ -3,8 +3,12 @@ package org.bitcoinppl.cove.cloudbackup
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Status
+import java.io.BufferedReader
 import java.io.IOException
+import java.io.InputStreamReader
 import java.net.HttpURLConnection
+import java.net.ServerSocket
+import java.net.SocketException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -142,6 +146,24 @@ class AndroidCloudStorageAccessTest {
             assertEquals(
                 "consent required",
                 (error as CloudStorageException.AuthorizationRequired).v1,
+            )
+        }
+
+    @Test
+    fun unauthorizedDriveAccountIdentityLookupClearsTokenAndRetries() =
+        runBlocking {
+            assertDriveAccountIdentityLookupClearsTokenAndRetries(
+                statusCode = HttpURLConnection.HTTP_UNAUTHORIZED,
+                body = "expired token",
+            )
+        }
+
+    @Test
+    fun rejectedDriveAccountIdentityLookupClearsTokenAndRetries() =
+        runBlocking {
+            assertDriveAccountIdentityLookupClearsTokenAndRetries(
+                statusCode = HttpURLConnection.HTTP_FORBIDDEN,
+                body = driveErrorBody("insufficientPermissions"),
             )
         }
 
@@ -725,6 +747,48 @@ class AndroidCloudStorageAccessTest {
         )
     }
 
+    private suspend fun assertDriveAccountIdentityLookupClearsTokenAndRetries(
+        statusCode: Int,
+        body: String,
+    ) {
+        TestDriveServer().use { server ->
+            server.enqueue(statusCode, body)
+            server.enqueue(
+                HttpURLConnection.HTTP_OK,
+                """
+                {
+                    "user": {
+                        "emailAddress": "person@example.com"
+                    }
+                }
+                """.trimIndent(),
+            )
+            server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+
+            val authorization = SequentialDriveAuthorization(listOf("token-1", "token-2"))
+            val storage = AndroidCloudStorageAccess(
+                driveAuthorization = authorization,
+                accountBindingStore = TestDriveAccountBindingStore(),
+                driveApiEndpoints = DriveApiEndpoints(
+                    aboutEndpoint = "${server.baseUrl}/about",
+                    filesEndpoint = "${server.baseUrl}/files",
+                    uploadEndpoint = "${server.baseUrl}/upload",
+                ),
+            )
+
+            assertEquals(emptyList<String>(), storage.listNamespaces(CloudAccessPolicy.SILENT))
+            assertEquals(listOf(false, false), authorization.accessRequests)
+            assertEquals(listOf("token-1"), authorization.clearedTokens)
+
+            val requests = server.requests()
+            assertEquals(listOf("/about", "/about", "/files"), requests.map { it.path.substringBefore("?") })
+            assertEquals(
+                listOf("Bearer token-1", "Bearer token-2", "Bearer token-2"),
+                requests.map { it.authorization },
+            )
+        }
+    }
+
     private fun driveErrorBody(reason: String): String =
         """
         {
@@ -774,6 +838,27 @@ class AndroidCloudStorageAccessTest {
         override suspend fun clearToken(token: String) = Unit
     }
 
+    private class SequentialDriveAuthorization(
+        tokens: List<String>,
+    ) : DriveAuthorization {
+        private val tokens = ArrayDeque(tokens)
+        val accessRequests = mutableListOf<Boolean>()
+        val clearedTokens = mutableListOf<String>()
+
+        override suspend fun accessToken(interactive: Boolean): DriveAccessToken {
+            accessRequests.add(interactive)
+            if (tokens.isEmpty()) {
+                throw AssertionError("unexpected drive access token request")
+            }
+
+            return DriveAccessToken(token = tokens.removeFirst(), account = null)
+        }
+
+        override suspend fun clearToken(token: String) {
+            clearedTokens.add(token)
+        }
+    }
+
     private class RecordingDriveAuthorization : DriveAuthorization {
         var token = "token-1"
         var account = DriveAccountIdentity(id = "account-1", email = "person@example.com")
@@ -809,6 +894,123 @@ class AndroidCloudStorageAccessTest {
             finishClear.await()
         }
     }
+
+    private class TestDriveServer : AutoCloseable {
+        private val serverSocket = ServerSocket(0)
+        private val responseLock = Any()
+        private val requestLock = Any()
+        private val responses = ArrayDeque<TestDriveResponse>()
+        private val requests = mutableListOf<TestDriveRequest>()
+
+        @Volatile
+        private var serverError: Throwable? = null
+
+        private val thread =
+            Thread({ serve() }, "test-drive-server")
+                .apply {
+                    isDaemon = true
+                    start()
+                }
+
+        val baseUrl = "http://127.0.0.1:${serverSocket.localPort}"
+
+        fun enqueue(statusCode: Int, body: String) {
+            synchronized(responseLock) {
+                responses.add(TestDriveResponse(statusCode, body))
+            }
+        }
+
+        fun requests(): List<TestDriveRequest> =
+            synchronized(requestLock) {
+                requests.toList()
+            }
+
+        override fun close() {
+            serverSocket.close()
+            thread.join(1_000)
+            serverError?.let { throw AssertionError("test drive server failed", it) }
+        }
+
+        private fun serve() {
+            try {
+                while (!serverSocket.isClosed) {
+                    val socket =
+                        try {
+                            serverSocket.accept()
+                        } catch (_: SocketException) {
+                            return
+                        }
+
+                    socket.use {
+                        val reader = BufferedReader(InputStreamReader(it.getInputStream(), Charsets.UTF_8))
+                        val requestLine = reader.readLine() ?: return@use
+                        val authorization = readAuthorizationHeader(reader)
+                        val requestTarget = requestLine.split(" ").getOrNull(1).orEmpty()
+
+                        synchronized(requestLock) {
+                            requests.add(TestDriveRequest(path = requestTarget, authorization = authorization))
+                        }
+
+                        val response =
+                            synchronized(responseLock) {
+                                if (responses.isEmpty()) {
+                                    TestDriveResponse(HttpURLConnection.HTTP_INTERNAL_ERROR, "unexpected request")
+                                } else {
+                                    responses.removeFirst()
+                                }
+                            }
+                        val responseBody = response.body.toByteArray(Charsets.UTF_8)
+                        val statusText = if (response.statusCode in 200..299) "OK" else "Error"
+                        val headers =
+                            "HTTP/1.1 ${response.statusCode} $statusText\r\n" +
+                                "Content-Type: application/json\r\n" +
+                                "Content-Length: ${responseBody.size}\r\n" +
+                                "Connection: close\r\n" +
+                                "\r\n"
+
+                        it.getOutputStream().use { output ->
+                            output.write(headers.toByteArray(Charsets.UTF_8))
+                            output.write(responseBody)
+                        }
+                    }
+                }
+            } catch (error: Throwable) {
+                if (!serverSocket.isClosed) {
+                    serverError = error
+                }
+            }
+        }
+
+        private fun readAuthorizationHeader(reader: BufferedReader): String? {
+            var authorization: String? = null
+            while (true) {
+                val line = reader.readLine() ?: return authorization
+                if (line.isEmpty()) {
+                    return authorization
+                }
+
+                val separator = line.indexOf(':')
+                if (separator < 0) {
+                    continue
+                }
+
+                val name = line.substring(0, separator)
+                if (name.equals("Authorization", ignoreCase = true)) {
+                    authorization = line.substring(separator + 1).trim()
+                }
+            }
+        }
+    }
+
+    private data class TestDriveResponse(
+        val statusCode: Int,
+        val body: String,
+    )
+
+    private data class TestDriveRequest(
+        val path: String,
+        val authorization: String?,
+    )
 
     private class TestDriveAccountBindingStore(
         private var identity: DriveAccountIdentity? = null,

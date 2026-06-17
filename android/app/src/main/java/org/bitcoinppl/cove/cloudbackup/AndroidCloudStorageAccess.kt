@@ -326,9 +326,16 @@ internal class DriveHttpException(
     val body: String,
 ) : IOException("drive request failed with status=$statusCode")
 
+internal data class DriveApiEndpoints(
+    val aboutEndpoint: String = DRIVE_ABOUT_ENDPOINT,
+    val filesEndpoint: String = DRIVE_FILES_ENDPOINT,
+    val uploadEndpoint: String = DRIVE_UPLOAD_ENDPOINT,
+)
+
 class AndroidCloudStorageAccess internal constructor(
     private val driveAuthorization: DriveAuthorization,
     private val accountBindingStore: DriveAccountBindingStore,
+    private val driveApiEndpoints: DriveApiEndpoints = DriveApiEndpoints(),
 ) : CloudStorageAccess {
     constructor(context: Context) : this(
         SharedPreferencesDriveAccountBindingStore(context.applicationContext),
@@ -475,7 +482,7 @@ class AndroidCloudStorageAccess internal constructor(
                     driveRequest(
                         token = token,
                         method = "DELETE",
-                        url = "${DriveApi.FILES_ENDPOINT}/${file.id}",
+                        url = "${driveApiEndpoints.filesEndpoint}/${file.id}",
                     )
                 } catch (error: Throwable) {
                     if (error is CancellationException) throw error
@@ -507,7 +514,7 @@ class AndroidCloudStorageAccess internal constructor(
                 driveRequest(
                     token = token,
                     method = "DELETE",
-                    url = "${DriveApi.FILES_ENDPOINT}/$namespaceFolderId",
+                    url = "${driveApiEndpoints.filesEndpoint}/$namespaceFolderId",
                 )
             }
         }
@@ -740,7 +747,7 @@ class AndroidCloudStorageAccess internal constructor(
             driveRequest(
                 token = token,
                 method = "POST",
-                url = DriveApi.FILES_ENDPOINT,
+                url = driveApiEndpoints.filesEndpoint,
                 body = metadata.toString().toByteArray(),
                 contentType = "application/json; charset=utf-8",
             ).asJsonObject()
@@ -772,9 +779,9 @@ class AndroidCloudStorageAccess internal constructor(
         val body = buildMultipartBody(boundary, metadata, data)
         val url =
             if (existing == null) {
-                "${DriveApi.UPLOAD_ENDPOINT}?uploadType=multipart"
+                "${driveApiEndpoints.uploadEndpoint}?uploadType=multipart"
             } else {
-                "${DriveApi.UPLOAD_ENDPOINT}/${existing.id}?uploadType=multipart"
+                "${driveApiEndpoints.uploadEndpoint}/${existing.id}?uploadType=multipart"
             }
 
         driveRequest(
@@ -909,7 +916,7 @@ class AndroidCloudStorageAccess internal constructor(
         driveRequest(
             token = token,
             method = "GET",
-            url = "${DriveApi.FILES_ENDPOINT}/$fileId?alt=media",
+            url = "${driveApiEndpoints.filesEndpoint}/$fileId?alt=media",
         ).body
 
     private suspend fun listChildren(
@@ -935,7 +942,7 @@ class AndroidCloudStorageAccess internal constructor(
         do {
             val builder =
                 Uri
-                    .parse(DriveApi.FILES_ENDPOINT)
+                    .parse(driveApiEndpoints.filesEndpoint)
                     .buildUpon()
                     .appendQueryParameter("spaces", APP_DATA_SPACE)
                     .appendQueryParameter("fields", "nextPageToken,files(id,name,mimeType)")
@@ -1050,8 +1057,27 @@ class AndroidCloudStorageAccess internal constructor(
         }
     }
 
-    private suspend fun verifiedDriveAccessToken(interactive: Boolean): DriveAccessToken {
-        val access = driveAuthorization.accessToken(interactive).withResolvedAccountIdentity()
+    private suspend fun verifiedDriveAccessToken(interactive: Boolean): DriveAccessToken =
+        verifiedDriveAccessToken(interactive, retryIdentityLookup = true)
+
+    private suspend fun verifiedDriveAccessToken(
+        interactive: Boolean,
+        retryIdentityLookup: Boolean,
+    ): DriveAccessToken {
+        val unresolvedAccess = driveAuthorization.accessToken(interactive)
+        val access =
+            try {
+                unresolvedAccess.withResolvedAccountIdentity()
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                val tokenWasCleared = clearFailedIdentityLookupToken(unresolvedAccess.token, error)
+                if (tokenWasCleared && retryIdentityLookup) {
+                    return verifiedDriveAccessToken(interactive, retryIdentityLookup = false)
+                }
+
+                throw error
+            }
+
         try {
             verifyDriveAccountBinding(accountBindingStore, access.account, bindIfMissing = false)
         } catch (error: DriveAccountBindingException) {
@@ -1077,7 +1103,7 @@ class AndroidCloudStorageAccess internal constructor(
     private suspend fun driveAccountIdentity(token: String): DriveAccountIdentity? {
         val url =
             Uri
-                .parse(DriveApi.ABOUT_ENDPOINT)
+                .parse(driveApiEndpoints.aboutEndpoint)
                 .buildUpon()
                 .appendQueryParameter("fields", "user(emailAddress)")
                 .build()
@@ -1090,6 +1116,28 @@ class AndroidCloudStorageAccess internal constructor(
                 url = url,
             ).asJsonObject(),
         )
+    }
+
+    private suspend fun clearFailedIdentityLookupToken(token: String, error: Throwable): Boolean {
+        val logMessage =
+            when {
+                error is DriveHttpException &&
+                    error.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED ->
+                    "failed to clear expired drive token"
+                error is DriveHttpException &&
+                    error.statusCode == HttpURLConnection.HTTP_FORBIDDEN &&
+                    error.isAuthorizationRejected() ->
+                    "failed to clear rejected drive token"
+                else -> return false
+            }
+
+        runCatching {
+            driveAuthorization.clearToken(token)
+        }.onFailure { tokenError ->
+            Log.w("AndroidCloudStorage", logMessage, tokenError)
+        }
+
+        return true
     }
 
     private suspend fun <T> finishDriveOperation(
@@ -1253,9 +1301,6 @@ class AndroidCloudStorageAccess internal constructor(
         }
 
     private object DriveApi {
-        const val ABOUT_ENDPOINT = "https://www.googleapis.com/drive/v3/about"
-        const val FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
-        const val UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files"
         const val FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
     }
 
@@ -1266,4 +1311,7 @@ class AndroidCloudStorageAccess internal constructor(
     }
 }
 
+private const val DRIVE_ABOUT_ENDPOINT = "https://www.googleapis.com/drive/v3/about"
+private const val DRIVE_FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
+private const val DRIVE_UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files"
 private const val HTTP_TOO_MANY_REQUESTS = 429
