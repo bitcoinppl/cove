@@ -56,22 +56,33 @@ class AndroidCloudStorageAccessTest {
     }
 
     @Test
-    fun driveAboutResponseProvidesAccountEmail() {
+    fun driveAboutResponseProvidesAccountIdentity() {
         val response =
             JSONObject(
                 """
                 {
                     "user": {
-                        "emailAddress": "Person@Example.com"
+                        "emailAddress": "Person@Example.com",
+                        "permissionId": "account-1"
                     }
                 }
                 """.trimIndent(),
             )
 
         assertEquals(
-            DriveAccountIdentity(id = null, email = "Person@Example.com"),
+            DriveAccountIdentity(id = "account-1", email = "person@example.com"),
             driveAccountIdentityFromAboutResponse(response),
         )
+    }
+
+    @Test
+    fun driveAccountIdentityNormalizesEmailForEqualityAndHashCode() {
+        val first = DriveAccountIdentity(id = "account-1", email = " Person@Example.com ")
+        val second = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+
+        assertEquals(first, second)
+        assertEquals(first.hashCode(), second.hashCode())
+        assertEquals("person@example.com", first.email)
     }
 
     @Test
@@ -207,7 +218,8 @@ class AndroidCloudStorageAccessTest {
                     """
                     {
                         "user": {
-                            "emailAddress": "person@example.com"
+                            "emailAddress": "person@example.com",
+                            "permissionId": "account-1"
                         }
                     }
                     """.trimIndent(),
@@ -256,7 +268,8 @@ class AndroidCloudStorageAccessTest {
                     """
                     {
                         "user": {
-                            "emailAddress": "person@example.com"
+                            "emailAddress": "person@example.com",
+                            "permissionId": "account-1"
                         }
                     }
                     """.trimIndent(),
@@ -305,6 +318,107 @@ class AndroidCloudStorageAccessTest {
                 assertEquals(emptyList<String>(), secondResult.getOrNull())
                 assertEquals(listOf(false), delegate.accessRequests)
                 assertTrue(delegate.clearedTokens.isEmpty())
+
+                val requests = server.requests()
+                assertEquals(listOf("/about", "/files", "/files"), requests.map { it.path.substringBefore("?") })
+                assertEquals(
+                    listOf("Bearer token-1", "Bearer token-1", "Bearer token-1"),
+                    requests.map { it.authorization },
+                )
+            }
+        }
+
+    @Test
+    fun constrainedAuthorizationWithoutIdentityIsVerifiedThroughDriveAbout() =
+        runBlocking {
+            TestDriveServer().use { server ->
+                server.enqueue(
+                    HttpURLConnection.HTTP_OK,
+                    """
+                    {
+                        "user": {
+                            "emailAddress": "other@example.com",
+                            "permissionId": "account-2"
+                        }
+                    }
+                    """.trimIndent(),
+                )
+
+                val selected = DriveAccountIdentity(id = null, email = "person@example.com")
+                val authorization = RecordingDriveAuthorization().apply {
+                    account = null
+                }
+                val storage = AndroidCloudStorageAccess(
+                    driveAuthorization = authorization,
+                    accountBindingStore = TestDriveAccountBindingStore(selected),
+                    driveApiEndpoints = DriveApiEndpoints(
+                        aboutEndpoint = "${server.baseUrl}/about",
+                        filesEndpoint = "${server.baseUrl}/files",
+                        uploadEndpoint = "${server.baseUrl}/upload",
+                    ),
+                    drivePathNamesProvider = { testDrivePathNames },
+                )
+
+                val error = captureError {
+                    storage.listNamespaces(CloudAccessPolicy.SILENT)
+                }
+
+                assertTrue(error is CloudStorageException.AuthorizationRequired)
+                assertEquals(
+                    "google drive account does not match the account selected for Cloud Backup",
+                    (error as CloudStorageException.AuthorizationRequired).v1,
+                )
+                assertEquals(listOf("token-1"), authorization.clearedTokens)
+
+                val requests = server.requests()
+                assertEquals(listOf("/about"), requests.map { it.path.substringBefore("?") })
+                assertTrue(requests.single().path.contains("permissionId"))
+            }
+        }
+
+    @Test
+    fun unboundReadOnlyOperationsReuseResolvedDriveAccountIdentity() =
+        runBlocking {
+            TestDriveServer().use { server ->
+                server.enqueue(
+                    HttpURLConnection.HTTP_OK,
+                    """
+                    {
+                        "user": {
+                            "emailAddress": "person@example.com",
+                            "permissionId": "account-1"
+                        }
+                    }
+                    """.trimIndent(),
+                )
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+
+                val store = TestDriveAccountBindingStore()
+                val delegate = RecordingDriveAuthorization().apply {
+                    account = null
+                }
+                val authorization = CachingDriveAuthorization(
+                    delegate = delegate,
+                    elapsedRealtime = { 0 },
+                    cacheWindowMs = 1_000,
+                    cacheKey = { driveAccountTokenCacheKey(store) },
+                )
+                val storage = AndroidCloudStorageAccess(
+                    driveAuthorization = authorization,
+                    accountBindingStore = store,
+                    driveApiEndpoints = DriveApiEndpoints(
+                        aboutEndpoint = "${server.baseUrl}/about",
+                        filesEndpoint = "${server.baseUrl}/files",
+                        uploadEndpoint = "${server.baseUrl}/upload",
+                    ),
+                    drivePathNamesProvider = { testDrivePathNames },
+                )
+
+                assertEquals(emptyList<String>(), storage.listNamespaces(CloudAccessPolicy.SILENT))
+                assertEquals(emptyList<String>(), storage.listNamespaces(CloudAccessPolicy.SILENT))
+                assertEquals(null, store.selectedIdentity())
+                assertEquals(listOf(false), delegate.accessRequests)
 
                 val requests = server.requests()
                 assertEquals(listOf("/about", "/files", "/files"), requests.map { it.path.substringBefore("?") })
@@ -512,46 +626,6 @@ class AndroidCloudStorageAccessTest {
         verifyDriveAccountBinding(store, verified)
 
         assertEquals(verified, store.selectedIdentity())
-    }
-
-    @Test
-    fun driveAccountIdentityUsesConstrainedAccountWhenAuthorizationOmitsIdentity() {
-        val selected = DriveAccountIdentity(id = "account-1", email = "person@example.com")
-
-        assertEquals(
-            selected,
-            resolveDriveAccountIdentity(
-                authorizationIdentity = null,
-                constrainedIdentity = selected,
-            ),
-        )
-    }
-
-    @Test
-    fun driveAccountIdentityRejectsFallbackWhenTokenWasNotConstrained() {
-        val selected = DriveAccountIdentity(id = "account-1", email = null)
-
-        assertEquals(
-            null,
-            resolveDriveAccountIdentity(
-                authorizationIdentity = null,
-                constrainedIdentity = selected,
-            ),
-        )
-    }
-
-    @Test
-    fun driveAccountIdentityPrefersAuthorizationIdentity() {
-        val selected = DriveAccountIdentity(id = "account-1", email = "person@example.com")
-        val actual = DriveAccountIdentity(id = "account-2", email = "other@example.com")
-
-        assertEquals(
-            actual,
-            resolveDriveAccountIdentity(
-                authorizationIdentity = actual,
-                constrainedIdentity = selected,
-            ),
-        )
     }
 
     @Test

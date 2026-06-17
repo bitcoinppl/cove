@@ -214,9 +214,16 @@ internal fun monotonicTimeMs(): Long = System.nanoTime() / 1_000_000L
 internal fun driveAccountIdentityFromAboutResponse(response: JSONObject): DriveAccountIdentity? =
     response
         .optJSONObject("user")
-        ?.optString("emailAddress")
-        ?.takeIf(String::isNotBlank)
-        ?.let { email -> DriveAccountIdentity(id = null, email = email) }
+        ?.let { user ->
+            val id = user.optString("permissionId").takeIf(String::isNotBlank)
+            val email = user.optString("emailAddress").takeIf(String::isNotBlank)
+
+            if (id == null && email == null) {
+                null
+            } else {
+                DriveAccountIdentity(id = id, email = email)
+            }
+        }
 
 internal fun duplicateDriveFolderNames(folderNames: List<String>): Set<String> =
     folderNames
@@ -366,6 +373,11 @@ private fun driveQueryParameter(value: String): String =
         .encode(value, StandardCharsets.UTF_8)
         .replace("+", "%20")
 
+private object UnboundDriveAccountTokenCacheKey
+
+internal fun driveAccountTokenCacheKey(store: DriveAccountBindingStore): Any =
+    store.selectedIdentity() ?: UnboundDriveAccountTokenCacheKey
+
 class AndroidCloudStorageAccess internal constructor(
     private val driveAuthorization: DriveAuthorization,
     private val accountBindingStore: DriveAccountBindingStore,
@@ -381,7 +393,7 @@ class AndroidCloudStorageAccess internal constructor(
             DriveAuthorizationHelper(accountBindingStore.appContext) {
                 accountBindingStore.selectedIdentity()
             },
-            cacheKey = { accountBindingStore.selectedIdentity() },
+            cacheKey = { driveAccountTokenCacheKey(accountBindingStore) },
         ),
         accountBindingStore,
     )
@@ -1131,7 +1143,7 @@ class AndroidCloudStorageAccess internal constructor(
     }
 
     private suspend fun DriveAccessToken.withResolvedAccountIdentity(): DriveAccessToken {
-        if (account?.normalizedEmail != null) {
+        if (account?.isComplete == true) {
             return this
         }
 
@@ -1152,7 +1164,7 @@ class AndroidCloudStorageAccess internal constructor(
                 method = "GET",
                 url = driveApiUrl(
                     driveApiEndpoints.aboutEndpoint,
-                    listOf("fields" to "user(emailAddress)"),
+                    listOf("fields" to "user(emailAddress,permissionId)"),
                 ),
             ).asJsonObject(),
         )

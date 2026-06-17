@@ -20,18 +20,24 @@ internal class AuthorizationRequiredException(
     cause: Throwable? = null,
 ) : Exception(message, cause)
 
-internal data class DriveAccountIdentity(
-    val id: String?,
-    val email: String?,
+internal class DriveAccountIdentity(
+    id: String?,
+    email: String?,
 ) {
+    val id: String? = id?.trim()?.takeIf(String::isNotEmpty)
+    val email: String? = email?.trim()?.lowercase()?.takeIf(String::isNotEmpty)
+
     init {
-        require(!id.isNullOrBlank() || !email.isNullOrBlank()) {
+        require(this.id != null || this.email != null) {
             "drive account identity requires id or email"
         }
     }
 
     val normalizedEmail: String?
-        get() = email?.trim()?.lowercase()?.takeIf(String::isNotBlank)
+        get() = email
+
+    val isComplete: Boolean
+        get() = id != null && normalizedEmail != null
 
     fun withMissingFieldsFrom(other: DriveAccountIdentity?): DriveAccountIdentity =
         if (other == null) {
@@ -44,7 +50,7 @@ internal data class DriveAccountIdentity(
         }
 
     fun matches(other: DriveAccountIdentity): Boolean {
-        if (!id.isNullOrBlank() && !other.id.isNullOrBlank()) {
+        if (id != null && other.id != null) {
             return id == other.id
         }
 
@@ -53,6 +59,41 @@ internal data class DriveAccountIdentity(
 
     fun androidAccount(): Account? =
         normalizedEmail?.let { Account(it, GOOGLE_ACCOUNT_TYPE) }
+
+    fun verifiedMerge(other: DriveAccountIdentity): DriveAccountIdentity {
+        val mergedEmail =
+            if (id != null && id == other.id) {
+                other.normalizedEmail ?: normalizedEmail
+            } else {
+                normalizedEmail ?: other.normalizedEmail
+            }
+
+        return DriveAccountIdentity(
+            id = id ?: other.id,
+            email = mergedEmail,
+        )
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) {
+            return true
+        }
+
+        if (other !is DriveAccountIdentity) {
+            return false
+        }
+
+        return id == other.id && normalizedEmail == other.normalizedEmail
+    }
+
+    override fun hashCode(): Int {
+        var result = id?.hashCode() ?: 0
+        result = 31 * result + (normalizedEmail?.hashCode() ?: 0)
+        return result
+    }
+
+    override fun toString(): String =
+        "DriveAccountIdentity(id=$id, email=$email)"
 
     companion object {
         private const val GOOGLE_ACCOUNT_TYPE = "com.google"
@@ -75,12 +116,6 @@ internal data class DriveAccessToken(
     val token: String,
     val account: DriveAccountIdentity?,
 )
-
-internal fun resolveDriveAccountIdentity(
-    authorizationIdentity: DriveAccountIdentity?,
-    constrainedIdentity: DriveAccountIdentity?,
-): DriveAccountIdentity? =
-    authorizationIdentity ?: constrainedIdentity?.takeIf { it.androidAccount() != null }
 
 internal sealed class DriveAccountBindingException(
     message: String,
@@ -159,11 +194,7 @@ internal fun verifyDriveAccountBinding(
         throw DriveAccountBindingException.Mismatch()
     }
 
-    val enriched =
-        DriveAccountIdentity(
-            id = selected.id ?: actual.id,
-            email = selected.normalizedEmail ?: actual.normalizedEmail,
-        )
+    val enriched = selected.verifiedMerge(actual)
     if (bindIfMissing && enriched != selected) {
         store.bindIdentity(enriched)
     }
@@ -284,10 +315,7 @@ internal class DriveAuthorizationHelper(
         val resolved = resolveIfNeeded(authorizationResult, interactive)
         val token = resolved.accessToken?.takeIf { it.isNotBlank() }
             ?: throw IllegalStateException("drive authorization succeeded but returned a blank access token")
-        val identity = resolveDriveAccountIdentity(
-            authorizationIdentity = DriveAccountIdentity.fromAuthorizationResult(resolved),
-            constrainedIdentity = selectedIdentity,
-        )
+        val identity = DriveAccountIdentity.fromAuthorizationResult(resolved)
 
         return DriveAccessToken(token = token, account = identity)
     }
