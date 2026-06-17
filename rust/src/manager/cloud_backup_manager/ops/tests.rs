@@ -7293,9 +7293,23 @@ async fn restore_activation_upload_failure_keeps_restore_successful_and_queues_u
 
     assert_eq!(report.wallets_restored, 1);
     wait_for_test_condition(
-        Duration::from_secs(1),
-        "background reupload should be attempted after restore",
-        || globals.cloud.wallet_backup_upload_attempt_count() > 0,
+        Duration::from_secs(5),
+        "background reupload should fail after restore and remain queued for retry",
+        || {
+            let upload_attempted = globals.cloud.wallet_backup_upload_attempt_count() > 0;
+            let retryable_failure = matches!(
+                Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+                Some(PersistedCloudBlobSyncState {
+                    state: PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                        retryable: true,
+                        ..
+                    }),
+                    ..
+                })
+            );
+
+            upload_attempted && retryable_failure
+        },
     )
     .await;
     assert_eq!(

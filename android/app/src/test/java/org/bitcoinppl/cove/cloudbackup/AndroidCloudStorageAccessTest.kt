@@ -3,8 +3,12 @@ package org.bitcoinppl.cove.cloudbackup
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Status
+import java.io.BufferedReader
 import java.io.IOException
+import java.io.InputStreamReader
 import java.net.HttpURLConnection
+import java.net.ServerSocket
+import java.net.SocketException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -13,12 +17,20 @@ import kotlinx.coroutines.yield
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.bitcoinppl.cove_core.device.RemoteBackupLocation
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidCloudStorageAccessTest {
+    private val testDrivePathNames = DrivePathNames(
+        namespacesRootFolderName = "cspp-namespaces",
+        masterKeyFolderName = "master-key",
+        walletsFolderName = "wallets",
+        walletFilePrefix = "wallet-",
+    )
+
     @Test
     fun createUploadMetadataIncludesParents() {
         val metadata = createUploadMetadata(fileName = "wallet-record.json", parentId = "folder-123")
@@ -41,6 +53,168 @@ class AndroidCloudStorageAccessTest {
         val json = metadata.toJson()
         assertEquals("wallet-record.json", json.getString("name"))
         assertFalse(json.has("parents"))
+    }
+
+    @Test
+    fun driveAboutResponseProvidesAccountIdentity() {
+        val response =
+            JSONObject(
+                """
+                {
+                    "user": {
+                        "emailAddress": "Person@Example.com",
+                        "permissionId": "account-1"
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals(
+            DriveAccountIdentity(drivePermissionId = "account-1", email = "person@example.com"),
+            driveAccountIdentityFromAboutResponse(response),
+        )
+    }
+
+    @Test
+    fun driveAboutResponseOmitsBlankIdentity() {
+        assertEquals(null, driveAccountIdentityFromAboutResponse(JSONObject("{}")))
+        assertEquals(
+            null,
+            driveAccountIdentityFromAboutResponse(
+                JSONObject(
+                    """
+                    {
+                        "user": {
+                            "emailAddress": " ",
+                            "permissionId": ""
+                        }
+                    }
+                    """.trimIndent(),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun driveAccountIdentityNormalizesEmailForEqualityAndHashCode() {
+        val first = DriveAccountIdentity(googleAccountId = "account-1", email = " Person@Example.com ")
+        val second = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+
+        assertEquals(first, second)
+        assertEquals(first.hashCode(), second.hashCode())
+        assertEquals("person@example.com", first.email)
+    }
+
+    @Test
+    fun driveAccountIdentityKeepsIdSourcesSeparate() {
+        val googleIdentity = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+        val driveIdentity = DriveAccountIdentity(drivePermissionId = "permission-1", email = "PERSON@example.com")
+
+        assertTrue(googleIdentity.matches(driveIdentity))
+        assertEquals(
+            DriveAccountIdentity(
+                googleAccountId = "account-1",
+                drivePermissionId = "permission-1",
+                email = "person@example.com",
+            ),
+            googleIdentity.verifiedMerge(driveIdentity),
+        )
+    }
+
+    @Test
+    fun driveAccountIdentityMergePoliciesHandleEmailRefreshes() {
+        val original = DriveAccountIdentity(googleAccountId = "account-1", email = "old@example.com")
+        val refreshed = DriveAccountIdentity(
+            googleAccountId = "account-1",
+            drivePermissionId = "permission-1",
+            email = "new@example.com",
+        )
+
+        assertEquals(
+            DriveAccountIdentity(
+                googleAccountId = "account-1",
+                drivePermissionId = "permission-1",
+                email = "old@example.com",
+            ),
+            original.withMissingFieldsFrom(refreshed),
+        )
+        assertEquals(
+            DriveAccountIdentity(
+                googleAccountId = "account-1",
+                drivePermissionId = "permission-1",
+                email = "new@example.com",
+            ),
+            original.verifiedMerge(refreshed),
+        )
+    }
+
+    @Test
+    fun driveAccountIdentityMergePoliciesFallbackWithoutRefreshedEmail() {
+        val original = DriveAccountIdentity(googleAccountId = "account-1", email = "old@example.com")
+        val withoutEmail = DriveAccountIdentity(
+            googleAccountId = "account-1",
+            drivePermissionId = "permission-1",
+            email = null,
+        )
+
+        assertEquals(
+            DriveAccountIdentity(
+                googleAccountId = "account-1",
+                drivePermissionId = "permission-1",
+                email = "old@example.com",
+            ),
+            original.withMissingFieldsFrom(withoutEmail),
+        )
+        assertEquals(
+            DriveAccountIdentity(
+                googleAccountId = "account-1",
+                drivePermissionId = "permission-1",
+                email = "old@example.com",
+            ),
+            original.verifiedMerge(withoutEmail),
+        )
+    }
+
+    @Test
+    fun driveAccountIdentityWithMissingFieldsDoesNotOverwriteExistingIds() {
+        val original = DriveAccountIdentity(
+            googleAccountId = "account-1",
+            drivePermissionId = "permission-1",
+            email = "person@example.com",
+        )
+        val other = DriveAccountIdentity(
+            googleAccountId = "account-2",
+            drivePermissionId = "permission-2",
+            email = "other@example.com",
+        )
+
+        assertEquals(original, original.withMissingFieldsFrom(other))
+    }
+
+    @Test
+    fun driveApiUrlEncodesQueryParameters() {
+        assertEquals(
+            "https://example.test/files?q=name%20%3D%20%27a%20b%2Bc%27&email=a%2Bb%40example.com",
+            driveApiUrl(
+                "https://example.test/files",
+                listOf("q" to "name = 'a b+c'", "email" to "a+b@example.com"),
+            ),
+        )
+    }
+
+    @Test
+    fun driveApiUrlKeepsExistingQueryAndFragmentOrder() {
+        assertEquals(
+            "https://example.test/files?alt=json&fields=files%28id%2Cname%29#metadata",
+            driveApiUrl(
+                "https://example.test/files?alt=json#metadata",
+                listOf("fields" to "files(id,name)"),
+            ),
+        )
+        assertEquals(
+            "https://example.test/files#metadata",
+            driveApiUrl("https://example.test/files#metadata", emptyList()),
+        )
     }
 
     @Test
@@ -123,6 +297,470 @@ class AndroidCloudStorageAccessTest {
                 "consent required",
                 (error as CloudStorageException.AuthorizationRequired).v1,
             )
+        }
+
+    @Test
+    fun unauthorizedDriveAccountIdentityLookupClearsTokenAndRetries() =
+        runBlocking {
+            assertDriveAccountIdentityLookupClearsTokenAndRetries(
+                statusCode = HttpURLConnection.HTTP_UNAUTHORIZED,
+                body = "expired token",
+            )
+        }
+
+    @Test
+    fun rejectedDriveAccountIdentityLookupClearsTokenAndRetries() =
+        runBlocking {
+            assertDriveAccountIdentityLookupClearsTokenAndRetries(
+                statusCode = HttpURLConnection.HTTP_FORBIDDEN,
+                body = driveErrorBody("insufficientPermissions"),
+            )
+        }
+
+    @Test
+    fun repeatedRejectedDriveAccountIdentityLookupIdentifiesVerificationFailure() =
+        runBlocking {
+            TestDriveServer().use { server ->
+                server.enqueue(HttpURLConnection.HTTP_FORBIDDEN, driveErrorBody("insufficientPermissions"))
+                server.enqueue(HttpURLConnection.HTTP_FORBIDDEN, driveErrorBody("insufficientPermissions"))
+
+                val authorization = SequentialDriveAuthorization(listOf("token-1", "token-2"))
+                val storage = AndroidCloudStorageAccess(
+                    driveAuthorization = authorization,
+                    accountBindingStore = TestDriveAccountBindingStore(),
+                    driveApiEndpoints = DriveApiEndpoints(
+                        aboutEndpoint = "${server.baseUrl}/about",
+                        filesEndpoint = "${server.baseUrl}/files",
+                        uploadEndpoint = "${server.baseUrl}/upload",
+                    ),
+                    drivePathNamesProvider = { testDrivePathNames },
+                )
+
+                val error = captureError {
+                    storage.listNamespaces(CloudAccessPolicy.SILENT)
+                }
+
+                assertTrue(error is CloudStorageException.AuthorizationRequired)
+                assertEquals(
+                    "google drive identity verification was rejected",
+                    (error as CloudStorageException.AuthorizationRequired).v1,
+                )
+                assertEquals(listOf(false, false), authorization.accessRequests)
+                assertEquals(listOf("token-1", "token-2"), authorization.clearedTokens)
+
+                val requests = server.requests()
+                assertEquals(listOf("/about", "/about"), requests.map { it.path.substringBefore("?") })
+            }
+        }
+
+    @Test
+    fun cachingDriveAuthorizationReusesUpdatedTokenIdentity() =
+        runBlocking {
+            var now = 0L
+            val delegate = RecordingDriveAuthorization().apply {
+                account = null
+            }
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { now },
+                cacheWindowMs = 1_000,
+            )
+            val unresolved = authorization.accessToken(interactive = false)
+            val resolved = unresolved.copy(
+                account = DriveAccountIdentity(googleAccountId = null, email = "person@example.com"),
+            )
+
+            authorization.updateCachedToken(resolved)
+
+            now = 500
+            assertEquals(resolved, authorization.accessToken(interactive = false))
+            assertEquals(listOf(false), delegate.accessRequests)
+        }
+
+    @Test
+    fun cachingDriveAuthorizationDropsUpdatedTokenWhenCacheKeyChanges() =
+        runBlocking {
+            var cacheKey: Any? = "account-1"
+            val delegate = RecordingDriveAuthorization().apply {
+                account = null
+            }
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { 0 },
+                cacheWindowMs = 1_000,
+                cacheKey = { cacheKey },
+            )
+            val unresolved = authorization.accessToken(interactive = false)
+            val resolved = unresolved.copy(
+                account = DriveAccountIdentity(googleAccountId = null, email = "person@example.com"),
+            )
+
+            cacheKey = "account-2"
+            authorization.updateCachedToken(resolved)
+
+            delegate.token = "token-2"
+
+            assertEquals("token-2", authorization.accessToken(interactive = false).token)
+            assertEquals(listOf(false, false), delegate.accessRequests)
+        }
+
+    @Test
+    fun cachingDriveAuthorizationDropsUpdatedTokenWhenTokenChanges() =
+        runBlocking {
+            val delegate = RecordingDriveAuthorization().apply {
+                account = null
+            }
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { 0 },
+                cacheWindowMs = 1_000,
+            )
+            val unresolved = authorization.accessToken(interactive = false)
+            val resolved = unresolved.copy(
+                token = "token-2",
+                account = DriveAccountIdentity(googleAccountId = null, email = "person@example.com"),
+            )
+
+            authorization.updateCachedToken(resolved)
+
+            delegate.token = "token-3"
+
+            assertEquals("token-3", authorization.accessToken(interactive = false).token)
+            assertEquals(listOf(false, false), delegate.accessRequests)
+        }
+
+    @Test
+    fun cachingDriveAuthorizationDropsUpdatedTokenAfterExpiry() =
+        runBlocking {
+            var now = 0L
+            val delegate = RecordingDriveAuthorization().apply {
+                account = null
+            }
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { now },
+                cacheWindowMs = 1_000,
+            )
+            val unresolved = authorization.accessToken(interactive = false)
+            val resolved = unresolved.copy(
+                account = DriveAccountIdentity(googleAccountId = null, email = "person@example.com"),
+            )
+
+            now = 1_000
+            authorization.updateCachedToken(resolved)
+
+            delegate.token = "token-2"
+
+            assertEquals("token-2", authorization.accessToken(interactive = false).token)
+            assertEquals(listOf(false, false), delegate.accessRequests)
+        }
+
+    @Test
+    fun cachingDriveAuthorizationDropsUpdatedTokenWhenCacheKeyIsUnavailable() =
+        runBlocking {
+            var cacheKey: Any? = "account-1"
+            val delegate = RecordingDriveAuthorization().apply {
+                account = null
+            }
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { 0 },
+                cacheWindowMs = 1_000,
+                cacheKey = { cacheKey },
+            )
+            val unresolved = authorization.accessToken(interactive = false)
+            val resolved = unresolved.copy(
+                account = DriveAccountIdentity(googleAccountId = null, email = "person@example.com"),
+            )
+
+            cacheKey = null
+            authorization.updateCachedToken(resolved)
+
+            delegate.token = "token-2"
+
+            assertEquals("token-2", authorization.accessToken(interactive = false).token)
+            assertEquals(listOf(false, false), delegate.accessRequests)
+        }
+
+    @Test
+    fun resolvedDriveAccountIdentityIsCachedAcrossOperations() =
+        runBlocking {
+            TestDriveServer().use { server ->
+                server.enqueue(
+                    HttpURLConnection.HTTP_OK,
+                    """
+                    {
+                        "user": {
+                            "emailAddress": "person@example.com",
+                            "permissionId": "account-1"
+                        }
+                    }
+                    """.trimIndent(),
+                )
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+
+                val delegate = RecordingDriveAuthorization().apply {
+                    account = null
+                }
+                val authorization = CachingDriveAuthorization(
+                    delegate = delegate,
+                    elapsedRealtime = { 0 },
+                    cacheWindowMs = 1_000,
+                )
+                val storage = AndroidCloudStorageAccess(
+                    driveAuthorization = authorization,
+                    accountBindingStore = TestDriveAccountBindingStore(),
+                    driveApiEndpoints = DriveApiEndpoints(
+                        aboutEndpoint = "${server.baseUrl}/about",
+                        filesEndpoint = "${server.baseUrl}/files",
+                        uploadEndpoint = "${server.baseUrl}/upload",
+                    ),
+                    drivePathNamesProvider = { testDrivePathNames },
+                )
+
+                assertEquals(emptyList<String>(), storage.listNamespaces(CloudAccessPolicy.SILENT))
+                assertEquals(emptyList<String>(), storage.listNamespaces(CloudAccessPolicy.SILENT))
+                assertEquals(listOf(false), delegate.accessRequests)
+
+                val requests = server.requests()
+                assertEquals(listOf("/about", "/files", "/files"), requests.map { it.path.substringBefore("?") })
+                assertEquals(
+                    listOf("Bearer token-1", "Bearer token-1", "Bearer token-1"),
+                    requests.map { it.authorization },
+                )
+            }
+        }
+
+    @Test
+    fun sparseDriveAccountIdentityIsResolvedBeforeVerification() =
+        runBlocking {
+            TestDriveServer().use { server ->
+                server.enqueue(
+                    HttpURLConnection.HTTP_OK,
+                    """
+                    {
+                        "user": {
+                            "emailAddress": "person@example.com",
+                            "permissionId": "account-1"
+                        }
+                    }
+                    """.trimIndent(),
+                )
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+
+                val store = TestDriveAccountBindingStore(
+                    DriveAccountIdentity(googleAccountId = null, email = "person@example.com"),
+                )
+                val delegate = RecordingDriveAuthorization().apply {
+                    account = DriveAccountIdentity(googleAccountId = "account-1", email = null)
+                }
+                val authorization = CachingDriveAuthorization(
+                    delegate = delegate,
+                    elapsedRealtime = { 0 },
+                    cacheWindowMs = 1_000,
+                    cacheKey = { store.selectedIdentity() },
+                )
+                val storage = AndroidCloudStorageAccess(
+                    driveAuthorization = authorization,
+                    accountBindingStore = store,
+                    driveApiEndpoints = DriveApiEndpoints(
+                        aboutEndpoint = "${server.baseUrl}/about",
+                        filesEndpoint = "${server.baseUrl}/files",
+                        uploadEndpoint = "${server.baseUrl}/upload",
+                    ),
+                    drivePathNamesProvider = { testDrivePathNames },
+                )
+
+                val firstResult = runCatching {
+                    storage.listNamespaces(CloudAccessPolicy.SILENT)
+                }
+                val secondResult = runCatching {
+                    storage.listNamespaces(CloudAccessPolicy.SILENT)
+                }
+                assertTrue(
+                    cloudStorageFailureMessage(firstResult.exceptionOrNull()),
+                    firstResult.isSuccess,
+                )
+                assertTrue(
+                    cloudStorageFailureMessage(secondResult.exceptionOrNull()),
+                    secondResult.isSuccess,
+                )
+                assertEquals(emptyList<String>(), firstResult.getOrNull())
+                assertEquals(emptyList<String>(), secondResult.getOrNull())
+                assertEquals(listOf(false), delegate.accessRequests)
+                assertTrue(delegate.clearedTokens.isEmpty())
+
+                val requests = server.requests()
+                assertEquals(listOf("/about", "/files", "/files"), requests.map { it.path.substringBefore("?") })
+                assertEquals(
+                    listOf("Bearer token-1", "Bearer token-1", "Bearer token-1"),
+                    requests.map { it.authorization },
+                )
+            }
+        }
+
+    @Test
+    fun storedDrivePermissionIdIsResolvedBeforeBindingVerification() =
+        runBlocking {
+            TestDriveServer().use { server ->
+                server.enqueue(
+                    HttpURLConnection.HTTP_OK,
+                    """
+                    {
+                        "user": {
+                            "permissionId": "permission-1"
+                        }
+                    }
+                    """.trimIndent(),
+                )
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+
+                val store = TestDriveAccountBindingStore(
+                    DriveAccountIdentity(drivePermissionId = "permission-1", email = null),
+                )
+                val delegate = RecordingDriveAuthorization().apply {
+                    account = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+                }
+                val authorization = CachingDriveAuthorization(
+                    delegate = delegate,
+                    elapsedRealtime = { 0 },
+                    cacheWindowMs = 1_000,
+                    cacheKey = { store.selectedIdentity() },
+                )
+                val storage = AndroidCloudStorageAccess(
+                    driveAuthorization = authorization,
+                    accountBindingStore = store,
+                    driveApiEndpoints = DriveApiEndpoints(
+                        aboutEndpoint = "${server.baseUrl}/about",
+                        filesEndpoint = "${server.baseUrl}/files",
+                        uploadEndpoint = "${server.baseUrl}/upload",
+                    ),
+                    drivePathNamesProvider = { testDrivePathNames },
+                )
+
+                val result = runCatching {
+                    storage.listNamespaces(CloudAccessPolicy.SILENT)
+                }
+
+                assertTrue(
+                    cloudStorageFailureMessage(result.exceptionOrNull()),
+                    result.isSuccess,
+                )
+                assertEquals(emptyList<String>(), result.getOrNull())
+                assertEquals(listOf(false), delegate.accessRequests)
+                assertTrue(delegate.clearedTokens.isEmpty())
+
+                val requests = server.requests()
+                assertEquals(listOf("/about", "/files"), requests.map { it.path.substringBefore("?") })
+                assertTrue(requests.first().path.contains("permissionId"))
+                assertEquals(
+                    listOf("Bearer token-1", "Bearer token-1"),
+                    requests.map { it.authorization },
+                )
+            }
+        }
+
+    @Test
+    fun constrainedAuthorizationWithoutIdentityIsVerifiedThroughDriveAbout() =
+        runBlocking {
+            TestDriveServer().use { server ->
+                server.enqueue(
+                    HttpURLConnection.HTTP_OK,
+                    """
+                    {
+                        "user": {
+                            "emailAddress": "other@example.com",
+                            "permissionId": "account-2"
+                        }
+                    }
+                    """.trimIndent(),
+                )
+
+                val selected = DriveAccountIdentity(googleAccountId = null, email = "person@example.com")
+                val authorization = RecordingDriveAuthorization().apply {
+                    account = null
+                }
+                val storage = AndroidCloudStorageAccess(
+                    driveAuthorization = authorization,
+                    accountBindingStore = TestDriveAccountBindingStore(selected),
+                    driveApiEndpoints = DriveApiEndpoints(
+                        aboutEndpoint = "${server.baseUrl}/about",
+                        filesEndpoint = "${server.baseUrl}/files",
+                        uploadEndpoint = "${server.baseUrl}/upload",
+                    ),
+                    drivePathNamesProvider = { testDrivePathNames },
+                )
+
+                val error = captureError {
+                    storage.listNamespaces(CloudAccessPolicy.SILENT)
+                }
+
+                assertTrue(error is CloudStorageException.AuthorizationRequired)
+                assertEquals(
+                    "google drive account does not match the account selected for Cloud Backup",
+                    (error as CloudStorageException.AuthorizationRequired).v1,
+                )
+                assertEquals(listOf("token-1"), authorization.clearedTokens)
+
+                val requests = server.requests()
+                assertEquals(listOf("/about"), requests.map { it.path.substringBefore("?") })
+                assertTrue(requests.single().path.contains("permissionId"))
+            }
+        }
+
+    @Test
+    fun unboundReadOnlyOperationsReuseResolvedDriveAccountIdentity() =
+        runBlocking {
+            TestDriveServer().use { server ->
+                server.enqueue(
+                    HttpURLConnection.HTTP_OK,
+                    """
+                    {
+                        "user": {
+                            "emailAddress": "person@example.com",
+                            "permissionId": "account-1"
+                        }
+                    }
+                    """.trimIndent(),
+                )
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+
+                val store = TestDriveAccountBindingStore()
+                val delegate = RecordingDriveAuthorization().apply {
+                    account = null
+                }
+                val authorization = CachingDriveAuthorization(
+                    delegate = delegate,
+                    elapsedRealtime = { 0 },
+                    cacheWindowMs = 1_000,
+                    cacheKey = { driveAccountTokenCacheKey(store) },
+                )
+                val storage = AndroidCloudStorageAccess(
+                    driveAuthorization = authorization,
+                    accountBindingStore = store,
+                    driveApiEndpoints = DriveApiEndpoints(
+                        aboutEndpoint = "${server.baseUrl}/about",
+                        filesEndpoint = "${server.baseUrl}/files",
+                        uploadEndpoint = "${server.baseUrl}/upload",
+                    ),
+                    drivePathNamesProvider = { testDrivePathNames },
+                )
+
+                assertEquals(emptyList<String>(), storage.listNamespaces(CloudAccessPolicy.SILENT))
+                assertEquals(emptyList<String>(), storage.listNamespaces(CloudAccessPolicy.SILENT))
+                assertEquals(null, store.selectedIdentity())
+                assertEquals(listOf(false), delegate.accessRequests)
+
+                val requests = server.requests()
+                assertEquals(listOf("/about", "/files", "/files"), requests.map { it.path.substringBefore("?") })
+                assertEquals(
+                    listOf("Bearer token-1", "Bearer token-1", "Bearer token-1"),
+                    requests.map { it.authorization },
+                )
+            }
         }
 
     @Test
@@ -243,9 +881,9 @@ class AndroidCloudStorageAccessTest {
     @Test
     fun driveAccountBindingPersistsFirstAccountAndRejectsMismatch() {
         val store = TestDriveAccountBindingStore()
-        val first = DriveAccountIdentity(id = "account-1", email = "person@example.com")
-        val sameEmailFallback = DriveAccountIdentity(id = null, email = "PERSON@example.com")
-        val mismatch = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+        val first = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+        val sameEmailFallback = DriveAccountIdentity(googleAccountId = null, email = "PERSON@example.com")
+        val mismatch = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
 
         verifyDriveAccountBinding(store, first)
         verifyDriveAccountBinding(store, sameEmailFallback)
@@ -256,9 +894,28 @@ class AndroidCloudStorageAccessTest {
     }
 
     @Test
+    fun driveAccountBindingMatchesStoredGoogleIdToDrivePermissionIdByEmail() {
+        val store = TestDriveAccountBindingStore(
+            DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com"),
+        )
+        val fallback = DriveAccountIdentity(drivePermissionId = "permission-1", email = "PERSON@example.com")
+
+        verifyDriveAccountBinding(store, fallback)
+
+        assertEquals(
+            DriveAccountIdentity(
+                googleAccountId = "account-1",
+                drivePermissionId = "permission-1",
+                email = "person@example.com",
+            ),
+            store.selectedIdentity(),
+        )
+    }
+
+    @Test
     fun driveAccountBindingValidationDoesNotPersistUnverifiedAccount() {
         val store = TestDriveAccountBindingStore()
-        val probe = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+        val probe = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
 
         verifyDriveAccountBinding(store, probe, bindIfMissing = false)
 
@@ -268,8 +925,8 @@ class AndroidCloudStorageAccessTest {
     @Test
     fun driveAccountBindingCanBeClearedAndRebound() {
         val store = TestDriveAccountBindingStore()
-        val first = DriveAccountIdentity(id = "account-1", email = "person@example.com")
-        val second = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+        val first = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+        val second = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
 
         verifyDriveAccountBinding(store, first)
         store.clearIdentity()
@@ -279,10 +936,56 @@ class AndroidCloudStorageAccessTest {
     }
 
     @Test
+    fun driveAccountBindingRejectsMissingIdentityWhenNoAccountIsSelected() {
+        val store = TestDriveAccountBindingStore()
+
+        val error = runCatching { verifyDriveAccountBinding(store, identity = null) }
+            .exceptionOrNull()
+
+        assertTrue(error is DriveAccountBindingException.MissingIdentity)
+    }
+
+    @Test
+    fun driveAccountBindingRejectsMissingIdentityWhenAccountIsSelected() {
+        val store = TestDriveAccountBindingStore(
+            DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com"),
+        )
+
+        val error = runCatching { verifyDriveAccountBinding(store, identity = null) }
+            .exceptionOrNull()
+
+        assertTrue(error is DriveAccountBindingException.MissingIdentity)
+    }
+
+    @Test
+    fun driveAccountBindingRejectsMissingIdentityWhenSelectedAccountCannotConstrainAuthorization() {
+        val store = TestDriveAccountBindingStore(
+            DriveAccountIdentity(googleAccountId = "account-1", email = null),
+        )
+
+        val error = runCatching { verifyDriveAccountBinding(store, identity = null) }
+            .exceptionOrNull()
+
+        assertTrue(error is DriveAccountBindingException.MissingIdentity)
+    }
+
+    @Test
+    fun driveAccountBindingEnrichesSparseSelectedAccountAfterMatchingVerification() {
+        val store = TestDriveAccountBindingStore(
+            DriveAccountIdentity(googleAccountId = "account-1", email = null),
+        )
+        val verified = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+
+        verifyDriveAccountBinding(store, verified)
+
+        assertEquals(verified, store.selectedIdentity())
+    }
+
+    @Test
     fun wrongDriveAccountBlocksOperationsBeforeRemoteMutation() =
         runBlocking {
-            val selected = DriveAccountIdentity(id = "account-1", email = "person@example.com")
-            val actual = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+            val selected = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val actual = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
             val authorization = RecordingDriveAuthorization().apply {
                 account = actual
             }
@@ -335,8 +1038,8 @@ class AndroidCloudStorageAccessTest {
     @Test
     fun cachedWrongDriveAccountTokenIsClearedAfterMismatch() =
         runBlocking {
-            val selected = DriveAccountIdentity(id = "account-1", email = "person@example.com")
-            val actual = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+            val selected = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val actual = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
             val store = TestDriveAccountBindingStore(selected)
             val delegate = RecordingDriveAuthorization().apply {
                 account = actual
@@ -364,8 +1067,8 @@ class AndroidCloudStorageAccessTest {
     @Test
     fun clearingDriveAccountBindingInvalidatesCachedToken() =
         runBlocking {
-            val first = DriveAccountIdentity(id = "account-1", email = "person@example.com")
-            val second = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+            val first = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val second = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
             val store = TestDriveAccountBindingStore(first)
             val delegate = RecordingDriveAuthorization()
             val authorization = CachingDriveAuthorization(
@@ -619,6 +1322,76 @@ class AndroidCloudStorageAccessTest {
         )
     }
 
+    private suspend fun assertDriveAccountIdentityLookupClearsTokenAndRetries(
+        statusCode: Int,
+        body: String,
+    ) {
+        TestDriveServer().use { server ->
+            server.enqueue(statusCode, body)
+            server.enqueue(
+                HttpURLConnection.HTTP_OK,
+                """
+                {
+                    "user": {
+                        "emailAddress": "person@example.com"
+                    }
+                }
+                """.trimIndent(),
+            )
+            server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+
+            val authorization = SequentialDriveAuthorization(listOf("token-1", "token-2"))
+            val storage = AndroidCloudStorageAccess(
+                driveAuthorization = authorization,
+                accountBindingStore = TestDriveAccountBindingStore(),
+                driveApiEndpoints = DriveApiEndpoints(
+                    aboutEndpoint = "${server.baseUrl}/about",
+                    filesEndpoint = "${server.baseUrl}/files",
+                    uploadEndpoint = "${server.baseUrl}/upload",
+                ),
+                drivePathNamesProvider = { testDrivePathNames },
+            )
+
+            val namespacesResult = runCatching {
+                storage.listNamespaces(CloudAccessPolicy.SILENT)
+            }
+            assertTrue(
+                cloudStorageFailureMessage(namespacesResult.exceptionOrNull()),
+                namespacesResult.isSuccess,
+            )
+            assertEquals(emptyList<String>(), namespacesResult.getOrNull())
+            assertEquals(listOf(false, false), authorization.accessRequests)
+            assertEquals(listOf("token-1"), authorization.clearedTokens)
+
+            val requests = server.requests()
+            assertEquals(listOf("/about", "/about", "/files"), requests.map { it.path.substringBefore("?") })
+            assertEquals(
+                listOf("Bearer token-1", "Bearer token-2", "Bearer token-2"),
+                requests.map { it.authorization },
+            )
+        }
+    }
+
+    private fun cloudStorageFailureMessage(error: Throwable?): String =
+        when (error) {
+            null -> "listNamespaces succeeded"
+            is CloudStorageException.AuthorizationRequired ->
+                "listNamespaces failed with AuthorizationRequired: ${error.v1}"
+            is CloudStorageException.NotAvailable ->
+                "listNamespaces failed with NotAvailable: ${error.v1}"
+            is CloudStorageException.NotFound ->
+                "listNamespaces failed with NotFound: ${error.v1}"
+            is CloudStorageException.Offline ->
+                "listNamespaces failed with Offline: ${error.v1}"
+            is CloudStorageException.QuotaExceeded ->
+                "listNamespaces failed with QuotaExceeded"
+            is CloudStorageException.UploadFailed ->
+                "listNamespaces failed with UploadFailed: ${error.v1}"
+            is CloudStorageException.DownloadFailed ->
+                "listNamespaces failed with DownloadFailed: ${error.v1}"
+            else -> "listNamespaces failed with ${error.javaClass.name}: ${error.message}"
+        }
+
     private fun driveErrorBody(reason: String): String =
         """
         {
@@ -668,9 +1441,30 @@ class AndroidCloudStorageAccessTest {
         override suspend fun clearToken(token: String) = Unit
     }
 
+    private class SequentialDriveAuthorization(
+        tokens: List<String>,
+    ) : DriveAuthorization {
+        private val tokens = ArrayDeque(tokens)
+        val accessRequests = mutableListOf<Boolean>()
+        val clearedTokens = mutableListOf<String>()
+
+        override suspend fun accessToken(interactive: Boolean): DriveAccessToken {
+            accessRequests.add(interactive)
+            if (tokens.isEmpty()) {
+                throw AssertionError("unexpected drive access token request")
+            }
+
+            return DriveAccessToken(token = tokens.removeFirst(), account = null)
+        }
+
+        override suspend fun clearToken(token: String) {
+            clearedTokens.add(token)
+        }
+    }
+
     private class RecordingDriveAuthorization : DriveAuthorization {
         var token = "token-1"
-        var account = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+        var account: DriveAccountIdentity? = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
         val accessRequests = mutableListOf<Boolean>()
         val clearedTokens = mutableListOf<String>()
 
@@ -686,7 +1480,7 @@ class AndroidCloudStorageAccessTest {
 
     private class BlockingClearDriveAuthorization : DriveAuthorization {
         var token = "token-1"
-        var account = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+        var account = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
         val accessRequests = mutableListOf<Boolean>()
         val clearedTokens = mutableListOf<String>()
         val clearStarted = CompletableDeferred<Unit>()
@@ -703,6 +1497,123 @@ class AndroidCloudStorageAccessTest {
             finishClear.await()
         }
     }
+
+    private class TestDriveServer : AutoCloseable {
+        private val serverSocket = ServerSocket(0)
+        private val responseLock = Any()
+        private val requestLock = Any()
+        private val responses = ArrayDeque<TestDriveResponse>()
+        private val requests = mutableListOf<TestDriveRequest>()
+
+        @Volatile
+        private var serverError: Throwable? = null
+
+        private val thread =
+            Thread({ serve() }, "test-drive-server")
+                .apply {
+                    isDaemon = true
+                    start()
+                }
+
+        val baseUrl = "http://127.0.0.1:${serverSocket.localPort}"
+
+        fun enqueue(statusCode: Int, body: String) {
+            synchronized(responseLock) {
+                responses.add(TestDriveResponse(statusCode, body))
+            }
+        }
+
+        fun requests(): List<TestDriveRequest> =
+            synchronized(requestLock) {
+                requests.toList()
+            }
+
+        override fun close() {
+            serverSocket.close()
+            thread.join(1_000)
+            serverError?.let { throw AssertionError("test drive server failed", it) }
+        }
+
+        private fun serve() {
+            try {
+                while (!serverSocket.isClosed) {
+                    val socket =
+                        try {
+                            serverSocket.accept()
+                        } catch (_: SocketException) {
+                            return
+                        }
+
+                    socket.use {
+                        val reader = BufferedReader(InputStreamReader(it.getInputStream(), Charsets.UTF_8))
+                        val requestLine = reader.readLine() ?: return@use
+                        val authorization = readAuthorizationHeader(reader)
+                        val requestTarget = requestLine.split(" ").getOrNull(1).orEmpty()
+
+                        synchronized(requestLock) {
+                            requests.add(TestDriveRequest(path = requestTarget, authorization = authorization))
+                        }
+
+                        val response =
+                            synchronized(responseLock) {
+                                if (responses.isEmpty()) {
+                                    TestDriveResponse(HttpURLConnection.HTTP_INTERNAL_ERROR, "unexpected request")
+                                } else {
+                                    responses.removeFirst()
+                                }
+                            }
+                        val responseBody = response.body.toByteArray(Charsets.UTF_8)
+                        val statusText = if (response.statusCode in 200..299) "OK" else "Error"
+                        val headers =
+                            "HTTP/1.1 ${response.statusCode} $statusText\r\n" +
+                                "Content-Type: application/json\r\n" +
+                                "Content-Length: ${responseBody.size}\r\n" +
+                                "Connection: close\r\n" +
+                                "\r\n"
+
+                        it.getOutputStream().use { output ->
+                            output.write(headers.toByteArray(Charsets.UTF_8))
+                            output.write(responseBody)
+                        }
+                    }
+                }
+            } catch (error: Throwable) {
+                if (!serverSocket.isClosed) {
+                    serverError = error
+                }
+            }
+        }
+
+        private fun readAuthorizationHeader(reader: BufferedReader): String? {
+            var authorization: String? = null
+            while (true) {
+                val line = reader.readLine() ?: return authorization
+                if (line.isEmpty()) {
+                    return authorization
+                }
+
+                val separator = line.indexOf(':')
+                if (separator < 0) {
+                    continue
+                }
+
+                val name = line.substring(0, separator)
+                if (name.equals("Authorization", ignoreCase = true)) {
+                    authorization = line.substring(separator + 1).trim()
+                }
+            }
+        }
+    }
+
+    private data class TestDriveResponse(
+        val statusCode: Int,
+        val body: String,
+    )
+
+    private data class TestDriveRequest(
+        val path: String,
+        val authorization: String?,
+    )
 
     private class TestDriveAccountBindingStore(
         private var identity: DriveAccountIdentity? = null,

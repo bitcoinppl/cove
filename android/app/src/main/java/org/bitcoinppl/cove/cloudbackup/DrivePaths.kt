@@ -6,16 +6,28 @@ import org.bitcoinppl.cove_core.csppWalletFilePrefix
 import org.bitcoinppl.cove_core.csppWalletsDirectory
 
 internal object DrivePaths {
-    val namespacesRootFolderName: String = csppNamespacesSubdirectory()
-    val masterKeyFolderName: String = csppMasterKeyDirectory()
-    val walletsFolderName: String = csppWalletsDirectory()
+    val defaultNames: DrivePathNames by lazy {
+        DrivePathNames(
+            namespacesRootFolderName = csppNamespacesSubdirectory(),
+            masterKeyFolderName = csppMasterKeyDirectory(),
+            walletsFolderName = csppWalletsDirectory(),
+            walletFilePrefix = csppWalletFilePrefix(),
+        )
+    }
+}
 
+internal data class DrivePathNames(
+    val namespacesRootFolderName: String,
+    val masterKeyFolderName: String,
+    val walletsFolderName: String,
+    val walletFilePrefix: String,
+) {
     fun walletLocationForFileName(fileName: String): String = "$walletsFolderName/$fileName"
 
     fun isWalletFile(name: String): Boolean =
         isWalletFileLocation(
             location = name,
-            walletFilePrefix = csppWalletFilePrefix(),
+            walletFilePrefix = walletFilePrefix,
             walletsFolderName = walletsFolderName,
         )
 }

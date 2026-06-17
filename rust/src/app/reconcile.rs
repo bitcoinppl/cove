@@ -47,13 +47,16 @@ impl Updater {
         UPDATER.get_or_init(|| Self(sender));
     }
 
-    pub fn global() -> &'static Self {
-        UPDATER.get().expect("updater is not initialized")
-    }
-
     pub fn send_update(message: AppStateReconcileMessage) {
-        if let Err(e) = Self::global().0.send(message) {
-            tracing::error!("Failed to send update, frontend may be disconnected: {e}");
+        let Some(updater) = UPDATER.get() else {
+            tracing::warn!(
+                "Dropping app reconcile update before updater initialization: {message:?}"
+            );
+            return;
+        };
+
+        if let Err(error) = updater.0.send(message) {
+            tracing::error!("Failed to send update, frontend may be disconnected: {error}");
         }
     }
 }

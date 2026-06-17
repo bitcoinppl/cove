@@ -16,6 +16,7 @@ import org.bitcoinppl.cove_core.device.CloudStorage
 import org.bitcoinppl.cove_core.device.Connectivity
 import org.bitcoinppl.cove_core.device.Keychain
 import org.bitcoinppl.cove_core.device.PasskeyAccess
+import org.bitcoinppl.cove_core.initializeApp
 import org.bitcoinppl.cove_core.setRootDataDir
 import java.time.Instant
 
@@ -72,6 +73,9 @@ class CoveApplication : Application() {
     /// Called from MainActivity after bootstrap completes on the main thread
     fun onBootstrapComplete() {
         if (bootstrapCompleted) return
+
+        // initialize app/updater before lifecycle callbacks can write auth state
+        initializeApp()
         bootstrapCompleted = true
 
         connectivityMonitor?.start()
