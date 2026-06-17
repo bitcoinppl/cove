@@ -202,6 +202,13 @@ private fun logDriveWarning(message: String, error: Throwable) {
 
 internal fun monotonicTimeMs(): Long = System.nanoTime() / 1_000_000L
 
+internal fun driveAccountIdentityFromAboutResponse(response: JSONObject): DriveAccountIdentity? =
+    response
+        .optJSONObject("user")
+        ?.optString("emailAddress")
+        ?.takeIf(String::isNotBlank)
+        ?.let { email -> DriveAccountIdentity(id = null, email = email) }
+
 internal fun duplicateDriveFolderNames(folderNames: List<String>): Set<String> =
     folderNames
         .groupingBy { it }
@@ -1044,7 +1051,7 @@ class AndroidCloudStorageAccess internal constructor(
     }
 
     private suspend fun verifiedDriveAccessToken(interactive: Boolean): DriveAccessToken {
-        val access = driveAuthorization.accessToken(interactive)
+        val access = driveAuthorization.accessToken(interactive).withResolvedAccountIdentity()
         try {
             verifyDriveAccountBinding(accountBindingStore, access.account, bindIfMissing = false)
         } catch (error: DriveAccountBindingException) {
@@ -1058,6 +1065,31 @@ class AndroidCloudStorageAccess internal constructor(
         }
 
         return access
+    }
+
+    private suspend fun DriveAccessToken.withResolvedAccountIdentity(): DriveAccessToken =
+        if (account == null) {
+            copy(account = driveAccountIdentity(token))
+        } else {
+            this
+        }
+
+    private suspend fun driveAccountIdentity(token: String): DriveAccountIdentity? {
+        val url =
+            Uri
+                .parse(DriveApi.ABOUT_ENDPOINT)
+                .buildUpon()
+                .appendQueryParameter("fields", "user(emailAddress)")
+                .build()
+                .toString()
+
+        return driveAccountIdentityFromAboutResponse(
+            driveRequest(
+                token = token,
+                method = "GET",
+                url = url,
+            ).asJsonObject(),
+        )
     }
 
     private suspend fun <T> finishDriveOperation(
@@ -1221,6 +1253,7 @@ class AndroidCloudStorageAccess internal constructor(
         }
 
     private object DriveApi {
+        const val ABOUT_ENDPOINT = "https://www.googleapis.com/drive/v3/about"
         const val FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
         const val UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files"
         const val FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"

@@ -13,6 +13,7 @@ import kotlinx.coroutines.yield
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.bitcoinppl.cove_core.device.RemoteBackupLocation
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -41,6 +42,25 @@ class AndroidCloudStorageAccessTest {
         val json = metadata.toJson()
         assertEquals("wallet-record.json", json.getString("name"))
         assertFalse(json.has("parents"))
+    }
+
+    @Test
+    fun driveAboutResponseProvidesAccountEmail() {
+        val response =
+            JSONObject(
+                """
+                {
+                    "user": {
+                        "emailAddress": "Person@Example.com"
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals(
+            DriveAccountIdentity(id = null, email = "Person@Example.com"),
+            driveAccountIdentityFromAboutResponse(response),
+        )
     }
 
     @Test
@@ -276,6 +296,92 @@ class AndroidCloudStorageAccessTest {
         verifyDriveAccountBinding(store, second)
 
         assertEquals(second, store.selectedIdentity())
+    }
+
+    @Test
+    fun driveAccountBindingRejectsMissingIdentityWhenNoAccountIsSelected() {
+        val store = TestDriveAccountBindingStore()
+
+        val error = runCatching { verifyDriveAccountBinding(store, identity = null) }
+            .exceptionOrNull()
+
+        assertTrue(error is DriveAccountBindingException.MissingIdentity)
+    }
+
+    @Test
+    fun driveAccountBindingRejectsMissingIdentityWhenAccountIsSelected() {
+        val store = TestDriveAccountBindingStore(
+            DriveAccountIdentity(id = "account-1", email = "person@example.com"),
+        )
+
+        val error = runCatching { verifyDriveAccountBinding(store, identity = null) }
+            .exceptionOrNull()
+
+        assertTrue(error is DriveAccountBindingException.MissingIdentity)
+    }
+
+    @Test
+    fun driveAccountBindingRejectsMissingIdentityWhenSelectedAccountCannotConstrainAuthorization() {
+        val store = TestDriveAccountBindingStore(
+            DriveAccountIdentity(id = "account-1", email = null),
+        )
+
+        val error = runCatching { verifyDriveAccountBinding(store, identity = null) }
+            .exceptionOrNull()
+
+        assertTrue(error is DriveAccountBindingException.MissingIdentity)
+    }
+
+    @Test
+    fun driveAccountBindingEnrichesSparseSelectedAccountAfterMatchingVerification() {
+        val store = TestDriveAccountBindingStore(
+            DriveAccountIdentity(id = "account-1", email = null),
+        )
+        val verified = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+
+        verifyDriveAccountBinding(store, verified)
+
+        assertEquals(verified, store.selectedIdentity())
+    }
+
+    @Test
+    fun driveAccountIdentityUsesConstrainedAccountWhenAuthorizationOmitsIdentity() {
+        val selected = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+
+        assertEquals(
+            selected,
+            resolveDriveAccountIdentity(
+                authorizationIdentity = null,
+                constrainedIdentity = selected,
+            ),
+        )
+    }
+
+    @Test
+    fun driveAccountIdentityRejectsFallbackWhenTokenWasNotConstrained() {
+        val selected = DriveAccountIdentity(id = "account-1", email = null)
+
+        assertEquals(
+            null,
+            resolveDriveAccountIdentity(
+                authorizationIdentity = null,
+                constrainedIdentity = selected,
+            ),
+        )
+    }
+
+    @Test
+    fun driveAccountIdentityPrefersAuthorizationIdentity() {
+        val selected = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+        val actual = DriveAccountIdentity(id = "account-2", email = "other@example.com")
+
+        assertEquals(
+            actual,
+            resolveDriveAccountIdentity(
+                authorizationIdentity = actual,
+                constrainedIdentity = selected,
+            ),
+        )
     }
 
     @Test

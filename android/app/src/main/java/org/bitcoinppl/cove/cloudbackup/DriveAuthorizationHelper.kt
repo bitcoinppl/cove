@@ -63,8 +63,14 @@ internal data class DriveAccountIdentity(
 
 internal data class DriveAccessToken(
     val token: String,
-    val account: DriveAccountIdentity,
+    val account: DriveAccountIdentity?,
 )
+
+internal fun resolveDriveAccountIdentity(
+    authorizationIdentity: DriveAccountIdentity?,
+    constrainedIdentity: DriveAccountIdentity?,
+): DriveAccountIdentity? =
+    authorizationIdentity ?: constrainedIdentity?.takeIf { it.androidAccount() != null }
 
 internal sealed class DriveAccountBindingException(
     message: String,
@@ -141,6 +147,15 @@ internal fun verifyDriveAccountBinding(
 
     if (!selected.matches(actual)) {
         throw DriveAccountBindingException.Mismatch()
+    }
+
+    val enriched =
+        DriveAccountIdentity(
+            id = selected.id ?: actual.id,
+            email = selected.normalizedEmail ?: actual.normalizedEmail,
+        )
+    if (bindIfMissing && enriched != selected) {
+        store.bindIdentity(enriched)
     }
 }
 
@@ -229,7 +244,8 @@ internal class DriveAuthorizationHelper(
                 .builder()
                 .setRequestedScopes(requestedScopes)
 
-        selectedAccount()?.androidAccount()?.let(requestBuilder::setAccount)
+        val selectedIdentity = selectedAccount()
+        selectedIdentity?.androidAccount()?.let(requestBuilder::setAccount)
 
         val authorizationResult = client
             .authorize(requestBuilder.build())
@@ -238,8 +254,10 @@ internal class DriveAuthorizationHelper(
         val resolved = resolveIfNeeded(authorizationResult, interactive)
         val token = resolved.accessToken?.takeIf { it.isNotBlank() }
             ?: throw IllegalStateException("drive authorization succeeded but returned a blank access token")
-        val identity = DriveAccountIdentity.fromAuthorizationResult(resolved)
-            ?: throw AuthorizationRequiredException("google drive account identity is unavailable")
+        val identity = resolveDriveAccountIdentity(
+            authorizationIdentity = DriveAccountIdentity.fromAuthorizationResult(resolved),
+            constrainedIdentity = selectedIdentity,
+        )
 
         return DriveAccessToken(token = token, account = identity)
     }
