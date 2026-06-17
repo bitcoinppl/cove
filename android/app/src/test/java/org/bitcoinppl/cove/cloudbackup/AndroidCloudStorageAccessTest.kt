@@ -199,6 +199,55 @@ class AndroidCloudStorageAccessTest {
         }
 
     @Test
+    fun resolvedDriveAccountIdentityIsCachedAcrossOperations() =
+        runBlocking {
+            TestDriveServer().use { server ->
+                server.enqueue(
+                    HttpURLConnection.HTTP_OK,
+                    """
+                    {
+                        "user": {
+                            "emailAddress": "person@example.com"
+                        }
+                    }
+                    """.trimIndent(),
+                )
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+                server.enqueue(HttpURLConnection.HTTP_OK, """{"files":[]}""")
+
+                val delegate = RecordingDriveAuthorization().apply {
+                    account = null
+                }
+                val authorization = CachingDriveAuthorization(
+                    delegate = delegate,
+                    elapsedRealtime = { 0 },
+                    cacheWindowMs = 1_000,
+                )
+                val storage = AndroidCloudStorageAccess(
+                    driveAuthorization = authorization,
+                    accountBindingStore = TestDriveAccountBindingStore(),
+                    driveApiEndpoints = DriveApiEndpoints(
+                        aboutEndpoint = "${server.baseUrl}/about",
+                        filesEndpoint = "${server.baseUrl}/files",
+                        uploadEndpoint = "${server.baseUrl}/upload",
+                    ),
+                    drivePathNamesProvider = { testDrivePathNames },
+                )
+
+                assertEquals(emptyList<String>(), storage.listNamespaces(CloudAccessPolicy.SILENT))
+                assertEquals(emptyList<String>(), storage.listNamespaces(CloudAccessPolicy.SILENT))
+                assertEquals(listOf(false), delegate.accessRequests)
+
+                val requests = server.requests()
+                assertEquals(listOf("/about", "/files", "/files"), requests.map { it.path.substringBefore("?") })
+                assertEquals(
+                    listOf("Bearer token-1", "Bearer token-1", "Bearer token-1"),
+                    requests.map { it.authorization },
+                )
+            }
+        }
+
+    @Test
     fun cachingDriveAuthorizationReusesTokenUntilCleared() =
         runBlocking {
             var now = 0L
