@@ -54,8 +54,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -374,6 +378,14 @@ internal fun OnboardingRestoreOfferView(
         } else {
             null
     }
+    var previousErrorMessage by remember { mutableStateOf(errorMessage) }
+    val visibleErrorMessage = errorMessage ?: previousErrorMessage
+
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            previousErrorMessage = errorMessage
+        }
+    }
 
     OnboardingBackground {
         BoxWithConstraints(
@@ -441,11 +453,9 @@ internal fun OnboardingRestoreOfferView(
                                 targetOffsetY = { -it },
                             ),
                 ) {
-                    if (errorMessage != null) {
-                        Column {
-                            Spacer(modifier = Modifier.size(14.dp))
-                            OnboardingRestoreErrorCard(text = errorMessage)
-                        }
+                    Column {
+                        Spacer(modifier = Modifier.size(14.dp))
+                        OnboardingRestoreErrorCard(text = visibleErrorMessage.orEmpty())
                     }
                 }
 
