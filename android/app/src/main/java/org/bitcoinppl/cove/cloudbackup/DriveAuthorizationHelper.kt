@@ -21,55 +21,68 @@ internal class AuthorizationRequiredException(
 ) : Exception(message, cause)
 
 internal class DriveAccountIdentity(
-    id: String?,
-    email: String?,
+    googleAccountId: String? = null,
+    drivePermissionId: String? = null,
+    email: String? = null,
 ) {
-    val id: String? = id?.trim()?.takeIf(String::isNotEmpty)
+    val googleAccountId: String? = googleAccountId?.trim()?.takeIf(String::isNotEmpty)
+    val drivePermissionId: String? = drivePermissionId?.trim()?.takeIf(String::isNotEmpty)
     val email: String? = email?.trim()?.lowercase()?.takeIf(String::isNotEmpty)
 
     init {
-        require(this.id != null || this.email != null) {
-            "drive account identity requires id or email"
+        require(this.googleAccountId != null || this.drivePermissionId != null || this.email != null) {
+            "drive account identity requires google account id, drive permission id, or email"
         }
     }
 
-    val normalizedEmail: String?
-        get() = email
-
     val isComplete: Boolean
-        get() = id != null && normalizedEmail != null
+        get() = (googleAccountId != null || drivePermissionId != null) && email != null
 
+    /**
+     * Fills missing fields without replacing values from the original authorization result
+     */
     fun withMissingFieldsFrom(other: DriveAccountIdentity?): DriveAccountIdentity =
         if (other == null) {
             this
         } else {
             DriveAccountIdentity(
-                id = id?.takeIf(String::isNotBlank) ?: other.id,
-                email = normalizedEmail ?: other.normalizedEmail,
+                googleAccountId = googleAccountId ?: other.googleAccountId,
+                drivePermissionId = drivePermissionId ?: other.drivePermissionId,
+                email = email ?: other.email,
             )
         }
 
     fun matches(other: DriveAccountIdentity): Boolean {
-        if (id != null && other.id != null) {
-            return id == other.id
+        if (googleAccountId != null && other.googleAccountId != null) {
+            return googleAccountId == other.googleAccountId
         }
 
-        return normalizedEmail != null && normalizedEmail == other.normalizedEmail
+        if (drivePermissionId != null && other.drivePermissionId != null) {
+            return drivePermissionId == other.drivePermissionId
+        }
+
+        return email != null && email == other.email
     }
 
     fun androidAccount(): Account? =
-        normalizedEmail?.let { Account(it, GOOGLE_ACCOUNT_TYPE) }
+        email?.let { Account(it, GOOGLE_ACCOUNT_TYPE) }
 
+    /**
+     * Merges a matching identity, preferring refreshed email data from the verified identity
+     */
     fun verifiedMerge(other: DriveAccountIdentity): DriveAccountIdentity {
+        val googleAccountIdMatched = googleAccountId != null && googleAccountId == other.googleAccountId
+        val drivePermissionIdMatched = drivePermissionId != null && drivePermissionId == other.drivePermissionId
         val mergedEmail =
-            if (id != null && id == other.id) {
-                other.normalizedEmail ?: normalizedEmail
+            if (googleAccountIdMatched || drivePermissionIdMatched) {
+                other.email ?: email
             } else {
-                normalizedEmail ?: other.normalizedEmail
+                email ?: other.email
             }
 
         return DriveAccountIdentity(
-            id = id ?: other.id,
+            googleAccountId = googleAccountId ?: other.googleAccountId,
+            drivePermissionId = drivePermissionId ?: other.drivePermissionId,
             email = mergedEmail,
         )
     }
@@ -83,17 +96,20 @@ internal class DriveAccountIdentity(
             return false
         }
 
-        return id == other.id && normalizedEmail == other.normalizedEmail
+        return googleAccountId == other.googleAccountId &&
+            drivePermissionId == other.drivePermissionId &&
+            email == other.email
     }
 
     override fun hashCode(): Int {
-        var result = id?.hashCode() ?: 0
-        result = 31 * result + (normalizedEmail?.hashCode() ?: 0)
+        var result = googleAccountId?.hashCode() ?: 0
+        result = 31 * result + (drivePermissionId?.hashCode() ?: 0)
+        result = 31 * result + (email?.hashCode() ?: 0)
         return result
     }
 
     override fun toString(): String =
-        "DriveAccountIdentity(id=$id, email=$email)"
+        "DriveAccountIdentity(googleAccountId=$googleAccountId, drivePermissionId=$drivePermissionId, email=$email)"
 
     companion object {
         private const val GOOGLE_ACCOUNT_TYPE = "com.google"
@@ -106,7 +122,7 @@ internal class DriveAccountIdentity(
             return if (id == null && email == null) {
                 null
             } else {
-                DriveAccountIdentity(id = id, email = email)
+                DriveAccountIdentity(googleAccountId = id, email = email)
             }
         }
     }
@@ -143,21 +159,27 @@ internal class SharedPreferencesDriveAccountBindingStore(
         appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     override fun selectedIdentity(): DriveAccountIdentity? {
-        val id = preferences.getString(KEY_ID, null)?.takeIf(String::isNotBlank)
+        val googleAccountId = preferences.getString(KEY_ID, null)?.takeIf(String::isNotBlank)
+        val drivePermissionId = preferences.getString(KEY_PERMISSION_ID, null)?.takeIf(String::isNotBlank)
         val email = preferences.getString(KEY_EMAIL, null)?.takeIf(String::isNotBlank)
 
-        return if (id == null && email == null) {
+        return if (googleAccountId == null && drivePermissionId == null && email == null) {
             null
         } else {
-            DriveAccountIdentity(id = id, email = email)
+            DriveAccountIdentity(
+                googleAccountId = googleAccountId,
+                drivePermissionId = drivePermissionId,
+                email = email,
+            )
         }
     }
 
     override fun bindIdentity(identity: DriveAccountIdentity) {
         preferences
             .edit()
-            .putString(KEY_ID, identity.id)
-            .putString(KEY_EMAIL, identity.normalizedEmail)
+            .putString(KEY_ID, identity.googleAccountId)
+            .putString(KEY_PERMISSION_ID, identity.drivePermissionId)
+            .putString(KEY_EMAIL, identity.email)
             .apply()
     }
 
@@ -165,6 +187,7 @@ internal class SharedPreferencesDriveAccountBindingStore(
         preferences
             .edit()
             .remove(KEY_ID)
+            .remove(KEY_PERMISSION_ID)
             .remove(KEY_EMAIL)
             .apply()
     }
@@ -172,6 +195,7 @@ internal class SharedPreferencesDriveAccountBindingStore(
     companion object {
         private const val PREFERENCES_NAME = "cove_cloud_backup_drive_account"
         private const val KEY_ID = "google_account_id"
+        private const val KEY_PERMISSION_ID = "google_drive_permission_id"
         private const val KEY_EMAIL = "google_account_email"
     }
 }
@@ -209,6 +233,9 @@ internal interface DriveAuthorization {
 
     suspend fun updateCachedToken(accessToken: DriveAccessToken) = Unit
 
+    /**
+     * Invalidates local token state before starting failable remote clear work
+     */
     suspend fun clearToken(token: String)
 }
 

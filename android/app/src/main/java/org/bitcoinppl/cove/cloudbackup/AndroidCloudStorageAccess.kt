@@ -197,6 +197,9 @@ private fun ApiException.cloudStorageMessage(prefix: String): String {
     return if (details == null) "$prefix: $status" else "$prefix: $status: $details"
 }
 
+private fun driveIdentityLookupFailedMessage(error: Throwable): String =
+    "google drive identity verification failed: ${error.message ?: "unknown error"}"
+
 private fun logDriveWarning(message: String, error: Throwable) {
     runCatching { Log.w("AndroidCloudStorage", message, error) }
 }
@@ -215,13 +218,13 @@ internal fun driveAccountIdentityFromAboutResponse(response: JSONObject): DriveA
     response
         .optJSONObject("user")
         ?.let { user ->
-            val id = user.optString("permissionId").takeIf(String::isNotBlank)
+            val drivePermissionId = user.optString("permissionId").takeIf(String::isNotBlank)
             val email = user.optString("emailAddress").takeIf(String::isNotBlank)
 
-            if (id == null && email == null) {
+            if (drivePermissionId == null && email == null) {
                 null
             } else {
-                DriveAccountIdentity(id = id, email = email)
+                DriveAccountIdentity(drivePermissionId = drivePermissionId, email = email)
             }
         }
 
@@ -265,6 +268,8 @@ internal fun mapDriveUploadError(error: Throwable, target: String): CloudStorage
     when (error) {
         is DriveAccountBindingException ->
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
+        is DriveAccountIdentityLookupException ->
+            mapDriveIdentityLookupError(error)
         is ForegroundAuthorizationTimeoutException ->
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is AuthorizationRequiredException ->
@@ -308,6 +313,8 @@ internal fun mapDriveListError(error: Throwable): CloudStorageException =
     when (error) {
         is DriveAccountBindingException ->
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
+        is DriveAccountIdentityLookupException ->
+            mapDriveIdentityLookupError(error)
         is ForegroundAuthorizationTimeoutException ->
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is AuthorizationRequiredException ->
@@ -342,13 +349,54 @@ internal class DriveHttpException(
     val body: String,
 ) : IOException("drive request failed with status=$statusCode")
 
+internal class DriveAccountIdentityLookupException(
+    cause: Throwable,
+) : IOException(driveIdentityLookupFailedMessage(cause), cause)
+
+private fun mapDriveIdentityLookupError(error: DriveAccountIdentityLookupException): CloudStorageException {
+    val cause = error.cause ?: return CloudStorageException.NotAvailable(
+        error.message ?: "google drive identity verification failed",
+    )
+
+    return when (cause) {
+        is DriveHttpException ->
+            when (cause.statusCode) {
+                HttpURLConnection.HTTP_UNAUTHORIZED ->
+                    CloudStorageException.AuthorizationRequired(
+                        "google drive identity verification requires authorization",
+                    )
+                HTTP_TOO_MANY_REQUESTS -> CloudStorageException.QuotaExceeded()
+                HttpURLConnection.HTTP_FORBIDDEN -> cause.identityLookupForbiddenError()
+                else -> CloudStorageException.NotAvailable(cause.identityLookupMessage())
+            }
+        is UnknownHostException, is SocketTimeoutException, is IOException ->
+            CloudStorageException.Offline(cause.message ?: "offline")
+        else -> CloudStorageException.NotAvailable(driveIdentityLookupFailedMessage(cause))
+    }
+}
+
+private fun DriveHttpException.identityLookupForbiddenError(): CloudStorageException =
+    when {
+        isQuotaExceeded() -> CloudStorageException.QuotaExceeded()
+        isGoogleDriveApiDisabled() ->
+            CloudStorageException.NotAvailable(
+                "google drive API is not enabled for this Google Cloud project",
+            )
+        isAuthorizationRejected() ->
+            CloudStorageException.AuthorizationRequired("google drive identity verification was rejected")
+        else -> CloudStorageException.NotAvailable(identityLookupMessage())
+    }
+
+private fun DriveHttpException.identityLookupMessage(): String =
+    "google drive identity verification failed: ${driveMessage("drive identity lookup failed")}"
+
 internal data class DriveApiEndpoints(
     val aboutEndpoint: String = DRIVE_ABOUT_ENDPOINT,
     val filesEndpoint: String = DRIVE_FILES_ENDPOINT,
     val uploadEndpoint: String = DRIVE_UPLOAD_ENDPOINT,
 )
 
-private fun driveApiUrl(
+internal fun driveApiUrl(
     endpoint: String,
     queryParameters: List<Pair<String, String>>,
 ): String {
@@ -1158,27 +1206,34 @@ class AndroidCloudStorageAccess internal constructor(
     }
 
     private suspend fun driveAccountIdentity(token: String): DriveAccountIdentity? {
-        return driveAccountIdentityFromAboutResponse(
-            driveRequest(
-                token = token,
-                method = "GET",
-                url = driveApiUrl(
-                    driveApiEndpoints.aboutEndpoint,
-                    listOf("fields" to "user(emailAddress,permissionId)"),
-                ),
-            ).asJsonObject(),
-        )
+        try {
+            return driveAccountIdentityFromAboutResponse(
+                driveRequest(
+                    token = token,
+                    method = "GET",
+                    url = driveApiUrl(
+                        driveApiEndpoints.aboutEndpoint,
+                        listOf("fields" to "user(emailAddress,permissionId)"),
+                    ),
+                ).asJsonObject(),
+            )
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+
+            throw DriveAccountIdentityLookupException(error)
+        }
     }
 
     private suspend fun clearFailedIdentityLookupToken(token: String, error: Throwable): Boolean {
+        val lookupError = (error as? DriveAccountIdentityLookupException)?.cause ?: error
         val logMessage =
             when {
-                error is DriveHttpException &&
-                    error.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED ->
+                lookupError is DriveHttpException &&
+                    lookupError.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED ->
                     "failed to clear expired drive token"
-                error is DriveHttpException &&
-                    error.statusCode == HttpURLConnection.HTTP_FORBIDDEN &&
-                    error.isAuthorizationRejected() ->
+                lookupError is DriveHttpException &&
+                    lookupError.statusCode == HttpURLConnection.HTTP_FORBIDDEN &&
+                    lookupError.isAuthorizationRejected() ->
                     "failed to clear rejected drive token"
                 else -> return false
             }
@@ -1271,7 +1326,7 @@ class AndroidCloudStorageAccess internal constructor(
 
             if (statusCode !in 200..299) {
                 val responseText = responseBody.toString(Charsets.UTF_8)
-                logDriveWarning("google drive request failed method=$method status=$statusCode")
+                logDriveWarning("google drive request failed method=$method status=$statusCode url=$url")
                 throw DriveHttpException(statusCode, responseText)
             }
 
