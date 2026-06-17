@@ -63,7 +63,7 @@ internal fun ReceivedTransactionDetails(
                 Text(
                     NumberFormat.getNumberInstance().format(numberOfConfirmations),
                     color = fg,
-                    fontSize = 14.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             } else {
@@ -85,7 +85,7 @@ internal fun ReceivedTransactionDetails(
             Text(
                 transactionDetails.blockNumberFmt() ?: "",
                 color = fg,
-                fontSize = 14.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(14.dp))
@@ -107,9 +107,9 @@ internal fun ReceivedTransactionDetails(
                 Text(
                     transactionDetails.addressSpacedOut() ?: stringResource(R.string.address_unavailable),
                     color = fg,
-                    fontSize = 14.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
-                    lineHeight = 18.sp,
+                    lineHeight = 22.sp,
                 )
             }
 

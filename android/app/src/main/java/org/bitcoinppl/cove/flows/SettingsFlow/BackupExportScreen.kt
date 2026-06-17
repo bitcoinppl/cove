@@ -175,7 +175,7 @@ fun BackupExportScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("Backup Password", style = MaterialTheme.typography.titleSmall)
+            Text("Backup Password", style = MaterialTheme.typography.bodySmall)
 
             OutlinedTextField(
                 value = password,

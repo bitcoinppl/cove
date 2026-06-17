@@ -106,7 +106,7 @@ fun MaterialSettingsItem(
         headlineContent = {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = titleColor ?: Color.Unspecified,
             )
         },
@@ -115,7 +115,7 @@ fun MaterialSettingsItem(
                 {
                     Text(
                         text = it,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -191,7 +191,7 @@ fun SettingsItem(
 
         Text(
             text = title,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
             modifier =
                 Modifier
                     .weight(1f)

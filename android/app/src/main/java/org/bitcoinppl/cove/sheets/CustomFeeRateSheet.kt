@@ -28,6 +28,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove_core.SendFlowAlertState
 import org.bitcoinppl.cove_core.SendFlowException
@@ -217,7 +218,7 @@ fun CustomFeeRateSheet(
             // title
             Text(
                 text = "Set Custom Network Fee",
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.title3,
                 fontWeight = FontWeight.Bold,
                 modifier =
                     Modifier
@@ -234,7 +235,7 @@ fun CustomFeeRateSheet(
                     text = "satoshi/byte",
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
                     modifier = Modifier.offset(y = 4.dp),
                 )
 
@@ -384,7 +385,7 @@ private fun DurationCapsule(
             )
             Text(
                 text = durationText,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
                 color = fontColor,
             )

@@ -389,7 +389,7 @@ private fun SpendingWidget(
             Text(
                 stringResource(R.string.label_account),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 modifier = Modifier.weight(1f),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -401,12 +401,12 @@ private fun SpendingWidget(
                 )
                 Spacer(Modifier.size(8.dp))
                 Column(horizontalAlignment = Alignment.Start) {
-                    Text(accountShort, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                    Text(accountShort, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                     Spacer(Modifier.size(4.dp))
                     Text(
                         stringResource(R.string.label_main),
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
@@ -418,16 +418,16 @@ private fun SpendingWidget(
                 Text(
                     stringResource(R.string.label_network_fee),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(feeEta, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Text(feeEta, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                     Spacer(Modifier.size(4.dp))
                     Text(
                         stringResource(R.string.btn_change_speed),
                         color = CoveColor.LinkBlue,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         modifier =
                             Modifier
                                 .clickable(onClick = onChangeSpeed)
@@ -435,14 +435,14 @@ private fun SpendingWidget(
                     )
                 }
             }
-            AsyncText(text = feeAmount, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            AsyncText(text = feeAmount, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         Spacer(Modifier.height(24.dp))
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Text(
                 stringResource(R.string.label_total_spending),
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
@@ -450,14 +450,14 @@ private fun SpendingWidget(
                 Text(
                     totalSpendingCrypto,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     totalSpendingFiat,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     textAlign = TextAlign.End,
                 )
             }
@@ -527,6 +527,7 @@ private fun ImageButton(
         Text(
             text = text,
             fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp,
             modifier = Modifier.padding(vertical = 8.dp),
         )
     }

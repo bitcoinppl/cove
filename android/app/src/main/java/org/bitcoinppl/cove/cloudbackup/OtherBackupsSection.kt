@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
@@ -38,14 +39,14 @@ internal fun OtherBackupsLoadFailedSection(error: String) {
         Column {
             Text(
                 text = "Could not load other cloud backups.",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
             MaterialDivider()
             Text(
                 text = error,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
@@ -106,7 +107,7 @@ internal fun OtherBackupsSection(
         Column {
             Text(
                 text = "${pluralize(namespaceCount, "backup set", "backup sets")} protected by ${otherPasskeyLabel(passkeySuffixes)}, containing ${pluralize(walletCount, "wallet", "wallets")}",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )

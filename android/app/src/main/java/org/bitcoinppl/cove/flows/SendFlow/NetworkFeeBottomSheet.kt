@@ -229,7 +229,7 @@ fun NetworkFeeBottomSheet(
         Text(
             text = stringResource(R.string.title_network_fee),
             color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 18.sp,
+            fontSize = 20.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.fillMaxWidth(),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -297,7 +297,7 @@ private fun FeeOptionCard(
                     Text(
                         text = stringResource(feeOption.priority.displayNameRes),
                         color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
-                        fontSize = 16.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -323,7 +323,7 @@ private fun FeeOptionCard(
                         Text(
                             text = feeOption.timeEstimate,
                             color = if (isSelected) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.outline,
-                            fontSize = 14.sp,
+                            fontSize = 11.sp,
                         )
                     }
                 }
@@ -331,21 +331,21 @@ private fun FeeOptionCard(
                 Text(
                     text = feeOption.feeRate,
                     color = if (isSelected) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.outline,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = feeOption.feeAmount,
                     color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
-                    fontSize = 16.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = feeOption.dollarAmount,
                     color = if (isSelected) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.outline,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                 )
             }
         }
@@ -388,7 +388,7 @@ fun CustomNetworkFeeBottomSheet(
         Text(
             text = stringResource(R.string.title_set_custom_network_fee),
             color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 18.sp,
+            fontSize = 20.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.fillMaxWidth(),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -435,7 +435,7 @@ fun CustomNetworkFeeBottomSheet(
                 Text(
                     text = timeEstimate,
                     color = MaterialTheme.colorScheme.outline,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
             }
         }
@@ -460,13 +460,13 @@ fun CustomNetworkFeeBottomSheet(
             Text(
                 text = feeAmount,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 16.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
                 text = dollarAmount,
                 color = MaterialTheme.colorScheme.outline,
-                fontSize = 14.sp,
+                fontSize = 11.sp,
             )
         }
         Spacer(modifier = Modifier.height(24.dp))

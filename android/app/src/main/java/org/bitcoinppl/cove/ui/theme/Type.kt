@@ -16,10 +16,10 @@ internal val tightLineHeightStyle =
         trim = LineHeightStyle.Trim.Both,
     )
 
-// Complete Material 3 typography scale with iOS-matching tight spacing
+// SwiftUI default text style sizes with iOS-matching tight spacing
 val Typography =
     Typography(
-        // Display styles - large, prominent text
+        // display styles are kept for oversized one-off UI states
         displayLarge =
             TextStyle(
                 fontFamily = FontFamily.Default,
@@ -50,13 +50,13 @@ val Typography =
                 platformStyle = tightPlatformStyle,
                 lineHeightStyle = tightLineHeightStyle,
             ),
-        // Headline styles - high-emphasis text
+        // headline styles map to largeTitle, title, and title2
         headlineLarge =
             TextStyle(
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.Normal,
-                fontSize = 32.sp,
-                lineHeight = 32.sp,
+                fontSize = 34.sp,
+                lineHeight = 34.sp,
                 letterSpacing = 0.sp,
                 platformStyle = tightPlatformStyle,
                 lineHeightStyle = tightLineHeightStyle,
@@ -75,13 +75,13 @@ val Typography =
             TextStyle(
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.Normal,
-                fontSize = 24.sp,
-                lineHeight = 24.sp,
+                fontSize = 22.sp,
+                lineHeight = 22.sp,
                 letterSpacing = 0.sp,
                 platformStyle = tightPlatformStyle,
                 lineHeightStyle = tightLineHeightStyle,
             ),
-        // Title styles - medium-emphasis text
+        // title styles map to title2, headline, and subheadline
         titleLarge =
             TextStyle(
                 fontFamily = FontFamily.Default,
@@ -96,9 +96,9 @@ val Typography =
             TextStyle(
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.Medium,
-                fontSize = 16.sp,
-                lineHeight = 16.sp,
-                letterSpacing = 0.15.sp,
+                fontSize = 17.sp,
+                lineHeight = 17.sp,
+                letterSpacing = 0.sp,
                 platformStyle = tightPlatformStyle,
                 lineHeightStyle = tightLineHeightStyle,
             ),
@@ -106,20 +106,20 @@ val Typography =
             TextStyle(
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.Medium,
-                fontSize = 14.sp,
-                lineHeight = 14.sp,
-                letterSpacing = 0.1.sp,
+                fontSize = 15.sp,
+                lineHeight = 15.sp,
+                letterSpacing = 0.sp,
                 platformStyle = tightPlatformStyle,
                 lineHeightStyle = tightLineHeightStyle,
             ),
-        // Body styles - main content text
+        // body styles map to body, subheadline, and footnote
         bodyLarge =
             TextStyle(
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.Normal,
-                fontSize = 16.sp,
-                lineHeight = 16.sp,
-                letterSpacing = 0.5.sp,
+                fontSize = 17.sp,
+                lineHeight = 17.sp,
+                letterSpacing = 0.sp,
                 platformStyle = tightPlatformStyle,
                 lineHeightStyle = tightLineHeightStyle,
             ),
@@ -127,9 +127,9 @@ val Typography =
             TextStyle(
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.Normal,
-                fontSize = 14.sp,
-                lineHeight = 14.sp,
-                letterSpacing = 0.25.sp,
+                fontSize = 15.sp,
+                lineHeight = 15.sp,
+                letterSpacing = 0.sp,
                 platformStyle = tightPlatformStyle,
                 lineHeightStyle = tightLineHeightStyle,
             ),
@@ -137,20 +137,20 @@ val Typography =
             TextStyle(
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.Normal,
-                fontSize = 12.sp,
-                lineHeight = 12.sp,
-                letterSpacing = 0.4.sp,
+                fontSize = 13.sp,
+                lineHeight = 13.sp,
+                letterSpacing = 0.sp,
                 platformStyle = tightPlatformStyle,
                 lineHeightStyle = tightLineHeightStyle,
             ),
-        // Label styles - UI elements, buttons
+        // label styles map to headline, footnote, and caption2
         labelLarge =
             TextStyle(
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.Medium,
-                fontSize = 14.sp,
-                lineHeight = 14.sp,
-                letterSpacing = 0.1.sp,
+                fontSize = 17.sp,
+                lineHeight = 17.sp,
+                letterSpacing = 0.sp,
                 platformStyle = tightPlatformStyle,
                 lineHeightStyle = tightLineHeightStyle,
             ),
@@ -158,9 +158,9 @@ val Typography =
             TextStyle(
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.Medium,
-                fontSize = 12.sp,
-                lineHeight = 12.sp,
-                letterSpacing = 0.5.sp,
+                fontSize = 13.sp,
+                lineHeight = 13.sp,
+                letterSpacing = 0.sp,
                 platformStyle = tightPlatformStyle,
                 lineHeightStyle = tightLineHeightStyle,
             ),
@@ -170,7 +170,7 @@ val Typography =
                 fontWeight = FontWeight.Medium,
                 fontSize = 11.sp,
                 lineHeight = 11.sp,
-                letterSpacing = 0.5.sp,
+                letterSpacing = 0.sp,
                 platformStyle = tightPlatformStyle,
                 lineHeightStyle = tightLineHeightStyle,
             ),
@@ -184,6 +184,32 @@ val Typography.title3: TextStyle
             fontWeight = FontWeight.Normal,
             fontSize = 20.sp,
             lineHeight = 20.sp,
+            letterSpacing = 0.sp,
+            platformStyle = tightPlatformStyle,
+            lineHeightStyle = tightLineHeightStyle,
+        )
+
+// extension to match iOS callout (16pt)
+val Typography.callout: TextStyle
+    get() =
+        TextStyle(
+            fontFamily = FontFamily.Default,
+            fontWeight = FontWeight.Normal,
+            fontSize = 16.sp,
+            lineHeight = 16.sp,
+            letterSpacing = 0.sp,
+            platformStyle = tightPlatformStyle,
+            lineHeightStyle = tightLineHeightStyle,
+        )
+
+// extension to match iOS caption (12pt)
+val Typography.caption: TextStyle
+    get() =
+        TextStyle(
+            fontFamily = FontFamily.Default,
+            fontWeight = FontWeight.Normal,
+            fontSize = 12.sp,
+            lineHeight = 12.sp,
             letterSpacing = 0.sp,
             platformStyle = tightPlatformStyle,
             lineHeightStyle = tightLineHeightStyle,

@@ -448,33 +448,33 @@ fun TransactionDetailsScreen(
                                         "Your transaction was successfully received"
                                     },
                                 color = sub,
-                                fontSize = 16.sp,
+                                fontSize = 17.sp,
                                 textAlign = TextAlign.Center,
-                                lineHeight = 22.sp,
+                                lineHeight = 23.sp,
                             )
                             Text(
                                 text = formattedDate,
                                 color = sub,
-                                fontSize = 16.sp,
+                                fontSize = 17.sp,
                                 fontWeight = FontWeight.Medium,
                                 textAlign = TextAlign.Center,
-                                lineHeight = 22.sp,
+                                lineHeight = 23.sp,
                             )
                         } else if (!isConfirmed) {
                             Text(
                                 text = "Your transaction is pending.",
                                 color = sub,
-                                fontSize = 16.sp,
+                                fontSize = 17.sp,
                                 textAlign = TextAlign.Center,
-                                lineHeight = 22.sp,
+                                lineHeight = 23.sp,
                             )
                             Text(
                                 text = "Please check back soon for an update.",
                                 color = sub,
-                                fontSize = 16.sp,
+                                fontSize = 17.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.Center,
-                                lineHeight = 22.sp,
+                                lineHeight = 23.sp,
                             )
                         }
                     }
@@ -484,7 +484,7 @@ fun TransactionDetailsScreen(
                     BalanceAutoSizeText(
                         txAmountPrimary,
                         color = fg,
-                        baseFontSize = 36.sp,
+                        baseFontSize = 34.sp,
                         minimumScaleFactor = 0.01f,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
@@ -496,7 +496,7 @@ fun TransactionDetailsScreen(
                     AsyncText(
                         text = totalSpentFiatFmt,
                         color = fg.copy(alpha = 0.8f),
-                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp),
+                        style = MaterialTheme.typography.bodyLarge,
                     )
 
                     Spacer(Modifier.height(32.dp))
@@ -572,6 +572,7 @@ fun TransactionDetailsScreen(
                                     containerColor = MaterialTheme.coveColors.midnightBtn,
                                     contentColor = Color.White,
                                 ),
+                            fontSize = 17.sp,
                             modifier =
                                 Modifier
                                     .fillMaxWidth(),

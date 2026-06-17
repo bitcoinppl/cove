@@ -199,7 +199,7 @@ fun CoinControlCustomAmountSheet(
                 Column(modifier = Modifier.weight(1f).padding(top = 16.dp)) {
                     Text(
                         "Sending UTXO Details",
-                        fontSize = 18.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -266,7 +266,7 @@ fun CoinControlCustomAmountSheet(
                 ) {
                     Text(
                         "Set Amount",
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -285,7 +285,7 @@ fun CoinControlCustomAmountSheet(
                             },
                             textStyle =
                                 TextStyle(
-                                    fontSize = 14.sp,
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     textAlign = TextAlign.End,
@@ -297,7 +297,7 @@ fun CoinControlCustomAmountSheet(
                         Spacer(Modifier.width(4.dp))
                         Text(
                             if (isSats) "SATS" else "BTC",
-                            fontSize = 14.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
@@ -308,7 +308,7 @@ fun CoinControlCustomAmountSheet(
 
                 Text(
                     "Use the slider to set the amount.",
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
@@ -361,7 +361,7 @@ private fun UtxoDetailRow(
                     text = utxo.displayName,
                     fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
                 if (utxo.type == UtxoType.CHANGE) {
                     Spacer(Modifier.width(4.dp))
@@ -377,7 +377,7 @@ private fun UtxoDetailRow(
             Text(
                 text = utxo.address.unformatted(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -386,7 +386,7 @@ private fun UtxoDetailRow(
             Text(
                 displayAmount,
                 fontWeight = FontWeight.Normal,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(4.dp))

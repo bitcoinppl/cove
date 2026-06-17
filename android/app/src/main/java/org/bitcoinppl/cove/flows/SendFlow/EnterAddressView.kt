@@ -70,14 +70,14 @@ fun EnterAddressView(
                 Text(
                     stringResource(R.string.label_enter_address),
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 18.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     stringResource(R.string.label_where_send_to),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
             }
             // clear button - only visible when focused and has content
@@ -115,8 +115,8 @@ fun EnterAddressView(
                 textStyle =
                     TextStyle(
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 15.sp,
-                        lineHeight = 20.sp,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
                         fontWeight = FontWeight.Medium,
                     ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -135,8 +135,8 @@ fun EnterAddressView(
                 Text(
                     text = addressStringSpacedOut(address),
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 15.sp,
-                    lineHeight = 20.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 3,
                     modifier =
@@ -150,8 +150,8 @@ fun EnterAddressView(
                 Text(
                     text = "bc1p...",
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    fontSize = 15.sp,
-                    lineHeight = 20.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
                     fontWeight = FontWeight.Medium,
                 )
             }

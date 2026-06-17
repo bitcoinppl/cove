@@ -1313,7 +1313,7 @@ private fun BackupSection(
         ) {
             Text(
                 text = "Backup",
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
             Spacer(modifier = Modifier.width(6.dp))

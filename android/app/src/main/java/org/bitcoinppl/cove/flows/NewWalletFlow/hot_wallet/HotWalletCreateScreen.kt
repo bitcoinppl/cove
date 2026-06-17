@@ -391,7 +391,7 @@ private fun WordCardView(
                     text = groupedWord.word,
                     color = CoveColor.midnightBlue,
                     fontWeight = FontWeight.Medium,
-                    maxFontSize = 14.sp,
+                    maxFontSize = 13.sp,
                     minimumScaleFactor = 0.2f,
                 )
                 Spacer(Modifier.weight(1f))

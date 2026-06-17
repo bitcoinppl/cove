@@ -40,7 +40,7 @@ fun ImageButton(
     onClick: () -> Unit,
     colors: ButtonColors = ButtonDefaults.buttonColors(),
     enabled: Boolean = true,
-    fontSize: TextUnit = 17.sp,
+    fontSize: TextUnit = 15.sp,
 ) {
     Surface(
         modifier =

@@ -197,7 +197,7 @@ fun BackupImportScreen(
                     Text("Back")
                 }
             } else {
-                Text("Backup File", style = MaterialTheme.typography.titleSmall)
+                Text("Backup File", style = MaterialTheme.typography.bodySmall)
 
                 OutlinedButton(
                     onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
@@ -213,7 +213,7 @@ fun BackupImportScreen(
                 }
 
                 if (fileData != null) {
-                    Text("Backup Password", style = MaterialTheme.typography.titleSmall)
+                    Text("Backup Password", style = MaterialTheme.typography.bodySmall)
 
                     OutlinedTextField(
                         value = password,
@@ -483,4 +483,3 @@ private fun formatReport(report: BackupImportReport): String {
     }
     return lines.joinToString("\n")
 }
-

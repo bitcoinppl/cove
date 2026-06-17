@@ -97,7 +97,7 @@ fun NumberPadPinView(
                 Text(
                     text = "Cancel",
                     color = Color.White,
-                    fontSize = 16.sp,
+                    fontSize = 17.sp,
                     modifier =
                         Modifier
                             .clickable { backAction() }
@@ -142,7 +142,7 @@ fun NumberPadPinView(
                         val char = pin[index]
                         Text(
                             text = if (showPin) char.toString() else "●",
-                            fontSize = if (showPin) 24.sp else 16.sp,
+                            fontSize = if (showPin) 28.sp else 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.Black,
                         )
@@ -202,7 +202,7 @@ fun NumberPadPinView(
                         Text(
                             text = "Cancel",
                             color = Color.White,
-                            fontSize = 18.sp,
+                            fontSize = 17.sp,
                         )
                     }
                 } else {
@@ -279,7 +279,7 @@ private fun NumberButton(
     ) {
         Text(
             text = text,
-            fontSize = 24.sp,
+            fontSize = 28.sp,
             color = Color.White,
         )
     }

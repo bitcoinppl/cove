@@ -118,7 +118,7 @@ private fun FiatCurrencyRow(
     ) {
         Text(
             text = "${fiatCurrency.emojiString()} ${fiatCurrency}",
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
         )
 
         if (isSelected) {

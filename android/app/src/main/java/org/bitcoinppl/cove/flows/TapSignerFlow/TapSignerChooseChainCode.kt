@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.ui.theme.callout
 import org.bitcoinppl.cove_core.TapSignerRoute
 
 /**
@@ -84,14 +85,14 @@ fun TapSignerChooseChainCode(
                 ) {
                     Text(
                         text = "A chain code works with your private key to generate Bitcoin addresses",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.callout,
                         textAlign = TextAlign.Center,
                     )
 
                     Text(
                         text =
                             "You can provide your own chain code for advanced setups, or let the app create one automatically for easy setup.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.callout,
                         textAlign = TextAlign.Center,
                     )
                 }
@@ -119,7 +120,7 @@ fun TapSignerChooseChainCode(
                         ) {
                             Text(
                                 text = "Automatic Setup",
-                                style = MaterialTheme.typography.labelLarge,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold,
                             )
 

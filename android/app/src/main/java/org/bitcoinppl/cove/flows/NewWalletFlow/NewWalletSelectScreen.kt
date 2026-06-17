@@ -259,9 +259,9 @@ fun NewWalletSelectScreen(
                     Text(
                         text = stringResource(R.string.label_wallet_add_new_wallet),
                         color = Color.White,
-                        fontSize = 34.sp,
+                        fontSize = 38.sp,
                         fontWeight = FontWeight.SemiBold,
-                        lineHeight = 38.sp,
+                        lineHeight = 42.sp,
                     )
 
                     HorizontalDivider(

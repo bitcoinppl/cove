@@ -102,7 +102,7 @@ fun SidebarView(
         Text(
             text = "My Wallets",
             color = Color.White,
-            fontSize = 17.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
         )
 
@@ -152,7 +152,7 @@ fun SidebarView(
             Text(
                 text = "Add Wallet",
                 color = Color.White,
-                fontSize = 17.sp,
+                fontSize = 16.sp,
             )
         }
 
@@ -178,7 +178,7 @@ fun SidebarView(
             Text(
                 text = "Settings",
                 color = Color.White,
-                fontSize = 17.sp,
+                fontSize = 16.sp,
             )
         }
     }
@@ -213,7 +213,7 @@ private fun WalletItem(
         AutoSizeText(
             text = wallet.name ?: "Wallet",
             color = Color.White,
-            maxFontSize = 17.sp,
+            maxFontSize = 13.sp,
             minimumScaleFactor = 0.80f,
             modifier = Modifier.weight(1f),
         )

@@ -118,7 +118,7 @@ private fun ColorSchemeRow(
     ) {
         Text(
             text = colorScheme.capitalizedString(),
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
         )
 
         if (isSelected) {

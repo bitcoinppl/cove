@@ -52,14 +52,14 @@ fun SendFlowHeaderView(
                 Text(
                     stringResource(R.string.label_balance),
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     AutoSizeText(
                         text = if (isHidden) "••••••" else amount,
                         color = Color.White,
-                        maxFontSize = 24.sp,
+                        maxFontSize = 20.sp,
                         minimumScaleFactor = 0.90f,
                         fontWeight = FontWeight.Bold,
                     )
@@ -67,7 +67,7 @@ fun SendFlowHeaderView(
                     Text(
                         denomination,
                         color = Color.White,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         modifier = Modifier.offset(y = (-4).dp),
                     )
                 }

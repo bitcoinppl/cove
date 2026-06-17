@@ -432,15 +432,16 @@ fun VerifyWordsScreen(
                     Text(
                         text = stringResource(R.string.label_verify_words_title),
                         color = Color.White,
-                        fontSize = 34.sp,
+                        fontSize = 38.sp,
                         fontWeight = FontWeight.SemiBold,
-                        lineHeight = 38.sp,
+                        lineHeight = 42.sp,
                     )
 
                     Text(
                         text = stringResource(R.string.label_verify_words_body),
                         color = Color.White.copy(alpha = 0.8f),
-                        lineHeight = 20.sp,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
                     )
 
                     Spacer(Modifier.weight(1f))
@@ -540,7 +541,7 @@ fun VerifyWordsScreen(
                         autoSize =
                             TextAutoSize.StepBased(
                                 minFontSize = 7.sp,
-                                maxFontSize = 14.sp,
+                                maxFontSize = 12.sp,
                                 stepSize = 0.5.sp,
                             ),
                         style =
@@ -594,7 +595,7 @@ private fun OptionChip(
                 autoSize =
                     TextAutoSize.StepBased(
                         minFontSize = 7.sp,
-                        maxFontSize = 14.sp,
+                        maxFontSize = 12.sp,
                         stepSize = 0.5.sp,
                     ),
                 style =

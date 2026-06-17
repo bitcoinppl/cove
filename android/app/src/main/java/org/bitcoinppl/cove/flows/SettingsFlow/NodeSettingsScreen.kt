@@ -397,7 +397,7 @@ private fun NodeRow(
     ) {
         Text(
             text = nodeName,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
         )
 
         if (isSelected) {

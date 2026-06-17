@@ -305,14 +305,14 @@ private fun BalanceWidget(
                 Text(
                     stringResource(R.string.label_balance),
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     AutoSizeText(
                         text = if (isHidden) "••••••" else amount,
                         color = Color.White,
-                        maxFontSize = 24.sp,
+                        maxFontSize = 20.sp,
                         minimumScaleFactor = 0.90f,
                         fontWeight = FontWeight.Bold,
                     )
@@ -320,7 +320,7 @@ private fun BalanceWidget(
                     Text(
                         denomination,
                         color = Color.White,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         modifier = Modifier.offset(y = (-4).dp),
                     )
                 }
@@ -352,14 +352,14 @@ private fun CoinControlAmountWidget(
         Text(
             stringResource(R.string.label_enter_amount),
             color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 18.sp,
+            fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             stringResource(R.string.label_how_much_to_send),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
         )
         Spacer(Modifier.height(24.dp))
         Row(
@@ -388,7 +388,7 @@ private fun CoinControlAmountWidget(
             }
             Spacer(Modifier.width(32.dp))
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.offset(y = (-4).dp)) {
-                Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, maxLines = 1)
+                Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, maxLines = 1)
                 Spacer(Modifier.width(4.dp))
                 Icon(
                     imageVector = Icons.Filled.ArrowDropDown,
@@ -402,7 +402,7 @@ private fun CoinControlAmountWidget(
         Text(
             dollarText,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 16.sp,
+            fontSize = 15.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -436,14 +436,14 @@ private fun AddressWidget(
                 Text(
                     stringResource(R.string.label_enter_address),
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 18.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     stringResource(R.string.label_where_send_to),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
             }
             // clear button - only visible when focused and has content
@@ -481,8 +481,8 @@ private fun AddressWidget(
                 textStyle =
                     TextStyle(
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 15.sp,
-                        lineHeight = 20.sp,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
                         fontWeight = FontWeight.Medium,
                     ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -501,8 +501,8 @@ private fun AddressWidget(
                 Text(
                     text = addressStringSpacedOut(address),
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 15.sp,
-                    lineHeight = 20.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 3,
                     modifier =
@@ -516,8 +516,8 @@ private fun AddressWidget(
                 Text(
                     text = "bc1p...",
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    fontSize = 15.sp,
-                    lineHeight = 20.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
                     fontWeight = FontWeight.Medium,
                 )
             }
@@ -543,7 +543,7 @@ private fun SpendingWidget(
             Text(
                 stringResource(R.string.label_account),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 modifier = Modifier.weight(1f),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -555,12 +555,12 @@ private fun SpendingWidget(
                 )
                 Spacer(Modifier.size(8.dp))
                 Column(horizontalAlignment = Alignment.Start) {
-                    Text(accountShort, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                    Text(accountShort, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                     Spacer(Modifier.size(4.dp))
                     Text(
                         stringResource(R.string.label_main),
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
@@ -572,16 +572,16 @@ private fun SpendingWidget(
                 Text(
                     stringResource(R.string.label_network_fee),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(feeEta, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Text(feeEta, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                     Spacer(Modifier.size(4.dp))
                     Text(
                         stringResource(R.string.btn_change_speed),
                         color = CoveColor.LinkBlue,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         modifier =
                             Modifier
                                 .clickable(onClick = onChangeSpeed)
@@ -589,14 +589,14 @@ private fun SpendingWidget(
                     )
                 }
             }
-            AsyncText(text = feeAmount, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            AsyncText(text = feeAmount, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         Spacer(Modifier.height(24.dp))
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Text(
                 stringResource(R.string.label_total_spending),
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
@@ -604,14 +604,14 @@ private fun SpendingWidget(
                 Text(
                     totalSpendingCrypto,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     totalSpendingFiat,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     textAlign = TextAlign.End,
                 )
             }
@@ -621,7 +621,7 @@ private fun SpendingWidget(
             Text(
                 text = if (utxoCount == 1) "Spending 1 UTXO" else "Spending $utxoCount UTXOs",
                 color = CoveColor.LinkBlue,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 modifier =
                     Modifier
                         .clickable(onClick = onUtxoDetailsClick)

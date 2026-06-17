@@ -70,15 +70,15 @@ internal fun TransactionDetailsWidget(
                 Text(
                     stringResource(R.string.label_sent_to),
                     color = sub,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     transactionDetails.addressSpacedOut() ?: stringResource(R.string.address_unavailable),
                     color = fg,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    lineHeight = 18.sp,
+                    lineHeight = 20.sp,
                 )
 
                 // show block number and confirmations for confirmed sent transactions
@@ -88,14 +88,14 @@ internal fun TransactionDetailsWidget(
                         Text(
                             transactionDetails.blockNumberFmt() ?: "",
                             color = sub,
-                            fontSize = 14.sp,
+                            fontSize = 12.sp,
                         )
-                        Text(" | ", color = sub, fontSize = 14.sp)
+                        Text(" | ", color = sub, fontSize = 12.sp)
                         if (numberOfConfirmations != null) {
                             Text(
                                 numberOfConfirmations.toString(),
                                 color = sub,
-                                fontSize = 14.sp,
+                                fontSize = 12.sp,
                             )
                             Spacer(Modifier.size(4.dp))
                             Box(
@@ -210,7 +210,7 @@ internal fun DetailsWidget(
             Text(
                 label,
                 color = labelColor,
-                fontSize = 12.sp,
+                fontSize = 15.sp,
             )
             if (showInfoIcon) {
                 Spacer(Modifier.width(8.dp))
@@ -229,7 +229,7 @@ internal fun DetailsWidget(
             }
         }
         Column(horizontalAlignment = Alignment.End) {
-            AutoSizeText(primary, color = primaryColor, maxFontSize = 14.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)
+            AutoSizeText(primary, color = primaryColor, maxFontSize = 15.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(6.dp))
             AsyncText(text = secondary, color = sub, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp))
         }
@@ -257,7 +257,7 @@ internal fun FiatPriceSection(
         Text(
             stringResource(R.string.label_fiat_price),
             color = textColor,
-            fontSize = 12.sp,
+            fontSize = 15.sp,
         )
         Spacer(Modifier.weight(1f))
         Column(horizontalAlignment = Alignment.End) {

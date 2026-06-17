@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -246,7 +247,7 @@ fun SendFlowAdvancedDetailsView(
             ) {
                 Text(
                     text = "Fee",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.caption,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
@@ -279,7 +280,7 @@ private fun SectionCard(
         if (title != null) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.caption,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier.padding(start = 12.dp, bottom = 8.dp),

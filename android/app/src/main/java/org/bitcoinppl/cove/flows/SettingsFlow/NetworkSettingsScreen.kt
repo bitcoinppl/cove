@@ -153,7 +153,7 @@ private fun NetworkRow(
     ) {
         Text(
             text = network.toString(),
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
         )
 
         if (isSelected) {

@@ -84,14 +84,14 @@ fun EnterAmountView(
         Text(
             stringResource(R.string.label_enter_amount),
             color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 18.sp,
+            fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             stringResource(R.string.label_how_much_to_send),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
         )
         Spacer(Modifier.height(24.dp))
         Row(
@@ -142,7 +142,7 @@ fun EnterAmountView(
                                 .offset(y = (-4).dp)
                                 .clickable { showUnitMenu = true },
                     ) {
-                        Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, maxLines = 1)
+                        Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, maxLines = 1)
                         Spacer(Modifier.width(4.dp))
                         Icon(
                             imageVector = Icons.Filled.ArrowDropDown,
@@ -192,14 +192,14 @@ fun EnterAmountView(
                 Text(
                     dollarText,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                 )
                 if (isFiatMode && secondaryUnit.isNotEmpty()) {
                     Spacer(Modifier.width(4.dp))
                     Text(
                         secondaryUnit,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                     )
                 }
             }

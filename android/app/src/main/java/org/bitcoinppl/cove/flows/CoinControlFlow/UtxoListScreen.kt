@@ -240,9 +240,9 @@ private fun UtxoListScreenContent(
                 Text(
                     stringResource(R.string.title_manage_utxos),
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 32.sp,
+                    fontSize = 34.sp,
                     fontWeight = FontWeight.Bold,
-                    lineHeight = 36.sp,
+                    lineHeight = 38.sp,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
 
@@ -284,7 +284,7 @@ private fun UtxoListScreenContent(
                         Text(
                             text = stringResource(R.string.list_of_utxos),
                             color = secondaryText,
-                            fontSize = 14.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Normal,
                             modifier = Modifier.weight(1f),
                         )
@@ -299,7 +299,7 @@ private fun UtxoListScreenContent(
                                         )
                                     },
                                 color = CoveColor.LinkBlue,
-                                fontSize = 14.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 modifier =
                                     Modifier.clickable {
@@ -345,7 +345,7 @@ private fun UtxoListScreenContent(
                                 Modifier
                                     .fillMaxWidth(),
                             color = secondaryText,
-                            fontSize = 14.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )
@@ -363,8 +363,8 @@ private fun UtxoListScreenContent(
                     Text(
                         text = stringResource(R.string.utxo_description),
                         color = secondaryText,
-                        fontSize = 14.sp,
-                        lineHeight = 18.sp,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -377,7 +377,7 @@ private fun UtxoListScreenContent(
                         Text(
                             stringResource(R.string.denotes_utxo_change),
                             color = secondaryText,
-                            fontSize = 14.sp,
+                            fontSize = 12.sp,
                         )
                     }
 
@@ -400,6 +400,7 @@ private fun UtxoListScreenContent(
                                 containerColor = if (anySelected) MaterialTheme.coveColors.midnightBtn else MaterialTheme.colorScheme.surfaceVariant,
                                 contentColor = if (anySelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             ),
+                        fontSize = 17.sp,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -433,7 +434,7 @@ private fun UtxoItemRow(
                     text = utxo.displayName,
                     fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
                 if (utxo.type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE) {
                     Spacer(Modifier.width(4.dp))
@@ -444,7 +445,7 @@ private fun UtxoItemRow(
             Text(
                 text = utxo.address.unformatted(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -453,7 +454,7 @@ private fun UtxoItemRow(
             Text(
                 manager.displayAmount(utxo.amount),
                 fontWeight = FontWeight.Normal,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(4.dp))
@@ -582,7 +583,7 @@ private fun SortChip(
     ) {
         AutoSizeText(
             text = label,
-            maxFontSize = 14.sp,
+            maxFontSize = 13.sp,
             minimumScaleFactor = 0.01f,
             color = txt,
             fontWeight = FontWeight.Medium,

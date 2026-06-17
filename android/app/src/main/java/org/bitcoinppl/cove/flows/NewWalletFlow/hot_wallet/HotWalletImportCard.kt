@@ -297,7 +297,7 @@ private fun WordInputField(
                     textStyle =
                         TextStyle(
                             color = textColor,
-                            fontSize = 14.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                         ),
                     singleLine = true,
@@ -354,7 +354,7 @@ private fun WordInputField(
                     Text(
                         text = suggestion,
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
                         modifier =
                             Modifier

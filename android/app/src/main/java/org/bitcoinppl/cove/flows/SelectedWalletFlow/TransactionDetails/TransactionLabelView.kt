@@ -248,7 +248,7 @@ fun TransactionLabelView(
                     Text(
                         text = currentLabel!!,
                         color = secondaryColor,
-                        fontSize = 13.sp, // iOS footnote parity
+                        fontSize = 13.sp,
                     )
 
                     if (isOperationInProgress) {
@@ -318,7 +318,7 @@ fun TransactionLabelView(
                     Text(
                         text = stringResource(R.string.btn_add_label),
                         color = secondaryColor,
-                        fontSize = 13.sp, // iOS footnote parity
+                        fontSize = 13.sp,
                     )
                 }
             }

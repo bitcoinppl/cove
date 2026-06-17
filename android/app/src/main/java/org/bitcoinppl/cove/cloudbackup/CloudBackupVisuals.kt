@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.ui.theme.coveColors
 import java.time.Instant
 import java.time.ZoneId
@@ -291,7 +292,7 @@ internal fun CloudBackupIconText(
     modifier: Modifier = Modifier,
     maxLines: Int = 1,
     iconSize: Dp = 13.dp,
-    textStyle: TextStyle = MaterialTheme.typography.labelSmall,
+    textStyle: TextStyle = MaterialTheme.typography.caption,
 ) {
     Row(
         modifier = modifier,
@@ -321,14 +322,14 @@ internal fun CloudBackupBitcoinMetadataText(text: String) {
         Text(
             "₿",
             color = colors.secondaryText,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.width(13.dp),
         )
         Text(
             text,
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.caption,
             color = colors.secondaryText,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

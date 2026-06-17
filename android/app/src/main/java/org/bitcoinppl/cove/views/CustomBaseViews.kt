@@ -243,7 +243,7 @@ fun SectionHeader(
         }
         Text(
             text = title,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier =
                 Modifier

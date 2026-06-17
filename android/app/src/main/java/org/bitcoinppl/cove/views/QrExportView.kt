@@ -53,6 +53,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.ui.theme.callout
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 import org.bitcoinppl.cove_core.types.QrDensity
@@ -129,7 +131,7 @@ fun QrExportView(
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.title3,
                 fontWeight = FontWeight.SemiBold,
             )
             if (onCopy != null) {
@@ -159,7 +161,7 @@ fun QrExportView(
 
         Text(
             text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.callout,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 4.dp, bottom = 24.dp, start = 40.dp, end = 40.dp),

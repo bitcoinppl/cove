@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.ui.theme.callout
 import org.bitcoinppl.cove_core.TapSignerRoute
 import java.security.SecureRandom
 
@@ -98,7 +99,7 @@ fun TapSignerAdvancedChainCode(
                 Text(
                     text =
                         "Enter your custom 32-byte chain code below. If you're unsure, select automatic on the previous screen.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.callout,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 30.dp),
                 )
@@ -122,7 +123,7 @@ fun TapSignerAdvancedChainCode(
                         placeholder = {
                             Text("Enter a 32 byte hex string")
                         },
-                        textStyle = MaterialTheme.typography.bodySmall,
+                        textStyle = MaterialTheme.typography.bodyMedium,
                         maxLines = 4,
                     )
                 }

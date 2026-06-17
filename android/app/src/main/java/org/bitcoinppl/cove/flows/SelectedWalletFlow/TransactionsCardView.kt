@@ -231,7 +231,7 @@ fun TransactionsCardView(
                     Text(
                         text = stringResource(R.string.go_buy_some_bitcoin),
                         color = secondaryText.copy(alpha = 0.7f),
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                     )
                 }
             }
@@ -338,7 +338,7 @@ internal fun TransactionsScanProgressStrip(
         Text(
             text = stringResource(R.string.scanning_for_transactions),
             color = secondaryText.copy(alpha = 0.7f),
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             modifier = Modifier.padding(bottom = 10.dp),
         )
     }
@@ -376,7 +376,7 @@ internal fun EmptyWalletScanState(
         Text(
             text = stringResource(R.string.checking_wallet_history),
             color = secondaryText,
-            fontSize = 16.sp,
+            fontSize = 17.sp,
         )
         Spacer(Modifier.height(10.dp))
         LinearProgressIndicator(
@@ -393,9 +393,9 @@ internal fun EmptyWalletScanState(
                 stringResource(
                     R.string.addresses_checked,
                     (scanProgress?.checked ?: 0u).toString(),
-                ),
+            ),
             color = secondaryText,
-            fontSize = 13.sp,
+            fontSize = 12.sp,
         )
     }
 }
@@ -1065,7 +1065,7 @@ fun LazyListScope.transactionItems(
                 Text(
                     text = stringResource(R.string.go_buy_some_bitcoin),
                     color = secondaryText.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                 )
             }
         }
@@ -1146,7 +1146,7 @@ private fun TransactionsPreviewShell(
                 Text(
                     text = stringResource(R.string.go_buy_some_bitcoin),
                     color = secondaryText.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                 )
             }
         }

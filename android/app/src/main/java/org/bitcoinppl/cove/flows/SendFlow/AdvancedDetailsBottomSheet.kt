@@ -165,14 +165,14 @@ fun AdvancedDetailsBottomSheet(
                 Text(
                     text = stringResource(R.string.title_advanced_details),
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 18.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.subtitle_advanced_details),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
             }
             IconButton(
@@ -251,12 +251,12 @@ fun AdvancedDetailsBottomSheet(
                     text = stringResource(R.string.label_fee),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp,
+                    fontSize = 12.sp,
                 )
                 Text(
                     text = data.fee,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -290,7 +290,7 @@ private fun UtxoCard(item: UtxoItem) {
                     Text(
                         text = item.label,
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                     )
 
@@ -299,7 +299,7 @@ private fun UtxoCard(item: UtxoItem) {
                 Text(
                     text = item.address,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Normal,
                 )
             }
@@ -307,7 +307,7 @@ private fun UtxoCard(item: UtxoItem) {
             Text(
                 text = item.amount,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -340,7 +340,7 @@ private fun SentToSelfCard(items: List<UtxoItem>) {
                     Text(
                         text = item.address,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Normal,
                         modifier = Modifier.weight(1f),
                     )
@@ -348,7 +348,7 @@ private fun SentToSelfCard(items: List<UtxoItem>) {
                     Text(
                         text = item.amount,
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                 }

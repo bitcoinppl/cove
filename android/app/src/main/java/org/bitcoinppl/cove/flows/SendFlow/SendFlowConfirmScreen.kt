@@ -240,21 +240,21 @@ private fun BalanceWidget(
                 Text(
                     stringResource(R.string.label_balance),
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = if (isHidden) "••••••" else amount,
                         color = Color.White,
-                        fontSize = 24.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.size(6.dp))
                     Text(
                         denomination,
                         color = Color.White,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         modifier = Modifier.offset(y = (-4).dp),
                     )
                 }
@@ -289,14 +289,14 @@ private fun AmountWidget(
         Text(
             stringResource(R.string.label_you_are_sending),
             color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 16.sp,
+            fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             stringResource(R.string.label_amount_they_will_receive),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
         )
         Spacer(Modifier.height(24.dp))
 
@@ -326,7 +326,7 @@ private fun AmountWidget(
                                 unitLabelWidth = with(density) { size.width.toDp() }
                             },
                 ) {
-                    Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, maxLines = 1)
+                    Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, maxLines = 1)
                     Spacer(Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.Filled.ArrowDropDown,
@@ -357,12 +357,12 @@ private fun AmountWidget(
             )
             Spacer(Modifier.size(12.dp))
             Column(horizontalAlignment = Alignment.Start) {
-                Text(accountShort, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                Text(accountShort, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 Spacer(Modifier.size(4.dp))
                 Text(
                     stringResource(R.string.label_main),
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -445,14 +445,14 @@ private fun KeyValueRow(
         Text(
             key,
             color = keyColor,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             fontWeight = if (boldKey) FontWeight.SemiBold else FontWeight.Normal,
             modifier = Modifier.weight(1f),
         )
         Text(
             value,
             color = valueColor,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             fontWeight = if (boldValue) FontWeight.SemiBold else FontWeight.Normal,
             textAlign = TextAlign.Right,
             modifier = Modifier.weight(2f),
@@ -568,7 +568,7 @@ private fun SwipeToSendStub(
             Text(
                 text = text,
                 color = displayColor,
-                fontSize = 18.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.align(Alignment.Center),
@@ -587,7 +587,7 @@ private fun SwipeToSendStub(
                     Text(
                         text = "sending",
                         color = Color.White,
-                        fontSize = 18.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                     ThreeDotsAnimation()
@@ -602,7 +602,7 @@ private fun SwipeToSendStub(
                     Text(
                         text = "sent",
                         color = Color.White,
-                        fontSize = 18.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Icon(
@@ -621,7 +621,7 @@ private fun SwipeToSendStub(
                     Text(
                         text = "error",
                         color = Color.White,
-                        fontSize = 18.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Icon(

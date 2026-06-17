@@ -65,6 +65,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.findActivity
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
@@ -187,7 +188,7 @@ fun BackupVerifyScreen(
             if (verifyReport != null) {
                 VerifyResultContent(verifyReport!!)
             } else {
-                Text("Backup File", style = MaterialTheme.typography.titleSmall)
+                Text("Backup File", style = MaterialTheme.typography.bodySmall)
 
                 OutlinedButton(
                     onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
@@ -203,7 +204,7 @@ fun BackupVerifyScreen(
                 }
 
                 if (fileData != null) {
-                    Text("Backup Password", style = MaterialTheme.typography.titleSmall)
+                    Text("Backup Password", style = MaterialTheme.typography.bodySmall)
 
                     OutlinedTextField(
                         value = password,
@@ -362,7 +363,7 @@ fun VerifyResultContent(report: BackupVerifyReport) {
         }
     }
 
-    Text("Backup Info", style = MaterialTheme.typography.titleSmall)
+    Text("Backup Info", style = MaterialTheme.typography.bodySmall)
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -377,12 +378,12 @@ fun VerifyResultContent(report: BackupVerifyReport) {
         }
     }
 
-    Text("Wallets", style = MaterialTheme.typography.titleSmall)
+    Text("Wallets", style = MaterialTheme.typography.bodySmall)
     report.wallets.forEach { wallet ->
         WalletSummaryCard(wallet)
     }
 
-    Text("Settings", style = MaterialTheme.typography.titleSmall)
+    Text("Settings", style = MaterialTheme.typography.bodySmall)
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
             report.fiatCurrency?.let { fiat ->
@@ -424,7 +425,7 @@ fun WalletSummaryCard(wallet: BackupWalletSummary) {
                 Text(wallet.name, fontWeight = FontWeight.Medium)
                 Text(
                     if (wallet.alreadyOnDevice) "Already on device" else "New",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.caption,
                     fontWeight = FontWeight.Medium,
                     color = if (wallet.alreadyOnDevice) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
                     modifier = Modifier
@@ -512,7 +513,7 @@ fun MetadataItem(
         )
         Text(
             text,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.caption,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
 import org.bitcoinppl.cove_core.WalletMode
@@ -163,7 +164,7 @@ internal fun CloudBackupHeaderSection(
             ) {
                 Text(
                     title,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.primaryText,
                 )
@@ -174,7 +175,7 @@ internal fun CloudBackupHeaderSection(
                         text = "Last synced ${cloudBackupFormattedDate(it)}",
                         color = colors.secondaryText,
                         iconSize = 14.dp,
-                        textStyle = MaterialTheme.typography.bodySmall,
+                        textStyle = MaterialTheme.typography.caption,
                     )
                 }
 
@@ -193,7 +194,7 @@ internal fun CloudBackupHeaderSection(
                     }
                     Text(
                         label,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.caption,
                         color = tint,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -326,7 +327,7 @@ private fun WalletItemRow(
                 Text(
                     item.name,
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.primaryText,
                     maxLines = 1,
@@ -358,7 +359,7 @@ private fun WalletItemRow(
                     modifier = Modifier.widthIn(max = 70.dp),
                 )
                 updatedAt?.let {
-                    Text("•", color = colors.secondaryText, style = MaterialTheme.typography.bodySmall)
+                    Text("•", color = colors.secondaryText, style = MaterialTheme.typography.caption)
                     CloudBackupIconText(
                         icon = Icons.Default.CalendarToday,
                         text = it,
@@ -403,7 +404,7 @@ private fun StatusBadge(
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(12.dp))
             Text(
                 label,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.caption,
                 color = color,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

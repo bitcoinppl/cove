@@ -43,7 +43,7 @@ fun QrCodeImportScreen(app: AppManager, modifier: Modifier = Modifier) {
                         Text(
                             text = "?",
                             color = Color.White,
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium,
                         )
                     }
@@ -124,7 +124,7 @@ private fun HelpSheet(onDismiss: () -> Unit) {
         ) {
             Text(
                 text = "How do I get my wallet export QR code?",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
 
@@ -133,7 +133,7 @@ private fun HelpSheet(onDismiss: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "ColdCard Q1",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
                     Text("1. Go to 'Advanced / Tools'")
@@ -148,7 +148,7 @@ private fun HelpSheet(onDismiss: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "ColdCard MK3/MK4",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
                     Text("1. Go to 'Advanced / Tools'")
@@ -163,7 +163,7 @@ private fun HelpSheet(onDismiss: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "Sparrow Desktop",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
                     Text("1. Click on Settings, in the left side bar")
@@ -179,7 +179,7 @@ private fun HelpSheet(onDismiss: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "Other Hardware Wallets",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
                     Text("1. In your hardware wallet, go to settings")

@@ -210,7 +210,7 @@ fun SecretWordsScreen(
                         Text(
                             text = errorMessage ?: stringResource(R.string.label_loading),
                             color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 16.sp,
+                            fontSize = 17.sp,
                         )
                     }
                 }
@@ -234,14 +234,14 @@ fun SecretWordsScreen(
 
                     Text(
                         text = stringResource(R.string.label_recovery_words_body),
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         color = Color.White.copy(alpha = 0.75f),
                         lineHeight = 18.sp,
                     )
 
                     Text(
                         text = stringResource(R.string.label_recovery_words_secure_note),
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = 0.9f),
                     )

@@ -54,7 +54,7 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                         Text(
                             text = "?",
                             color = Color.White,
-                            fontSize = 24.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Medium,
                         )
                     }

@@ -125,7 +125,7 @@ fun RecoveryWordChip(
             AutoSizeText(
                 text = "$index.",
                 color = CoveColor.midnightBlue,
-                maxFontSize = 14.sp,
+                maxFontSize = 12.sp,
                 minimumScaleFactor = 0.5f,
             )
             Spacer(Modifier.width(8.dp))
@@ -135,7 +135,7 @@ fun RecoveryWordChip(
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
-                maxFontSize = 14.sp,
+                maxFontSize = 12.sp,
                 minimumScaleFactor = 0.75f,
             )
         }

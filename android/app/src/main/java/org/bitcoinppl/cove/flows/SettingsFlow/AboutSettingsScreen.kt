@@ -442,7 +442,7 @@ private fun AboutRow(
     label: String,
     value: String,
     onClick: (() -> Unit)? = null,
-    valueStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
+    valueStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge,
 ) {
     Row(
         modifier =

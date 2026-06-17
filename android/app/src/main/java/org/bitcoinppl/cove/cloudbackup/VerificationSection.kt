@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
@@ -274,7 +275,7 @@ private fun VerifiedSummary(
             items.forEach { item ->
                 Text(
                     item,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.caption,
                     color = color,
                 )
             }
@@ -285,7 +286,7 @@ private fun VerifiedSummary(
 
     Text(
         items.joinToString(" • "),
-        style = MaterialTheme.typography.labelSmall,
+        style = MaterialTheme.typography.caption,
         color = color,
     )
 }

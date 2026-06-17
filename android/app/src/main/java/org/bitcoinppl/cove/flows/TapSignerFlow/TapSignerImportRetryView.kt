@@ -88,7 +88,7 @@ fun TapSignerImportRetryView(
             ) {
                 Text(
                     text = "Import Failed",
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                 )
 

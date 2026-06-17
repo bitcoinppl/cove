@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.CloudRestoreProviderHint
 import org.bitcoinppl.cove_core.OnboardingStorageSelection
 import java.time.Instant
@@ -104,7 +105,7 @@ internal fun CloudCheckContent() {
             Text(
                 text = "This can take a few minutes, please be patient",
                 color = OnboardingTextSecondary,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
             )
         }
@@ -197,7 +198,7 @@ internal fun OnboardingTermsScreen(
                 Text(
                     text = "By checking these boxes, you accept and agree to the above terms.",
                     color = CoveColor.coveLightGray.copy(alpha = 0.50f),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
 
                 Spacer(modifier = Modifier.size(20.dp))
@@ -483,7 +484,7 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
             Text(
                 text = "Recommended",
                 color = OnboardingGradientLight.copy(alpha = 0.92f),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.caption,
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -654,7 +655,7 @@ private fun ProviderDetailItem(
             Text(
                 text = label,
                 color = CoveColor.coveLightGray.copy(alpha = 0.64f),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.caption,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(

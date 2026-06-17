@@ -86,7 +86,9 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.nfc.NfcWriteSheet
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
+import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove.views.QrExportView
@@ -307,7 +309,7 @@ fun SendFlowHardwareScreen(
                         Column(modifier = Modifier.padding(top = 16.dp)) {
                             Text(
                                 text = "You're sending",
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.padding(top = 6.dp),
@@ -358,7 +360,7 @@ fun SendFlowHardwareScreen(
 
                             Text(
                                 text = fiatAmount,
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.title3,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             )
                         }
@@ -701,21 +703,21 @@ private fun BalanceHeader(
                 Text(
                     text = "Balance",
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = balanceString,
                         color = Color.White,
-                        fontSize = 24.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.size(6.dp))
                     Text(
                         text = denomination,
                         color = Color.White,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         modifier = Modifier.offset(y = (-4).dp),
                     )
                 }
@@ -755,7 +757,7 @@ private fun AccountSection(metadata: WalletMetadata?) {
             metadata?.name?.let { name ->
                 Text(
                     text = name,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -1046,7 +1048,7 @@ private fun TransactionDetailsSheet(
         ) {
             Text(
                 text = "Close",
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.caption,
                 modifier = Modifier.padding(vertical = 4.dp),
             )
         }

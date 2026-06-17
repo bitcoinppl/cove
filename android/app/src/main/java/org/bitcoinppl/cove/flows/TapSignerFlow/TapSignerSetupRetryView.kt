@@ -93,7 +93,7 @@ fun TapSignerSetupRetryView(
             ) {
                 Text(
                     text = "Setup Incomplete",
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                 )
 

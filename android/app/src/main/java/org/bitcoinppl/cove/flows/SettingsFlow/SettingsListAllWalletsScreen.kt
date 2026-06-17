@@ -231,7 +231,7 @@ private fun WalletRow(
         // wallet name
         Text(
             text = wallet.name,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
             modifier =
                 Modifier
                     .weight(1f)

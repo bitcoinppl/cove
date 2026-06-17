@@ -19,6 +19,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
@@ -58,7 +59,7 @@ fun FeeRateSelectorSheet(
             // title
             Text(
                 text = "Network Fee",
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.title3,
                 fontWeight = FontWeight.Bold,
                 modifier =
                     Modifier
@@ -228,7 +229,7 @@ private fun FeeOptionCard(
                 ) {
                     Text(
                         text = feeOption.feeSpeed().toString(),
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
                         color = contentColor,
                     )
@@ -257,7 +258,7 @@ private fun FeeOptionCard(
 
                 AsyncText(
                     text = totalFee?.let { "${it.satsString()} sats" },
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium,
                     color = contentColor,
                 )

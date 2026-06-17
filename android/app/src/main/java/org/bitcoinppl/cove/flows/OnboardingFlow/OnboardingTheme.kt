@@ -419,7 +419,7 @@ internal fun OnboardingSecondaryButton(
         Text(
             text = text,
             modifier = Modifier.padding(vertical = 17.dp, horizontal = 18.dp),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
         )
     }

@@ -200,7 +200,7 @@ fun HotWalletSelectScreen(
                             text = stringResource(R.string.btn_wallet_import),
                             color = Color.White,
                             fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp,
+                            fontSize = 15.sp,
                             textAlign = TextAlign.Center,
                             modifier =
                                 Modifier

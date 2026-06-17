@@ -32,13 +32,13 @@ fun ConfirmationIndicatorView(
         Text(
             text = stringResource(R.string.label_confirmations),
             color = MaterialTheme.colorScheme.secondary,
-            fontSize = 14.sp,
+            fontSize = 17.sp,
         )
 
         Text(
             text = "$current of $total",
             fontWeight = FontWeight.Bold,
-            fontSize = 16.sp,
+            fontSize = 17.sp,
         )
 
         Row(

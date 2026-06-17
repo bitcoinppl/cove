@@ -42,6 +42,7 @@ import org.bitcoinppl.cove_core.QrScanner
 import org.bitcoinppl.cove_core.ScanProgress
 import org.bitcoinppl.cove_core.ScanResult
 import org.bitcoinppl.cove_core.StringOrData
+import org.bitcoinppl.cove.ui.theme.caption
 import java.util.concurrent.Executors
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -426,7 +427,7 @@ private fun QrScannerContent(
 
                             Text(
                                 text = detail,
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.caption,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White.copy(alpha = 0.7f),
                             )

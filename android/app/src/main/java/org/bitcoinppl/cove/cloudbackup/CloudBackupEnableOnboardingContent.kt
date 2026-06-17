@@ -51,6 +51,7 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingPrimaryButton
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingStatusHero
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTextSecondary
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 
 internal enum class CloudBackupEnableOnboardingContext {
@@ -88,7 +89,7 @@ internal fun CloudBackupEnableOnboardingView(
                 Text(
                     text = cancelButtonTitle,
                     color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier =
                         Modifier
@@ -155,7 +156,7 @@ internal fun CloudBackupEnableOnboardingView(
                                 Text(
                                     text = "Secured with Passkey + Google Drive",
                                     color = CoveColor.coveLightGray.copy(alpha = 0.75f),
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.caption,
                                 )
                             }
                         }
@@ -167,9 +168,9 @@ internal fun CloudBackupEnableOnboardingView(
                                         "Your wallet backup is end-to-end encrypted before upload and stored in Google Drive. Only your passkey can decrypt it, so both are needed to restore your wallets."
                                     CloudBackupEnableOnboardingContext.HARDWARE_IMPORT ->
                                         "This backs up your imported hardware wallet configuration and labels in Google Drive, and it also enables backup for compatible wallets you create in Cove later. Your hardware wallet seed and private keys are not backed up by Cove."
-                                },
+                            },
                             color = CoveColor.coveLightGray.copy(alpha = 0.60f),
-                            style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+                            style = MaterialTheme.typography.caption.copy(lineHeight = 18.sp),
                         )
                     }
                 }

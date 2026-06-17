@@ -32,7 +32,7 @@ fun NfcHelpSheet(modifier: Modifier = Modifier) {
     ) {
         Text(
             text = "How do I import using NFC?",
-            fontSize = 24.sp,
+            fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 18.dp),
         )
@@ -41,7 +41,7 @@ fun NfcHelpSheet(modifier: Modifier = Modifier) {
         Column(modifier = Modifier.padding(bottom = 32.dp)) {
             Text(
                 text = "ColdCard Q1",
-                fontSize = 20.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
@@ -62,7 +62,7 @@ fun NfcHelpSheet(modifier: Modifier = Modifier) {
         Column {
             Text(
                 text = "ColdCard MK4",
-                fontSize = 20.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
@@ -82,7 +82,7 @@ fun NfcHelpSheet(modifier: Modifier = Modifier) {
 private fun InstructionStep(text: String) {
     Text(
         text = text,
-        fontSize = 16.sp,
+        fontSize = 17.sp,
         lineHeight = 24.sp,
         modifier = Modifier.padding(bottom = 8.dp),
     )

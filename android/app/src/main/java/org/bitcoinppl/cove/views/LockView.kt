@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.ui.theme.callout
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -227,7 +228,7 @@ private fun PermissionsNeeded() {
     ) {
         Text(
             text = "Cove needs permissions to use biometric authentication to unlock your wallet. Please open settings and enable biometric authentication.",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.callout,
             textAlign = TextAlign.Center,
             color = Color.White,
         )
@@ -317,7 +318,7 @@ private fun BiometricView(
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Tap to Unlock",
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     color = Color.Gray,
                 )
             }

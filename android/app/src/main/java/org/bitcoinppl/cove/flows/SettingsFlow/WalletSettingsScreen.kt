@@ -158,7 +158,7 @@ fun WalletSettingsScreen(
                 title = {
                     AutoSizeText(
                         text = metadata.name,
-                        maxFontSize = 16.sp,
+                        maxFontSize = 17.sp,
                         minimumScaleFactor = 0.75f,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),

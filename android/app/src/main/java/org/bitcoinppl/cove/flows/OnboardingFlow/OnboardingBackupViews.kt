@@ -75,6 +75,7 @@ import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingView
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.CloudBackupConfiguredState
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
@@ -391,7 +392,7 @@ private fun OnboardingWordCard(
                 Text(
                     text = index.toString(),
                     color = OnboardingGradientLight,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.caption,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -719,8 +720,7 @@ internal fun OnboardingCloudBackupSuccessView(
             Text(
                 text = "Cloud Backup enabled successfully",
                 color = Color.White,
-                fontSize = 28.sp,
-                lineHeight = 34.sp,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
@@ -1028,7 +1028,7 @@ internal fun OnboardingExchangeFundingView(
                                     Text(
                                         text = "Deposit address",
                                         color = CoveColor.coveLightGray.copy(alpha = 0.72f),
-                                        style = MaterialTheme.typography.labelSmall,
+                                        style = MaterialTheme.typography.caption,
                                         fontWeight = FontWeight.SemiBold,
                                     )
                                     Text(
