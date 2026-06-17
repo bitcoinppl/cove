@@ -10,7 +10,8 @@ use std::collections::HashMap;
 use xshell::{cmd, Shell};
 
 // Android build constants
-const ANDROID_TARGETS: &[&str] = &["aarch64-linux-android", "x86_64-linux-android"];
+const ANDROID_TARGETS: &[&str] =
+    &["aarch64-linux-android", "armv7-linux-androideabi", "x86_64-linux-android"];
 const JNI_LIBS_DIR: &str = "../android/app/src/main/jniLibs";
 const ANDROID_KOTLIN_DIR: &str = "../android/app/src/main/java";
 const BINDINGS_DIR: &str = "./bindings/kotlin";
@@ -67,6 +68,7 @@ impl BuildProfile {
 fn get_abi_mapping() -> HashMap<&'static str, &'static str> {
     let mut map = HashMap::new();
     map.insert("aarch64-linux-android", "arm64-v8a");
+    map.insert("armv7-linux-androideabi", "armeabi-v7a");
     map.insert("x86_64-linux-android", "x86_64");
     map
 }
@@ -302,7 +304,7 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
         print_success(&format!("APK saved to {}", apk_dest));
     }
 
-    // create native debug symbols zip (only valid ABIs for minSdk 33+)
+    // create native debug symbols zip for every ABI shipped in the app bundle
     let symbols_filename = format!("cove-{}-{}-symbols.zip", version_name, version_code);
     let symbols_path = format!("{}/Downloads/{}", home_dir, symbols_filename);
     let native_libs_path =
@@ -312,8 +314,7 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
         print_info("Creating native debug symbols zip...");
         let current_dir = sh.current_dir();
         sh.change_dir(native_libs_path);
-        // only include valid ABIs (arm64-v8a and x86_64 for minSdk 33+)
-        cmd!(sh, "zip -r {symbols_path} arm64-v8a x86_64")
+        cmd!(sh, "zip -r {symbols_path} arm64-v8a armeabi-v7a x86_64")
             .quiet()
             .run()
             .wrap_err("Failed to create debug symbols zip")?;
