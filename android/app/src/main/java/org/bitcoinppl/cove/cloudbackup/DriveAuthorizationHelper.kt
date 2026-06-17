@@ -33,6 +33,16 @@ internal data class DriveAccountIdentity(
     val normalizedEmail: String?
         get() = email?.trim()?.lowercase()?.takeIf(String::isNotBlank)
 
+    fun withMissingFieldsFrom(other: DriveAccountIdentity?): DriveAccountIdentity =
+        if (other == null) {
+            this
+        } else {
+            DriveAccountIdentity(
+                id = id?.takeIf(String::isNotBlank) ?: other.id,
+                email = normalizedEmail ?: other.normalizedEmail,
+            )
+        }
+
     fun matches(other: DriveAccountIdentity): Boolean {
         if (!id.isNullOrBlank() && !other.id.isNullOrBlank()) {
             return id == other.id

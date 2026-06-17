@@ -1130,12 +1130,20 @@ class AndroidCloudStorageAccess internal constructor(
         return access
     }
 
-    private suspend fun DriveAccessToken.withResolvedAccountIdentity(): DriveAccessToken =
-        if (account == null) {
-            copy(account = driveAccountIdentity(token))
-        } else {
-            this
+    private suspend fun DriveAccessToken.withResolvedAccountIdentity(): DriveAccessToken {
+        if (account?.normalizedEmail != null) {
+            return this
         }
+
+        val resolvedAccount = driveAccountIdentity(token)
+        val mergedAccount = account?.withMissingFieldsFrom(resolvedAccount) ?: resolvedAccount
+
+        return if (mergedAccount == account) {
+            this
+        } else {
+            copy(account = mergedAccount)
+        }
+    }
 
     private suspend fun driveAccountIdentity(token: String): DriveAccountIdentity? {
         return driveAccountIdentityFromAboutResponse(
