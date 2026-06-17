@@ -24,6 +24,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidCloudStorageAccessTest {
+    private val testDrivePathNames = DrivePathNames(
+        namespacesRootFolderName = "cspp-namespaces",
+        masterKeyFolderName = "master-key",
+        walletsFolderName = "wallets",
+        walletFilePrefix = "wallet-",
+    )
+
     @Test
     fun createUploadMetadataIncludesParents() {
         val metadata = createUploadMetadata(fileName = "wallet-record.json", parentId = "folder-123")
@@ -165,6 +172,30 @@ class AndroidCloudStorageAccessTest {
                 statusCode = HttpURLConnection.HTTP_FORBIDDEN,
                 body = driveErrorBody("insufficientPermissions"),
             )
+        }
+
+    @Test
+    fun cachingDriveAuthorizationReusesUpdatedTokenIdentity() =
+        runBlocking {
+            var now = 0L
+            val delegate = RecordingDriveAuthorization().apply {
+                account = null
+            }
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { now },
+                cacheWindowMs = 1_000,
+            )
+            val unresolved = authorization.accessToken(interactive = false)
+            val resolved = unresolved.copy(
+                account = DriveAccountIdentity(id = null, email = "person@example.com"),
+            )
+
+            authorization.updateCachedToken(resolved)
+
+            now = 500
+            assertEquals(resolved, authorization.accessToken(interactive = false))
+            assertEquals(listOf(false), delegate.accessRequests)
         }
 
     @Test
@@ -774,9 +805,17 @@ class AndroidCloudStorageAccessTest {
                     filesEndpoint = "${server.baseUrl}/files",
                     uploadEndpoint = "${server.baseUrl}/upload",
                 ),
+                drivePathNamesProvider = { testDrivePathNames },
             )
 
-            assertEquals(emptyList<String>(), storage.listNamespaces(CloudAccessPolicy.SILENT))
+            val namespacesResult = runCatching {
+                storage.listNamespaces(CloudAccessPolicy.SILENT)
+            }
+            assertTrue(
+                cloudStorageFailureMessage(namespacesResult.exceptionOrNull()),
+                namespacesResult.isSuccess,
+            )
+            assertEquals(emptyList<String>(), namespacesResult.getOrNull())
             assertEquals(listOf(false, false), authorization.accessRequests)
             assertEquals(listOf("token-1"), authorization.clearedTokens)
 
@@ -788,6 +827,26 @@ class AndroidCloudStorageAccessTest {
             )
         }
     }
+
+    private fun cloudStorageFailureMessage(error: Throwable?): String =
+        when (error) {
+            null -> "listNamespaces succeeded"
+            is CloudStorageException.AuthorizationRequired ->
+                "listNamespaces failed with AuthorizationRequired: ${error.v1}"
+            is CloudStorageException.NotAvailable ->
+                "listNamespaces failed with NotAvailable: ${error.v1}"
+            is CloudStorageException.NotFound ->
+                "listNamespaces failed with NotFound: ${error.v1}"
+            is CloudStorageException.Offline ->
+                "listNamespaces failed with Offline: ${error.v1}"
+            is CloudStorageException.QuotaExceeded ->
+                "listNamespaces failed with QuotaExceeded"
+            is CloudStorageException.UploadFailed ->
+                "listNamespaces failed with UploadFailed: ${error.v1}"
+            is CloudStorageException.DownloadFailed ->
+                "listNamespaces failed with DownloadFailed: ${error.v1}"
+            else -> "listNamespaces failed with ${error.javaClass.name}: ${error.message}"
+        }
 
     private fun driveErrorBody(reason: String): String =
         """
@@ -861,7 +920,7 @@ class AndroidCloudStorageAccessTest {
 
     private class RecordingDriveAuthorization : DriveAuthorization {
         var token = "token-1"
-        var account = DriveAccountIdentity(id = "account-1", email = "person@example.com")
+        var account: DriveAccountIdentity? = DriveAccountIdentity(id = "account-1", email = "person@example.com")
         val accessRequests = mutableListOf<Boolean>()
         val clearedTokens = mutableListOf<String>()
 

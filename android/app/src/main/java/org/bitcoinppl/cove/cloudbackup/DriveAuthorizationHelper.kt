@@ -166,6 +166,8 @@ internal fun clearCloudBackupDriveAccountBinding(context: Context) {
 internal interface DriveAuthorization {
     suspend fun accessToken(interactive: Boolean): DriveAccessToken
 
+    suspend fun updateCachedToken(accessToken: DriveAccessToken) = Unit
+
     suspend fun clearToken(token: String)
 }
 
@@ -216,6 +218,24 @@ internal class CachingDriveAuthorization(
             }
 
             delegate.clearToken(token)
+        }
+    }
+
+    override suspend fun updateCachedToken(accessToken: DriveAccessToken) {
+        tokenMutex.withLock {
+            val cached = cachedAccessToken ?: return@withLock
+            val currentCacheKey = cacheKey()
+            if (
+                currentCacheKey == null ||
+                    cached.cacheKey != currentCacheKey ||
+                    cached.expiresAtMs <= elapsedRealtime() ||
+                    cached.token.token != accessToken.token
+            ) {
+                cachedAccessToken = null
+                return@withLock
+            }
+
+            cachedAccessToken = cached.copy(token = accessToken)
         }
     }
 
