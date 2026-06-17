@@ -75,6 +75,12 @@ fun SettingsContainer(
                         modifier = modifier,
                     )
                 }
+                is SettingsRoute.BlockExplorer -> {
+                    BlockExplorerSettingsScreen(
+                        app = app,
+                        modifier = modifier,
+                    )
+                }
                 is SettingsRoute.FiatCurrency -> {
                     FiatCurrencySettingsScreen(
                         app = app,

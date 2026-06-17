@@ -378,12 +378,9 @@ impl TransactionDetails {
 
     #[uniffi::method]
     pub fn transaction_url(&self) -> String {
-        match self.network {
-            Network::Bitcoin => format!("https://mempool.space/tx/{}", self.tx_id.0),
-            Network::Testnet => format!("https://mempool.space/testnet/tx/{}", self.tx_id.0),
-            Network::Testnet4 => format!("https://mempool.space/testnet4/tx/{}", self.tx_id.0),
-            Network::Signet => format!("https://mutinynet.com/tx/{}", self.tx_id.0),
-        }
+        Database::global()
+            .global_config
+            .custom_block_explorer_transaction_url(self.network, self.tx_id.0.to_string())
     }
 
     #[uniffi::method]

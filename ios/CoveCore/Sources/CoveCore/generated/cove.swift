@@ -4102,13 +4102,21 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func authType()  -> AuthType
 
+    func clearCustomBlockExplorer(network: Network) throws
+
     func clearSelectedWallet() throws
 
     func colorScheme()  -> ColorSchemeSelection
 
+    func customBlockExplorer(network: Network)  -> String?
+
     func delete(key: GlobalConfigKey) throws
 
     func deleteHashedPinCode() throws
+
+    func effectiveBlockExplorerHost(network: Network)  -> String
+
+    func effectiveBlockExplorerPreview(network: Network)  -> String
 
     func get(key: GlobalConfigKey) throws  -> String?
 
@@ -4117,6 +4125,8 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     func isInDecoyMode()  -> Bool
 
     func isInMainMode()  -> Bool
+
+    func previewCustomBlockExplorer(network: Network, input: String) throws  -> String
 
     func selectWallet(id: WalletId) throws
 
@@ -4131,6 +4141,8 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     func set(key: GlobalConfigKey, value: String) throws
 
     func setColorScheme(colorScheme: ColorSchemeSelection) throws
+
+    func setCustomBlockExplorer(network: Network, input: String) throws  -> String?
 
     func setHashedPinCode(hashedPinCode: String) throws
 
@@ -4203,6 +4215,15 @@ open func authType() -> AuthType  {
 })
 }
 
+open func clearCustomBlockExplorer(network: Network)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_clear_custom_block_explorer(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
+    )
+}
+}
+
 open func clearSelectedWallet()throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_globalconfigtable_clear_selected_wallet(
@@ -4216,6 +4237,16 @@ open func colorScheme() -> ColorSchemeSelection  {
         uniffiCallStatus in
     uniffi_cove_fn_method_globalconfigtable_colorscheme(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func customBlockExplorer(network: Network) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_custom_block_explorer(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
     )
 })
 }
@@ -4235,6 +4266,26 @@ open func deleteHashedPinCode()throws   {try rustCallWithError(FfiConverterTypeD
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
+}
+
+open func effectiveBlockExplorerHost(network: Network) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_effective_block_explorer_host(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
+    )
+})
+}
+
+open func effectiveBlockExplorerPreview(network: Network) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_effective_block_explorer_preview(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
+    )
+})
 }
 
 open func get(key: GlobalConfigKey)throws  -> String?  {
@@ -4270,6 +4321,17 @@ open func isInMainMode() -> Bool  {
         uniffiCallStatus in
     uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func previewCustomBlockExplorer(network: Network, input: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_preview_custom_block_explorer(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNetwork_lower(network),
+        FfiConverterString.lower(input),uniffiCallStatus
     )
 })
 }
@@ -4336,6 +4398,17 @@ open func setColorScheme(colorScheme: ColorSchemeSelection)throws   {try rustCal
         FfiConverterTypeColorSchemeSelection_lower(colorScheme),uniffiCallStatus
     )
 }
+}
+
+open func setCustomBlockExplorer(network: Network, input: String)throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_set_custom_block_explorer(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNetwork_lower(network),
+        FfiConverterString.lower(input),uniffiCallStatus
+    )
+})
 }
 
 open func setHashedPinCode(hashedPinCode: String)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
@@ -24340,6 +24413,8 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case decoySelectedWalletId
     case lockedAt
     case onboardingProgress
+    case customBlockExplorer(Network
+    )
 
 
 
@@ -24389,6 +24464,9 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case 13: return .lockedAt
 
         case 14: return .onboardingProgress
+
+        case 15: return .customBlockExplorer(try FfiConverterTypeNetwork.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -24454,6 +24532,11 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case .onboardingProgress:
             writeInt(&buf, Int32(14))
 
+
+        case let .customBlockExplorer(v1):
+            writeInt(&buf, Int32(15))
+            FfiConverterTypeNetwork.write(v1, into: &buf)
+
         }
     }
 }
@@ -24485,6 +24568,8 @@ enum GlobalConfigTableError: Swift.Error, Equatable, Hashable, Foundation.Locali
     case Read(String
     )
     case PinCodeMustBeHashed
+    case InvalidCustomBlockExplorer(String
+    )
 
 
 
@@ -24532,6 +24617,9 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 3: return .PinCodeMustBeHashed
+        case 4: return .InvalidCustomBlockExplorer(
+            try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -24556,6 +24644,11 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
 
         case .PinCodeMustBeHashed:
             writeInt(&buf, Int32(3))
+
+
+        case let .InvalidCustomBlockExplorer(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
 
         }
     }
@@ -30914,6 +31007,7 @@ public enum SettingsRoute: Equatable, Hashable {
     case network
     case appearance
     case node
+    case blockExplorer
     case fiatCurrency
     case wallet(id: WalletId, route: WalletSettingsRoute
     )
@@ -30949,16 +31043,18 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
 
         case 4: return .node
 
-        case 5: return .fiatCurrency
+        case 5: return .blockExplorer
 
-        case 6: return .wallet(id: try FfiConverterTypeWalletId.read(from: &buf), route: try FfiConverterTypeWalletSettingsRoute.read(from: &buf)
+        case 6: return .fiatCurrency
+
+        case 7: return .wallet(id: try FfiConverterTypeWalletId.read(from: &buf), route: try FfiConverterTypeWalletSettingsRoute.read(from: &buf)
         )
 
-        case 7: return .allWallets
+        case 8: return .allWallets
 
-        case 8: return .about
+        case 9: return .about
 
-        case 9: return .cloudBackup
+        case 10: return .cloudBackup
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -30984,26 +31080,30 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
 
 
-        case .fiatCurrency:
+        case .blockExplorer:
             writeInt(&buf, Int32(5))
 
 
-        case let .wallet(id,route):
+        case .fiatCurrency:
             writeInt(&buf, Int32(6))
+
+
+        case let .wallet(id,route):
+            writeInt(&buf, Int32(7))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterTypeWalletSettingsRoute.write(route, into: &buf)
 
 
         case .allWallets:
-            writeInt(&buf, Int32(7))
-
-
-        case .about:
             writeInt(&buf, Int32(8))
 
 
-        case .cloudBackup:
+        case .about:
             writeInt(&buf, Int32(9))
+
+
+        case .cloudBackup:
+            writeInt(&buf, Int32(10))
 
         }
     }
@@ -39744,16 +39844,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_authtype() != 62043) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_clear_custom_block_explorer() != 40308) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet() != 50864) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_colorscheme() != 59965) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_custom_block_explorer() != 16998) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_delete() != 58450) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code() != 24897) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_host() != 22806) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_preview() != 21192) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_get() != 65389) {
@@ -39766,6 +39878,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode() != 25736) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer() != 36136) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 33046) {
@@ -39787,6 +39902,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_setcolorscheme() != 42967) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer() != 26335) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 7049) {

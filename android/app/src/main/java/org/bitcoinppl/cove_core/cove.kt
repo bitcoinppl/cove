@@ -1285,13 +1285,21 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_authtype(
     ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_clear_custom_block_explorer(
+    ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_colorscheme(
     ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_custom_block_explorer(
+    ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_delete(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code(
+    ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_host(
+    ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_preview(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_get(
     ): Short
@@ -1300,6 +1308,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_globalconfigtable_is_in_decoy_mode(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode(
+    ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_select_wallet(
     ): Short
@@ -1314,6 +1324,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_globalconfigtable_set(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_setcolorscheme(
+    ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code(
     ): Short
@@ -2243,14 +2255,22 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_authtype(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_globalconfigtable_clear_custom_block_explorer(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_clear_selected_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_colorscheme(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBufferColorSchemeSelection.ByValue
+    external fun uniffi_cove_fn_method_globalconfigtable_custom_block_explorer(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_delete(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_delete_hashed_pin_code(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_globalconfigtable_effective_block_explorer_host(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_globalconfigtable_effective_block_explorer_preview(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_get(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_hashed_pin_code(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2259,6 +2279,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_globalconfigtable_preview_custom_block_explorer(`ptr`: Long,`network`: RustBufferNetwork.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_selectedfiatcurrency(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2273,6 +2295,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_setcolorscheme(`ptr`: Long,`colorScheme`: RustBufferColorSchemeSelection.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_globalconfigtable_set_custom_block_explorer(`ptr`: Long,`network`: RustBufferNetwork.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(`ptr`: Long,`hashedPinCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_set_selected_network(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3898,16 +3922,28 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_globalconfigtable_authtype() != 62043.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_clear_custom_block_explorer() != 40308.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet() != 50864.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_colorscheme() != 59965.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_custom_block_explorer() != 16998.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_delete() != 58450.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code() != 24897.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_host() != 22806.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_preview() != 21192.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_get() != 65389.toShort()) {
@@ -3920,6 +3956,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode() != 25736.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer() != 36136.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 33046.toShort()) {
@@ -3941,6 +3980,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_setcolorscheme() != 42967.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer() != 26335.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 7049.toShort()) {
@@ -12110,13 +12152,21 @@ public interface GlobalConfigTableInterface {
 
     fun `authType`(): AuthType
 
+    fun `clearCustomBlockExplorer`(`network`: Network)
+
     fun `clearSelectedWallet`()
 
     fun `colorScheme`(): ColorSchemeSelection
 
+    fun `customBlockExplorer`(`network`: Network): kotlin.String?
+
     fun `delete`(`key`: GlobalConfigKey)
 
     fun `deleteHashedPinCode`()
+
+    fun `effectiveBlockExplorerHost`(`network`: Network): kotlin.String
+
+    fun `effectiveBlockExplorerPreview`(`network`: Network): kotlin.String
 
     fun `get`(`key`: GlobalConfigKey): kotlin.String?
 
@@ -12125,6 +12175,8 @@ public interface GlobalConfigTableInterface {
     fun `isInDecoyMode`(): kotlin.Boolean
 
     fun `isInMainMode`(): kotlin.Boolean
+
+    fun `previewCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String
 
     fun `selectWallet`(`id`: WalletId)
 
@@ -12139,6 +12191,8 @@ public interface GlobalConfigTableInterface {
     fun `set`(`key`: GlobalConfigKey, `value`: kotlin.String)
 
     fun `setColorScheme`(`colorScheme`: ColorSchemeSelection)
+
+    fun `setCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String?
 
     fun `setHashedPinCode`(`hashedPinCode`: kotlin.String)
 
@@ -12266,6 +12320,20 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 
 
 
+    @Throws(DatabaseException::class)override fun `clearCustomBlockExplorer`(`network`: Network)
+        =
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_clear_custom_block_explorer(
+        it,
+
+        FfiConverterTypeNetwork.lower(`network`),_status)
+}
+    }
+
+
+
+
     @Throws(DatabaseException::class)override fun `clearSelectedWallet`()
         =
     callWithHandle {
@@ -12285,6 +12353,20 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_colorscheme(
         it,
         _status)
+}
+    }
+    )
+    }
+
+
+    override fun `customBlockExplorer`(`network`: Network): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_custom_block_explorer(
+        it,
+
+        FfiConverterTypeNetwork.lower(`network`),_status)
 }
     }
     )
@@ -12316,6 +12398,34 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 }
     }
 
+
+
+    override fun `effectiveBlockExplorerHost`(`network`: Network): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_effective_block_explorer_host(
+        it,
+
+        FfiConverterTypeNetwork.lower(`network`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `effectiveBlockExplorerPreview`(`network`: Network): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_effective_block_explorer_preview(
+        it,
+
+        FfiConverterTypeNetwork.lower(`network`),_status)
+}
+    }
+    )
+    }
 
 
 
@@ -12367,6 +12477,22 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(
         it,
         _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(DatabaseException::class)override fun `previewCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_preview_custom_block_explorer(
+        it,
+
+        FfiConverterTypeNetwork.lower(`network`),
+        FfiConverterString.lower(`input`),_status)
 }
     }
     )
@@ -12466,6 +12592,22 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 }
     }
 
+
+
+
+    @Throws(DatabaseException::class)override fun `setCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_custom_block_explorer(
+        it,
+
+        FfiConverterTypeNetwork.lower(`network`),
+        FfiConverterString.lower(`input`),_status)
+}
+    }
+    )
+    }
 
 
 
@@ -40753,6 +40895,15 @@ sealed class GlobalConfigKey {
     object OnboardingProgress : GlobalConfigKey()
 
 
+    data class CustomBlockExplorer(
+        val v1: org.bitcoinppl.cove_core.types.Network) : GlobalConfigKey()
+
+    {
+
+
+        companion object
+    }
+
 
 
 
@@ -40785,6 +40936,9 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             12 -> GlobalConfigKey.DecoySelectedWalletId
             13 -> GlobalConfigKey.LockedAt
             14 -> GlobalConfigKey.OnboardingProgress
+            15 -> GlobalConfigKey.CustomBlockExplorer(
+                FfiConverterTypeNetwork.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -40875,6 +41029,13 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 4UL
             )
         }
+        is GlobalConfigKey.CustomBlockExplorer -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeNetwork.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: GlobalConfigKey, buf: ByteBuffer) {
@@ -40936,6 +41097,11 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 buf.putInt(14)
                 Unit
             }
+            is GlobalConfigKey.CustomBlockExplorer -> {
+                buf.putInt(15)
+                FfiConverterTypeNetwork.write(value.v1, buf)
+                Unit
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
@@ -40968,6 +41134,14 @@ sealed class GlobalConfigTableException: kotlin.Exception() {
         ) : GlobalConfigTableException() {
         override val message
             get() = ""
+    }
+
+    class InvalidCustomBlockExplorer(
+
+        val v1: kotlin.String
+        ) : GlobalConfigTableException() {
+        override val message
+            get() = "v1=${ v1 }"
     }
 
 
@@ -41005,6 +41179,9 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
                 FfiConverterString.read(buf),
                 )
             3 -> GlobalConfigTableException.PinCodeMustBeHashed()
+            4 -> GlobalConfigTableException.InvalidCustomBlockExplorer(
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -41025,6 +41202,11 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is GlobalConfigTableException.InvalidCustomBlockExplorer -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
         }
     }
 
@@ -41042,6 +41224,11 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
             }
             is GlobalConfigTableException.PinCodeMustBeHashed -> {
                 buf.putInt(3)
+                Unit
+            }
+            is GlobalConfigTableException.InvalidCustomBlockExplorer -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -48850,6 +49037,9 @@ sealed class SettingsRoute {
     object Node : SettingsRoute()
 
 
+    object BlockExplorer : SettingsRoute()
+
+
     object FiatCurrency : SettingsRoute()
 
 
@@ -48892,14 +49082,15 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
             2 -> SettingsRoute.Network
             3 -> SettingsRoute.Appearance
             4 -> SettingsRoute.Node
-            5 -> SettingsRoute.FiatCurrency
-            6 -> SettingsRoute.Wallet(
+            5 -> SettingsRoute.BlockExplorer
+            6 -> SettingsRoute.FiatCurrency
+            7 -> SettingsRoute.Wallet(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterTypeWalletSettingsRoute.read(buf),
                 )
-            7 -> SettingsRoute.AllWallets
-            8 -> SettingsRoute.About
-            9 -> SettingsRoute.CloudBackup
+            8 -> SettingsRoute.AllWallets
+            9 -> SettingsRoute.About
+            10 -> SettingsRoute.CloudBackup
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -48924,6 +49115,12 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
             )
         }
         is SettingsRoute.Node -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SettingsRoute.BlockExplorer -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -48981,26 +49178,30 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
                 buf.putInt(4)
                 Unit
             }
-            is SettingsRoute.FiatCurrency -> {
+            is SettingsRoute.BlockExplorer -> {
                 buf.putInt(5)
                 Unit
             }
-            is SettingsRoute.Wallet -> {
+            is SettingsRoute.FiatCurrency -> {
                 buf.putInt(6)
+                Unit
+            }
+            is SettingsRoute.Wallet -> {
+                buf.putInt(7)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
                 FfiConverterTypeWalletSettingsRoute.write(value.`route`, buf)
                 Unit
             }
             is SettingsRoute.AllWallets -> {
-                buf.putInt(7)
-                Unit
-            }
-            is SettingsRoute.About -> {
                 buf.putInt(8)
                 Unit
             }
-            is SettingsRoute.CloudBackup -> {
+            is SettingsRoute.About -> {
                 buf.putInt(9)
+                Unit
+            }
+            is SettingsRoute.CloudBackup -> {
+                buf.putInt(10)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

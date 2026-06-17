@@ -8,6 +8,10 @@ use crate::{
     app::reconcile::{Update, Updater},
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
+    custom_block_explorer::{
+        CustomBlockExplorerError, CustomBlockExplorerTemplate, PREVIEW_TXID,
+        effective_transaction_url,
+    },
     fiat::FiatCurrency,
     network::Network,
     node::Node,
@@ -37,6 +41,7 @@ pub enum GlobalConfigKey {
     DecoySelectedWalletId,
     LockedAt,
     OnboardingProgress,
+    CustomBlockExplorer(Network),
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -59,6 +64,16 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::DecoySelectedWalletId => "decoy_selected_wallet_id",
             GlobalConfigKey::LockedAt => "locked_at",
             GlobalConfigKey::OnboardingProgress => "onboarding_progress",
+            GlobalConfigKey::CustomBlockExplorer(Network::Bitcoin) => {
+                "custom_block_explorer_bitcoin"
+            }
+            GlobalConfigKey::CustomBlockExplorer(Network::Testnet) => {
+                "custom_block_explorer_testnet"
+            }
+            GlobalConfigKey::CustomBlockExplorer(Network::Testnet4) => {
+                "custom_block_explorer_testnet4"
+            }
+            GlobalConfigKey::CustomBlockExplorer(Network::Signet) => "custom_block_explorer_signet",
         }
     }
 }
@@ -88,6 +103,15 @@ pub enum GlobalConfigTableError {
 
     #[error("pin code must be hashed before saving")]
     PinCodeMustBeHashed,
+
+    #[error("invalid custom block explorer: {0}")]
+    InvalidCustomBlockExplorer(String),
+}
+
+impl From<CustomBlockExplorerError> for GlobalConfigTableError {
+    fn from(error: CustomBlockExplorerError) -> Self {
+        Self::InvalidCustomBlockExplorer(error.to_string())
+    }
 }
 
 impl GlobalConfigTable {
@@ -178,6 +202,17 @@ impl GlobalConfigTable {
 
         Ok(())
     }
+
+    pub(crate) fn custom_block_explorer_transaction_url(
+        &self,
+        network: Network,
+        txid: String,
+    ) -> String {
+        let stored_template =
+            self.get(GlobalConfigKey::CustomBlockExplorer(network)).ok().flatten();
+
+        effective_transaction_url(network, stored_template.as_deref(), txid)
+    }
 }
 
 #[uniffi::export]
@@ -258,6 +293,62 @@ impl GlobalConfigTable {
         Updater::send_update(Update::SelectedNodeChanged(node.clone()));
 
         Ok(())
+    }
+
+    pub fn custom_block_explorer(&self, network: Network) -> Option<String> {
+        self.get(GlobalConfigKey::CustomBlockExplorer(network)).unwrap_or(None).and_then(
+            |template| {
+                CustomBlockExplorerTemplate::parse_stored(&template)
+                    .ok()
+                    .map(|template| template.as_str().to_string())
+            },
+        )
+    }
+
+    pub fn effective_block_explorer_preview(&self, network: Network) -> String {
+        self.custom_block_explorer_transaction_url(network, PREVIEW_TXID.to_string())
+    }
+
+    pub fn preview_custom_block_explorer(&self, network: Network, input: String) -> Result<String> {
+        if input.trim().is_empty() {
+            return Ok(CustomBlockExplorerTemplate::default_for(network).render(PREVIEW_TXID));
+        }
+
+        let template = CustomBlockExplorerTemplate::parse(network, &input)
+            .map_err(GlobalConfigTableError::from)?;
+
+        Ok(template.render(PREVIEW_TXID))
+    }
+
+    pub fn effective_block_explorer_host(&self, network: Network) -> String {
+        let preview = self.effective_block_explorer_preview(network);
+
+        url::Url::parse(&preview)
+            .ok()
+            .and_then(|url| url.host_str().map(ToString::to_string))
+            .unwrap_or_default()
+    }
+
+    pub fn set_custom_block_explorer(
+        &self,
+        network: Network,
+        input: String,
+    ) -> Result<Option<String>> {
+        if input.trim().is_empty() {
+            self.clear_custom_block_explorer(network)?;
+            return Ok(None);
+        }
+
+        let template = CustomBlockExplorerTemplate::parse(network, &input)
+            .map_err(GlobalConfigTableError::from)?;
+        let canonical = template.as_str().to_string();
+        self.set(GlobalConfigKey::CustomBlockExplorer(network), canonical.clone())?;
+
+        Ok(Some(canonical))
+    }
+
+    pub fn clear_custom_block_explorer(&self, network: Network) -> Result<()> {
+        self.delete(GlobalConfigKey::CustomBlockExplorer(network))
     }
 
     #[uniffi::method(name = "selectedFiatCurrency")]
@@ -372,5 +463,108 @@ mod tests {
 
         let key: &str = GlobalConfigKey::SelectedNode(Network::Testnet).into();
         assert_eq!(key, "selected_node_testnet");
+    }
+
+    #[test]
+    fn test_custom_block_explorer_keys() {
+        use super::GlobalConfigKey;
+
+        let key: &str = GlobalConfigKey::CustomBlockExplorer(Network::Bitcoin).into();
+        assert_eq!(key, "custom_block_explorer_bitcoin");
+
+        let key: &str = GlobalConfigKey::CustomBlockExplorer(Network::Testnet).into();
+        assert_eq!(key, "custom_block_explorer_testnet");
+
+        let key: &str = GlobalConfigKey::CustomBlockExplorer(Network::Testnet4).into();
+        assert_eq!(key, "custom_block_explorer_testnet4");
+
+        let key: &str = GlobalConfigKey::CustomBlockExplorer(Network::Signet).into();
+        assert_eq!(key, "custom_block_explorer_signet");
+    }
+
+    #[test]
+    fn custom_block_explorer_setter_validates_normalizes_and_clears_empty() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let saved = table
+            .set_custom_block_explorer(Network::Bitcoin, " https://example.com ".to_string())
+            .unwrap();
+        assert_eq!(saved.as_deref(), Some("https://example.com/tx/{txid}"));
+        assert_eq!(
+            table.custom_block_explorer(Network::Bitcoin).as_deref(),
+            Some("https://example.com/tx/{txid}")
+        );
+
+        let cleared = table.set_custom_block_explorer(Network::Bitcoin, "   ".to_string()).unwrap();
+        assert_eq!(cleared, None);
+        assert_eq!(table.custom_block_explorer(Network::Bitcoin), None);
+    }
+
+    #[test]
+    fn custom_block_explorer_input_preview_validates_without_saving() {
+        let (_tmp, table) = test_table();
+
+        assert_eq!(
+            table
+                .preview_custom_block_explorer(Network::Bitcoin, "https://example.com".to_string())
+                .unwrap(),
+            "https://example.com/tx/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+        assert!(table.custom_block_explorer(Network::Bitcoin).is_none());
+
+        assert_eq!(
+            table
+                .preview_custom_block_explorer(
+                    Network::Bitcoin,
+                    "https://bad.example/{address}".to_string(),
+                )
+                .unwrap_err(),
+            super::Error::GlobalConfig(super::GlobalConfigTableError::InvalidCustomBlockExplorer(
+                "Unsupported block explorer template placeholder".to_string(),
+            ))
+        );
+    }
+
+    #[test]
+    fn empty_custom_block_explorer_input_preview_uses_default() {
+        let (_tmp, table) = test_table();
+
+        assert_eq!(
+            table.preview_custom_block_explorer(Network::Signet, "   ".to_string()).unwrap(),
+            "https://mutinynet.com/tx/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+    }
+
+    #[test]
+    fn corrupt_stored_custom_block_explorer_falls_back_to_default() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        use super::GlobalConfigKey;
+
+        table
+            .set(
+                GlobalConfigKey::CustomBlockExplorer(Network::Bitcoin),
+                "javascript:alert(1)".to_string(),
+            )
+            .unwrap();
+
+        let txid = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        assert_eq!(
+            table.custom_block_explorer_transaction_url(Network::Bitcoin, txid.to_string()),
+            "https://mempool.space/tx/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
+        assert_eq!(table.custom_block_explorer(Network::Bitcoin), None);
+    }
+
+    fn test_table() -> (tempfile::TempDir, super::GlobalConfigTable) {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = std::sync::Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
+        let write_txn = db.begin_write().unwrap();
+        let table = super::GlobalConfigTable::new(db.clone(), &write_txn);
+        write_txn.commit().unwrap();
+
+        (tmp, table)
     }
 }

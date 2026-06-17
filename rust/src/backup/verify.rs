@@ -202,6 +202,7 @@ mod tests {
                 selected_fiat_currency: None,
                 color_scheme: None,
                 selected_nodes: vec![],
+                custom_block_explorers: Default::default(),
             },
         }
     }

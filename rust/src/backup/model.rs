@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -123,6 +125,9 @@ pub struct AppSettings {
     pub color_scheme: Option<String>,
     /// Per-network node configuration: (network_string, node_config_json)
     pub selected_nodes: Vec<(String, String)>,
+    /// Per-network normalized custom transaction explorer templates
+    #[serde(default)]
+    pub custom_block_explorers: BTreeMap<String, String>,
 }
 
 /// Result of a successful backup export
@@ -248,6 +253,10 @@ mod tests {
                     "bitcoin".to_string(),
                     "{\"url\":\"localhost\"}".to_string(),
                 )],
+                custom_block_explorers: BTreeMap::from([(
+                    "Bitcoin".to_string(),
+                    "https://example.com/tx/{txid}".to_string(),
+                )]),
             },
         }
     }
@@ -263,6 +272,10 @@ mod tests {
         assert_eq!(decoded.created_at, 1700000000);
         assert_eq!(decoded.wallets.len(), 1);
         assert_eq!(decoded.settings.selected_network.as_deref(), Some("bitcoin"));
+        assert_eq!(
+            decoded.settings.custom_block_explorers.get("Bitcoin").map(String::as_str),
+            Some("https://example.com/tx/{txid}")
+        );
     }
 
     #[test]
@@ -335,6 +348,7 @@ mod tests {
                 selected_fiat_currency: None,
                 color_scheme: None,
                 selected_nodes: vec![],
+                custom_block_explorers: BTreeMap::new(),
             },
         };
 
@@ -361,6 +375,25 @@ mod tests {
     }
 
     #[test]
+    fn old_backup_without_custom_block_explorers_deserializes() {
+        let json = serde_json::json!({
+            "version": 1,
+            "created_at": 1700000000_u64,
+            "wallets": [],
+            "settings": {
+                "selected_network": "bitcoin",
+                "selected_fiat_currency": "USD",
+                "color_scheme": "dark",
+                "selected_nodes": []
+            }
+        });
+
+        let payload: BackupPayload = serde_json::from_value(json).unwrap();
+
+        assert!(payload.settings.custom_block_explorers.is_empty());
+    }
+
+    #[test]
     fn json_zstd_round_trip() {
         let payload = sample_payload();
 
@@ -376,5 +409,19 @@ mod tests {
             WalletSecret::Mnemonic(m) => assert_eq!(m, "abandon abandon abandon"),
             _ => panic!("expected Mnemonic"),
         }
+    }
+
+    #[test]
+    fn old_app_settings_without_custom_block_explorers_deserializes() {
+        let json = serde_json::json!({
+            "selected_network": "bitcoin",
+            "selected_fiat_currency": "USD",
+            "color_scheme": "dark",
+            "selected_nodes": []
+        });
+
+        let settings: AppSettings = serde_json::from_value(json).unwrap();
+
+        assert!(settings.custom_block_explorers.is_empty());
     }
 }

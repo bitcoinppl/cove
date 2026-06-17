@@ -41,6 +41,7 @@ mod backup;
 mod bdk_store;
 mod build;
 mod converter;
+mod custom_block_explorer;
 mod discovery_scanner;
 mod fee_client;
 mod fiat;

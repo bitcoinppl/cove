@@ -1,4 +1,4 @@
-use std::str::FromStr as _;
+use std::{collections::BTreeMap, str::FromStr as _};
 
 use bip39::Mnemonic;
 use cove_device::keychain::Keychain;
@@ -6,8 +6,8 @@ use cove_types::network::Network;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
-use crate::database::Database;
-use crate::database::global_config::GlobalConfigKey;
+use crate::database::global_config::{GlobalConfigKey, GlobalConfigTable, GlobalConfigTableError};
+use crate::database::{Database, Error as DatabaseError};
 use crate::label_manager::LabelManager;
 use crate::mnemonic::MnemonicExt as _;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
@@ -552,11 +552,44 @@ fn restore_settings(settings: &super::model::AppSettings) -> Result<(), BackupEr
         }
     }
 
+    errors.extend(restore_custom_block_explorers(config, &settings.custom_block_explorers));
+
     if errors.is_empty() {
         Ok(())
     } else {
         Err(BackupError::Database(format!("failed to restore settings: {}", errors.join("; "))))
     }
+}
+
+fn restore_custom_block_explorers(
+    config: &GlobalConfigTable,
+    custom_block_explorers: &BTreeMap<String, String>,
+) -> Vec<String> {
+    let mut errors = Vec::new();
+
+    for (network_str, template) in custom_block_explorers {
+        let Ok(network) = Network::try_from(network_str.as_str()) else {
+            warn!("skipping unknown network in custom_block_explorers: {network_str}");
+            continue;
+        };
+
+        if template.trim().is_empty() {
+            warn!("skipping empty custom block explorer for {network_str}");
+            continue;
+        }
+
+        if let Err(error) = config.set_custom_block_explorer(network, template.clone()) {
+            warn!("skipping invalid custom block explorer for {network_str}: {error}");
+            if !matches!(
+                error,
+                DatabaseError::GlobalConfig(GlobalConfigTableError::InvalidCustomBlockExplorer(_))
+            ) {
+                errors.push(format!("custom block explorer for {network_str}: {error}"));
+            }
+        }
+    }
+
+    errors
 }
 
 fn wallet_name_from_backup(backup: &WalletBackup) -> String {
@@ -574,6 +607,7 @@ fn wallet_name_from_backup(backup: &WalletBackup) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::str::FromStr as _;
     use std::sync::Arc;
 
@@ -609,6 +643,55 @@ mod tests {
             xpub: None,
             labels_jsonl: None,
         }
+    }
+
+    #[test]
+    fn backup_import_restores_valid_custom_block_explorers() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, config) = test_config();
+        let explorers =
+            BTreeMap::from([("Bitcoin".to_string(), "https://example.com".to_string())]);
+
+        let errors = restore_custom_block_explorers(&config, &explorers);
+
+        assert!(errors.is_empty());
+        assert_eq!(
+            config.custom_block_explorer(Network::Bitcoin).as_deref(),
+            Some("https://example.com/tx/{txid}")
+        );
+    }
+
+    #[test]
+    fn backup_import_skips_invalid_custom_block_explorer_without_clearing_existing() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, config) = test_config();
+        config
+            .set_custom_block_explorer(Network::Bitcoin, "https://existing.example".to_string())
+            .unwrap();
+        let explorers = BTreeMap::from([
+            ("Bitcoin".to_string(), "https://bad.example/{address}".to_string()),
+            ("Signet".to_string(), "   ".to_string()),
+            ("unknown".to_string(), "https://ignored.example".to_string()),
+        ]);
+
+        let errors = restore_custom_block_explorers(&config, &explorers);
+
+        assert!(errors.is_empty());
+        assert_eq!(
+            config.custom_block_explorer(Network::Bitcoin).as_deref(),
+            Some("https://existing.example/tx/{txid}")
+        );
+        assert_eq!(config.custom_block_explorer(Network::Signet), None);
+    }
+
+    fn test_config() -> (tempfile::TempDir, GlobalConfigTable) {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
+        let write_txn = db.begin_write().unwrap();
+        let table = GlobalConfigTable::new(db.clone(), &write_txn);
+        write_txn.commit().unwrap();
+
+        (tmp, table)
     }
 
     #[tokio::test(flavor = "current_thread")]

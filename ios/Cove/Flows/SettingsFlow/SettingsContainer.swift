@@ -57,6 +57,8 @@ struct SettingsContainer: View {
                 AppearancePicker
             case .node:
                 NodeSelectionView()
+            case .blockExplorer:
+                BlockExplorerSettingsView()
             case .fiatCurrency:
                 FiatCurrencyPicker
             case let .wallet(id: walletId, route: route):
