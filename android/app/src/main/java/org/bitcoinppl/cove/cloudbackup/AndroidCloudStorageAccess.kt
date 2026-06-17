@@ -1300,37 +1300,43 @@ class AndroidCloudStorageAccess internal constructor(
     ): DriveResponse =
         withContext(Dispatchers.IO) {
             val connection = (URL(url).openConnection() as HttpURLConnection)
-            connection.requestMethod = method
-            connection.connectTimeout = NETWORK_TIMEOUT_MS
-            connection.readTimeout = NETWORK_TIMEOUT_MS
-            connection.setRequestProperty("Authorization", "Bearer $token")
-            connection.setRequestProperty("Accept", "application/json")
+            try {
+                connection.requestMethod = method
+                connection.connectTimeout = NETWORK_TIMEOUT_MS
+                connection.readTimeout = NETWORK_TIMEOUT_MS
+                connection.setRequestProperty("Authorization", "Bearer $token")
+                connection.setRequestProperty("Accept", "application/json")
 
-            if (body != null) {
-                connection.doOutput = true
-                connection.setRequestProperty("Content-Type", contentType)
-                connection.outputStream.use { output ->
-                    output.write(body)
-                }
-            }
-
-            val statusCode = connection.responseCode
-            val stream =
-                if (statusCode in 200..299) {
-                    connection.inputStream
-                } else {
-                    connection.errorStream ?: connection.inputStream
+                if (body != null) {
+                    connection.doOutput = true
+                    connection.setRequestProperty("Content-Type", contentType)
+                    connection.outputStream.use { output ->
+                        output.write(body)
+                    }
                 }
 
-            val responseBody = stream?.use { input -> input.readBytes() } ?: ByteArray(0)
+                val statusCode = connection.responseCode
+                val stream =
+                    if (statusCode in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream ?: connection.inputStream
+                    }
 
-            if (statusCode !in 200..299) {
-                val responseText = responseBody.toString(Charsets.UTF_8)
-                logDriveWarning("google drive request failed method=$method status=$statusCode url=$url")
-                throw DriveHttpException(statusCode, responseText)
+                val responseBody = stream?.use { input -> input.readBytes() } ?: ByteArray(0)
+
+                if (statusCode !in 200..299) {
+                    val responseText = responseBody.toString(Charsets.UTF_8)
+                    logDriveWarning(
+                        "google drive request failed method=$method status=$statusCode url=$url",
+                    )
+                    throw DriveHttpException(statusCode, responseText)
+                }
+
+                DriveResponse(statusCode, responseBody)
+            } finally {
+                connection.disconnect()
             }
-
-            DriveResponse(statusCode, responseBody)
         }
 
     private fun DriveResponse.asJsonObject(): JSONObject =
