@@ -1120,7 +1120,7 @@ impl WalletActor {
         // and no extra watchers were created in the meantime
         self.addr.send_fut_with(|addr| async move {
             tokio::time::sleep(Duration::from_secs(30)).await;
-            send!(addr.perform_scan_for_single_tx_id(tx_id));
+            send!(addr.perform_delayed_scan_for_watched_tx_id(tx_id));
             send!(addr.remove_watcher_for_txn(tx_id));
         });
 
@@ -1147,12 +1147,6 @@ impl WalletActor {
     }
 
     pub async fn perform_scan_for_single_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
-        // shutdown clears watchers, so skip delayed scans for removed transactions
-        if !self.transaction_watchers.contains_key(&tx_id) {
-            debug!("skipping single tx scan, watcher already removed for {tx_id}");
-            return Produces::ok(());
-        }
-
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
         let _ = self.update_height().await?.await;
 
@@ -1178,6 +1172,16 @@ impl WalletActor {
         });
 
         Produces::ok(())
+    }
+
+    async fn perform_delayed_scan_for_watched_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
+        // shutdown clears watchers, so skip delayed scans for removed transactions
+        if !self.transaction_watchers.contains_key(&tx_id) {
+            debug!("skipping single tx scan, watcher already removed for {tx_id}");
+            return Produces::ok(());
+        }
+
+        self.perform_scan_for_single_tx_id(tx_id).await
     }
 
     async fn perform_full_scan(&mut self) -> ActorResult<()> {
