@@ -32,6 +32,8 @@ async fn http_post(
         .send()
         .await
         .map_err(|e| eyre::eyre!("send failed: {e:?}"))?
+        .error_for_status()
+        .map_err(|e| eyre::eyre!("relay returned error status: {e:?}"))?
         .bytes()
         .await
         .map_err(|e| eyre::eyre!("body read failed: {e:?}"))?
@@ -295,17 +297,17 @@ impl PayjoinActor {
                     send!(addr.update_polling_sender(next));
                 }
                 Err(e) => {
-                    // receiver explicitly rejected the session, broadcast fallback
-                    // other errors (transient OHTTP failures) may be recoverable,
-                    // retry using the still-stored polling sender
+                    // receiver rejected the session or the response is invalid, broadcast fallback;
+                    // only retry when there is no api error (pure transport failure)
                     match e.api_error_ref() {
                         Some(ResponseError::WellKnown(_))
-                        | Some(ResponseError::Unrecognized { .. }) => {
-                            warn!("payjoin poll: receiver rejected session: {e:?}");
+                        | Some(ResponseError::Unrecognized { .. })
+                        | Some(ResponseError::Validation(_)) => {
+                            warn!("payjoin poll: session rejected or invalid response: {e:?}");
                             send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
                         }
                         _ => {
-                            warn!("payjoin poll: response error, retrying: {e:?}");
+                            warn!("payjoin poll: transport error, retrying: {e:?}");
                             send!(addr.begin_next_poll_msg());
                         }
                     }
