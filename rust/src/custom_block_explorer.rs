@@ -145,8 +145,7 @@ fn parse_http_url(input: &str) -> Result<Url, CustomBlockExplorerError> {
 }
 
 fn canonical_base_path(url: &Url, network: Network, placeholder_marker: &str) -> String {
-    let path = url.path().trim_end_matches('/');
-    let path = if path == "/" { "" } else { path.trim_start_matches('/') };
+    let path = url.path().trim_end_matches('/').trim_start_matches('/');
     let path = canonicalize_known_host_path(url.host_str(), network, path);
 
     if path.is_empty() {
