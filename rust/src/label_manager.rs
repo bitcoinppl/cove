@@ -11,7 +11,10 @@ use crate::{
 };
 
 use ahash::AHashMap as HashMap;
-use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
+use bip329::{
+    AddressRecord, InputRecord, Label, Labels, OutputRecord, ParsedLabels, TransactionRecord,
+};
+use bitcoin::OutPoint;
 use cove_types::{TxId, confirm::QrDensity};
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -153,7 +156,12 @@ impl LabelManager {
         // if it's a new transaction, we need to insert input and output labels for each
         if let InsertOrUpdate::Insert(now) = insert_or_update {
             let input_labels = input_records_iter.map(Into::into).collect::<Vec<Label>>();
-            let output_labels = output_records_iter.map(Into::into).collect::<Vec<Label>>();
+            let output_labels = self
+                .preserve_output_spendability(output_records_iter)
+                .map_err_str(LabelManagerError::GetOutputRecords)?
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<Label>>();
             let timestamps = Timestamps::new(now.into(), now.into());
 
             self.db
@@ -179,6 +187,16 @@ impl LabelManager {
     }
 
     pub fn delete_labels_for_txn(&self, tx_id: Arc<TxId>) -> Result<(), LabelManagerError> {
+        self.delete_labels_for_txn_without_cloud_backup_dirty(tx_id)?;
+        self.mark_cloud_backup_dirty();
+
+        Ok(())
+    }
+
+    fn delete_labels_for_txn_without_cloud_backup_dirty(
+        &self,
+        tx_id: Arc<TxId>,
+    ) -> Result<(), LabelManagerError> {
         let Some(txn_label) =
             self.db.labels.get_txn_label_record(tx_id.0).map_err_str(LabelManagerError::Get)?
         else {
@@ -186,6 +204,7 @@ impl LabelManager {
         };
 
         let txn_label_created_at = txn_label.timestamps.created_at;
+        let txn_label_text = txn_label.item.label.clone();
 
         let input_records = self
             .db
@@ -201,6 +220,7 @@ impl LabelManager {
 
         // create list of labels to delete
         let mut labels_to_delete = vec![Label::from(txn_label.item)];
+        let mut lock_only_records = Vec::new();
 
         // only delete the input record if it hasn't changed since being created with the txn label
         for record in input_records {
@@ -211,12 +231,25 @@ impl LabelManager {
             }
         }
 
-        // only delete the output record if it hasn't changed since being created with the txn label
+        // only delete the output record if it still has the txn-label generated output label
         for record in output_records {
-            if txn_label_created_at == record.timestamps.created_at
-                && txn_label_created_at == record.timestamps.updated_at
+            if txn_label_created_at != record.timestamps.created_at
+                || !is_auto_output_label(txn_label_text.as_deref(), record.item.label.as_deref())
             {
+                continue;
+            }
+
+            if record.item.spendable {
                 labels_to_delete.push(Label::from(record.item));
+            } else {
+                labels_to_delete.push(Label::from(record.item.clone()));
+
+                let mut item = record.item;
+                item.label = None;
+
+                let mut timestamps = record.timestamps;
+                timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+                lock_only_records.push(Record::with_timestamps(Label::from(item), timestamps));
             }
         }
 
@@ -225,7 +258,10 @@ impl LabelManager {
             .delete_labels(labels_to_delete)
             .map_err_str(LabelManagerError::DeleteLabels)?;
 
-        self.mark_cloud_backup_dirty();
+        self.db
+            .labels
+            .insert_records(lock_only_records)
+            .map_err_str(LabelManagerError::SaveOutputLabels)?;
 
         Ok(())
     }
@@ -233,7 +269,7 @@ impl LabelManager {
     #[uniffi::method(name = "importLabels")]
     pub fn _import_labels(&self, labels: Arc<Bip329Labels>) -> Result<(), LabelManagerError> {
         let labels = Arc::unwrap_or_clone(labels);
-        self.import_labels(labels.0)
+        self.save_imported_labels(labels.parsed, true)
     }
 
     pub fn import(&self, jsonl: &str) -> Result<(), LabelManagerError> {
@@ -299,8 +335,18 @@ impl LabelManager {
         Ok(Self { db })
     }
 
-    pub fn import_labels(&self, labels: impl Into<Labels>) -> Result<(), LabelManagerError> {
-        self.save_imported_labels(labels.into(), true)
+    pub(crate) fn set_output_spendability_for_outpoints(
+        &self,
+        outpoints: Vec<OutPoint>,
+        spendable: bool,
+    ) -> Result<()> {
+        self.db
+            .labels
+            .set_output_spendability_for_outpoints(outpoints, spendable)
+            .map_err_str(LabelManagerError::SaveOutputLabels)?;
+        self.mark_cloud_backup_dirty();
+
+        Ok(())
     }
 
     pub(crate) fn import_without_cloud_backup_dirty(
@@ -312,10 +358,10 @@ impl LabelManager {
 
     fn save_imported_labels(
         &self,
-        labels: Labels,
+        parsed: ParsedLabels,
         mark_cloud_backup_dirty: bool,
     ) -> Result<(), LabelManagerError> {
-        self.db.labels.insert_labels(labels).map_err_str(LabelManagerError::Save)?;
+        self.db.labels.insert_imported_labels(parsed).map_err_str(LabelManagerError::Save)?;
         if mark_cloud_backup_dirty {
             self.mark_cloud_backup_dirty();
         }
@@ -363,17 +409,18 @@ impl LabelManager {
             }
         });
 
-        let output_records = new_output_records_iter.into_iter().map(|record| {
+        let output_records = new_output_records_iter.into_iter().map(|mut record| {
             let vout = record.ref_.vout;
-            let label: Label = record.into();
 
             match current_output_records.remove(&vout) {
                 Some(current) => {
+                    record.spendable = current.item.spendable;
+                    let label: Label = record.into();
                     let mut timestamps = current.timestamps;
                     timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
                     Record::with_timestamps(label, timestamps)
                 }
-                None => Record::new(label),
+                None => Record::new(Label::from(record)),
             }
         });
 
@@ -470,6 +517,21 @@ impl LabelManager {
         Ok(InsertOrUpdate::Insert(now.into()))
     }
 
+    fn preserve_output_spendability(
+        &self,
+        records: impl Iterator<Item = OutputRecord>,
+    ) -> std::result::Result<Vec<OutputRecord>, crate::database::wallet_data::label::Error> {
+        records
+            .map(|mut record| {
+                if let Some(current) = self.db.labels.get_output_record(record.ref_)? {
+                    record.spendable = current.item.spendable;
+                }
+
+                Ok(record)
+            })
+            .collect()
+    }
+
     // create input labels for a transaction to match sparrow auto-generated input labels
     fn create_input_records(
         &self,
@@ -524,6 +586,168 @@ impl LabelManager {
     }
 }
 
-fn parse_labels(jsonl: &str) -> Result<Labels, LabelManagerError> {
-    Labels::try_from_str(jsonl).map_err_str(LabelManagerError::Parse)
+fn parse_labels(jsonl: &str) -> Result<ParsedLabels, LabelManagerError> {
+    Labels::try_from_str_with_metadata(jsonl).map_err_str(LabelManagerError::Parse)
+}
+
+fn is_auto_output_label(txn_label: Option<&str>, output_label: Option<&str>) -> bool {
+    let (Some(txn_label), Some(output_label)) = (txn_label, output_label) else {
+        return false;
+    };
+
+    output_label == format!("{txn_label} (received)")
+        || output_label == format!("{txn_label} (change)")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use crate::{
+        database::wallet_data::test_support::new_test_wallet_data_db,
+        transaction::TransactionDetails, wallet::metadata::WalletId,
+    };
+
+    use super::*;
+
+    fn test_manager() -> (LabelManager, tempfile::TempDir) {
+        let (db, tmp) = new_test_wallet_data_db(WalletId::preview_new());
+
+        (LabelManager { db }, tmp)
+    }
+
+    fn received_details_with_output(vout: u32) -> TransactionDetails {
+        let mut details = TransactionDetails::preview_confirmed_received();
+        details.output_indexes = vec![vout];
+        details
+    }
+
+    fn set_output_spendable(manager: &LabelManager, outpoint: bitcoin::OutPoint, spendable: bool) {
+        let mut record = manager
+            .db
+            .labels
+            .get_output_record(outpoint)
+            .expect("failed to get output record")
+            .expect("missing output record");
+        record.item.spendable = spendable;
+
+        manager
+            .db
+            .labels
+            .insert_label_with_timestamps(record.item, record.timestamps)
+            .expect("failed to update output record");
+    }
+
+    fn insert_or_update_auto_labels(
+        manager: &LabelManager,
+        details: &TransactionDetails,
+        label: &str,
+    ) {
+        let tx_id = details.tx_id;
+        let insert_or_update = manager
+            .insert_or_update_transaction_label(&tx_id, label.to_string(), None)
+            .expect("failed to insert transaction label");
+        let input_records = manager.create_input_records(
+            &tx_id,
+            label,
+            &details.input_indexes,
+            details.sent_and_received.direction,
+        );
+        let output_records = manager.create_output_records(
+            &tx_id,
+            label,
+            &details.output_indexes,
+            details.sent_and_received.direction,
+        );
+
+        match insert_or_update {
+            InsertOrUpdate::Insert(now) => {
+                let now = now.into();
+                let timestamps = Timestamps::new(now, now);
+                let input_labels = input_records.into_iter().map(Label::from).collect::<Vec<_>>();
+                let output_labels = manager
+                    .preserve_output_spendability(output_records.into_iter())
+                    .expect("failed to preserve output spendability")
+                    .into_iter()
+                    .map(Label::from)
+                    .collect::<Vec<_>>();
+
+                manager
+                    .db
+                    .labels
+                    .insert_labels_with_timestamps(input_labels, timestamps)
+                    .expect("failed to insert input labels");
+                manager
+                    .db
+                    .labels
+                    .insert_labels_with_timestamps(output_labels, timestamps)
+                    .expect("failed to insert output labels");
+            }
+            InsertOrUpdate::Update(_) => manager
+                .update_labels_for_txn(
+                    &tx_id,
+                    input_records.into_iter(),
+                    output_records.into_iter(),
+                )
+                .expect("failed to update labels"),
+        }
+    }
+
+    #[test]
+    fn editing_transaction_label_preserves_existing_output_spendability() {
+        let (manager, _tmp) = test_manager();
+        let details = received_details_with_output(0);
+        let outpoint = bitcoin::OutPoint { txid: details.tx_id.0, vout: 0 };
+
+        insert_or_update_auto_labels(&manager, &details, "first");
+        set_output_spendable(&manager, outpoint, false);
+
+        insert_or_update_auto_labels(&manager, &details, "second");
+
+        let output = manager
+            .db
+            .labels
+            .get_output_record(outpoint)
+            .expect("failed to get output")
+            .expect("missing output")
+            .item;
+
+        assert_eq!(output.label, Some("second (received)".to_string()));
+        assert!(!output.spendable);
+    }
+
+    #[test]
+    fn deleting_transaction_label_preserves_locked_auto_output_as_lock_only_record() {
+        let (manager, _tmp) = test_manager();
+        let details = received_details_with_output(0);
+        let tx_id = details.tx_id;
+        let outpoint = bitcoin::OutPoint { txid: tx_id.0, vout: 0 };
+
+        insert_or_update_auto_labels(&manager, &details, "first");
+        set_output_spendable(&manager, outpoint, false);
+
+        manager
+            .delete_labels_for_txn_without_cloud_backup_dirty(Arc::new(tx_id))
+            .expect("failed to delete labels");
+
+        let output = manager
+            .db
+            .labels
+            .get_output_record(outpoint)
+            .expect("failed to get output")
+            .expect("missing output")
+            .item;
+
+        assert_eq!(output.label, None);
+        assert!(!output.spendable);
+        assert!(manager.db.labels.get_txn_label_record(tx_id.0).unwrap().is_none());
+    }
+
+    #[test]
+    fn auto_output_label_detection_rejects_user_edited_labels() {
+        assert!(is_auto_output_label(Some("original"), Some("original (received)")));
+        assert!(is_auto_output_label(Some("original"), Some("original (change)")));
+        assert!(!is_auto_output_label(Some("original"), Some("custom label")));
+        assert!(!is_auto_output_label(Some("original"), None));
+    }
 }

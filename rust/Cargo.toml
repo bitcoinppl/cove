@@ -56,7 +56,7 @@ ruzstd = "0.8.3"
 bitcoin = { version = "0.32.9" }
 bdk_wallet = { version = "3.0.0", features = ["keys-bip39", "file_store", "rusqlite"] }
 bip39 = { version = "2.2.2", features = ["zeroize"] }
-bip329 = { version = "0.4.0" }
+bip329 = { version = "0.5.0" }
 payjoin = { version = "0.25.0", default-features = false, features = ["v2"] }
 pubport = { version = "0.5.0" }
 

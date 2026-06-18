@@ -26,6 +26,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ButtonDefaults
@@ -46,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +67,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -95,9 +99,11 @@ fun UtxoListScreen(
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    val scope = rememberCoroutineScope()
+
     // reload labels on appear to match iOS behavior
     LaunchedEffect(manager) {
-        manager.rust.reloadLabels()
+        manager.reloadLabels()
     }
 
     UtxoListScreenContent(
@@ -110,14 +116,31 @@ fun UtxoListScreen(
         onToggleUnit = {
             manager.dispatch(org.bitcoinppl.cove_core.CoinControlManagerAction.ToggleUnit)
         },
-        onToggle = { hash ->
-            val newSelected =
-                if (manager.selected.contains(hash)) {
-                    manager.selected - hash
-                } else {
-                    manager.selected + hash
+        onToggle = { utxo ->
+            if (!utxo.spendable) {
+                scope.launch {
+                    snackbarHostState.showSnackbar("Unlock this UTXO before selecting it.")
                 }
-            manager.updateSelected(newSelected)
+            } else {
+                val id = utxo.id
+                val newSelected =
+                    if (manager.selected.contains(id)) {
+                        manager.selected - id
+                    } else {
+                        manager.selected + id
+                    }
+                manager.updateSelected(newSelected)
+            }
+        },
+        onSetSpendability = { utxo, spendable ->
+            scope.launch {
+                try {
+                    manager.setSpendability(utxo.outpoint, spendable)
+                } catch (e: Exception) {
+                    android.util.Log.e("UtxoListScreen", "Unable to update UTXO spendability", e)
+                    snackbarHostState.showSnackbar("Unable to update UTXO lock.")
+                }
+            }
         },
         onToggleSelectAll = {
             manager.dispatch(org.bitcoinppl.cove_core.CoinControlManagerAction.ToggleSelectAll)
@@ -155,7 +178,8 @@ private fun UtxoListScreenContent(
     searchQuery: String,
     onBack: () -> Unit,
     onToggleUnit: () -> Unit,
-    onToggle: (ULong) -> Unit,
+    onToggle: (org.bitcoinppl.cove_core.types.Utxo) -> Unit,
+    onSetSpendability: (org.bitcoinppl.cove_core.types.Utxo, Boolean) -> Unit,
     onToggleSelectAll: () -> Unit,
     onSortChange: (UtxoSort) -> Unit,
     onContinue: () -> Unit,
@@ -323,8 +347,11 @@ private fun UtxoListScreenContent(
                                 UtxoItemRow(
                                     manager = manager,
                                     utxo = utxo,
-                                    selected = selected.contains(utxo.id),
-                                    onToggle = { onToggle(utxo.id) },
+                                    selected = utxo.spendable && selected.contains(utxo.id),
+                                    onToggle = { onToggle(utxo) },
+                                    onSetSpendability = {
+                                        onSetSpendability(utxo, !utxo.spendable)
+                                    },
                                 )
                                 if (index != utxos.lastIndex) {
                                     HorizontalDivider(
@@ -417,16 +444,18 @@ private fun UtxoItemRow(
     utxo: org.bitcoinppl.cove_core.types.Utxo,
     selected: Boolean,
     onToggle: () -> Unit,
+    onSetSpendability: () -> Unit,
 ) {
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 16.dp)
+                .graphicsLayer(alpha = if (utxo.spendable) 1f else 0.58f)
                 .clickable { onToggle() },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SelectionCircle(selected = selected)
+        SelectionCircle(selected = selected, spendable = utxo.spendable)
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -439,6 +468,15 @@ private fun UtxoItemRow(
                 if (utxo.type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE) {
                     Spacer(Modifier.width(4.dp))
                     ChangeBadge()
+                }
+                if (!utxo.spendable) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp),
+                    )
                 }
             }
             Spacer(Modifier.height(4.dp))
@@ -464,11 +502,22 @@ private fun UtxoItemRow(
                 fontSize = 12.sp,
             )
         }
+        Spacer(Modifier.width(8.dp))
+        IconButton(onClick = onSetSpendability) {
+            Icon(
+                imageVector = if (utxo.spendable) Icons.Filled.LockOpen else Icons.Filled.Lock,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
 @Composable
-private fun SelectionCircle(selected: Boolean) {
+private fun SelectionCircle(
+    selected: Boolean,
+    spendable: Boolean,
+) {
     val selectedColor = CoveColor.LinkBlue
     val unselectedColor = MaterialTheme.colorScheme.outlineVariant
     Box(
@@ -483,7 +532,14 @@ private fun SelectionCircle(selected: Boolean) {
                 ).background(if (selected) selectedColor else Color.Transparent),
         contentAlignment = Alignment.Center,
     ) {
-        if (selected) {
+        if (!spendable) {
+            Icon(
+                imageVector = Icons.Default.Lock,
+                contentDescription = null,
+                tint = unselectedColor,
+                modifier = Modifier.size(14.dp),
+            )
+        } else if (selected) {
             Icon(
                 imageVector = Icons.Default.Check,
                 contentDescription = null,

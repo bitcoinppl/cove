@@ -85,6 +85,24 @@ fn selected_fee_rate_for_options(
     }
 }
 
+fn amount_exceeds_spendable_balance(amount: Option<u64>, spendable_balance: Option<u64>) -> bool {
+    let amount = amount.unwrap_or(0);
+    if amount == 0 {
+        return false;
+    }
+
+    let spendable = spendable_balance.unwrap_or(u64::MAX);
+
+    amount > spendable
+}
+
+fn spendable_balance_for_validation(
+    unlocked_spendable_sats: Option<u64>,
+    fallback_trusted_spendable_sats: u64,
+) -> u64 {
+    unlocked_spendable_sats.unwrap_or(fallback_trusted_spendable_sats)
+}
+
 #[uniffi::export(callback_interface)]
 pub trait SendFlowManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// tells the frontend to reconcile the manager changes
@@ -139,6 +157,7 @@ pub enum SendFlowManagerAction {
     SelectMaxSend,
     ClearSendAmount,
     ClearAddress,
+    RefreshWalletBalance,
 
     SetCoinControlMode(Vec<Utxo>),
     DisableCoinControlMode,
@@ -319,19 +338,9 @@ impl RustSendFlowManager {
 
     #[uniffi::method]
     pub fn amount_exceeds_balance(&self) -> bool {
-        let amount = self.state.lock().amount_sats.unwrap_or(0);
-        if amount == 0 {
-            return false;
-        }
+        let state = self.state.lock();
 
-        let spendable = self
-            .state
-            .lock()
-            .wallet_balance
-            .as_ref()
-            .map_or(u64::MAX, |b| b.trusted_spendable().to_sat());
-
-        amount > spendable
+        amount_exceeds_spendable_balance(state.amount_sats, state.unlocked_spendable_sats)
     }
 
     #[uniffi::method]
@@ -523,14 +532,16 @@ impl RustSendFlowManager {
             return false;
         }
 
-        let spendable_balance = self
-            .state
-            .lock()
-            .wallet_balance
-            .clone()
-            .unwrap_or_default()
-            .trusted_spendable()
-            .to_sat();
+        let spendable_balance = {
+            let state = self.state.lock();
+            let fallback_trusted_spendable_sats =
+                state.wallet_balance.clone().unwrap_or_default().trusted_spendable().to_sat();
+
+            spendable_balance_for_validation(
+                state.unlocked_spendable_sats,
+                fallback_trusted_spendable_sats,
+            )
+        };
 
         if spendable_balance < amount {
             let is_max_selected = self.state.lock().max_selected.is_some();
@@ -642,6 +653,14 @@ impl RustSendFlowManager {
 
             Action::ClearSendAmount => self.clear_send_amount(),
             Action::ClearAddress => self.clear_address(),
+            Action::RefreshWalletBalance => {
+                let me = self.clone();
+                cove_tokio::task::spawn(async move {
+                    me.get_wallet_balance().await;
+                    me.get_or_update_fee_rate_options().await;
+                    me.reconciler.send(Message::RefreshPresenters);
+                });
+            }
 
             Action::NotifySelectedUnitedChanged { old, new } => {
                 self.handle_selected_unit_changed(old, new);
@@ -692,6 +711,22 @@ impl RustSendFlowManager {
                 self.handle_coin_control_entered_amount_changed(amount, is_focused);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn amount_exceeds_spendable_balance_uses_unlocked_balance() {
+        assert!(super::amount_exceeds_spendable_balance(Some(6_000), Some(5_000)));
+        assert!(!super::amount_exceeds_spendable_balance(Some(5_000), Some(5_000)));
+        assert!(!super::amount_exceeds_spendable_balance(Some(0), Some(0)));
+    }
+
+    #[test]
+    fn validation_spendable_balance_prefers_unlocked_balance_over_wallet_fallback() {
+        assert_eq!(super::spendable_balance_for_validation(Some(5_000), 10_000), 5_000);
+        assert_eq!(super::spendable_balance_for_validation(None, 10_000), 10_000);
     }
 }
 
@@ -1991,7 +2026,18 @@ impl RustSendFlowManager {
 
     async fn get_wallet_balance(self: &Arc<Self>) {
         let balance = self.wallet_manager.balance().await;
+        let unlocked_spendable_sats = self
+            .wallet_manager
+            .unlocked_spendable_balance()
+            .await
+            .map(|amount| amount.as_sats())
+            .unwrap_or_else(|error| {
+                warn!("failed to get unlocked spendable balance: {error}");
+                balance.spendable().as_sats()
+            });
         let wallet_balance = Arc::new(balance);
-        self.state.lock().wallet_balance = Some(wallet_balance.clone());
+        let mut state = self.state.lock();
+        state.wallet_balance = Some(wallet_balance);
+        state.unlocked_spendable_sats = Some(unlocked_spendable_sats);
     }
 }

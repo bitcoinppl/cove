@@ -1161,22 +1161,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_transactions_preview_new(
     ): Short
-    external fun uniffi_cove_checksum_func_wallet_amount_in_fiat_cached(
-    ): Short
-    external fun uniffi_cove_checksum_func_wallet_display_amount(
-    ): Short
-    external fun uniffi_cove_checksum_func_wallet_display_amount_pending_fmt(
-    ): Short
-    external fun uniffi_cove_checksum_func_wallet_display_amount_with_direction(
-    ): Short
-    external fun uniffi_cove_checksum_func_wallet_display_fiat_amount(
-    ): Short
-    external fun uniffi_cove_checksum_func_wallet_display_fiat_amount_pending_fmt(
-    ): Short
-    external fun uniffi_cove_checksum_func_wallet_display_fiat_amount_with_direction(
-    ): Short
-    external fun uniffi_cove_checksum_func_wallet_display_sent_and_received_amount(
-    ): Short
     external fun uniffi_cove_checksum_func_ffi_min_send_amount(
     ): Short
     external fun uniffi_cove_checksum_func_ffi_min_send_sats(
@@ -1393,6 +1377,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn(
     ): Short
+    external fun uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn_without_cloud_backup_dirty(
+    ): Short
     external fun uniffi_cove_checksum_method_labelmanager_export(
     ): Short
     external fun uniffi_cove_checksum_method_labelmanager_export_default_file_name(
@@ -1490,6 +1476,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_reload_labels(
     ): Short
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_selected_utxos(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustcoincontrolmanager_set_utxo_spendability(
     ): Short
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_unit(
     ): Short
@@ -1589,8 +1577,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_balance_presentation(
     ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_balance_presentation_for_state(
-    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat(
@@ -1659,8 +1645,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_label_manager(
     ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_ledger_state(
-    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_mark_wallet_as_verified(
@@ -1701,7 +1685,13 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_wallet_address_type(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_toggle_transaction_lock_state(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_transaction_details(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_unlocked_spendable_balance(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_validate_metadata(
     ): Short
@@ -1852,8 +1842,6 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_transactiondetails_block_number_fmt(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_confirmation_date_time(
-    ): Short
-    external fun uniffi_cove_checksum_method_transactiondetails_display_amount(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt(
     ): Short
@@ -2435,6 +2423,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_labelmanager_delete_labels_for_txn_without_cloud_backup_dirty(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
     external fun uniffi_cove_fn_method_labelmanager_export(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_labelmanager_export_default_file_name(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2551,6 +2541,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustcoincontrolmanager_selected_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustcoincontrolmanager_set_utxo_spendability(`ptr`: Long,`outpoint`: Long,`spendable`: Byte,
+    ): Long
     external fun uniffi_cove_fn_method_rustcoincontrolmanager_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBufferBitcoinUnit.ByValue
     external fun uniffi_cove_fn_method_rustcoincontrolmanager_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2705,8 +2697,6 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_balance_presentation(`ptr`: Long,`scanStatus`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_rustwalletmanager_balance_presentation_for_state(`ptr`: Long,`ledgerState`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(`ptr`: Long,`signedTransaction`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_convert_and_display_fiat(`ptr`: Long,`amount`: Long,`prices`: Long,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus,
@@ -2775,8 +2765,6 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_label_manager(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_fn_method_rustwalletmanager_ledger_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2817,7 +2805,13 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_switch_to_different_wallet_address_type(`ptr`: Long,`walletAddressType`: RustBuffer.ByValue,
     ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_toggle_transaction_lock_state(`ptr`: Long,`txId`: Long,
+    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_transaction_details(`ptr`: Long,`txId`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_transaction_lock_state(`ptr`: Long,`txId`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_unlocked_spendable_balance(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_validate_metadata(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -3072,8 +3066,6 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_transactiondetails_block_number_fmt(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_confirmation_date_time(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_transactiondetails_display_amount(`ptr`: Long,`metadata`: RustBuffer.ByValue,`showUnit`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(`ptr`: Long,
     ): Long
@@ -3497,22 +3489,6 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_transactions_preview_new(`confirmed`: Byte,`unconfirmed`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_wallet_amount_in_fiat_cached(`amount`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_wallet_display_amount(`metadata`: RustBuffer.ByValue,`amount`: Long,`showUnit`: Byte,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_wallet_display_amount_pending_fmt(`metadata`: RustBuffer.ByValue,`amount`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_wallet_display_amount_with_direction(`metadata`: RustBuffer.ByValue,`amount`: Long,`direction`: RustBufferTransactionDirection.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_wallet_display_fiat_amount(`metadata`: RustBuffer.ByValue,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_wallet_display_fiat_amount_pending_fmt(`metadata`: RustBuffer.ByValue,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_wallet_display_fiat_amount_with_direction(`metadata`: RustBuffer.ByValue,`amount`: Double,`direction`: RustBufferTransactionDirection.ByValue,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_wallet_display_sent_and_received_amount(`metadata`: RustBuffer.ByValue,`sentAndReceived`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_ffi_min_send_amount(uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_func_ffi_min_send_sats(uniffi_out_err: UniffiRustCallStatus,
@@ -3780,30 +3756,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_transactions_preview_new() != 39646.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_wallet_amount_in_fiat_cached() != 26689.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_wallet_display_amount() != 61536.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_wallet_display_amount_pending_fmt() != 28974.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_wallet_display_amount_with_direction() != 31040.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_wallet_display_fiat_amount() != 19771.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_wallet_display_fiat_amount_pending_fmt() != 9763.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_wallet_display_fiat_amount_with_direction() != 59603.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_func_wallet_display_sent_and_received_amount() != 2923.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_ffi_min_send_amount() != 61138.toShort()) {
@@ -4130,6 +4082,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 18479.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn_without_cloud_backup_dirty() != 47716.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_labelmanager_export() != 24203.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4275,6 +4230,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_selected_utxos() != 30072.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_set_utxo_spendability() != 52265.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_unit() != 17965.toShort()) {
@@ -4424,9 +4382,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance_presentation() != 27753.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance_presentation_for_state() != 65105.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4529,9 +4484,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_ledger_state() != 45737.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates() != 34012.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4541,10 +4493,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_master_fingerprint() != 64370.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_coin_control_manager() != 1459.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_coin_control_manager() != 11951.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 10979.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 55235.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_non_default_account_number() != 54959.toShort()) {
@@ -4592,7 +4544,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_wallet_address_type() != 37401.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_toggle_transaction_lock_state() != 4815.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_transaction_details() != 34155.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state() != 22037.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_unlocked_spendable_balance() != 11834.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 36684.toShort()) {
@@ -4818,9 +4779,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 59432.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_transactiondetails_display_amount() != 46360.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt() != 57101.toShort()) {
@@ -14246,6 +14204,8 @@ public interface LabelManagerInterface {
 
     fun `deleteLabelsForTxn`(`txId`: TxId)
 
+    fun `deleteLabelsForTxnWithoutCloudBackupDirty`(`txId`: TxId)
+
     suspend fun `export`(): kotlin.String
 
     fun `exportDefaultFileName`(`name`: kotlin.String): kotlin.String
@@ -14384,6 +14344,20 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     callWithHandle {
     uniffiRustCallWithError(LabelManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(
+        it,
+
+        FfiConverterTypeTxId.lower(`txId`),_status)
+}
+    }
+
+
+
+
+    @Throws(LabelManagerException::class)override fun `deleteLabelsForTxnWithoutCloudBackupDirty`(`txId`: TxId)
+        =
+    callWithHandle {
+    uniffiRustCallWithError(LabelManagerException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_labelmanager_delete_labels_for_txn_without_cloud_backup_dirty(
         it,
 
         FfiConverterTypeTxId.lower(`txId`),_status)
@@ -18743,6 +18717,8 @@ public interface RustCoinControlManagerInterface {
 
     fun `selectedUtxos`(): List<Utxo>
 
+    suspend fun `setUtxoSpendability`(`outpoint`: OutPoint, `spendable`: kotlin.Boolean)
+
     fun `unit`(): BitcoinUnit
 
     fun `utxos`(): List<Utxo>
@@ -18940,6 +18916,30 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
     )
     }
 
+
+
+    @Throws(LabelManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `setUtxoSpendability`(`outpoint`: OutPoint, `spendable`: kotlin.Boolean) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_set_utxo_spendability(
+                uniffiHandle,
+
+        FfiConverterTypeOutPoint.lower(`outpoint`),
+        FfiConverterBoolean.lower(`spendable`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        LabelManagerException.ErrorHandler,
+    )
+    }
 
     override fun `unit`(): BitcoinUnit {
             return FfiConverterTypeBitcoinUnit.lift(
@@ -21077,8 +21077,6 @@ public interface RustWalletManagerInterface {
 
     fun `balancePresentation`(`scanStatus`: WalletScanStatus): BalancePresentation
 
-    fun `balancePresentationForState`(`ledgerState`: WalletLedgerState): BalancePresentation
-
     suspend fun `broadcastTransaction`(`signedTransaction`: BitcoinTransaction)
 
     fun `convertAndDisplayFiat`(`amount`: Amount, `prices`: PriceResponse, `withSuffix`: kotlin.Boolean = true): kotlin.String
@@ -21213,11 +21211,6 @@ public interface RustWalletManagerInterface {
 
     fun `labelManager`(): LabelManager
 
-    /**
-     * Returns the metadata-derived bootstrap snapshot; live scan activity arrives through reconcile messages
-     */
-    fun `ledgerState`(): WalletLedgerState
-
     fun `listenForUpdates`(`reconciler`: WalletManagerReconciler)
 
     fun `markWalletAsVerified`()
@@ -21263,7 +21256,13 @@ public interface RustWalletManagerInterface {
 
     suspend fun `switchToDifferentWalletAddressType`(`walletAddressType`: WalletAddressType)
 
+    suspend fun `toggleTransactionLockState`(`txId`: TxId): TransactionLockState
+
     suspend fun `transactionDetails`(`txId`: TxId): TransactionDetails
+
+    suspend fun `transactionLockState`(`txId`: TxId): TransactionLockState
+
+    suspend fun `unlockedSpendableBalance`(): Amount
 
     fun `validateMetadata`()
 
@@ -21454,20 +21453,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         it,
 
         FfiConverterTypeWalletScanStatus.lower(`scanStatus`),_status)
-}
-    }
-    )
-    }
-
-
-    override fun `balancePresentationForState`(`ledgerState`: WalletLedgerState): BalancePresentation {
-            return FfiConverterTypeBalancePresentation.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_balance_presentation_for_state(
-        it,
-
-        FfiConverterTypeWalletLedgerState.lower(`ledgerState`),_status)
 }
     }
     )
@@ -22140,22 +22125,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
 
 
-
-    /**
-     * Returns the metadata-derived bootstrap snapshot; live scan activity arrives through reconcile messages
-     */override fun `ledgerState`(): WalletLedgerState {
-            return FfiConverterTypeWalletLedgerState.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_ledger_state(
-        it,
-        _status)
-}
-    }
-    )
-    }
-
-
     override fun `listenForUpdates`(`reconciler`: WalletManagerReconciler)
         =
     callWithHandle {
@@ -22196,7 +22165,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
 
 
-    @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `newCoinControlManager`() : RustCoinControlManager {
         return uniffiRustCallAsync(
@@ -22212,15 +22180,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         // lift function
         { FfiConverterTypeRustCoinControlManager.lift(it) },
         // Error FFI converter
-        WalletManagerException.ErrorHandler,
+        UniffiNullRustCallStatusErrorHandler,
     )
     }
 
-
-    @Throws(WalletManagerException::class)override fun `newSendFlowManager`(`balance`: Balance): RustSendFlowManager {
+    override fun `newSendFlowManager`(`balance`: Balance): RustSendFlowManager {
             return FfiConverterTypeRustSendFlowManager.lift(
     callWithHandle {
-    uniffiRustCallWithError(WalletManagerException) { _status ->
+    uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(
         it,
 
@@ -22499,6 +22466,28 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `toggleTransactionLockState`(`txId`: TxId) : TransactionLockState {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_toggle_transaction_lock_state(
+                uniffiHandle,
+
+        FfiConverterTypeTxId.lower(`txId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTransactionLockState.lift(it) },
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `transactionDetails`(`txId`: TxId) : TransactionDetails {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
@@ -22513,6 +22502,49 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
         // lift function
         { FfiConverterTypeTransactionDetails.lift(it) },
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `transactionLockState`(`txId`: TxId) : TransactionLockState {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_transaction_lock_state(
+                uniffiHandle,
+
+        FfiConverterTypeTxId.lower(`txId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTransactionLockState.lift(it) },
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `unlockedSpendableBalance`() : Amount {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_unlocked_spendable_balance(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeAmount.lift(it) },
         // Error FFI converter
         WalletManagerException.ErrorHandler,
     )
@@ -23920,8 +23952,6 @@ public interface TransactionDetailsInterface {
 
     fun `confirmationDateTime`(): kotlin.String?
 
-    fun `displayAmount`(`metadata`: WalletMetadata, `showUnit`: kotlin.Boolean = true): kotlin.String
-
     suspend fun `feeFiatFmt`(): kotlin.String
 
     fun `feeFiatFmtCached`(): kotlin.String?
@@ -24209,21 +24239,6 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     UniffiLib.uniffi_cove_fn_method_transactiondetails_confirmation_date_time(
         it,
         _status)
-}
-    }
-    )
-    }
-
-
-    override fun `displayAmount`(`metadata`: WalletMetadata, `showUnit`: kotlin.Boolean): kotlin.String {
-            return FfiConverterString.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_transactiondetails_display_amount(
-        it,
-
-        FfiConverterTypeWalletMetadata.lower(`metadata`),
-        FfiConverterBoolean.lower(`showUnit`),_status)
 }
     }
     )
@@ -42276,40 +42291,6 @@ public object FfiConverterTypeInitError : FfiConverterRustBuffer<InitException> 
 
 
 
-
-enum class InitialScanActivity {
-
-    ACTIVE,
-    IDLE;
-
-
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeInitialScanActivity: FfiConverterRustBuffer<InitialScanActivity> {
-    override fun read(buf: ByteBuffer) = try {
-        InitialScanActivity.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: InitialScanActivity) = 4UL
-
-    override fun write(value: InitialScanActivity, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
 sealed class InsertOrUpdate {
 
     data class Insert(
@@ -47849,6 +47830,9 @@ sealed class SendFlowManagerAction: Disposable  {
     object ClearAddress : SendFlowManagerAction()
 
 
+    object RefreshWalletBalance : SendFlowManagerAction()
+
+
     data class SetCoinControlMode(
         val v1: List<org.bitcoinppl.cove_core.types.Utxo>) : SendFlowManagerAction()
 
@@ -48020,6 +48004,8 @@ sealed class SendFlowManagerAction: Disposable  {
             }
             is SendFlowManagerAction.ClearAddress -> {// Nothing to destroy
             }
+            is SendFlowManagerAction.RefreshWalletBalance -> {// Nothing to destroy
+            }
             is SendFlowManagerAction.SetCoinControlMode -> {
 
     Disposable.destroy(
@@ -48160,58 +48146,59 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             3 -> SendFlowManagerAction.SelectMaxSend
             4 -> SendFlowManagerAction.ClearSendAmount
             5 -> SendFlowManagerAction.ClearAddress
-            6 -> SendFlowManagerAction.SetCoinControlMode(
+            6 -> SendFlowManagerAction.RefreshWalletBalance
+            7 -> SendFlowManagerAction.SetCoinControlMode(
                 FfiConverterSequenceTypeUtxo.read(buf),
                 )
-            7 -> SendFlowManagerAction.DisableCoinControlMode
-            8 -> SendFlowManagerAction.SelectFeeRate(
+            8 -> SendFlowManagerAction.DisableCoinControlMode
+            9 -> SendFlowManagerAction.SelectFeeRate(
                 FfiConverterTypeFeeRateOptionWithTotalFee.read(buf),
                 )
-            9 -> SendFlowManagerAction.NotifyEnteringBtcAmountChanged(
+            10 -> SendFlowManagerAction.NotifyEnteringBtcAmountChanged(
                 FfiConverterString.read(buf),
                 )
-            10 -> SendFlowManagerAction.NotifyEnteringFiatAmountChanged(
+            11 -> SendFlowManagerAction.NotifyEnteringFiatAmountChanged(
                 FfiConverterString.read(buf),
                 )
-            11 -> SendFlowManagerAction.NotifyEnteringAddressChanged(
+            12 -> SendFlowManagerAction.NotifyEnteringAddressChanged(
                 FfiConverterString.read(buf),
                 )
-            12 -> SendFlowManagerAction.NotifySelectedUnitedChanged(
+            13 -> SendFlowManagerAction.NotifySelectedUnitedChanged(
                 FfiConverterTypeBitcoinUnit.read(buf),
                 FfiConverterTypeBitcoinUnit.read(buf),
                 )
-            13 -> SendFlowManagerAction.NotifyBtcOrFiatChanged(
+            14 -> SendFlowManagerAction.NotifyBtcOrFiatChanged(
                 FfiConverterTypeFiatOrBtc.read(buf),
                 FfiConverterTypeFiatOrBtc.read(buf),
                 )
-            14 -> SendFlowManagerAction.NotifyScanCodeChanged(
+            15 -> SendFlowManagerAction.NotifyScanCodeChanged(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 )
-            15 -> SendFlowManagerAction.NotifyPricesChanged(
+            16 -> SendFlowManagerAction.NotifyPricesChanged(
                 FfiConverterTypePriceResponse.read(buf),
                 )
-            16 -> SendFlowManagerAction.NotifyFocusFieldChanged(
+            17 -> SendFlowManagerAction.NotifyFocusFieldChanged(
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 )
-            17 -> SendFlowManagerAction.NotifyAddressChanged(
+            18 -> SendFlowManagerAction.NotifyAddressChanged(
                 FfiConverterTypeAddress.read(buf),
                 )
-            18 -> SendFlowManagerAction.NotifyAmountChanged(
+            19 -> SendFlowManagerAction.NotifyAmountChanged(
                 FfiConverterTypeAmount.read(buf),
                 )
-            19 -> SendFlowManagerAction.NotifyCoinControlAmountChanged(
+            20 -> SendFlowManagerAction.NotifyCoinControlAmountChanged(
                 FfiConverterDouble.read(buf),
                 )
-            20 -> SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
+            21 -> SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
                 FfiConverterString.read(buf),
                 FfiConverterBoolean.read(buf),
                 )
-            21 -> SendFlowManagerAction.ChangeFeeRateOptions(
+            22 -> SendFlowManagerAction.ChangeFeeRateOptions(
                 FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
                 )
-            22 -> SendFlowManagerAction.FinalizeAndGoToNextScreen
+            23 -> SendFlowManagerAction.FinalizeAndGoToNextScreen
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -48244,6 +48231,12 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             )
         }
         is SendFlowManagerAction.ClearAddress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SendFlowManagerAction.RefreshWalletBalance -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -48397,92 +48390,96 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 buf.putInt(5)
                 Unit
             }
-            is SendFlowManagerAction.SetCoinControlMode -> {
+            is SendFlowManagerAction.RefreshWalletBalance -> {
                 buf.putInt(6)
+                Unit
+            }
+            is SendFlowManagerAction.SetCoinControlMode -> {
+                buf.putInt(7)
                 FfiConverterSequenceTypeUtxo.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.DisableCoinControlMode -> {
-                buf.putInt(7)
+                buf.putInt(8)
                 Unit
             }
             is SendFlowManagerAction.SelectFeeRate -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 FfiConverterTypeFeeRateOptionWithTotalFee.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyEnteringBtcAmountChanged -> {
-                buf.putInt(9)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is SendFlowManagerAction.NotifyEnteringFiatAmountChanged -> {
                 buf.putInt(10)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is SendFlowManagerAction.NotifyEnteringAddressChanged -> {
+            is SendFlowManagerAction.NotifyEnteringFiatAmountChanged -> {
                 buf.putInt(11)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is SendFlowManagerAction.NotifySelectedUnitedChanged -> {
+            is SendFlowManagerAction.NotifyEnteringAddressChanged -> {
                 buf.putInt(12)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is SendFlowManagerAction.NotifySelectedUnitedChanged -> {
+                buf.putInt(13)
                 FfiConverterTypeBitcoinUnit.write(value.`old`, buf)
                 FfiConverterTypeBitcoinUnit.write(value.`new`, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyBtcOrFiatChanged -> {
-                buf.putInt(13)
+                buf.putInt(14)
                 FfiConverterTypeFiatOrBtc.write(value.`old`, buf)
                 FfiConverterTypeFiatOrBtc.write(value.`new`, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyScanCodeChanged -> {
-                buf.putInt(14)
+                buf.putInt(15)
                 FfiConverterString.write(value.`old`, buf)
                 FfiConverterString.write(value.`new`, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyPricesChanged -> {
-                buf.putInt(15)
+                buf.putInt(16)
                 FfiConverterTypePriceResponse.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyFocusFieldChanged -> {
-                buf.putInt(16)
+                buf.putInt(17)
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.`old`, buf)
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.`new`, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyAddressChanged -> {
-                buf.putInt(17)
+                buf.putInt(18)
                 FfiConverterTypeAddress.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyAmountChanged -> {
-                buf.putInt(18)
+                buf.putInt(19)
                 FfiConverterTypeAmount.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyCoinControlAmountChanged -> {
-                buf.putInt(19)
+                buf.putInt(20)
                 FfiConverterDouble.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged -> {
-                buf.putInt(20)
+                buf.putInt(21)
                 FfiConverterString.write(value.v1, buf)
                 FfiConverterBoolean.write(value.v2, buf)
                 Unit
             }
             is SendFlowManagerAction.ChangeFeeRateOptions -> {
-                buf.putInt(21)
+                buf.putInt(22)
                 FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.FinalizeAndGoToNextScreen -> {
-                buf.putInt(22)
+                buf.putInt(23)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -51333,6 +51330,42 @@ public object FfiConverterTypeTransactionDetailError : FfiConverterRustBuffer<Tr
 
 
 
+enum class TransactionLockState {
+
+    NONE,
+    UNLOCKED,
+    LOCKED,
+    MIXED;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTransactionLockState: FfiConverterRustBuffer<TransactionLockState> {
+    override fun read(buf: ByteBuffer) = try {
+        TransactionLockState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: TransactionLockState) = 4UL
+
+    override fun write(value: TransactionLockState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class TransactionState {
 
     PENDING,
@@ -53209,79 +53242,6 @@ public object FfiConverterTypeWalletErrorAlert : FfiConverterRustBuffer<WalletEr
 
 
 
-sealed class WalletLedgerState {
-
-    object Complete : WalletLedgerState()
-
-
-    data class InitialScanIncomplete(
-        val v1: org.bitcoinppl.cove_core.InitialScanActivity) : WalletLedgerState()
-
-    {
-
-
-        companion object
-    }
-
-
-
-
-
-
-
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeWalletLedgerState : FfiConverterRustBuffer<WalletLedgerState>{
-    override fun read(buf: ByteBuffer): WalletLedgerState {
-        return when(buf.getInt()) {
-            1 -> WalletLedgerState.Complete
-            2 -> WalletLedgerState.InitialScanIncomplete(
-                FfiConverterTypeInitialScanActivity.read(buf),
-                )
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
-    }
-
-    override fun allocationSize(value: WalletLedgerState): ULong = when(value) {
-        is WalletLedgerState.Complete -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is WalletLedgerState.InitialScanIncomplete -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeInitialScanActivity.allocationSize(value.v1)
-            )
-        }
-    }
-
-    override fun write(value: WalletLedgerState, buf: ByteBuffer) {
-        when(value) {
-            is WalletLedgerState.Complete -> {
-                buf.putInt(1)
-                Unit
-            }
-            is WalletLedgerState.InitialScanIncomplete -> {
-                buf.putInt(2)
-                FfiConverterTypeInitialScanActivity.write(value.v1, buf)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-}
-
-
-
-
-
 sealed class WalletLoadState: Disposable  {
 
     object Loading : WalletLoadState()
@@ -53468,6 +53428,15 @@ sealed class WalletManagerAction: Disposable  {
     object SelectCurrentWalletAddressType : WalletManagerAction()
 
 
+    data class SelectDifferentWalletAddressType(
+        val v1: org.bitcoinppl.cove_core.WalletAddressType) : WalletManagerAction()
+
+    {
+
+
+        companion object
+    }
+
     object SelectedWalletDisappeared : WalletManagerAction()
 
 
@@ -53540,6 +53509,13 @@ sealed class WalletManagerAction: Disposable  {
             }
             is WalletManagerAction.SelectCurrentWalletAddressType -> {// Nothing to destroy
             }
+            is WalletManagerAction.SelectDifferentWalletAddressType -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
             is WalletManagerAction.SelectedWalletDisappeared -> {// Nothing to destroy
             }
             is WalletManagerAction.StartTransactionWatcher -> {
@@ -53595,13 +53571,16 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             8 -> WalletManagerAction.ToggleFiatBtcPrimarySecondary
             9 -> WalletManagerAction.ToggleShowLabels
             10 -> WalletManagerAction.SelectCurrentWalletAddressType
-            11 -> WalletManagerAction.SelectedWalletDisappeared
-            12 -> WalletManagerAction.StartTransactionWatcher(
+            11 -> WalletManagerAction.SelectDifferentWalletAddressType(
+                FfiConverterTypeWalletAddressType.read(buf),
+                )
+            12 -> WalletManagerAction.SelectedWalletDisappeared
+            13 -> WalletManagerAction.StartTransactionWatcher(
                 FfiConverterTypeTxId.read(buf),
                 )
-            13 -> WalletManagerAction.OpenReceiveAddress
-            14 -> WalletManagerAction.CreateNewReceiveAddress
-            15 -> WalletManagerAction.CloseReceiveAddress(
+            14 -> WalletManagerAction.OpenReceiveAddress
+            15 -> WalletManagerAction.CreateNewReceiveAddress
+            16 -> WalletManagerAction.CloseReceiveAddress(
                 FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -53671,6 +53650,13 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+            )
+        }
+        is WalletManagerAction.SelectDifferentWalletAddressType -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletAddressType.allocationSize(value.v1)
             )
         }
         is WalletManagerAction.SelectedWalletDisappeared -> {
@@ -53753,25 +53739,30 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
                 buf.putInt(10)
                 Unit
             }
-            is WalletManagerAction.SelectedWalletDisappeared -> {
+            is WalletManagerAction.SelectDifferentWalletAddressType -> {
                 buf.putInt(11)
+                FfiConverterTypeWalletAddressType.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerAction.SelectedWalletDisappeared -> {
+                buf.putInt(12)
                 Unit
             }
             is WalletManagerAction.StartTransactionWatcher -> {
-                buf.putInt(12)
+                buf.putInt(13)
                 FfiConverterTypeTxId.write(value.v1, buf)
                 Unit
             }
             is WalletManagerAction.OpenReceiveAddress -> {
-                buf.putInt(13)
-                Unit
-            }
-            is WalletManagerAction.CreateNewReceiveAddress -> {
                 buf.putInt(14)
                 Unit
             }
-            is WalletManagerAction.CloseReceiveAddress -> {
+            is WalletManagerAction.CreateNewReceiveAddress -> {
                 buf.putInt(15)
+                Unit
+            }
+            is WalletManagerAction.CloseReceiveAddress -> {
+                buf.putInt(16)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
@@ -53919,12 +53910,6 @@ sealed class WalletManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
-    class InitialScanIncomplete(
-        ) : WalletManagerException() {
-        override val message
-            get() = ""
-    }
-
     class BuildTxException(
 
         val v1: kotlin.String
@@ -53998,6 +53983,14 @@ sealed class WalletManagerException: kotlin.Exception() {
     }
 
     class AddUtxosException(
+
+        val v1: kotlin.String
+        ) : WalletManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class OutputLabelsException(
 
         val v1: kotlin.String
         ) : WalletManagerException() {
@@ -54097,35 +54090,37 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
             17 -> WalletManagerException.FeesException(
                 FfiConverterString.read(buf),
                 )
-            18 -> WalletManagerException.InitialScanIncomplete()
-            19 -> WalletManagerException.BuildTxException(
+            18 -> WalletManagerException.BuildTxException(
                 FfiConverterString.read(buf),
                 )
-            20 -> WalletManagerException.InsufficientFunds(
+            19 -> WalletManagerException.InsufficientFunds(
                 FfiConverterString.read(buf),
                 )
-            21 -> WalletManagerException.GetConfirmDetailsException(
+            20 -> WalletManagerException.GetConfirmDetailsException(
                 FfiConverterString.read(buf),
                 )
-            22 -> WalletManagerException.SignAndBroadcastException(
+            21 -> WalletManagerException.SignAndBroadcastException(
                 FfiConverterString.read(buf),
                 )
-            23 -> WalletManagerException.Converter(
+            22 -> WalletManagerException.Converter(
                 FfiConverterTypeConverterError.read(buf),
                 )
-            24 -> WalletManagerException.UnknownException(
+            23 -> WalletManagerException.UnknownException(
                 FfiConverterString.read(buf),
                 )
-            25 -> WalletManagerException.PsbtFinalizeException(
+            24 -> WalletManagerException.PsbtFinalizeException(
                 FfiConverterString.read(buf),
                 )
-            26 -> WalletManagerException.GetHistoricalPricesException(
+            25 -> WalletManagerException.GetHistoricalPricesException(
                 FfiConverterString.read(buf),
                 )
-            27 -> WalletManagerException.CsvCreationException(
+            26 -> WalletManagerException.CsvCreationException(
                 FfiConverterString.read(buf),
                 )
-            28 -> WalletManagerException.AddUtxosException(
+            27 -> WalletManagerException.AddUtxosException(
+                FfiConverterString.read(buf),
+                )
+            28 -> WalletManagerException.OutputLabelsException(
                 FfiConverterString.read(buf),
                 )
             29 -> WalletManagerException.DatabaseCorruption(
@@ -54224,10 +54219,6 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
-            is WalletManagerException.InitialScanIncomplete -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-            )
             is WalletManagerException.BuildTxException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
@@ -54274,6 +54265,11 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 + FfiConverterString.allocationSize(value.v1)
             )
             is WalletManagerException.AddUtxosException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is WalletManagerException.OutputLabelsException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -54377,56 +54373,57 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.InitialScanIncomplete -> {
-                buf.putInt(18)
-                Unit
-            }
             is WalletManagerException.BuildTxException -> {
-                buf.putInt(19)
+                buf.putInt(18)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.InsufficientFunds -> {
-                buf.putInt(20)
+                buf.putInt(19)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.GetConfirmDetailsException -> {
-                buf.putInt(21)
+                buf.putInt(20)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.SignAndBroadcastException -> {
-                buf.putInt(22)
+                buf.putInt(21)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.Converter -> {
-                buf.putInt(23)
+                buf.putInt(22)
                 FfiConverterTypeConverterError.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.UnknownException -> {
-                buf.putInt(24)
+                buf.putInt(23)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.PsbtFinalizeException -> {
-                buf.putInt(25)
+                buf.putInt(24)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.GetHistoricalPricesException -> {
-                buf.putInt(26)
+                buf.putInt(25)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.CsvCreationException -> {
-                buf.putInt(27)
+                buf.putInt(26)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.AddUtxosException -> {
+                buf.putInt(27)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.OutputLabelsException -> {
                 buf.putInt(28)
                 FfiConverterString.write(value.v1, buf)
                 Unit
@@ -54453,15 +54450,6 @@ sealed class WalletManagerReconcileMessage: Disposable  {
 
     data class WalletScanStatusChanged(
         val v1: org.bitcoinppl.cove_core.WalletScanStatus) : WalletManagerReconcileMessage()
-
-    {
-
-
-        companion object
-    }
-
-    data class LedgerStateChanged(
-        val v1: org.bitcoinppl.cove_core.WalletLedgerState) : WalletManagerReconcileMessage()
 
     {
 
@@ -54628,13 +54616,6 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     )
 
             }
-            is WalletManagerReconcileMessage.LedgerStateChanged -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
             is WalletManagerReconcileMessage.AvailableTransactions -> {
 
     Disposable.destroy(
@@ -54769,56 +54750,53 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             1 -> WalletManagerReconcileMessage.WalletScanStatusChanged(
                 FfiConverterTypeWalletScanStatus.read(buf),
                 )
-            2 -> WalletManagerReconcileMessage.LedgerStateChanged(
-                FfiConverterTypeWalletLedgerState.read(buf),
-                )
-            3 -> WalletManagerReconcileMessage.AvailableTransactions(
+            2 -> WalletManagerReconcileMessage.AvailableTransactions(
                 FfiConverterSequenceTypeTransaction.read(buf),
                 )
-            4 -> WalletManagerReconcileMessage.ScanComplete(
+            3 -> WalletManagerReconcileMessage.ScanComplete(
                 FfiConverterSequenceTypeTransaction.read(buf),
                 )
-            5 -> WalletManagerReconcileMessage.UpdatedTransactions(
+            4 -> WalletManagerReconcileMessage.UpdatedTransactions(
                 FfiConverterSequenceTypeTransaction.read(buf),
                 )
-            6 -> WalletManagerReconcileMessage.NodeConnectionFailed(
+            5 -> WalletManagerReconcileMessage.NodeConnectionFailed(
                 FfiConverterString.read(buf),
                 )
-            7 -> WalletManagerReconcileMessage.WalletMetadataChanged(
+            6 -> WalletManagerReconcileMessage.WalletMetadataChanged(
                 FfiConverterTypeWalletMetadata.read(buf),
                 )
-            8 -> WalletManagerReconcileMessage.WalletBalanceChanged(
+            7 -> WalletManagerReconcileMessage.WalletBalanceChanged(
                 FfiConverterTypeBalance.read(buf),
                 )
-            9 -> WalletManagerReconcileMessage.WalletException(
+            8 -> WalletManagerReconcileMessage.WalletException(
                 FfiConverterTypeWalletManagerError.read(buf),
                 )
-            10 -> WalletManagerReconcileMessage.UnknownError(
+            9 -> WalletManagerReconcileMessage.UnknownError(
                 FfiConverterString.read(buf),
                 )
-            11 -> WalletManagerReconcileMessage.WalletScannerResponse(
+            10 -> WalletManagerReconcileMessage.WalletScannerResponse(
                 FfiConverterTypeScannerResponse.read(buf),
                 )
-            12 -> WalletManagerReconcileMessage.UnsignedTransactionsChanged
-            13 -> WalletManagerReconcileMessage.SendFlowException(
+            11 -> WalletManagerReconcileMessage.UnsignedTransactionsChanged
+            12 -> WalletManagerReconcileMessage.SendFlowException(
                 FfiConverterTypeSendFlowErrorAlert.read(buf),
                 )
-            14 -> WalletManagerReconcileMessage.HotWalletKeyMissing(
+            13 -> WalletManagerReconcileMessage.HotWalletKeyMissing(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            15 -> WalletManagerReconcileMessage.ReceiveAddressUpdated(
+            14 -> WalletManagerReconcileMessage.ReceiveAddressUpdated(
                 FfiConverterTypeReceiveAddressState.read(buf),
                 )
-            16 -> WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated(
+            15 -> WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated(
                 FfiConverterTypeReceiveAddressPresentation.read(buf),
                 )
-            17 -> WalletManagerReconcileMessage.ReceiveAddressLoadingChanged(
+            16 -> WalletManagerReconcileMessage.ReceiveAddressLoadingChanged(
                 FfiConverterBoolean.read(buf),
                 )
-            18 -> WalletManagerReconcileMessage.ReceiveAddressError(
+            17 -> WalletManagerReconcileMessage.ReceiveAddressError(
                 FfiConverterString.read(buf),
                 )
-            19 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
+            18 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
                 FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -54831,13 +54809,6 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             (
                 4UL
                 + FfiConverterTypeWalletScanStatus.allocationSize(value.v1)
-            )
-        }
-        is WalletManagerReconcileMessage.LedgerStateChanged -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeWalletLedgerState.allocationSize(value.v1)
             )
         }
         is WalletManagerReconcileMessage.AvailableTransactions -> {
@@ -54967,92 +54938,87 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 FfiConverterTypeWalletScanStatus.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerReconcileMessage.LedgerStateChanged -> {
-                buf.putInt(2)
-                FfiConverterTypeWalletLedgerState.write(value.v1, buf)
-                Unit
-            }
             is WalletManagerReconcileMessage.AvailableTransactions -> {
-                buf.putInt(3)
+                buf.putInt(2)
                 FfiConverterSequenceTypeTransaction.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ScanComplete -> {
-                buf.putInt(4)
+                buf.putInt(3)
                 FfiConverterSequenceTypeTransaction.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.UpdatedTransactions -> {
-                buf.putInt(5)
+                buf.putInt(4)
                 FfiConverterSequenceTypeTransaction.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.NodeConnectionFailed -> {
-                buf.putInt(6)
+                buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
-                buf.putInt(7)
+                buf.putInt(6)
                 FfiConverterTypeWalletMetadata.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
-                buf.putInt(8)
+                buf.putInt(7)
                 FfiConverterTypeBalance.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.WalletException -> {
-                buf.putInt(9)
+                buf.putInt(8)
                 FfiConverterTypeWalletManagerError.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.UnknownError -> {
-                buf.putInt(10)
+                buf.putInt(9)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
-                buf.putInt(11)
+                buf.putInt(10)
                 FfiConverterTypeScannerResponse.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {
-                buf.putInt(12)
+                buf.putInt(11)
                 Unit
             }
             is WalletManagerReconcileMessage.SendFlowException -> {
-                buf.putInt(13)
+                buf.putInt(12)
                 FfiConverterTypeSendFlowErrorAlert.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
-                buf.putInt(14)
+                buf.putInt(13)
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressUpdated -> {
-                buf.putInt(15)
+                buf.putInt(14)
                 FfiConverterTypeReceiveAddressState.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated -> {
-                buf.putInt(16)
+                buf.putInt(15)
                 FfiConverterTypeReceiveAddressPresentation.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressLoadingChanged -> {
-                buf.putInt(17)
+                buf.putInt(16)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressError -> {
-                buf.putInt(18)
+                buf.putInt(17)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
-                buf.putInt(19)
+                buf.putInt(18)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
@@ -59311,107 +59277,6 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 
         FfiConverterUByte.lower(`confirmed`),
         FfiConverterUByte.lower(`unconfirmed`),_status)
-}
-    )
-    }
-
- fun `walletAmountInFiatCached`(`amount`: Amount): kotlin.Double? {
-            return FfiConverterOptionalDouble.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_amount_in_fiat_cached(
-
-
-        FfiConverterTypeAmount.lower(`amount`),_status)
-}
-    )
-    }
-
- fun `walletDisplayAmount`(`metadata`: WalletMetadata, `amount`: Amount, `showUnit`: kotlin.Boolean): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_display_amount(
-
-
-        FfiConverterTypeWalletMetadata.lower(`metadata`),
-        FfiConverterTypeAmount.lower(`amount`),
-        FfiConverterBoolean.lower(`showUnit`),_status)
-}
-    )
-    }
-
- fun `walletDisplayAmountPendingFmt`(`metadata`: WalletMetadata, `amount`: Amount): kotlin.String? {
-            return FfiConverterOptionalString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_display_amount_pending_fmt(
-
-
-        FfiConverterTypeWalletMetadata.lower(`metadata`),
-        FfiConverterTypeAmount.lower(`amount`),_status)
-}
-    )
-    }
-
- fun `walletDisplayAmountWithDirection`(`metadata`: WalletMetadata, `amount`: Amount, `direction`: TransactionDirection): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_display_amount_with_direction(
-
-
-        FfiConverterTypeWalletMetadata.lower(`metadata`),
-        FfiConverterTypeAmount.lower(`amount`),
-        FfiConverterTypeTransactionDirection.lower(`direction`),_status)
-}
-    )
-    }
-
- fun `walletDisplayFiatAmount`(`metadata`: WalletMetadata, `amount`: kotlin.Double, `withSuffix`: kotlin.Boolean): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_display_fiat_amount(
-
-
-        FfiConverterTypeWalletMetadata.lower(`metadata`),
-        FfiConverterDouble.lower(`amount`),
-        FfiConverterBoolean.lower(`withSuffix`),_status)
-}
-    )
-    }
-
- fun `walletDisplayFiatAmountPendingFmt`(`metadata`: WalletMetadata, `amount`: kotlin.Double, `withSuffix`: kotlin.Boolean): kotlin.String? {
-            return FfiConverterOptionalString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_display_fiat_amount_pending_fmt(
-
-
-        FfiConverterTypeWalletMetadata.lower(`metadata`),
-        FfiConverterDouble.lower(`amount`),
-        FfiConverterBoolean.lower(`withSuffix`),_status)
-}
-    )
-    }
-
- fun `walletDisplayFiatAmountWithDirection`(`metadata`: WalletMetadata, `amount`: kotlin.Double, `direction`: TransactionDirection, `withSuffix`: kotlin.Boolean): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_display_fiat_amount_with_direction(
-
-
-        FfiConverterTypeWalletMetadata.lower(`metadata`),
-        FfiConverterDouble.lower(`amount`),
-        FfiConverterTypeTransactionDirection.lower(`direction`),
-        FfiConverterBoolean.lower(`withSuffix`),_status)
-}
-    )
-    }
-
- fun `walletDisplaySentAndReceivedAmount`(`metadata`: WalletMetadata, `sentAndReceived`: SentAndReceived): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_wallet_display_sent_and_received_amount(
-
-
-        FfiConverterTypeWalletMetadata.lower(`metadata`),
-        FfiConverterTypeSentAndReceived.lower(`sentAndReceived`),_status)
 }
     )
     }

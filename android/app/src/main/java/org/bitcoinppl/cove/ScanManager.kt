@@ -1,10 +1,6 @@
 package org.bitcoinppl.cove
 
 import androidx.compose.runtime.Stable
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.tapcard.*
@@ -13,7 +9,6 @@ import org.bitcoinppl.cove_core.types.*
 @Stable
 class ScanManager private constructor() {
     private val tag = "ScanManager"
-    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val app: AppManager get() = AppManager.getInstance()
 
@@ -56,8 +51,8 @@ class ScanManager private constructor() {
                 }
 
                 is MultiFormat.Bip329Labels -> {
-                    val selectedWallet = Database().globalConfig().selectedWallet()
-                    if (selectedWallet == null) {
+                    val manager = app.walletManager
+                    if (manager == null || Database().globalConfig().selectedWallet() == null) {
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.InvalidFileFormat(
@@ -68,14 +63,8 @@ class ScanManager private constructor() {
                     }
 
                     try {
-                        LabelManager(id = selectedWallet).use { it.importLabels(multiFormat.v1) }
+                        manager.importLabels(multiFormat.v1)
                         app.alertState = TaggedItem(AppAlertState.ImportedLabelsSuccessfully)
-
-                        app.walletManager?.let { wm ->
-                            mainScope.launch {
-                                wm.rust.getTransactions()
-                            }
-                        }
                     } catch (e: Exception) {
                         Log.e(tag, "Failed to import labels", e)
                         app.alertState =

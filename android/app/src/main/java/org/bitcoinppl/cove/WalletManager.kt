@@ -306,6 +306,22 @@ class WalletManager :
         return details
     }
 
+    suspend fun transactionLockState(txId: TxId): TransactionLockState = rust.transactionLockState(txId)
+
+    suspend fun toggleTransactionLockState(txId: TxId): TransactionLockState = rust.toggleTransactionLockState(txId)
+
+    fun importLabels(labels: Bip329Labels) {
+        LabelManager(id = id).use { it.importLabels(labels) }
+        AppManager.getInstance().reconcileAfterLabelImport(id)
+    }
+
+    fun reconcileAfterLabelImport() {
+        transactionDetailsCache.clear()
+        mainScope.launch {
+            rust.getTransactions()
+        }
+    }
+
     fun updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {
         transactionDetailsCache[txId] = details
     }

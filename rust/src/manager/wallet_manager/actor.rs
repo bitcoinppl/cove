@@ -5,8 +5,8 @@ use crate::{
     },
     historical_price_service::HistoricalPriceService,
     manager::wallet_manager::{
-        Error, SendFlowErrorAlert, WalletLedgerState, WalletManagerError, WalletScanPhase,
-        WalletScanStatus,
+        Error, SendFlowErrorAlert, TransactionLockState, WalletLedgerState, WalletManagerError,
+        WalletScanPhase, WalletScanStatus,
         receive_address::{
             CACHE_WINDOW, ReceiveAddressPresentation, ReceiveAddressRefreshState,
             ReceiveAddressSession, ReceiveAddressState, ReceiveAddressStatus,
@@ -35,11 +35,12 @@ use ahash::HashMap;
 use bdk_wallet::{
     AddUtxoError, Utxo, WeightedUtxo,
     chain::{
-        BlockId, TxGraph,
+        BlockId, ChainPosition, TxGraph,
         bitcoin::Psbt,
         spk_client::{FullScanResponse, SyncRequest, SyncResponse},
     },
     error::CreateTxError,
+    tx_builder::TxBuilder,
 };
 // Note: SignOptions is marked deprecated in bdk_wallet 2.2.0 with a misleading message
 // saying it moved to bitcoin::psbt, but no replacement exists there yet. bdk_wallet itself
@@ -65,6 +66,7 @@ use flume::Sender;
 use parking_lot::RwLock;
 use rand::RngExt as _;
 use std::{
+    collections::HashSet,
     sync::Arc,
     time::{Duration, UNIX_EPOCH},
 };
@@ -212,6 +214,11 @@ impl WalletActor {
         Produces::ok(balance)
     }
 
+    #[into_actor_result]
+    pub async fn unlocked_trusted_spendable_balance(&mut self) -> Result<Amount, Error> {
+        self.unlocked_trusted_spendable_balance_inner()
+    }
+
     // Build a transaction but don't advance the change address index
     #[into_actor_result]
     pub async fn build_ephemeral_drain_tx(
@@ -223,8 +230,10 @@ impl WalletActor {
 
         debug!("build_ephemeral_drain_tx for fee rate {}", fee.sat_per_vb());
         let script_pubkey = address.script_pubkey();
+        let locked_outpoints = self.locked_output_outpoints()?;
         let mut tx_builder = self.wallet.bdk.build_tx();
 
+        exclude_locked_outpoints(&mut tx_builder, locked_outpoints);
         tx_builder.drain_wallet().drain_to(script_pubkey).fee_rate(fee.into());
         let psbt = tx_builder.finish().map_err_str(Error::BuildTxError)?;
         self.wallet.unreserve_tx_change_addresses(&psbt.unsigned_tx);
@@ -247,8 +256,10 @@ impl WalletActor {
         let script_pubkey = address.script_pubkey();
 
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
+        let locked_outpoints = self.locked_output_outpoints()?;
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
 
+        exclude_locked_outpoints(&mut tx_builder, locked_outpoints);
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(script_pubkey, amount);
         tx_builder.fee_rate(fee_rate);
@@ -1132,6 +1143,23 @@ impl WalletActor {
         Produces::ok(details)
     }
 
+    pub async fn current_wallet_unspent_outpoints_for_txn(
+        &mut self,
+        tx_id: TxId,
+    ) -> ActorResult<Vec<OutPoint>> {
+        Produces::ok(self.current_wallet_unspent_outpoints_for_txid(tx_id.0))
+    }
+
+    pub async fn transaction_lock_state(
+        &mut self,
+        tx_id: TxId,
+    ) -> ActorResult<TransactionLockState> {
+        let outpoints = self.current_wallet_unspent_outpoints_for_txid(tx_id.0);
+        let state = self.lock_state_for_outpoints(&outpoints)?;
+
+        Produces::ok(state)
+    }
+
     pub async fn start_transaction_watcher(&mut self, tx_id: Txid) -> ActorResult<()> {
         debug!("start_transaction_watcher for txn: {tx_id}");
         if self.transaction_watchers.contains_key(&tx_id) {
@@ -1258,6 +1286,7 @@ impl WalletActor {
         utxos: &[bitcoin::OutPoint],
     ) -> Result<Amount, Error> {
         let fee_rate = fee_rate.into();
+        self.reject_locked_outpoints(utxos)?;
 
         let (utxo_total_amount, fee_estimate) = {
             let mut utxo_total_amount = Amount::ZERO;
@@ -1360,6 +1389,57 @@ impl WalletActor {
                 )
             })
             .collect()
+    }
+
+    fn current_wallet_unspent_outpoints_for_txid(&self, txid: Txid) -> Vec<OutPoint> {
+        current_wallet_unspent_outpoints_for_txid(self.wallet.bdk.list_unspent(), txid)
+    }
+
+    fn lock_state_for_outpoints(
+        &self,
+        outpoints: &[OutPoint],
+    ) -> Result<TransactionLockState, Error> {
+        if outpoints.is_empty() {
+            return Ok(TransactionLockState::None);
+        }
+
+        let locked_outpoints =
+            self.db.labels.locked_output_outpoints().map_err_str(Error::OutputLabelsError)?;
+        Ok(lock_state_for_outpoints(outpoints, &locked_outpoints))
+    }
+
+    fn unlocked_trusted_spendable_balance_inner(&self) -> Result<Amount, Error> {
+        let spendable = self.wallet.balance().0.trusted_spendable();
+        let locked_outpoints =
+            self.db.labels.locked_output_outpoints().map_err_str(Error::OutputLabelsError)?;
+        let locked_amount = self
+            .wallet
+            .bdk
+            .list_unspent()
+            .filter(|output| locked_outpoints.contains(&output.outpoint))
+            .filter(trusted_spendable_output)
+            .fold(Amount::ZERO, |total, output| total + output.txout.value);
+
+        Ok(spendable.checked_sub(locked_amount).unwrap_or(Amount::ZERO))
+    }
+
+    fn locked_output_outpoints(&self) -> Result<Vec<OutPoint>, Error> {
+        let outpoints = self
+            .db
+            .labels
+            .locked_output_outpoints()
+            .map_err_str(Error::OutputLabelsError)?
+            .into_iter()
+            .collect();
+
+        Ok(outpoints)
+    }
+
+    fn reject_locked_outpoints(&self, outpoints: &[OutPoint]) -> Result<(), Error> {
+        let locked_outpoints =
+            self.db.labels.locked_output_outpoints().map_err_str(Error::OutputLabelsError)?;
+
+        reject_locked_selected_outpoints(outpoints, &locked_outpoints)
     }
 
     /// Perform a full scan with a user-supplied gap limit to recover missed addresses.
@@ -2273,6 +2353,66 @@ impl Drop for WalletActor {
     }
 }
 
+fn trusted_spendable_output(output: &LocalOutput) -> bool {
+    output.chain_position.is_confirmed()
+        || matches!(output.chain_position, ChainPosition::Unconfirmed { .. })
+            && output.keychain == KeychainKind::Internal
+}
+
+fn lock_state_for_outpoints(
+    outpoints: &[OutPoint],
+    locked_outpoints: &HashSet<OutPoint>,
+) -> TransactionLockState {
+    if outpoints.is_empty() {
+        return TransactionLockState::None;
+    }
+
+    let locked_count =
+        outpoints.iter().filter(|outpoint| locked_outpoints.contains(outpoint)).count();
+
+    match locked_count {
+        0 => TransactionLockState::Unlocked,
+        count if count == outpoints.len() => TransactionLockState::Locked,
+        _ => TransactionLockState::Mixed,
+    }
+}
+
+fn current_wallet_unspent_outpoints_for_txid(
+    outputs: impl IntoIterator<Item = LocalOutput>,
+    txid: Txid,
+) -> Vec<OutPoint> {
+    outputs
+        .into_iter()
+        .filter(|output| output.outpoint.txid == txid)
+        .map(|output| output.outpoint)
+        .collect()
+}
+
+fn selected_outpoints_include_locked(
+    outpoints: &[OutPoint],
+    locked_outpoints: &std::collections::HashSet<OutPoint>,
+) -> bool {
+    outpoints.iter().any(|outpoint| locked_outpoints.contains(outpoint))
+}
+
+fn reject_locked_selected_outpoints(
+    outpoints: &[OutPoint],
+    locked_outpoints: &std::collections::HashSet<OutPoint>,
+) -> Result<(), Error> {
+    if selected_outpoints_include_locked(outpoints, locked_outpoints) {
+        return Err(Error::InsufficientFunds("selected UTXOs include locked outputs".into()));
+    }
+
+    Ok(())
+}
+
+fn exclude_locked_outpoints<Cs>(
+    tx_builder: &mut TxBuilder<'_, Cs>,
+    locked_outpoints: Vec<OutPoint>,
+) {
+    tx_builder.unspendable(locked_outpoints);
+}
+
 async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
     // Create a fresh client with its own TCP connection for this background check.
     // We cannot reuse the actor's cached client because:
@@ -2301,20 +2441,80 @@ async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use bdk_wallet::KeychainKind;
+    use bdk_wallet::{
+        KeychainKind, LocalOutput,
+        chain::{ChainPosition, ConfirmationBlockTime},
+        test_utils::{get_funded_wallet_wpkh, receive_output_in_latest_block},
+    };
+    use bitcoin::{
+        Address as BdkAddress, Amount, BlockHash, Network, OutPoint, ScriptBuf, TxOut, Txid,
+        hashes::Hash as _,
+    };
     use cove_bdk_progressive_scan::ScanUpdate;
-    use std::{collections::BTreeMap, time::UNIX_EPOCH};
+    use std::{
+        collections::{BTreeMap, HashSet},
+        time::UNIX_EPOCH,
+    };
 
     use crate::wallet::metadata::WalletMetadata;
 
     use super::{
-        ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, Error, FullScanType, InitialScanRoute,
-        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart,
+        ActorState, BlockId, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType,
+        InitialScanRoute, RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart,
         full_scan_updates_initial_metadata, initial_scan_route, ledger_ready_for_spend,
         metadata_with_full_scan_performed, progressive_scan_update_response,
         reset_scan_lifecycle_state_for_address_type_switch, should_accept_wallet_scan_generation,
-        should_skip_recent_scan, wallet_scan_progress_start,
+        should_skip_recent_scan, trusted_spendable_output, wallet_scan_progress_start,
     };
+    use crate::manager::wallet_manager::TransactionLockState;
+
+    fn local_output_with_outpoint(
+        keychain: KeychainKind,
+        chain_position: ChainPosition<ConfirmationBlockTime>,
+        outpoint: OutPoint,
+    ) -> LocalOutput {
+        LocalOutput {
+            outpoint,
+            txout: TxOut { value: Amount::from_sat(1_000), script_pubkey: ScriptBuf::new() },
+            keychain,
+            is_spent: false,
+            derivation_index: 0,
+            chain_position,
+        }
+    }
+
+    fn local_output(
+        keychain: KeychainKind,
+        chain_position: ChainPosition<ConfirmationBlockTime>,
+    ) -> LocalOutput {
+        local_output_with_outpoint(keychain, chain_position, OutPoint::null())
+    }
+
+    fn confirmed_position() -> ChainPosition<ConfirmationBlockTime> {
+        ChainPosition::Confirmed {
+            anchor: ConfirmationBlockTime {
+                block_id: BlockId { height: 1, hash: BlockHash::all_zeros() },
+                confirmation_time: 1,
+            },
+            transitively: None,
+        }
+    }
+
+    fn unconfirmed_position() -> ChainPosition<ConfirmationBlockTime> {
+        ChainPosition::Unconfirmed { first_seen: Some(1), last_seen: Some(1) }
+    }
+
+    fn outpoint(vout: u32) -> OutPoint {
+        OutPoint { txid: Txid::from_byte_array([1; 32]), vout }
+    }
+
+    fn regtest_address() -> BdkAddress {
+        "bcrt1q3qtze4ys45tgdvguj66zrk4fu6hq3a3v9pfly5"
+            .parse::<BdkAddress<_>>()
+            .expect("address parses")
+            .require_network(Network::Regtest)
+            .expect("address is regtest")
+    }
 
     #[test]
     fn progressive_scan_update_response_preserves_last_active_indices() {
@@ -2327,6 +2527,139 @@ mod tests {
         let response = progressive_scan_update_response(scan_update);
 
         assert_eq!(response.last_active_indices, BTreeMap::from([(KeychainKind::External, 7)]));
+    }
+
+    #[test]
+    fn trusted_spendable_output_matches_bdk_balance_categories() {
+        let confirmed_external = local_output(KeychainKind::External, confirmed_position());
+        let unconfirmed_internal = local_output(KeychainKind::Internal, unconfirmed_position());
+        let unconfirmed_external = local_output(KeychainKind::External, unconfirmed_position());
+
+        assert!(trusted_spendable_output(&confirmed_external));
+        assert!(trusted_spendable_output(&unconfirmed_internal));
+        assert!(!trusted_spendable_output(&unconfirmed_external));
+    }
+
+    #[test]
+    fn lock_state_for_outpoints_returns_none_without_relevant_outputs() {
+        assert_eq!(
+            super::lock_state_for_outpoints(&[], &HashSet::new()),
+            TransactionLockState::None
+        );
+    }
+
+    #[test]
+    fn lock_state_for_outpoints_returns_unlocked_when_no_outputs_are_locked() {
+        let outpoints = [outpoint(0), outpoint(1)];
+
+        assert_eq!(
+            super::lock_state_for_outpoints(&outpoints, &HashSet::new()),
+            TransactionLockState::Unlocked
+        );
+    }
+
+    #[test]
+    fn lock_state_for_outpoints_returns_locked_when_all_outputs_are_locked() {
+        let outpoints = [outpoint(0), outpoint(1)];
+        let locked = HashSet::from(outpoints);
+
+        assert_eq!(
+            super::lock_state_for_outpoints(&outpoints, &locked),
+            TransactionLockState::Locked
+        );
+    }
+
+    #[test]
+    fn lock_state_for_outpoints_returns_mixed_when_some_outputs_are_locked() {
+        let outpoints = [outpoint(0), outpoint(1)];
+        let locked = HashSet::from([outpoint(1)]);
+
+        assert_eq!(
+            super::lock_state_for_outpoints(&outpoints, &locked),
+            TransactionLockState::Mixed
+        );
+    }
+
+    #[test]
+    fn current_wallet_unspent_outpoints_for_txid_ignores_other_transactions() {
+        let matching = outpoint(0);
+        let other = OutPoint { txid: Txid::from_byte_array([2; 32]), vout: 0 };
+        let outputs = [
+            local_output_with_outpoint(KeychainKind::External, confirmed_position(), matching),
+            local_output_with_outpoint(KeychainKind::External, confirmed_position(), other),
+        ];
+
+        assert_eq!(
+            super::current_wallet_unspent_outpoints_for_txid(outputs, matching.txid),
+            vec![matching]
+        );
+    }
+
+    #[test]
+    fn selected_outpoints_include_locked_detects_locked_manual_selection() {
+        let selected = [outpoint(0), outpoint(1)];
+        let locked = HashSet::from([outpoint(1), outpoint(2)]);
+
+        assert!(super::selected_outpoints_include_locked(&selected, &locked));
+        assert!(!super::selected_outpoints_include_locked(&selected, &HashSet::new()));
+    }
+
+    #[test]
+    fn automatic_builder_excludes_locked_outpoints_from_psbt_inputs() {
+        let (mut wallet, initial_txid) = get_funded_wallet_wpkh();
+        let locked = OutPoint { txid: initial_txid, vout: 0 };
+        let unlocked = receive_output_in_latest_block(&mut wallet, Amount::from_sat(80_000));
+        let address = regtest_address();
+
+        let mut tx_builder = wallet.build_tx();
+        super::exclude_locked_outpoints(&mut tx_builder, vec![locked]);
+        tx_builder.add_recipient(address.script_pubkey(), Amount::from_sat(40_000));
+        tx_builder.fee_absolute(Amount::from_sat(500));
+
+        let psbt = tx_builder.finish().expect("unlocked output can fund transaction");
+        let spent_outpoints = psbt
+            .unsigned_tx
+            .input
+            .iter()
+            .map(|input| input.previous_output)
+            .collect::<HashSet<_>>();
+
+        assert!(!spent_outpoints.contains(&locked));
+        assert!(spent_outpoints.contains(&unlocked));
+    }
+
+    #[test]
+    fn drain_builder_excludes_locked_outpoints_from_psbt_inputs() {
+        let (mut wallet, initial_txid) = get_funded_wallet_wpkh();
+        let locked = OutPoint { txid: initial_txid, vout: 0 };
+        let unlocked = receive_output_in_latest_block(&mut wallet, Amount::from_sat(80_000));
+        let address = regtest_address();
+
+        let mut tx_builder = wallet.build_tx();
+        super::exclude_locked_outpoints(&mut tx_builder, vec![locked]);
+        tx_builder.drain_wallet().drain_to(address.script_pubkey());
+        tx_builder.fee_absolute(Amount::from_sat(500));
+
+        let psbt = tx_builder.finish().expect("unlocked output can fund drain transaction");
+        let spent_outpoints = psbt
+            .unsigned_tx
+            .input
+            .iter()
+            .map(|input| input.previous_output)
+            .collect::<HashSet<_>>();
+
+        assert!(!spent_outpoints.contains(&locked));
+        assert!(spent_outpoints.contains(&unlocked));
+    }
+
+    #[test]
+    fn manual_builder_rejects_locked_outpoints_before_bdk_can_override_unspendable() {
+        let selected = [outpoint(0)];
+        let locked = HashSet::from(selected);
+        let error = super::reject_locked_selected_outpoints(&selected, &locked)
+            .expect_err("locked manual selection must be rejected");
+
+        assert!(matches!(error, super::Error::InsufficientFunds(_)));
     }
 
     #[test]

@@ -12,6 +12,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
@@ -30,6 +31,8 @@ class CoinControlManager(
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val isClosed = AtomicBoolean(false)
+
+    val id: WalletId = rust.id()
 
     var sort by mutableStateOf<CoinControlListSort?>(
         CoinControlListSort.Date(ListSortDirection.DESCENDING),
@@ -76,8 +79,10 @@ class CoinControlManager(
      * update selected utxos and dispatch notification
      */
     fun updateSelected(value: Set<ULong>) {
-        selected = value
-        val outpoints = utxos.filter { value.contains(it.outpoint.hashToUint()) }.map { it.outpoint }
+        val spendableIds = utxos.filter { it.spendable }.map { it.outpoint.hashToUint() }.toSet()
+        val spendableSelection = value.intersect(spendableIds)
+        selected = spendableSelection
+        val outpoints = utxos.filter { spendableSelection.contains(it.outpoint.hashToUint()) }.map { it.outpoint }
         dispatch(CoinControlManagerAction.NotifySelectedUtxosChanged(outpoints))
     }
 
@@ -98,8 +103,8 @@ class CoinControlManager(
     val totalSelectedAmount: String
         get() = displayAmount(totalSelected)
 
-    val totalSelectedSats: Int
-        get() = totalSelected.asSats().toInt()
+    val totalSelectedSats: Long
+        get() = totalSelected.asSats().toLong()
 
     /**
      * called when user presses continue button
@@ -107,7 +112,7 @@ class CoinControlManager(
      */
     fun continuePressed(app: AppManager) {
         val walletId = rust.id()
-        val selectedUtxos = utxos.filter { selected.contains(it.outpoint.hashToUint()) }
+        val selectedUtxos = utxos.filter { it.spendable && selected.contains(it.outpoint.hashToUint()) }
 
         // navigate forward to coin control set amount screen
         val sendRoute = SendRoute.CoinControlSetAmount(walletId, selectedUtxos)
@@ -121,7 +126,7 @@ class CoinControlManager(
             mainScope.launch {
                 delay(SEND_FLOW_UPDATE_DELAY_MS)
                 if (!isActive) return@launch
-                val selectedUtxos = utxos.filter { selected.contains(it.outpoint.hashToUint()) }
+                val selectedUtxos = utxos.filter { it.spendable && selected.contains(it.outpoint.hashToUint()) }
                 sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
             }
     }
@@ -169,6 +174,19 @@ class CoinControlManager(
             BitcoinUnit.SAT to false -> amount.satsString()
             else -> amount.satsStringWithUnit()
         }
+
+    suspend fun reloadLabels() {
+        rust.reloadLabels()
+    }
+
+    suspend fun setSpendability(
+        outpoint: OutPoint,
+        spendable: Boolean,
+    ) {
+        withContext(Dispatchers.IO) {
+            rust.setUtxoSpendability(outpoint, spendable)
+        }
+    }
 
     override fun reconcile(message: CoinControlManagerReconcileMessage) {
         logDebug("reconcile: $message")

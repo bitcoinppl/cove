@@ -99,6 +99,9 @@ class AppManager private constructor() : FfiReconcile {
     internal var sendFlowManager: SendFlowManager? = null
         private set
 
+    internal var coinControlManager: CoinControlManager? = null
+        private set
+
     val cloudBackupManager: CloudBackupManager = CloudBackupManager.getInstance()
 
     init {
@@ -175,6 +178,34 @@ class AppManager private constructor() : FfiReconcile {
         return manager
     }
 
+    fun setCoinControlManager(manager: CoinControlManager) {
+        coinControlManager = manager
+    }
+
+    fun clearCoinControlManager(manager: CoinControlManager) {
+        if (coinControlManager === manager) {
+            coinControlManager = null
+        }
+    }
+
+    fun reconcileAfterLabelImport(walletId: WalletId) {
+        walletManager
+            ?.takeIf { it.id == walletId }
+            ?.reconcileAfterLabelImport()
+
+        coinControlManager
+            ?.takeIf { it.id == walletId }
+            ?.let { manager ->
+                mainScope.launch {
+                    manager.reloadLabels()
+                }
+            }
+
+        sendFlowManager
+            ?.takeIf { it.id == walletId }
+            ?.reconcileAfterLabelImport()
+    }
+
     fun clearWalletManager() {
         try {
             walletManager?.close()
@@ -233,6 +264,7 @@ class AppManager private constructor() : FfiReconcile {
         database = Database()
         walletManager = null
         sendFlowManager = null
+        coinControlManager = null
 
         val state = rust.state()
         router = RouterManager(state.router)

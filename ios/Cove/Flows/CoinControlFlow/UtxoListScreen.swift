@@ -18,6 +18,7 @@ struct UtxoListScreen: View {
     let manager: CoinControlManager
 
     @FocusState private var isFocused: Bool
+    @State private var showLockedSelectionAlert = false
 
     func goToTransactionDetails(_ utxo: Utxo) {
         let txId = utxo.id.txid()
@@ -30,27 +31,48 @@ struct UtxoListScreen: View {
         VStack(spacing: 0) {
             List(selection: manager.selectedBinding) {
                 ForEach(manager.utxos) { utxo in
-                    UtxoRow(manager: manager, utxo: utxo)
-                        .listRowBackground(Color.secondarySystemGroupedBackground)
-                        .contextMenu {
-                            Button(action: {
-                                UIPasteboard.general.string = utxo.address.unformatted()
-                            }) {
-                                Text("Copy Address")
-                            }
-
-                            Button(action: {
-                                UIPasteboard.general.string = utxo.outpoint.txidStr()
-                            }) {
-                                Text("Copy Transaction ID")
-                            }
-
-                            Button(action: { goToTransactionDetails(utxo) }) {
-                                Text("View Transaction Details")
-                            }
-                        } preview: {
-                            UtxoRowPreview(displayAmount: manager.displayAmount, utxo: utxo)
+                    UtxoRow(
+                        manager: manager,
+                        utxo: utxo,
+                        onLockedSelectionAttempt: {
+                            showLockedSelectionAlert = true
                         }
+                    )
+                    .listRowBackground(Color.secondarySystemGroupedBackground)
+                    .contextMenu {
+                        Button(action: {
+                            UIPasteboard.general.string = utxo.address.unformatted()
+                        }) {
+                            Text("Copy Address")
+                        }
+
+                        Button(action: {
+                            UIPasteboard.general.string = utxo.outpoint.txidStr()
+                        }) {
+                            Text("Copy Transaction ID")
+                        }
+
+                        Button(action: { goToTransactionDetails(utxo) }) {
+                            Text("View Transaction Details")
+                        }
+
+                        Button(action: {
+                            Task {
+                                do {
+                                    try await manager.setSpendability(
+                                        !utxo.spendable,
+                                        for: utxo.outpoint
+                                    )
+                                } catch {
+                                    Log.error("Unable to update UTXO spendability: \(error)")
+                                }
+                            }
+                        }) {
+                            Text(utxo.spendable ? "Lock UTXO" : "Unlock UTXO")
+                        }
+                    } preview: {
+                        UtxoRowPreview(displayAmount: manager.displayAmount, utxo: utxo)
+                    }
                 }
             }
             .scrollContentBackground(.hidden)
@@ -202,8 +224,8 @@ struct UtxoListScreen: View {
                     navigate(
                         RouteFactory()
                             .coinControlSend(
-                                id: manager.rust.id(),
-                                utxos: manager.rust.selectedUtxos()
+                                id: manager.id,
+                                utxos: manager.selectedUtxos()
                             )
                     )
                 }
@@ -252,18 +274,20 @@ struct UtxoListScreen: View {
             Color(.systemGroupedBackground)
                 .ignoresSafeArea()
         )
+        .alert("UTXO Locked", isPresented: $showLockedSelectionAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Unlock this UTXO before selecting it.")
+        }
         .environment(manager)
-        .task { await manager.rust.reloadLabels() }
+        .task { await manager.reloadLabels() }
     }
 
     // MARK: - Helpers
 
     private func sortButton(for key: CoinControlListSortKey) -> some View {
         let _ = manager.sort
-        let isSelected = {
-            if case .selected = manager.rust.buttonPresentation(button: key) { return true }
-            return false
-        }()
+        let isSelected = manager.isSortSelected(key)
 
         return Button {
             manager.dispatch(.changeSort(key))
@@ -297,6 +321,7 @@ struct UtxoListScreen: View {
 private struct UtxoRow: View {
     var manager: CoinControlManager
     let utxo: Utxo
+    let onLockedSelectionAttempt: () -> Void
 
     var body: some View {
         HStack(spacing: 20) {
@@ -312,6 +337,12 @@ private struct UtxoRow: View {
                         Image(systemName: "circlebadge.2")
                             .font(.caption)
                             .foregroundColor(.statusWarning.opacity(0.8))
+                    }
+
+                    if !utxo.spendable {
+                        Image(systemName: "lock.fill")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
 
@@ -340,6 +371,12 @@ private struct UtxoRow: View {
             }
         }
         .padding(.vertical, 4)
+        .opacity(utxo.spendable ? 1 : 0.58)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !utxo.spendable else { return }
+            onLockedSelectionAttempt()
+        }
     }
 }
 

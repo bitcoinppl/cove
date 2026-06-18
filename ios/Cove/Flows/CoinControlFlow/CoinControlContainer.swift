@@ -59,14 +59,22 @@ private struct CoinControlLoadedView: View {
         .task(id: ObjectIdentifier(walletManager)) {
             await loadManager()
         }
+        .onDisappear {
+            closeManager()
+        }
     }
 
     @MainActor
     private func loadManager() async {
-        manager = nil
+        closeManager()
+
         do {
             let rustManager = try await walletManager.rust.newCoinControlManager()
-            manager = CoinControlManager(rustManager)
+            guard !Task.isCancelled else { return }
+
+            let manager = CoinControlManager(rustManager)
+            self.manager = manager
+            app.setCoinControlManager(manager)
         } catch {
             handleCoinControlManagerError(error)
         }
@@ -105,5 +113,14 @@ private struct CoinControlLoadedView: View {
             ))
             app.popRoute()
         }
+    }
+
+    @MainActor
+    private func closeManager() {
+        guard let manager else { return }
+
+        app.clearCoinControlManager(manager)
+        manager.close()
+        self.manager = nil
     }
 }

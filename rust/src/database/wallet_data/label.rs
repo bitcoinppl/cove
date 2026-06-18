@@ -1,7 +1,9 @@
-use std::{borrow::Borrow, fmt::Debug, sync::Arc};
+use std::{borrow::Borrow, collections::HashSet, fmt::Debug, sync::Arc};
 
 use crate::database::{Record, error::DatabaseError, record::Timestamps};
-use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
+use bip329::{
+    AddressRecord, InputRecord, Label, Labels, OutputRecord, ParsedLabels, TransactionRecord,
+};
 use bitcoin::{Address, address::NetworkUnchecked};
 use cove_util::result_ext::ResultExt as _;
 use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata as _, TableDefinition};
@@ -144,11 +146,13 @@ impl LabelsTable {
     ) -> Result<impl Iterator<Item = Record<InputRecord>>, Error> {
         let table = self.read_table(INPUT_TABLE)?;
 
-        let start_inout_id = OutPointKey { id: *txid.as_ref(), index: 0 };
+        let txid = *txid.as_ref();
+        let start_inout_id = OutPointKey { id: txid, index: 0 };
 
         let inputs = table
             .range(start_inout_id..)?
             .filter_map(Result::ok)
+            .take_while(move |(key, _record)| key.value().id == txid)
             .map(|(_key, record)| record.value());
 
         Ok(inputs)
@@ -160,11 +164,13 @@ impl LabelsTable {
     ) -> Result<impl Iterator<Item = Record<OutputRecord>>, Error> {
         let table = self.read_table(OUTPUT_TABLE)?;
 
-        let start_inout_id = OutPointKey { id: *txid.as_ref(), index: 0 };
+        let txid = *txid.as_ref();
+        let start_inout_id = OutPointKey { id: txid, index: 0 };
 
         let outputs = table
             .range(start_inout_id..)?
             .filter_map(Result::ok)
+            .take_while(move |(key, _record)| key.value().id == txid)
             .map(|(_key, record)| record.value());
 
         Ok(outputs)
@@ -208,7 +214,64 @@ impl LabelsTable {
         Ok(label)
     }
 
+    pub fn get_output_record(
+        &self,
+        outpoint: impl Borrow<bitcoin::OutPoint>,
+    ) -> Result<Option<Record<OutputRecord>>, Error> {
+        let outpoint = outpoint.borrow();
+        let table = self.read_table(OUTPUT_TABLE)?;
+        let label = table.get(OutPointKey::from(outpoint))?.map(|record| record.value());
+
+        Ok(label)
+    }
+
+    pub fn locked_output_outpoints(&self) -> Result<HashSet<bitcoin::OutPoint>, Error> {
+        let table = self.read_table(OUTPUT_TABLE)?;
+        let outpoints = table
+            .iter()?
+            .filter_map(Result::ok)
+            .map(|(_key, record)| record.value().item)
+            .filter(|record| !record.spendable)
+            .map(|record| record.ref_)
+            .collect();
+
+        Ok(outpoints)
+    }
+
     // MARK: INSERT
+
+    pub fn insert_imported_labels(&self, parsed: ParsedLabels) -> Result<(), Error> {
+        let spendable_by_outpoint = parsed
+            .output_spendable
+            .into_iter()
+            .map(|field| (field.ref_, field.value))
+            .collect::<std::collections::HashMap<_, _>>();
+
+        let labels = parsed
+            .labels
+            .into_vec()
+            .into_iter()
+            .map(|label| {
+                let Label::Output(mut output) = label else { return Ok(label) };
+
+                match spendable_by_outpoint
+                    .get(&output.ref_)
+                    .and_then(|field| field.explicit_value())
+                {
+                    Some(spendable) => output.spendable = spendable,
+                    None => {
+                        if let Some(current) = self.get_output_record(output.ref_)? {
+                            output.spendable = current.item.spendable;
+                        }
+                    }
+                }
+
+                Ok(Label::Output(output))
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        self.insert_labels(labels)
+    }
 
     pub fn insert_labels(&self, labels: impl IntoIterator<Item = Label>) -> Result<(), Error> {
         self.insert_labels_with_timestamps(labels, Timestamps::now())
@@ -274,6 +337,58 @@ impl LabelsTable {
         records.into_iter().try_for_each(|record| {
             self.insert_label_with_write_txn(record.item, record.timestamps, &write_txn)
         })?;
+
+        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
+
+        Ok(())
+    }
+
+    pub fn set_output_spendability(
+        &self,
+        outpoint: bitcoin::OutPoint,
+        spendable: bool,
+    ) -> Result<(), Error> {
+        self.set_output_spendability_for_outpoints([outpoint], spendable)
+    }
+
+    pub fn set_output_spendability_for_outpoints(
+        &self,
+        outpoints: impl IntoIterator<Item = bitcoin::OutPoint>,
+        spendable: bool,
+    ) -> Result<(), Error> {
+        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
+        let now = jiff::Timestamp::now().as_second().cast_unsigned();
+
+        {
+            let mut table = write_txn.open_table(OUTPUT_TABLE)?;
+
+            for outpoint in outpoints {
+                let key = OutPointKey::from(outpoint);
+                let current = table.get(key.clone())?.map(|record| record.value());
+
+                match (current, spendable) {
+                    (Some(mut current), true) if current.item.label.is_some() => {
+                        current.item.spendable = true;
+                        current.timestamps.updated_at = now;
+                        table.insert(key, current)?;
+                    }
+                    (Some(_current), true) => {
+                        table.remove(key)?;
+                    }
+                    (Some(mut current), false) => {
+                        current.item.spendable = false;
+                        current.timestamps.updated_at = now;
+                        table.insert(key, current)?;
+                    }
+                    (None, true) => {}
+                    (None, false) => {
+                        let record = OutputRecord { ref_: outpoint, label: None, spendable: false };
+                        let record = Record::with_timestamps(record, Timestamps::new(now, now));
+                        table.insert(key, record)?;
+                    }
+                }
+            }
+        }
 
         write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
 
@@ -404,10 +519,13 @@ impl From<redb::StorageError> for Error {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr as _;
+
     use crate::{
         database::wallet_data::test_support::new_test_wallet_data_db, wallet::metadata::WalletId,
     };
     use bip329::Labels;
+    use bitcoin::OutPoint;
 
     #[test]
     fn test_all_labels_for_txn() {
@@ -431,5 +549,239 @@ mod tests {
         let labels = db.all_labels_for_txn(txn[0].ref_).expect("failed to get labels");
 
         assert_eq!(labels.len(), 5);
+    }
+
+    #[test]
+    fn txn_record_iters_are_bounded_to_requested_txid() {
+        let first_txid = "0000000000000000000000000000000000000000000000000000000000000001";
+        let second_txid = "0000000000000000000000000000000000000000000000000000000000000002";
+        let jsonl = format!(
+            r#"
+            {{"type":"tx","ref":"{first_txid}","label":"first"}}
+            {{"type":"output","ref":"{first_txid}:0","label":"first output"}}
+            {{"type":"input","ref":"{first_txid}:0","label":"first input"}}
+            {{"type":"output","ref":"{second_txid}:0","label":"second output"}}
+            {{"type":"input","ref":"{second_txid}:0","label":"second input"}}
+        "#
+        );
+
+        let labels = Labels::try_from_str(&jsonl).expect("failed to parse labels");
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let db = &wallet_db.labels;
+
+        db.insert_labels(labels).expect("failed to insert labels");
+
+        let txid = bitcoin::Txid::from_str(first_txid).expect("failed to parse txid");
+        let inputs =
+            db.txn_input_records_iter(txid).expect("failed to get inputs").collect::<Vec<_>>();
+        let outputs =
+            db.txn_output_records_iter(txid).expect("failed to get outputs").collect::<Vec<_>>();
+
+        assert_eq!(inputs.len(), 1);
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(inputs[0].item.ref_.txid, txid);
+        assert_eq!(outputs[0].item.ref_.txid, txid);
+    }
+
+    #[test]
+    fn imported_output_with_omitted_spendable_preserves_current_spendability() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let existing = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"locked","spendable":false}"#;
+        let imported = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"renamed"}"#;
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let db = &wallet_db.labels;
+
+        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
+            .expect("failed to insert existing labels");
+        db.insert_imported_labels(
+            Labels::try_from_str_with_metadata(imported).expect("failed to parse imported labels"),
+        )
+        .expect("failed to insert imported labels");
+
+        let record = db
+            .get_output_record(outpoint)
+            .expect("failed to get output record")
+            .expect("missing output record");
+
+        assert_eq!(record.item.label, Some("renamed".to_string()));
+        assert!(!record.item.spendable);
+    }
+
+    #[test]
+    fn imported_explicit_output_spendable_overrides_current_spendability() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let existing = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"locked","spendable":false}"#;
+        let imported = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"unlocked","spendable":true}"#;
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let db = &wallet_db.labels;
+
+        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
+            .expect("failed to insert existing labels");
+        db.insert_imported_labels(
+            Labels::try_from_str_with_metadata(imported).expect("failed to parse imported labels"),
+        )
+        .expect("failed to insert imported labels");
+
+        let record = db
+            .get_output_record(outpoint)
+            .expect("failed to get output record")
+            .expect("missing output record");
+
+        assert_eq!(record.item.label, Some("unlocked".to_string()));
+        assert!(record.item.spendable);
+    }
+
+    #[test]
+    fn imported_explicit_locked_output_locks_current_output() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let existing = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"unlocked","spendable":true}"#;
+        let imported = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"locked","spendable":false}"#;
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let db = &wallet_db.labels;
+
+        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
+            .expect("failed to insert existing labels");
+        db.insert_imported_labels(
+            Labels::try_from_str_with_metadata(imported).expect("failed to parse imported labels"),
+        )
+        .expect("failed to insert imported labels");
+
+        let record = db
+            .get_output_record(outpoint)
+            .expect("failed to get output record")
+            .expect("missing output record");
+
+        assert_eq!(record.item.label, Some("locked".to_string()));
+        assert!(!record.item.spendable);
+        assert!(
+            db.locked_output_outpoints().expect("failed to get locked outputs").contains(&outpoint)
+        );
+    }
+
+    #[test]
+    fn setting_output_unspendable_creates_lock_only_record() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let db = &wallet_db.labels;
+
+        db.set_output_spendability(outpoint, false).expect("failed to lock output");
+
+        let record = db
+            .get_output_record(outpoint)
+            .expect("failed to get output record")
+            .expect("missing output record");
+        let locked = db.locked_output_outpoints().expect("failed to get locked outputs");
+
+        assert_eq!(record.item.label, None);
+        assert!(!record.item.spendable);
+        assert!(locked.contains(&outpoint));
+    }
+
+    #[test]
+    fn export_includes_lock_only_output_record() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let db = &wallet_db.labels;
+
+        db.set_output_spendability(outpoint, false).expect("failed to lock output");
+
+        let exported = db.all_labels().expect("failed to load labels").export().unwrap();
+
+        assert!(exported.contains(r#""type":"output""#));
+        assert!(exported.contains(
+            r#""ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1""#
+        ));
+        assert!(exported.contains(r#""spendable":false"#));
+    }
+
+    #[test]
+    fn unlocking_lock_only_record_removes_output_record() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let db = &wallet_db.labels;
+
+        db.set_output_spendability(outpoint, false).expect("failed to lock output");
+        db.set_output_spendability(outpoint, true).expect("failed to unlock output");
+
+        assert!(db.get_output_record(outpoint).expect("failed to get output record").is_none());
+        assert!(db.locked_output_outpoints().expect("failed to get locked outputs").is_empty());
+    }
+
+    #[test]
+    fn unlocking_labeled_output_preserves_label() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let existing = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"keep me","spendable":false}"#;
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let db = &wallet_db.labels;
+
+        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
+            .expect("failed to insert existing labels");
+        db.set_output_spendability(outpoint, true).expect("failed to unlock output");
+
+        let record = db
+            .get_output_record(outpoint)
+            .expect("failed to get output record")
+            .expect("missing output record");
+
+        assert_eq!(record.item.label, Some("keep me".to_string()));
+        assert!(record.item.spendable);
+    }
+
+    #[test]
+    fn bulk_spendability_update_only_changes_requested_outpoints() {
+        let requested = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse requested outpoint");
+        let untouched = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:2",
+        )
+        .expect("failed to parse untouched outpoint");
+        let existing = r#"
+            {"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"requested","spendable":true}
+            {"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:2","label":"untouched","spendable":true}
+        "#;
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let db = &wallet_db.labels;
+
+        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
+            .expect("failed to insert existing labels");
+        db.set_output_spendability_for_outpoints([requested], false)
+            .expect("failed to lock requested output");
+
+        let requested = db
+            .get_output_record(requested)
+            .expect("failed to get requested output")
+            .expect("missing requested output")
+            .item;
+        let untouched = db
+            .get_output_record(untouched)
+            .expect("failed to get untouched output")
+            .expect("missing untouched output")
+            .item;
+
+        assert!(!requested.spendable);
+        assert!(untouched.spendable);
     }
 }

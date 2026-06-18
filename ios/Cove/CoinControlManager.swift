@@ -2,12 +2,22 @@ import SwiftUI
 
 extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinControlManager {}
 
+private enum CoinControlManagerError: LocalizedError {
+    case closed
+
+    var errorDescription: String? {
+        "Coin control manager is closed"
+    }
+}
+
 @Observable final class CoinControlManager: AnyReconciler, CoinControlManagerReconciler {
     typealias Message = CoinControlManagerReconcileMessage
     typealias Action = CoinControlManagerAction
 
     private let logger = Log(id: "CoinControlManager")
-    var rust: RustCoinControlManager
+    @ObservationIgnored
+    private var rust: RustCoinControlManager?
+    let id: WalletId
 
     private(set) var sort: CoinControlListSort? = .some(.date(.descending))
 
@@ -35,24 +45,33 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         Binding(
             get: { self.selected },
             set: {
-                self.selected = $0
-                self.dispatch(.notifySelectedUtxosChanged(Array($0)))
+                let spendableIds = Set(self.utxos.filter(\.spendable).map(\.id))
+                let selected = $0.intersection(spendableIds)
+                self.selected = selected
+                self.dispatch(.notifySelectedUtxosChanged(Array(selected)))
             }
         )
     }
 
     public init(_ rust: RustCoinControlManager) {
         self.rust = rust
+        self.id = rust.id()
 
         self.utxos = rust.utxos()
         self.unit = rust.unit()
 
-        self.rust.listenForUpdates(reconciler: WeakReconciler(self))
+        rust.listenForUpdates(reconciler: WeakReconciler(self))
+    }
+
+    deinit {
+        close()
     }
 
     public func buttonArrow(_ key: CoinControlListSortKey) -> String? {
         _ = self.sort
-        return switch self.rust.buttonPresentation(button: key) {
+        guard let rust else { return nil }
+
+        return switch rust.buttonPresentation(button: key) {
         case .selected(.ascending):
             "arrow.up"
         case .selected(.descending):
@@ -60,6 +79,17 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         case .notSelected:
             .none
         }
+    }
+
+    public func isSortSelected(_ key: CoinControlListSortKey) -> Bool {
+        guard let rust else { return false }
+
+        if case .selected = rust.buttonPresentation(button: key) { return true }
+        return false
+    }
+
+    public func selectedUtxos() -> [Utxo] {
+        rust?.selectedUtxos() ?? []
     }
 
     public var totalSelectedAmount: String {
@@ -75,7 +105,7 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         self.updateSendFlowManagerTask?.cancel()
         self.updateSendFlowManagerTask = nil
 
-        let selectedUtxos = self.utxos.filter { self.selected.contains($0.id) }
+        let selectedUtxos = self.utxos.filter { $0.spendable && self.selected.contains($0.id) }
         sfm.dispatch(.setCoinControlMode(selectedUtxos))
     }
 
@@ -85,7 +115,7 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         self.updateSendFlowManagerTask = Task {
             try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }
-            let selectedUtxos = self.utxos.filter { self.selected.contains($0.id) }
+            let selectedUtxos = self.utxos.filter { $0.spendable && self.selected.contains($0.id) }
             sfm.dispatch(.setCoinControlMode(selectedUtxos))
         }
     }
@@ -125,11 +155,32 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         }
     }
 
+    func reloadLabels() async {
+        guard let rust else { return }
+
+        await rust.reloadLabels()
+    }
+
+    func setSpendability(_ spendable: Bool, for outpoint: OutPoint) async throws {
+        guard let rust else { throw CoinControlManagerError.closed }
+
+        try await rust.setUtxoSpendability(outpoint: outpoint, spendable: spendable)
+    }
+
+    func close() {
+        guard rust != nil else { return }
+
+        logger.debug("Closing CoinControlManager")
+        updateSendFlowManagerTask?.cancel()
+        updateSendFlowManagerTask = nil
+        rust = nil
+    }
+
     private let rustBridge = DispatchQueue(label: "cove.CoinControlManager.rustbridge", qos: .userInitiated)
 
     func reconcile(message: Message) {
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.rust != nil else { return }
             logger.debug("reconcile: \(message)")
             apply(message)
         }
@@ -137,7 +188,7 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
 
     func reconcileMany(messages: [Message]) {
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.rust != nil else { return }
             logger.debug("reconcile_messages: \(messages)")
             messages.forEach { self.apply($0) }
         }
@@ -148,9 +199,11 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     }
 
     public func dispatch(_ action: Action) {
-        rustBridge.async {
+        rustBridge.async { [weak self] in
+            guard let self, let rust = self.rust else { return }
+
             self.logger.debug("dispatch: \(action)")
-            self.rust.dispatch(action: action)
+            rust.dispatch(action: action)
         }
     }
 }

@@ -78,6 +78,7 @@ import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.HeaderIconPresenter
 import org.bitcoinppl.cove_core.TransactionDetails
+import org.bitcoinppl.cove_core.TransactionLockState
 import org.bitcoinppl.cove_core.TransactionState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.types.FfiColorScheme
@@ -117,6 +118,8 @@ fun TransactionDetailsScreen(
     // state for confirmation polling and pull-to-refresh
     var numberOfConfirmations by remember { mutableStateOf<Int?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var lockState by remember { mutableStateOf<TransactionLockState?>(null) }
+    var isUpdatingLockState by remember { mutableStateOf(false) }
 
     // use cached fiat values for immediate display, null shows spinner
     var feeFiatFmt by remember { mutableStateOf(transactionDetails.feeFiatFmtCached()) }
@@ -136,6 +139,12 @@ fun TransactionDetailsScreen(
             manager.updateTransactionDetailsCache(txId, freshDetails)
         } catch (e: Exception) {
             android.util.Log.e("TransactionDetails", "error fetching fresh details", e)
+        }
+
+        try {
+            lockState = manager.transactionLockState(txId)
+        } catch (e: Exception) {
+            android.util.Log.e("TransactionDetails", "error fetching transaction lock state", e)
         }
     }
 
@@ -366,6 +375,7 @@ fun TransactionDetailsScreen(
                             val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
                             numberOfConfirmations = confirmations.toInt()
                         }
+                        lockState = manager.transactionLockState(txId)
                     } catch (e: Exception) {
                         android.util.Log.e("TransactionDetails", "error refreshing details", e)
                     }
@@ -513,6 +523,27 @@ fun TransactionDetailsScreen(
                         showStroke = capsuleConfig.third,
                     )
 
+                    if (lockState != null && lockState != TransactionLockState.NONE) {
+                        Spacer(Modifier.height(12.dp))
+                        TransactionLockAction(
+                            state = lockState!!,
+                            updating = isUpdatingLockState,
+                            color = sub,
+                            onToggle = {
+                                scope.launch {
+                                    isUpdatingLockState = true
+                                    try {
+                                        lockState = manager.toggleTransactionLockState(txId)
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("TransactionDetails", "error toggling transaction lock state", e)
+                                        snackbarHostState.showSnackbar("Unable to update transaction lock.")
+                                    }
+                                    isUpdatingLockState = false
+                                }
+                            },
+                        )
+                    }
+
                     Spacer(Modifier.height(32.dp))
 
                     // show confirmation indicator if < 3 confirmations
@@ -604,6 +635,47 @@ fun TransactionDetailsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TransactionLockAction(
+    state: TransactionLockState,
+    updating: Boolean,
+    color: Color,
+    onToggle: () -> Unit,
+) {
+    val stateText =
+        when (state) {
+            TransactionLockState.LOCKED -> "Locked"
+            TransactionLockState.MIXED -> "Mixed"
+            TransactionLockState.UNLOCKED -> "Unlocked"
+            TransactionLockState.NONE -> ""
+        }
+    val buttonText =
+        when (state) {
+            TransactionLockState.LOCKED -> "Unlock Transaction"
+            TransactionLockState.MIXED, TransactionLockState.UNLOCKED -> "Lock Transaction"
+            TransactionLockState.NONE -> ""
+        }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = stateText,
+            color = color,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        TextButton(
+            onClick = onToggle,
+            enabled = !updating,
+        ) {
+            Text(
+                text = if (updating) "Updating..." else buttonText,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }

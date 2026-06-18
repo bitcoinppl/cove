@@ -9426,6 +9426,8 @@ data class Utxo (
     var `blockHeight`: kotlin.UInt
     ,
     var `type`: UtxoType
+    ,
+    var `spendable`: kotlin.Boolean
 
 ): Disposable{
      fun `date`(): kotlin.String {
@@ -9505,7 +9507,8 @@ data class Utxo (
         this.`address`,
         this.`derivationIndex`,
         this.`blockHeight`,
-        this.`type`
+        this.`type`,
+        this.`spendable`
     )
     }
 
@@ -9526,6 +9529,7 @@ public object FfiConverterTypeUtxo: FfiConverterRustBuffer<Utxo> {
             FfiConverterUInt.read(buf),
             FfiConverterUInt.read(buf),
             FfiConverterTypeUtxoType.read(buf),
+            FfiConverterBoolean.read(buf),
         )
     }
 
@@ -9537,7 +9541,8 @@ public object FfiConverterTypeUtxo: FfiConverterRustBuffer<Utxo> {
             FfiConverterTypeAddress.allocationSize(value.`address`) +
             FfiConverterUInt.allocationSize(value.`derivationIndex`) +
             FfiConverterUInt.allocationSize(value.`blockHeight`) +
-            FfiConverterTypeUtxoType.allocationSize(value.`type`)
+            FfiConverterTypeUtxoType.allocationSize(value.`type`) +
+            FfiConverterBoolean.allocationSize(value.`spendable`)
     )
 
     override fun write(value: Utxo, buf: ByteBuffer) {
@@ -9549,6 +9554,7 @@ public object FfiConverterTypeUtxo: FfiConverterRustBuffer<Utxo> {
             FfiConverterUInt.write(value.`derivationIndex`, buf)
             FfiConverterUInt.write(value.`blockHeight`, buf)
             FfiConverterTypeUtxoType.write(value.`type`, buf)
+            FfiConverterBoolean.write(value.`spendable`, buf)
     }
 }
 

@@ -64,6 +64,9 @@ private let navigationSettleDelayMs = 800
 
     private(set) var sendFlowManager: SendFlowManager?
 
+    @ObservationIgnored
+    weak var coinControlManager: CoinControlManager?
+
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
         case .light:
@@ -243,6 +246,30 @@ private let navigationSettleDelayMs = 800
         return sendFlowManager
     }
 
+    public func setCoinControlManager(_ manager: CoinControlManager) {
+        coinControlManager = manager
+    }
+
+    public func clearCoinControlManager(_ manager: CoinControlManager) {
+        if coinControlManager === manager {
+            coinControlManager = nil
+        }
+    }
+
+    public func reconcileAfterLabelImport(walletId: WalletId) {
+        if let walletManager, walletManager.id == walletId {
+            walletManager.reconcileAfterLabelImport()
+        }
+
+        if let coinControlManager, coinControlManager.id == walletId {
+            Task { await coinControlManager.reloadLabels() }
+        }
+
+        if let sendFlowManager, sendFlowManager.id == walletId {
+            sendFlowManager.reconcileAfterLabelImport()
+        }
+    }
+
     public var fullVersionId: String {
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
         let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
@@ -296,6 +323,8 @@ private let navigationSettleDelayMs = 800
 
         database = Database()
         clearWalletManager()
+        coinControlManager?.close()
+        coinControlManager = nil
 
         let state = rust.state()
         router = state.router

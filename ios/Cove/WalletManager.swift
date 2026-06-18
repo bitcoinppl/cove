@@ -296,6 +296,24 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         return details
     }
 
+    func transactionLockState(for txId: TxId) async throws -> TransactionLockState {
+        try await rust.transactionLockState(txId: txId)
+    }
+
+    func toggleTransactionLockState(for txId: TxId) async throws -> TransactionLockState {
+        try await rust.toggleTransactionLockState(txId: txId)
+    }
+
+    func importLabels(labels: Bip329Labels) throws {
+        try LabelManager(id: id).import(labels: labels)
+        AppManager.shared.reconcileAfterLabelImport(walletId: id)
+    }
+
+    func reconcileAfterLabelImport() {
+        transactionDetails.removeAll()
+        Task { await rust.getTransactions() }
+    }
+
     func updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {
         transactionDetails[txId] = details
     }

@@ -114,6 +114,10 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         self.sendAmountFiat = self.rust.sendAmountFiat()
     }
 
+    public func reconcileAfterLabelImport() {
+        dispatch(action: .refreshWalletBalance)
+    }
+
     public func getNewCustomFeeRateWithTotal(
         feeRate: FeeRate, feeSpeed: FeeSpeed
     ) async throws -> FeeRateOptionWithTotalFee {

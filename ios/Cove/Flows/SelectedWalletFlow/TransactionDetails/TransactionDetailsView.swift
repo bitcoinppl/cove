@@ -17,6 +17,9 @@ struct TransactionDetailsView: View {
 
     @State private var initialOffset: Double? = nil
     @State private var currentOffset: Double = 0
+    @State private var lockState: TransactionLockState? = nil
+    @State private var isUpdatingLockState = false
+    @State private var lockStateError: String? = nil
 
     // public
     let id: WalletId
@@ -130,6 +133,8 @@ struct TransactionDetailsView: View {
         }
         .padding(.top, 12)
 
+        TransactionLockControl
+
         // confirmations pills
         if let confirmations = numberOfConfirmations, confirmations < 3 {
             VStack {
@@ -220,6 +225,8 @@ struct TransactionDetailsView: View {
         }
         .padding(.top, 12)
 
+        TransactionLockControl
+
         if let confirmations = numberOfConfirmations, confirmations < 3 {
             VStack {
                 Divider().padding(.vertical, 18)
@@ -233,6 +240,74 @@ struct TransactionDetailsView: View {
                 manager: manager, transactionDetails: transactionDetails,
                 numberOfConfirmations: numberOfConfirmations
             )
+        }
+    }
+
+    @ViewBuilder
+    var TransactionLockControl: some View {
+        switch lockState {
+        case .some(.none), nil:
+            EmptyView()
+        case .some(.unlocked), .some(.locked), .some(.mixed):
+            VStack(spacing: 8) {
+                Text(lockStateText)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+
+                Button(action: {
+                    Task { await toggleTransactionLockState() }
+                }) {
+                    Label(lockStateButtonText, systemImage: lockStateButtonIcon)
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(Color.systemGray5)
+                        .foregroundStyle(.primary)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(isUpdatingLockState)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    var lockStateText: String {
+        switch lockState {
+        case .some(.locked):
+            "Locked"
+        case .some(.mixed):
+            "Mixed"
+        case .some(.unlocked):
+            "Unlocked"
+        case .some(.none), nil:
+            ""
+        }
+    }
+
+    var lockStateButtonText: String {
+        switch lockState {
+        case .some(.locked):
+            "Unlock Transaction"
+        case .some(.mixed):
+            "Lock Transaction"
+        case .some(.unlocked):
+            "Lock Transaction"
+        case .some(.none), nil:
+            ""
+        }
+    }
+
+    var lockStateButtonIcon: String {
+        switch lockState {
+        case .some(.locked):
+            "lock.open"
+        case .some(.mixed), .some(.unlocked):
+            "lock"
+        case .some(.none), nil:
+            "lock"
         }
     }
 
@@ -307,12 +382,15 @@ struct TransactionDetailsView: View {
         }
         .refreshable {
             await refreshTransactionDetails()
+            await refreshTransactionLockState()
         }
         .task(id: txId) {
             // fetch fresh details on load
             if refreshOnAppear {
                 await refreshTransactionDetails()
             }
+
+            await refreshTransactionLockState()
 
             // start watcher after a delay to avoid race condition with onDisappear
             if !transactionDetails.isConfirmed() {
@@ -344,6 +422,16 @@ struct TransactionDetailsView: View {
         .onDisappear {
             UIRefreshControl.appearance().tintColor = UIColor.secondaryLabel
         }
+        .alert("Unable to Update Lock", isPresented: Binding(
+            get: { lockStateError != nil },
+            set: { if !$0 { lockStateError = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                lockStateError = nil
+            }
+        } message: {
+            Text(lockStateError ?? "")
+        }
     }
 
     func refreshTransactionDetails() async {
@@ -365,6 +453,42 @@ struct TransactionDetailsView: View {
             }
         } catch {
             Log.error("Error refreshing transaction details: \(error)")
+        }
+    }
+
+    func refreshTransactionLockState() async {
+        do {
+            let state = try await manager.transactionLockState(for: initialDetails.txId())
+            await MainActor.run {
+                withAnimation {
+                    lockState = state
+                }
+            }
+        } catch {
+            Log.error("Error refreshing transaction lock state: \(error)")
+        }
+    }
+
+    func toggleTransactionLockState() async {
+        guard !isUpdatingLockState else { return }
+
+        await MainActor.run {
+            isUpdatingLockState = true
+        }
+
+        do {
+            let state = try await manager.toggleTransactionLockState(for: initialDetails.txId())
+            await MainActor.run {
+                withAnimation {
+                    lockState = state
+                }
+                isUpdatingLockState = false
+            }
+        } catch {
+            await MainActor.run {
+                lockStateError = error.localizedDescription
+                isUpdatingLockState = false
+            }
         }
     }
 

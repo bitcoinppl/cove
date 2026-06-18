@@ -67,15 +67,17 @@ impl State {
         }
     }
 
-    pub fn load_utxo_labels(&mut self) {
+    pub fn load_utxo_labels(&mut self) -> bool {
         let utxos = &mut self.utxos;
 
         let Some(wallet_db) = WalletDataDb::new_or_existing(self.wallet_id.clone()).ok() else {
-            return;
+            return false;
         };
         let labels_db = wallet_db.labels;
 
         for utxo in utxos.iter_mut() {
+            let outpoint = bitcoin::OutPoint::from(utxo.outpoint.as_ref());
+            let output_record = labels_db.get_output_record(outpoint).ok().flatten();
             let label = labels_db
                 .get_txn_label_record(utxo.outpoint.txid)
                 .ok()
@@ -90,7 +92,24 @@ impl State {
                 });
 
             utxo.label = label;
+            utxo.spendable = output_record.map(|record| record.item.spendable).unwrap_or(true);
         }
+
+        self.prune_locked_selected_utxos()
+    }
+
+    pub fn prune_locked_selected_utxos(&mut self) -> bool {
+        let old_selected_utxos = self.selected_utxos.clone();
+        let spendable_outpoints = self
+            .utxos
+            .iter()
+            .filter(|utxo| utxo.spendable)
+            .map(|utxo| utxo.outpoint.clone())
+            .collect::<std::collections::HashSet<_>>();
+
+        self.selected_utxos.retain(|outpoint| spendable_outpoints.contains(outpoint));
+
+        self.selected_utxos != old_selected_utxos
     }
 
     pub fn sort_utxos(&mut self, sort: ListSort) {

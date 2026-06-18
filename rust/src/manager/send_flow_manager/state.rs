@@ -28,6 +28,7 @@ pub struct SendFlowManagerState {
     pub(crate) selected_fiat_currency: FiatCurrency,
     pub(crate) first_address: Option<Arc<Address>>,
     pub(crate) wallet_balance: Option<Arc<Balance>>,
+    pub(crate) unlocked_spendable_sats: Option<u64>,
     /// True once we have base fee rates (either from cache or network)
     /// UI can show immediately once this is true (total fees pending calculation)
     pub(crate) has_base_fees: bool,
@@ -129,6 +130,8 @@ impl SendFlowManagerState {
 
         let btc_price_in_fiat = App::global().prices().map(|prices| prices.get());
 
+        let unlocked_spendable_sats = Some(balance.spendable().as_sats());
+
         Self {
             metadata,
             fee_rate_options_base: None,
@@ -143,6 +146,7 @@ impl SendFlowManagerState {
             focus_field: None,
             address: None,
             wallet_balance: Some(balance),
+            unlocked_spendable_sats,
             fee_selection: None,
             btc_price_in_fiat,
             selected_fiat_currency,
