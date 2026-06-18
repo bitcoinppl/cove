@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.flows.OnboardingFlow
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -323,6 +324,13 @@ internal fun OnboardingThinProgressBar(
     progress: Float,
     modifier: Modifier = Modifier,
 ) {
+    val animatedProgress =
+        animateFloatAsState(
+            targetValue = progress.coerceIn(0f, 1f),
+            animationSpec = tween(durationMillis = 250),
+            label = "onboardingThinProgress",
+        ).value
+
     Box(
         modifier =
             modifier
@@ -334,7 +342,7 @@ internal fun OnboardingThinProgressBar(
         Box(
             modifier =
                 Modifier
-                    .fillMaxWidth(progress.coerceIn(0f, 1f))
+                    .fillMaxWidth(animatedProgress)
                     .height(5.dp)
                     .clip(RoundedCornerShape(99.dp))
                     .background(OnboardingGradientLight),

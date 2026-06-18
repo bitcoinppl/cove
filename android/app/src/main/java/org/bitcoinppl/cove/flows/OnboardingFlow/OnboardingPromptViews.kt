@@ -1,5 +1,11 @@
 package org.bitcoinppl.cove.flows.OnboardingFlow
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,8 +54,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -369,6 +379,14 @@ internal fun OnboardingRestoreOfferView(
         } else {
             null
     }
+    var previousErrorMessage by remember { mutableStateOf(errorMessage) }
+    val visibleErrorMessage = errorMessage ?: previousErrorMessage
+
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            previousErrorMessage = errorMessage
+        }
+    }
 
     OnboardingBackground {
         BoxWithConstraints(
@@ -421,9 +439,25 @@ internal fun OnboardingRestoreOfferView(
 
                 OnboardingPasskeyCard(providerHint = providerHint)
 
-                if (errorMessage != null) {
-                    Spacer(modifier = Modifier.size(14.dp))
-                    OnboardingRestoreErrorCard(text = errorMessage)
+                AnimatedVisibility(
+                    visible = errorMessage != null,
+                    enter =
+                        fadeIn(animationSpec = tween(durationMillis = 300)) +
+                            slideInVertically(
+                                animationSpec = tween(durationMillis = 300),
+                                initialOffsetY = { -it },
+                            ),
+                    exit =
+                        fadeOut(animationSpec = tween(durationMillis = 300)) +
+                            slideOutVertically(
+                                animationSpec = tween(durationMillis = 300),
+                                targetOffsetY = { -it },
+                            ),
+                ) {
+                    Column {
+                        Spacer(modifier = Modifier.size(14.dp))
+                        OnboardingRestoreErrorCard(text = visibleErrorMessage.orEmpty())
+                    }
                 }
 
                 Spacer(modifier = Modifier.size(26.dp))

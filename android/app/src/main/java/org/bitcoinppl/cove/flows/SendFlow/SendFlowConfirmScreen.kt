@@ -659,24 +659,32 @@ private fun SwipeToSendStub(
 // three dots animation for sending state
 @Composable
 private fun ThreeDotsAnimation() {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    val density = LocalDensity.current
+    val dotLiftPx = with(density) { 6.dp.toPx() }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         repeat(3) { index ->
             val infiniteTransition = rememberInfiniteTransition(label = "dot$index")
-            val alpha by infiniteTransition.animateFloat(
-                initialValue = 0.3f,
+            val progress by infiniteTransition.animateFloat(
+                initialValue = 0f,
                 targetValue = 1f,
                 animationSpec =
                     infiniteRepeatable(
-                        animation = tween(600, delayMillis = index * 200),
+                        animation = tween(500, delayMillis = index * 200),
                         repeatMode = RepeatMode.Reverse,
                     ),
-                label = "dotAlpha$index",
+                label = "dotBounce$index",
             )
+            val scale = 0.5f + (progress * 0.5f)
             Box(
                 modifier =
                     Modifier
                         .size(6.dp)
-                        .graphicsLayer { this.alpha = alpha }
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationY = -dotLiftPx * progress
+                        }
                         .background(Color.White, CircleShape),
             )
         }

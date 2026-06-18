@@ -87,9 +87,7 @@ struct SwipeToSendView: View {
                 .overlay(
                     Group {
                         if sendState == .idle {
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 20))
-                                .foregroundColor(.white)
+                            PulsingSendArrow(isPulsing: !isDragging && offset == 0)
                         }
                     }
                 )
@@ -150,6 +148,36 @@ struct SwipeToSendView: View {
         } action: { frame in
             containerWidth = frame.width
         }
+    }
+}
+
+private struct PulsingSendArrow: View {
+    let isPulsing: Bool
+
+    @State private var pulseStartedAt: Date?
+
+    var body: some View {
+        TimelineView(.animation(paused: !isPulsing)) { context in
+            Image(systemName: "arrow.right")
+                .font(.system(size: 20))
+                .foregroundColor(.white)
+                .opacity(opacity(at: context.date))
+        }
+        .onChange(of: isPulsing, initial: true) { _, pulsing in
+            pulseStartedAt = pulsing ? Date() : nil
+        }
+    }
+
+    private func opacity(at date: Date) -> Double {
+        guard isPulsing, let pulseStartedAt else { return 1 }
+
+        let elapsed = max(0, date.timeIntervalSince(pulseStartedAt))
+        let progress = elapsed
+            .truncatingRemainder(dividingBy: 1.8) / 0.9
+        let mirroredProgress = progress <= 1 ? progress : 2 - progress
+        let easedProgress = 0.5 - (0.5 * cos(mirroredProgress * .pi))
+
+        return 1 - (0.4 * easedProgress)
     }
 }
 
