@@ -538,7 +538,7 @@ mod tests {
         "#;
 
         let labels = Labels::try_from_str(jsonl).expect("failed to parse labels");
-        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
         db.insert_labels(labels).expect("failed to insert labels");
@@ -566,7 +566,7 @@ mod tests {
         );
 
         let labels = Labels::try_from_str(&jsonl).expect("failed to parse labels");
-        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
         db.insert_labels(labels).expect("failed to insert labels");
@@ -591,7 +591,7 @@ mod tests {
         .expect("failed to parse outpoint");
         let existing = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"locked","spendable":false}"#;
         let imported = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"renamed"}"#;
-        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
         db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
@@ -618,7 +618,7 @@ mod tests {
         .expect("failed to parse outpoint");
         let existing = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"locked","spendable":false}"#;
         let imported = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"unlocked","spendable":true}"#;
-        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
         db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
@@ -645,7 +645,7 @@ mod tests {
         .expect("failed to parse outpoint");
         let existing = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"unlocked","spendable":true}"#;
         let imported = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"locked","spendable":false}"#;
-        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
         db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
@@ -673,7 +673,7 @@ mod tests {
             "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
         )
         .expect("failed to parse outpoint");
-        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
         db.set_output_spendability(outpoint, false).expect("failed to lock output");
@@ -695,7 +695,7 @@ mod tests {
             "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
         )
         .expect("failed to parse outpoint");
-        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
         db.set_output_spendability(outpoint, false).expect("failed to lock output");
@@ -715,7 +715,7 @@ mod tests {
             "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
         )
         .expect("failed to parse outpoint");
-        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
         db.set_output_spendability(outpoint, false).expect("failed to lock output");
@@ -732,7 +732,7 @@ mod tests {
         )
         .expect("failed to parse outpoint");
         let existing = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"keep me","spendable":false}"#;
-        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
         db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
@@ -762,7 +762,7 @@ mod tests {
             {"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"requested","spendable":true}
             {"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:2","label":"untouched","spendable":true}
         "#;
-        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
         db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))

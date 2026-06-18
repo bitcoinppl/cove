@@ -611,7 +611,7 @@ mod tests {
     use super::*;
 
     fn test_manager() -> (LabelManager, tempfile::TempDir) {
-        let (db, tmp) = new_test_wallet_data_db(WalletId::preview_new());
+        let (db, tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
 
         (LabelManager { db }, tmp)
     }

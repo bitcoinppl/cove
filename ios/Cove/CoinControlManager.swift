@@ -1,3 +1,4 @@
+import os
 import SwiftUI
 
 extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinControlManager {}
@@ -18,6 +19,8 @@ private enum CoinControlManagerError: LocalizedError {
     @ObservationIgnored
     private var rust: RustCoinControlManager?
     let id: WalletId
+    @ObservationIgnored
+    private let closeState = OSAllocatedUnfairLock(initialState: false)
 
     private(set) var sort: CoinControlListSort? = .some(.date(.descending))
 
@@ -65,6 +68,23 @@ private enum CoinControlManagerError: LocalizedError {
 
     deinit {
         close()
+    }
+
+    func close() {
+        guard markClosedIfNeeded() else { return }
+
+        logger.debug("Closing CoinControlManager")
+        updateSendFlowManagerTask?.cancel()
+        updateSendFlowManagerTask = nil
+        rust = nil
+    }
+
+    private func markClosedIfNeeded() -> Bool {
+        closeState.withLock { isClosed in
+            guard !isClosed else { return false }
+            isClosed = true
+            return true
+        }
     }
 
     public func buttonArrow(_ key: CoinControlListSortKey) -> String? {
@@ -165,15 +185,6 @@ private enum CoinControlManagerError: LocalizedError {
         guard let rust else { throw CoinControlManagerError.closed }
 
         try await rust.setUtxoSpendability(outpoint: outpoint, spendable: spendable)
-    }
-
-    func close() {
-        guard rust != nil else { return }
-
-        logger.debug("Closing CoinControlManager")
-        updateSendFlowManagerTask?.cancel()
-        updateSendFlowManagerTask = nil
-        rust = nil
     }
 
     private let rustBridge = DispatchQueue(label: "cove.CoinControlManager.rustbridge", qos: .userInitiated)

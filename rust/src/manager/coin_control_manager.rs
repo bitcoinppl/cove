@@ -452,14 +452,15 @@ mod tests {
             .set_output_spendability(bitcoin::OutPoint::from(locked.as_ref()), false)
             .expect("failed to lock output");
 
-        {
+        let selection_changed = {
             let mut state = manager.state.lock();
             state.selected_utxos = vec![locked.clone(), unlocked.clone()];
-            state.load_utxo_labels();
-        }
+            state.load_utxo_labels()
+        };
 
         let state = manager.state.lock();
 
+        assert!(selection_changed);
         assert!(!state.utxos[0].spendable);
         assert_eq!(state.selected_utxos, vec![unlocked]);
     }
