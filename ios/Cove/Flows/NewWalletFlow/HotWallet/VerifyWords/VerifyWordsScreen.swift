@@ -102,8 +102,8 @@ private struct VerifyWordsLoadedView: View {
     @MainActor
     private func loadStateMachine() async {
         do {
-            verificationComplete = false
             let validator = try manager.rust.wordValidator()
+            verificationComplete = false
             stateMachine = WordVerifyStateMachine(validator: validator, startingWordNumber: 1)
         } catch {
             Log.error("VerifyWords failed to initialize: \(error)")

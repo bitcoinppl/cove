@@ -26,41 +26,38 @@ public struct SendFlowContainer: View {
     }
 }
 
-private struct SendFlowResolutionKey: Hashable {
-    let walletManagerId: ObjectIdentifier
-    let sendFlowManagerId: ObjectIdentifier?
-}
-
 private struct SendFlowLoadedView: View {
     @Environment(AppManager.self) private var app
 
     let sendRoute: SendRoute
     let manager: WalletManager
 
-    @State private var initCompleted = false
     @State private var initializedSendFlowManagerId: ObjectIdentifier?
 
     private var sendFlowManager: SendFlowManager? {
         app.cachedSendFlowManager(id: manager.id)
     }
 
-    private var resolutionKey: SendFlowResolutionKey {
-        .init(
-            walletManagerId: ObjectIdentifier(manager),
-            sendFlowManagerId: sendFlowManager.map(ObjectIdentifier.init)
-        )
+    private var initializedSendFlowManager: SendFlowManager? {
+        guard let sendFlowManager else { return nil }
+
+        guard initializedSendFlowManagerId == ObjectIdentifier(sendFlowManager) else {
+            return nil
+        }
+
+        return sendFlowManager
     }
 
     var body: some View {
         Group {
-            if let sendFlowManager, initCompleted {
+            if let sendFlowManager = initializedSendFlowManager {
                 loadedContent(sendFlowManager: sendFlowManager)
             } else {
                 ProgressView()
                     .tint(.primary)
             }
         }
-        .task(id: resolutionKey) {
+        .task(id: ObjectIdentifier(manager)) {
             await ensureSendFlowManagerInitialized()
         }
     }
@@ -162,19 +159,20 @@ private struct SendFlowLoadedView: View {
 
     @MainActor
     private func ensureSendFlowManagerInitialized() async {
+        if initializedSendFlowManager != nil { return }
+
         let presenter = SendFlowPresenter(app: app, manager: manager)
         let sendFlowManager = app.ensureSendFlowManager(manager, presenter: presenter)
         let sendFlowManagerId = ObjectIdentifier(sendFlowManager)
 
-        guard initializedSendFlowManagerId != sendFlowManagerId else { return }
-
-        initializedSendFlowManagerId = sendFlowManagerId
-        initCompleted = false
+        initializedSendFlowManagerId = nil
         applyRouteArguments(to: sendFlowManager)
 
         // rust handles alert + popRoute on failure
         if await sendFlowManager.rust.waitForInit() {
-            initCompleted = true
+            guard !Task.isCancelled else { return }
+
+            initializedSendFlowManagerId = sendFlowManagerId
         }
     }
 }
