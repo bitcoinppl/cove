@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 @Stable
 class CoinControlManager(
-    val rust: RustCoinControlManager,
+    private val rust: RustCoinControlManager,
 ) : CoinControlManagerReconciler,
     Closeable {
     private val tag = "CoinControlManager"
@@ -89,8 +89,13 @@ class CoinControlManager(
     /**
      * get button arrow icon based on sort state
      */
+    fun buttonPresentation(key: CoinControlListSortKey): ButtonPresentation? {
+        if (isClosed.get()) return null
+        return rust.buttonPresentation(key)
+    }
+
     fun buttonArrow(key: CoinControlListSortKey): String? =
-        when (val presentation = rust.buttonPresentation(key)) {
+        when (val presentation = buttonPresentation(key)) {
             is ButtonPresentation.Selected -> {
                 when (presentation.v1) {
                     ListSortDirection.ASCENDING -> "arrow_upward"
@@ -98,6 +103,7 @@ class CoinControlManager(
                 }
             }
             is ButtonPresentation.NotSelected -> null
+            null -> null
         }
 
     val totalSelectedAmount: String
@@ -111,7 +117,7 @@ class CoinControlManager(
      * navigates forward to CoinControlSetAmount screen with selected UTXOs
      */
     fun continuePressed(app: AppManager) {
-        val walletId = rust.id()
+        val walletId = id
         val selectedUtxos = utxos.filter { it.spendable && selected.contains(it.outpoint.hashToUint()) }
 
         // navigate forward to coin control set amount screen
@@ -176,6 +182,7 @@ class CoinControlManager(
         }
 
     suspend fun reloadLabels() {
+        if (isClosed.get()) return
         rust.reloadLabels()
     }
 
@@ -183,24 +190,35 @@ class CoinControlManager(
         outpoint: OutPoint,
         spendable: Boolean,
     ) {
+        if (isClosed.get()) return
+
         withContext(Dispatchers.IO) {
             rust.setUtxoSpendability(outpoint, spendable)
         }
     }
 
     override fun reconcile(message: CoinControlManagerReconcileMessage) {
+        if (isClosed.get()) return
+
         logDebug("reconcile: $message")
         mainScope.launch { apply(message) }
     }
 
     override fun reconcileMany(messages: List<CoinControlManagerReconcileMessage>) {
+        if (isClosed.get()) return
+
         logDebug("reconcile_messages: ${messages.size} messages")
         mainScope.launch { messages.forEach { apply(it) } }
     }
 
     fun dispatch(action: CoinControlManagerAction) {
+        if (isClosed.get()) return
+
         logDebug("dispatch: $action")
-        mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
+        mainScope.launch(Dispatchers.IO) {
+            if (isClosed.get()) return@launch
+            rust.dispatch(action)
+        }
     }
 
     override fun close() {

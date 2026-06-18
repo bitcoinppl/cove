@@ -574,10 +574,10 @@ private fun SortRow(
     @Suppress("UNUSED_VARIABLE")
     val sort = manager.sort
 
-    val datePresentation = manager.rust.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.DATE)
-    val namePresentation = manager.rust.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.NAME)
-    val amountPresentation = manager.rust.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.AMOUNT)
-    val changePresentation = manager.rust.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.CHANGE)
+    val datePresentation = manager.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.DATE)
+    val namePresentation = manager.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.NAME)
+    val amountPresentation = manager.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.AMOUNT)
+    val changePresentation = manager.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.CHANGE)
 
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
