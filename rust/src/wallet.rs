@@ -303,7 +303,11 @@ impl Wallet {
                 let (descriptors, address_type) = preferred_json_descriptors(&json)?;
 
                 metadata.address_type = address_type;
-                metadata.discovery_state = DiscoveryState::StartedJson(Arc::new((*json).into()));
+                if should_start_json_discovery(&json, address_type) {
+                    metadata.discovery_state =
+                        DiscoveryState::StartedJson(Arc::new((*json).into()));
+                }
+
                 descriptors
             }
             Format::Wasabi(descriptors) => descriptors,
@@ -787,9 +791,17 @@ fn preferred_json_descriptors(
     })
     .ok_or_else(|| {
         WalletError::ParseXpubError(xpub::XpubError::MissingXpub(
-            "No supported xpub found".to_string(),
+            "No supported BIP44, BIP49, or BIP84 xpub found".to_string(),
         ))
     })
+}
+
+fn should_start_json_discovery(
+    json: &pubport::formats::Json,
+    address_type: WalletAddressType,
+) -> bool {
+    address_type == WalletAddressType::NativeSegwit
+        && (json.bip49.is_some() || json.bip44.is_some())
 }
 
 impl Wallet {
@@ -948,6 +960,40 @@ mod tests {
 
         assert_eq!(address_type, WalletAddressType::Legacy);
         assert!(descriptors.external.to_string().starts_with("pkh("));
+    }
+
+    #[test]
+    fn json_discovery_starts_for_native_segwit_with_alternates() {
+        let json = descriptor_json(
+            Some(bip44_descriptors()),
+            Some(bip49_descriptors()),
+            Some(bip84_descriptors()),
+        );
+
+        let (_, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::NativeSegwit);
+        assert!(should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn json_discovery_does_not_start_for_single_native_segwit_export() {
+        let json = descriptor_json(None, None, Some(bip84_descriptors()));
+
+        let (_, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::NativeSegwit);
+        assert!(!should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn json_discovery_does_not_start_for_wrapped_segwit_export() {
+        let json = descriptor_json(None, Some(bip49_descriptors()), None);
+
+        let (_, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::WrappedSegwit);
+        assert!(!should_start_json_discovery(&json, address_type));
     }
 
     fn scan_indexes(
