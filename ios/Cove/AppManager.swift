@@ -154,12 +154,17 @@ private let navigationSettleDelayMs = 800
 
     func clearWalletManager(id: WalletId? = nil) {
         if id == nil {
+            walletManager?.close()
             walletManager = nil
             clearSendFlowManager()
             return
         }
 
-        if walletManager?.id == id { walletManager = nil }
+        if walletManager?.id == id {
+            walletManager?.close()
+            walletManager = nil
+        }
+
         clearSendFlowManager(id: id)
     }
 
