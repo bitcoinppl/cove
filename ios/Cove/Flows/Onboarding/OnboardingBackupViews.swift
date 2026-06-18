@@ -574,12 +574,22 @@ struct OnboardingExchangeFundingView: View {
     let walletId: WalletId?
     let onContinue: () -> Void
 
+    @State private var walletLoadingError: Error?
+
     var body: some View {
         if let walletId {
             WalletManagerHost(walletId: walletId, loading: {
-                OnboardingExchangeFundingContent(onContinue: onContinue)
+                if let walletLoadingError {
+                    OnboardingExchangeFundingContent(
+                        initialErrorMessage: "The new wallet could not be loaded. \(walletLoadingError.localizedDescription)",
+                        onContinue: onContinue
+                    )
+                } else {
+                    OnboardingExchangeFundingContent(onContinue: onContinue)
+                }
             }, onError: { error in
                 Log.error("Unable to load wallet for onboarding funding: \(error)")
+                walletLoadingError = error
             }) { manager in
                 OnboardingExchangeFundingContent(manager: manager, onContinue: onContinue)
             }

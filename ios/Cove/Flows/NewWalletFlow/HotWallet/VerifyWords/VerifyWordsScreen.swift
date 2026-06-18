@@ -11,6 +11,7 @@ import SwiftUI
 
 struct VerifyWordsContainer: View {
     @Environment(\.sizeCategory) var sizeCategory
+    @Environment(AppManager.self) private var app
 
     let id: WalletId
     let onVerified: (() -> Void)?
@@ -27,6 +28,7 @@ struct VerifyWordsContainer: View {
             Text("Loading....")
         }, onError: { error in
             Log.error("VerifyWords failed to initialize: \(error)")
+            app.trySelectLatestOrNewWallet()
         }) { manager in
             VerifyWordsLoadedView(
                 manager: manager,
@@ -42,12 +44,15 @@ struct VerifyWordsContainer: View {
 }
 
 private struct VerifyWordsLoadedView: View {
+    @Environment(AppManager.self) private var app
+
     let manager: WalletManager
     let onVerified: (() -> Void)?
     let sizeCategory: ContentSizeCategory
 
     @Binding var verificationComplete: Bool
     @State private var stateMachine: WordVerifyStateMachine?
+    @State private var loadingError: Error?
 
     var body: some View {
         Group {
@@ -65,6 +70,8 @@ private struct VerifyWordsLoadedView: View {
                 } else {
                     loadedScreen(stateMachine: stateMachine)
                 }
+            } else if let loadingError {
+                loadingErrorView(error: loadingError)
             } else {
                 Text("Loading....")
             }
@@ -99,8 +106,41 @@ private struct VerifyWordsLoadedView: View {
         }
     }
 
+    private func loadingErrorView(error: Error) -> some View {
+        VStack(spacing: 16) {
+            Text("Unable to load recovery word verification")
+                .font(.headline)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            Text(error.localizedDescription)
+                .font(.footnote)
+                .foregroundStyle(.coveLightGray.opacity(0.75))
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: 12) {
+                Button("Try Again") {
+                    Task {
+                        await loadStateMachine()
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+
+                Button("Return to Wallet") {
+                    app.trySelectLatestOrNewWallet()
+                }
+                .buttonStyle(DarkButtonStyle())
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.midnightBlue.ignoresSafeArea())
+    }
+
     @MainActor
     private func loadStateMachine() async {
+        loadingError = nil
+
         do {
             let validator = try manager.rust.wordValidator()
             verificationComplete = false
@@ -108,6 +148,7 @@ private struct VerifyWordsLoadedView: View {
         } catch {
             Log.error("VerifyWords failed to initialize: \(error)")
             stateMachine = nil
+            loadingError = error
         }
     }
 }
