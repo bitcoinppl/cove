@@ -4,9 +4,12 @@ use bitcoin::{Amount, FeeRate as BdkFeeRate, Transaction as BdkTransaction, para
 use payjoin::{
     Uri, UriExt,
     persist::{NoopSessionPersister, OptionalTransitionOutcome},
-    send::v2::{
-        PollingForProposal, Sender as V2Sender, SenderBuilder, SessionEvent as PayjoinSessionEvent,
-        WithReplyKey,
+    send::{
+        ResponseError,
+        v2::{
+            PollingForProposal, Sender as V2Sender, SenderBuilder,
+            SessionEvent as PayjoinSessionEvent, WithReplyKey,
+        },
     },
 };
 use rand::seq::SliceRandom as _;
@@ -44,6 +47,33 @@ fn ohttp_relays() -> Vec<&'static str> {
     ];
     relays.shuffle(&mut rand::rng());
     relays
+}
+
+// tries each OHTTP relay in shuffled order, returning the first successful (body, context) pair
+async fn try_ohttp_relays<C>(
+    client: &reqwest::Client,
+    timeout: Duration,
+    build_request: impl Fn(&str) -> eyre::Result<(payjoin::Request, C)>,
+) -> eyre::Result<(Vec<u8>, C)> {
+    let mut last_err = eyre::eyre!("no OHTTP relays configured");
+    for relay in ohttp_relays() {
+        let (req, ctx) = match build_request(relay) {
+            Ok(pair) => pair,
+            Err(e) => {
+                warn!("payjoin: relay {relay} rejected: {e:?}");
+                last_err = e;
+                continue;
+            }
+        };
+        match http_post(client, req, timeout).await {
+            Ok(body) => return Ok((body, ctx)),
+            Err(e) => {
+                warn!("payjoin: relay {relay} request failed: {e:?}");
+                last_err = e;
+            }
+        }
+    }
+    Err(last_err)
 }
 
 /// Opaque alias so `actor.rs` can name the initial sender state without importing payjoin internals
@@ -171,40 +201,19 @@ impl PayjoinActor {
                 }
             };
 
-            let post_result = {
-                let mut last_err = eyre::eyre!("no OHTTP relays configured");
-                let mut success = None;
-                for relay in ohttp_relays() {
-                    let (req, ctx) = match sender.create_v2_post_request(relay) {
-                        Ok(pair) => pair,
-                        Err(e) => {
-                            warn!("payjoin: relay {relay} rejected for POST: {e:?}");
-                            last_err = eyre::eyre!("relay {relay} rejected: {e:?}");
-                            continue;
-                        }
-                    };
-                    match http_post(&client, req, Duration::from_secs(30)).await {
-                        Ok(body) => {
-                            success = Some((body, ctx));
-                            break;
-                        }
-                        Err(e) => {
-                            warn!("payjoin: relay {relay} POST failed: {e}");
-                            last_err = e;
-                        }
+            let (post_response, post_ctx) =
+                match try_ohttp_relays(&client, Duration::from_secs(30), |relay| {
+                    sender.create_v2_post_request(relay).map_err(|e| eyre::eyre!("{e:?}"))
+                })
+                .await
+                {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        warn!("payjoin POST: all relays failed: {e}");
+                        send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
+                        return;
                     }
-                }
-                success.ok_or(last_err)
-            };
-
-            let (post_response, post_ctx) = match post_result {
-                Ok(pair) => pair,
-                Err(e) => {
-                    warn!("payjoin POST: all relays failed: {e}");
-                    send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
-                    return;
-                }
-            };
+                };
 
             let persister = NoopSessionPersister::<PayjoinSessionEvent>::default();
             let polling_sender =
@@ -258,44 +267,23 @@ impl PayjoinActor {
                 }
             };
 
-            let poll_result = {
-                let mut last_err = eyre::eyre!("no OHTTP relays configured");
-                let mut success = None;
-                for relay in ohttp_relays() {
-                    let (req, ctx) = match polling_sender.create_poll_request(relay) {
-                        Ok(pair) => pair,
-                        Err(e) => {
-                            warn!("payjoin: relay {relay} rejected for poll: {e:?}");
-                            last_err = eyre::eyre!("relay {relay} rejected: {e:?}");
-                            continue;
-                        }
-                    };
-                    // polls are long-polling: the directory holds the connection open until a
-                    // proposal arrives or its own timeout fires, so allow slightly more than
-                    // the server-side timeout to avoid racing it
-                    match http_post(&client, req, Duration::from_secs(35)).await {
-                        Ok(body) => {
-                            success = Some((body, ctx));
-                            break;
-                        }
-                        Err(e) => {
-                            warn!("payjoin: relay {relay} poll failed: {e}");
-                            last_err = e;
-                        }
+            // polls are long-polling: the directory holds the connection open until a
+            // proposal arrives or its own timeout fires, so allow slightly more than
+            // the server-side timeout to avoid racing it
+            let (poll_response, poll_ctx) =
+                match try_ohttp_relays(&client, Duration::from_secs(35), |relay| {
+                    polling_sender.create_poll_request(relay).map_err(|e| eyre::eyre!("{e:?}"))
+                })
+                .await
+                {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        warn!("payjoin poll: all relays failed, retrying: {e}");
+                        tokio::time::sleep(Duration::from_secs(2)).await;
+                        send!(addr.begin_next_poll_msg());
+                        return;
                     }
-                }
-                success.ok_or(last_err)
-            };
-
-            let (poll_response, poll_ctx) = match poll_result {
-                Ok(pair) => pair,
-                Err(e) => {
-                    warn!("payjoin poll: all relays failed, retrying: {e}");
-                    tokio::time::sleep(Duration::from_secs(2)).await;
-                    send!(addr.begin_next_poll_msg());
-                    return;
-                }
-            };
+                };
 
             let persister = NoopSessionPersister::<PayjoinSessionEvent>::default();
             match polling_sender.process_response(&poll_response, poll_ctx).save(&persister) {
@@ -307,8 +295,20 @@ impl PayjoinActor {
                     send!(addr.update_polling_sender(next));
                 }
                 Err(e) => {
-                    warn!("payjoin poll: fatal error processing response: {e:?}");
-                    send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
+                    // receiver explicitly rejected the session, broadcast fallback
+                    // other errors (transient OHTTP failures) may be recoverable,
+                    // retry using the still-stored polling sender
+                    match e.api_error_ref() {
+                        Some(ResponseError::WellKnown(_))
+                        | Some(ResponseError::Unrecognized { .. }) => {
+                            warn!("payjoin poll: receiver rejected session: {e:?}");
+                            send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
+                        }
+                        _ => {
+                            warn!("payjoin poll: response error, retrying: {e:?}");
+                            send!(addr.begin_next_poll_msg());
+                        }
+                    }
                 }
             }
         });
