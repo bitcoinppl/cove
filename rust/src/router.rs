@@ -67,6 +67,7 @@ pub enum SettingsRoute {
     Network,
     Appearance,
     Node,
+    BlockExplorer,
     FiatCurrency,
 
     Wallet {

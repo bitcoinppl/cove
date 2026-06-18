@@ -11,6 +11,7 @@ struct SettingsRow: View {
     @Environment(AppManager.self) private var app
 
     let title: String
+    var subtitle: String? = nil
 
     var route: SettingsRoute? = nil
 
@@ -23,9 +24,17 @@ struct SettingsRow: View {
         HStack {
             icon ?? SettingsIcon(symbol: symbol ?? "")
 
-            Text(title)
-                .font(.subheadline)
-                .padding(8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(8)
 
             Spacer()
 

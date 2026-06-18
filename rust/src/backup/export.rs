@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use strum::IntoEnumIterator as _;
 use tracing::warn;
@@ -7,8 +7,10 @@ use zeroize::Zeroizing;
 use cove_device::keychain::Keychain;
 use cove_types::network::Network;
 
+use crate::custom_block_explorer::CustomBlockExplorerTemplate;
 use crate::database::Database;
 use crate::database::global_config::GlobalConfigKey;
+use crate::database::global_config::GlobalConfigTable;
 use crate::label_manager::LabelManager;
 use crate::wallet::metadata::{WalletMode, WalletType};
 
@@ -154,7 +156,15 @@ impl BackupExporter {
             }
         }
 
-        Ok(AppSettings { selected_network, selected_fiat_currency, color_scheme, selected_nodes })
+        let custom_block_explorers = gather_custom_block_explorers(&self.db.global_config);
+
+        Ok(AppSettings {
+            selected_network,
+            selected_fiat_currency,
+            color_scheme,
+            selected_nodes,
+            custom_block_explorers,
+        })
     }
 
     fn get_config(&mut self, key: GlobalConfigKey) -> Option<String> {
@@ -167,6 +177,25 @@ impl BackupExporter {
             }
         }
     }
+}
+
+fn gather_custom_block_explorers(config: &GlobalConfigTable) -> BTreeMap<String, String> {
+    let mut explorers = BTreeMap::new();
+
+    for network in Network::iter() {
+        let Some(stored_template) = config.custom_block_explorer(network) else {
+            continue;
+        };
+
+        let Ok(template) = CustomBlockExplorerTemplate::parse_stored(&stored_template) else {
+            warn!("skipping invalid custom block explorer for {network}");
+            continue;
+        };
+
+        explorers.insert(network.to_string(), template.as_str().to_string());
+    }
+
+    explorers
 }
 
 pub async fn export_all(password: String) -> Result<BackupResult, BackupError> {
@@ -211,4 +240,43 @@ async fn export_labels(id: cove_types::WalletId) -> Result<String, BackupError> 
     })?;
 
     manager.export().await.map_err(|e| BackupError::Gather(e.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backup_export_gathers_only_normalized_custom_block_explorers() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, config) = test_config();
+
+        config
+            .set_custom_block_explorer(Network::Bitcoin, "https://example.com".to_string())
+            .unwrap();
+        config
+            .set(
+                GlobalConfigKey::CustomBlockExplorer(Network::Signet),
+                "https://invalid.example".to_string(),
+            )
+            .unwrap();
+
+        let explorers = gather_custom_block_explorers(&config);
+
+        assert_eq!(explorers.len(), 1);
+        assert_eq!(
+            explorers.get("Bitcoin").map(String::as_str),
+            Some("https://example.com/tx/{txid}")
+        );
+    }
+
+    fn test_config() -> (tempfile::TempDir, GlobalConfigTable) {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
+        let write_txn = db.begin_write().unwrap();
+        let table = GlobalConfigTable::new(db.clone(), &write_txn);
+        write_txn.commit().unwrap();
+
+        (tmp, table)
+    }
 }
