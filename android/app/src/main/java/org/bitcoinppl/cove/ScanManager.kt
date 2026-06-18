@@ -51,29 +51,7 @@ class ScanManager private constructor() {
                 }
 
                 is MultiFormat.Bip329Labels -> {
-                    val manager = app.walletManager
-                    if (manager == null || Database().globalConfig().selectedWallet() == null) {
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.InvalidFileFormat(
-                                    "Currently BIP329 labels must be imported through the wallet actions",
-                                ),
-                            )
-                        return
-                    }
-
-                    try {
-                        manager.importLabels(multiFormat.v1)
-                        app.alertState = TaggedItem(AppAlertState.ImportedLabelsSuccessfully)
-                    } catch (e: Exception) {
-                        Log.e(tag, "Failed to import labels", e)
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.InvalidFileFormat(
-                                    e.message ?: "Failed to import labels",
-                                ),
-                            )
-                    }
+                    importLabels(multiFormat.v1)
                 }
             }
         } catch (e: Exception) {
@@ -81,6 +59,33 @@ class ScanManager private constructor() {
             app.alertState =
                 TaggedItem(
                     AppAlertState.InvalidFileFormat(e.message ?: "Unknown error"),
+                )
+        }
+    }
+
+    private fun importLabels(labels: Bip329Labels) {
+        val selectedWallet = Database().globalConfig().selectedWallet()
+        if (selectedWallet == null) {
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.InvalidFileFormat(
+                        "Currently BIP329 labels must be imported through the wallet actions",
+                    ),
+                )
+            return
+        }
+
+        try {
+            LabelManager(id = selectedWallet).use { it.importLabels(labels) }
+            app.reconcileAfterLabelImport(selectedWallet)
+            app.alertState = TaggedItem(AppAlertState.ImportedLabelsSuccessfully)
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to import labels", e)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.InvalidFileFormat(
+                        e.message ?: "Failed to import labels",
+                    ),
                 )
         }
     }
