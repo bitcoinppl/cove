@@ -714,22 +714,6 @@ impl RustSendFlowManager {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn amount_exceeds_spendable_balance_uses_unlocked_balance() {
-        assert!(super::amount_exceeds_spendable_balance(Some(6_000), Some(5_000)));
-        assert!(!super::amount_exceeds_spendable_balance(Some(5_000), Some(5_000)));
-        assert!(!super::amount_exceeds_spendable_balance(Some(0), Some(0)));
-    }
-
-    #[test]
-    fn validation_spendable_balance_prefers_unlocked_balance_over_wallet_fallback() {
-        assert_eq!(super::spendable_balance_for_validation(Some(5_000), 10_000), 5_000);
-        assert_eq!(super::spendable_balance_for_validation(None, 10_000), 10_000);
-    }
-}
-
 // MARK: Private getters
 impl RustSendFlowManager {
     fn selected_fee_rate(&self) -> Option<Arc<FeeRateOptionWithTotalFee>> {
@@ -2039,5 +2023,21 @@ impl RustSendFlowManager {
         let mut state = self.state.lock();
         state.wallet_balance = Some(wallet_balance);
         state.unlocked_spendable_sats = Some(unlocked_spendable_sats);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn amount_exceeds_spendable_balance_uses_unlocked_balance() {
+        assert!(super::amount_exceeds_spendable_balance(Some(6_000), Some(5_000)));
+        assert!(!super::amount_exceeds_spendable_balance(Some(5_000), Some(5_000)));
+        assert!(!super::amount_exceeds_spendable_balance(Some(0), Some(0)));
+    }
+
+    #[test]
+    fn validation_spendable_balance_prefers_unlocked_balance_over_wallet_fallback() {
+        assert_eq!(super::spendable_balance_for_validation(Some(5_000), 10_000), 5_000);
+        assert_eq!(super::spendable_balance_for_validation(None, 10_000), 10_000);
     }
 }
