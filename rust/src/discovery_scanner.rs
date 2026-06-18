@@ -144,9 +144,10 @@ impl WalletDiscoveryScanner {
 
         let id = metadata.id.clone();
         let (wallets, scan_source) = match metadata.discovery_state {
-            DiscoveryState::StartedJson(json) => {
-                (Wallets::try_from_json(&json, network)?, ScanSource::Json(json))
-            }
+            DiscoveryState::StartedJson(json) => (
+                Wallets::try_from_json(&json, network, metadata.address_type)?,
+                ScanSource::Json(json),
+            ),
             DiscoveryState::StartedMnemonic => {
                 let mnemonic = Keychain::global()
                     .get_wallet_key(&id)
@@ -540,13 +541,21 @@ fn index(type_: WalletAddressType) -> usize {
 }
 
 impl Wallets {
-    pub fn try_from_json(json: &Json, network: Network) -> Result<Self, WalletError> {
+    pub fn try_from_json(
+        json: &Json,
+        network: Network,
+        current_address_type: WalletAddressType,
+    ) -> Result<Self, WalletError> {
         let mut wallets = Self::default();
 
         for (json, type_) in [
             (&json.bip49, WalletAddressType::WrappedSegwit),
             (&json.bip44, WalletAddressType::Legacy),
         ] {
+            if type_ == current_address_type {
+                continue;
+            }
+
             if let Some(json) = json {
                 // TODO: remove string round-trip once bdk_wallet updates to miniscript 0.13
                 // expect is okay: descriptor already validated by pubport, just bridging miniscript versions

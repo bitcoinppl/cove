@@ -300,10 +300,9 @@ impl Wallet {
         let pubport_descriptors = match pubport {
             Format::Descriptor(descriptors) => descriptors,
             Format::Json(json) => {
-                let descriptors = json.bip84.clone().ok_or(WalletError::ParseXpubError(
-                    xpub::XpubError::MissingXpub("No BIP84 xpub found".to_string()),
-                ))?;
+                let (descriptors, address_type) = preferred_json_descriptors(&json)?;
 
+                metadata.address_type = address_type;
                 metadata.discovery_state = DiscoveryState::StartedJson(Arc::new((*json).into()));
                 descriptors
             }
@@ -774,6 +773,25 @@ fn receive_prioritized_full_scan_request(
     builder.build()
 }
 
+fn preferred_json_descriptors(
+    json: &pubport::formats::Json,
+) -> Result<(pubport::descriptor::Descriptors, WalletAddressType), WalletError> {
+    [
+        (&json.bip84, WalletAddressType::NativeSegwit),
+        (&json.bip49, WalletAddressType::WrappedSegwit),
+        (&json.bip44, WalletAddressType::Legacy),
+    ]
+    .into_iter()
+    .find_map(|(descriptors, address_type)| {
+        descriptors.as_ref().map(|descriptors| (descriptors.clone(), address_type))
+    })
+    .ok_or_else(|| {
+        WalletError::ParseXpubError(xpub::XpubError::MissingXpub(
+            "No supported xpub found".to_string(),
+        ))
+    })
+}
+
 impl Wallet {
     pub(crate) fn preview_new_wallet_with_metadata(metadata: WalletMetadata) -> Self {
         let mnemonic = Mnemonic::from_str("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
@@ -865,6 +883,71 @@ mod tests {
             .network(Network::Regtest)
             .create_wallet_no_persist()
             .expect("wallet is created")
+    }
+
+    fn pubport_descriptors(descriptor: &str) -> pubport::descriptor::Descriptors {
+        pubport::descriptor::Descriptors::try_from_line(descriptor)
+            .expect("descriptor fixture is valid")
+    }
+
+    fn descriptor_json(
+        bip44: Option<pubport::descriptor::Descriptors>,
+        bip49: Option<pubport::descriptor::Descriptors>,
+        bip84: Option<pubport::descriptor::Descriptors>,
+    ) -> pubport::formats::Json {
+        pubport::formats::Json { bip44, bip49, bip84, bip86: None }
+    }
+
+    fn bip44_descriptors() -> pubport::descriptor::Descriptors {
+        pubport_descriptors(
+            "pkh([817e7be0/44h/0h/0h]xpub6BoKN14JzSFN1T3cqe9FnrwnXGAsmbgETJyeazoa3F7aMXh4XndvVrJAYyM127FsrH8KFv5XFXDroqXNfZMfsinow7xp93ueYSpnrjBBFs4/<0;1>/*)#tdtrl3y9",
+        )
+    }
+
+    fn bip49_descriptors() -> pubport::descriptor::Descriptors {
+        pubport_descriptors(
+            "sh(wpkh([817e7be0/49h/0h/0h]xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm/<0;1>/*))#8llmt36x",
+        )
+    }
+
+    fn bip84_descriptors() -> pubport::descriptor::Descriptors {
+        pubport_descriptors(
+            "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7",
+        )
+    }
+
+    #[test]
+    fn preferred_json_descriptors_uses_native_segwit_when_present() {
+        let json = descriptor_json(
+            Some(bip44_descriptors()),
+            Some(bip49_descriptors()),
+            Some(bip84_descriptors()),
+        );
+
+        let (descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::NativeSegwit);
+        assert!(descriptors.external.to_string().starts_with("wpkh("));
+    }
+
+    #[test]
+    fn preferred_json_descriptors_falls_back_to_wrapped_segwit() {
+        let json = descriptor_json(Some(bip44_descriptors()), Some(bip49_descriptors()), None);
+
+        let (descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::WrappedSegwit);
+        assert!(descriptors.external.to_string().starts_with("sh(wpkh("));
+    }
+
+    #[test]
+    fn preferred_json_descriptors_falls_back_to_legacy() {
+        let json = descriptor_json(Some(bip44_descriptors()), None, None);
+
+        let (descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::Legacy);
+        assert!(descriptors.external.to_string().starts_with("pkh("));
     }
 
     fn scan_indexes(

@@ -86,6 +86,7 @@ pub enum DescriptorError {
 }
 
 impl From<descriptor::Error> for DescriptorError {
+    #[allow(unreachable_patterns)]
     fn from(error: descriptor::Error) -> Self {
         type DS = descriptor::Error;
 
@@ -111,21 +112,14 @@ impl From<descriptor::Error> for DescriptorError {
             DS::MissingKeyExpressionFields => {
                 Self::KeyExpressionError("missing fields".to_string())
             }
+            _ => Self::InvalidDescriptor(error.to_string()),
         }
     }
 }
 
 impl From<pubport::Error> for XpubError {
     fn from(error: pubport::Error) -> Self {
-        use pubport::Error;
-
-        match error {
-            Error::InvalidDescriptor(error) => Self::InvalidDescriptor(error.into()),
-            Error::InvalidJsonParse(error) => Self::InvalidJson(error.to_string()),
-            Error::InvalidDescriptorInJson => Self::InvalidDescriptorInJson,
-            Error::JsonNoDecriptor => Self::JsonNoDecriptor,
-            Error::InvalidXpub(error) => Self::InvalidXpub(error.to_string()),
-        }
+        Self::InvalidXpub(error.to_string())
     }
 }
 
