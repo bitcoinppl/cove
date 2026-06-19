@@ -13,10 +13,14 @@ use payjoin::{
     },
 };
 use rand::seq::SliceRandom as _;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tracing::{debug, error, warn};
 
 use super::actor::WalletActor;
+
+// maximum time to wait for a receiver proposal before broadcasting the fallback transaction;
+// create_poll_request does not check session expiry, so this provides a client-side deadline
+const PAYJOIN_SESSION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 // send a payjoin HTTP request via reqwest and return the response bytes
 async fn http_post(
@@ -79,35 +83,50 @@ async fn try_ohttp_relays<C>(
 }
 
 /// Opaque alias so `actor.rs` can name the initial sender state without importing payjoin internals
-pub(super) type PayjoinSender = V2Sender<WithReplyKey>;
+pub(crate) type PayjoinSender = V2Sender<WithReplyKey>;
+
+// returns the index of the single external (recipient) output, or Err for batch/self-send PSBTs
+fn recipient_output_index(psbt: &Psbt) -> eyre::Result<usize> {
+    let external: Vec<_> = psbt
+        .outputs
+        .iter()
+        .enumerate()
+        .filter(|(_, o)| o.bip32_derivation.is_empty())
+        .map(|(i, _)| i)
+        .collect();
+
+    match external.as_slice() {
+        [idx] => Ok(*idx),
+        [] => Err(eyre::eyre!("no recipient output found in PSBT")),
+        outputs => Err(eyre::eyre!(
+            "payjoin not supported for batch sends ({} external outputs)",
+            outputs.len()
+        )),
+    }
+}
 
 /// Builds the v2 sender state machine from a signed PSBT and payjoin endpoint
-pub(super) fn build_sender(
+pub(crate) fn build_sender(
     signed_psbt: Psbt,
     endpoint: String,
     network: bitcoin::Network,
 ) -> eyre::Result<PayjoinSender> {
     // TODO: anti-probing (inputs_seen), verify our inputs have not appeared in a prior session
+    // TODO: surface payjoin downgrade to the user when the fallback tx is broadcast instead of the proposal
 
-    // '#' in the endpoint is the OHTTP key and must be percent-encoded as '%23' in the pj= param
-    let encoded_endpoint = endpoint.replace('#', "%23");
-
-    // reject batch sends: payjoin requires exactly one external (recipient) output
-    let external_count =
-        signed_psbt.outputs.iter().filter(|o| o.bip32_derivation.is_empty()).count();
-    if external_count > 1 {
+    // reject v1 endpoints: SenderBuilder::new (v2) panics with unimplemented! on non-OHTTP URIs
+    if !endpoint.contains('#') {
         return Err(eyre::eyre!(
-            "payjoin not supported for batch sends ({external_count} external outputs)"
+            "payjoin endpoint is not a BIP77 v2 OHTTP endpoint (no '#' fragment); \
+             v1 endpoints are not supported — broadcast the fallback transaction instead"
         ));
     }
 
-    // outputs with no bip32_derivation are external (recipient) outputs
-    let (idx, _) = signed_psbt
-        .outputs
-        .iter()
-        .enumerate()
-        .find(|(_, o)| o.bip32_derivation.is_empty())
-        .ok_or_else(|| eyre::eyre!("no recipient output found in PSBT"))?;
+    // '#' is the URI fragment delimiter (carries OHTTP key, reply key, and expiry) and must be
+    // percent-encoded as '%23' in the pj= param so it survives BIP21 URI round-trips
+    let encoded_endpoint = endpoint.replace('#', "%23");
+
+    let idx = recipient_output_index(&signed_psbt)?;
 
     let txout = &signed_psbt.unsigned_tx.output[idx];
     let amount_btc = Amount::from_sat(txout.value.to_sat()).to_btc();
@@ -121,10 +140,22 @@ pub(super) fn build_sender(
         .check_pj_supported()
         .map_err(|_| eyre::eyre!("URI does not support payjoin (missing pj= param)"))?;
 
+    // use the original PSBT's effective fee rate as the minimum the receiver must match;
+    // BROADCAST_MIN is only used as a fallback if the fee cannot be computed
+    let fee_rate = signed_psbt
+        .fee()
+        .ok()
+        .and_then(|fee| {
+            let wu = signed_psbt.unsigned_tx.weight().to_wu();
+            let sat_per_kwu = fee.to_sat() * 1000;
+            sat_per_kwu.checked_div(wu).map(BdkFeeRate::from_sat_per_kwu)
+        })
+        .unwrap_or(BdkFeeRate::BROADCAST_MIN);
+
     let persister = NoopSessionPersister::<PayjoinSessionEvent>::default();
     let sender = SenderBuilder::new(signed_psbt, pj_uri)
         .always_disable_output_substitution()
-        .build_recommended(BdkFeeRate::BROADCAST_MIN)
+        .build_recommended(fee_rate)
         .map_err(|e| eyre::eyre!("failed to build payjoin sender: {e:?}"))?
         .save(&persister)
         .expect("NoopSessionPersister cannot fail");
@@ -140,15 +171,16 @@ enum PayjoinSession {
     Polling { polling_sender: V2Sender<PollingForProposal> },
 }
 
-pub(super) struct PayjoinActor {
+pub(crate) struct PayjoinActor {
     addr: WeakAddr<Self>,
     wallet_addr: WeakAddr<WalletActor>,
     fallback_tx: BdkTransaction,
     session: Option<PayjoinSession>,
+    poll_deadline: Option<Instant>,
 }
 
 impl PayjoinActor {
-    pub(super) fn new(
+    pub(crate) fn new(
         wallet_addr: WeakAddr<WalletActor>,
         sender: V2Sender<WithReplyKey>,
         fallback_tx: BdkTransaction,
@@ -158,6 +190,7 @@ impl PayjoinActor {
             wallet_addr,
             fallback_tx,
             session: Some(PayjoinSession::PrePost { sender }),
+            poll_deadline: None,
         }
     }
 }
@@ -180,7 +213,7 @@ impl Actor for PayjoinActor {
 
 impl PayjoinActor {
     /// POSTs the signed PSBT to the payjoin directory and transitions to polling
-    pub(super) async fn start_post(&mut self) -> ActorResult<()> {
+    pub(crate) async fn start_post(&mut self) -> ActorResult<()> {
         let sender = match self.session.take() {
             Some(PayjoinSession::PrePost { sender }) => sender,
             unexpected => {
@@ -234,18 +267,26 @@ impl PayjoinActor {
         Produces::ok(())
     }
 
-    /// Stores the polling sender and begins polling
-    pub(super) async fn post_succeeded(
+    /// Stores the polling sender, sets the session deadline, and begins polling
+    pub(crate) async fn post_succeeded(
         &mut self,
         polling_sender: V2Sender<PollingForProposal>,
     ) -> ActorResult<()> {
+        self.poll_deadline = Some(Instant::now() + PAYJOIN_SESSION_TIMEOUT);
         self.session = Some(PayjoinSession::Polling { polling_sender });
         self.begin_next_poll();
         Produces::ok(())
     }
 
     /// Poll the directory for the receiver's proposal PSBT
-    pub(super) async fn begin_poll(&mut self) -> ActorResult<()> {
+    pub(crate) async fn begin_poll(&mut self) -> ActorResult<()> {
+        // if the session deadline has passed, broadcast the fallback immediately
+        if self.poll_deadline.is_some_and(|d| Instant::now() >= d) {
+            let fallback_tx = self.fallback_tx.clone();
+            send!(self.wallet_addr.handle_payjoin_fallback(fallback_tx));
+            return Produces::ok(());
+        }
+
         // clone so the original stays in self.session, allowing retry if all relays fail this tick
         let polling_sender = match &self.session {
             Some(PayjoinSession::Polling { polling_sender }) => polling_sender.clone(),
@@ -263,8 +304,7 @@ impl PayjoinActor {
                 Ok(c) => c,
                 Err(e) => {
                     warn!("payjoin poll: failed to create HTTP client: {e:?}");
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                    send!(addr.begin_next_poll_msg());
+                    send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
                     return;
                 }
             };
@@ -297,17 +337,17 @@ impl PayjoinActor {
                     send!(addr.update_polling_sender(next));
                 }
                 Err(e) => {
-                    // receiver rejected the session or the response is invalid, broadcast fallback;
-                    // only retry when there is no api error (pure transport failure)
+                    // WellKnown/Unrecognized mean the receiver explicitly rejected the session;
+                    // the public API does not expose fatal/transient classification directly —
+                    // other opaque response errors retry until the bounded session deadline fires
                     match e.api_error_ref() {
                         Some(ResponseError::WellKnown(_))
-                        | Some(ResponseError::Unrecognized { .. })
-                        | Some(ResponseError::Validation(_)) => {
-                            warn!("payjoin poll: session rejected or invalid response: {e:?}");
+                        | Some(ResponseError::Unrecognized { .. }) => {
+                            warn!("payjoin poll: receiver rejected session: {e:?}");
                             send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
                         }
                         _ => {
-                            warn!("payjoin poll: transport error, retrying: {e:?}");
+                            warn!("payjoin poll: transient error, retrying: {e:?}");
                             send!(addr.begin_next_poll_msg());
                         }
                     }
@@ -319,7 +359,7 @@ impl PayjoinActor {
     }
 
     /// Updates the polling sender on Stasis and continues polling
-    pub(super) async fn update_polling_sender(
+    pub(crate) async fn update_polling_sender(
         &mut self,
         next: V2Sender<PollingForProposal>,
     ) -> ActorResult<()> {
@@ -329,7 +369,7 @@ impl PayjoinActor {
     }
 
     /// Queues the next poll immediately, called from async task context
-    pub(super) async fn begin_next_poll_msg(&mut self) -> ActorResult<()> {
+    pub(crate) async fn begin_next_poll_msg(&mut self) -> ActorResult<()> {
         self.begin_next_poll();
         Produces::ok(())
     }
@@ -339,5 +379,104 @@ impl PayjoinActor {
         self.addr.send_fut(async move {
             send!(addr.begin_poll());
         });
+    }
+
+    /// Cancels the session and broadcasts the fallback transaction
+    pub(crate) async fn cancel_and_fallback(&mut self) -> ActorResult<()> {
+        let fallback_tx = self.fallback_tx.clone();
+        send!(self.wallet_addr.handle_payjoin_fallback(fallback_tx));
+        Produces::ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitcoin::{
+        ScriptBuf, Transaction, TxOut, psbt::Output as PsbtOutput, transaction::Version,
+    };
+
+    // secp256k1 generator point G — a well-known valid compressed public key (33 bytes)
+    const SECP_G: [u8; 33] = [
+        0x02, 0x79, 0xbe, 0x66, 0x7e, 0xf9, 0xdc, 0xbb, 0xac, 0x55, 0xa0, 0x62, 0x95, 0xce, 0x87,
+        0x0b, 0x07, 0x02, 0x9b, 0xfc, 0xdb, 0x2d, 0xce, 0x28, 0xd9, 0x59, 0xf2, 0x81, 0x5b, 0x16,
+        0xf8, 0x17, 0x98,
+    ];
+
+    fn make_psbt(outputs: Vec<(TxOut, bool)>) -> Psbt {
+        let tx_outputs: Vec<TxOut> = outputs.iter().map(|(o, _)| o.clone()).collect();
+        let unsigned_tx = Transaction {
+            version: Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![],
+            output: tx_outputs,
+        };
+        let mut psbt = Psbt::from_unsigned_tx(unsigned_tx).expect("valid tx");
+        for (i, (_, is_external)) in outputs.iter().enumerate() {
+            if *is_external {
+                psbt.outputs[i] = PsbtOutput::default();
+            } else {
+                let mut out = PsbtOutput::default();
+                out.bip32_derivation.insert(
+                    bitcoin::secp256k1::PublicKey::from_slice(&SECP_G).expect("valid pubkey"),
+                    Default::default(),
+                );
+                psbt.outputs[i] = out;
+            }
+        }
+        psbt
+    }
+
+    #[test]
+    fn test_recipient_output_index_accepts_single_recipient() {
+        let psbt = make_psbt(vec![
+            (TxOut { value: Amount::from_sat(50_000), script_pubkey: ScriptBuf::default() }, true),
+            (TxOut { value: Amount::from_sat(49_000), script_pubkey: ScriptBuf::default() }, false),
+        ]);
+        assert_eq!(recipient_output_index(&psbt).unwrap(), 0);
+    }
+
+    #[test]
+    fn test_recipient_output_index_rejects_batch_send() {
+        let psbt = make_psbt(vec![
+            (TxOut { value: Amount::from_sat(50_000), script_pubkey: ScriptBuf::default() }, true),
+            (TxOut { value: Amount::from_sat(50_000), script_pubkey: ScriptBuf::default() }, true),
+        ]);
+        let err = recipient_output_index(&psbt).unwrap_err();
+        assert!(err.to_string().contains("batch"), "expected 'batch' in error, got: {err}");
+    }
+
+    #[test]
+    fn test_recipient_output_index_rejects_no_recipient() {
+        let psbt = make_psbt(vec![(
+            TxOut { value: Amount::from_sat(99_000), script_pubkey: ScriptBuf::default() },
+            false,
+        )]);
+        let err = recipient_output_index(&psbt).unwrap_err();
+        assert!(err.to_string().contains("recipient"), "expected 'recipient' in error, got: {err}");
+    }
+
+    #[test]
+    fn test_endpoint_fragment_encoded() {
+        let endpoint = "https://example.com/pj#ohttp-keys".to_string();
+        let encoded = endpoint.replace('#', "%23");
+        assert_eq!(encoded, "https://example.com/pj%23ohttp-keys");
+        assert!(!encoded.contains('#'), "raw '#' must not appear in encoded endpoint");
+    }
+
+    #[test]
+    fn test_amount_satoshi_precision() {
+        let cases = [
+            (1u64, "0.00000001"),
+            (100, "0.00000100"),
+            (1_000_000, "0.01000000"),
+            (100_000_000, "1.00000000"),
+            (2_100_000_000_000_000u64, "21000000.00000000"),
+        ];
+        for (sats, expected) in cases {
+            let btc = Amount::from_sat(sats).to_btc();
+            let formatted = format!("{btc:.8}");
+            assert_eq!(formatted, expected, "sats={sats}");
+        }
     }
 }
