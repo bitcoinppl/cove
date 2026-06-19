@@ -888,6 +888,9 @@ mod tests {
         insert_tx,
     };
 
+    const BIP49_YPUB: &str = "ypub6Ww3ibxVfGzLrAH1PNcjyAWenMTbbAosGNB6VvmSEgytSER9azLDWCxoJwW7Ke7icmizBMXrzBx9979FfaHxHcrArf3zbeJJJUZPf663zsP";
+    const BIP84_ZPUB: &str = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+
     fn test_bdk_wallet() -> bdk_wallet::Wallet {
         let (external_descriptor, internal_descriptor) = get_test_wpkh_and_change_desc();
 
@@ -908,6 +911,15 @@ mod tests {
         bip84: Option<pubport::descriptor::Descriptors>,
     ) -> pubport::formats::Json {
         pubport::formats::Json { bip44, bip49, bip84, bip86: None }
+    }
+
+    fn json_from_export(export: &str) -> pubport::formats::Json {
+        let format = pubport::Format::try_new_from_str(export).expect("export fixture is valid");
+        let pubport::Format::Json(json) = format else {
+            panic!("Expected JSON export");
+        };
+
+        *json
     }
 
     fn bip44_descriptors() -> pubport::descriptor::Descriptors {
@@ -960,6 +972,34 @@ mod tests {
 
         assert_eq!(address_type, WalletAddressType::Legacy);
         assert!(descriptors.external.to_string().starts_with("pkh("));
+    }
+
+    #[test]
+    fn bare_ypub_import_selects_wrapped_segwit_descriptor() {
+        let json = json_from_export(BIP49_YPUB);
+
+        assert!(json.bip49.is_some());
+        assert!(json.bip84.is_none());
+
+        let (descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::WrappedSegwit);
+        assert!(descriptors.external.to_string().starts_with("sh(wpkh("));
+        assert!(!should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn bare_zpub_import_selects_native_segwit_descriptor() {
+        let json = json_from_export(BIP84_ZPUB);
+
+        assert!(json.bip84.is_some());
+        assert!(json.bip49.is_none());
+
+        let (descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::NativeSegwit);
+        assert!(descriptors.external.to_string().starts_with("wpkh("));
+        assert!(!should_start_json_discovery(&json, address_type));
     }
 
     #[test]

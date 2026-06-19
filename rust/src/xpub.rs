@@ -86,7 +86,6 @@ pub enum DescriptorError {
 }
 
 impl From<descriptor::Error> for DescriptorError {
-    #[allow(unreachable_patterns)]
     fn from(error: descriptor::Error) -> Self {
         type DS = descriptor::Error;
 
@@ -103,6 +102,8 @@ impl From<descriptor::Error> for DescriptorError {
             DS::InvalidXpub(error) => Self::InvalidXpub(error.to_string()),
             DS::SinglePubkeyNotSupported => Self::SinglePubkeyNotSupported,
             DS::UnableToParseXpub(error) => Self::UnableToParseXpub(error.to_string()),
+            DS::InvalidDerivationPath(error) => Self::InvalidDescriptor(error.to_string()),
+            DS::InvalidFingerprint(error) => Self::InvalidDescriptor(error.to_string()),
             DS::NoXpubInDescriptor => Self::NoXpubInDescriptor,
             DS::MasterXpub => Self::MasterXpub,
             DS::InvalidJsonDescriptor(..) => {
@@ -112,14 +113,19 @@ impl From<descriptor::Error> for DescriptorError {
             DS::MissingKeyExpressionFields => {
                 Self::KeyExpressionError("missing fields".to_string())
             }
-            _ => Self::InvalidDescriptor(error.to_string()),
         }
     }
 }
 
 impl From<pubport::Error> for XpubError {
     fn from(error: pubport::Error) -> Self {
-        Self::InvalidXpub(error.to_string())
+        match error {
+            pubport::Error::InvalidDescriptor(error) => Self::InvalidDescriptor(error.into()),
+            pubport::Error::InvalidJsonParse(error) => Self::InvalidJson(error.to_string()),
+            pubport::Error::MissingJsonDescriptorData => Self::JsonNoDecriptor,
+            pubport::Error::InvalidXpub(error) => Self::InvalidXpub(error.to_string()),
+            pubport::Error::UnsupportedFormat(error) => Self::InvalidXpub(error.to_string()),
+        }
     }
 }
 

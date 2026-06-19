@@ -381,6 +381,7 @@ mod tests {
     use foundation_ur::UR;
 
     const ACCOUNT_XPUB: &str = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+    const ACCOUNT_ZPUB: &str = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
 
     // helper to create valid crypto-seed URs
     fn create_crypto_seed_ur(entropy: Vec<u8>) -> String {
@@ -401,6 +402,28 @@ mod tests {
     fn test_nfc_data_xpub_returns_hardware_export() {
         let result =
             MultiFormat::try_from_nfc_message(NfcMessage::Data(ACCOUNT_XPUB.as_bytes().to_vec()));
+
+        assert!(matches!(result, Ok(MultiFormat::HardwareExport(_))), "{result:?}");
+    }
+
+    #[test]
+    fn test_plain_zpub_returns_hardware_export() {
+        let result = MultiFormat::try_from_string(ACCOUNT_ZPUB);
+
+        assert!(matches!(result, Ok(MultiFormat::HardwareExport(_))), "{result:?}");
+    }
+
+    #[test]
+    fn test_utf8_data_zpub_returns_hardware_export() {
+        let result = MultiFormat::try_from_data(ACCOUNT_ZPUB.as_bytes());
+
+        assert!(matches!(result, Ok(MultiFormat::HardwareExport(_))), "{result:?}");
+    }
+
+    #[test]
+    fn test_nfc_data_zpub_returns_hardware_export() {
+        let result =
+            MultiFormat::try_from_nfc_message(NfcMessage::Data(ACCOUNT_ZPUB.as_bytes().to_vec()));
 
         assert!(matches!(result, Ok(MultiFormat::HardwareExport(_))), "{result:?}");
     }
