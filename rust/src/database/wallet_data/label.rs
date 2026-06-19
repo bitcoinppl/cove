@@ -383,32 +383,32 @@ impl LabelsTable {
         {
             let mut table = write_txn.open_table(OUTPUT_TABLE)?;
 
-            for outpoint in outpoints {
+            outpoints.into_iter().try_for_each(|outpoint| -> Result<(), Error> {
                 let key = OutPointKey::from(outpoint);
-                let current = table.get(key.clone())?.map(|record| record.value());
+                let Some(mut current) = table.get(key.clone())?.map(|record| record.value()) else {
+                    if spendable {
+                        return Ok(());
+                    }
 
-                match (current, spendable) {
-                    (Some(mut current), true) if current.item.label.is_some() => {
-                        current.item.spendable = true;
-                        current.timestamps.updated_at = now;
-                        table.insert(key, current)?;
-                    }
-                    (Some(_current), true) => {
-                        table.remove(key)?;
-                    }
-                    (Some(mut current), false) => {
-                        current.item.spendable = false;
-                        current.timestamps.updated_at = now;
-                        table.insert(key, current)?;
-                    }
-                    (None, true) => {}
-                    (None, false) => {
-                        let record = OutputRecord { ref_: outpoint, label: None, spendable: false };
-                        let record = Record::with_timestamps(record, Timestamps::new(now, now));
-                        table.insert(key, record)?;
-                    }
+                    let record = OutputRecord { ref_: outpoint, label: None, spendable: false };
+                    let record = Record::with_timestamps(record, Timestamps::new(now, now));
+                    table.insert(key, record)?;
+
+                    return Ok(());
+                };
+
+                if spendable && current.item.label.is_none() {
+                    table.remove(key)?;
+
+                    return Ok(());
                 }
-            }
+
+                current.item.spendable = spendable;
+                current.timestamps.updated_at = now;
+                table.insert(key, current)?;
+
+                Ok(())
+            })?;
         }
 
         write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
