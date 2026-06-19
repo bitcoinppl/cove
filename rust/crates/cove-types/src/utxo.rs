@@ -40,7 +40,7 @@ pub struct Utxo {
     pub derivation_index: u32,
     pub block_height: u32,
     pub type_: UtxoType,
-    /// Populated by coin-control label loading; display cache only, not authoritative for spending
+    /// Cached lock state for display and selection filtering; transaction building rechecks the labels DB
     pub spendable: bool,
 }
 
