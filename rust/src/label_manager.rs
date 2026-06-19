@@ -794,7 +794,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn parsed_label_import_rejects_unselected_wallet() {
         let _guard = SELECTED_WALLET_TEST_LOCK.lock().expect("test lock is acquired");
-        cove_tokio::init();
+        crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::init_test_database();
 
         let selected_wallet = WalletId::preview_new_random();
@@ -818,7 +818,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn parsed_label_import_accepts_selected_wallet() {
         let _guard = SELECTED_WALLET_TEST_LOCK.lock().expect("test lock is acquired");
-        cove_tokio::init();
+        crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::init_test_database();
 
         let (manager, _tmp) = test_manager();
