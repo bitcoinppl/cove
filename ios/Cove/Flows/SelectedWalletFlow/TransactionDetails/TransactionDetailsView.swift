@@ -247,59 +247,79 @@ struct TransactionDetailsView: View {
     @ViewBuilder
     var TransactionLockControl: some View {
         if lockStateLoadError != nil {
-            VStack(spacing: 8) {
-                Text("Unable to load lock state")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-
-                Button(action: {
-                    Task { await refreshTransactionLockState() }
-                }) {
-                    Label("Retry", systemImage: "arrow.clockwise")
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 12)
-                        .background(Color.systemGray5)
-                        .foregroundStyle(.primary)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.top, 2)
+            transactionLockControlContent(
+                title: String(localized: "Unable to load lock state"),
+                buttonTitle: String(localized: "Retry"),
+                systemImage: "arrow.clockwise",
+                action: { Task { await refreshTransactionLockState() } }
+            )
         } else {
             switch lockState {
             case .some(.none), nil:
                 EmptyView()
             case .some(.unlocked), .some(.locked), .some(.mixed):
-                VStack(spacing: 8) {
-                    Text(lockStateText)
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
+                transactionLockControlContent(
+                    title: lockStateText,
+                    buttonTitle: isUpdatingLockState
+                        ? String(localized: "Updating...")
+                        : lockStateButtonText,
+                    systemImage: lockStateButtonIcon,
+                    isUpdating: isUpdatingLockState,
+                    action: {
+                        guard !isUpdatingLockState else { return }
 
-                    Button(action: {
-                        if !isUpdatingLockState {
-                            isUpdatingLockState = true
-                            Task { await toggleTransactionLockState() }
-                        }
-                    }) {
-                        Label(lockStateButtonText, systemImage: lockStateButtonIcon)
-                            .font(.footnote)
-                            .fontWeight(.semibold)
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 12)
-                            .background(Color.systemGray5)
-                            .foregroundStyle(.primary)
-                            .clipShape(Capsule())
+                        isUpdatingLockState = true
+                        Task { await toggleTransactionLockState() }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isUpdatingLockState)
-                }
-                .padding(.top, 2)
+                )
             }
         }
+    }
+
+    func transactionLockControlContent(
+        title: String,
+        buttonTitle: String,
+        systemImage: String,
+        isUpdating: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    if isUpdating {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Image(systemName: systemImage)
+                            .font(.footnote.weight(.semibold))
+                    }
+
+                    Text(buttonTitle)
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(Color.systemGray5)
+                .foregroundStyle(.primary)
+                .clipShape(Capsule())
+                .opacity(isUpdating ? 0.72 : 1)
+            }
+            .buttonStyle(.plain)
+            .disabled(isUpdating)
+        }
+        .padding(.top, 2)
     }
 
     var lockStateText: String {
