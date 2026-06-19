@@ -36204,6 +36204,9 @@ enum XpubError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     )
     case InvalidJson(String
     )
+    /**
+     * Retained for UniFFI compatibility with clients that may still match this error
+     */
     case InvalidDescriptorInJson
     case JsonNoDecriptor
     case MissingXpub(String
