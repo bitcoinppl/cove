@@ -999,7 +999,9 @@ impl RustWalletManager {
         tx_id: Arc<TxId>,
     ) -> Result<TransactionLockState, Error> {
         let tx_id = Arc::unwrap_or_clone(tx_id);
-        let state = call!(self.actor.transaction_lock_state(tx_id)).await.unwrap()?;
+        let state = call!(self.actor.transaction_lock_state(tx_id))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
 
         Ok(state)
     }
@@ -1010,9 +1012,12 @@ impl RustWalletManager {
         tx_id: Arc<TxId>,
     ) -> Result<TransactionLockState, Error> {
         let tx_id = Arc::unwrap_or_clone(tx_id);
-        let state = call!(self.actor.transaction_lock_state(tx_id)).await.unwrap()?;
-        let outpoints =
-            call!(self.actor.current_wallet_unspent_outpoints_for_txn(tx_id)).await.unwrap();
+        let state = call!(self.actor.transaction_lock_state(tx_id))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
+        let outpoints = call!(self.actor.current_wallet_unspent_outpoints_for_txn(tx_id))
+            .await
+            .map_err(|_| Error::ActorNotFound)?;
         let Some((outpoints, spendable)) = transaction_lock_toggle_update(state, outpoints) else {
             return Ok(TransactionLockState::None);
         };
@@ -1021,7 +1026,9 @@ impl RustWalletManager {
             .set_output_spendability_for_outpoints(outpoints, spendable)
             .map_err_str(Error::OutputLabelsError)?;
 
-        let state = call!(self.actor.transaction_lock_state(tx_id)).await.unwrap()?;
+        let state = call!(self.actor.transaction_lock_state(tx_id))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
 
         Ok(state)
     }

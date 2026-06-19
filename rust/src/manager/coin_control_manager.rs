@@ -13,6 +13,7 @@ use cove_types::{
     unit::BitcoinUnit,
     utxo::{Utxo, UtxoType},
 };
+use cove_util::result_ext::ResultExt as _;
 use parking_lot::Mutex;
 
 use crate::{
@@ -142,7 +143,8 @@ impl RustCoinControlManager {
         let wallet_id = self.state.lock().wallet_id.clone();
         let outpoint = bitcoin::OutPoint::from(outpoint.as_ref());
 
-        LabelManager::new(wallet_id)
+        LabelManager::try_new(wallet_id)
+            .map_err_str(LabelManagerError::SaveOutputLabels)?
             .set_output_spendability_for_outpoints(vec![outpoint], spendable)?;
 
         self.reload_labels().await;

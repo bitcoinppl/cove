@@ -352,13 +352,8 @@ impl LabelManager {
 
         self.db
             .labels
-            .delete_labels(labels_to_delete)
+            .delete_labels_and_insert_records(labels_to_delete, lock_only_records)
             .map_err_str(LabelManagerError::DeleteLabels)?;
-
-        self.db
-            .labels
-            .insert_records(lock_only_records)
-            .map_err_str(LabelManagerError::SaveOutputLabels)?;
 
         Ok(true)
     }
