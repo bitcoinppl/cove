@@ -466,8 +466,11 @@ impl Wallet {
 
         // switch db and wallet
         self.bdk = wallet;
+        self.db = Mutex::new(db);
         self.metadata.address_type = address_type;
         self.metadata.discovery_state = DiscoveryState::ChoseAdressType;
+        self.metadata.internal.reset_scan_state_for_address_type_switch();
+        Database::global().wallets.update_wallet_metadata(self.metadata.clone())?;
 
         Ok(())
     }
@@ -501,6 +504,8 @@ impl Wallet {
         std::mem::swap(&mut me, self);
         self.metadata.address_type = address_type;
         self.metadata.discovery_state = DiscoveryState::ChoseAdressType;
+        self.metadata.internal.reset_scan_state_for_address_type_switch();
+        Database::global().wallets.update_wallet_metadata(self.metadata.clone())?;
 
         Ok(())
     }

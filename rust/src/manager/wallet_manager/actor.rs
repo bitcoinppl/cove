@@ -5,7 +5,7 @@ use crate::{
     },
     historical_price_service::HistoricalPriceService,
     manager::wallet_manager::{
-        Error, SendFlowErrorAlert, WalletManagerError, WalletScanStatus,
+        Error, SendFlowErrorAlert, WalletLedgerState, WalletManagerError, WalletScanStatus,
         receive_address::{
             CACHE_WINDOW, ReceiveAddressPresentation, ReceiveAddressRefreshState,
             ReceiveAddressSession, ReceiveAddressState, ReceiveAddressStatus,
@@ -202,6 +202,8 @@ impl WalletActor {
         address: Address,
         fee: FeeRate,
     ) -> Result<Psbt, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         debug!("build_ephemeral_drain_tx for fee rate {}", fee.sat_per_vb());
         let script_pubkey = address.script_pubkey();
         let mut tx_builder = self.wallet.bdk.build_tx();
@@ -221,6 +223,8 @@ impl WalletActor {
         address: Address,
         fee_rate: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         debug!("build_tx");
         let fee_rate = fee_rate.into();
         let script_pubkey = address.script_pubkey();
@@ -244,6 +248,8 @@ impl WalletActor {
         address: Address,
         fee: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         debug!("build_ephemeral_tx");
         let psbt = self.do_build_tx(amount, address, fee).await?;
         self.wallet.unreserve_tx_change_addresses(&psbt.unsigned_tx);
@@ -259,6 +265,8 @@ impl WalletActor {
         address: Address,
         fee_rate: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         debug!("build_manual_tx: {total_amount:?}");
 
         let fee_rate = fee_rate.into();
@@ -284,6 +292,8 @@ impl WalletActor {
         address: Address,
         fee: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         debug!("build_manual_ephemeral_tx");
         let psbt = self.do_build_manual_tx(utxos, amount, address, fee).await?;
         self.wallet.unreserve_tx_change_addresses(&psbt.unsigned_tx);
@@ -295,8 +305,12 @@ impl WalletActor {
         self.wallet.unreserve_tx_change_addresses(&txn);
     }
 
-    pub async fn list_unspent(&mut self) -> ActorResult<Vec<LocalOutput>> {
-        Produces::ok(self.wallet.bdk.list_unspent().collect())
+    pub async fn list_unspent(&mut self) -> ActorResult<Result<Vec<LocalOutput>, Error>> {
+        if let Err(error) = self.ensure_ledger_ready_for_spend() {
+            return Produces::ok(Err(error));
+        }
+
+        Produces::ok(Ok(self.wallet.bdk.list_unspent().collect()))
     }
 
     #[act_zero_ext::into_actor_result]
@@ -484,6 +498,8 @@ impl WalletActor {
         psbt: Psbt,
         fee_rate: BdkFeeRate,
     ) -> Result<ConfirmDetails, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         #[inline(always)]
         fn error(s: &str) -> WalletManagerError {
             WalletManagerError::GetConfirmDetailsError(s.to_string())
@@ -587,6 +603,10 @@ impl WalletActor {
         psbt: Psbt,
         _payjoin_endpoint: Option<String>,
     ) -> ActorResult<Result<(), Error>> {
+        if let Err(error) = self.ensure_ledger_ready_for_spend() {
+            return Produces::ok(Err(error));
+        }
+
         // TODO: if payjoin_endpoint is Some, run BIP77 negotiation before broadcast
         let result = self.do_sign_and_broadcast_transaction(psbt).await;
         Produces::ok(result)
@@ -640,6 +660,8 @@ impl WalletActor {
         &mut self,
         transaction: BdkTransaction,
     ) -> Result<(), Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         self.check_node_connection().await.map_err(|error| {
             let error_string =
                 format!("failed to broadcast transaction, unable to connect to node: {error:?}");
@@ -670,6 +692,8 @@ impl WalletActor {
     #[into_actor_result]
     #[allow(deprecated)] // SignOptions usage required by bdk_wallet API, no replacement yet
     pub async fn finalize_psbt(&mut self, psbt: Psbt) -> Result<bitcoin::Transaction, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         let mut psbt = psbt;
 
         let finalized = self
@@ -957,9 +981,9 @@ impl WalletActor {
     ) -> ActorResult<()> {
         debug!("start_wallet_scan");
 
-        if let Some(last_scan) = self.last_scan_finished()
-            && elapsed_secs_since(last_scan) < 15
-            && !force_scan
+        let completed_initial_scan = self.completed_initial_scan();
+
+        if completed_initial_scan && should_skip_recent_scan(self.last_scan_finished(), force_scan)
         {
             debug!("skipping wallet scan, last scan was less than 15 seconds ago");
             self.send_scan_status(WalletScanStatus::Idle);
@@ -971,10 +995,9 @@ impl WalletActor {
 
         // perform that scanning in a background task
         let addr = self.addr.clone();
-        if self.completed_initial_scan() {
-            send!(addr.perform_incremental_scan(progress_start));
-        } else {
-            send!(addr.perform_full_scan());
+        match initial_scan_route(completed_initial_scan) {
+            InitialScanRoute::Full => send!(addr.perform_full_scan()),
+            InitialScanRoute::Incremental => send!(addr.perform_incremental_scan(progress_start)),
         }
 
         Produces::ok(())
@@ -1441,10 +1464,14 @@ impl WalletActor {
             }
         }
 
-        if should_update_full_scan_metadata(full_scan_type) {
+        if full_scan_updates_initial_metadata(true, full_scan_type) {
             let now = jiff::Timestamp::now().as_second() as u64;
             self.wallet.metadata.internal.performed_full_scan_at = Some(now);
             Database::global().wallets.update_internal_metadata(&self.wallet.metadata)?;
+            self.send(WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(
+                self.wallet.metadata.clone(),
+            )));
+            self.send_ledger_state(WalletScanStatus::Idle);
         }
 
         self.save_last_scan_finished();
@@ -1579,9 +1606,12 @@ impl WalletActor {
         Some(())
     }
 
-    fn completed_initial_scan(&mut self) -> bool {
+    fn completed_initial_scan(&self) -> bool {
         self.wallet.metadata.internal.performed_full_scan_at.is_some()
-            || self.last_scan_finished().is_some()
+    }
+
+    fn ensure_ledger_ready_for_spend(&self) -> Result<(), Error> {
+        ledger_ready_for_spend(self.completed_initial_scan())
     }
 
     fn last_height_fetched(&mut self) -> Option<(Duration, usize)> {
@@ -2012,6 +2042,43 @@ fn wallet_scan_progress_start(
     ScanProgressStart::Delayed(RETURNING_WALLET_SCAN_PROGRESS_DELAY)
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum InitialScanRoute {
+    Full,
+    Incremental,
+}
+
+fn initial_scan_route(completed_initial_scan: bool) -> InitialScanRoute {
+    if completed_initial_scan {
+        return InitialScanRoute::Incremental;
+    }
+
+    InitialScanRoute::Full
+}
+
+fn should_skip_recent_scan(last_scan_finished: Option<Duration>, force_scan: bool) -> bool {
+    if force_scan {
+        return false;
+    }
+
+    last_scan_finished.is_some_and(|last_scan| elapsed_secs_since(last_scan) < 15)
+}
+
+const fn full_scan_updates_initial_metadata(
+    scan_succeeded: bool,
+    full_scan_type: FullScanType,
+) -> bool {
+    scan_succeeded && should_update_full_scan_metadata(full_scan_type)
+}
+
+fn ledger_ready_for_spend(completed_initial_scan: bool) -> Result<(), Error> {
+    if completed_initial_scan {
+        return Ok(());
+    }
+
+    Err(Error::InitialScanIncomplete)
+}
+
 impl WalletActor {
     fn send(&self, msg: WalletManagerReconcileMessage) {
         if self.reconciler.send(msg.into()).is_err() {
@@ -2020,7 +2087,14 @@ impl WalletActor {
     }
 
     fn send_scan_status(&self, status: WalletScanStatus) {
+        self.send_ledger_state(status.clone());
         self.send(WalletManagerReconcileMessage::WalletScanStatusChanged(status));
+    }
+
+    fn send_ledger_state(&self, status: WalletScanStatus) {
+        let state =
+            WalletLedgerState::from_metadata_and_scan_status(&self.wallet.metadata, &status);
+        self.send(WalletManagerReconcileMessage::LedgerStateChanged(state));
     }
 
     fn scan_actor(&mut self) -> Addr<WalletScanActor> {
@@ -2093,12 +2167,13 @@ async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
 mod tests {
     use bdk_wallet::KeychainKind;
     use cove_bdk_progressive_scan::ScanUpdate;
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, time::UNIX_EPOCH};
 
     use super::{
-        ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType,
-        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, progressive_scan_update_response,
-        wallet_scan_progress_start,
+        ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, Error, FullScanType, InitialScanRoute,
+        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart,
+        full_scan_updates_initial_metadata, initial_scan_route, ledger_ready_for_spend,
+        progressive_scan_update_response, should_skip_recent_scan, wallet_scan_progress_start,
     };
 
     #[test]
@@ -2134,6 +2209,43 @@ mod tests {
     fn first_full_scan_uses_immediate_progress() {
         assert_eq!(wallet_scan_progress_start(false, true), ScanProgressStart::Immediate);
         assert_eq!(wallet_scan_progress_start(false, false), ScanProgressStart::Immediate);
+    }
+
+    #[test]
+    fn incomplete_scan_routes_to_full_scan_even_with_last_scan_finished() {
+        assert_eq!(initial_scan_route(false), InitialScanRoute::Full);
+        assert!(should_skip_recent_scan(Some(UNIX_EPOCH.elapsed().unwrap()), false));
+    }
+
+    #[test]
+    fn recent_scan_skip_applies_only_after_readiness_is_complete() {
+        assert_eq!(initial_scan_route(true), InitialScanRoute::Incremental);
+        assert!(should_skip_recent_scan(Some(UNIX_EPOCH.elapsed().unwrap()), false));
+        assert!(!should_skip_recent_scan(Some(UNIX_EPOCH.elapsed().unwrap()), true));
+        assert!(!should_skip_recent_scan(None, false));
+    }
+
+    #[test]
+    fn full_scan_failure_does_not_set_performed_full_scan_at() {
+        assert!(!full_scan_updates_initial_metadata(false, FullScanType::Full));
+        assert!(!full_scan_updates_initial_metadata(false, FullScanType::Rescan(150)));
+    }
+
+    #[test]
+    fn full_scan_success_updates_initial_metadata_for_full_range_scans() {
+        assert!(full_scan_updates_initial_metadata(true, FullScanType::Full));
+        assert!(full_scan_updates_initial_metadata(true, FullScanType::Rescan(150)));
+        assert!(!full_scan_updates_initial_metadata(true, FullScanType::Rescan(20)));
+    }
+
+    #[test]
+    fn spend_guard_rejects_incomplete_initial_scan() {
+        assert_eq!(ledger_ready_for_spend(false), Err(Error::InitialScanIncomplete));
+    }
+
+    #[test]
+    fn spend_guard_allows_completed_initial_scan() {
+        assert_eq!(ledger_ready_for_spend(true), Ok(()));
     }
 
     #[test]

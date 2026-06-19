@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.initialScanIncomplete
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.wallet.WalletExportState
 import org.bitcoinppl.cove.wallet.WalletSheetsHost
@@ -195,6 +196,16 @@ fun SelectedWalletContainer(
                 onSend = {
                     if (wm.walletMetadata?.walletType == WalletType.WATCH_ONLY) {
                         app.alertState = TaggedItem(AppAlertState.CantSendOnWatchOnlyWallet)
+                        return@SelectedWalletScreen
+                    }
+                    if (wm.ledgerState.initialScanIncomplete) {
+                        app.alertState =
+                            TaggedItem(
+                                AppAlertState.General(
+                                    title = "Initial Scan Incomplete",
+                                    message = "Can't send until initial scan completes.",
+                                ),
+                            )
                         return@SelectedWalletScreen
                     }
                     val balance = wm.balance.spendable().asSats()

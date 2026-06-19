@@ -22,6 +22,26 @@ struct WalletBalanceHeaderView: View {
     let updater: (WalletManagerAction) -> Void
     let showReceiveSheet: () -> Void
 
+    private var initialScanIsIncomplete: Bool {
+        manager.ledgerState.initialScanIncomplete
+    }
+
+    private var sendButtonIsUnavailable: Bool {
+        metadata.walletType == .watchOnly || initialScanIsIncomplete
+    }
+
+    private var showsInitialScanMessage: Bool {
+        metadata.walletType != .watchOnly && initialScanIsIncomplete
+    }
+
+    private var sendButtonForegroundColor: Color {
+        sendButtonIsUnavailable ? Color.secondary : Color.midnightBtn
+    }
+
+    private var sendButtonBackgroundColor: Color {
+        sendButtonIsUnavailable ? Color.gray : Color.btnPrimary
+    }
+
     @ViewBuilder
     private var primaryBalanceView: some View {
         if !metadata.sensitiveVisible {
@@ -147,15 +167,34 @@ struct WalletBalanceHeaderView: View {
                 }
             }
 
+            if showsInitialScanMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock.arrow.circlepath")
+                    Text("Can't send until initial scan completes")
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundColor(.white.opacity(balancePresentation.secondaryOpacity))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+            }
+
             HStack(spacing: 16) {
                 Button(action: {
-                    if balance.asSats() == 0 {
-                        manager.errorAlert = .noBalance
+                    if metadata.walletType == .watchOnly {
+                        app.alertState = .init(.cantSendOnWatchOnlyWallet)
                         return
                     }
 
-                    if metadata.walletType == .watchOnly {
-                        app.alertState = .init(.cantSendOnWatchOnlyWallet)
+                    if initialScanIsIncomplete {
+                        app.alertState = .init(.general(
+                            title: "Initial Scan Incomplete",
+                            message: "Can't send until initial scan completes."
+                        ))
+                        return
+                    }
+
+                    if balance.asSats() == 0 {
+                        manager.errorAlert = .noBalance
                         return
                     }
 
@@ -165,15 +204,11 @@ struct WalletBalanceHeaderView: View {
                         Image(systemName: "arrow.up.right")
                         Text("Send")
                     }
-                    .foregroundColor(
-                        metadata.walletType == .watchOnly ? Color.secondary : Color.midnightBtn
-                    )
+                    .foregroundColor(sendButtonForegroundColor)
                     .frame(maxWidth: .infinity)
                     .padding()
                     .padding(.vertical, 4)
-                    .background(
-                        metadata.walletType == .watchOnly ? Color.gray : Color.btnPrimary
-                    )
+                    .background(sendButtonBackgroundColor)
                     .cornerRadius(10)
                 }
 

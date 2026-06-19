@@ -37,6 +37,8 @@ struct CoinControlContainer: View {
 }
 
 private struct CoinControlLoadedView: View {
+    @Environment(AppManager.self) private var app
+
     let route: CoinControlRoute
     let walletManager: WalletManager
 
@@ -62,7 +64,15 @@ private struct CoinControlLoadedView: View {
     @MainActor
     private func loadManager() async {
         manager = nil
-        let rustManager = await walletManager.rust.newCoinControlManager()
-        manager = CoinControlManager(rustManager)
+        do {
+            let rustManager = try await walletManager.rust.newCoinControlManager()
+            manager = CoinControlManager(rustManager)
+        } catch {
+            app.alertState = .init(.general(
+                title: "Initial Scan Incomplete",
+                message: "Can't send until initial scan completes."
+            ))
+            app.popRoute()
+        }
     }
 }

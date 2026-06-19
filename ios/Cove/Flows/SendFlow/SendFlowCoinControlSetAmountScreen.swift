@@ -579,7 +579,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
             let manager = WalletManager(preview: "preview_only")
             let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
             let sendFlowManager = SendFlowManager(
-                manager.rust.newSendFlowManager(balance: manager.balance),
+                try! manager.rust.newSendFlowManager(balance: manager.balance),
                 presenter: presenter
             )
 

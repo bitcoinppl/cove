@@ -56,10 +56,11 @@ fun CoinControlContainer(
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
-                        title = "Error!",
-                        message = "Unable to get wallet: ${e.message}",
+                        title = "Initial Scan Incomplete",
+                        message = "Can't send until initial scan completes.",
                     ),
                 )
+            app.popRoute()
         }
     }
 

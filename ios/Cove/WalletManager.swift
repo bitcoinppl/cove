@@ -14,6 +14,20 @@ private extension WalletScanStatus {
     }
 }
 
+extension WalletLedgerState {
+    var initialScanComplete: Bool {
+        if case .complete = self {
+            return true
+        }
+
+        return false
+    }
+
+    var initialScanIncomplete: Bool {
+        !initialScanComplete
+    }
+}
+
 @Observable final class WalletManager: AnyReconciler, WalletManagerReconciler {
     typealias Message = WalletManagerReconcileMessage
     typealias Action = WalletManagerAction
@@ -27,6 +41,7 @@ private extension WalletScanStatus {
     private let closeState = OSAllocatedUnfairLock(initialState: false)
 
     var walletMetadata: WalletMetadata
+    var ledgerState: WalletLedgerState
     var loadState: WalletLoadState
     var scanStatus: WalletScanStatus
     var balancePresentation: BalancePresentation
@@ -62,6 +77,7 @@ private extension WalletScanStatus {
         self.rust = rust
         self.loadState = loadState
         self.scanStatus = .idle
+        self.ledgerState = rust.ledgerState()
         self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
 
         walletMetadata = rust.walletMetadata()
@@ -90,6 +106,7 @@ private extension WalletScanStatus {
         self.rust = rust
         self.loadState = .loading
         self.scanStatus = .idle
+        self.ledgerState = rust.ledgerState()
         self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         walletMetadata = metadata
         id = metadata.id
@@ -115,6 +132,7 @@ private extension WalletScanStatus {
         self.rust = rust
         self.loadState = .loading
         self.scanStatus = .idle
+        self.ledgerState = rust.ledgerState()
         self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         walletMetadata = metadata
         id = metadata.id
@@ -214,8 +232,15 @@ private extension WalletScanStatus {
                     self.loadState = .scanning([])
                 }
             } else if case let .scanning(txns) = self.loadState {
-                self.loadState = .loaded(txns)
+                if ledgerState.initialScanComplete {
+                    self.loadState = .loaded(txns)
+                }
             }
+
+        case let .ledgerStateChanged(ledgerState):
+            self.ledgerState = ledgerState
+            self.balancePresentation = rust.balancePresentation(scanStatus: scanStatus)
+            reconcileLoadStateWithLedgerState()
 
         case let .availableTransactions(txns):
             switch self.loadState {
@@ -236,11 +261,13 @@ private extension WalletScanStatus {
             case .scanning, .loading:
                 self.loadState = .scanning(txns)
             case .loaded:
-                self.loadState = .loaded(txns)
+                self.loadState = ledgerState.initialScanComplete
+                    ? .loaded(txns)
+                    : .scanning(txns)
             }
 
         case let .scanComplete(txns):
-            self.loadState = .loaded(txns)
+            self.loadState = ledgerState.initialScanComplete ? .loaded(txns) : .scanning(txns)
 
         case let .walletBalanceChanged(balance):
             withAnimation { self.balance = balance }
@@ -252,6 +279,7 @@ private extension WalletScanStatus {
             withAnimation { self.walletMetadata = metadata }
             setWalletMetadata(metadata)
             self.balancePresentation = rust.balancePresentation(scanStatus: scanStatus)
+            reconcileLoadStateWithLedgerState()
 
         case let .walletScannerResponse(scannerResponse):
             self.logger.debug("walletScannerResponse: \(scannerResponse)")
@@ -305,6 +333,18 @@ private extension WalletScanStatus {
     private let rustBridge = DispatchQueue(
         label: "cove.walletmanager.rustbridge", qos: .userInitiated
     )
+
+    private func reconcileLoadStateWithLedgerState() {
+        if ledgerState.initialScanComplete, !scanStatus.isActive,
+           case let .scanning(txns) = loadState
+        {
+            loadState = .loaded(txns)
+        } else if ledgerState.initialScanIncomplete,
+                  case let .loaded(txns) = loadState
+        {
+            loadState = .scanning(txns)
+        }
+    }
 
     private func setWalletMetadata(_ metadata: WalletMetadata) {
         rustBridge.async { [weak self] in
@@ -362,6 +402,7 @@ private extension WalletScanStatus {
         self.rust = rust
         self.loadState = .loading
         self.scanStatus = .idle
+        self.ledgerState = rust.ledgerState()
         self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
         self.walletMetadata = rust.walletMetadata()
 

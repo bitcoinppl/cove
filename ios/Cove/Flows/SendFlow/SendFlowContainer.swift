@@ -72,7 +72,15 @@ private struct SendFlowLoadedView: View {
         .environment(presenter)
         .environment(sendFlowManager)
         .onAppear {
-            // if zero balance, show alert and send back
+            if manager.ledgerState.initialScanIncomplete {
+                app.alertState = .init(.general(
+                    title: "Initial Scan Incomplete",
+                    message: "Can't send until initial scan completes."
+                ))
+                app.popRoute()
+                return
+            }
+
             if manager.balance.spendable().asSats() == 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation(.easeInOut(duration: 0.4)) {
@@ -162,7 +170,17 @@ private struct SendFlowLoadedView: View {
         if initializedSendFlowManager != nil { return }
 
         let presenter = SendFlowPresenter(app: app, manager: manager)
-        let sendFlowManager = app.ensureSendFlowManager(manager, presenter: presenter)
+        let sendFlowManager: SendFlowManager
+        do {
+            sendFlowManager = try app.ensureSendFlowManager(manager, presenter: presenter)
+        } catch {
+            app.alertState = .init(.general(
+                title: "Initial Scan Incomplete",
+                message: "Can't send until initial scan completes."
+            ))
+            app.popRoute()
+            return
+        }
         let sendFlowManagerId = ObjectIdentifier(sendFlowManager)
 
         initializedSendFlowManagerId = nil

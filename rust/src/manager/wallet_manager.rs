@@ -1,5 +1,6 @@
 pub mod actor;
 pub mod balance_presentation;
+pub mod ledger_state;
 pub mod receive_address;
 
 use std::{
@@ -11,6 +12,7 @@ use act_zero::{Addr, call, send};
 use actor::WalletActor;
 pub use balance_presentation::BalancePresentation;
 use flume::Receiver;
+pub use ledger_state::WalletLedgerState;
 use parking_lot::RwLock;
 use receive_address::{ReceiveAddressPresentation, ReceiveAddressState};
 use tap::TapFallible as _;
@@ -71,6 +73,7 @@ pub type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletManagerReconcileMessage {
     WalletScanStatusChanged(WalletScanStatus),
+    LedgerStateChanged(WalletLedgerState),
 
     AvailableTransactions(Vec<Transaction>),
     ScanComplete(Vec<Transaction>),
@@ -253,6 +256,9 @@ pub enum WalletManagerError {
     #[error("unable to get fees: {0}")]
     FeesError(String),
 
+    #[error("Can't send until initial scan completes.")]
+    InitialScanIncomplete,
+
     #[error("unable to build transaction: {0}")]
     BuildTxError(String),
 
@@ -345,6 +351,9 @@ impl RustWalletManager {
         let cached_balance: Balance = wallet.balance();
         let cached_transactions: Vec<Transaction> = wallet.transactions();
         deferred.queue(Message::WalletBalanceChanged(cached_balance.into()));
+        deferred.queue(Message::LedgerStateChanged(
+            WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
+        ));
 
         let initial_load_state = if cached_transactions.is_empty() {
             WalletLoadState::Loading
@@ -378,11 +387,20 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub fn ledger_state(&self) -> WalletLedgerState {
+        let metadata = self.current_metadata();
+
+        WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle)
+    }
+
+    #[uniffi::method]
     pub fn balance_presentation(&self, scan_status: WalletScanStatus) -> BalancePresentation {
-        BalancePresentation::for_scan(
-            self.metadata.read().internal.last_scan_finished,
-            &scan_status,
-        )
+        let metadata = self.current_metadata();
+
+        let ledger_state =
+            WalletLedgerState::from_metadata_and_scan_status(&metadata, &scan_status);
+
+        BalancePresentation::for_ledger_state(ledger_state)
     }
 
     #[uniffi::method]
@@ -394,20 +412,24 @@ impl RustWalletManager {
     pub fn new_send_flow_manager(
         self: Arc<Self>,
         balance: Arc<Balance>,
-    ) -> Arc<RustSendFlowManager> {
+    ) -> Result<Arc<RustSendFlowManager>, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         let me = self.clone();
         let metadata = self.metadata.read().clone();
 
-        RustSendFlowManager::new(metadata, balance, me)
+        Ok(RustSendFlowManager::new(metadata, balance, me))
     }
 
     #[uniffi::method]
-    pub async fn new_coin_control_manager(&self) -> Arc<RustCoinControlManager> {
+    pub async fn new_coin_control_manager(&self) -> Result<Arc<RustCoinControlManager>, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         let metadata = self.metadata.read().clone();
-        let unspent = call!(self.actor.list_unspent()).await.expect("actor failed");
+        let unspent = call!(self.actor.list_unspent()).await.expect("actor failed")?;
 
         let manager = RustCoinControlManager::new(metadata, unspent);
-        Arc::new(manager)
+        Ok(Arc::new(manager))
     }
 
     #[uniffi::method]
@@ -739,6 +761,8 @@ impl RustWalletManager {
         psbt: Arc<Psbt>,
         payjoin_endpoint: Option<String>,
     ) -> Result<(), Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         let psbt = Arc::unwrap_or_clone(psbt);
         call!(self.actor.initiate_payment(psbt.into(), payjoin_endpoint)).await.unwrap()?;
 
@@ -752,6 +776,8 @@ impl RustWalletManager {
         &self,
         signed_transaction: Arc<BitcoinTransaction>,
     ) -> Result<(), Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         let txn = Arc::unwrap_or_clone(signed_transaction);
         let tx_id = txn.tx_id();
 
@@ -1248,6 +1274,8 @@ impl RustWalletManager {
     /// Finalize a signed PSBT
     #[uniffi::method]
     pub async fn finalize_psbt(&self, psbt: Arc<Psbt>) -> Result<BitcoinTransaction, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         let actor = self.actor.clone();
         let psbt = Arc::unwrap_or_clone(psbt).into();
         let transaction = call!(actor.finalize_psbt(psbt)).await.unwrap()?;
@@ -1286,6 +1314,7 @@ impl RustWalletManager {
                 )
                 .await
                 .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
+                self.refresh_metadata_from_database()?;
 
                 // reset route so it reloads the wallet with new txns
                 FfiApp::global().load_and_reset_default_route(Route::SelectedWallet(id));
@@ -1297,6 +1326,7 @@ impl RustWalletManager {
                 call!(actor.switch_mnemonic_to_new_address_type(wallet_address_type))
                     .await
                     .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
+                self.refresh_metadata_from_database()?;
 
                 debug!("switch done");
 
@@ -1378,6 +1408,7 @@ impl RustWalletManager {
             Action::SelectDifferentWalletAddressType(wallet_address_type) => {
                 candidate.address_type = wallet_address_type;
                 candidate.discovery_state = DiscoveryState::ChoseAdressType;
+                candidate.internal.reset_scan_state_for_address_type_switch();
             }
 
             Action::ToggleShowLabels => candidate.show_labels = !candidate.show_labels,
@@ -1416,6 +1447,9 @@ impl RustWalletManager {
 
         *self.metadata.write() = candidate.clone();
         self.reconciler.send(Message::WalletMetadataChanged(Box::new(candidate.clone())));
+        self.reconciler.send(Message::LedgerStateChanged(
+            WalletLedgerState::from_metadata_and_scan_status(&candidate, &WalletScanStatus::Idle),
+        ));
         CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &candidate);
     }
 
@@ -1433,6 +1467,41 @@ impl RustWalletManager {
 }
 
 impl RustWalletManager {
+    fn current_metadata(&self) -> WalletMetadata {
+        let cached_metadata = self.metadata.read().clone();
+        Database::global()
+            .wallets()
+            .get(&self.id, cached_metadata.network, cached_metadata.wallet_mode)
+            .ok()
+            .flatten()
+            .unwrap_or(cached_metadata)
+    }
+
+    fn ensure_ledger_ready_for_spend(&self) -> Result<(), Error> {
+        if self.current_metadata().internal.performed_full_scan_at.is_some() {
+            return Ok(());
+        }
+
+        Err(Error::InitialScanIncomplete)
+    }
+
+    fn refresh_metadata_from_database(&self) -> Result<WalletMetadata, Error> {
+        let before_metadata = self.metadata.read().clone();
+        let metadata = Database::global()
+            .wallets()
+            .get(&self.id, before_metadata.network, before_metadata.wallet_mode)?
+            .ok_or(Error::WalletDoesNotExist)?;
+
+        *self.metadata.write() = metadata.clone();
+        self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
+        self.reconciler.send(Message::LedgerStateChanged(
+            WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
+        ));
+        CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
+
+        Ok(metadata)
+    }
+
     pub async fn confirm_txn(
         &self,
         amount: Amount,

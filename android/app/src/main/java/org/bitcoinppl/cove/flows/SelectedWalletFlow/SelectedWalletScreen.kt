@@ -65,6 +65,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.initialScanIncomplete
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.AutoSizeText
@@ -340,7 +341,7 @@ fun SelectedWalletScreen(
                     when (loadState) {
                         is WalletLoadState.SCANNING -> {
                             val txns = loadState.txns
-                            val firstScan = manager.walletMetadata?.internal?.lastScanFinished == null
+                            val firstScan = manager.ledgerState.initialScanIncomplete
                             Pair(txns, firstScan)
                         }
                         is WalletLoadState.LOADED -> Pair(loadState.txns, false)
@@ -431,6 +432,7 @@ fun SelectedWalletScreen(
                                     onSend = onSend,
                                     onReceive = onReceive,
                                     isWatchOnly = isWatchOnly,
+                                    initialScanIncomplete = manager.ledgerState.initialScanIncomplete,
                                 )
                             }
 

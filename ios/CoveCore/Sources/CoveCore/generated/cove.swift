@@ -9162,15 +9162,17 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func labelManager()  -> LabelManager
 
+    func ledgerState()  -> WalletLedgerState
+
     func listenForUpdates(reconciler: WalletManagerReconciler)
 
     func markWalletAsVerified() throws
 
     func masterFingerprint()  -> String?
 
-    func newCoinControlManager() async  -> RustCoinControlManager
+    func newCoinControlManager() async throws  -> RustCoinControlManager
 
-    func newSendFlowManager(balance: Balance)  -> RustSendFlowManager
+    func newSendFlowManager(balance: Balance) throws  -> RustSendFlowManager
 
     func nonDefaultAccountNumber()  -> UInt32?
 
@@ -9898,6 +9900,15 @@ open func labelManager() -> LabelManager  {
 })
 }
 
+open func ledgerState() -> WalletLedgerState  {
+    return try!  FfiConverterTypeWalletLedgerState_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustwalletmanager_ledger_state(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 open func listenForUpdates(reconciler: WalletManagerReconciler)  {try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustwalletmanager_listen_for_updates(
@@ -9924,9 +9935,9 @@ open func masterFingerprint() -> String?  {
 })
 }
 
-open func newCoinControlManager()async  -> RustCoinControlManager  {
+open func newCoinControlManager()async throws  -> RustCoinControlManager  {
     return
-        try!  await uniffiRustCallAsync(
+        try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_cove_fn_method_rustwalletmanager_new_coin_control_manager(
                     self.uniffiCloneHandle()
@@ -9937,13 +9948,12 @@ open func newCoinControlManager()async  -> RustCoinControlManager  {
             completeFunc: ffi_cove_rust_future_complete_u64,
             freeFunc: ffi_cove_rust_future_free_u64,
             liftFunc: FfiConverterTypeRustCoinControlManager_lift,
-            errorHandler: nil
-
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
 
-open func newSendFlowManager(balance: Balance) -> RustSendFlowManager  {
-    return try!  FfiConverterTypeRustSendFlowManager_lift(try! rustCall() {
+open func newSendFlowManager(balance: Balance)throws  -> RustSendFlowManager  {
+    return try  FfiConverterTypeRustSendFlowManager_lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(
             self.uniffiCloneHandle(),
@@ -25696,6 +25706,72 @@ public func FfiConverterTypeInitError_lower(_ value: InitError) -> RustBuffer {
 
 
 
+public enum InitialScanActivity: Equatable, Hashable {
+
+    case active
+    case idle
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension InitialScanActivity: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeInitialScanActivity: FfiConverterRustBuffer {
+    typealias SwiftType = InitialScanActivity
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> InitialScanActivity {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .active
+
+        case 2: return .idle
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: InitialScanActivity, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .active:
+            writeInt(&buf, Int32(1))
+
+
+        case .idle:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeInitialScanActivity_lift(_ buf: RustBuffer) throws -> InitialScanActivity {
+    return try FfiConverterTypeInitialScanActivity.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeInitialScanActivity_lower(_ value: InitialScanActivity) -> RustBuffer {
+    return FfiConverterTypeInitialScanActivity.lower(value)
+}
+
+
+
+
 public enum InsertOrUpdate: Equatable, Hashable {
 
     case insert(Timestamp
@@ -33962,6 +34038,75 @@ public func FfiConverterTypeWalletErrorAlert_lower(_ value: WalletErrorAlert) ->
 
 
 
+public enum WalletLedgerState: Equatable, Hashable {
+
+    case complete
+    case initialScanIncomplete(InitialScanActivity
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension WalletLedgerState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWalletLedgerState: FfiConverterRustBuffer {
+    typealias SwiftType = WalletLedgerState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletLedgerState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .complete
+
+        case 2: return .initialScanIncomplete(try FfiConverterTypeInitialScanActivity.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletLedgerState, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .complete:
+            writeInt(&buf, Int32(1))
+
+
+        case let .initialScanIncomplete(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeInitialScanActivity.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletLedgerState_lift(_ buf: RustBuffer) throws -> WalletLedgerState {
+    return try FfiConverterTypeWalletLedgerState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletLedgerState_lower(_ value: WalletLedgerState) -> RustBuffer {
+    return FfiConverterTypeWalletLedgerState.lower(value)
+}
+
+
+
+
 public enum WalletLoadState {
 
     case loading
@@ -34271,6 +34416,7 @@ enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     )
     case FeesError(String
     )
+    case InitialScanIncomplete
     case BuildTxError(String
     )
     case InsufficientFunds(String
@@ -34381,41 +34527,42 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
         case 17: return .FeesError(
             try FfiConverterString.read(from: &buf)
             )
-        case 18: return .BuildTxError(
+        case 18: return .InitialScanIncomplete
+        case 19: return .BuildTxError(
             try FfiConverterString.read(from: &buf)
             )
-        case 19: return .InsufficientFunds(
+        case 20: return .InsufficientFunds(
             try FfiConverterString.read(from: &buf)
             )
-        case 20: return .GetConfirmDetailsError(
+        case 21: return .GetConfirmDetailsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 21: return .SignAndBroadcastError(
+        case 22: return .SignAndBroadcastError(
             try FfiConverterString.read(from: &buf)
             )
-        case 22: return .Converter(
+        case 23: return .Converter(
             try FfiConverterTypeConverterError.read(from: &buf)
             )
-        case 23: return .UnknownError(
+        case 24: return .UnknownError(
             try FfiConverterString.read(from: &buf)
             )
-        case 24: return .PsbtFinalizeError(
+        case 25: return .PsbtFinalizeError(
             try FfiConverterString.read(from: &buf)
             )
-        case 25: return .GetHistoricalPricesError(
+        case 26: return .GetHistoricalPricesError(
             try FfiConverterString.read(from: &buf)
             )
-        case 26: return .CsvCreationError(
+        case 27: return .CsvCreationError(
             try FfiConverterString.read(from: &buf)
             )
-        case 27: return .AddUtxosError(
+        case 28: return .AddUtxosError(
             try FfiConverterString.read(from: &buf)
             )
-        case 28: return .DatabaseCorruption(
+        case 29: return .DatabaseCorruption(
             id: try FfiConverterTypeWalletId.read(from: &buf),
             error: try FfiConverterString.read(from: &buf)
             )
-        case 29: return .ReceiveAddressError(
+        case 30: return .ReceiveAddressError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -34513,64 +34660,68 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .BuildTxError(v1):
+        case .InitialScanIncomplete:
             writeInt(&buf, Int32(18))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .InsufficientFunds(v1):
+        case let .BuildTxError(v1):
             writeInt(&buf, Int32(19))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .GetConfirmDetailsError(v1):
+        case let .InsufficientFunds(v1):
             writeInt(&buf, Int32(20))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .SignAndBroadcastError(v1):
+        case let .GetConfirmDetailsError(v1):
             writeInt(&buf, Int32(21))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Converter(v1):
+        case let .SignAndBroadcastError(v1):
             writeInt(&buf, Int32(22))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Converter(v1):
+            writeInt(&buf, Int32(23))
             FfiConverterTypeConverterError.write(v1, into: &buf)
 
 
         case let .UnknownError(v1):
-            writeInt(&buf, Int32(23))
-            FfiConverterString.write(v1, into: &buf)
-
-
-        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(24))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .GetHistoricalPricesError(v1):
+        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(25))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .CsvCreationError(v1):
+        case let .GetHistoricalPricesError(v1):
             writeInt(&buf, Int32(26))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .AddUtxosError(v1):
+        case let .CsvCreationError(v1):
             writeInt(&buf, Int32(27))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .DatabaseCorruption(id,error):
+        case let .AddUtxosError(v1):
             writeInt(&buf, Int32(28))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .DatabaseCorruption(id,error):
+            writeInt(&buf, Int32(29))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterString.write(error, into: &buf)
 
 
         case let .ReceiveAddressError(v1):
-            writeInt(&buf, Int32(29))
+            writeInt(&buf, Int32(30))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -34597,6 +34748,8 @@ public func FfiConverterTypeWalletManagerError_lower(_ value: WalletManagerError
 public enum WalletManagerReconcileMessage {
 
     case walletScanStatusChanged(WalletScanStatus
+    )
+    case ledgerStateChanged(WalletLedgerState
     )
     case availableTransactions([Transaction]
     )
@@ -34655,54 +34808,57 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case 1: return .walletScanStatusChanged(try FfiConverterTypeWalletScanStatus.read(from: &buf)
         )
 
-        case 2: return .availableTransactions(try FfiConverterSequenceTypeTransaction.read(from: &buf)
+        case 2: return .ledgerStateChanged(try FfiConverterTypeWalletLedgerState.read(from: &buf)
         )
 
-        case 3: return .scanComplete(try FfiConverterSequenceTypeTransaction.read(from: &buf)
+        case 3: return .availableTransactions(try FfiConverterSequenceTypeTransaction.read(from: &buf)
         )
 
-        case 4: return .updatedTransactions(try FfiConverterSequenceTypeTransaction.read(from: &buf)
+        case 4: return .scanComplete(try FfiConverterSequenceTypeTransaction.read(from: &buf)
         )
 
-        case 5: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
+        case 5: return .updatedTransactions(try FfiConverterSequenceTypeTransaction.read(from: &buf)
         )
 
-        case 6: return .walletMetadataChanged(try FfiConverterTypeWalletMetadata.read(from: &buf)
+        case 6: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
         )
 
-        case 7: return .walletBalanceChanged(try FfiConverterTypeBalance.read(from: &buf)
+        case 7: return .walletMetadataChanged(try FfiConverterTypeWalletMetadata.read(from: &buf)
         )
 
-        case 8: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
+        case 8: return .walletBalanceChanged(try FfiConverterTypeBalance.read(from: &buf)
         )
 
-        case 9: return .unknownError(try FfiConverterString.read(from: &buf)
+        case 9: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
         )
 
-        case 10: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
+        case 10: return .unknownError(try FfiConverterString.read(from: &buf)
         )
 
-        case 11: return .unsignedTransactionsChanged
-
-        case 12: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
+        case 11: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
         )
 
-        case 13: return .hotWalletKeyMissing(try FfiConverterTypeWalletId.read(from: &buf)
+        case 12: return .unsignedTransactionsChanged
+
+        case 13: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
         )
 
-        case 14: return .receiveAddressUpdated(try FfiConverterTypeReceiveAddressState.read(from: &buf)
+        case 14: return .hotWalletKeyMissing(try FfiConverterTypeWalletId.read(from: &buf)
         )
 
-        case 15: return .receiveAddressPresentationUpdated(try FfiConverterTypeReceiveAddressPresentation.read(from: &buf)
+        case 15: return .receiveAddressUpdated(try FfiConverterTypeReceiveAddressState.read(from: &buf)
         )
 
-        case 16: return .receiveAddressLoadingChanged(try FfiConverterBool.read(from: &buf)
+        case 16: return .receiveAddressPresentationUpdated(try FfiConverterTypeReceiveAddressPresentation.read(from: &buf)
         )
 
-        case 17: return .receiveAddressError(try FfiConverterString.read(from: &buf)
+        case 17: return .receiveAddressLoadingChanged(try FfiConverterBool.read(from: &buf)
         )
 
-        case 18: return .receiveAddressClosed(try FfiConverterUInt64.read(from: &buf)
+        case 18: return .receiveAddressError(try FfiConverterString.read(from: &buf)
+        )
+
+        case 19: return .receiveAddressClosed(try FfiConverterUInt64.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -34718,87 +34874,92 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
             FfiConverterTypeWalletScanStatus.write(v1, into: &buf)
 
 
-        case let .availableTransactions(v1):
+        case let .ledgerStateChanged(v1):
             writeInt(&buf, Int32(2))
-            FfiConverterSequenceTypeTransaction.write(v1, into: &buf)
+            FfiConverterTypeWalletLedgerState.write(v1, into: &buf)
 
 
-        case let .scanComplete(v1):
+        case let .availableTransactions(v1):
             writeInt(&buf, Int32(3))
             FfiConverterSequenceTypeTransaction.write(v1, into: &buf)
 
 
-        case let .updatedTransactions(v1):
+        case let .scanComplete(v1):
             writeInt(&buf, Int32(4))
             FfiConverterSequenceTypeTransaction.write(v1, into: &buf)
 
 
-        case let .nodeConnectionFailed(v1):
+        case let .updatedTransactions(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterSequenceTypeTransaction.write(v1, into: &buf)
+
+
+        case let .nodeConnectionFailed(v1):
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .walletMetadataChanged(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeWalletMetadata.write(v1, into: &buf)
 
 
         case let .walletBalanceChanged(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeBalance.write(v1, into: &buf)
 
 
         case let .walletError(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeWalletManagerError.write(v1, into: &buf)
 
 
         case let .unknownError(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .walletScannerResponse(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeScannerResponse.write(v1, into: &buf)
 
 
         case .unsignedTransactionsChanged:
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
 
 
         case let .sendFlowError(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeSendFlowErrorAlert.write(v1, into: &buf)
 
 
         case let .hotWalletKeyMissing(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeWalletId.write(v1, into: &buf)
 
 
         case let .receiveAddressUpdated(v1):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(15))
             FfiConverterTypeReceiveAddressState.write(v1, into: &buf)
 
 
         case let .receiveAddressPresentationUpdated(v1):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(16))
             FfiConverterTypeReceiveAddressPresentation.write(v1, into: &buf)
 
 
         case let .receiveAddressLoadingChanged(v1):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(17))
             FfiConverterBool.write(v1, into: &buf)
 
 
         case let .receiveAddressError(v1):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(18))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .receiveAddressClosed(v1):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(19))
             FfiConverterUInt64.write(v1, into: &buf)
 
         }
@@ -40378,6 +40539,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_ledger_state() != 46786) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates() != 34012) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -40387,10 +40551,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_master_fingerprint() != 64370) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_new_coin_control_manager() != 11951) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_new_coin_control_manager() != 1459) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 55235) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 10979) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_non_default_account_number() != 54959) {

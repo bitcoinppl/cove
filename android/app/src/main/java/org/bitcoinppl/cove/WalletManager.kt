@@ -28,6 +28,12 @@ private val WalletScanStatus.isActive: Boolean
             is WalletScanStatus.Scanning, is WalletScanStatus.ScanningPendingProgress -> true
         }
 
+val WalletLedgerState.initialScanComplete: Boolean
+    get() = this is WalletLedgerState.Complete
+
+val WalletLedgerState.initialScanIncomplete: Boolean
+    get() = !initialScanComplete
+
 /**
  * wallet manager - manages wallet state, balance, transactions
  * ported from iOS WalletManager.swift
@@ -47,6 +53,9 @@ class WalletManager :
 
     // observable state
     var walletMetadata by mutableStateOf<WalletMetadata?>(null)
+        private set
+
+    var ledgerState by mutableStateOf<WalletLedgerState>(WalletLedgerState.InitialScanIncomplete(InitialScanActivity.IDLE))
         private set
 
     var loadState by mutableStateOf<WalletLoadState>(WalletLoadState.LOADING)
@@ -131,6 +140,7 @@ class WalletManager :
         this.id = walletId
         this.rust = rustManager
         this.walletMetadata = metadata
+        this.ledgerState = rustManager.ledgerState()
         this.balancePresentationState = rustManager.balancePresentation(WalletScanStatus.Idle)
         this.unsignedTransactions = runCatching { rustManager.getUnsignedTransactions() }.getOrElse { emptyList() }
 
@@ -269,10 +279,20 @@ class WalletManager :
                     }
                 } else {
                     when (val current = loadState) {
-                        is WalletLoadState.SCANNING -> loadState = WalletLoadState.LOADED(current.txns)
+                        is WalletLoadState.SCANNING -> {
+                            if (ledgerState.initialScanComplete) {
+                                loadState = WalletLoadState.LOADED(current.txns)
+                            }
+                        }
                         is WalletLoadState.LOADED, is WalletLoadState.LOADING -> Unit
                     }
                 }
+            }
+
+            is WalletManagerReconcileMessage.LedgerStateChanged -> {
+                ledgerState = message.v1
+                balancePresentationState = rust.balancePresentation(scanStatus)
+                reconcileLoadStateWithLedgerState()
             }
 
             is WalletManagerReconcileMessage.AvailableTransactions -> {
@@ -300,12 +320,21 @@ class WalletManager :
                         is WalletLoadState.SCANNING, is WalletLoadState.LOADING ->
                             WalletLoadState.SCANNING(message.v1)
                         is WalletLoadState.LOADED ->
-                            WalletLoadState.LOADED(message.v1)
+                            if (ledgerState.initialScanComplete) {
+                                WalletLoadState.LOADED(message.v1)
+                            } else {
+                                WalletLoadState.SCANNING(message.v1)
+                            }
                     }
             }
 
             is WalletManagerReconcileMessage.ScanComplete -> {
-                loadState = WalletLoadState.LOADED(message.v1)
+                loadState =
+                    if (ledgerState.initialScanComplete) {
+                        WalletLoadState.LOADED(message.v1)
+                    } else {
+                        WalletLoadState.SCANNING(message.v1)
+                    }
             }
 
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
@@ -323,6 +352,7 @@ class WalletManager :
                 walletMetadata = message.v1
                 persistWalletMetadata(message.v1)
                 balancePresentationState = rust.balancePresentation(scanStatus)
+                reconcileLoadStateWithLedgerState()
             }
 
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
@@ -416,6 +446,22 @@ class WalletManager :
 
     private fun persistWalletMetadata(metadata: WalletMetadata) {
         ioScope.launch { rust.setWalletMetadata(metadata) }
+    }
+
+    private fun reconcileLoadStateWithLedgerState() {
+        when (val current = loadState) {
+            is WalletLoadState.SCANNING -> {
+                if (ledgerState.initialScanComplete && !scanStatus.isActive) {
+                    loadState = WalletLoadState.LOADED(current.txns)
+                }
+            }
+            is WalletLoadState.LOADED -> {
+                if (ledgerState.initialScanIncomplete) {
+                    loadState = WalletLoadState.SCANNING(current.txns)
+                }
+            }
+            is WalletLoadState.LOADING -> Unit
+        }
     }
 
     override fun close() {

@@ -28,12 +28,20 @@ struct TransactionsCardView: View {
     }
 
     private var isScanning: Bool {
-        switch manager.scanStatus {
+        if manager.ledgerState.initialScanIncomplete {
+            return true
+        }
+
+        return switch manager.scanStatus {
         case .idle:
             false
         case .scanning, .scanningPendingProgress:
             true
         }
+    }
+
+    private var scanSpinnerMessage: String? {
+        manager.ledgerState.initialScanComplete ? nil : "Checking wallet history"
     }
 
     private var isScanProgressVisible: Bool {
@@ -61,7 +69,7 @@ struct TransactionsCardView: View {
                         TransactionsScanProgressStrip(progressFraction: scanProgressFraction)
                             .padding(.bottom, 10)
                     } else {
-                        TransactionsScanSpinnerStrip()
+                        TransactionsScanSpinnerStrip(message: scanSpinnerMessage)
                             .padding(.bottom, 10)
                     }
                 }
@@ -112,7 +120,7 @@ struct TransactionsCardView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 56)
                     } else {
-                        EmptyWalletScanSpinnerState()
+                        EmptyWalletScanSpinnerState(message: scanSpinnerMessage)
                             .frame(maxWidth: .infinity)
                             .padding(.top, 56)
                     }
@@ -143,12 +151,26 @@ struct TransactionsCardView: View {
 }
 
 struct TransactionsScanSpinnerStrip: View {
+    let message: String?
+
+    init(message: String? = nil) {
+        self.message = message
+    }
+
     var body: some View {
-        ProgressView()
-            .scaleEffect(0.75)
-            .tint(.secondary)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .frame(height: 18)
+        HStack(spacing: 8) {
+            ProgressView()
+                .scaleEffect(0.75)
+                .tint(.secondary)
+
+            if let message {
+                Text(message)
+                    .foregroundStyle(.secondary.opacity(0.7))
+                    .font(.caption2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(height: 18)
     }
 }
 
@@ -170,9 +192,23 @@ struct TransactionsScanProgressStrip: View {
 }
 
 struct EmptyWalletScanSpinnerState: View {
+    let message: String?
+
+    init(message: String? = nil) {
+        self.message = message
+    }
+
     var body: some View {
-        ProgressView()
-            .tint(.primary)
+        VStack(spacing: 10) {
+            ProgressView()
+                .tint(.primary)
+
+            if let message {
+                Text(message)
+                    .foregroundStyle(.secondary)
+                    .font(.body)
+            }
+        }
     }
 }
 

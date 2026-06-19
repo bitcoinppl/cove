@@ -139,6 +139,17 @@ struct SelectedWalletScreen: View {
         }
     }
 
+    private var refreshableTransactions: [CoveCore.Transaction]? {
+        switch manager.loadState {
+        case .loading:
+            nil
+        case let .scanning(txns):
+            txns
+        case let .loaded(txns):
+            txns
+        }
+    }
+
     @ViewBuilder
     private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
         switch state.item {
@@ -490,7 +501,7 @@ struct SelectedWalletScreen: View {
             .modifier(ScrollViewBackgroundModifier(iOS26OrLater: iOS26OrLater))
             .refreshable {
                 // nothing to do – let the indicator disappear right away
-                guard case .loaded = manager.loadState else { return }
+                guard refreshableTransactions != nil else { return }
                 let task = Task.detached { try? await Task.sleep(for: .seconds(1.75)) }
 
                 // wait for the task to complete
@@ -500,7 +511,7 @@ struct SelectedWalletScreen: View {
             .task(id: runPostRefresh) {
                 guard runPostRefresh else { return }
                 defer { runPostRefresh = false }
-                guard case let .loaded(txns) = manager.loadState else { return }
+                guard let txns = refreshableTransactions else { return }
 
                 self.manager.loadState = .scanning(txns)
                 await manager.rust.forceWalletScan()

@@ -59,6 +59,7 @@ fun WalletBalanceHeaderView(
     onSend: () -> Unit,
     onReceive: () -> Unit,
     isWatchOnly: Boolean = false,
+    initialScanIncomplete: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // get status bar height for edge-to-edge display
@@ -109,6 +110,7 @@ fun WalletBalanceHeaderView(
                 onSend = onSend,
                 onReceive = onReceive,
                 isWatchOnly = isWatchOnly,
+                initialScanIncomplete = initialScanIncomplete,
             )
         }
     }
@@ -232,7 +234,25 @@ private fun SendReceiveButtons(
     onSend: () -> Unit,
     onReceive: () -> Unit,
     isWatchOnly: Boolean = false,
+    initialScanIncomplete: Boolean = false,
 ) {
+    val sendUnavailable = isWatchOnly || initialScanIncomplete
+
+    if (initialScanIncomplete && !isWatchOnly) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = "Can't send until initial scan completes",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         ImageButton(
             text = stringResource(R.string.btn_send),
@@ -240,8 +260,8 @@ private fun SendReceiveButtons(
             onClick = onSend,
             colors =
                 androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = if (isWatchOnly) Color.Gray else CoveColor.btnPrimary,
-                    contentColor = if (isWatchOnly) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue,
+                    containerColor = if (sendUnavailable) Color.Gray else CoveColor.btnPrimary,
+                    contentColor = if (sendUnavailable) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue,
                 ),
             modifier = Modifier.weight(1f),
         )

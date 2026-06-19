@@ -329,7 +329,7 @@ private struct UtxoRow: View {
         let wm = WalletManager(preview: "preview_only")
         let ap = AppManager.shared
         let presenter = SendFlowPresenter(app: ap, manager: wm)
-        let sendFlowManager = ap.ensureSendFlowManager(wm, presenter: presenter)
+        let sendFlowManager = try! ap.ensureSendFlowManager(wm, presenter: presenter)
         let utxos = previewNewUtxoList(outputCount: 2, changeCount: 1)
 
         SendFlowUtxoCustomAmountSheetView(utxos: utxos)

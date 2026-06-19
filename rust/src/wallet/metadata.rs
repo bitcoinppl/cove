@@ -83,6 +83,15 @@ pub struct InternalOnlyMetadata {
     pub store_type: StoreType,
 }
 
+impl InternalOnlyMetadata {
+    pub(crate) fn reset_scan_state_for_address_type_switch(&mut self) {
+        self.address_index = None;
+        self.last_scan_finished = None;
+        self.last_height_fetched = None;
+        self.performed_full_scan_at = None;
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum StoreType {
     #[default]
@@ -587,5 +596,30 @@ mod tests {
             birthday,
             Some(WalletBirthday::BlockHeight(MAINNET_COVE_RELEASE_BIRTHDAY_HEIGHT))
         );
+    }
+
+    #[test]
+    fn address_type_reset_clears_all_scan_metadata_fields() {
+        let mut metadata = InternalOnlyMetadata {
+            address_index: Some(cove_types::AddressIndex {
+                last_seen_index: 4,
+                address_list_hash: 2,
+            }),
+            last_scan_finished: Some(Duration::from_secs(10)),
+            last_height_fetched: Some(BlockSizeLast {
+                block_height: 1,
+                last_seen: Duration::from_secs(20),
+            }),
+            performed_full_scan_at: Some(30),
+            store_type: StoreType::FileStore,
+        };
+
+        metadata.reset_scan_state_for_address_type_switch();
+
+        assert_eq!(metadata.address_index, None);
+        assert_eq!(metadata.last_scan_finished, None);
+        assert_eq!(metadata.last_height_fetched, None);
+        assert_eq!(metadata.performed_full_scan_at, None);
+        assert_eq!(metadata.store_type, StoreType::FileStore);
     }
 }

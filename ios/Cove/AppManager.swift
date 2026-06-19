@@ -128,7 +128,7 @@ private let navigationSettleDelayMs = 800
     func ensureSendFlowManager(
         _ walletManager: WalletManager,
         presenter: SendFlowPresenter
-    ) -> SendFlowManager {
+    ) throws -> SendFlowManager {
         if let sendFlowManager = cachedSendFlowManager(id: walletManager.id) {
             logger.debug("found and using sendflow manager for \(walletManager.id)")
             sendFlowManager.presenter = presenter
@@ -138,7 +138,7 @@ private let navigationSettleDelayMs = 800
         logger.debug("did not find SendFlowManager for \(walletManager.id), creating new")
         clearSendFlowManager()
 
-        let sendFlowManager = SendFlowManager(
+        let sendFlowManager = try SendFlowManager(
             walletManager.rust.newSendFlowManager(balance: walletManager.balance),
             presenter: presenter
         )

@@ -87,7 +87,7 @@ fun SendFlowContainer(
                 else -> {}
             }
 
-            // wait for initialization, rust handles alert + popRoute on failure
+            // wait for initialization after Rust accepts the send path
             val initSuccess = sfm.waitForInit()
             if (initSuccess) {
                 walletManager = wm
@@ -96,6 +96,13 @@ fun SendFlowContainer(
             }
         } catch (e: Exception) {
             android.util.Log.e(tag, "something went very wrong", e)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Initial Scan Incomplete",
+                        message = "Can't send until initial scan completes.",
+                    ),
+                )
             app.popRoute()
         }
     }

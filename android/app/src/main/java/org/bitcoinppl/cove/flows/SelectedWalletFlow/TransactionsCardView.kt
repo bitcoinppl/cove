@@ -174,6 +174,7 @@ fun TransactionsCardView(
                 )
             } else {
                 TransactionsScanSpinnerStrip(
+                    message = if (isFirstScan) "Checking wallet history" else null,
                     secondaryText = secondaryText,
                     modifier = Modifier.padding(bottom = 10.dp),
                 )
@@ -197,6 +198,7 @@ fun TransactionsCardView(
                     )
                 } else {
                     EmptyWalletScanSpinnerState(
+                        message = if (isFirstScan) "Checking wallet history" else null,
                         primaryText = primaryText,
                         modifier =
                             Modifier
@@ -294,21 +296,32 @@ fun TransactionsCardView(
 
 @Composable
 internal fun TransactionsScanSpinnerStrip(
+    message: String? = null,
     secondaryText: Color,
     modifier: Modifier = Modifier,
 ) {
-    Box(
+    Row(
         modifier =
             modifier
                 .fillMaxWidth()
                 .height(18.dp),
-        contentAlignment = Alignment.Center,
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         CircularProgressIndicator(
             modifier = Modifier.size(16.dp),
             color = secondaryText,
             strokeWidth = 2.dp,
         )
+
+        if (message != null) {
+            Spacer(Modifier.size(8.dp))
+            Text(
+                text = message,
+                color = secondaryText.copy(alpha = 0.7f),
+                fontSize = 11.sp,
+            )
+        }
     }
 }
 
@@ -346,18 +359,28 @@ internal fun TransactionsScanProgressStrip(
 
 @Composable
 internal fun EmptyWalletScanSpinnerState(
+    message: String? = null,
     primaryText: Color,
     modifier: Modifier = Modifier,
 ) {
-    Box(
+    Column(
         modifier = modifier,
-        contentAlignment = Alignment.TopCenter,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         CircularProgressIndicator(
             modifier = Modifier.size(28.dp),
             color = primaryText,
             strokeWidth = 2.5.dp,
         )
+
+        if (message != null) {
+            Text(
+                text = message,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+            )
+        }
     }
 }
 
@@ -955,6 +978,7 @@ fun LazyListScope.transactionItems(
                 )
             } else {
                 TransactionsScanSpinnerStrip(
+                    message = if (isFirstScan) "Checking wallet history" else null,
                     secondaryText = secondaryText,
                     modifier =
                         Modifier
@@ -1028,6 +1052,7 @@ fun LazyListScope.transactionItems(
                 )
             } else {
                 EmptyWalletScanSpinnerState(
+                    message = if (isFirstScan) "Checking wallet history" else null,
                     primaryText = primaryText,
                     modifier =
                         Modifier
