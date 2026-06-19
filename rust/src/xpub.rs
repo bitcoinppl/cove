@@ -23,6 +23,7 @@ pub enum XpubError {
     #[error("Invalid JSON {0}")]
     InvalidJson(String),
 
+    /// Retained for UniFFI compatibility with clients that may still match this error
     #[error("Invalid descriptor in JSON")]
     InvalidDescriptorInJson,
 
@@ -124,7 +125,9 @@ impl From<pubport::Error> for XpubError {
             pubport::Error::InvalidJsonParse(error) => Self::InvalidJson(error.to_string()),
             pubport::Error::MissingJsonDescriptorData => Self::JsonNoDecriptor,
             pubport::Error::InvalidXpub(error) => Self::InvalidXpub(error.to_string()),
-            pubport::Error::UnsupportedFormat(error) => Self::InvalidXpub(error.to_string()),
+            pubport::Error::UnsupportedFormat(error) => {
+                Self::InvalidDescriptor(DescriptorError::InvalidDescriptor(error.to_string()))
+            }
         }
     }
 }
@@ -132,5 +135,23 @@ impl From<pubport::Error> for XpubError {
 impl From<descriptor::Error> for XpubError {
     fn from(error: descriptor::Error) -> Self {
         Self::InvalidDescriptor(error.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unsupported_pubport_format_maps_to_invalid_descriptor() {
+        let error = pubport::Format::try_new_from_str("not a wallet").unwrap_err();
+        let error = XpubError::from(error);
+
+        let XpubError::InvalidDescriptor(DescriptorError::InvalidDescriptor(message)) = error
+        else {
+            panic!("expected invalid descriptor error");
+        };
+
+        assert_eq!(message, "no supported wallet export format matched");
     }
 }
