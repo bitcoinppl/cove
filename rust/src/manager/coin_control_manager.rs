@@ -525,6 +525,19 @@ mod tests {
     }
 
     #[test]
+    fn selected_utxos_excludes_locked_utxos() {
+        let manager = preview_manager_with_locked_first_utxo();
+        let locked = manager.state.lock().utxos[0].outpoint.clone();
+        let unlocked = manager.state.lock().utxos[1].outpoint.clone();
+        manager.state.lock().selected_utxos = vec![locked, unlocked.clone()];
+
+        let selected = manager.selected_utxos();
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].outpoint, unlocked);
+    }
+
+    #[test]
     fn direct_selection_preserves_selected_utxos_outside_active_search() {
         let manager = Arc::new(RustCoinControlManager::preview_new(2, 0));
         let hidden = manager.state.lock().utxos[0].outpoint.clone();

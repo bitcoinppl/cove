@@ -345,6 +345,25 @@ impl LabelsTable {
         Ok(())
     }
 
+    pub fn delete_labels_and_insert_records(
+        &self,
+        labels: impl IntoIterator<Item = Label>,
+        records: impl IntoIterator<Item = Record<Label>>,
+    ) -> Result<(), Error> {
+        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
+
+        labels
+            .into_iter()
+            .try_for_each(|label| self.delete_label_with_write_txn(label, &write_txn))?;
+        records.into_iter().try_for_each(|record| {
+            self.insert_label_with_write_txn(record.item, record.timestamps, &write_txn)
+        })?;
+
+        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
+
+        Ok(())
+    }
+
     pub fn set_output_spendability(
         &self,
         outpoint: bitcoin::OutPoint,
