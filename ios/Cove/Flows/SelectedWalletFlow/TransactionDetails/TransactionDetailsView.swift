@@ -256,7 +256,10 @@ struct TransactionDetailsView: View {
                     .foregroundStyle(.secondary)
 
                 Button(action: {
-                    Task { await toggleTransactionLockState() }
+                    if !isUpdatingLockState {
+                        isUpdatingLockState = true
+                        Task { await toggleTransactionLockState() }
+                    }
                 }) {
                     Label(lockStateButtonText, systemImage: lockStateButtonIcon)
                         .font(.footnote)
@@ -277,11 +280,11 @@ struct TransactionDetailsView: View {
     var lockStateText: String {
         switch lockState {
         case .some(.locked):
-            "Locked"
+            String(localized: "Locked")
         case .some(.mixed):
-            "Mixed"
+            String(localized: "Mixed")
         case .some(.unlocked):
-            "Unlocked"
+            String(localized: "Unlocked")
         case .some(.none), nil:
             ""
         }
@@ -290,11 +293,11 @@ struct TransactionDetailsView: View {
     var lockStateButtonText: String {
         switch lockState {
         case .some(.locked):
-            "Unlock Transaction"
+            String(localized: "Unlock Transaction")
         case .some(.mixed):
-            "Lock Transaction"
+            String(localized: "Lock Transaction")
         case .some(.unlocked):
-            "Lock Transaction"
+            String(localized: "Lock Transaction")
         case .some(.none), nil:
             ""
         }
@@ -470,12 +473,6 @@ struct TransactionDetailsView: View {
     }
 
     func toggleTransactionLockState() async {
-        guard !isUpdatingLockState else { return }
-
-        await MainActor.run {
-            isUpdatingLockState = true
-        }
-
         do {
             let state = try await manager.toggleTransactionLockState(for: initialDetails.txId())
             await MainActor.run {
