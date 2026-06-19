@@ -5444,6 +5444,7 @@ dependencies = [
  "clap",
  "color-eyre",
  "colored",
+ "cove-ur",
  "foundation-ur",
  "gif",
  "hex",

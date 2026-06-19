@@ -16,6 +16,7 @@ bdk_wallet = { version = "3.0.0", features = ["keys-bip39"] }
 bitcoin = "0.32.9"
 bip39 = "2.2.2"
 base64 = "0.22.1"
+cove-ur = { path = "../crates/cove-ur" }
 qrcode = "0.14.1"
 image = { version = "0.25.10", features = ["gif"] }
 gif = "0.14.2"
