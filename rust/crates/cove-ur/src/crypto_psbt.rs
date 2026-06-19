@@ -1,8 +1,8 @@
-//! crypto-psbt: PSBT encoded as CBOR byte string with tag 310
+//! crypto-psbt: PSBT encoded as a CBOR byte string
 //! BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
 //!
 //! Note: This type uses manual CBOR encoding/decoding (not derive macros) because:
-//! 1. The structure is `tag(310) bytes` - a simple tagged byte string, not a map
+//! 1. The structure is `bytes` - a simple byte string, not a map
 //! 2. Decoding must support both tagged and untagged formats for interoperability
 //! 3. Derive macros don't provide significant simplification for this structure
 
@@ -16,7 +16,7 @@ use crate::{
     registry::CRYPTO_PSBT,
 };
 
-/// crypto-psbt: PSBT encoded as CBOR byte string with tag 310
+/// crypto-psbt: PSBT encoded as a CBOR byte string
 /// BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
 pub struct CryptoPsbt {
@@ -52,8 +52,8 @@ impl CryptoPsbt {
         self.psbt.serialize()
     }
 
-    /// Encode as tagged CBOR bytes
-    /// CBOR structure: #6.310(bytes)
+    /// Encode as untagged CBOR bytes
+    /// CBOR structure: bytes
     ///
     /// # Errors
     /// Returns error if CBOR encoding fails
@@ -63,16 +63,12 @@ impl CryptoPsbt {
         let mut buffer = Vec::new();
         let mut encoder = Encoder::new(&mut buffer);
 
-        // write tag 310
-        encoder.tag(Tag::new(CRYPTO_PSBT)).map_err_str(UrError::CborEncodeError)?;
-
-        // write PSBT as byte string
         encoder.bytes(&psbt_bytes).map_err_str(UrError::CborEncodeError)?;
 
         Ok(buffer)
     }
 
-    /// Decode from tagged CBOR bytes
+    /// Decode from CBOR bytes
     /// Supports both tagged (#6.310) and untagged CBOR for interoperability
     ///
     /// # Errors
@@ -80,9 +76,7 @@ impl CryptoPsbt {
     pub fn from_cbor(cbor: &[u8]) -> Result<Self> {
         let mut decoder = Decoder::new(cbor);
 
-        // try to read tag - if present, verify it's 310
         if let Ok(tag) = decoder.tag() {
-            // tagged format: verify tag 310
             if tag != Tag::new(CRYPTO_PSBT) {
                 return Err(UrError::InvalidTag { expected: CRYPTO_PSBT, actual: tag.as_u64() });
             }
@@ -243,31 +237,30 @@ mod tests {
     }
 
     #[test]
-    fn test_crypto_psbt_cbor_has_tag() {
+    fn test_crypto_psbt_cbor_is_untagged_bytes() {
         let psbt = test_psbt();
         let crypto_psbt = CryptoPsbt::new(psbt);
 
         let cbor = crypto_psbt.to_cbor().unwrap();
 
-        // verify CBOR starts with tag 310
-        // CBOR tag 310 = 0xD9 0x01 0x36
-        assert_eq!(cbor[0], 0xD9); // major type 6 (tag), additional info 25 (2-byte uint16)
-        assert_eq!(cbor[1], 0x01);
-        assert_eq!(cbor[2], 0x36); // 0x0136 = 310
+        let mut expected_cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut expected_cbor);
+        encoder.bytes(&crypto_psbt.to_bytes()).unwrap();
+
+        assert_eq!(cbor, expected_cbor);
     }
 
     #[test]
-    fn test_crypto_psbt_untagged_cbor() {
+    fn test_crypto_psbt_legacy_tagged_cbor() {
         let psbt = test_psbt();
         let psbt_bytes = psbt.serialize();
 
-        // create untagged CBOR (just the byte string, no tag 310)
-        let mut untagged_cbor = Vec::new();
-        let mut encoder = Encoder::new(&mut untagged_cbor);
+        let mut tagged_cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut tagged_cbor);
+        encoder.tag(Tag::new(CRYPTO_PSBT)).unwrap();
         encoder.bytes(&psbt_bytes).unwrap();
 
-        // should still decode successfully
-        let decoded = CryptoPsbt::from_cbor(&untagged_cbor).unwrap();
+        let decoded = CryptoPsbt::from_cbor(&tagged_cbor).unwrap();
         assert_eq!(decoded.psbt(), &psbt);
     }
 

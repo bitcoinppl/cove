@@ -333,7 +333,7 @@ impl ConfirmDetails {
         use cove_ur::CryptoPsbt;
         use foundation_ur::Encoder as UrEncoder;
 
-        // wrap PSBT in CryptoPsbt and encode to tagged CBOR
+        // wrap PSBT in CryptoPsbt and encode to CBOR
         let crypto_psbt = CryptoPsbt::from_psbt_bytes(self.psbt.0.serialize()).map_err(|e| {
             ConfirmDetailsError::QrCodeCreation(format!("CryptoPsbt encoding failed: {e}"))
         })?;
