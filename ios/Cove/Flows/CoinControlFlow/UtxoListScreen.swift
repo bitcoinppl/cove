@@ -396,10 +396,12 @@ private struct UtxoRow: View {
         .padding(.vertical, 4)
         .opacity(utxo.spendable ? 1 : 0.58)
         .contentShape(Rectangle())
-        .onTapGesture {
-            guard !utxo.spendable else { return }
-            onLockedSelectionAttempt()
-        }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                guard !utxo.spendable else { return }
+                onLockedSelectionAttempt()
+            }
+        )
     }
 }
 
