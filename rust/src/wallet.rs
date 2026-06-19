@@ -804,8 +804,9 @@ fn should_start_json_discovery(
     json: &pubport::formats::Json,
     address_type: WalletAddressType,
 ) -> bool {
-    address_type == WalletAddressType::NativeSegwit
-        && (json.bip49.is_some() || json.bip44.is_some())
+    [(&json.bip49, WalletAddressType::WrappedSegwit), (&json.bip44, WalletAddressType::Legacy)]
+        .into_iter()
+        .any(|(descriptors, type_)| descriptors.is_some() && type_ != address_type)
 }
 
 impl Wallet {
@@ -1035,6 +1036,16 @@ mod tests {
         let (_, address_type) = preferred_json_descriptors(&json).unwrap();
 
         assert_eq!(address_type, WalletAddressType::NativeSegwit);
+        assert!(should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn json_discovery_starts_for_wrapped_segwit_with_legacy_alternate() {
+        let json = descriptor_json(Some(bip44_descriptors()), Some(bip49_descriptors()), None);
+
+        let (_, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::WrappedSegwit);
         assert!(should_start_json_discovery(&json, address_type));
     }
 
