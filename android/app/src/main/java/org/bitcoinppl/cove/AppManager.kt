@@ -260,6 +260,7 @@ class AppManager private constructor() : FfiReconcile {
         // close managers before clearing them
         walletManager?.close()
         sendFlowManager?.close()
+        coinControlManager?.close()
 
         database = Database()
         walletManager = null

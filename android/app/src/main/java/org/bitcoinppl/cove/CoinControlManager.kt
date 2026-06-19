@@ -12,7 +12,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
@@ -187,9 +186,7 @@ class CoinControlManager(
     ) {
         if (isClosed.get()) return
 
-        withContext(Dispatchers.IO) {
-            rust.setUtxoSpendability(outpoint, spendable)
-        }
+        rust.setUtxoSpendability(outpoint, spendable)
     }
 
     override fun reconcile(message: CoinControlManagerReconcileMessage) {

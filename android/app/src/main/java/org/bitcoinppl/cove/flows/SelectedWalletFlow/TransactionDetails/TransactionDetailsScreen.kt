@@ -235,6 +235,8 @@ fun TransactionDetailsScreen(
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val transactionLockUpdateErrorMessage =
+        stringResource(R.string.snackbar_transaction_lock_update_error)
 
     // theme colors
     val bg = MaterialTheme.colorScheme.background
@@ -530,15 +532,18 @@ fun TransactionDetailsScreen(
                             updating = isUpdatingLockState,
                             color = sub,
                             onToggle = {
-                                scope.launch {
+                                if (!isUpdatingLockState) {
                                     isUpdatingLockState = true
-                                    try {
-                                        lockState = manager.toggleTransactionLockState(txId)
-                                    } catch (e: Exception) {
-                                        android.util.Log.e("TransactionDetails", "error toggling transaction lock state", e)
-                                        snackbarHostState.showSnackbar("Unable to update transaction lock.")
+                                    scope.launch {
+                                        try {
+                                            lockState = manager.toggleTransactionLockState(txId)
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("TransactionDetails", "error toggling transaction lock state", e)
+                                            snackbarHostState.showSnackbar(transactionLockUpdateErrorMessage)
+                                        } finally {
+                                            isUpdatingLockState = false
+                                        }
                                     }
-                                    isUpdatingLockState = false
                                 }
                             },
                         )
@@ -648,17 +653,18 @@ private fun TransactionLockAction(
 ) {
     val stateText =
         when (state) {
-            TransactionLockState.LOCKED -> "Locked"
-            TransactionLockState.MIXED -> "Mixed"
-            TransactionLockState.UNLOCKED -> "Unlocked"
+            TransactionLockState.LOCKED -> stringResource(R.string.label_transaction_lock_state_locked)
+            TransactionLockState.MIXED -> stringResource(R.string.label_transaction_lock_state_mixed)
+            TransactionLockState.UNLOCKED -> stringResource(R.string.label_transaction_lock_state_unlocked)
             TransactionLockState.NONE -> ""
         }
     val buttonText =
         when (state) {
-            TransactionLockState.LOCKED -> "Unlock Transaction"
-            TransactionLockState.MIXED, TransactionLockState.UNLOCKED -> "Lock Transaction"
+            TransactionLockState.LOCKED -> stringResource(R.string.btn_unlock_transaction)
+            TransactionLockState.MIXED, TransactionLockState.UNLOCKED -> stringResource(R.string.btn_lock_transaction)
             TransactionLockState.NONE -> ""
         }
+    val updatingText = stringResource(R.string.label_transaction_lock_updating)
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
@@ -672,7 +678,7 @@ private fun TransactionLockAction(
             enabled = !updating,
         ) {
             Text(
-                text = if (updating) "Updating..." else buttonText,
+                text = if (updating) updatingText else buttonText,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )

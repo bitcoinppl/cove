@@ -100,6 +100,8 @@ fun UtxoListScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val scope = rememberCoroutineScope()
+    val lockedSelectionMessage = stringResource(R.string.snackbar_utxo_locked_selection)
+    val updateUtxoLockErrorMessage = stringResource(R.string.snackbar_utxo_lock_update_error)
 
     // reload labels on appear to match iOS behavior
     LaunchedEffect(manager) {
@@ -119,7 +121,7 @@ fun UtxoListScreen(
         onToggle = { utxo ->
             if (!utxo.spendable) {
                 scope.launch {
-                    snackbarHostState.showSnackbar("Unlock this UTXO before selecting it.")
+                    snackbarHostState.showSnackbar(lockedSelectionMessage)
                 }
             } else {
                 val id = utxo.id
@@ -138,7 +140,7 @@ fun UtxoListScreen(
                     manager.setSpendability(utxo.outpoint, spendable)
                 } catch (e: Exception) {
                     android.util.Log.e("UtxoListScreen", "Unable to update UTXO spendability", e)
-                    snackbarHostState.showSnackbar("Unable to update UTXO lock.")
+                    snackbarHostState.showSnackbar(updateUtxoLockErrorMessage)
                 }
             }
         },
