@@ -2472,7 +2472,10 @@ mod tests {
     use bdk_wallet::{
         KeychainKind, LocalOutput,
         chain::{ChainPosition, ConfirmationBlockTime},
-        test_utils::{get_funded_wallet_wpkh, insert_checkpoint, receive_output_in_latest_block},
+        test_utils::{
+            ReceiveTo, get_funded_wallet_wpkh, insert_checkpoint, receive_output,
+            receive_output_in_latest_block, receive_output_to_address,
+        },
     };
     use bitcoin::{
         Address as BdkAddress, Amount, BlockHash, Network, OutPoint, ScriptBuf, TxOut, Txid,
@@ -2582,6 +2585,10 @@ mod tests {
         LockedActorFixture { actor, locked, unlocked, _tmp: tmp }
     }
 
+    fn lock_output(actor: &super::WalletActor, outpoint: OutPoint) {
+        actor.db.labels.set_output_spendability(outpoint, false).expect("output is locked");
+    }
+
     fn spent_outpoints(psbt: &bdk_wallet::bitcoin::Psbt) -> HashSet<OutPoint> {
         psbt.unsigned_tx.input.iter().map(|input| input.previous_output).collect()
     }
@@ -2636,6 +2643,45 @@ mod tests {
             super::unlocked_spendable_amount(Amount::from_sat(10_000), Amount::from_sat(12_000)),
             Amount::ZERO
         );
+    }
+
+    #[test]
+    fn unlocked_trusted_spendable_balance_subtracts_locked_bdk_spendable_outputs() {
+        crate::database::test_support::init_test_database();
+
+        let mut wallet = Wallet::preview_new_wallet();
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([2; 32]) },
+        );
+        let locked_confirmed =
+            receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(76_000));
+        let locked_untrusted_pending =
+            receive_output(&mut wallet.bdk, Amount::from_sat(20_000), ReceiveTo::Mempool(1));
+        let internal_address = wallet.bdk.next_unused_address(KeychainKind::Internal).address;
+        let locked_trusted_pending = receive_output_to_address(
+            &mut wallet.bdk,
+            internal_address,
+            Amount::from_sat(30_000),
+            ReceiveTo::Mempool(2),
+        );
+        let _unlocked_confirmed =
+            receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(80_000));
+
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = super::WalletActor::new(wallet, sender).expect("actor is created");
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+        actor.db = db;
+
+        lock_output(&actor, locked_confirmed);
+        lock_output(&actor, locked_untrusted_pending);
+        lock_output(&actor, locked_trusted_pending);
+
+        let bdk_spendable = actor.wallet.balance().0.trusted_spendable();
+        let expected_locked_spendable = Amount::from_sat(76_000 + 30_000);
+        let expected = bdk_spendable - expected_locked_spendable;
+
+        assert_eq!(actor.unlocked_trusted_spendable_balance_inner().unwrap(), expected);
     }
 
     #[test]
@@ -2825,6 +2871,37 @@ mod tests {
 
         assert!(!spent_outpoints.contains(&fixture.locked));
         assert!(spent_outpoints.contains(&fixture.unlocked));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn actor_build_tx_fails_when_all_outputs_are_locked() {
+        let fixture = locked_actor_fixture();
+        let mut actor = fixture.actor;
+        lock_output(&actor, fixture.unlocked);
+
+        let result = actor
+            .build_tx(Amount::from_sat(40_000), Address::preview_new(), one_sat_vbyte_fee_rate())
+            .await;
+        let error =
+            actor_value(result).await.expect_err("all locked outputs cannot fund transaction");
+
+        assert!(matches!(error, super::Error::BuildTxError(_)));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn actor_drain_tx_fails_when_all_outputs_are_locked() {
+        let fixture = locked_actor_fixture();
+        let mut actor = fixture.actor;
+        lock_output(&actor, fixture.unlocked);
+
+        let result = actor
+            .build_ephemeral_drain_tx(Address::preview_new(), one_sat_vbyte_fee_rate().into())
+            .await;
+        let error = actor_value(result)
+            .await
+            .expect_err("all locked outputs cannot fund drain transaction");
+
+        assert!(matches!(error, super::Error::BuildTxError(_)));
     }
 
     #[tokio::test(flavor = "current_thread")]

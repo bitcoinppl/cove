@@ -87,7 +87,10 @@ impl State {
                     utxo.spendable = false;
                 }
 
-                return self.prune_locked_selected_utxos();
+                let selection_changed = self.prune_locked_selected_utxos();
+                self.refresh_search_results();
+
+                return selection_changed;
             }
         };
         let labels_db = wallet_db.labels;
@@ -134,7 +137,10 @@ impl State {
 
         self.lock_state_load_failed = lock_state_load_failed;
 
-        self.prune_locked_selected_utxos()
+        let selection_changed = self.prune_locked_selected_utxos();
+        self.refresh_search_results();
+
+        selection_changed
     }
 
     pub fn prune_locked_selected_utxos(&mut self) -> bool {
@@ -195,6 +201,16 @@ impl State {
         self.search = String::new();
         self.filtered_utxos = FilteredUtxos::All;
         self.sort_utxos(sort);
+    }
+
+    fn refresh_search_results(&mut self) {
+        if self.search.is_empty() {
+            self.filtered_utxos = FilteredUtxos::All;
+            return;
+        }
+
+        let search = self.search.clone();
+        self.filter_utxos(&search);
     }
 
     pub fn filter_utxos(&mut self, search: &str) {

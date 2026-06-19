@@ -784,7 +784,9 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub async fn unlocked_spendable_balance(&self) -> Result<Amount, Error> {
-        let amount = call!(self.actor.unlocked_trusted_spendable_balance()).await.unwrap()?;
+        let amount = call!(self.actor.unlocked_trusted_spendable_balance())
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
 
         Ok(amount.into())
     }

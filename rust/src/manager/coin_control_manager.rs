@@ -97,23 +97,14 @@ impl RustCoinControlManager {
         let (utxos, selected_utxos, total_value, lock_state_load_failed) = {
             let mut state = self.state.lock();
 
-            let old_utxos_hash = {
-                let mut hasher = DefaultHasher::new();
-                state.utxos.hash(&mut hasher);
-                hasher.finish()
-            };
+            let old_utxos_hash = hash_utxos(&state.utxos());
             let old_lock_state_load_failed = state.lock_state_load_failed;
 
             let selection_changed = state.load_utxo_labels();
 
-            let new_utxos = state.utxos.clone();
+            let new_utxos = state.utxos();
             let lock_state_load_failed = state.lock_state_load_failed;
-
-            let new_utxos_hash = {
-                let mut hasher = DefaultHasher::new();
-                new_utxos.hash(&mut hasher);
-                hasher.finish()
-            };
+            let new_utxos_hash = hash_utxos(&new_utxos);
 
             if old_utxos_hash == new_utxos_hash
                 && !selection_changed
@@ -123,7 +114,7 @@ impl RustCoinControlManager {
             }
 
             let selected_utxos = state.selected_utxos.clone();
-            let total_value = total_value_of_spendable_utxos(&new_utxos, &selected_utxos).into();
+            let total_value = total_value_of_spendable_utxos(&state.utxos, &selected_utxos).into();
 
             (new_utxos, selected_utxos, total_value, lock_state_load_failed)
         };
@@ -405,6 +396,12 @@ fn total_value_of_spendable_utxos(utxos: &[Utxo], selected_utxo_ids: &[Arc<OutPo
     Amount::from_sat(final_amount_sats)
 }
 
+fn hash_utxos(utxos: &[Utxo]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    utxos.hash(&mut hasher);
+    hasher.finish()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -489,6 +486,20 @@ mod tests {
     }
 
     #[test]
+    fn load_utxo_labels_fails_closed_when_wallet_database_cannot_open() {
+        let mut state = State::preview_new(2, 0);
+        state.wallet_id = WalletId::from("invalid\0wallet-id");
+        state.selected_utxos = vec![state.utxos[0].outpoint.clone()];
+
+        let selection_changed = state.load_utxo_labels();
+
+        assert!(selection_changed);
+        assert!(state.lock_state_load_failed);
+        assert!(state.selected_utxos.is_empty());
+        assert!(state.utxos.iter().all(|utxo| !utxo.spendable));
+    }
+
+    #[test]
     fn select_all_skips_locked_utxos() {
         let manager = preview_manager_with_locked_first_utxo();
         let locked = manager.state.lock().utxos[0].outpoint.clone();
@@ -548,6 +559,34 @@ mod tests {
         let total = manager.total_value_of_utxos(&[locked, unlocked]);
 
         assert_eq!(total.as_sats(), unlocked_amount);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn reload_labels_preserves_active_search_results() {
+        let manager = Arc::new(RustCoinControlManager::preview_new(2, 0));
+        let wallet_id = manager.state.lock().wallet_id.clone();
+        let visible = manager.state.lock().utxos[1].outpoint.clone();
+        let search = visible.txid.to_string();
+        let (wallet_db, _tmp) = new_test_wallet_data_db(wallet_id);
+
+        manager.clone().notify_search_changed(search);
+        while manager.reconcile_receiver.try_recv().is_ok() {}
+
+        wallet_db
+            .labels
+            .set_output_spendability(bitcoin::OutPoint::from(visible.as_ref()), false)
+            .expect("failed to lock searched output");
+
+        manager.reload_labels().await;
+
+        let message = manager.reconcile_receiver.recv_async().await.expect("reconcile message");
+        let SingleOrMany::Single(Message::UpdateUtxos(utxos)) = message else {
+            panic!("expected utxo update");
+        };
+
+        assert_eq!(utxos.len(), 1);
+        assert_eq!(utxos[0].outpoint, visible);
+        assert!(!utxos[0].spendable);
     }
 
     #[test]

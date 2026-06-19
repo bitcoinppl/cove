@@ -130,8 +130,6 @@ impl SendFlowManagerState {
 
         let btc_price_in_fiat = App::global().prices().map(|prices| prices.get());
 
-        let unlocked_spendable_sats = Some(balance.spendable().as_sats());
-
         Self {
             metadata,
             fee_rate_options_base: None,
@@ -146,7 +144,7 @@ impl SendFlowManagerState {
             focus_field: None,
             address: None,
             wallet_balance: Some(balance),
-            unlocked_spendable_sats,
+            unlocked_spendable_sats: None,
             fee_selection: None,
             btc_price_in_fiat,
             selected_fiat_currency,
@@ -174,5 +172,30 @@ impl From<SendFlowManagerState> for State {
 impl From<Arc<Mutex<SendFlowManagerState>>> for State {
     fn from(state: Arc<Mutex<SendFlowManagerState>>) -> Self {
         Self(state)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use bitcoin::Amount as BdkAmount;
+
+    use super::*;
+
+    #[test]
+    fn new_starts_with_unknown_unlocked_spendable_balance() {
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let balance = Arc::new(Balance(bdk_wallet::Balance {
+            confirmed: BdkAmount::from_sat(50_000),
+            ..Default::default()
+        }));
+
+        let state = SendFlowManagerState::new(metadata, balance);
+
+        assert_eq!(state.wallet_balance.as_ref().unwrap().spendable().as_sats(), 50_000);
+        assert_eq!(state.unlocked_spendable_sats, None);
     }
 }
