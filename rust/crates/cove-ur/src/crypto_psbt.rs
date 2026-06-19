@@ -243,6 +243,10 @@ mod tests {
 
         let cbor = crypto_psbt.to_cbor().unwrap();
 
+        assert!(!cbor.is_empty());
+        assert_eq!(cbor[0] >> 5, 2);
+        assert_ne!(cbor[0], 0xD9);
+
         let mut expected_cbor = Vec::new();
         let mut encoder = Encoder::new(&mut expected_cbor);
         encoder.bytes(&crypto_psbt.to_bytes()).unwrap();
@@ -307,6 +311,8 @@ mod tests {
 
         // roundtrip: encode back to UR and verify it decodes to same PSBT
         let ur_string = crypto_psbt.to_ur_string().unwrap();
+        assert_eq!(ur_string.to_uppercase(), JADE_UR);
+
         let decoded = CryptoPsbt::from_ur_string(&ur_string).unwrap();
         assert_eq!(decoded.to_bytes(), psbt_bytes);
     }
@@ -339,6 +345,32 @@ mod tests {
         // correct tag but invalid PSBT bytes (missing magic)
         encoder.tag(Tag::new(310)).unwrap();
         encoder.bytes(&[0x00, 0x00, 0x00]).unwrap();
+
+        let result = CryptoPsbt::from_cbor(&cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
+
+    /// Test malformed CBOR: untagged invalid PSBT data
+    #[test]
+    fn test_crypto_psbt_untagged_invalid_psbt_data() {
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        encoder.bytes(&[0x00, 0x00, 0x00]).unwrap();
+
+        let result = CryptoPsbt::from_cbor(&cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
+
+    /// Test malformed CBOR: empty byte string
+    #[test]
+    fn test_crypto_psbt_empty_byte_string() {
+        let mut cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut cbor);
+
+        encoder.bytes(&[]).unwrap();
 
         let result = CryptoPsbt::from_cbor(&cbor);
         assert!(result.is_err());

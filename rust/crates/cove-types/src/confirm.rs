@@ -333,10 +333,8 @@ impl ConfirmDetails {
         use cove_ur::CryptoPsbt;
         use foundation_ur::Encoder as UrEncoder;
 
-        // wrap PSBT in CryptoPsbt and encode to CBOR
-        let crypto_psbt = CryptoPsbt::from_psbt_bytes(self.psbt.0.serialize()).map_err(|e| {
-            ConfirmDetailsError::QrCodeCreation(format!("CryptoPsbt encoding failed: {e}"))
-        })?;
+        // wrap PSBT in CryptoPsbt and encode to untagged CBOR
+        let crypto_psbt = CryptoPsbt::new(self.psbt.0.clone());
 
         let cbor_psbt = crypto_psbt.encode().map_err(|e| {
             ConfirmDetailsError::QrCodeCreation(format!("CBOR encoding failed: {e}"))
@@ -495,5 +493,40 @@ pub fn confirm_details_preview_new() -> ConfirmDetails {
         sending_to: Address::preview_new(),
         psbt,
         more_details,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cove_ur::CryptoPsbt;
+    use foundation_ur::{Decoder as UrDecoder, UR};
+
+    use super::*;
+
+    #[test]
+    fn psbt_to_ur_exports_untagged_crypto_psbt() {
+        let confirm_details = confirm_details_preview_new();
+
+        let parts = confirm_details.psbt_to_ur(10_000).unwrap();
+
+        assert_eq!(parts.len(), 1);
+
+        let mut decoder = UrDecoder::default();
+        for part in parts {
+            let ur = UR::parse(&part).unwrap();
+            assert_eq!(ur.as_type(), "crypto-psbt");
+            decoder.receive(ur).unwrap();
+        }
+
+        assert!(decoder.is_complete());
+        assert_eq!(decoder.ur_type(), Some("crypto-psbt"));
+
+        let cbor = decoder.message().unwrap().unwrap();
+        assert!(!cbor.is_empty());
+        assert_eq!(cbor[0] >> 5, 2);
+        assert_ne!(cbor[0], 0xD9);
+
+        let crypto_psbt = CryptoPsbt::decode(cbor.to_vec()).unwrap();
+        assert_eq!(crypto_psbt.to_psbt_bytes(), confirm_details.psbt.0.serialize());
     }
 }
