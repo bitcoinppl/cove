@@ -23,6 +23,7 @@ private enum SheetState: Equatable {
 struct SelectedWalletScreen: View {
     @Environment(\.safeAreaInsets) private var safeAreaInsets
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(AppManager.self) private var app
     @Environment(\.navigate) private var navigate
 
@@ -360,7 +361,10 @@ struct SelectedWalletScreen: View {
         .background(Color.coveBg)
         .toolbar { MainToolBar }
         .navigationTitleView { titleContent }
-        .adaptiveToolbarStyle(showNavBar: shouldShowNavBar)
+        .adaptiveToolbarStyle(
+            showNavBar: shouldShowNavBar,
+            reduceTransparency: reduceTransparency
+        )
         .sheet(item: $sheetState, content: SheetContent)
         .fileImporter(
             isPresented: $isImportingLabels,

@@ -37,14 +37,27 @@ extension View {
     /// - Parameters:
     ///   - showNavBar: whether to show or hide the navigation bar
     ///
-    /// - iOS 26+: uses Liquid Glass design when visible, hides when not
+    /// - iOS 26+: uses Liquid Glass design, or a solid matching background when Reduce Transparency is enabled
     /// - iOS 18 and earlier: maintains midnight blue background with dark color scheme
     @ViewBuilder
-    func adaptiveToolbarStyle(showNavBar: Bool) -> some View {
+    func adaptiveToolbarStyle(showNavBar: Bool, reduceTransparency: Bool = false) -> some View {
         if #available(iOS 26.0, *) {
-            // iOS 26+: let system handle liquid glass automatically
-            // don't override with clear background
-            self
+            if reduceTransparency {
+                if showNavBar {
+                    self
+                        .toolbarBackground(Color.coveBg, for: .navigationBar)
+                        .toolbarBackground(.visible, for: .navigationBar)
+                } else {
+                    self
+                        .toolbarColorScheme(.dark, for: .navigationBar)
+                        .toolbarBackground(Color.midnightBlue, for: .navigationBar)
+                        .toolbarBackground(.visible, for: .navigationBar)
+                }
+            } else {
+                // iOS 26+: let system handle liquid glass automatically
+                // don't override with clear background
+                self
+            }
         } else {
             // iOS 18 and earlier: keep existing midnight blue style
             self
