@@ -164,11 +164,6 @@ class CoinControlManager(
             is CoinControlManagerReconcileMessage.UpdateUnit -> {
                 unit = message.v1
             }
-
-            is CoinControlManagerReconcileMessage.UpdateTotalSelectedAmount -> {
-                updateSendFlowManager()
-                totalSelected = message.v1
-            }
         }
     }
 

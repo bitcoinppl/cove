@@ -5155,8 +5155,6 @@ public protocol LabelManagerProtocol: AnyObject, Sendable {
 
     func deleteLabelsForTxn(txId: TxId) throws
 
-    func deleteLabelsForTxnWithoutCloudBackupDirty(txId: TxId) throws
-
     func export() async throws  -> String
 
     func exportDefaultFileName(name: String)  -> String
@@ -5242,15 +5240,6 @@ public convenience init(id: WalletId) {
 open func deleteLabelsForTxn(txId: TxId)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeTxId_lower(txId),uniffiCallStatus
-    )
-}
-}
-
-open func deleteLabelsForTxnWithoutCloudBackupDirty(txId: TxId)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_labelmanager_delete_labels_for_txn_without_cloud_backup_dirty(
             self.uniffiCloneHandle(),
         FfiConverterTypeTxId_lower(txId),uniffiCallStatus
     )
@@ -22701,8 +22690,6 @@ public enum CoinControlManagerReconcileMessage {
     )
     case updateSelectedUtxos(utxos: [OutPoint], totalValue: Amount
     )
-    case updateTotalSelectedAmount(Amount
-    )
     case updateUnit(BitcoinUnit
     )
 
@@ -22740,10 +22727,7 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         case 5: return .updateSelectedUtxos(utxos: try FfiConverterSequenceTypeOutPoint.read(from: &buf), totalValue: try FfiConverterTypeAmount.read(from: &buf)
         )
 
-        case 6: return .updateTotalSelectedAmount(try FfiConverterTypeAmount.read(from: &buf)
-        )
-
-        case 7: return .updateUnit(try FfiConverterTypeBitcoinUnit.read(from: &buf)
+        case 6: return .updateUnit(try FfiConverterTypeBitcoinUnit.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -22779,13 +22763,8 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
             FfiConverterTypeAmount.write(totalValue, into: &buf)
 
 
-        case let .updateTotalSelectedAmount(v1):
-            writeInt(&buf, Int32(6))
-            FfiConverterTypeAmount.write(v1, into: &buf)
-
-
         case let .updateUnit(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeBitcoinUnit.write(v1, into: &buf)
 
         }
@@ -34459,6 +34438,7 @@ enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     )
     case InsufficientFunds(String
     )
+    case LockedOutputsSelected
     case GetConfirmDetailsError(String
     )
     case SignAndBroadcastError(String
@@ -34573,38 +34553,39 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
         case 19: return .InsufficientFunds(
             try FfiConverterString.read(from: &buf)
             )
-        case 20: return .GetConfirmDetailsError(
+        case 20: return .LockedOutputsSelected
+        case 21: return .GetConfirmDetailsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 21: return .SignAndBroadcastError(
+        case 22: return .SignAndBroadcastError(
             try FfiConverterString.read(from: &buf)
             )
-        case 22: return .Converter(
+        case 23: return .Converter(
             try FfiConverterTypeConverterError.read(from: &buf)
             )
-        case 23: return .UnknownError(
+        case 24: return .UnknownError(
             try FfiConverterString.read(from: &buf)
             )
-        case 24: return .PsbtFinalizeError(
+        case 25: return .PsbtFinalizeError(
             try FfiConverterString.read(from: &buf)
             )
-        case 25: return .GetHistoricalPricesError(
+        case 26: return .GetHistoricalPricesError(
             try FfiConverterString.read(from: &buf)
             )
-        case 26: return .CsvCreationError(
+        case 27: return .CsvCreationError(
             try FfiConverterString.read(from: &buf)
             )
-        case 27: return .AddUtxosError(
+        case 28: return .AddUtxosError(
             try FfiConverterString.read(from: &buf)
             )
-        case 28: return .OutputLabelsError(
+        case 29: return .OutputLabelsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 29: return .DatabaseCorruption(
+        case 30: return .DatabaseCorruption(
             id: try FfiConverterTypeWalletId.read(from: &buf),
             error: try FfiConverterString.read(from: &buf)
             )
-        case 30: return .ReceiveAddressError(
+        case 31: return .ReceiveAddressError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -34712,59 +34693,63 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .GetConfirmDetailsError(v1):
+        case .LockedOutputsSelected:
             writeInt(&buf, Int32(20))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .SignAndBroadcastError(v1):
+        case let .GetConfirmDetailsError(v1):
             writeInt(&buf, Int32(21))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Converter(v1):
+        case let .SignAndBroadcastError(v1):
             writeInt(&buf, Int32(22))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Converter(v1):
+            writeInt(&buf, Int32(23))
             FfiConverterTypeConverterError.write(v1, into: &buf)
 
 
         case let .UnknownError(v1):
-            writeInt(&buf, Int32(23))
-            FfiConverterString.write(v1, into: &buf)
-
-
-        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(24))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .GetHistoricalPricesError(v1):
+        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(25))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .CsvCreationError(v1):
+        case let .GetHistoricalPricesError(v1):
             writeInt(&buf, Int32(26))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .AddUtxosError(v1):
+        case let .CsvCreationError(v1):
             writeInt(&buf, Int32(27))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .OutputLabelsError(v1):
+        case let .AddUtxosError(v1):
             writeInt(&buf, Int32(28))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .DatabaseCorruption(id,error):
+        case let .OutputLabelsError(v1):
             writeInt(&buf, Int32(29))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .DatabaseCorruption(id,error):
+            writeInt(&buf, Int32(30))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterString.write(error, into: &buf)
 
 
         case let .ReceiveAddressError(v1):
-            writeInt(&buf, Int32(30))
+            writeInt(&buf, Int32(31))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -40174,9 +40159,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 18479) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn_without_cloud_backup_dirty() != 47716) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_export() != 24203) {

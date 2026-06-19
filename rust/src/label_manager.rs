@@ -187,81 +187,9 @@ impl LabelManager {
     }
 
     pub fn delete_labels_for_txn(&self, tx_id: Arc<TxId>) -> Result<(), LabelManagerError> {
-        self.delete_labels_for_txn_without_cloud_backup_dirty(tx_id)?;
-        self.mark_cloud_backup_dirty();
-
-        Ok(())
-    }
-
-    fn delete_labels_for_txn_without_cloud_backup_dirty(
-        &self,
-        tx_id: Arc<TxId>,
-    ) -> Result<(), LabelManagerError> {
-        let Some(txn_label) =
-            self.db.labels.get_txn_label_record(tx_id.0).map_err_str(LabelManagerError::Get)?
-        else {
-            return Ok(());
-        };
-
-        let txn_label_created_at = txn_label.timestamps.created_at;
-        let txn_label_text = txn_label.item.label.clone();
-
-        let input_records = self
-            .db
-            .labels
-            .txn_input_records_iter(tx_id.0)
-            .map_err_str(LabelManagerError::GetInputRecords)?;
-
-        let output_records = self
-            .db
-            .labels
-            .txn_output_records_iter(tx_id.0)
-            .map_err_str(LabelManagerError::GetOutputRecords)?;
-
-        // create list of labels to delete
-        let mut labels_to_delete = vec![Label::from(txn_label.item)];
-        let mut lock_only_records = Vec::new();
-
-        // only delete the input record if it hasn't changed since being created with the txn label
-        for record in input_records {
-            if txn_label_created_at == record.timestamps.created_at
-                && txn_label_created_at == record.timestamps.updated_at
-            {
-                labels_to_delete.push(Label::from(record.item));
-            }
+        if self.delete_labels_for_txn_without_cloud_backup_dirty(tx_id)? {
+            self.mark_cloud_backup_dirty();
         }
-
-        // only delete the output record if it still has the txn-label generated output label
-        for record in output_records {
-            if txn_label_created_at != record.timestamps.created_at
-                || !is_auto_output_label(txn_label_text.as_deref(), record.item.label.as_deref())
-            {
-                continue;
-            }
-
-            if record.item.spendable {
-                labels_to_delete.push(Label::from(record.item));
-            } else {
-                labels_to_delete.push(Label::from(record.item.clone()));
-
-                let mut item = record.item;
-                item.label = None;
-
-                let mut timestamps = record.timestamps;
-                timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
-                lock_only_records.push(Record::with_timestamps(Label::from(item), timestamps));
-            }
-        }
-
-        self.db
-            .labels
-            .delete_labels(labels_to_delete)
-            .map_err_str(LabelManagerError::DeleteLabels)?;
-
-        self.db
-            .labels
-            .insert_records(lock_only_records)
-            .map_err_str(LabelManagerError::SaveOutputLabels)?;
 
         Ok(())
     }
@@ -354,6 +282,79 @@ impl LabelManager {
         jsonl: &str,
     ) -> Result<(), LabelManagerError> {
         self.save_imported_labels(parse_labels(jsonl)?, false)
+    }
+
+    fn delete_labels_for_txn_without_cloud_backup_dirty(
+        &self,
+        tx_id: Arc<TxId>,
+    ) -> Result<bool, LabelManagerError> {
+        let Some(txn_label) =
+            self.db.labels.get_txn_label_record(tx_id.0).map_err_str(LabelManagerError::Get)?
+        else {
+            return Ok(false);
+        };
+
+        let txn_label_created_at = txn_label.timestamps.created_at;
+        let txn_label_text = txn_label.item.label.clone();
+
+        let input_records = self
+            .db
+            .labels
+            .txn_input_records_iter(tx_id.0)
+            .map_err_str(LabelManagerError::GetInputRecords)?;
+
+        let output_records = self
+            .db
+            .labels
+            .txn_output_records_iter(tx_id.0)
+            .map_err_str(LabelManagerError::GetOutputRecords)?;
+
+        // collect txn-generated labels to delete while preserving lock-only output records
+        let mut labels_to_delete = vec![Label::from(txn_label.item)];
+        let mut lock_only_records = Vec::new();
+
+        // only delete the input record if it hasn't changed since being created with the txn label
+        for record in input_records {
+            if txn_label_created_at == record.timestamps.created_at
+                && txn_label_created_at == record.timestamps.updated_at
+            {
+                labels_to_delete.push(Label::from(record.item));
+            }
+        }
+
+        // only delete output labels that were still generated from the txn label
+        for record in output_records {
+            if txn_label_created_at != record.timestamps.created_at
+                || !is_auto_output_label(txn_label_text.as_deref(), record.item.label.as_deref())
+            {
+                continue;
+            }
+
+            if record.item.spendable {
+                labels_to_delete.push(Label::from(record.item));
+            } else {
+                labels_to_delete.push(Label::from(record.item.clone()));
+
+                let mut item = record.item;
+                item.label = None;
+
+                let mut timestamps = record.timestamps;
+                timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+                lock_only_records.push(Record::with_timestamps(Label::from(item), timestamps));
+            }
+        }
+
+        self.db
+            .labels
+            .delete_labels(labels_to_delete)
+            .map_err_str(LabelManagerError::DeleteLabels)?;
+
+        self.db
+            .labels
+            .insert_records(lock_only_records)
+            .map_err_str(LabelManagerError::SaveOutputLabels)?;
+
+        Ok(true)
     }
 
     fn save_imported_labels(
@@ -726,7 +727,7 @@ mod tests {
         insert_or_update_auto_labels(&manager, &details, "first");
         set_output_spendable(&manager, outpoint, false);
 
-        manager
+        let changed = manager
             .delete_labels_for_txn_without_cloud_backup_dirty(Arc::new(tx_id))
             .expect("failed to delete labels");
 
@@ -738,9 +739,22 @@ mod tests {
             .expect("missing output")
             .item;
 
+        assert!(changed);
         assert_eq!(output.label, None);
         assert!(!output.spendable);
         assert!(manager.db.labels.get_txn_label_record(tx_id.0).unwrap().is_none());
+    }
+
+    #[test]
+    fn deleting_missing_transaction_label_reports_no_change() {
+        let (manager, _tmp) = test_manager();
+        let tx_id = TxId::preview_new();
+
+        let changed = manager
+            .delete_labels_for_txn_without_cloud_backup_dirty(Arc::new(tx_id))
+            .expect("missing txn delete should succeed");
+
+        assert!(!changed);
     }
 
     #[test]

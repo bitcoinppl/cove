@@ -91,16 +91,13 @@ fn amount_exceeds_spendable_balance(amount: Option<u64>, spendable_balance: Opti
         return false;
     }
 
-    let spendable = spendable_balance.unwrap_or(u64::MAX);
+    let spendable = spendable_balance.unwrap_or(0);
 
     amount > spendable
 }
 
-fn spendable_balance_for_validation(
-    unlocked_spendable_sats: Option<u64>,
-    fallback_trusted_spendable_sats: u64,
-) -> u64 {
-    unlocked_spendable_sats.unwrap_or(fallback_trusted_spendable_sats)
+fn spendable_balance_for_validation(unlocked_spendable_sats: Option<u64>) -> u64 {
+    unlocked_spendable_sats.unwrap_or(0)
 }
 
 #[uniffi::export(callback_interface)]
@@ -534,13 +531,7 @@ impl RustSendFlowManager {
 
         let spendable_balance = {
             let state = self.state.lock();
-            let fallback_trusted_spendable_sats =
-                state.wallet_balance.clone().unwrap_or_default().trusted_spendable().to_sat();
-
-            spendable_balance_for_validation(
-                state.unlocked_spendable_sats,
-                fallback_trusted_spendable_sats,
-            )
+            spendable_balance_for_validation(state.unlocked_spendable_sats)
         };
 
         if spendable_balance < amount {
@@ -2010,19 +2001,16 @@ impl RustSendFlowManager {
 
     async fn get_wallet_balance(self: &Arc<Self>) {
         let balance = self.wallet_manager.balance().await;
-        let unlocked_spendable_sats = self
-            .wallet_manager
-            .unlocked_spendable_balance()
-            .await
-            .map(|amount| amount.as_sats())
-            .unwrap_or_else(|error| {
-                warn!("failed to get unlocked spendable balance: {error}");
-                balance.spendable().as_sats()
-            });
+        let unlocked_spendable_sats =
+            self.wallet_manager.unlocked_spendable_balance().await.map(|amount| amount.as_sats());
+        if let Err(error) = &unlocked_spendable_sats {
+            error!("failed to get unlocked spendable balance: {error}");
+        }
+
         let wallet_balance = Arc::new(balance);
         let mut state = self.state.lock();
         state.wallet_balance = Some(wallet_balance);
-        state.unlocked_spendable_sats = Some(unlocked_spendable_sats);
+        state.unlocked_spendable_sats = unlocked_spendable_sats.ok();
     }
 }
 
@@ -2033,11 +2021,13 @@ mod tests {
         assert!(super::amount_exceeds_spendable_balance(Some(6_000), Some(5_000)));
         assert!(!super::amount_exceeds_spendable_balance(Some(5_000), Some(5_000)));
         assert!(!super::amount_exceeds_spendable_balance(Some(0), Some(0)));
+        assert!(super::amount_exceeds_spendable_balance(Some(1), None));
+        assert!(!super::amount_exceeds_spendable_balance(Some(0), None));
     }
 
     #[test]
-    fn validation_spendable_balance_prefers_unlocked_balance_over_wallet_fallback() {
-        assert_eq!(super::spendable_balance_for_validation(Some(5_000), 10_000), 5_000);
-        assert_eq!(super::spendable_balance_for_validation(None, 10_000), 10_000);
+    fn validation_spendable_balance_uses_zero_when_unlocked_balance_is_unknown() {
+        assert_eq!(super::spendable_balance_for_validation(Some(5_000)), 5_000);
+        assert_eq!(super::spendable_balance_for_validation(None), 0);
     }
 }

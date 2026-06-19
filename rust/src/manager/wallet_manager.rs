@@ -274,6 +274,9 @@ pub enum WalletManagerError {
     #[error("insufficient funds: {0}")]
     InsufficientFunds(String),
 
+    #[error("selected UTXOs include locked outputs")]
+    LockedOutputsSelected,
+
     #[error("Unable to get confirm details, {0}")]
     GetConfirmDetailsError(String),
 
@@ -994,7 +997,7 @@ impl RustWalletManager {
         tx_id: Arc<TxId>,
     ) -> Result<TransactionLockState, Error> {
         let tx_id = Arc::unwrap_or_clone(tx_id);
-        let state = call!(self.actor.transaction_lock_state(tx_id)).await.unwrap();
+        let state = call!(self.actor.transaction_lock_state(tx_id)).await.unwrap()?;
 
         Ok(state)
     }
@@ -1005,7 +1008,7 @@ impl RustWalletManager {
         tx_id: Arc<TxId>,
     ) -> Result<TransactionLockState, Error> {
         let tx_id = Arc::unwrap_or_clone(tx_id);
-        let state = call!(self.actor.transaction_lock_state(tx_id)).await.unwrap();
+        let state = call!(self.actor.transaction_lock_state(tx_id)).await.unwrap()?;
         let outpoints =
             call!(self.actor.current_wallet_unspent_outpoints_for_txn(tx_id)).await.unwrap();
         let Some((outpoints, spendable)) = transaction_lock_toggle_update(state, outpoints) else {
@@ -1014,9 +1017,9 @@ impl RustWalletManager {
 
         self.label_manager
             .set_output_spendability_for_outpoints(outpoints, spendable)
-            .map_err(|error| Error::OutputLabelsError(error.to_string()))?;
+            .map_err_str(Error::OutputLabelsError)?;
 
-        let state = call!(self.actor.transaction_lock_state(tx_id)).await.unwrap();
+        let state = call!(self.actor.transaction_lock_state(tx_id)).await.unwrap()?;
 
         Ok(state)
     }

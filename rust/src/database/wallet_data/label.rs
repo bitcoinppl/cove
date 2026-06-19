@@ -227,13 +227,15 @@ impl LabelsTable {
 
     pub fn locked_output_outpoints(&self) -> Result<HashSet<bitcoin::OutPoint>, Error> {
         let table = self.read_table(OUTPUT_TABLE)?;
-        let outpoints = table
-            .iter()?
-            .filter_map(Result::ok)
-            .map(|(_key, record)| record.value().item)
-            .filter(|record| !record.spendable)
-            .map(|record| record.ref_)
-            .collect();
+        let mut outpoints = HashSet::new();
+
+        for row in table.iter()? {
+            let (_key, record) = row?;
+            let record = record.value().item;
+            if !record.spendable {
+                outpoints.insert(record.ref_);
+            }
+        }
 
         Ok(outpoints)
     }

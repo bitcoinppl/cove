@@ -156,9 +156,6 @@ private enum CoinControlManagerError: LocalizedError {
             withAnimation { self.totalSelected = totalSelected }
         case let .updateUnit(unit):
             withAnimation { self.unit = unit }
-        case let .updateTotalSelectedAmount(amount):
-            updateSendFlowManager()
-            withAnimation { self.totalSelected = amount }
         }
     }
 

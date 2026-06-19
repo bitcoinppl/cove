@@ -357,12 +357,6 @@ impl Bip329Labels {
     }
 }
 
-impl From<bip329::Labels> for Bip329Labels {
-    fn from(labels: bip329::Labels) -> Self {
-        Self { parsed: bip329::ParsedLabels { labels, output_spendable: Vec::new() } }
-    }
-}
-
 impl From<cove_tap_card::TapSigner> for MultiFormat {
     fn from(tap_signer: cove_tap_card::TapSigner) -> Self {
         Self::from(Arc::new(tap_signer))

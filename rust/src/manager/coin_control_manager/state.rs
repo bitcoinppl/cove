@@ -7,6 +7,7 @@ use cove_types::{
     unit::BitcoinUnit,
     utxo::{Utxo, UtxoType},
 };
+use tracing::error;
 
 use crate::{database::wallet_data::WalletDataDb, wallet::metadata::WalletMetadata};
 
@@ -70,26 +71,51 @@ impl State {
     pub fn load_utxo_labels(&mut self) -> bool {
         let utxos = &mut self.utxos;
 
-        let Some(wallet_db) = WalletDataDb::new_or_existing(self.wallet_id.clone()).ok() else {
-            return false;
+        let wallet_db = match WalletDataDb::new_or_existing(self.wallet_id.clone()) {
+            Ok(wallet_db) => wallet_db,
+            Err(error) => {
+                let wallet_id = &self.wallet_id;
+                error!("failed to open wallet label database wallet_id={wallet_id}: {error}");
+                for utxo in utxos {
+                    utxo.spendable = false;
+                }
+
+                return self.prune_locked_selected_utxos();
+            }
         };
         let labels_db = wallet_db.labels;
 
         for utxo in utxos.iter_mut() {
             let outpoint = bitcoin::OutPoint::from(utxo.outpoint.as_ref());
-            let output_record = labels_db.get_output_record(outpoint).ok().flatten();
-            let label = labels_db
-                .get_txn_label_record(utxo.outpoint.txid)
-                .ok()
-                .flatten()
-                .map(|record| record.item.label)
-                .unwrap_or_else(|| {
-                    labels_db
-                        .get_address_record(utxo.address.as_unchecked())
-                        .ok()
-                        .flatten()
-                        .and_then(|record| record.item.label)
-                });
+            let output_record = match labels_db.get_output_record(outpoint) {
+                Ok(record) => record,
+                Err(error) => {
+                    error!("failed to load output lock state outpoint={outpoint}: {error}");
+                    utxo.spendable = false;
+                    utxo.label = None;
+                    continue;
+                }
+            };
+
+            let txn_label = match labels_db.get_txn_label_record(utxo.outpoint.txid) {
+                Ok(record) => record.and_then(|record| record.item.label),
+                Err(error) => {
+                    let txid = utxo.outpoint.txid;
+                    error!("failed to load transaction label txid={txid}: {error}");
+                    None
+                }
+            };
+
+            let label = txn_label.or_else(|| {
+                match labels_db.get_address_record(utxo.address.as_unchecked()) {
+                    Ok(record) => record.and_then(|record| record.item.label),
+                    Err(error) => {
+                        let address = utxo.address.as_unchecked();
+                        error!("failed to load address label address={address:?}: {error}");
+                        None
+                    }
+                }
+            });
 
             utxo.label = label;
             utxo.spendable = output_record.map(|record| record.item.spendable).unwrap_or(true);

@@ -53,7 +53,6 @@ pub enum CoinControlManagerReconcileMessage {
     UpdateUtxos(Vec<Utxo>),
     UpdateSearch(String),
     UpdateSelectedUtxos { utxos: Vec<Arc<OutPoint>>, total_value: Arc<Amount> },
-    UpdateTotalSelectedAmount(Arc<Amount>),
     UpdateUnit(BitcoinUnit),
 }
 

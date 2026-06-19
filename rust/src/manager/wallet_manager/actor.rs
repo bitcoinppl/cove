@@ -49,7 +49,7 @@ use bdk_wallet::{
 #[allow(deprecated)]
 use bdk_wallet::SignOptions;
 use bdk_wallet::{KeychainKind, LocalOutput, TxOrdering};
-use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
+use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid, constants::COINBASE_MATURITY};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_bdk_progressive_scan::ScanUpdate;
@@ -1150,14 +1150,15 @@ impl WalletActor {
         Produces::ok(self.current_wallet_unspent_outpoints_for_txid(tx_id.0))
     }
 
+    #[into_actor_result]
     pub async fn transaction_lock_state(
         &mut self,
         tx_id: TxId,
-    ) -> ActorResult<TransactionLockState> {
+    ) -> Result<TransactionLockState, Error> {
         let outpoints = self.current_wallet_unspent_outpoints_for_txid(tx_id.0);
         let state = self.lock_state_for_outpoints(&outpoints)?;
 
-        Produces::ok(state)
+        Ok(state)
     }
 
     pub async fn start_transaction_watcher(&mut self, tx_id: Txid) -> ActorResult<()> {
@@ -1286,6 +1287,8 @@ impl WalletActor {
         utxos: &[bitcoin::OutPoint],
     ) -> Result<Amount, Error> {
         let fee_rate = fee_rate.into();
+
+        // bdk manually selected UTXOs can bypass `unspendable`
         self.reject_locked_outpoints(utxos)?;
 
         let (utxo_total_amount, fee_estimate) = {
@@ -1412,15 +1415,24 @@ impl WalletActor {
         let spendable = self.wallet.balance().0.trusted_spendable();
         let locked_outpoints =
             self.db.labels.locked_output_outpoints().map_err_str(Error::OutputLabelsError)?;
+        let chain_tip_height = self.wallet.bdk.local_chain().tip().height();
         let locked_amount = self
             .wallet
             .bdk
             .list_unspent()
             .filter(|output| locked_outpoints.contains(&output.outpoint))
-            .filter(trusted_spendable_output)
+            .filter(|output| {
+                let is_coinbase = self
+                    .wallet
+                    .bdk
+                    .get_tx(output.outpoint.txid)
+                    .is_some_and(|tx| tx.tx_node.tx.is_coinbase());
+
+                trusted_spendable_output(output, is_coinbase, chain_tip_height)
+            })
             .fold(Amount::ZERO, |total, output| total + output.txout.value);
 
-        Ok(spendable.checked_sub(locked_amount).unwrap_or(Amount::ZERO))
+        Ok(unlocked_spendable_amount(spendable, locked_amount))
     }
 
     fn locked_output_outpoints(&self) -> Result<Vec<OutPoint>, Error> {
@@ -2353,10 +2365,23 @@ impl Drop for WalletActor {
     }
 }
 
-fn trusted_spendable_output(output: &LocalOutput) -> bool {
-    output.chain_position.is_confirmed()
-        || matches!(output.chain_position, ChainPosition::Unconfirmed { .. })
-            && output.keychain == KeychainKind::Internal
+fn trusted_spendable_output(
+    output: &LocalOutput,
+    is_coinbase: bool,
+    chain_tip_height: u32,
+) -> bool {
+    match output.chain_position {
+        ChainPosition::Confirmed { anchor, .. } if is_coinbase => {
+            let age = chain_tip_height.saturating_sub(anchor.block_id.height);
+            age + 1 >= COINBASE_MATURITY
+        }
+        ChainPosition::Confirmed { .. } => true,
+        ChainPosition::Unconfirmed { .. } => output.keychain == KeychainKind::Internal,
+    }
+}
+
+fn unlocked_spendable_amount(spendable: Amount, locked_amount: Amount) -> Amount {
+    spendable.checked_sub(locked_amount).unwrap_or(Amount::ZERO)
 }
 
 fn lock_state_for_outpoints(
@@ -2400,7 +2425,7 @@ fn reject_locked_selected_outpoints(
     locked_outpoints: &std::collections::HashSet<OutPoint>,
 ) -> Result<(), Error> {
     if selected_outpoints_include_locked(outpoints, locked_outpoints) {
-        return Err(Error::InsufficientFunds("selected UTXOs include locked outputs".into()));
+        return Err(Error::LockedOutputsSelected);
     }
 
     Ok(())
@@ -2466,7 +2491,10 @@ mod tests {
         reset_scan_lifecycle_state_for_address_type_switch, should_accept_wallet_scan_generation,
         should_skip_recent_scan, trusted_spendable_output, wallet_scan_progress_start,
     };
-    use crate::manager::wallet_manager::TransactionLockState;
+    use crate::{
+        database::wallet_data::test_support::new_test_wallet_data_db,
+        manager::wallet_manager::TransactionLockState, wallet::metadata::WalletId,
+    };
 
     fn local_output_with_outpoint(
         keychain: KeychainKind,
@@ -2535,9 +2563,33 @@ mod tests {
         let unconfirmed_internal = local_output(KeychainKind::Internal, unconfirmed_position());
         let unconfirmed_external = local_output(KeychainKind::External, unconfirmed_position());
 
-        assert!(trusted_spendable_output(&confirmed_external));
-        assert!(trusted_spendable_output(&unconfirmed_internal));
-        assert!(!trusted_spendable_output(&unconfirmed_external));
+        assert!(trusted_spendable_output(&confirmed_external, false, 1));
+        assert!(trusted_spendable_output(&unconfirmed_internal, false, 1));
+        assert!(!trusted_spendable_output(&unconfirmed_external, false, 1));
+    }
+
+    #[test]
+    fn trusted_spendable_output_excludes_immature_coinbase_outputs() {
+        let confirmed_external = local_output(KeychainKind::External, confirmed_position());
+
+        assert!(!trusted_spendable_output(&confirmed_external, true, 99));
+        assert!(trusted_spendable_output(&confirmed_external, true, 100));
+    }
+
+    #[test]
+    fn unlocked_spendable_amount_saturates_when_locked_amount_exceeds_spendable() {
+        assert_eq!(
+            super::unlocked_spendable_amount(Amount::from_sat(10_000), Amount::from_sat(4_000)),
+            Amount::from_sat(6_000)
+        );
+        assert_eq!(
+            super::unlocked_spendable_amount(Amount::from_sat(10_000), Amount::from_sat(10_000)),
+            Amount::ZERO
+        );
+        assert_eq!(
+            super::unlocked_spendable_amount(Amount::from_sat(10_000), Amount::from_sat(12_000)),
+            Amount::ZERO
+        );
     }
 
     #[test]
@@ -2659,7 +2711,44 @@ mod tests {
         let error = super::reject_locked_selected_outpoints(&selected, &locked)
             .expect_err("locked manual selection must be rejected");
 
-        assert!(matches!(error, super::Error::InsufficientFunds(_)));
+        assert!(matches!(error, super::Error::LockedOutputsSelected));
+    }
+
+    #[test]
+    fn db_locked_outputs_feed_builder_guards() {
+        let (mut wallet, initial_txid) = get_funded_wallet_wpkh();
+        let locked = OutPoint { txid: initial_txid, vout: 0 };
+        let unlocked = receive_output_in_latest_block(&mut wallet, Amount::from_sat(80_000));
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
+
+        wallet_db.labels.set_output_spendability(locked, false).expect("output is locked");
+
+        let locked_outpoints =
+            wallet_db.labels.locked_output_outpoints().expect("locked outpoints load");
+        let address = regtest_address();
+        let mut tx_builder = wallet.build_tx();
+        super::exclude_locked_outpoints(
+            &mut tx_builder,
+            locked_outpoints.iter().copied().collect(),
+        );
+        tx_builder.add_recipient(address.script_pubkey(), Amount::from_sat(40_000));
+        tx_builder.fee_absolute(Amount::from_sat(500));
+
+        let psbt = tx_builder.finish().expect("unlocked output can fund transaction");
+        let spent_outpoints = psbt
+            .unsigned_tx
+            .input
+            .iter()
+            .map(|input| input.previous_output)
+            .collect::<HashSet<_>>();
+
+        assert!(!spent_outpoints.contains(&locked));
+        assert!(spent_outpoints.contains(&unlocked));
+
+        let error = super::reject_locked_selected_outpoints(&[locked], &locked_outpoints)
+            .expect_err("manual locked output selection is rejected");
+
+        assert!(matches!(error, super::Error::LockedOutputsSelected));
     }
 
     #[test]
