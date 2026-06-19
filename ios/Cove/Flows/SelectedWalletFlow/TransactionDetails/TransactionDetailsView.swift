@@ -20,6 +20,7 @@ struct TransactionDetailsView: View {
     @State private var lockState: TransactionLockState? = nil
     @State private var isUpdatingLockState = false
     @State private var lockStateError: String? = nil
+    @State private var lockStateLoadError: String? = nil
 
     // public
     let id: WalletId
@@ -245,23 +246,17 @@ struct TransactionDetailsView: View {
 
     @ViewBuilder
     var TransactionLockControl: some View {
-        switch lockState {
-        case .some(.none), nil:
-            EmptyView()
-        case .some(.unlocked), .some(.locked), .some(.mixed):
+        if lockStateLoadError != nil {
             VStack(spacing: 8) {
-                Text(lockStateText)
+                Text("Unable to load lock state")
                     .font(.caption)
                     .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
 
                 Button(action: {
-                    if !isUpdatingLockState {
-                        isUpdatingLockState = true
-                        Task { await toggleTransactionLockState() }
-                    }
+                    Task { await refreshTransactionLockState() }
                 }) {
-                    Label(lockStateButtonText, systemImage: lockStateButtonIcon)
+                    Label("Retry", systemImage: "arrow.clockwise")
                         .font(.footnote)
                         .fontWeight(.semibold)
                         .padding(.vertical, 8)
@@ -271,9 +266,39 @@ struct TransactionDetailsView: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .disabled(isUpdatingLockState)
             }
             .padding(.top, 2)
+        } else {
+            switch lockState {
+            case .some(.none), nil:
+                EmptyView()
+            case .some(.unlocked), .some(.locked), .some(.mixed):
+                VStack(spacing: 8) {
+                    Text(lockStateText)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+
+                    Button(action: {
+                        if !isUpdatingLockState {
+                            isUpdatingLockState = true
+                            Task { await toggleTransactionLockState() }
+                        }
+                    }) {
+                        Label(lockStateButtonText, systemImage: lockStateButtonIcon)
+                            .font(.footnote)
+                            .fontWeight(.semibold)
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(Color.systemGray5)
+                            .foregroundStyle(.primary)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isUpdatingLockState)
+                }
+                .padding(.top, 2)
+            }
         }
     }
 
@@ -465,10 +490,14 @@ struct TransactionDetailsView: View {
             await MainActor.run {
                 withAnimation {
                     lockState = state
+                    lockStateLoadError = nil
                 }
             }
         } catch {
             Log.error("Error refreshing transaction lock state: \(error)")
+            await MainActor.run {
+                lockStateLoadError = error.localizedDescription
+            }
         }
     }
 

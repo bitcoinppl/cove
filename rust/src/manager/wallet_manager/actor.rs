@@ -2370,9 +2370,12 @@ fn trusted_spendable_output(
     is_coinbase: bool,
     chain_tip_height: u32,
 ) -> bool {
+    // keep this in lockstep with bdk's trusted_spendable balance categories
     match output.chain_position {
         ChainPosition::Confirmed { anchor, .. } if is_coinbase => {
             let age = chain_tip_height.saturating_sub(anchor.block_id.height);
+
+            // bdk counts the confirmation block itself in coinbase maturity
             age + 1 >= COINBASE_MATURITY
         }
         ChainPosition::Confirmed { .. } => true,
@@ -2469,7 +2472,7 @@ mod tests {
     use bdk_wallet::{
         KeychainKind, LocalOutput,
         chain::{ChainPosition, ConfirmationBlockTime},
-        test_utils::{get_funded_wallet_wpkh, receive_output_in_latest_block},
+        test_utils::{get_funded_wallet_wpkh, insert_checkpoint, receive_output_in_latest_block},
     };
     use bitcoin::{
         Address as BdkAddress, Amount, BlockHash, Network, OutPoint, ScriptBuf, TxOut, Txid,
@@ -2493,8 +2496,23 @@ mod tests {
     };
     use crate::{
         database::wallet_data::test_support::new_test_wallet_data_db,
-        manager::wallet_manager::TransactionLockState, wallet::metadata::WalletId,
+        manager::wallet_manager::TransactionLockState,
+        wallet::{Address, Wallet, metadata::WalletId},
     };
+
+    struct LockedActorFixture {
+        actor: super::WalletActor,
+        locked: OutPoint,
+        unlocked: OutPoint,
+        _tmp: tempfile::TempDir,
+    }
+
+    async fn actor_value<T>(result: act_zero::ActorResult<T>) -> T {
+        result
+            .expect("actor method should not fail")
+            .await
+            .expect("actor method should produce a value")
+    }
 
     fn local_output_with_outpoint(
         keychain: KeychainKind,
@@ -2542,6 +2560,34 @@ mod tests {
             .expect("address parses")
             .require_network(Network::Regtest)
             .expect("address is regtest")
+    }
+
+    fn locked_actor_fixture() -> LockedActorFixture {
+        crate::database::test_support::init_test_database();
+
+        let mut wallet = Wallet::preview_new_wallet();
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([2; 32]) },
+        );
+        let locked = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(76_000));
+        let unlocked = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(80_000));
+
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = super::WalletActor::new(wallet, sender).expect("actor is created");
+        let (db, tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+        db.labels.set_output_spendability(locked, false).expect("output is locked");
+        actor.db = db;
+
+        LockedActorFixture { actor, locked, unlocked, _tmp: tmp }
+    }
+
+    fn spent_outpoints(psbt: &bdk_wallet::bitcoin::Psbt) -> HashSet<OutPoint> {
+        psbt.unsigned_tx.input.iter().map(|input| input.previous_output).collect()
+    }
+
+    fn one_sat_vbyte_fee_rate() -> bitcoin::FeeRate {
+        bitcoin::FeeRate::from_sat_per_vb(1).expect("fee rate")
     }
 
     #[test]
@@ -2747,6 +2793,55 @@ mod tests {
 
         let error = super::reject_locked_selected_outpoints(&[locked], &locked_outpoints)
             .expect_err("manual locked output selection is rejected");
+
+        assert!(matches!(error, super::Error::LockedOutputsSelected));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn actor_build_tx_excludes_db_locked_outpoints_from_psbt_inputs() {
+        let fixture = locked_actor_fixture();
+        let mut actor = fixture.actor;
+
+        let result = actor
+            .build_tx(Amount::from_sat(40_000), Address::preview_new(), one_sat_vbyte_fee_rate())
+            .await;
+        let psbt = actor_value(result).await.expect("unlocked output funds transaction");
+        let spent_outpoints = spent_outpoints(&psbt);
+
+        assert!(!spent_outpoints.contains(&fixture.locked));
+        assert!(spent_outpoints.contains(&fixture.unlocked));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn actor_drain_tx_excludes_db_locked_outpoints_from_psbt_inputs() {
+        let fixture = locked_actor_fixture();
+        let mut actor = fixture.actor;
+
+        let result = actor
+            .build_ephemeral_drain_tx(Address::preview_new(), one_sat_vbyte_fee_rate().into())
+            .await;
+        let psbt = actor_value(result).await.expect("unlocked output funds drain transaction");
+        let spent_outpoints = spent_outpoints(&psbt);
+
+        assert!(!spent_outpoints.contains(&fixture.locked));
+        assert!(spent_outpoints.contains(&fixture.unlocked));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn actor_manual_tx_rejects_db_locked_outpoints() {
+        let fixture = locked_actor_fixture();
+        let mut actor = fixture.actor;
+
+        let result = actor
+            .build_manual_tx(
+                vec![fixture.locked],
+                Amount::from_sat(76_000),
+                Address::preview_new(),
+                one_sat_vbyte_fee_rate(),
+            )
+            .await;
+        let error =
+            actor_value(result).await.expect_err("locked manual output selection is rejected");
 
         assert!(matches!(error, super::Error::LockedOutputsSelected));
     }

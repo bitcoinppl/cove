@@ -112,6 +112,7 @@ fun UtxoListScreen(
         manager = manager,
         utxos = manager.utxos,
         selected = manager.selected,
+        lockStateLoadFailed = manager.lockStateLoadFailed,
         totalSelectedAmount = manager.totalSelectedAmount,
         searchQuery = manager.search,
         onBack = { app.popRoute() },
@@ -176,6 +177,7 @@ private fun UtxoListScreenContent(
     manager: org.bitcoinppl.cove.CoinControlManager,
     utxos: List<org.bitcoinppl.cove_core.types.Utxo>,
     selected: Set<ULong>,
+    lockStateLoadFailed: Boolean,
     totalSelectedAmount: String,
     searchQuery: String,
     onBack: () -> Unit,
@@ -376,6 +378,19 @@ private fun UtxoListScreenContent(
                             color = secondaryText,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
+
+                    if (lockStateLoadFailed) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.warning_utxo_lock_state_load_failed),
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 16.sp,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )
                     }

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use cove_util::result_ext::ResultExt as _;
 
 use crate::{
+    database::Database,
     database::{InsertOrUpdate, Record, record::Timestamps, wallet_data::WalletDataDb},
     manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
     multi_format::Bip329Labels,
@@ -54,6 +55,9 @@ pub enum LabelManagerError {
 
     #[error("Unable to save address labels: {0}")]
     SaveAddressLabels(String),
+
+    #[error("BIP329 labels can only be imported into the selected wallet")]
+    WalletNotSelected,
 }
 
 pub type Error = LabelManagerError;
@@ -197,7 +201,9 @@ impl LabelManager {
     #[uniffi::method(name = "importLabels")]
     pub fn _import_labels(&self, labels: Arc<Bip329Labels>) -> Result<(), LabelManagerError> {
         let labels = Arc::unwrap_or_clone(labels);
-        self.save_imported_labels(labels.parsed, true)
+        self.ensure_selected_wallet()?;
+
+        self.save_imported_labels(labels.0, true)
     }
 
     pub fn import(&self, jsonl: &str) -> Result<(), LabelManagerError> {
@@ -372,6 +378,18 @@ impl LabelManager {
 
     fn mark_cloud_backup_dirty(&self) {
         CLOUD_BACKUP_MANAGER.handle_wallet_backup_change(self.db.id.clone());
+    }
+
+    fn ensure_selected_wallet(&self) -> Result<(), LabelManagerError> {
+        let Some(selected_wallet) = Database::global().global_config.selected_wallet() else {
+            return Err(LabelManagerError::WalletNotSelected);
+        };
+
+        if selected_wallet != self.db.id {
+            return Err(LabelManagerError::WalletNotSelected);
+        }
+
+        Ok(())
     }
 
     fn update_labels_for_txn(
@@ -605,11 +623,15 @@ mod tests {
     use std::sync::Arc;
 
     use crate::{
-        database::wallet_data::test_support::new_test_wallet_data_db,
-        transaction::TransactionDetails, wallet::metadata::WalletId,
+        database::{Database, wallet_data::test_support::new_test_wallet_data_db},
+        multi_format::Bip329Labels,
+        transaction::TransactionDetails,
+        wallet::metadata::WalletId,
     };
 
     use super::*;
+
+    static SELECTED_WALLET_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn test_manager() -> (LabelManager, tempfile::TempDir) {
         let (db, tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
@@ -637,6 +659,15 @@ mod tests {
             .labels
             .insert_label_with_timestamps(record.item, record.timestamps)
             .expect("failed to update output record");
+    }
+
+    fn sample_bip329_labels() -> Arc<Bip329Labels> {
+        Arc::new(
+            Bip329Labels::try_from_str(
+                r#"{"type":"tx","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd","label":"imported"}"#,
+            )
+            .expect("labels parse"),
+        )
     }
 
     fn insert_or_update_auto_labels(
@@ -763,5 +794,52 @@ mod tests {
         assert!(is_auto_output_label(Some("original"), Some("original (change)")));
         assert!(!is_auto_output_label(Some("original"), Some("custom label")));
         assert!(!is_auto_output_label(Some("original"), None));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn parsed_label_import_rejects_unselected_wallet() {
+        let _guard = SELECTED_WALLET_TEST_LOCK.lock().expect("test lock is acquired");
+        cove_tokio::init();
+        crate::database::test_support::init_test_database();
+
+        let selected_wallet = WalletId::preview_new_random();
+        let (manager, _tmp) = test_manager();
+        Database::global()
+            .global_config
+            .select_wallet(selected_wallet)
+            .expect("selected wallet is set");
+
+        let error = manager
+            ._import_labels(sample_bip329_labels())
+            .expect_err("import into unselected wallet is rejected");
+
+        assert!(matches!(error, LabelManagerError::WalletNotSelected));
+        Database::global()
+            .global_config
+            .clear_selected_wallet()
+            .expect("selected wallet is cleared");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn parsed_label_import_accepts_selected_wallet() {
+        let _guard = SELECTED_WALLET_TEST_LOCK.lock().expect("test lock is acquired");
+        cove_tokio::init();
+        crate::database::test_support::init_test_database();
+
+        let (manager, _tmp) = test_manager();
+        Database::global()
+            .global_config
+            .select_wallet(manager.db.id.clone())
+            .expect("selected wallet is set");
+
+        manager
+            ._import_labels(sample_bip329_labels())
+            .expect("import into selected wallet succeeds");
+
+        assert!(manager.db.labels.number_of_labels().expect("labels count loads") > 0);
+        Database::global()
+            .global_config
+            .clear_selected_wallet()
+            .expect("selected wallet is cleared");
     }
 }

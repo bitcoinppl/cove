@@ -48,6 +48,9 @@ class CoinControlManager(
     var utxos by mutableStateOf<List<Utxo>>(emptyList())
         private set
 
+    var lockStateLoadFailed by mutableStateOf(false)
+        private set
+
     var unit by mutableStateOf(BitcoinUnit.SAT)
         private set
 
@@ -56,6 +59,7 @@ class CoinControlManager(
     init {
         logDebug("Initializing CoinControlManager")
         utxos = rust.utxos()
+        lockStateLoadFailed = rust.lockStateLoadFailed()
         unit = rust.unit()
         rust.listenForUpdates(this)
     }
@@ -86,13 +90,16 @@ class CoinControlManager(
     }
 
     /**
-     * get button arrow icon based on sort state
+     * get current button presentation based on sort state
      */
     fun buttonPresentation(key: CoinControlListSortKey): ButtonPresentation? {
         if (isClosed.get()) return null
         return rust.buttonPresentation(key)
     }
 
+    /**
+     * get button arrow icon based on sort state
+     */
     fun buttonArrow(key: CoinControlListSortKey): String? =
         when (val presentation = buttonPresentation(key)) {
             is ButtonPresentation.Selected -> {
@@ -162,6 +169,10 @@ class CoinControlManager(
 
             is CoinControlManagerReconcileMessage.UpdateUnit -> {
                 unit = message.v1
+            }
+
+            is CoinControlManagerReconcileMessage.UpdateLockStateLoadFailed -> {
+                lockStateLoadFailed = message.v1
             }
         }
     }

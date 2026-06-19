@@ -91,12 +91,15 @@
     <string name="label_delete_error">Failed to delete label: %s</string>
     <string name="label_update_error">Failed to update label: %s</string>
     <string name="btn_view_in_explorer">View in Explorer</string>
+    <string name="btn_retry">Retry</string>
     <string name="btn_show_details">Show Details</string>
     <string name="btn_hide_details">Hide Details</string>
     <string name="snackbar_transaction_lock_update_error">Unable to update transaction lock.</string>
+    <string name="snackbar_transaction_lock_load_error">Unable to load transaction lock state.</string>
     <string name="label_transaction_lock_state_locked">Locked</string>
     <string name="label_transaction_lock_state_mixed">Mixed</string>
     <string name="label_transaction_lock_state_unlocked">Unlocked</string>
+    <string name="label_transaction_lock_load_failed">Unable to load lock state</string>
     <string name="label_transaction_lock_updating">Updating...</string>
     <string name="btn_lock_transaction">Lock Transaction</string>
     <string name="btn_unlock_transaction">Unlock Transaction</string>
@@ -133,6 +136,7 @@
     <string name="continue_with_count">Continue (%1$d)</string>
     <string name="snackbar_utxo_locked_selection">Unlock this UTXO before selecting it.</string>
     <string name="snackbar_utxo_lock_update_error">Unable to update UTXO lock.</string>
+    <string name="warning_utxo_lock_state_load_failed">Unable to read UTXO lock state. UTXOs are shown locked for safety.</string>
     <string name="label_balance">Balance</string>
     <string name="label_enter_amount">Enter amount</string>
     <string name="label_how_much_to_send">How much would you like to send?</string>

@@ -28,6 +28,7 @@ pub struct CoinControlManagerState {
     pub sort: SortState,
     pub selected_utxos: Vec<Arc<OutPoint>>,
     pub search: String,
+    pub lock_state_load_failed: bool,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, uniffi::Object)]
@@ -48,6 +49,7 @@ impl State {
         let sort = SortState::default();
         let selected_utxos = vec![];
         let search = String::new();
+        let lock_state_load_failed = false;
 
         Self {
             wallet_id,
@@ -58,6 +60,7 @@ impl State {
             selected_utxos,
             search,
             filtered_utxos: FilteredUtxos::All,
+            lock_state_load_failed,
         }
     }
 
@@ -76,6 +79,10 @@ impl State {
             Err(error) => {
                 let wallet_id = &self.wallet_id;
                 error!("failed to open wallet label database wallet_id={wallet_id}: {error}");
+
+                self.lock_state_load_failed = true;
+
+                // fail closed so a lock-state read failure cannot make locked UTXOs selectable
                 for utxo in utxos {
                     utxo.spendable = false;
                 }
@@ -84,6 +91,7 @@ impl State {
             }
         };
         let labels_db = wallet_db.labels;
+        let mut lock_state_load_failed = false;
 
         for utxo in utxos.iter_mut() {
             let outpoint = bitcoin::OutPoint::from(utxo.outpoint.as_ref());
@@ -91,6 +99,9 @@ impl State {
                 Ok(record) => record,
                 Err(error) => {
                     error!("failed to load output lock state outpoint={outpoint}: {error}");
+                    lock_state_load_failed = true;
+
+                    // fail closed so a single read failure cannot make this output selectable
                     utxo.spendable = false;
                     utxo.label = None;
                     continue;
@@ -120,6 +131,8 @@ impl State {
             utxo.label = label;
             utxo.spendable = output_record.map(|record| record.item.spendable).unwrap_or(true);
         }
+
+        self.lock_state_load_failed = lock_state_load_failed;
 
         self.prune_locked_selected_utxos()
     }
@@ -286,7 +299,18 @@ impl CoinControlManagerState {
         let selected_utxos = vec![];
         let search = String::new();
         let filtered_utxos = FilteredUtxos::All;
+        let lock_state_load_failed = false;
 
-        Self { wallet_id, unit, network, utxos, filtered_utxos, sort, selected_utxos, search }
+        Self {
+            wallet_id,
+            unit,
+            network,
+            utxos,
+            filtered_utxos,
+            sort,
+            selected_utxos,
+            search,
+            lock_state_load_failed,
+        }
     }
 }

@@ -1471,6 +1471,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates(
     ): Short
+    external fun uniffi_cove_checksum_method_rustcoincontrolmanager_lock_state_load_failed(
+    ): Short
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_reload_labels(
     ): Short
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_selected_utxos(
@@ -2533,6 +2535,8 @@ internal object UniffiLib {
     ): RustBufferWalletId.ByValue
     external fun uniffi_cove_fn_method_rustcoincontrolmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_rustcoincontrolmanager_lock_state_load_failed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_method_rustcoincontrolmanager_reload_labels(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustcoincontrolmanager_selected_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -4217,6 +4221,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates() != 53354.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_lock_state_load_failed() != 30996.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_reload_labels() != 44692.toShort()) {
@@ -18690,6 +18697,8 @@ public interface RustCoinControlManagerInterface {
 
     fun `listenForUpdates`(`reconciler`: CoinControlManagerReconciler)
 
+    fun `lockStateLoadFailed`(): kotlin.Boolean
+
     suspend fun `reloadLabels`()
 
     fun `selectedUtxos`(): List<Utxo>
@@ -18858,6 +18867,19 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
 }
     }
 
+
+
+    override fun `lockStateLoadFailed`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_lock_state_load_failed(
+        it,
+        _status)
+}
+    }
+    )
+    }
 
 
 
@@ -38716,6 +38738,15 @@ sealed class CoinControlManagerReconcileMessage: Disposable  {
         companion object
     }
 
+    data class UpdateLockStateLoadFailed(
+        val v1: kotlin.Boolean) : CoinControlManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
 
 
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -38759,6 +38790,13 @@ sealed class CoinControlManagerReconcileMessage: Disposable  {
     )
 
             }
+            is CoinControlManagerReconcileMessage.UpdateLockStateLoadFailed -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
@@ -38792,6 +38830,9 @@ public object FfiConverterTypeCoinControlManagerReconcileMessage : FfiConverterR
                 )
             6 -> CoinControlManagerReconcileMessage.UpdateUnit(
                 FfiConverterTypeBitcoinUnit.read(buf),
+                )
+            7 -> CoinControlManagerReconcileMessage.UpdateLockStateLoadFailed(
+                FfiConverterBoolean.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -38840,6 +38881,13 @@ public object FfiConverterTypeCoinControlManagerReconcileMessage : FfiConverterR
                 + FfiConverterTypeBitcoinUnit.allocationSize(value.v1)
             )
         }
+        is CoinControlManagerReconcileMessage.UpdateLockStateLoadFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: CoinControlManagerReconcileMessage, buf: ByteBuffer) {
@@ -38872,6 +38920,11 @@ public object FfiConverterTypeCoinControlManagerReconcileMessage : FfiConverterR
             is CoinControlManagerReconcileMessage.UpdateUnit -> {
                 buf.putInt(6)
                 FfiConverterTypeBitcoinUnit.write(value.v1, buf)
+                Unit
+            }
+            is CoinControlManagerReconcileMessage.UpdateLockStateLoadFailed -> {
+                buf.putInt(7)
+                FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -42496,6 +42549,12 @@ sealed class LabelManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class WalletNotSelected(
+        ) : LabelManagerException() {
+        override val message
+            get() = ""
+    }
+
 
 
 
@@ -42554,6 +42613,7 @@ public object FfiConverterTypeLabelManagerError : FfiConverterRustBuffer<LabelMa
             10 -> LabelManagerException.SaveAddressLabels(
                 FfiConverterString.read(buf),
                 )
+            11 -> LabelManagerException.WalletNotSelected()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -42610,6 +42670,10 @@ public object FfiConverterTypeLabelManagerError : FfiConverterRustBuffer<LabelMa
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is LabelManagerException.WalletNotSelected -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -42663,6 +42727,10 @@ public object FfiConverterTypeLabelManagerError : FfiConverterRustBuffer<LabelMa
             is LabelManagerException.SaveAddressLabels -> {
                 buf.putInt(10)
                 FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is LabelManagerException.WalletNotSelected -> {
+                buf.putInt(11)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

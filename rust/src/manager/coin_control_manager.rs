@@ -54,6 +54,7 @@ pub enum CoinControlManagerReconcileMessage {
     UpdateSearch(String),
     UpdateSelectedUtxos { utxos: Vec<Arc<OutPoint>>, total_value: Arc<Amount> },
     UpdateUnit(BitcoinUnit),
+    UpdateLockStateLoadFailed(bool),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -87,8 +88,13 @@ impl RustCoinControlManager {
     }
 
     #[uniffi::method]
+    pub fn lock_state_load_failed(&self) -> bool {
+        self.state.lock().lock_state_load_failed
+    }
+
+    #[uniffi::method]
     pub async fn reload_labels(&self) {
-        let (utxos, selected_utxos, total_value) = {
+        let (utxos, selected_utxos, total_value, lock_state_load_failed) = {
             let mut state = self.state.lock();
 
             let old_utxos_hash = {
@@ -96,10 +102,12 @@ impl RustCoinControlManager {
                 state.utxos.hash(&mut hasher);
                 hasher.finish()
             };
+            let old_lock_state_load_failed = state.lock_state_load_failed;
 
             let selection_changed = state.load_utxo_labels();
 
             let new_utxos = state.utxos.clone();
+            let lock_state_load_failed = state.lock_state_load_failed;
 
             let new_utxos_hash = {
                 let mut hasher = DefaultHasher::new();
@@ -107,19 +115,25 @@ impl RustCoinControlManager {
                 hasher.finish()
             };
 
-            if old_utxos_hash == new_utxos_hash && !selection_changed {
+            if old_utxos_hash == new_utxos_hash
+                && !selection_changed
+                && old_lock_state_load_failed == lock_state_load_failed
+            {
                 return;
             }
 
             let selected_utxos = state.selected_utxos.clone();
             let total_value = total_value_of_spendable_utxos(&new_utxos, &selected_utxos).into();
 
-            (new_utxos, selected_utxos, total_value)
+            (new_utxos, selected_utxos, total_value, lock_state_load_failed)
         };
 
         self.reconciler.send_async(Message::UpdateUtxos(utxos)).await;
         self.reconciler
             .send_async(Message::UpdateSelectedUtxos { utxos: selected_utxos, total_value })
+            .await;
+        self.reconciler
+            .send_async(Message::UpdateLockStateLoadFailed(lock_state_load_failed))
             .await;
     }
 
@@ -147,12 +161,15 @@ impl RustCoinControlManager {
 
     #[uniffi::method]
     pub fn selected_utxos(&self) -> Vec<Utxo> {
+        let state = self.state.lock();
         let selected_utxos_ids: HashSet<Arc<OutPoint>> =
-            self.state.lock().selected_utxos.iter().cloned().collect();
+            state.selected_utxos.iter().cloned().collect();
 
-        self.utxos()
-            .into_iter()
+        state
+            .utxos
+            .iter()
             .filter(|utxo| utxo.spendable && selected_utxos_ids.contains(&utxo.outpoint))
+            .cloned()
             .collect()
     }
 
@@ -248,7 +265,8 @@ impl RustCoinControlManager {
     }
 
     pub fn total_value_of_utxos(&self, selected_utxo_ids: &[Arc<OutPoint>]) -> Amount {
-        total_value_of_spendable_utxos(&self.utxos(), selected_utxo_ids)
+        let state = self.state.lock();
+        total_value_of_spendable_utxos(&state.utxos, selected_utxo_ids)
     }
 
     fn sort_button_pressed(self: Arc<Self>, sort_button_pressed: CoinControlListSortKey) {
@@ -313,19 +331,25 @@ impl RustCoinControlManager {
     }
 
     fn notify_selected_utxos_changed(self: Arc<Self>, selected_utxos: Vec<Arc<OutPoint>>) {
-        let spendable_outpoints = self
-            .utxos()
-            .into_iter()
-            .filter(|utxo| utxo.spendable)
-            .map(|utxo| utxo.outpoint)
-            .collect::<HashSet<_>>();
-        let selected_utxos = selected_utxos
-            .into_iter()
-            .filter(|outpoint| spendable_outpoints.contains(outpoint))
-            .collect::<Vec<_>>();
-        let total_value = self.total_value_of_utxos(&selected_utxos).into();
+        let (selected_utxos, total_value) = {
+            let mut state = self.state.lock();
+            let spendable_outpoints = state
+                .utxos
+                .iter()
+                .filter(|utxo| utxo.spendable)
+                .map(|utxo| utxo.outpoint.clone())
+                .collect::<HashSet<_>>();
+            let selected_utxos = selected_utxos
+                .into_iter()
+                .filter(|outpoint| spendable_outpoints.contains(outpoint))
+                .collect::<Vec<_>>();
+            let total_value = total_value_of_spendable_utxos(&state.utxos, &selected_utxos).into();
 
-        self.state.lock().selected_utxos = selected_utxos.clone();
+            state.selected_utxos = selected_utxos.clone();
+
+            (selected_utxos, total_value)
+        };
+
         self.reconciler.send(Message::UpdateSelectedUtxos { utxos: selected_utxos, total_value });
     }
 
@@ -485,6 +509,33 @@ mod tests {
         manager.clone().notify_selected_utxos_changed(vec![locked, unlocked.clone()]);
 
         assert_eq!(manager.state.lock().selected_utxos, vec![unlocked]);
+    }
+
+    #[test]
+    fn direct_selection_preserves_selected_utxos_outside_active_search() {
+        let manager = Arc::new(RustCoinControlManager::preview_new(2, 0));
+        let hidden = manager.state.lock().utxos[0].outpoint.clone();
+        let visible = manager.state.lock().utxos[1].outpoint.clone();
+        let expected_total = {
+            let mut state = manager.state.lock();
+            state.utxos[0].label = Some("outside active search".to_string());
+            state.utxos[1].label = Some("needle".to_string());
+            state.utxos[0].amount.as_sats() + state.utxos[1].amount.as_sats()
+        };
+
+        manager.clone().notify_search_changed("needle".to_string());
+
+        let visible_outpoints =
+            manager.utxos().into_iter().map(|utxo| utxo.outpoint).collect::<Vec<_>>();
+        assert_eq!(visible_outpoints, vec![visible.clone()]);
+
+        manager.clone().notify_selected_utxos_changed(vec![hidden.clone(), visible.clone()]);
+
+        let selected_utxos = manager.state.lock().selected_utxos.clone();
+
+        assert_eq!(selected_utxos, vec![hidden, visible]);
+        assert_eq!(manager.total_value_of_utxos(&selected_utxos).as_sats(), expected_total);
+        assert_eq!(manager.selected_utxos().len(), 2);
     }
 
     #[test]

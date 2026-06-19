@@ -15,12 +15,18 @@ private enum CoinControlManagerError: LocalizedError {
     typealias Message = CoinControlManagerReconcileMessage
     typealias Action = CoinControlManagerAction
 
+    private struct RustState {
+        var rust: RustCoinControlManager?
+        var isClosed = false
+    }
+
     private let logger = Log(id: "CoinControlManager")
     @ObservationIgnored
-    private var rust: RustCoinControlManager?
-    let id: WalletId
+    private let rustState = OSAllocatedUnfairLock(initialState: RustState())
     @ObservationIgnored
-    private let closeState = OSAllocatedUnfairLock(initialState: false)
+    private let rustBridge = DispatchQueue(label: "cove.CoinControlManager.rustbridge", qos: .userInitiated)
+
+    let id: WalletId
 
     private(set) var sort: CoinControlListSort? = .some(.date(.descending))
 
@@ -28,9 +34,14 @@ private enum CoinControlManagerError: LocalizedError {
     var totalSelected = Amount.fromSat(sats: 0)
     var selected: Set<Utxo.ID> = []
     var utxos: [Utxo]
+    var lockStateLoadFailed: Bool
     var unit: Unit = .sat
 
     private var updateSendFlowManagerTask: Task<Void, Never>? = nil
+
+    private var rust: RustCoinControlManager? {
+        rustState.withLock { $0.rust }
+    }
 
     @ObservationIgnored
     var searchBinding: Binding<String> {
@@ -48,8 +59,11 @@ private enum CoinControlManagerError: LocalizedError {
         Binding(
             get: { self.selected },
             set: {
-                let spendableIds = Set(self.utxos.filter(\.spendable).map(\.id))
-                let selected = $0.intersection(spendableIds)
+                let visibleIds = Set(self.utxos.map(\.id))
+                let visibleSpendableIds = Set(self.utxos.filter(\.spendable).map(\.id))
+                let selectedOutsideVisibleSearch = self.selected.subtracting(visibleIds)
+                let selected = selectedOutsideVisibleSearch.union($0.intersection(visibleSpendableIds))
+
                 self.selected = selected
                 self.dispatch(.notifySelectedUtxosChanged(Array(selected)))
             }
@@ -57,12 +71,13 @@ private enum CoinControlManagerError: LocalizedError {
     }
 
     public init(_ rust: RustCoinControlManager) {
-        self.rust = rust
         self.id = rust.id()
 
         self.utxos = rust.utxos()
+        self.lockStateLoadFailed = rust.lockStateLoadFailed()
         self.unit = rust.unit()
 
+        rustState.withLock { $0.rust = rust }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -71,19 +86,21 @@ private enum CoinControlManagerError: LocalizedError {
     }
 
     func close() {
-        guard markClosedIfNeeded() else { return }
+        guard takeRustForClose() != nil else { return }
 
         logger.debug("Closing CoinControlManager")
         updateSendFlowManagerTask?.cancel()
         updateSendFlowManagerTask = nil
-        rust = nil
     }
 
-    private func markClosedIfNeeded() -> Bool {
-        closeState.withLock { isClosed in
-            guard !isClosed else { return false }
-            isClosed = true
-            return true
+    private func takeRustForClose() -> RustCoinControlManager? {
+        rustState.withLock { state in
+            guard !state.isClosed else { return nil }
+
+            state.isClosed = true
+            let rust = state.rust
+            state.rust = nil
+            return rust
         }
     }
 
@@ -125,8 +142,7 @@ private enum CoinControlManagerError: LocalizedError {
         self.updateSendFlowManagerTask?.cancel()
         self.updateSendFlowManagerTask = nil
 
-        let selectedUtxos = self.utxos.filter { $0.spendable && self.selected.contains($0.id) }
-        sfm.dispatch(.setCoinControlMode(selectedUtxos))
+        sfm.dispatch(.setCoinControlMode(selectedUtxos()))
     }
 
     private func updateSendFlowManager() {
@@ -135,8 +151,7 @@ private enum CoinControlManagerError: LocalizedError {
         self.updateSendFlowManagerTask = Task {
             try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }
-            let selectedUtxos = self.utxos.filter { $0.spendable && self.selected.contains($0.id) }
-            sfm.dispatch(.setCoinControlMode(selectedUtxos))
+            sfm.dispatch(.setCoinControlMode(selectedUtxos()))
         }
     }
 
@@ -156,6 +171,8 @@ private enum CoinControlManagerError: LocalizedError {
             withAnimation { self.totalSelected = totalSelected }
         case let .updateUnit(unit):
             withAnimation { self.unit = unit }
+        case let .updateLockStateLoadFailed(failed):
+            withAnimation { self.lockStateLoadFailed = failed }
         }
     }
 
@@ -183,8 +200,6 @@ private enum CoinControlManagerError: LocalizedError {
 
         try await rust.setUtxoSpendability(outpoint: outpoint, spendable: spendable)
     }
-
-    private let rustBridge = DispatchQueue(label: "cove.CoinControlManager.rustbridge", qos: .userInitiated)
 
     func reconcile(message: Message) {
         DispatchQueue.main.async { [weak self] in

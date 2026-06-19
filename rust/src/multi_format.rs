@@ -345,15 +345,13 @@ impl StringOrData {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
-pub struct Bip329Labels {
-    pub(crate) parsed: bip329::ParsedLabels,
-}
+pub struct Bip329Labels(pub(crate) bip329::ParsedLabels);
 
 impl Bip329Labels {
     pub(crate) fn try_from_str(string: &str) -> Result<Self, bip329::error::ParseError> {
         let parsed = bip329::Labels::try_from_str_with_metadata(string)?;
 
-        Ok(Self { parsed })
+        Ok(Self(parsed))
     }
 }
 

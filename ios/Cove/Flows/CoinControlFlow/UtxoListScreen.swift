@@ -19,6 +19,7 @@ struct UtxoListScreen: View {
 
     @FocusState private var isFocused: Bool
     @State private var showLockedSelectionAlert = false
+    @State private var utxoLockUpdateError: String? = nil
 
     func goToTransactionDetails(_ utxo: Utxo) {
         let txId = utxo.id.txid()
@@ -65,6 +66,9 @@ struct UtxoListScreen: View {
                                     )
                                 } catch {
                                     Log.error("Unable to update UTXO spendability: \(error)")
+                                    await MainActor.run {
+                                        utxoLockUpdateError = error.localizedDescription
+                                    }
                                 }
                             }
                         }) {
@@ -179,6 +183,15 @@ struct UtxoListScreen: View {
                 // ─ UTXO list ─
                 VStack(spacing: 8) {
                     UtxoList()
+                    if manager.lockStateLoadFailed {
+                        Text("Unable to read UTXO lock state. UTXOs are shown locked for safety.")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+
                     Text(manager.totalSelectedAmount)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -278,6 +291,16 @@ struct UtxoListScreen: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Unlock this UTXO before selecting it.")
+        }
+        .alert("Unable to Update UTXO Lock", isPresented: Binding(
+            get: { utxoLockUpdateError != nil },
+            set: { if !$0 { utxoLockUpdateError = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                utxoLockUpdateError = nil
+            }
+        } message: {
+            Text(utxoLockUpdateError ?? "")
         }
         .environment(manager)
         .task { await manager.reloadLabels() }

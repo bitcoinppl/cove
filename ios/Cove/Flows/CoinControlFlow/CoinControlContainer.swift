@@ -59,13 +59,15 @@ private struct CoinControlLoadedView: View {
         .task(id: ObjectIdentifier(walletManager)) {
             await loadManager()
         }
-        .onDisappear {
-            closeManager()
-        }
     }
 
     @MainActor
     private func loadManager() async {
+        if let manager, manager.id == walletManager.id {
+            app.setCoinControlManager(manager)
+            return
+        }
+
         closeManager()
 
         do {

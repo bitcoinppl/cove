@@ -64,8 +64,9 @@ class ScanManager private constructor() {
     }
 
     private fun importLabels(labels: Bip329Labels) {
+        val manager = app.walletManager
         val selectedWallet = Database().globalConfig().selectedWallet()
-        if (selectedWallet == null) {
+        if (manager == null || selectedWallet != manager.id) {
             app.alertState =
                 TaggedItem(
                     AppAlertState.InvalidFileFormat(
@@ -76,8 +77,7 @@ class ScanManager private constructor() {
         }
 
         try {
-            LabelManager(id = selectedWallet).use { it.importLabels(labels) }
-            app.reconcileAfterLabelImport(selectedWallet)
+            manager.importLabels(labels)
             app.alertState = TaggedItem(AppAlertState.ImportedLabelsSuccessfully)
         } catch (e: Exception) {
             Log.e(tag, "Failed to import labels", e)

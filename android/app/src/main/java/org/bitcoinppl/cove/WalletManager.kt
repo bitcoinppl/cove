@@ -316,9 +316,20 @@ class WalletManager :
     }
 
     fun reconcileAfterLabelImport() {
-        transactionDetailsCache.clear()
         mainScope.launch {
+            reconcileAfterLabelImportAndWait()
+        }
+    }
+
+    suspend fun reconcileAfterLabelImportAndWait(): Boolean {
+        transactionDetailsCache.clear()
+
+        return try {
             rust.getTransactions()
+            true
+        } catch (e: Exception) {
+            Log.e(tag, "failed to refresh transactions after label import", e)
+            false
         }
     }
 

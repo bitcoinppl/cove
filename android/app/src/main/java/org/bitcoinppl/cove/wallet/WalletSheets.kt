@@ -284,9 +284,17 @@ internal fun WalletSheetsHost(
                 onDismiss = onDismissNfcScanner,
                 onSuccess = {
                     onDismissNfcScanner()
-                    AppManager.getInstance().reconcileAfterLabelImport(manager.id)
                     scope.launch {
-                        snackbarHostState.showSnackbar("Labels imported successfully")
+                        val refreshed =
+                            AppManager.getInstance().reconcileAfterLabelImportAndWait(manager.id)
+                        val message =
+                            if (refreshed) {
+                                "Labels imported successfully"
+                            } else {
+                                "Labels imported successfully, but transaction list may need manual refresh"
+                            }
+
+                        snackbarHostState.showSnackbar(message)
                     }
                 },
                 onError = { errorMsg ->

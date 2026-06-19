@@ -7700,6 +7700,8 @@ public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
 
     func listenForUpdates(reconciler: CoinControlManagerReconciler)
 
+    func lockStateLoadFailed()  -> Bool
+
     func reloadLabels() async
 
     func selectedUtxos()  -> [Utxo]
@@ -7812,6 +7814,15 @@ open func listenForUpdates(reconciler: CoinControlManagerReconciler)  {try! rust
         FfiConverterCallbackInterfaceCoinControlManagerReconciler_lower(reconciler),uniffiCallStatus
     )
 }
+}
+
+open func lockStateLoadFailed() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustcoincontrolmanager_lock_state_load_failed(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
 }
 
 open func reloadLabels()async   {
@@ -22692,6 +22703,8 @@ public enum CoinControlManagerReconcileMessage {
     )
     case updateUnit(BitcoinUnit
     )
+    case updateLockStateLoadFailed(Bool
+    )
 
 
 
@@ -22730,6 +22743,9 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         case 6: return .updateUnit(try FfiConverterTypeBitcoinUnit.read(from: &buf)
         )
 
+        case 7: return .updateLockStateLoadFailed(try FfiConverterBool.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -22766,6 +22782,11 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         case let .updateUnit(v1):
             writeInt(&buf, Int32(6))
             FfiConverterTypeBitcoinUnit.write(v1, into: &buf)
+
+
+        case let .updateLockStateLoadFailed(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterBool.write(v1, into: &buf)
 
         }
     }
@@ -25954,6 +25975,7 @@ enum LabelManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     )
     case SaveAddressLabels(String
     )
+    case WalletNotSelected
 
 
 
@@ -26024,6 +26046,7 @@ public struct FfiConverterTypeLabelManagerError: FfiConverterRustBuffer {
         case 10: return .SaveAddressLabels(
             try FfiConverterString.read(from: &buf)
             )
+        case 11: return .WalletNotSelected
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -26084,6 +26107,10 @@ public struct FfiConverterTypeLabelManagerError: FfiConverterRustBuffer {
         case let .SaveAddressLabels(v1):
             writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
+
+
+        case .WalletNotSelected:
+            writeInt(&buf, Int32(11))
 
         }
     }
@@ -40300,6 +40327,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates() != 53354) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_lock_state_load_failed() != 30996) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_reload_labels() != 44692) {

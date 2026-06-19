@@ -91,12 +91,14 @@ fn amount_exceeds_spendable_balance(amount: Option<u64>, spendable_balance: Opti
         return false;
     }
 
+    // fail closed when the unlocked balance cannot be loaded
     let spendable = spendable_balance.unwrap_or(0);
 
     amount > spendable
 }
 
 fn spendable_balance_for_validation(unlocked_spendable_sats: Option<u64>) -> u64 {
+    // fail closed so amount validation cannot overspend locked or unknown UTXOs
     unlocked_spendable_sats.unwrap_or(0)
 }
 

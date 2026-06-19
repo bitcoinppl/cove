@@ -189,21 +189,27 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun reconcileAfterLabelImport(walletId: WalletId) {
-        walletManager
-            ?.takeIf { it.id == walletId }
-            ?.reconcileAfterLabelImport()
+        mainScope.launch {
+            reconcileAfterLabelImportAndWait(walletId)
+        }
+    }
+
+    suspend fun reconcileAfterLabelImportAndWait(walletId: WalletId): Boolean {
+        val refreshed =
+            walletManager
+                ?.takeIf { it.id == walletId }
+                ?.reconcileAfterLabelImportAndWait()
+                ?: false
 
         coinControlManager
             ?.takeIf { it.id == walletId }
-            ?.let { manager ->
-                mainScope.launch {
-                    manager.reloadLabels()
-                }
-            }
+            ?.reloadLabels()
 
         sendFlowManager
             ?.takeIf { it.id == walletId }
             ?.reconcileAfterLabelImport()
+
+        return refreshed
     }
 
     fun clearWalletManager() {

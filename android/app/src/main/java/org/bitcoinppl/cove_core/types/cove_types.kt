@@ -9427,6 +9427,9 @@ data class Utxo (
     ,
     var `type`: UtxoType
     ,
+    /**
+     * Populated by coin-control label loading; display cache only, not authoritative for spending
+     */
     var `spendable`: kotlin.Boolean
 
 ): Disposable{
