@@ -4691,11 +4691,17 @@ public struct Utxo: Equatable, Hashable {
     public var derivationIndex: UInt32
     public var blockHeight: UInt32
     public var type: UtxoType
+    /**
+     * Cached lock state for display and selection filtering; transaction building rechecks the labels DB
+     */
     public var spendable: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(outpoint: OutPoint, label: String?, datetime: UInt64, amount: Amount, address: Address, derivationIndex: UInt32, blockHeight: UInt32, type: UtxoType, spendable: Bool) {
+    public init(outpoint: OutPoint, label: String?, datetime: UInt64, amount: Amount, address: Address, derivationIndex: UInt32, blockHeight: UInt32, type: UtxoType,
+        /**
+         * Cached lock state for display and selection filtering; transaction building rechecks the labels DB
+         */spendable: Bool) {
         self.outpoint = outpoint
         self.label = label
         self.datetime = datetime
