@@ -1,5 +1,6 @@
 use bdk_wallet::bitcoin::bip32::{ChildNumber, Xpub};
 use pubport::descriptor;
+use tracing::warn;
 
 pub(crate) trait XpubExt {
     fn account_index(&self) -> u32;
@@ -126,6 +127,7 @@ impl From<pubport::Error> for XpubError {
             pubport::Error::MissingJsonDescriptorData => Self::JsonNoDecriptor,
             pubport::Error::InvalidXpub(error) => Self::InvalidXpub(error.to_string()),
             pubport::Error::UnsupportedFormat(error) => {
+                warn!("unsupported wallet export format: {error:?}");
                 Self::InvalidDescriptor(DescriptorError::InvalidDescriptor(error.to_string()))
             }
         }

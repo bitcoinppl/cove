@@ -775,6 +775,10 @@ fn receive_prioritized_full_scan_request(
     builder.build()
 }
 
+/// Selects the JSON descriptor set that becomes the imported wallet
+///
+/// A JSON export can carry several standard account types. Cove imports the most modern
+/// supported primary wallet and lets discovery scan any supported older alternates separately
 fn preferred_json_descriptors(
     json: &pubport::formats::Json,
 ) -> Result<(pubport::descriptor::Descriptors, WalletAddressType), WalletError> {
@@ -800,6 +804,10 @@ fn xpub_from_descriptors(descriptors: &Descriptors) -> Result<Xpub, WalletError>
     )))
 }
 
+/// Returns whether a JSON import needs alternate address-type discovery
+///
+/// Discovery only starts when the export has a supported alternate that differs from the
+/// primary wallet, because the primary descriptor is synced by the main wallet
 fn should_start_json_discovery(
     json: &pubport::formats::Json,
     address_type: WalletAddressType,
@@ -945,6 +953,14 @@ mod tests {
         )
     }
 
+    fn assert_missing_supported_xpub(error: WalletError) {
+        let WalletError::ParseXpubError(xpub::XpubError::MissingXpub(message)) = error else {
+            panic!("expected missing xpub error");
+        };
+
+        assert_eq!(message, "No supported BIP44, BIP49, or BIP84 xpub found");
+    }
+
     #[test]
     fn preferred_json_descriptors_uses_native_segwit_when_present() {
         let json = descriptor_json(
@@ -980,6 +996,31 @@ mod tests {
     }
 
     #[test]
+    fn preferred_json_descriptors_errors_without_supported_xpub() {
+        let json = descriptor_json(None, None, None);
+        let error = preferred_json_descriptors(&json).unwrap_err();
+
+        assert_missing_supported_xpub(error);
+    }
+
+    #[test]
+    fn preferred_json_descriptors_rejects_bip86_only_export() {
+        let json = json_from_export(
+            r#"{
+  "xfp": "817e7be0",
+  "bip86": {
+    "deriv": "m/86'/0'/0'",
+    "xpub": "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM",
+    "first": "bc1p5cyxnuxmeuwuvkwfem96l9z7k3d5en0fhzc3wkvsgq4wv5q3xpqsv0gz6u"
+  }
+}"#,
+        );
+        let error = preferred_json_descriptors(&json).unwrap_err();
+
+        assert_missing_supported_xpub(error);
+    }
+
+    #[test]
     fn bare_ypub_import_selects_wrapped_segwit_descriptor() {
         let json = json_from_export(BIP49_YPUB);
 
@@ -1009,6 +1050,19 @@ mod tests {
             xpub_from_descriptors(&descriptors).unwrap().to_string(),
             "xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm"
         );
+    }
+
+    #[test]
+    fn converted_json_import_material_matches_pubport_for_primary_descriptors() {
+        for pubport_descriptors in [bip84_descriptors(), bip44_descriptors()] {
+            let descriptors: Descriptors = pubport_descriptors.clone().into();
+
+            assert_eq!(descriptors.fingerprint(), pubport_descriptors.fingerprint());
+            assert_eq!(
+                xpub_from_descriptors(&descriptors).unwrap(),
+                pubport_descriptors.xpub().unwrap()
+            );
+        }
     }
 
     #[test]
