@@ -150,6 +150,30 @@ fun TransactionDetailsScreen(
         }
     }
 
+    fun retryTransactionLockState() {
+        scope.launch {
+            refreshTransactionLockState(showSnackbar = true)
+        }
+    }
+
+    fun toggleTransactionLockState() {
+        if (isUpdatingLockState) {
+            return
+        }
+
+        isUpdatingLockState = true
+        scope.launch {
+            try {
+                lockState = manager.toggleTransactionLockState(txId)
+            } catch (e: Exception) {
+                android.util.Log.e("TransactionDetails", "error toggling transaction lock state", e)
+                snackbarHostState.showSnackbar(transactionLockUpdateErrorMessage)
+            } finally {
+                isUpdatingLockState = false
+            }
+        }
+    }
+
     // immediately fetch fresh transaction details on screen load
     LaunchedEffect(manager, txId, refreshOnAppear) {
         if (!refreshOnAppear) return@LaunchedEffect
@@ -538,39 +562,14 @@ fun TransactionDetailsScreen(
                         showStroke = capsuleConfig.third,
                     )
 
-                    if (lockStateLoadFailed) {
-                        Spacer(Modifier.height(12.dp))
-                        TransactionLockLoadError(
-                            color = sub,
-                            onRetry = {
-                                scope.launch {
-                                    refreshTransactionLockState(showSnackbar = true)
-                                }
-                            },
-                        )
-                    } else if (lockState != null && lockState != TransactionLockState.NONE) {
-                        Spacer(Modifier.height(12.dp))
-                        TransactionLockAction(
-                            state = lockState!!,
-                            updating = isUpdatingLockState,
-                            color = sub,
-                            onToggle = {
-                                if (!isUpdatingLockState) {
-                                    isUpdatingLockState = true
-                                    scope.launch {
-                                        try {
-                                            lockState = manager.toggleTransactionLockState(txId)
-                                        } catch (e: Exception) {
-                                            android.util.Log.e("TransactionDetails", "error toggling transaction lock state", e)
-                                            snackbarHostState.showSnackbar(transactionLockUpdateErrorMessage)
-                                        } finally {
-                                            isUpdatingLockState = false
-                                        }
-                                    }
-                                }
-                            },
-                        )
-                    }
+                    TransactionLockControls(
+                        state = lockState,
+                        loadFailed = lockStateLoadFailed,
+                        updating = isUpdatingLockState,
+                        color = sub,
+                        onRetry = ::retryTransactionLockState,
+                        onToggle = ::toggleTransactionLockState,
+                    )
 
                     Spacer(Modifier.height(32.dp))
 
@@ -663,6 +662,38 @@ fun TransactionDetailsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TransactionLockControls(
+    state: TransactionLockState?,
+    loadFailed: Boolean,
+    updating: Boolean,
+    color: Color,
+    onRetry: () -> Unit,
+    onToggle: () -> Unit,
+) {
+    val actionState = state?.takeUnless { it == TransactionLockState.NONE }
+
+    when {
+        loadFailed -> {
+            Spacer(Modifier.height(12.dp))
+            TransactionLockLoadError(
+                color = color,
+                onRetry = onRetry,
+            )
+        }
+
+        actionState != null -> {
+            Spacer(Modifier.height(12.dp))
+            TransactionLockAction(
+                state = actionState,
+                updating = updating,
+                color = color,
+                onToggle = onToggle,
+            )
         }
     }
 }
