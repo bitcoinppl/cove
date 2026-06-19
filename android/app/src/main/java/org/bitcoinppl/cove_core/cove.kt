@@ -56240,6 +56240,9 @@ sealed class XpubException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * Retained for UniFFI compatibility with clients that may still match this error
+     */
     class InvalidDescriptorInJson(
         ) : XpubException() {
         override val message
