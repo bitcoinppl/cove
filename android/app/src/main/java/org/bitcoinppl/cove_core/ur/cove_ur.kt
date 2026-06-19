@@ -1583,7 +1583,7 @@ public object FfiConverterTypeCryptoHdkey: FfiConverter<CryptoHdkey, Long> {
 
 
 /**
- * crypto-psbt: PSBT encoded as CBOR byte string with tag 310
+ * crypto-psbt: PSBT encoded as a CBOR byte string
  * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 public interface CryptoPsbtInterface {
@@ -1613,7 +1613,7 @@ public interface CryptoPsbtInterface {
 }
 
 /**
- * crypto-psbt: PSBT encoded as CBOR byte string with tag 310
+ * crypto-psbt: PSBT encoded as a CBOR byte string
  * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 open class CryptoPsbt: Disposable, AutoCloseable, CryptoPsbtInterface
