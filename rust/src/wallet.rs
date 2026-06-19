@@ -315,12 +315,10 @@ impl Wallet {
             Format::KeyExpression(descriptors) => descriptors,
         };
 
-        let fingerprint = pubport_descriptors.fingerprint();
-
         // compute xpub and descriptors early so they're available for the upgrade path
-        let xpub =
-            pubport_descriptors.xpub().map_err(Into::into).map_err(WalletError::ParseXpubError)?;
         let descriptors: Descriptors = pubport_descriptors.into();
+        let fingerprint = descriptors.fingerprint();
+        let xpub = xpub_from_descriptors(&descriptors)?;
 
         let incoming_identity = PublicWalletIdentity::from_descriptors(&descriptors);
 
@@ -796,6 +794,12 @@ fn preferred_json_descriptors(
     })
 }
 
+fn xpub_from_descriptors(descriptors: &Descriptors) -> Result<Xpub, WalletError> {
+    descriptors.external.xpub().ok_or(WalletError::ParseXpubError(XpubError::InvalidDescriptor(
+        xpub::DescriptorError::NoXpubInDescriptor,
+    )))
+}
+
 fn should_start_json_discovery(
     json: &pubport::formats::Json,
     address_type: WalletAddressType,
@@ -986,6 +990,24 @@ mod tests {
         assert_eq!(address_type, WalletAddressType::WrappedSegwit);
         assert!(descriptors.external.to_string().starts_with("sh(wpkh("));
         assert!(!should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn wrapped_segwit_json_import_material_exposes_nested_xpub() {
+        let json = descriptor_json(None, Some(bip49_descriptors()), None);
+
+        let (pubport_descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+        let descriptors: Descriptors = pubport_descriptors.into();
+
+        assert_eq!(address_type, WalletAddressType::WrappedSegwit);
+        assert_eq!(
+            descriptors.fingerprint().map(|fingerprint| fingerprint.to_string()),
+            Some("817e7be0".to_string())
+        );
+        assert_eq!(
+            xpub_from_descriptors(&descriptors).unwrap().to_string(),
+            "xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm"
+        );
     }
 
     #[test]
