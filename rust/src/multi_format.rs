@@ -421,6 +421,13 @@ mod tests {
     }
 
     #[test]
+    fn test_non_utf8_data_returns_unrecognized_format() {
+        let result = MultiFormat::try_from_data(&[0xff, 0xfe, 0xfd]);
+
+        assert!(matches!(result, Err(MultiFormatError::UnrecognizedFormat)), "{result:?}");
+    }
+
+    #[test]
     fn test_nfc_data_zpub_returns_hardware_export() {
         let result =
             MultiFormat::try_from_nfc_message(NfcMessage::Data(ACCOUNT_ZPUB.as_bytes().to_vec()));
