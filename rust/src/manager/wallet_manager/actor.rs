@@ -1502,12 +1502,16 @@ impl WalletActor {
 
         if full_scan_updates_initial_metadata(true, full_scan_type) {
             let now = jiff::Timestamp::now().as_second() as u64;
-            let metadata = self.record_full_scan_performed(now)?;
-            self.send(WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(metadata)));
+            self.record_full_scan_performed(now)?;
+            self.save_last_scan_finished();
+            self.send(WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(
+                self.wallet.metadata.clone(),
+            )));
             self.send_ledger_state(WalletScanStatus::Idle);
+        } else {
+            self.save_last_scan_finished();
         }
 
-        self.save_last_scan_finished();
         self.notify_scan_complete().await?;
 
         self.state = ActorState::FullScanComplete(full_scan_type);
