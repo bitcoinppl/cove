@@ -386,6 +386,7 @@ impl RustWalletManager {
         self.initial_load_state.clone()
     }
 
+    /// Returns the metadata-derived bootstrap snapshot; live scan activity arrives through reconcile messages
     #[uniffi::method]
     pub fn ledger_state(&self) -> WalletLedgerState {
         let metadata = self.current_metadata();

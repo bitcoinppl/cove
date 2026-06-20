@@ -287,7 +287,6 @@ extension WalletLedgerState {
             withAnimation { self.walletMetadata = metadata }
             setWalletMetadata(metadata)
             self.balancePresentation = rust.balancePresentation(scanStatus: scanStatus)
-            reconcileLoadStateWithLedgerState()
 
         case let .walletScannerResponse(scannerResponse):
             self.logger.debug("walletScannerResponse: \(scannerResponse)")
