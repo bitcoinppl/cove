@@ -1,4 +1,4 @@
-use super::ledger_state::{InitialScanActivity, WalletLedgerState};
+use super::ledger_state::WalletLedgerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
 pub struct BalancePresentation {
@@ -19,12 +19,7 @@ impl BalancePresentation {
     pub(crate) fn for_ledger_state(ledger_state: WalletLedgerState) -> Self {
         match ledger_state {
             WalletLedgerState::Complete => Self::normal(),
-            WalletLedgerState::InitialScanIncomplete(InitialScanActivity::Active) => {
-                Self::provisional()
-            }
-            WalletLedgerState::InitialScanIncomplete(InitialScanActivity::Idle) => {
-                Self::provisional()
-            }
+            WalletLedgerState::InitialScanIncomplete(_) => Self::provisional(),
         }
     }
 }
@@ -32,6 +27,8 @@ impl BalancePresentation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use super::super::ledger_state::InitialScanActivity;
 
     #[test]
     fn complete_ledger_uses_normal_balance_presentation() {

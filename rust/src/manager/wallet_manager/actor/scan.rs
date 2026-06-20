@@ -505,7 +505,7 @@ impl WalletScanActor {
             return Produces::ok(());
         }
 
-        self.clear_active_scan();
+        self.clear_active_scan_work();
 
         match scan_result.scan {
             RunningScan::Full(scan_type) => {
@@ -520,11 +520,12 @@ impl WalletScanActor {
                     )))
                     .await;
 
-                self.start_queued_rescan().await?;
-
                 if scan_succeeded && let Err(error) = apply_result {
                     return Err(Box::new(error));
                 }
+
+                self.active_wallet_generation = None;
+                self.start_queued_rescan().await?;
             }
             RunningScan::Incremental => {
                 let scan_succeeded = scan_result.scan_succeeded();
@@ -535,15 +536,19 @@ impl WalletScanActor {
                     )))
                     .await;
 
-                self.start_queued_rescan().await?;
-
                 if !scan_succeeded {
+                    self.active_wallet_generation = None;
+                    self.start_queued_rescan().await?;
+
                     return Produces::ok(());
                 }
 
                 if let Err(error) = apply_result {
                     return Err(Box::new(error));
                 }
+
+                self.active_wallet_generation = None;
+                self.start_queued_rescan().await?;
             }
         }
 
@@ -733,9 +738,14 @@ impl WalletScanActor {
 
     /// Clears the active scan generation after a scan finishes normally
     fn clear_active_scan(&mut self) {
+        self.clear_active_scan_work();
+        self.active_wallet_generation = None;
+    }
+
+    /// Clears completed scan work while keeping the wallet generation for error cleanup
+    fn clear_active_scan_work(&mut self) {
         self.active_cancel_token = None;
         self.active_generation = None;
-        self.active_wallet_generation = None;
         self.progress_is_visible = false;
     }
 
@@ -909,16 +919,16 @@ fn should_accept_scan_generation(active_generation: Option<u64>, event_generatio
 mod tests {
     use std::time::Duration;
 
-    use act_zero::WeakAddr;
+    use act_zero::{Actor, WeakAddr};
     use bdk_wallet::{KeychainKind, chain::spk_client::FullScanResponse};
     use cove_bdk_progressive_scan::{KeychainProgress, ScanProgress};
     use cove_common::consts::GAP_LIMIT;
     use tokio_util::sync::CancellationToken;
 
     use super::{
-        FullScanType, RunningScan, SCAN_PARTIAL_FLUSH_INTERVAL, SCAN_PROGRESS_BASIS_POINTS,
-        SCAN_PROGRESS_INTERVAL, ScanFlushCadence, ScanFlushDecision, ScanProgressStart,
-        ScanRequestOrder, WalletScanActor, WalletScanEvent, WalletScanEventKind,
+        FullScanType, ProgressiveFullScanResult, RunningScan, SCAN_PARTIAL_FLUSH_INTERVAL,
+        SCAN_PROGRESS_BASIS_POINTS, SCAN_PROGRESS_INTERVAL, ScanFlushCadence, ScanFlushDecision,
+        ScanProgressStart, ScanRequestOrder, WalletScanActor, WalletScanEvent, WalletScanEventKind,
         WalletScanGeneration, WalletScanPhase, WalletScanProgress, WalletScanStatus,
         initial_scan_status, is_cancelled_progressive_scan, scan_progress_basis_points,
         should_accept_scan_generation, should_flush_pending_after_scan_result,
@@ -1261,6 +1271,33 @@ mod tests {
         assert!(scan_actor.active_generation.is_none());
         assert!(scan_actor.active_wallet_generation.is_none());
         assert!(scan_actor.queued_rescan.is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn scan_apply_error_preserves_wallet_generation_for_error_cleanup() {
+        let mut scan_actor = WalletScanActor::new(WeakAddr::default());
+        scan_actor.active_cancel_token = Some(CancellationToken::new());
+        scan_actor.active_generation = Some(7);
+        scan_actor.active_wallet_generation = Some(WalletScanGeneration::INITIAL);
+        scan_actor.progress_is_visible = true;
+
+        let error = scan_actor
+            .handle_scan_result(ProgressiveFullScanResult {
+                scan: RunningScan::Full(FullScanType::Full),
+                scan_generation: 7,
+                wallet_generation: WalletScanGeneration::INITIAL,
+                result: Ok(FullScanResponse::default()),
+            })
+            .await
+            .expect_err("detached wallet actor should make scan apply fail");
+
+        assert!(scan_actor.active_cancel_token.is_none());
+        assert!(scan_actor.active_generation.is_none());
+        assert_eq!(scan_actor.active_wallet_generation, Some(WalletScanGeneration::INITIAL));
+        assert!(!scan_actor.progress_is_visible);
+
+        assert!(!Actor::error(&mut scan_actor, error).await);
+        assert!(scan_actor.active_wallet_generation.is_none());
     }
 
     #[test]
