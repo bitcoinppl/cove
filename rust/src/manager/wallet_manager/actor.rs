@@ -376,6 +376,8 @@ impl WalletActor {
         amount: Amount,
         address: Address,
     ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         let fast_fee_rate = fee_rate_options.fast.fee_rate;
         let medium_fee_rate = fee_rate_options.medium.fee_rate;
         let slow_fee_rate = fee_rate_options.slow.fee_rate;
@@ -414,6 +416,8 @@ impl WalletActor {
         amount: Amount,
         address: Address,
     ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         debug!("fee_rate_options_with_total_fee_for_manual");
         let fast_fee_rate = fee_rate_options.fast.fee_rate;
         let medium_fee_rate = fee_rate_options.medium.fee_rate;
@@ -471,6 +475,8 @@ impl WalletActor {
         fee_rate_options: FeeRateOptions,
         address: Address,
     ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        self.ensure_ledger_ready_for_spend()?;
+
         let options = fee_rate_options;
 
         let fast_fee_rate = options.fast.fee_rate;

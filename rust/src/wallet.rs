@@ -755,14 +755,10 @@ fn receive_prioritized_full_scan_request(
     builder.build()
 }
 
-#[uniffi::export]
 impl Wallet {
-    // Create a dummy wallet for xcode previews
-    #[uniffi::constructor(name = "previewNewWallet")]
-    pub fn preview_new_wallet() -> Self {
+    pub(crate) fn preview_new_wallet_with_metadata(metadata: WalletMetadata) -> Self {
         let mnemonic = Mnemonic::from_str("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
         let passphrase = None;
-        let metadata = WalletMetadata::preview_new();
 
         if let Err(error) = delete_wallet_specific_data(&metadata.id) {
             debug!("clean up failed, failed to delete wallet data: {error}");
@@ -773,6 +769,16 @@ impl Wallet {
         }
 
         Self::try_new_persisted_from_mnemonic_segwit(metadata, mnemonic, passphrase).unwrap()
+    }
+}
+
+#[uniffi::export]
+impl Wallet {
+    // Create a dummy wallet for xcode previews
+    #[uniffi::constructor(name = "previewNewWallet")]
+    pub fn preview_new_wallet() -> Self {
+        let metadata = WalletMetadata::preview_new();
+        Self::preview_new_wallet_with_metadata(metadata)
     }
 
     pub fn id(&self) -> WalletId {

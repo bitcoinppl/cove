@@ -174,11 +174,7 @@ private struct SendFlowLoadedView: View {
         do {
             sendFlowManager = try app.ensureSendFlowManager(manager, presenter: presenter)
         } catch {
-            app.alertState = .init(.general(
-                title: "Initial Scan Incomplete",
-                message: "Can't send until initial scan completes."
-            ))
-            app.popRoute()
+            handleSendFlowManagerError(error)
             return
         }
         let sendFlowManagerId = ObjectIdentifier(sendFlowManager)
@@ -191,6 +187,44 @@ private struct SendFlowLoadedView: View {
             guard !Task.isCancelled else { return }
 
             initializedSendFlowManagerId = sendFlowManagerId
+        }
+    }
+
+    private func handleSendFlowManagerError(_ error: Error) {
+        switch error {
+        case WalletManagerError.InitialScanIncomplete:
+            app.alertState = .init(.general(
+                title: "Initial Scan Incomplete",
+                message: "Can't send until initial scan completes."
+            ))
+            app.popRoute()
+        case let WalletManagerError.DatabaseCorruption(walletId, errorMessage):
+            Log.error("Wallet database corrupted for \(walletId): \(errorMessage)")
+            app.alertState = TaggedItem(
+                .walletDatabaseCorrupted(walletId: walletId, error: errorMessage)
+            )
+            app.popRoute()
+        case WalletManagerError.WalletDoesNotExist:
+            Log.error("Wallet does not exist for send route \(sendRoute)")
+            app.alertState = .init(.general(
+                title: "Wallet Not Found",
+                message: "This wallet is no longer available."
+            ))
+            app.trySelectLatestOrNewWallet()
+        case let walletError as WalletManagerError:
+            Log.error("Unable to open wallet for send flow: \(walletError)")
+            app.alertState = .init(.general(
+                title: "Unable to Open Wallet",
+                message: "The wallet could not be opened for sending. Please try again from the wallet screen."
+            ))
+            app.popRoute()
+        default:
+            Log.error("Unable to open wallet for send flow: \(error)")
+            app.alertState = .init(.general(
+                title: "Unable to Open Wallet",
+                message: "The wallet could not be opened for sending. Please try again from the wallet screen."
+            ))
+            app.popRoute()
         }
     }
 }

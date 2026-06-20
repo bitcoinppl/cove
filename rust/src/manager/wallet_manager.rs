@@ -1562,7 +1562,7 @@ impl RustWalletManager {
         let metadata = preview_ledger_ready_metadata(metadata);
         let (sender, receiver) = flume::bounded(100);
 
-        let wallet = Wallet::preview_new_wallet();
+        let wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
         let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();
         let wallet_actor = WalletActor::new(wallet, sender.clone())
             .expect("failed to open wallet database for preview wallet");
