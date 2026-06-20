@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import org.bitcoinppl.cove.OnboardingManager
+import org.bitcoinppl.cove.localizedMessage
 import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingCloudRestoreState
 import org.bitcoinppl.cove_core.OnboardingStep
@@ -23,7 +24,7 @@ internal fun OnboardingContainer(
         if (manager.state.step == OnboardingStep.RESTORE_OFFER &&
             manager.state.cloudRestoreState == OnboardingCloudRestoreState.INCONCLUSIVE
         ) {
-            manager.state.cloudRestoreMessage
+            manager.state.cloudRestoreIssue?.localizedMessage()?.asString()
         } else {
             null
         }

@@ -70,7 +70,7 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
 
     var lifecycleFailureMessage: String? {
         guard case let .failed(failure) = state.lifecycle else { return nil }
-        return failure.message
+        return failure.localizedMessage
     }
 
     var isLifecycleDisabled: Bool {

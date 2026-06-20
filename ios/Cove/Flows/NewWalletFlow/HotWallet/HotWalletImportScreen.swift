@@ -209,8 +209,8 @@ struct HotWalletImportScreen: View {
                 } else {
                     sheetState = .none
                     app.alertState = TaggedItem(.general(
-                        title: "Invalid QR Code",
-                        message: "Please scan a valid seed phrase QR code"
+                        title: String(localized: "Invalid QR Code"),
+                        message: String(localized: "Please scan a valid seed phrase QR code.")
                     ))
                 }
                 scanner.reset()
@@ -416,7 +416,7 @@ struct HotWalletImportScreen: View {
         )
     }
 
-    private var alertTitle: String {
+    private var alertTitle: LocalizedStringKey {
         guard let alertState else { return "Error" }
         return MyAlert(alertState).title
     }
@@ -452,18 +452,19 @@ struct HotWalletImportScreen: View {
                             try app.selectWalletOrThrow(walletId)
                             app.resetRoute(to: .selectedWallet(walletId))
                         } catch {
+                            Log.error("Unable to select duplicate wallet: \(error)")
                             app.alertState = TaggedItem(.general(
-                                title: "Unable to Select Wallet",
-                                message: error.localizedDescription
+                                title: String(localized: "Unable to Select Wallet"),
+                                message: String(localized: "Unable to select wallet. Please try again.")
                             ))
                         }
                     }
                 }
             )
-        case let .scanError(error):
+        case .scanError:
             return AlertBuilder(
                 title: "Error Scanning QR Code",
-                message: error,
+                message: "Unable to scan this QR code. Please try again.",
                 actions: singleOkCancel
             )
         }
@@ -528,8 +529,8 @@ struct HotWalletImportScreen: View {
 
         // both failed - show error
         app.alertState = TaggedItem(.general(
-            title: "Invalid NFC Tag",
-            message: "Please scan a valid seed phrase NFC tag"
+            title: String(localized: "Invalid NFC Tag"),
+            message: String(localized: "Please scan a valid seed phrase NFC tag.")
         ))
     }
 
@@ -541,7 +542,7 @@ struct HotWalletImportScreen: View {
         default:
             Log.warn("Invalid number of words: \(numberOfWords)")
             scanError = TaggedString(
-                "Invalid number of words: \(numberOfWords), we only support 12 or 24 words"
+                String(localized: "Recovery words must contain 12 or 24 words.")
             )
 
             sheetState = .none

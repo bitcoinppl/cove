@@ -123,35 +123,6 @@ pub enum ScanProgress {
     Ur { percentage: f64 },
 }
 
-#[uniffi::export]
-impl ScanProgress {
-    /// Display text for the progress (e.g., "Scanned 3 of 10" or "Scanned 45%")
-    pub fn display_text(&self) -> String {
-        match self {
-            Self::Bbqr { scanned, total } => format!("Scanned {scanned} of {total}"),
-            Self::Ur { percentage } => {
-                let percent = (percentage * 100.0) as u32;
-                format!("Scanned {percent}%")
-            }
-        }
-    }
-
-    /// Detail text for the progress (e.g., "7 parts left"), or None for UR
-    pub fn detail_text(&self) -> Option<String> {
-        match self {
-            Self::Bbqr { scanned, total } => {
-                let remaining = total - scanned;
-                if remaining == 1 {
-                    Some("1 part left".to_string())
-                } else {
-                    Some(format!("{remaining} parts left"))
-                }
-            }
-            Self::Ur { .. } => None, // UR uses fountain codes, no fixed "parts left"
-        }
-    }
-}
-
 impl ScanProgress {
     /// Check if this progress is greater than another (used for haptic feedback)
     fn is_greater_than(&self, other: &Self) -> bool {
@@ -763,34 +734,6 @@ mod tests {
             }
             _ => panic!("After reset, single QR should complete immediately"),
         }
-    }
-
-    /// Test ScanProgress display methods
-    #[test]
-    fn test_scan_progress_display() {
-        // BBQR progress
-        let bbqr_progress = ScanProgress::Bbqr { scanned: 3, total: 10 };
-        assert_eq!(bbqr_progress.display_text(), "Scanned 3 of 10");
-        assert_eq!(bbqr_progress.detail_text(), Some("7 parts left".to_string()));
-
-        // UR progress
-        let ur_progress = ScanProgress::Ur { percentage: 0.45 };
-        assert_eq!(ur_progress.display_text(), "Scanned 45%");
-        assert_eq!(ur_progress.detail_text(), None);
-
-        // edge cases
-        let one_left = ScanProgress::Bbqr { scanned: 9, total: 10 };
-        assert_eq!(one_left.detail_text(), Some("1 part left".to_string()));
-
-        let complete_bbqr = ScanProgress::Bbqr { scanned: 10, total: 10 };
-        assert_eq!(complete_bbqr.display_text(), "Scanned 10 of 10");
-        assert_eq!(complete_bbqr.detail_text(), Some("0 parts left".to_string()));
-
-        let zero_ur = ScanProgress::Ur { percentage: 0.0 };
-        assert_eq!(zero_ur.display_text(), "Scanned 0%");
-
-        let complete_ur = ScanProgress::Ur { percentage: 1.0 };
-        assert_eq!(complete_ur.display_text(), "Scanned 100%");
     }
 
     /// Test PSBT hex constant used in tests

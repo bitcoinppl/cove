@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -53,6 +54,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.UnlockMode
 import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove_core.AuthType
@@ -71,6 +73,9 @@ fun LockView(
     val context = LocalContext.current
     val activity = context.findFragmentActivity()
     val biometricManager = remember { BiometricManager.from(context) }
+    val biometricTitle = stringResource(R.string.lock_unlock_cove)
+    val biometricSubtitle = stringResource(R.string.lock_use_biometric)
+    val cancelTitle = stringResource(R.string.scoped_common_cancel)
 
     val isBiometricAvailable =
         remember {
@@ -79,12 +84,12 @@ fun LockView(
 
     // keep promptInfo cached (it's just config, doesn't go stale)
     val promptInfo =
-        remember {
+        remember(biometricTitle, biometricSubtitle, cancelTitle) {
             PromptInfo
                 .Builder()
-                .setTitle("Unlock Cove")
-                .setSubtitle("Use your biometric to unlock")
-                .setNegativeButtonText("Cancel")
+                .setTitle(biometricTitle)
+                .setSubtitle(biometricSubtitle)
+                .setNegativeButtonText(cancelTitle)
                 .build()
         }
 
@@ -193,7 +198,7 @@ fun LockView(
                     // show PIN screen
                     else -> {
                         NumberPadPinView(
-                            title = "Enter Cove PIN",
+                            title = stringResource(R.string.lock_enter_cove_pin),
                             isPinCorrect = { pin ->
                                 when (auth.handleAndReturnUnlockMode(pin)) {
                                     UnlockMode.MAIN, UnlockMode.DECOY, UnlockMode.WIPE -> true
@@ -227,7 +232,7 @@ private fun PermissionsNeeded() {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "Cove needs permissions to use biometric authentication to unlock your wallet. Please open settings and enable biometric authentication.",
+            text = stringResource(R.string.lock_permissions_needed),
             style = MaterialTheme.typography.callout,
             textAlign = TextAlign.Center,
             color = Color.White,
@@ -241,7 +246,7 @@ private fun PermissionsNeeded() {
                 context.startActivity(intent)
             },
         ) {
-            Text("Open Settings")
+            Text(stringResource(R.string.lock_open_settings))
         }
     }
 }
@@ -311,13 +316,13 @@ private fun BiometricView(
             ) {
                 Icon(
                     imageVector = Icons.Default.Fingerprint,
-                    contentDescription = "Biometric",
+                    contentDescription = stringResource(R.string.lock_biometric),
                     tint = Color.White,
                     modifier = Modifier.size(48.dp),
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Tap to Unlock",
+                    text = stringResource(R.string.lock_tap_to_unlock),
                     fontSize = 11.sp,
                     color = Color.Gray,
                 )
@@ -340,7 +345,7 @@ private fun BiometricView(
                 color = Color.White.copy(alpha = 0.1f),
             ) {
                 Text(
-                    text = "Enter Cove PIN",
+                    text = stringResource(R.string.lock_enter_cove_pin),
                     color = Color.White,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                     fontWeight = FontWeight.Normal,

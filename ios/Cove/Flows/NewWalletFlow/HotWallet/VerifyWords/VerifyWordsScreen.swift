@@ -106,14 +106,14 @@ private struct VerifyWordsLoadedView: View {
         }
     }
 
-    private func loadingErrorView(error: Error) -> some View {
+    private func loadingErrorView(error _: Error) -> some View {
         VStack(spacing: 16) {
             Text("Unable to load recovery word verification")
                 .font(.headline)
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
 
-            Text(error.localizedDescription)
+            Text("Please try again.")
                 .font(.footnote)
                 .foregroundStyle(.coveLightGray.opacity(0.75))
                 .multilineTextAlignment(.center)

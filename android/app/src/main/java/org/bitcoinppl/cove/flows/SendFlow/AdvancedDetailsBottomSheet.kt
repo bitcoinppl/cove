@@ -99,7 +99,7 @@ private fun AdvancedDetailsBottomSheetPreview() {
             onClick = { showBottomSheet = true },
             modifier = Modifier.align(Alignment.Center),
         ) {
-            Text("Show Advanced Details")
+            Text(stringResource(R.string.btn_show_details))
         }
         if (showBottomSheet) {
             val bottomSheetState =
@@ -160,7 +160,7 @@ fun AdvancedDetailsBottomSheet(
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
+                    contentDescription = stringResource(R.string.wallet_send_close),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(24.dp),
                 )

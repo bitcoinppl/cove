@@ -449,9 +449,9 @@ fun TransactionDetailsScreen(
                             Text(
                                 text =
                                     if (isSent) {
-                                        "Your transaction was sent on"
+                                        stringResource(R.string.wallet_send_transaction_sent_on)
                                     } else {
-                                        "Your transaction was successfully received"
+                                        stringResource(R.string.wallet_send_transaction_received_successfully)
                                     },
                                 color = sub,
                                 fontSize = 17.sp,
@@ -468,14 +468,14 @@ fun TransactionDetailsScreen(
                             )
                         } else if (!isConfirmed) {
                             Text(
-                                text = "Your transaction is pending.",
+                                text = stringResource(R.string.wallet_send_transaction_pending),
                                 color = sub,
                                 fontSize = 17.sp,
                                 textAlign = TextAlign.Center,
                                 lineHeight = 23.sp,
                             )
                             Text(
-                                text = "Please check back soon for an update.",
+                                text = stringResource(R.string.wallet_send_check_back_for_update),
                                 color = sub,
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.SemiBold,

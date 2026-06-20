@@ -21,9 +21,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.annotation.StringRes
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.localizedMessage
 import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
@@ -38,7 +42,7 @@ internal fun DisableCloudBackupSection(
     var showUnavailable by remember { mutableStateOf(false) }
     var showFirstConfirmation by remember { mutableStateOf(false) }
     var showFinalConfirmation by remember { mutableStateOf(false) }
-    val unavailableMessage = disableUnavailableMessage(manager, detail)
+    val unavailableMessageRes = disableUnavailableMessageRes(manager, detail)
     val colors = cloudBackupVisualColors()
     val coordinator = LocalCloudBackupPresentationCoordinator.current
 
@@ -51,9 +55,9 @@ internal fun DisableCloudBackupSection(
     }
 
     manager.disableFailure?.let { failure ->
-        ErrorInlineMessage(failure.message, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+        ErrorInlineMessage(failure.localizedMessage().asString(), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
         CloudBackupSimpleActionCard(
-            title = "Try Again",
+            title = stringResource(R.string.action_try_again),
             icon = Icons.Default.Refresh,
             tint = colors.danger,
             onClick = { manager.dispatch(CloudBackupManagerAction.DisableCloudBackup) },
@@ -61,7 +65,7 @@ internal fun DisableCloudBackupSection(
 
         if (failure.canKeepEnabled) {
             CloudBackupSimpleActionCard(
-                title = "Keep Cloud Backup Enabled",
+                title = stringResource(R.string.cloud_backup_disable_keep_enabled),
                 icon = Icons.Default.CloudDone,
                 tint = colors.success,
                 onClick = { manager.dispatch(CloudBackupManagerAction.KeepCloudBackupEnabled) },
@@ -77,7 +81,7 @@ internal fun DisableCloudBackupSection(
         ) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), color = colors.danger, strokeWidth = 2.dp)
             Text(
-                "Deleting cloud backups",
+                stringResource(R.string.cloud_backup_disable_deleting_status),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.danger,
             )
@@ -86,7 +90,7 @@ internal fun DisableCloudBackupSection(
 
     TextButton(
         onClick = {
-            if (unavailableMessage != null) {
+            if (unavailableMessageRes != null) {
                 showUnavailable = true
             } else {
                 showFirstConfirmation = true
@@ -98,7 +102,7 @@ internal fun DisableCloudBackupSection(
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         colors = ButtonDefaults.textButtonColors(contentColor = colors.danger),
     ) {
-        Text("Disable Cloud Backup", style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.cloud_backup_disable_button), style = MaterialTheme.typography.bodySmall)
     }
 
     Spacer(modifier = Modifier.height(32.dp))
@@ -106,12 +110,12 @@ internal fun DisableCloudBackupSection(
     if (showUnavailable) {
         AlertDialog(
             onDismissRequest = { showUnavailable = false },
-            title = { Text("Cloud Backup Can't Be Disabled Yet") },
+            title = { Text(stringResource(R.string.cloud_backup_disable_unavailable_title)) },
             text = {
-                Text(unavailableMessage ?: "Cove is waiting for Cloud Backup to finish another operation.")
+                Text(stringResource(unavailableMessageRes ?: R.string.cloud_backup_disable_unavailable_fallback))
             },
             confirmButton = {
-                TextButton(onClick = { showUnavailable = false }) { Text("OK") }
+                TextButton(onClick = { showUnavailable = false }) { Text(stringResource(R.string.btn_ok)) }
             },
         )
     }
@@ -119,18 +123,18 @@ internal fun DisableCloudBackupSection(
     if (showFirstConfirmation) {
         AlertDialog(
             onDismissRequest = { showFirstConfirmation = false },
-            title = { Text("Disable Cloud Backup?") },
-            text = { Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage.") },
+            title = { Text(stringResource(R.string.cloud_backup_disable_confirm_title)) },
+            text = { Text(stringResource(R.string.cloud_backup_disable_confirm_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showFirstConfirmation = false
                         showFinalConfirmation = true
                     },
-                ) { Text("Continue") }
+                ) { Text(stringResource(R.string.settings_action_continue)) }
             },
             dismissButton = {
-                TextButton(onClick = { showFirstConfirmation = false }) { Text("Cancel") }
+                TextButton(onClick = { showFirstConfirmation = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -138,10 +142,10 @@ internal fun DisableCloudBackupSection(
     if (showFinalConfirmation) {
         AlertDialog(
             onDismissRequest = { showFinalConfirmation = false },
-            title = { Text("Delete Cloud Backups?") },
+            title = { Text(stringResource(R.string.cloud_backup_disable_final_title)) },
             text = {
                 Text(
-                    "Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage. Wallets already on this device will stay on this device, but they will no longer be backed up to cloud storage.",
+                    stringResource(R.string.cloud_backup_disable_final_message),
                 )
             },
             confirmButton = {
@@ -150,41 +154,42 @@ internal fun DisableCloudBackupSection(
                         showFinalConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.DisableCloudBackup)
                     },
-                ) { Text("Delete Cloud Backups and Disable") }
+                ) { Text(stringResource(R.string.settings_action_delete_cloud_backups_disable)) }
             },
             dismissButton = {
-                TextButton(onClick = { showFinalConfirmation = false }) { Text("Cancel") }
+                TextButton(onClick = { showFinalConfirmation = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
 }
 
-private fun disableUnavailableMessage(
+@StringRes
+private fun disableUnavailableMessageRes(
     manager: CloudBackupManager,
     detail: CloudBackupDetail?,
-): String? {
+): Int? {
     if (manager.isDisablingCloudBackup) {
-        return "Cove is already disabling Cloud Backup."
+        return R.string.cloud_backup_disable_already_disabling
     }
 
     if (manager.isPerformingDestructiveAction && manager.disableFailure == null) {
-        return "Cove is waiting for the current Cloud Backup operation to finish."
+        return R.string.cloud_backup_disable_pending_operation
     }
 
     if (manager.cloudOnlyOperation is CloudOnlyOperation.Operating) {
-        return "Cove is waiting for the current cloud-only wallet operation to finish."
+        return R.string.cloud_backup_disable_pending_cloud_only_operation
     }
 
     when (manager.otherBackupsOperation) {
         is OtherBackupsOperation.Recovering,
         is OtherBackupsOperation.Deleting,
-        -> return "Cove is waiting for the current other-backup operation to finish."
+        -> return R.string.cloud_backup_disable_other_operation_blocked
         else -> Unit
     }
 
     if (detail != null) {
         if (detail.cloudOnlyCount.toInt() > 0) {
-            return "Restore or delete wallets that are only in Cloud Backup before disabling."
+            return R.string.cloud_backup_disable_cloud_only_blocked
         }
 
         val otherBackups = detail.otherBackups
@@ -192,7 +197,7 @@ private fun disableUnavailableMessage(
             otherBackups is CloudBackupOtherBackupsState.Loaded &&
                 otherBackups.summary.namespaceCount.toInt() > 0
         ) {
-            return "Recover or delete other Cloud Backups before disabling."
+            return R.string.cloud_backup_disable_other_backups_blocked
         }
     }
 

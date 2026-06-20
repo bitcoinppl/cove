@@ -22,12 +22,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.AppAlertState
@@ -65,7 +68,7 @@ fun TapSignerSetupRetryView(
             horizontalArrangement = Arrangement.Start,
         ) {
             TextButton(onClick = { app.sheetState = null }) {
-                Text("Cancel", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.scoped_common_cancel), fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -80,7 +83,7 @@ fun TapSignerSetupRetryView(
         ) {
             Icon(
                 imageVector = Icons.Default.Warning,
-                contentDescription = "Warning",
+                contentDescription = stringResource(R.string.scoped_common_warning),
                 modifier = Modifier.size(100.dp),
                 tint = Color.Yellow,
             )
@@ -92,14 +95,13 @@ fun TapSignerSetupRetryView(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    text = "Setup Incomplete",
+                    text = stringResource(R.string.tap_signer_setup_incomplete_title),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                 )
 
                 Text(
-                    text =
-                        "The setup process was interrupted. You can retry to continue where you left off.",
+                    text = stringResource(R.string.tap_signer_setup_incomplete_body),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
@@ -116,8 +118,8 @@ fun TapSignerSetupRetryView(
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.General(
-                                    title = "Error",
-                                    message = "Unable to access NFC. Please try again.",
+                                    title = context.getString(R.string.scoped_common_error),
+                                    message = context.getString(R.string.tap_signer_error_unable_access_nfc),
                                 ),
                             )
                         return@launch
@@ -132,7 +134,7 @@ fun TapSignerSetupRetryView(
                     }
                     nfcManager.onTagDetected = { manager.isTagDetected = true }
 
-                    manager.scanMessage = "Hold your phone near the TapSigner to continue setup"
+                    manager.scanMessage = UiText.resource(R.string.tap_signer_hold_continue_setup)
                     manager.isTagDetected = false
                     manager.isScanning = true
 
@@ -161,7 +163,7 @@ fun TapSignerSetupRetryView(
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.TapSignerSetupFailed(
-                                    e.message ?: "Unknown error",
+                                    context.getString(R.string.app_alert_tapsigner_setup_failed_message),
                                 ),
                             )
                     }
@@ -169,7 +171,7 @@ fun TapSignerSetupRetryView(
             },
             modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp),
         ) {
-            Text("Retry Setup")
+            Text(stringResource(R.string.tap_signer_retry_setup))
         }
     }
 }

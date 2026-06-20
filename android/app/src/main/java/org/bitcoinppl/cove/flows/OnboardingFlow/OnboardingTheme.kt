@@ -215,7 +215,7 @@ internal fun OnboardingTopBackButton(
             ),
     ) {
         Text(
-            text = "Back",
+            text = stringResource(R.string.scoped_common_back),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )

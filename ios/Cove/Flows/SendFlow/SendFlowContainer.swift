@@ -130,26 +130,19 @@ private struct SendFlowLoadedView: View {
         )
     }
 
-    private var alertTitle: String {
+    private var alertTitle: LocalizedStringKey {
         guard let alert = manager.sendFlowErrorAlert else { return "Error!" }
         return myAlert(alert).title
     }
 
-    private func myAlert(_ alert: TaggedItem<SendFlowErrorAlert>) -> AnyAlertBuilder {
-        let error =
-            switch alert.item {
-            case let .confirmDetails(error): error
-            case let .signAndBroadcast(error): error
+    private func myAlert(_: TaggedItem<SendFlowErrorAlert>) -> AnyAlertBuilder {
+        AlertBuilder(
+            title: "Error!",
+            message: "Unable to prepare the transaction. Please try again.",
+            actions: {
+                Button("OK", action: { manager.sendFlowErrorAlert = .none })
             }
-
-        return
-            AlertBuilder(
-                title: "Error!",
-                message: error,
-                actions: {
-                    Button("OK", action: { manager.sendFlowErrorAlert = .none })
-                }
-            ).eraseToAny()
+        ).eraseToAny()
     }
 
     private func applyRouteArguments(to sendFlowManager: SendFlowManager) {
@@ -201,22 +194,22 @@ private struct SendFlowLoadedView: View {
         case WalletManagerError.WalletDoesNotExist:
             Log.error("Wallet does not exist for send route \(sendRoute)")
             app.alertState = .init(.general(
-                title: "Wallet Not Found",
-                message: "This wallet is no longer available."
+                title: String(localized: "Wallet Not Found"),
+                message: String(localized: "This wallet is no longer available.")
             ))
             app.trySelectLatestOrNewWallet()
         case let walletError as WalletManagerError:
             Log.error("Unable to open wallet for send flow: \(walletError)")
             app.alertState = .init(.general(
-                title: "Unable to Open Wallet",
-                message: "The wallet could not be opened for sending. Please try again from the wallet screen."
+                title: String(localized: "Unable to Open Wallet"),
+                message: String(localized: "The wallet could not be opened for sending. Please try again from the wallet screen.")
             ))
             app.popRoute()
         default:
             Log.error("Unable to open wallet for send flow: \(error)")
             app.alertState = .init(.general(
-                title: "Unable to Open Wallet",
-                message: "The wallet could not be opened for sending. Please try again from the wallet screen."
+                title: String(localized: "Unable to Open Wallet"),
+                message: String(localized: "The wallet could not be opened for sending. Please try again from the wallet screen.")
             ))
             app.popRoute()
         }

@@ -30,7 +30,8 @@ struct CoinControlContainer: View {
         Log.error("[ERROR] Unable to get wallet \(error.localizedDescription)")
         app.alertState = .init(
             .general(
-                title: "Error!", message: "Unable to get wallet \(error.localizedDescription)"
+                title: String(localized: "Unable to Load Wallet"),
+                message: String(localized: "Unable to load this wallet. Please try again.")
             )
         )
     }
@@ -96,22 +97,22 @@ private struct CoinControlLoadedView: View {
         case WalletManagerError.WalletDoesNotExist:
             Log.error("Wallet does not exist for coin control route \(route)")
             app.alertState = .init(.general(
-                title: "Wallet Not Found",
-                message: "This wallet is no longer available."
+                title: String(localized: "Wallet Not Found"),
+                message: String(localized: "This wallet is no longer available.")
             ))
             app.trySelectLatestOrNewWallet()
         case let walletError as WalletManagerError:
             Log.error("Unable to open wallet for coin control: \(walletError)")
             app.alertState = .init(.general(
-                title: "Unable to Open Wallet",
-                message: "The wallet could not be opened for coin control. Please try again from the wallet screen."
+                title: String(localized: "Unable to Open Wallet"),
+                message: String(localized: "The wallet could not be opened for coin control. Please try again from the wallet screen.")
             ))
             app.popRoute()
         default:
             Log.error("Unable to open wallet for coin control: \(error)")
             app.alertState = .init(.general(
-                title: "Unable to Open Wallet",
-                message: "The wallet could not be opened for coin control. Please try again from the wallet screen."
+                title: String(localized: "Unable to Open Wallet"),
+                message: String(localized: "The wallet could not be opened for coin control. Please try again from the wallet screen.")
             ))
             app.popRoute()
         }

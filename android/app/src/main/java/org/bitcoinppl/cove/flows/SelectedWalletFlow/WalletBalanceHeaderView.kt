@@ -182,7 +182,14 @@ internal fun BalanceWidget(
             }
             Icon(
                 imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                contentDescription = if (isHidden) "Hidden" else "Visible",
+                contentDescription =
+                    stringResource(
+                        if (isHidden) {
+                            R.string.wallet_send_hidden
+                        } else {
+                            R.string.wallet_send_visible
+                        },
+                    ),
                 tint = Color.White,
                 modifier =
                     Modifier
@@ -195,7 +202,7 @@ internal fun BalanceWidget(
             AmountDisplay(
                 amount = pendingAmount,
                 isHidden = isHidden,
-                hiddenText = "+ •••••• pending",
+                hiddenText = stringResource(R.string.wallet_send_hidden_pending),
                 textContent = { text ->
                     Text(
                         text = text,

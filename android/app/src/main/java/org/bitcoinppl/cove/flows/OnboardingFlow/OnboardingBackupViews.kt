@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -151,15 +152,15 @@ internal fun OnboardingBackupWalletView(
 ) {
     val title =
         if (branch == OnboardingBranch.EXCHANGE) {
-            "Back up your wallet before funding it"
+            stringResource(R.string.onboarding_backup_wallet_before_funding)
         } else {
-            "Back up your wallet"
+            stringResource(R.string.onboarding_backup_wallet_title)
         }
     val subtitle =
         if (branch == OnboardingBranch.EXCHANGE) {
-            "You'll fund this wallet next. Save your recovery words or enable Cloud Backup first."
+            stringResource(R.string.onboarding_backup_wallet_before_funding_subtitle)
         } else {
-            "Choose at least one backup method before continuing."
+            stringResource(R.string.onboarding_backup_wallet_subtitle)
         }
 
     OnboardingPromptScreen(
@@ -169,18 +170,28 @@ internal fun OnboardingBackupWalletView(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             OnboardingStatusCard(
-                title = "Save recovery words",
-                subtitle = "Write down your $wordCount-word recovery phrase offline",
-                actionTitle = if (secretWordsSaved) "Saved" else "Show Words",
+                title = stringResource(R.string.onboarding_save_recovery_words),
+                subtitle = stringResource(R.string.onboarding_recovery_words_offline_subtitle, wordCount),
+                actionTitle =
+                    if (secretWordsSaved) {
+                        stringResource(R.string.onboarding_saved)
+                    } else {
+                        stringResource(R.string.onboarding_show_words)
+                    },
                 icon = Icons.Default.Description,
                 isComplete = secretWordsSaved,
                 onClick = onShowWords,
                 modifier = Modifier.testTag("onboarding.secretWords"),
             )
             OnboardingStatusCard(
-                title = "Enable Cloud Backup",
-                subtitle = "Encrypt and store a backup in Google Drive protected by your passkey",
-                actionTitle = if (cloudBackupEnabled) "Enabled" else "Enable",
+                title = stringResource(R.string.onboarding_enable_cloud_backup),
+                subtitle = stringResource(R.string.onboarding_cloud_backup_subtitle),
+                actionTitle =
+                    if (cloudBackupEnabled) {
+                        stringResource(R.string.onboarding_enabled)
+                    } else {
+                        stringResource(R.string.onboarding_enable)
+                    },
                 icon = Icons.Default.CloudDownload,
                 isComplete = cloudBackupEnabled,
                 onClick = onEnableCloudBackup,
@@ -191,12 +202,11 @@ internal fun OnboardingBackupWalletView(
         Spacer(modifier = Modifier.size(16.dp))
 
         OnboardingPrimaryButton(
-            text = "Continue",
+            text = stringResource(R.string.settings_action_continue),
             onClick = onContinue,
             modifier = Modifier.testTag("onboarding.continue"),
             enabled = secretWordsSaved || cloudBackupEnabled,
         )
     }
 }
-
 

@@ -40,9 +40,6 @@ use crate::manager::cloud_backup_manager::{
 };
 use crate::wallet::metadata::WalletMetadata;
 
-const RECREATE_WARNING: &str = "Recreating from this device will remove references to wallets that only exist in the cloud backup";
-const REINITIALIZE_WARNING: &str = "This will replace your entire cloud backup set. Wallets that only exist in the cloud backup will be lost";
-
 enum EncryptedMasterKeyStep {
     Loaded(EncryptedMasterKeyBackup),
     Missing,
@@ -456,14 +453,10 @@ impl VerificationSession {
 
                 match encrypted.backup_version() {
                     Ok(MasterKeyBackupVersion::V1) => {}
-                    Err(unsupported) => {
-                        let version = unsupported.0;
+                    Err(_unsupported) => {
                         return Ok(EncryptedMasterKeyStep::Finished(
                             DeepVerificationResult::Failed(
                                 DeepVerificationFailure::UnsupportedVersion {
-                                    message: format!(
-                                        "master key backup version {version} is not supported",
-                                    ),
                                     detail: self.detail(),
                                 },
                             ),
@@ -994,17 +987,13 @@ impl VerificationSession {
     /// Builds the failure shown when wallet blobs are missing but local data can recreate the manifest
     fn recreate_manifest_result(&self) -> DeepVerificationResult {
         DeepVerificationResult::Failed(DeepVerificationFailure::RecreateManifest {
-            message: "wallet backups not found in iCloud namespace".into(),
-            warning: RECREATE_WARNING.into(),
             detail: self.detail(),
         })
     }
 
     /// Builds the failure shown when the backup cannot be trusted and should be recreated from scratch
-    fn reinitialize_result(&self, message: impl Into<String>) -> DeepVerificationResult {
+    fn reinitialize_result(&self, _message: impl Into<String>) -> DeepVerificationResult {
         DeepVerificationResult::Failed(DeepVerificationFailure::ReinitializeBackup {
-            message: message.into(),
-            warning: REINITIALIZE_WARNING.into(),
             detail: self.detail(),
         })
     }

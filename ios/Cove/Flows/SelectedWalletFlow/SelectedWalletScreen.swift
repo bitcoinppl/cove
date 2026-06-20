@@ -202,11 +202,11 @@ struct SelectedWalletScreen: View {
                     }
                 }
             } catch {
+                Log.error("Xpub export failed: \(error.localizedDescription)")
                 app.alertState = .init(
                     .general(
-                        title: "Xpub Export Failed",
-                        message:
-                        "Unable to export public descriptors: \(error.localizedDescription)"
+                        title: String(localized: "Xpub Export Failed"),
+                        message: String(localized: "Unable to export public descriptors. Please try again.")
                     )
                 )
             }
@@ -223,10 +223,11 @@ struct SelectedWalletScreen: View {
                     }
                 }
             } catch {
+                Log.error("Label export failed: \(error.localizedDescription)")
                 app.alertState = .init(
                     .general(
-                        title: "Label Export Failed",
-                        message: "Unable to export labels: \(error.localizedDescription)"
+                        title: String(localized: "Label Export Failed"),
+                        message: String(localized: "Unable to export labels. Please try again.")
                     )
                 )
             }
@@ -343,18 +344,19 @@ struct SelectedWalletScreen: View {
 
                 app.alertState = .init(
                     .general(
-                        title: "Success!",
-                        message: "Labels have been imported successfully."
+                        title: String(localized: "Success"),
+                        message: String(localized: "Labels have been imported successfully.")
                     )
                 )
 
                 // when labels are imported, we need to get the transactions again with the updated labels
                 Task { await manager.rust.getTransactions() }
             } catch {
+                Log.error("Label import failed: \(error.localizedDescription)")
                 app.alertState = .init(
                     .general(
-                        title: "Oops something went wrong!",
-                        message: "Unable to import labels \(error.localizedDescription)"
+                        title: String(localized: "Label Import Failed"),
+                        message: String(localized: "Unable to import labels. Please try again.")
                     )
                 )
             }
@@ -411,8 +413,8 @@ struct SelectedWalletScreen: View {
         guard case let .bip329Labels(labels) = scanned.item else {
             app.alertState = .init(
                 .general(
-                    title: "Invalid QR Code",
-                    message: "The scanned QR code does not contain BIP329 labels."
+                    title: String(localized: "Invalid QR Code"),
+                    message: String(localized: "The scanned QR code does not contain BIP329 labels.")
                 )
             )
             return
@@ -422,16 +424,17 @@ struct SelectedWalletScreen: View {
             try manager.importLabels(labels: labels)
             app.alertState = .init(
                 .general(
-                    title: "Success!",
-                    message: "Labels have been imported successfully."
+                    title: String(localized: "Success"),
+                    message: String(localized: "Labels have been imported successfully.")
                 )
             )
 
         } catch {
+            Log.error("Label QR import failed: \(error.localizedDescription)")
             app.alertState = .init(
                 .general(
-                    title: "Oops something went wrong!",
-                    message: "Unable to import labels: \(error.localizedDescription)"
+                    title: String(localized: "Label Import Failed"),
+                    message: String(localized: "Unable to import labels. Please try again.")
                 )
             )
         }

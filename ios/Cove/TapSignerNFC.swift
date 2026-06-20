@@ -82,14 +82,18 @@ class TapSignerNFC {
                                 self.nfc.session?.invalidate()
                             } else if let error = self.nfc.tapSignerError {
                                 continuation.resume(returning: .failure(error))
-                                self.nfc.session?.invalidate(errorMessage: error.description)
+                                self.nfc.session?.invalidate(
+                                    errorMessage: String(localized: "TAPSIGNER operation failed. Please try again.")
+                                )
                             } else {
                                 Log.error(
                                     "Unknown error response: \(String(describing: self.nfc.tapSignerResponse)), error: \(String(describing: self.nfc.tapSignerError))"
                                 )
                                 let error = TapSignerReaderError.Unknown("Unknown error occurred")
                                 continuation.resume(returning: .failure(error))
-                                self.nfc.session?.invalidate(errorMessage: error.description)
+                                self.nfc.session?.invalidate(
+                                    errorMessage: String(localized: "TAPSIGNER operation failed. Please try again.")
+                                )
                             }
                         }
                     }
@@ -99,10 +103,10 @@ class TapSignerNFC {
                 }
             }
         } catch let error as TapSignerReaderError {
-            self.nfc.session?.invalidate(errorMessage: error.description)
+            self.nfc.session?.invalidate(errorMessage: String(localized: "TAPSIGNER operation failed. Please try again."))
             return .failure(error)
         } catch {
-            nfc.session?.invalidate(errorMessage: "Something went wrong!")
+            nfc.session?.invalidate(errorMessage: String(localized: "Something went wrong. Please try again."))
             return .failure(.Unknown(error.localizedDescription))
         }
     }
@@ -292,22 +296,21 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
 
         isScanning = true
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
-        session?.alertMessage = "Hold your iPhone near the NFC tag."
+        session?.alertMessage = String(localized: "Hold your iPhone near the NFC tag.")
         session?.begin()
     }
 
     func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
         self.session = session
         guard let tag = tags.first else {
-            session.invalidate(errorMessage: "No tag detected.")
+            session.invalidate(errorMessage: String(localized: "No tag detected."))
             return
         }
 
         session.connect(to: tag) { error in
-            if let error {
+            if error != nil {
                 session.invalidate(
-                    errorMessage:
-                    "Connection error: \(error.localizedDescription), please try again"
+                    errorMessage: String(localized: "Unable to connect to NFC tag. Please try again.")
                 )
                 return
             }
@@ -315,11 +318,11 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             switch tag {
             case .iso15693:
                 logger.error("found tag iso15693Tag")
-                session.invalidate(errorMessage: "Unsupported tag type.")
+                session.invalidate(errorMessage: String(localized: "Unsupported tag type."))
             case let .iso7816(iso7816Tag):
                 Log.debug("found tag iso7816")
 
-                let readingMessage = "Reading tag, please hold still"
+                let readingMessage = String(localized: "Reading tag. Please hold still.")
                 session.alertMessage = readingMessage
 
                 self.tag = iso7816Tag
@@ -328,13 +331,13 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
                 }
             case .miFare:
                 logger.error("found tag miFare")
-                session.invalidate(errorMessage: "Unsupported tag type.")
+                session.invalidate(errorMessage: String(localized: "Unsupported tag type."))
             case .feliCa:
                 logger.error("found tag feliCa")
-                session.invalidate(errorMessage: "Unsupported tag type.")
+                session.invalidate(errorMessage: String(localized: "Unsupported tag type."))
             @unknown default:
                 logger.error("unsupported tag type: \(tag)")
-                session.invalidate(errorMessage: "Unsupported tag type.")
+                session.invalidate(errorMessage: String(localized: "Unsupported tag type."))
             }
         }
     }
@@ -361,12 +364,12 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             logger.error("TAPSIGNER error: \(error)")
             tapSignerError = error
             if case .TapSignerError(.CkTap(.BadAuth)) = error {
-                return session.invalidate(errorMessage: "Wrong PIN, please try again")
+                return session.invalidate(errorMessage: String(localized: "Wrong PIN. Please try again."))
             }
-            session.invalidate(errorMessage: "TapSigner error: \(error.description)")
+            session.invalidate(errorMessage: String(localized: "TAPSIGNER operation failed. Please try again."))
         } catch {
             logger.error("Error creating reader: \(error)")
-            session.invalidate(errorMessage: "Error creating reader: \(error.localizedDescription)")
+            session.invalidate(errorMessage: String(localized: "Unable to start NFC scanning. Please try again."))
         }
     }
 
@@ -390,17 +393,17 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         switch error as? NFCReaderError {
         case .none:
             tapSignerError = .Unknown("Unable to read NFC tag, try again")
-            session.invalidate(errorMessage: "Unable to read NFC tag, try again")
+            session.invalidate(errorMessage: String(localized: "Unable to read NFC tag. Please try again."))
         case let .some(error):
             switch error.code {
             case .readerTransceiveErrorTagConnectionLost:
                 tapSignerError = .Unknown("Tag connection lost, please hold your phone still")
                 session.invalidate(
-                    errorMessage: "Tag connection lost, please hold your phone still"
+                    errorMessage: String(localized: "Tag connection lost. Please hold your phone still.")
                 )
             default:
                 tapSignerError = .Unknown("Unable to read NFC tag, try again")
-                session.invalidate(errorMessage: "Unable to read NFC tag, try again")
+                session.invalidate(errorMessage: String(localized: "Unable to read NFC tag. Please try again."))
             }
         }
     }

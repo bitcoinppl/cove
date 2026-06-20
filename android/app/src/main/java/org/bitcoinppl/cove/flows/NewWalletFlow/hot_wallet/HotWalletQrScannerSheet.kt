@@ -12,8 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.QrCodeScanView
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
@@ -26,6 +28,8 @@ internal fun QrScannerSheet(
     onDismiss: () -> Unit,
     onWordsScanned: (List<List<String>>) -> Unit,
 ) {
+    val context = LocalContext.current
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.Transparent,
@@ -50,8 +54,8 @@ internal fun QrScannerSheet(
                                     app.alertState =
                                         TaggedItem(
                                             AppAlertState.General(
-                                                title = "Invalid QR Code",
-                                                message = "Please scan a valid seed phrase QR code",
+                                                title = context.getString(R.string.new_wallet_flow_invalid_qr_code),
+                                                message = context.getString(R.string.new_wallet_flow_invalid_seed_phrase_qr),
                                             ),
                                         )
                                 }
@@ -62,8 +66,8 @@ internal fun QrScannerSheet(
                             app.alertState =
                                 TaggedItem(
                                     AppAlertState.General(
-                                        title = "Invalid QR Code",
-                                        message = "Please scan a valid seed phrase QR code",
+                                        title = context.getString(R.string.new_wallet_flow_invalid_qr_code),
+                                        message = context.getString(R.string.new_wallet_flow_invalid_seed_phrase_qr),
                                     ),
                                 )
                         }

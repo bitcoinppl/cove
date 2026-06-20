@@ -121,7 +121,12 @@ struct SecretWordsScreen: View {
         .onAppear {
             auth.lock()
             guard words == nil else { return }
-            do { words = try Mnemonic(id: id) } catch { errorMessage = error.localizedDescription }
+            do {
+                words = try Mnemonic(id: id)
+            } catch {
+                Log.error("Unable to load recovery words: \(error.localizedDescription)")
+                errorMessage = String(localized: "Unable to load recovery words. Please try again.")
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .adaptiveToolbarStyle()

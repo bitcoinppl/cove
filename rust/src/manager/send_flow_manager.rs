@@ -266,10 +266,7 @@ impl RustSendFlowManager {
 
         debug!("validate_fee_percentage: {fee_sats} / {amount} = {fee_percentage} ");
         if fee_percentage > 100 {
-            let error = SendFlowAlertState::General {
-                title: "Fee Too High!".to_string(),
-                message: "The fee is higher than the amount you are sending".to_string(),
-            };
+            let error = SendFlowAlertState::FeeTooHigh;
 
             if display_alert {
                 self.reconciler.send(Message::SetAlert(error));
@@ -279,10 +276,7 @@ impl RustSendFlowManager {
         }
 
         if fee_percentage > 20 {
-            let error = SendFlowAlertState::General {
-                title: "Warning, High Fee!".to_string(),
-                message: "The fee is higher than 20% of the amount you are sending".to_string(),
-            };
+            let error = SendFlowAlertState::HighFeeWarning;
 
             if display_alert {
                 self.reconciler.send(Message::SetAlert(error));

@@ -28,10 +28,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.callout
 import org.bitcoinppl.cove_core.TapSignerRoute
 import java.security.SecureRandom
@@ -71,9 +73,9 @@ fun TapSignerAdvancedChainCode(
                 TextButton(onClick = { manager.popRoute() }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = stringResource(R.string.scoped_common_back),
                     )
-                    Text("Back", fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.scoped_common_back), fontWeight = FontWeight.SemiBold)
                 }
             }
 
@@ -89,7 +91,7 @@ fun TapSignerAdvancedChainCode(
             ) {
                 // title
                 Text(
-                    text = "Advanced Setup",
+                    text = stringResource(R.string.tap_signer_advanced_setup),
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 20.dp),
@@ -97,8 +99,7 @@ fun TapSignerAdvancedChainCode(
 
                 // description
                 Text(
-                    text =
-                        "Enter your custom 32-byte chain code below. If you're unsure, select automatic on the previous screen.",
+                    text = stringResource(R.string.tap_signer_advanced_body),
                     style = MaterialTheme.typography.callout,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 30.dp),
@@ -121,7 +122,7 @@ fun TapSignerAdvancedChainCode(
                                 .fillMaxWidth()
                                 .height(100.dp),
                         placeholder = {
-                            Text("Enter a 32 byte hex string")
+                            Text(stringResource(R.string.tap_signer_chain_code_placeholder))
                         },
                         textStyle = MaterialTheme.typography.bodyMedium,
                         maxLines = 4,
@@ -134,7 +135,7 @@ fun TapSignerAdvancedChainCode(
                     modifier = Modifier.padding(bottom = 30.dp),
                 ) {
                     Text(
-                        text = "Generate new string for me",
+                        text = stringResource(R.string.tap_signer_generate_chain_code),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -159,7 +160,7 @@ fun TapSignerAdvancedChainCode(
                         disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
             ) {
-                Text("Continue")
+                Text(stringResource(R.string.scoped_common_continue))
             }
         }
     }

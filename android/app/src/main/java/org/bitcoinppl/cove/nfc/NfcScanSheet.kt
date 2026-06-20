@@ -29,13 +29,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.Scanner
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.Scanner
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove_core.AppAlertState
@@ -53,7 +56,7 @@ fun NfcScanSheet(
     val context = LocalContext.current
     val activity = context.findActivity()
 
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf<UiText?>(null) }
     var isScanning by remember { mutableStateOf(false) }
 
     val nfcReader =
@@ -64,7 +67,7 @@ fun NfcScanSheet(
     // start scanning when sheet opens
     LaunchedEffect(nfcReader) {
         if (nfcReader == null) {
-            errorMessage = "NFC is not available"
+            errorMessage = UiText.resource(R.string.nfc_unavailable)
             return@LaunchedEffect
         }
 
@@ -95,7 +98,7 @@ fun NfcScanSheet(
                         Log.e(TAG, "Failed to process NFC data: ${e.message}", e)
                         app.alertState =
                             TaggedItem(
-                                AppAlertState.InvalidFormat(e.message ?: "Failed to process NFC data"),
+                                AppAlertState.InvalidFormat(context.getString(R.string.nfc_unable_to_process_data)),
                             )
                     }
                 }
@@ -134,12 +137,12 @@ fun NfcScanSheet(
 
             if (errorMessage != null) {
                 Text(
-                    text = "Error",
+                    text = stringResource(R.string.scoped_common_error),
                     style = MaterialTheme.typography.title3,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = errorMessage!!,
+                    text = errorMessage!!.asString(),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.error,
@@ -150,19 +153,19 @@ fun NfcScanSheet(
                     nfcReader?.startScanning()
                     isScanning = true
                 }) {
-                    Text("Try Again")
+                    Text(stringResource(R.string.scoped_common_try_again))
                 }
             } else if (readingState == NfcReadingState.SUCCESS) {
                 // success state - show checkmark
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Success",
+                    contentDescription = stringResource(R.string.scoped_common_success),
                     modifier = Modifier.size(48.dp),
                     tint = Color(0xFF4CAF50), // green
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = nfcReader?.message ?: "Tag read successfully!",
+                    text = nfcReader?.message?.asString() ?: stringResource(R.string.nfc_tag_read_successfully),
                     style = MaterialTheme.typography.title3,
                 )
             } else if (readingState == NfcReadingState.TAG_DETECTED ||
@@ -183,12 +186,12 @@ fun NfcScanSheet(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "Reading" + ".".repeat(dotCount),
+                    text = stringResource(R.string.nfc_reading_progress, ".".repeat(dotCount)),
                     style = MaterialTheme.typography.title3,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Please hold still",
+                    text = stringResource(R.string.nfc_please_hold_still),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -200,12 +203,12 @@ fun NfcScanSheet(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "Ready to Scan",
+                    text = stringResource(R.string.nfc_ready_to_scan),
                     style = MaterialTheme.typography.title3,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = nfcReader?.message ?: "Hold your phone near the NFC tag",
+                    text = nfcReader?.message?.asString() ?: stringResource(R.string.nfc_hold_near_tag),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

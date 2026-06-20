@@ -236,7 +236,7 @@ fun HotWalletImportScreen(
             alertState = AlertState.DuplicateWallet
         } catch (e: Exception) {
             Log.e("HotWalletImport", "import error", e)
-            genericErrorMessage = e.message ?: "Unknown error occurred"
+            genericErrorMessage = context.getString(R.string.new_wallet_flow_unknown_error_occurred)
             alertState = AlertState.GenericError
         }
     }
@@ -255,7 +255,7 @@ fun HotWalletImportScreen(
                 24 -> NumberOfBip39Words.TWENTY_FOUR
                 else -> {
                     Log.w("HotWalletImport", "Invalid word count: $totalWords")
-                    genericErrorMessage = "Invalid number of words: $totalWords. We only support 12 or 24 words."
+                    genericErrorMessage = context.getString(R.string.new_wallet_flow_invalid_word_count, totalWords)
                     alertState = AlertState.GenericError
                     return
                 }
@@ -332,7 +332,7 @@ fun HotWalletImportScreen(
                     IconButton(onClick = { onBackPressed?.invoke() ?: app.popRoute() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.new_wallet_flow_back),
                         )
                     }
                 },
@@ -342,7 +342,7 @@ fun HotWalletImportScreen(
                             IconButton(onClick = { showNfcScanner = true }) {
                                 Icon(
                                     imageVector = Icons.Default.Nfc,
-                                    contentDescription = "NFC Import",
+                                    contentDescription = stringResource(R.string.new_wallet_flow_nfc_import),
                                 )
                             }
                         }
@@ -351,7 +351,7 @@ fun HotWalletImportScreen(
                         IconButton(onClick = { showQrScanner = true }) {
                             Icon(
                                 imageVector = Icons.Default.QrCodeScanner,
-                                contentDescription = "QR Code Import",
+                                contentDescription = stringResource(R.string.new_wallet_flow_qr_code_import),
                             )
                         }
                     }

@@ -29,10 +29,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.title3
 
@@ -48,7 +51,7 @@ fun NfcWriteSheet(
     val context = LocalContext.current
     val activity = context.findActivity()
 
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf<UiText?>(null) }
 
     val nfcWriter =
         remember(activity) {
@@ -58,7 +61,7 @@ fun NfcWriteSheet(
     // start writing when sheet opens
     LaunchedEffect(nfcWriter, data) {
         if (nfcWriter == null) {
-            errorMessage = "NFC is not available"
+            errorMessage = UiText.resource(R.string.nfc_unavailable)
             return@LaunchedEffect
         }
 
@@ -74,7 +77,7 @@ fun NfcWriteSheet(
                     onSuccess()
                 }
                 is NfcWriteResult.Error -> {
-                    Log.e(TAG, "NFC write error: ${result.message}")
+                    Log.e(TAG, "NFC write error: ${result.message.resolve(context)}")
                     errorMessage = result.message
                 }
             }
@@ -108,12 +111,12 @@ fun NfcWriteSheet(
 
             if (errorMessage != null) {
                 Text(
-                    text = "Error",
+                    text = stringResource(R.string.scoped_common_error),
                     style = MaterialTheme.typography.title3,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = errorMessage!!,
+                    text = errorMessage!!.asString(),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.error,
@@ -123,19 +126,19 @@ fun NfcWriteSheet(
                     errorMessage = null
                     nfcWriter?.startWriting(data)
                 }) {
-                    Text("Try Again")
+                    Text(stringResource(R.string.scoped_common_try_again))
                 }
             } else if (writingState == NfcWritingState.SUCCESS) {
                 // success state - show checkmark
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Success",
+                    contentDescription = stringResource(R.string.scoped_common_success),
                     modifier = Modifier.size(48.dp),
                     tint = Color(0xFF4CAF50), // green
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = nfcWriter?.message ?: "Tag written successfully!",
+                    text = nfcWriter?.message?.asString() ?: stringResource(R.string.nfc_tag_written_successfully),
                     style = MaterialTheme.typography.title3,
                 )
             } else if (writingState == NfcWritingState.TAG_DETECTED ||
@@ -156,12 +159,12 @@ fun NfcWriteSheet(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "Writing" + ".".repeat(dotCount),
+                    text = stringResource(R.string.nfc_writing_progress, ".".repeat(dotCount)),
                     style = MaterialTheme.typography.title3,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Please hold still",
+                    text = stringResource(R.string.nfc_please_hold_still),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -173,12 +176,12 @@ fun NfcWriteSheet(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "Ready to Write",
+                    text = stringResource(R.string.nfc_ready_to_write),
                     style = MaterialTheme.typography.title3,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = nfcWriter?.message ?: "Hold your phone near the NFC tag",
+                    text = nfcWriter?.message?.asString() ?: stringResource(R.string.nfc_hold_near_tag),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -95,9 +95,9 @@ struct MissingPasskeyContent: View {
                 .foregroundStyle(.secondary)
         }
 
-        if let repairError {
+        if repairError != nil {
             Section {
-                Label(repairError, systemImage: "exclamationmark.triangle.fill")
+                Label(String(localized: "Unable to open passkey options. Please try again."), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color.statusError)
                     .font(.caption)
             }
@@ -114,31 +114,31 @@ struct DisableCloudBackupSection: View {
 
     private var unavailableMessage: String? {
         if manager.isDisablingCloudBackup {
-            return "Cove is already disabling Cloud Backup."
+            return String(localized: "Cove is already disabling Cloud Backup.")
         }
 
         if manager.isPerformingDestructiveAction, manager.disableFailure == nil {
-            return "Cove is waiting for the current Cloud Backup operation to finish."
+            return String(localized: "Cove is waiting for the current Cloud Backup operation to finish.")
         }
 
         if case .operating = manager.cloudOnlyOperation {
-            return "Cove is waiting for the current cloud-only wallet operation to finish."
+            return String(localized: "Cove is waiting for the current cloud-only wallet operation to finish.")
         }
 
         switch manager.otherBackupsOperation {
         case .recovering, .deleting:
-            return "Cove is waiting for the current other-backup operation to finish."
+            return String(localized: "Cove is waiting for the current other-backup operation to finish.")
         default:
             break
         }
 
         if let detail {
             if detail.cloudOnlyCount > 0 {
-                return "Restore or delete wallets that are only in Cloud Backup before disabling."
+                return String(localized: "Restore or delete wallets that are only in Cloud Backup before disabling.")
             }
 
             if case let .loaded(summary) = detail.otherBackups, summary.namespaceCount > 0 {
-                return "Recover or delete other Cloud Backups before disabling."
+                return String(localized: "Recover or delete other Cloud Backups before disabling.")
             }
         }
 
@@ -157,7 +157,7 @@ struct DisableCloudBackupSection: View {
             }
 
             if let failure = manager.disableFailure {
-                Text(failure.message)
+                Text("Cloud Backup could not be disabled. Please try again.")
                     .font(.caption)
                     .foregroundStyle(Color.statusError)
 
@@ -192,7 +192,7 @@ struct DisableCloudBackupSection: View {
         .alert("Cloud Backup Can't Be Disabled Yet", isPresented: $showingUnavailableAlert) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(unavailableMessage ?? "Cove is waiting for Cloud Backup to finish another operation.")
+            Text(unavailableMessage ?? String(localized: "Cove is waiting for Cloud Backup to finish another operation."))
         }
         .confirmationDialog(
             "Disable Cloud Backup?",

@@ -96,11 +96,11 @@ func cloudBackupVerificationFeedback(
 ) -> CloudBackupVerificationFeedback? {
     switch presentation {
     case .completed(source: .rootPrompt):
-        .successFloater("Cloud Backup Verified")
-    case let .failed(source: .rootPrompt, message: message):
+        .successFloater(String(localized: "Cloud Backup Verified"))
+    case let .failed(source: .rootPrompt, failure: failure):
         .failureAlert(
-            title: "Cloud Backup Verification Failed",
-            message: message
+            title: String(localized: "Cloud Backup Verification Failed"),
+            message: failure.localizedMessage
         )
     default:
         nil
@@ -603,10 +603,10 @@ private struct CloudBackupVerificationPromptView: View {
     }
 
     private var message: String {
-        if let failure { return failure.message() }
-        if isVerifying { return "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey." }
+        if let failure { return failure.localizedMessage }
+        if isVerifying { return String(localized: "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey.") }
 
-        return "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey."
+        return String(localized: "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey.")
     }
 
     private var primaryButtonTitle: String {

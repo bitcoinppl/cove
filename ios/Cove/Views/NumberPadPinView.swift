@@ -9,7 +9,7 @@ import SwiftUI
 
 struct NumberPadPinView: View {
     /// args
-    var title: String
+    var title: Text
     @Binding var lockState: LockState
 
     let isPinCorrect: (String) -> Bool
@@ -29,7 +29,7 @@ struct NumberPadPinView: View {
     @State private var animateField: Bool
 
     public init(
-        title: String = "Enter Pin",
+        title: LocalizedStringKey = "Enter Pin",
         lockState: Binding<LockState> = .constant(.unlocked),
         isPinCorrect: @escaping (String) -> Bool,
         showPin: Bool = false,
@@ -38,7 +38,7 @@ struct NumberPadPinView: View {
         onUnlock: @escaping (String) -> Void = { _ in },
         onWrongPin: @escaping (String) -> Void = { _ in }
     ) {
-        self.title = title
+        self.title = Text(title)
         _lockState = lockState
         self.isPinCorrect = isPinCorrect
         self.showPin = showPin
@@ -60,7 +60,7 @@ struct NumberPadPinView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Text(title)
+            title
                 .font(.title.bold())
                 .frame(maxWidth: .infinity)
                 .foregroundStyle(.white)
@@ -81,7 +81,7 @@ struct NumberPadPinView: View {
                                 let index = pin.index(pin.startIndex, offsetBy: index)
                                 let string = showPin ? String(pin[index]) : "●"
 
-                                Text(string)
+                                Text(verbatim: string)
                                     .font(showPin ? .title : .body)
                                     .fontWeight(.bold)
                                     .foregroundStyle(.black)
@@ -130,7 +130,7 @@ struct NumberPadPinView: View {
                         guard pin.count < pinLength else { return }
                         pin.append(String(number))
                     }, label: {
-                        Text(String(number))
+                        Text(verbatim: String(number))
                             .font(.title)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 20)
@@ -156,7 +156,7 @@ struct NumberPadPinView: View {
                     guard pin.count < pinLength else { return }
                     pin.append("0")
                 }, label: {
-                    Text("0")
+                    Text(verbatim: "0")
                         .font(.title)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 20)

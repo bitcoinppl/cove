@@ -92,7 +92,7 @@ struct SettingsContainer: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             if let network = pendingNetwork {
-                Text("Switching to \(network) will take you to a wallet on that network.")
+                Text("Switching to \(network.localizedDisplayName) will take you to a wallet on that network.")
             }
         }
     }

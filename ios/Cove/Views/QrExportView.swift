@@ -15,8 +15,8 @@ extension QrExportFormat: CaseIterable {
 /// Generic QR export view that can display animated BBQr or UR QR codes
 /// If `generateUrStrings` is nil, the format picker is hidden and only BBQr is used
 struct QrExportView: View {
-    let title: String
-    let subtitle: String
+    let title: Text
+    let subtitle: Text
     let generateBbqrStrings: (QrDensity) async throws -> [String]
     let generateUrStrings: ((QrDensity) async throws -> [String])?
     let copyData: (() async throws -> String)?
@@ -33,6 +33,20 @@ struct QrExportView: View {
         generateUrStrings != nil
     }
 
+    init(
+        title: LocalizedStringKey,
+        subtitle: LocalizedStringKey,
+        generateBbqrStrings: @escaping (QrDensity) async throws -> [String],
+        generateUrStrings: ((QrDensity) async throws -> [String])?,
+        copyData: (() async throws -> String)?
+    ) {
+        self.title = Text(title)
+        self.subtitle = Text(subtitle)
+        self.generateBbqrStrings = generateBbqrStrings
+        self.generateUrStrings = generateUrStrings
+        self.copyData = copyData
+    }
+
     /// Animation interval: dynamic based on density for both formats
     var animationInterval: TimeInterval {
         switch selectedFormat {
@@ -45,7 +59,7 @@ struct QrExportView: View {
         VStack {
             HStack {
                 Spacer()
-                Text(title)
+                title
                     .font(.title3)
                     .fontWeight(.semibold)
                 Spacer()
@@ -65,7 +79,7 @@ struct QrExportView: View {
             }
             .padding(.top, 12)
 
-            Text(subtitle)
+            subtitle
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -77,7 +91,7 @@ struct QrExportView: View {
             if showFormatPicker {
                 Picker("Format", selection: $selectedFormat) {
                     ForEach(QrExportFormat.allCases, id: \.self) { format in
-                        Text(String(describing: format)).tag(format)
+                        Text(format.localizedDisplayName).tag(format)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -122,7 +136,8 @@ struct QrExportView: View {
             currentIndex = 0
             error = nil
         } catch let err {
-            error = err.localizedDescription
+            Log.error("Failed to generate QR export: \(err)")
+            error = String(localized: "Unable to generate the QR code. Please try again.")
             qrs = []
         }
     }
@@ -132,9 +147,20 @@ struct QrExportView: View {
         do {
             let data = try await copyData()
             UIPasteboard.general.string = data
-            await FloaterPopup(text: "Copied").dismissAfter(2).present()
+            await FloaterPopup(text: String(localized: "Copied")).dismissAfter(2).present()
         } catch {
             Log.error("Failed to copy data: \(error)")
+        }
+    }
+}
+
+private extension QrExportFormat {
+    var localizedDisplayName: String {
+        switch self {
+        case .bbqr:
+            String(localized: "BBQr")
+        case .ur:
+            String(localized: "UR")
         }
     }
 }

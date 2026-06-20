@@ -41,7 +41,7 @@ struct WalletSettingsSection: View {
         Section("Wallet Settings") {
             ForEach(top5Wallets) { wallet in
                 SettingsRow(
-                    title: wallet.name,
+                    verbatimTitle: wallet.name,
                     route: .wallet(id: wallet.id, route: .main),
                     icon: WalletIcon(wallet)
                 )

@@ -68,98 +68,33 @@ class SendFlowPresenter(
     /**
      * get alert title based on alert state
      */
-    fun alertTitle(): String =
+    fun alertTitle(): UiText =
         when (val state = alertState?.item) {
-            is SendFlowAlertState.Error -> errorAlertTitle(state.v1)
-            is SendFlowAlertState.General -> state.title
-            null -> ""
-        }
-
-    private fun errorAlertTitle(error: SendFlowException): String =
-        when (error) {
-            is SendFlowException.EmptyAddress,
-            is SendFlowException.InvalidAddress,
-            is SendFlowException.WrongNetwork,
-            -> "Invalid Address"
-
-            is SendFlowException.InvalidNumber,
-            is SendFlowException.ZeroAmount,
-            -> "Invalid Amount"
-
-            is SendFlowException.InsufficientFunds,
-            is SendFlowException.NoBalance,
-            -> "Insufficient Funds"
-
-            is SendFlowException.SendAmountToLow -> "Send Amount Too Low"
-            is SendFlowException.UnableToGetFeeRate -> "Unable to get fee rate"
-            is SendFlowException.UnableToBuildTxn -> "Unable to build transaction"
-            is SendFlowException.UnableToGetMaxSend -> "Unable to get max send"
-            is SendFlowException.UnableToSaveUnsignedTransaction -> "Unable to Save Unsigned Transaction"
-            is SendFlowException.WalletManager ->
-                when (error.v1) {
-                    is WalletManagerException.LockedOutputsSelected -> "Insufficient Funds"
-                    else -> "Error"
-                }
-            is SendFlowException.UnableToGetFeeDetails -> "Fee Details Error"
+            is SendFlowAlertState.Error,
+            is SendFlowAlertState.General,
+            is SendFlowAlertState.UnableToLoadFees,
+            is SendFlowAlertState.FeeTooHigh,
+            is SendFlowAlertState.HighFeeWarning,
+            is SendFlowAlertState.UnableToReadLockedCoins,
+            is SendFlowAlertState.BalanceStillLoading,
+            -> state.localizedTitle()
+            null -> UiText.raw("")
         }
 
     /**
      * get alert message text based on alert state
      */
-    fun alertMessage(): String =
+    fun alertMessage(): UiText =
         when (val state = alertState?.item) {
-            is SendFlowAlertState.Error -> errorAlertMessage(state.v1)
-            is SendFlowAlertState.General -> state.message
-            null -> ""
-        }
-
-    private fun errorAlertMessage(error: SendFlowException): String =
-        when (error) {
-            is SendFlowException.EmptyAddress ->
-                "Please enter an address"
-
-            is SendFlowException.InvalidNumber ->
-                "Please enter a valid number for the amount to send"
-
-            is SendFlowException.ZeroAmount ->
-                "Can't send an empty transaction. Please enter a valid amount"
-
-            is SendFlowException.NoBalance ->
-                "You do not have any bitcoin in your wallet. Please add some to send a transaction"
-
-            is SendFlowException.InvalidAddress ->
-                "The address ${error.v1} is invalid"
-
-            is SendFlowException.WrongNetwork ->
-                "The address ${error.address} is on the wrong network, it is for ${error.validFor}. You are on ${error.current}"
-
-            is SendFlowException.InsufficientFunds ->
-                "You do not have enough bitcoin in your wallet to cover the amount plus fees"
-
-            is SendFlowException.SendAmountToLow ->
-                "Send amount is too low. Please send at least 5000 sats"
-
-            is SendFlowException.UnableToGetFeeRate ->
-                "Are you connected to the internet?"
-
-            is SendFlowException.WalletManager ->
-                when (error.v1) {
-                    is WalletManagerException.LockedOutputsSelected ->
-                        "Selected coins include locked coins. Unlock them or choose different coins."
-                    else -> error.v1.message ?: "Wallet Manager Error"
-                }
-
-            is SendFlowException.UnableToGetFeeDetails ->
-                error.v1
-
-            is SendFlowException.UnableToBuildTxn ->
-                error.v1
-
-            is SendFlowException.UnableToGetMaxSend ->
-                error.v1
-
-            is SendFlowException.UnableToSaveUnsignedTransaction ->
-                error.v1
+            is SendFlowAlertState.Error,
+            is SendFlowAlertState.General,
+            is SendFlowAlertState.UnableToLoadFees,
+            is SendFlowAlertState.FeeTooHigh,
+            is SendFlowAlertState.HighFeeWarning,
+            is SendFlowAlertState.UnableToReadLockedCoins,
+            is SendFlowAlertState.BalanceStillLoading,
+            -> state.localizedMessage()
+            null -> UiText.raw("")
         }
 
     /**
@@ -168,7 +103,13 @@ class SendFlowPresenter(
     fun alertButtonAction(): (() -> Unit)? =
         when (val state = alertState?.item) {
             is SendFlowAlertState.Error -> errorAlertButtonAction(state.v1)
-            is SendFlowAlertState.General -> {
+            is SendFlowAlertState.General,
+            is SendFlowAlertState.UnableToLoadFees,
+            is SendFlowAlertState.FeeTooHigh,
+            is SendFlowAlertState.HighFeeWarning,
+            is SendFlowAlertState.UnableToReadLockedCoins,
+            is SendFlowAlertState.BalanceStillLoading,
+            -> {
                 { alertState = null }
             }
             null -> null

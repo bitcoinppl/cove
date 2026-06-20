@@ -380,9 +380,10 @@ struct BackupExportView: View {
                     try? FileManager.default.removeItem(at: url)
                 }
                 await MainActor.run {
+                    Log.error("Unable to export backup: \(error.localizedDescription)")
                     tempFileURL = nil
                     isExporting = false
-                    errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                    errorMessage = (error as? BackupError)?.localizedMessage ?? String(localized: "Unable to export this backup. Please try again.")
                 }
             }
         }

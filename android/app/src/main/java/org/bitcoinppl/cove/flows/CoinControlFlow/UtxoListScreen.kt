@@ -75,13 +75,13 @@ import java.util.Locale
 val org.bitcoinppl.cove_core.types.Utxo.id: ULong
     get() = outpoint.hashToUint()
 
-val org.bitcoinppl.cove_core.types.Utxo.displayName: String
-    get() =
-        label ?: if (type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE) {
-            "Change Address"
-        } else {
-            "Receive Address"
-        }
+@Composable
+internal fun org.bitcoinppl.cove_core.types.Utxo.localizedDisplayName(): String =
+    label ?: if (type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE) {
+        stringResource(R.string.wallet_send_change_address)
+    } else {
+        stringResource(R.string.wallet_send_receive_address)
+    }
 
 val org.bitcoinppl.cove_core.types.Utxo.displayDate: String
     get() {
@@ -228,14 +228,24 @@ private fun UtxoListScreenContent(
                         onDismissRequest = { menuExpanded = false },
                     ) {
                         androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("Toggle Unit") },
+                            text = { Text(stringResource(R.string.wallet_send_toggle_unit)) },
                             onClick = {
                                 onToggleUnit()
                                 menuExpanded = false
                             },
                         )
                         androidx.compose.material3.DropdownMenuItem(
-                            text = { Text(if (selected.isEmpty()) "Select All" else "Deselect All") },
+                            text = {
+                                Text(
+                                    stringResource(
+                                        if (selected.isEmpty()) {
+                                            R.string.select_all
+                                        } else {
+                                            R.string.deselect_all
+                                        },
+                                    ),
+                                )
+                            },
                             onClick = {
                                 onToggleSelectAll()
                                 menuExpanded = false
@@ -477,7 +487,7 @@ private fun UtxoItemRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = utxo.displayName,
+                    text = utxo.localizedDisplayName(),
                     fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp,

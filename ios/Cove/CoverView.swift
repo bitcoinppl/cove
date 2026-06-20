@@ -38,7 +38,7 @@ private struct StorageErrorView: View {
                 .font(.headline)
                 .foregroundColor(.white)
 
-            Text(errorMessage)
+            Text(verbatim: errorMessage)
                 .font(.subheadline)
                 .foregroundColor(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
@@ -50,11 +50,17 @@ private struct StorageErrorView: View {
                 .padding(.top, 8)
 
             HStack(spacing: 12) {
-                Button(copiedDiagnostics ? "Copied" : "Copy Diagnostics") {
+                Button {
                     UIPasteboard.general.string = StartupDiagnostics.report(errorMessage: errorMessage)
                     copiedDiagnostics = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         copiedDiagnostics = false
+                    }
+                } label: {
+                    if copiedDiagnostics {
+                        Text("Copied")
+                    } else {
+                        Text("Copy Diagnostics")
                     }
                 }
                 .buttonStyle(.bordered)
@@ -121,7 +127,7 @@ private struct SplashLoadingView: View {
             }
 
             if let statusMessage {
-                Text(statusMessage)
+                Text(verbatim: statusMessage)
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.7))
             }
@@ -145,7 +151,7 @@ private struct SplashLoadingView: View {
                 if let progress = activeMigration()?.progress(),
                    progress.total > 0
                 {
-                    statusMessage = "Encrypting data..."
+                    statusMessage = String(localized: "Encrypting data...")
                     encryptionProgress =
                         Double(progress.current) / Double(progress.total)
                 } else if encryptionProgress != nil {

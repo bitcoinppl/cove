@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,7 +69,7 @@ fun SidebarView(
         ) {
             Image(
                 painter = painterResource(id = R.drawable.cove_logo),
-                contentDescription = "Cove",
+                contentDescription = stringResource(R.string.common_remaining_cove_logo_content_description),
                 modifier =
                     Modifier
                         .size(65.dp)
@@ -82,7 +83,7 @@ fun SidebarView(
             ) {
                 Icon(
                     imageVector = Icons.Default.Nfc,
-                    contentDescription = "NFC Scan",
+                    contentDescription = stringResource(R.string.common_remaining_nfc_scan_content_description),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp),
                 )
@@ -100,7 +101,7 @@ fun SidebarView(
 
         // my wallets header
         Text(
-            text = "My Wallets",
+            text = stringResource(R.string.common_remaining_my_wallets),
             color = Color.White,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
@@ -150,7 +151,7 @@ fun SidebarView(
                 modifier = Modifier.size(24.dp),
             )
             Text(
-                text = "Add Wallet",
+                text = stringResource(R.string.common_remaining_add_wallet),
                 color = Color.White,
                 fontSize = 16.sp,
             )
@@ -176,7 +177,7 @@ fun SidebarView(
                 modifier = Modifier.size(24.dp),
             )
             Text(
-                text = "Settings",
+                text = stringResource(R.string.title_wallet_settings),
                 color = Color.White,
                 fontSize = 16.sp,
             )
@@ -211,7 +212,7 @@ private fun WalletItem(
 
         // wallet name
         AutoSizeText(
-            text = wallet.name ?: "Wallet",
+            text = wallet.name,
             color = Color.White,
             maxFontSize = 13.sp,
             minimumScaleFactor = 0.80f,

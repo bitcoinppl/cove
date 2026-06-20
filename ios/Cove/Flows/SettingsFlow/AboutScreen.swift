@@ -125,7 +125,7 @@ struct AboutScreen: View {
         )
     }
 
-    private var alertTitle: String {
+    private var alertTitle: LocalizedStringKey {
         guard let alertState else { return "Error" }
         return MyAlert(alertState).title
     }
@@ -142,7 +142,8 @@ struct AboutScreen: View {
                             try Database().globalFlag().set(key: .betaFeaturesEnabled, value: true)
                             isBetaEnabled = true
                         } catch {
-                            alertState = .init(.betaError("Failed to enable beta features: \(error.localizedDescription)"))
+                            Log.error("Failed to enable beta features: \(error)")
+                            alertState = .init(.betaError(String(localized: "Unable to enable beta features. Please try again.")))
                             return
                         }
                         alertState = .init(.betaEnabled)
@@ -161,7 +162,8 @@ struct AboutScreen: View {
                             try Database().globalFlag().set(key: .betaFeaturesEnabled, value: false)
                             isBetaEnabled = false
                         } catch {
-                            alertState = .init(.betaError("Failed to disable beta features: \(error.localizedDescription)"))
+                            Log.error("Failed to disable beta features: \(error)")
+                            alertState = .init(.betaError(String(localized: "Unable to disable beta features. Please try again.")))
                             return
                         }
                         alertState = .none
@@ -177,10 +179,10 @@ struct AboutScreen: View {
                 actions: { Button("OK") { dismiss() } }
             ).eraseToAny()
 
-        case let .betaError(error):
+        case .betaError:
             AlertBuilder(
                 title: "Something went wrong!",
-                message: error,
+                message: "Unable to update beta features. Please try again.",
                 actions: { Button("OK") { alertState = .none } }
             ).eraseToAny()
 
@@ -204,7 +206,9 @@ struct AboutScreen: View {
         case let .wipeCloudResult(result):
             AlertBuilder(
                 title: result.succeeded ? "Cloud Backup Wiped" : "Cloud Backup Wipe Failed",
-                message: result.message,
+                message: result.succeeded
+                    ? "All cloud backup data was deleted and local state was reset."
+                    : "Unable to wipe Cloud Backup data. Please try again.",
                 actions: { Button("OK") { alertState = .none } }
             ).eraseToAny()
 
@@ -215,16 +219,16 @@ struct AboutScreen: View {
                 actions: {
                     Button("Reset", role: .destructive) {
                         RustCloudBackupManager().debugResetCloudBackupState()
-                        alertState = .init(.resetLocalStateResult("Local backup state reset. iCloud files are untouched."))
+                        alertState = .init(.resetLocalStateResult(String(localized: "Local backup state reset. iCloud files are untouched.")))
                     }
                     Button("Cancel", role: .cancel) { alertState = .none }
                 }
             ).eraseToAny()
 
-        case let .resetLocalStateResult(message):
+        case .resetLocalStateResult:
             AlertBuilder(
                 title: "Local State Reset",
-                message: message,
+                message: "Local backup state reset. iCloud files are untouched.",
                 actions: { Button("OK") { alertState = .none } }
             ).eraseToAny()
         }
@@ -241,12 +245,15 @@ struct AboutScreen: View {
         } catch {
             return WipeCloudResult(
                 succeeded: false,
-                message: "iCloud wipe failed: \(error.localizedDescription)"
+                message: String(localized: "iCloud wipe failed. Please try again.")
             )
         }
 
         RustCloudBackupManager().debugResetCloudBackupState()
-        return WipeCloudResult(succeeded: true, message: "All cloud backup data deleted and local state reset")
+        return WipeCloudResult(
+            succeeded: true,
+            message: String(localized: "All cloud backup data deleted and local state reset.")
+        )
     }
 }
 

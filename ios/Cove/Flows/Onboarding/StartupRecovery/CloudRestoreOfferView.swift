@@ -25,12 +25,12 @@ struct CloudRestoreOfferView: View {
                     .frame(height: 16)
 
                 VStack(spacing: 16) {
-                    Text(warningMessage == nil ? "iCloud Backup Found" : "Restore from iCloud")
+                    titleText
                         .font(OnboardingRecoveryTypography.heroTitle)
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
 
-                    Text(messageBody)
+                    messageBody
                         .font(OnboardingRecoveryTypography.body)
                         .foregroundStyle(.coveLightGray.opacity(0.76))
                         .multilineTextAlignment(.center)
@@ -83,12 +83,20 @@ struct CloudRestoreOfferView: View {
         .animation(.easeInOut(duration: 0.3), value: errorMessage)
     }
 
-    private var messageBody: String {
+    private var titleText: Text {
         if warningMessage == nil {
-            return "A previous iCloud backup was found. Restore your wallet securely using your passkey."
+            return Text("iCloud Backup Found")
         }
 
-        return "We couldn't confirm whether an iCloud backup is available. If you're reinstalling this device, you can still try restoring with your passkey."
+        return Text("Restore from iCloud")
+    }
+
+    private var messageBody: Text {
+        if warningMessage == nil {
+            return Text("A previous iCloud backup was found. Restore your wallet securely using your passkey.")
+        }
+
+        return Text("We couldn't confirm whether an iCloud backup is available. If you're reinstalling this device, you can still try restoring with your passkey.")
     }
 
     private var heroIcon: some View {
@@ -139,7 +147,7 @@ struct CloudRestoreOfferView: View {
                         .font(OnboardingRecoveryTypography.bodySemibold)
                         .foregroundStyle(.white)
 
-                    Text(providerHint.map(passkeyDisplayName) ?? "Secured with your passkey provider")
+                    providerSubtitle
                         .font(OnboardingRecoveryTypography.footnote)
                         .foregroundStyle(.coveLightGray.opacity(0.58))
                 }
@@ -193,7 +201,7 @@ struct CloudRestoreOfferView: View {
                     .foregroundStyle(Color.btnGradientLight)
                     .frame(width: 48)
 
-                Text(passkeyStorageDescription)
+                passkeyStorageDescription
                     .font(OnboardingRecoveryTypography.subheadline)
                     .foregroundStyle(.coveLightGray.opacity(0.74))
                     .fixedSize(horizontal: false, vertical: true)
@@ -211,7 +219,7 @@ struct CloudRestoreOfferView: View {
         )
     }
 
-    private func providerDetailItem(icon: String, label: String, value: String) -> some View {
+    private func providerDetailItem(icon: String, label: LocalizedStringKey, value: String) -> some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 20, weight: .semibold))
@@ -223,7 +231,7 @@ struct CloudRestoreOfferView: View {
                     .font(OnboardingRecoveryTypography.captionSemibold)
                     .foregroundStyle(.coveLightGray.opacity(0.64))
 
-                Text(value)
+                Text(verbatim: value)
                     .font(OnboardingRecoveryTypography.footnote)
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
@@ -232,12 +240,20 @@ struct CloudRestoreOfferView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var passkeyStorageDescription: String {
-        if let providerName = providerHint?.providerName {
-            return "Your passkey is stored securely by \(providerName), and your encrypted backup is stored in iCloud."
+    private var providerSubtitle: Text {
+        if let providerHint {
+            return Text(verbatim: passkeyDisplayName(providerHint))
         }
 
-        return "Your passkey is stored securely by your passkey provider, and your encrypted backup is stored in iCloud."
+        return Text("Secured with your passkey provider")
+    }
+
+    private var passkeyStorageDescription: Text {
+        if let providerName = providerHint?.providerName {
+            return Text("Your passkey is stored securely by \(providerName), and your encrypted backup is stored in iCloud.")
+        }
+
+        return Text("Your passkey is stored securely by your passkey provider, and your encrypted backup is stored in iCloud.")
     }
 
     private func passkeyDisplayName(_ providerHint: CloudRestoreProviderHint) -> String {
@@ -256,7 +272,7 @@ struct CloudRestoreOfferView: View {
                 .foregroundStyle(.orange)
                 .padding(.top, 2)
 
-            Text(message)
+            Text(verbatim: message)
                 .font(OnboardingRecoveryTypography.footnote)
                 .foregroundStyle(.orange.opacity(0.95))
                 .fixedSize(horizontal: false, vertical: true)
@@ -281,7 +297,7 @@ struct CloudRestoreOfferView: View {
                 .foregroundStyle(Color.btnGradientLight.opacity(0.95))
                 .padding(.top, 2)
 
-            Text(message)
+            Text(verbatim: message)
                 .font(OnboardingRecoveryTypography.footnote)
                 .foregroundStyle(.coveLightGray.opacity(0.9))
                 .fixedSize(horizontal: false, vertical: true)

@@ -21,7 +21,7 @@ struct CoveMainView: View {
 
     @ViewBuilder
     private func alertMessage(alert: TaggedItem<AppAlertState>) -> some View {
-        let text = alert.item.message()
+        let text = alert.item.localizedMessage
 
         if case .foundAddress = alert.item {
             Text(text.map { "\($0)\u{200B}" }.joined())
@@ -69,8 +69,8 @@ struct CoveMainView: View {
                     DispatchQueue.main.async {
                         app.alertState = .init(
                             .general(
-                                title: "Error",
-                                message: error.localizedDescription
+                                title: String(localized: "Error"),
+                                message: String(localized: "Unable to change the wallet type. Please try again.")
                             )
                         )
                     }
@@ -186,7 +186,7 @@ struct CoveMainView: View {
                 } catch {
                     DispatchQueue.main.async {
                         app.alertState = .init(
-                            .errorImportingHardwareWallet(message: error.localizedDescription)
+                            .errorImportingHardwareWallet(message: String(localized: "Unable to import this hardware wallet. Please try again."))
                         )
                     }
                 }
@@ -480,7 +480,7 @@ struct CoveMainView: View {
                 .onChange(of: scannedCode, onChangeQr)
                 .onChange(of: app.nfcReader.scannedMessage, onChangeNfc)
                 .alert(
-                    app.alertState?.item.title() ?? "Alert",
+                    app.alertState?.item.localizedTitle ?? String(localized: "Alert"),
                     isPresented: showingAlert,
                     presenting: app.alertState,
                     actions: alertButtons,

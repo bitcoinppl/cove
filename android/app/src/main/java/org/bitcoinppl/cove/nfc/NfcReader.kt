@@ -15,6 +15,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
 import java.nio.charset.Charset
 
 enum class NfcReadingState {
@@ -35,7 +37,7 @@ class NfcReader(
     var isScanning by mutableStateOf(false)
         private set
 
-    var message by mutableStateOf("")
+    var message by mutableStateOf<UiText?>(null)
         private set
 
     var readingState by mutableStateOf(NfcReadingState.WAITING)
@@ -43,17 +45,17 @@ class NfcReader(
 
     fun startScanning() {
         if (nfcAdapter == null) {
-            _scanResults.trySend(NfcScanResult.Error("NFC is not supported on this device"))
+            _scanResults.trySend(NfcScanResult.Error(UiText.resource(R.string.nfc_not_supported)))
             return
         }
 
         if (!nfcAdapter.isEnabled) {
-            _scanResults.trySend(NfcScanResult.Error("NFC is disabled. Please enable it in Settings"))
+            _scanResults.trySend(NfcScanResult.Error(UiText.resource(R.string.nfc_disabled)))
             return
         }
 
         isScanning = true
-        message = "Hold your phone near the NFC tag"
+        message = UiText.resource(R.string.nfc_hold_near_tag)
         readingState = NfcReadingState.WAITING
 
         // must be called on UI thread
@@ -75,7 +77,7 @@ class NfcReader(
 
     fun stopScanning() {
         isScanning = false
-        message = ""
+        message = null
         readingState = NfcReadingState.WAITING
         // must be called on UI thread
         activity.runOnUiThread {
@@ -89,7 +91,7 @@ class NfcReader(
         // update state on main thread - tag detected!
         mainHandler.post {
             readingState = NfcReadingState.TAG_DETECTED
-            message = "Reading"
+            message = UiText.resource(R.string.nfc_reading)
         }
 
         try {
@@ -114,14 +116,18 @@ class NfcReader(
             // if NDEF didn't work, try to format and read
             val ndefFormatable = NdefFormatable.get(tag)
             if (ndefFormatable != null) {
-                _scanResults.trySend(NfcScanResult.Error("Tag is not formatted with NDEF data"))
+                _scanResults.trySend(NfcScanResult.Error(UiText.resource(R.string.nfc_tag_not_formatted)))
                 return
             }
 
-            _scanResults.trySend(NfcScanResult.Error("Unable to read NFC tag"))
+            _scanResults.trySend(NfcScanResult.Error(UiText.resource(R.string.nfc_unable_to_read_tag)))
         } catch (e: Exception) {
             Log.e("NfcReader", "Error reading NFC tag", e)
-            _scanResults.trySend(NfcScanResult.Error("Error reading tag: ${e.message}"))
+            _scanResults.trySend(
+                NfcScanResult.Error(
+                    UiText.resource(R.string.nfc_error_reading_tag),
+                ),
+            )
         }
     }
 
@@ -205,7 +211,7 @@ class NfcReader(
             // set SUCCESS state and show success message
             mainHandler.post {
                 readingState = NfcReadingState.SUCCESS
-                message = "Tag read successfully!"
+                message = UiText.resource(R.string.nfc_tag_read_successfully)
             }
 
             // delay sending the result so UI can show success message
@@ -221,7 +227,7 @@ class NfcReader(
                 stopScanning()
             }, SUCCESS_DISPLAY_DELAY_MS)
         } else {
-            _scanResults.trySend(NfcScanResult.Error("No readable data found on NFC tag"))
+            _scanResults.trySend(NfcScanResult.Error(UiText.resource(R.string.nfc_no_readable_data)))
             stopScanning()
         }
     }
@@ -233,7 +239,7 @@ class NfcReader(
     fun reset() {
         stopScanning()
         isScanning = false
-        message = ""
+        message = null
         readingState = NfcReadingState.WAITING
     }
 }
@@ -268,6 +274,6 @@ sealed class NfcScanResult {
     }
 
     data class Error(
-        val message: String,
+        val message: UiText,
     ) : NfcScanResult()
 }

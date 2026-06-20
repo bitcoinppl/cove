@@ -37,10 +37,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.AppAction
@@ -129,12 +131,12 @@ fun SendFlowAdvancedDetailsView(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = "Advanced Details",
+                    text = stringResource(R.string.title_advanced_details),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "View current transaction breakdown",
+                    text = stringResource(R.string.subtitle_advanced_details),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
@@ -150,7 +152,7 @@ fun SendFlowAdvancedDetailsView(
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
+                    contentDescription = stringResource(R.string.wallet_send_close),
                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                     modifier = Modifier.size(18.dp),
                 )
@@ -173,7 +175,7 @@ fun SendFlowAdvancedDetailsView(
             if (split != null) {
                 // UTXOs Used (inputs)
                 SectionCard(
-                    title = "UTXOs Used",
+                    title = stringResource(R.string.wallet_send_utxos_used),
                     rows = toTxRows(details.inputs()),
                     onCopyAddress = { address ->
                         copyToClipboard(context, address)
@@ -185,7 +187,7 @@ fun SendFlowAdvancedDetailsView(
                 // outputs - either Sent To Self or Sent To Address
                 if (split.external.isEmpty()) {
                     SectionCard(
-                        title = "Sent To Self",
+                        title = stringResource(R.string.wallet_send_sent_to_self),
                         rows = toTxRows(split.internal),
                         onCopyAddress = { address ->
                             copyToClipboard(context, address)
@@ -194,7 +196,7 @@ fun SendFlowAdvancedDetailsView(
                     SectionDivider()
                 } else {
                     SectionCard(
-                        title = "Sent To Address",
+                        title = stringResource(R.string.wallet_send_sent_to_address),
                         rows = toTxRows(split.external),
                         onCopyAddress = { address ->
                             copyToClipboard(context, address)
@@ -205,7 +207,7 @@ fun SendFlowAdvancedDetailsView(
                     // UTXO Change - only show if there are both external and internal outputs
                     if (split.internal.isNotEmpty()) {
                         SectionCard(
-                            title = "UTXO Change",
+                            title = stringResource(R.string.wallet_send_utxo_change),
                             rows = toTxRows(split.internal),
                             onCopyAddress = { address ->
                                 copyToClipboard(context, address)
@@ -217,7 +219,7 @@ fun SendFlowAdvancedDetailsView(
             } else {
                 // loading state - show raw inputs and outputs
                 SectionCard(
-                    title = "UTXO Inputs",
+                    title = stringResource(R.string.wallet_send_utxo_inputs),
                     rows = toTxRows(details.inputs()),
                     onCopyAddress = { address ->
                         copyToClipboard(context, address)
@@ -227,7 +229,7 @@ fun SendFlowAdvancedDetailsView(
                 SectionDivider()
 
                 SectionCard(
-                    title = "UTXO Outputs",
+                    title = stringResource(R.string.wallet_send_utxo_outputs),
                     rows = toTxRows(details.outputs()),
                     onCopyAddress = { address ->
                         copyToClipboard(context, address)
@@ -246,7 +248,7 @@ fun SendFlowAdvancedDetailsView(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "Fee",
+                    text = stringResource(R.string.label_fee),
                     style = MaterialTheme.typography.caption,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -319,8 +321,8 @@ private fun TxRow(
 
     val label =
         model.label ?: when (model.utxoType) {
-            UtxoType.OUTPUT -> "Receive Address"
-            UtxoType.CHANGE -> "Change Address"
+            UtxoType.OUTPUT -> stringResource(R.string.wallet_send_receive_address)
+            UtxoType.CHANGE -> stringResource(R.string.wallet_send_change_address)
             else -> null
         }
 
@@ -390,7 +392,7 @@ private fun TxRow(
             onDismissRequest = { showMenu = false },
         ) {
             DropdownMenuItem(
-                text = { Text("Copy") },
+                text = { Text(stringResource(R.string.wallet_send_copy)) },
                 onClick = {
                     onCopyAddress(model.addressUnformatted)
                     showMenu = false
@@ -402,6 +404,6 @@ private fun TxRow(
 
 private fun copyToClipboard(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("address", text)
+    val clip = ClipData.newPlainText(context.getString(R.string.wallet_send_address_clip_label), text)
     clipboard.setPrimaryClip(clip)
 }

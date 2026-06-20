@@ -63,7 +63,10 @@ fun FiatCurrencySettingsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { app.popRoute() }) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.content_description_back),
+                        )
                     }
                 },
                 actions = { },
@@ -117,14 +120,19 @@ private fun FiatCurrencyRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "${fiatCurrency.emojiString()} ${fiatCurrency}",
+            text =
+                stringResource(
+                    R.string.common_remaining_fiat_currency_label,
+                    fiatCurrency.emojiString(),
+                    fiatCurrency.toString(),
+                ),
             style = MaterialTheme.typography.bodyMedium,
         )
 
         if (isSelected) {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
+                contentDescription = stringResource(R.string.content_description_selected),
                 tint = MaterialTheme.colorScheme.primary,
             )
         }

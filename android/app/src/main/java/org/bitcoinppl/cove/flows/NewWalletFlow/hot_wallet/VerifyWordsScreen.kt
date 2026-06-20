@@ -255,7 +255,7 @@ fun VerifyWordsScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.new_wallet_flow_back),
                         )
                     }
                 },
@@ -486,10 +486,10 @@ fun VerifyWordsScreen(
             if (showSkipAlert) {
                 AlertDialog(
                     onDismissRequest = { showSkipAlert = false },
-                    title = { Text("Skip verifying words?") },
+                    title = { Text(stringResource(R.string.new_wallet_flow_skip_verifying_words_title)) },
                     text = {
                         Text(
-                            "Are you sure you want to skip verifying words? Without having a backup of these words, you could lose your bitcoin",
+                            stringResource(R.string.new_wallet_flow_skip_verifying_words_message),
                         )
                     },
                     confirmButton = {
@@ -499,12 +499,12 @@ fun VerifyWordsScreen(
                                 onSkip()
                             },
                         ) {
-                            Text("Yes, Verify Later")
+                            Text(stringResource(R.string.new_wallet_flow_yes_verify_later))
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { showSkipAlert = false }) {
-                            Text("Cancel")
+                            Text(stringResource(R.string.new_wallet_flow_cancel))
                         }
                     },
                 )

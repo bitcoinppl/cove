@@ -44,10 +44,10 @@ use crate::manager::cloud_backup_manager::wallets::{
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupDetailResult,
     CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableOutcome,
-    CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupKeychain,
-    CloudBackupLifecycle, CloudBackupManagerAction, CloudBackupOtherBackupsState,
-    CloudBackupPasskeyChoiceIntent, CloudBackupRestoreEvent, CloudBackupRootPrompt,
-    CloudBackupVerificationOutcome, CloudBackupVerificationPresentation,
+    CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupIntegrityIssue,
+    CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
+    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreEvent,
+    CloudBackupRootPrompt, CloudBackupVerificationOutcome, CloudBackupVerificationPresentation,
     CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
     DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
     PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
@@ -4762,9 +4762,9 @@ async fn sync_and_integrity_skip_pending_upload_candidates() {
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(1));
 
-    let warning = manager.verify_backup_integrity_impl().await.expect("expected passkey warning");
+    let issues = manager.verify_backup_integrity_impl().await;
 
-    assert!(!warning.contains("some wallets are not backed up"));
+    assert!(!issues.contains(&CloudBackupIntegrityIssue::WalletsNotBackedUp));
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(1));
 }
@@ -4790,9 +4790,9 @@ async fn integrity_does_not_retry_sync_after_auto_backup_failure() {
         .unwrap();
     globals.cloud.fail_wallet_backup_upload("offline");
 
-    let warning = manager.verify_backup_integrity_impl().await.expect("expected integrity warning");
+    let issues = manager.verify_backup_integrity_impl().await;
 
-    assert!(warning.contains("some wallets are not backed up"));
+    assert!(issues.contains(&CloudBackupIntegrityIssue::WalletsNotBackedUp));
     assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
 }
 
@@ -4810,9 +4810,9 @@ async fn integrity_warns_when_background_wallet_list_fails() {
         .unwrap();
     globals.cloud.fail_list_wallet_files_non_interactive("offline");
 
-    let warning = manager.verify_backup_integrity_impl().await.expect("expected integrity warning");
+    let issues = manager.verify_backup_integrity_impl().await;
 
-    assert!(warning.contains("wallet backups could not be listed"));
+    assert!(issues.contains(&CloudBackupIntegrityIssue::RemoteWalletListUnreadable));
     globals.cloud.clear_list_wallet_files_non_interactive_failure();
 }
 
@@ -4909,9 +4909,9 @@ async fn integrity_preserves_unsupported_remote_wallet_backups() {
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
-    let warning = manager.verify_backup_integrity_impl().await;
+    let issues = manager.verify_backup_integrity_impl().await;
 
-    assert!(warning.is_none());
+    assert!(issues.is_empty());
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
 
     let detail = manager.model_snapshot().detail.expect("expected cloud backup detail");
@@ -5009,9 +5009,9 @@ async fn integrity_refreshes_detail_after_auto_backup_success() {
         .unwrap();
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
 
-    let warning = manager.verify_backup_integrity_impl().await;
+    let issues = manager.verify_backup_integrity_impl().await;
 
-    assert!(warning.is_none());
+    assert!(issues.is_empty());
     let detail = manager.model_snapshot().detail.expect("expected cloud backup detail");
     assert_eq!(detail.up_to_date.len(), 1);
     assert!(detail.needs_sync.is_empty());
@@ -5037,9 +5037,9 @@ async fn integrity_auto_backup_continues_when_other_backup_summary_fails() {
         .unwrap();
     globals.cloud.fail_list_namespaces("offline while listing namespaces");
 
-    let warning = manager.verify_backup_integrity_impl().await;
+    let issues = manager.verify_backup_integrity_impl().await;
 
-    assert!(warning.is_none());
+    assert!(issues.is_empty());
     assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
     let detail = manager.model_snapshot().detail.expect("expected cloud backup detail");
     assert!(matches!(detail.other_backups, CloudBackupOtherBackupsState::LoadFailed { .. }));
@@ -5062,9 +5062,9 @@ async fn integrity_does_not_retry_sync_after_auto_backup_success_when_listing_st
         .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
         .unwrap();
 
-    let warning = manager.verify_backup_integrity_impl().await;
+    let issues = manager.verify_backup_integrity_impl().await;
 
-    assert!(warning.is_none());
+    assert!(issues.is_empty());
     assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
 }
 
@@ -5086,9 +5086,9 @@ async fn integrity_refreshes_detail_after_auto_backup_failure() {
         .unwrap();
     globals.cloud.fail_wallet_backup_upload("offline");
 
-    let warning = manager.verify_backup_integrity_impl().await.expect("expected integrity warning");
+    let issues = manager.verify_backup_integrity_impl().await;
 
-    assert!(warning.contains("some wallets are not backed up"));
+    assert!(issues.contains(&CloudBackupIntegrityIssue::WalletsNotBackedUp));
     let detail = manager.model_snapshot().detail.expect("expected cloud backup detail");
     assert_eq!(detail.needs_sync.len(), 1);
     assert_eq!(detail.needs_sync[0].record_id, record_id);
@@ -5332,13 +5332,7 @@ async fn deep_verify_fails_when_auto_sync_upload_fails() {
     let result = deep_verify_for_test(&manager, true).await;
 
     match result {
-        DeepVerificationResult::Failed(DeepVerificationFailure::Retry {
-            message, detail, ..
-        }) => {
-            assert_eq!(
-                message,
-                "failed to auto-sync missing wallet backups: cloud storage error: upload failed: upload failed"
-            );
+        DeepVerificationResult::Failed(DeepVerificationFailure::Retry { detail, .. }) => {
             let detail = detail.expect("expected detail on retry failure");
             assert_eq!(detail.needs_sync.len(), 1);
             assert_eq!(detail.needs_sync[0].record_id, record_id);
@@ -5372,9 +5366,7 @@ async fn deep_verify_persists_partial_auto_sync_upload_before_later_wallet_fails
 
     let record_id = wallet_record_id(first_wallet.id.as_ref());
     match result {
-        DeepVerificationResult::Failed(DeepVerificationFailure::Retry { message, .. }) => {
-            assert!(message.contains("upload failed"), "{message}");
-        }
+        DeepVerificationResult::Failed(DeepVerificationFailure::Retry { .. }) => {}
         other => panic!("expected retry failure, got {other:?}"),
     }
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
@@ -5511,9 +5503,7 @@ async fn manual_verification_loads_wallet_inventory_before_wrapper_repair() {
     .await;
 
     match manager.model_snapshot().verification {
-        VerificationState::Failed(DeepVerificationFailure::Retry { message, .. }) => {
-            assert!(message.contains("failed to list wallet backups"), "{message}");
-        }
+        VerificationState::Failed(DeepVerificationFailure::Retry { .. }) => {}
         other => panic!("expected retry failure, got {other:?}"),
     }
     assert_eq!(globals.passkey.create_count(), 0);
@@ -5814,12 +5804,7 @@ async fn pending_upload_verification_expires_stale_completion() {
         PendingUploadVerificationState::Idle
     );
     match manager.model_snapshot().verification {
-        VerificationState::Failed(DeepVerificationFailure::Retry { message, .. }) => {
-            assert_eq!(
-                message,
-                "cloud backup upload confirmation expired; start verification again"
-            );
-        }
+        VerificationState::Failed(DeepVerificationFailure::Retry { .. }) => {}
         other => panic!("expected retry failure for stale completion, got {other:?}"),
     }
 }
@@ -6233,11 +6218,7 @@ async fn deep_verify_retries_when_remote_wallet_truth_is_unknown() {
     let result = deep_verify_for_test(&manager, true).await;
 
     match result {
-        DeepVerificationResult::Failed(DeepVerificationFailure::Retry {
-            message, detail, ..
-        }) => {
-            assert_eq!(message, "failed to refresh remote wallet truth for some wallets");
-
+        DeepVerificationResult::Failed(DeepVerificationFailure::Retry { detail, .. }) => {
             let detail = detail.expect("expected verification detail");
             assert_eq!(detail.needs_sync.len(), 1);
             assert_eq!(detail.needs_sync[0].record_id, record_id);

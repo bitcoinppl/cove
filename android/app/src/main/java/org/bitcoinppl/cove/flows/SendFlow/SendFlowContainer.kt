@@ -21,10 +21,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.QrCodeScanView
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
@@ -65,6 +67,12 @@ fun SendFlowContainer(
     var sendFlowManager by remember(walletId) { mutableStateOf<SendFlowManager?>(null) }
     var initCompleted by remember(walletId) { mutableStateOf(false) }
     val tag = "SendFlowContainer"
+    val initialScanIncompleteTitle = stringResource(R.string.common_remaining_initial_scan_incomplete_title)
+    val initialScanIncompleteMessage = stringResource(R.string.common_remaining_initial_scan_incomplete_message)
+    val walletNotFoundTitle = stringResource(R.string.common_remaining_wallet_not_found_title)
+    val walletNoLongerAvailableMessage = stringResource(R.string.common_remaining_wallet_no_longer_available_message)
+    val unableToOpenWalletTitle = stringResource(R.string.common_remaining_unable_to_open_wallet_title)
+    val unableToOpenSendMessage = stringResource(R.string.wallet_send_unable_to_open_wallet_for_sending)
 
     // initialize managers on appear
     LaunchedEffect(sendRoute) {
@@ -96,7 +104,7 @@ fun SendFlowContainer(
             }
         } catch (e: WalletManagerException.InitialScanIncomplete) {
             android.util.Log.e(tag, "initial scan incomplete", e)
-            app.showInitialScanIncompleteAlert()
+            app.showInitialScanIncompleteAlert(initialScanIncompleteTitle, initialScanIncompleteMessage)
             app.popRoute()
         } catch (e: WalletManagerException.DatabaseCorruption) {
             android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
@@ -110,8 +118,8 @@ fun SendFlowContainer(
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
-                        title = "Wallet Not Found",
-                        message = "This wallet is no longer available.",
+                        title = walletNotFoundTitle,
+                        message = walletNoLongerAvailableMessage,
                     ),
                 )
             app.trySelectLatestOrNewWallet()
@@ -120,8 +128,8 @@ fun SendFlowContainer(
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
-                        title = "Unable to Open Wallet",
-                        message = "The wallet could not be opened for sending. Please try again from the wallet screen.",
+                        title = unableToOpenWalletTitle,
+                        message = unableToOpenSendMessage,
                     ),
                 )
             app.popRoute()
@@ -130,8 +138,8 @@ fun SendFlowContainer(
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
-                        title = "Unable to Open Wallet",
-                        message = "The wallet could not be opened for sending. Please try again from the wallet screen.",
+                        title = unableToOpenWalletTitle,
+                        message = unableToOpenSendMessage,
                     ),
                 )
             app.popRoute()
@@ -243,6 +251,20 @@ private fun SendFlowRouteToScreen(
     presenter: SendFlowPresenter,
     modifier: Modifier = Modifier,
 ) {
+    val unknownError = stringResource(R.string.wallet_send_unknown_error)
+    val okText = stringResource(R.string.wallet_send_ok)
+    val exceedsBalanceMessage = stringResource(R.string.wallet_send_exceeds_available_balance)
+    val invalidAddressMessage = stringResource(R.string.wallet_send_address_not_valid)
+    val invalidAmountMessage = stringResource(R.string.wallet_send_amount_not_valid)
+    val invalidQrCodeTitle = stringResource(R.string.wallet_send_invalid_qr_code_title)
+    val invalidQrCodeMessage = stringResource(R.string.wallet_send_invalid_bitcoin_address_qr)
+    val unableToFinalizeTitle = stringResource(R.string.wallet_send_unable_to_finalize_transaction)
+    val unableToFinalizeMessage = stringResource(R.string.wallet_send_unable_to_finalize_transaction_message)
+    val successTitle = stringResource(R.string.wallet_send_success)
+    val sentSuccessfullyMessage = stringResource(R.string.wallet_send_transaction_sent_successfully)
+    val errorTitle = stringResource(R.string.wallet_send_error)
+    val failedToSendMessage = stringResource(R.string.wallet_send_failed_to_send_transaction)
+
     when (sendRoute) {
         is SendRoute.SetAmount -> {
             val exceedsBalance = sendFlowManager.amountExceedsBalance()
@@ -253,7 +275,7 @@ private fun SendFlowRouteToScreen(
             LaunchedEffect(exceedsBalance) {
                 if (exceedsBalance && !previouslyExceeded) {
                     snackbarHostState.showSnackbar(
-                        message = "Exceeds available balance",
+                        message = exceedsBalanceMessage,
                         duration = SnackbarDuration.Short,
                     )
                 }
@@ -279,7 +301,7 @@ private fun SendFlowRouteToScreen(
                             if (hasAddress) {
                                 validationScope.launch {
                                     snackbarHostState.showSnackbar(
-                                        message = "Address not valid. Please try again.",
+                                        message = invalidAddressMessage,
                                         duration = SnackbarDuration.Short,
                                     )
                                 }
@@ -291,7 +313,7 @@ private fun SendFlowRouteToScreen(
                             if (hasAmount) {
                                 validationScope.launch {
                                     snackbarHostState.showSnackbar(
-                                        message = "Amount not valid. Please try again.",
+                                        message = invalidAmountMessage,
                                         duration = SnackbarDuration.Short,
                                     )
                                 }
@@ -342,8 +364,8 @@ private fun SendFlowRouteToScreen(
                                             app.alertState =
                                                 TaggedItem(
                                                     AppAlertState.General(
-                                                        title = "Invalid QR Code",
-                                                        message = "Please scan a valid Bitcoin address QR code",
+                                                        title = invalidQrCodeTitle,
+                                                        message = invalidQrCodeMessage,
                                                     ),
                                                 )
                                         }
@@ -507,8 +529,8 @@ private fun SendFlowRouteToScreen(
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.General(
-                                    title = "Unable to finalize transaction",
-                                    message = e.message ?: "Unknown error",
+                                    title = unableToFinalizeTitle,
+                                    message = e.message ?: unableToFinalizeMessage,
                                 ),
                             )
                         app.popRoute()
@@ -516,8 +538,8 @@ private fun SendFlowRouteToScreen(
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.General(
-                                    title = "Unknown error",
-                                    message = e.message ?: "Unknown error",
+                                    title = unknownError,
+                                    message = e.message ?: unknownError,
                                 ),
                             )
                         app.popRoute()
@@ -555,9 +577,7 @@ private fun SendFlowRouteToScreen(
                                     walletManager.broadcastTransaction(input.v1)
                                 }
                                 is SendConfirmationInput.SignedPsbt -> {
-                                    val txnToBroadcast =
-                                        finalizedTransaction
-                                            ?: error("Unable to finalize transaction")
+                                    val txnToBroadcast = finalizedTransaction ?: error(unableToFinalizeMessage)
                                     walletManager.broadcastTransaction(txnToBroadcast)
                                 }
                                 SendConfirmationInput.Unsigned -> {
@@ -570,10 +590,10 @@ private fun SendFlowRouteToScreen(
                             showSuccessAlert = true
                             Auth.unlock()
                         } catch (e: WalletManagerException) {
-                            sendState = SendState.Error(e.message ?: "Unknown error")
+                            sendState = SendState.Error(e.message ?: unknownError)
                             showErrorAlert = true
                         } catch (e: Exception) {
-                            sendState = SendState.Error(e.message ?: "Unknown error")
+                            sendState = SendState.Error(e.message ?: unknownError)
                             showErrorAlert = true
                         }
                     }
@@ -587,8 +607,8 @@ private fun SendFlowRouteToScreen(
                         showSuccessAlert = false
                         app.loadAndReset(Route.SelectedWallet(walletManager.id))
                     },
-                    title = { Text("Success") },
-                    text = { Text("Transaction sent successfully!") },
+                    title = { Text(successTitle) },
+                    text = { Text(sentSuccessfullyMessage) },
                     confirmButton = {
                         TextButton(
                             onClick = {
@@ -596,7 +616,7 @@ private fun SendFlowRouteToScreen(
                                 app.loadAndReset(Route.SelectedWallet(walletManager.id))
                             },
                         ) {
-                            Text("OK")
+                            Text(okText)
                         }
                     },
                 )
@@ -609,12 +629,12 @@ private fun SendFlowRouteToScreen(
                         showErrorAlert = false
                         sendState = SendState.Idle
                     },
-                    title = { Text("Error") },
+                    title = { Text(errorTitle) },
                     text = {
                         val errorMessage =
                             when (val state = sendState) {
                                 is SendState.Error -> state.message
-                                else -> "Failed to send transaction"
+                                else -> failedToSendMessage
                             }
                         Text(errorMessage)
                     },
@@ -625,7 +645,7 @@ private fun SendFlowRouteToScreen(
                                 sendState = SendState.Idle
                             },
                         ) {
-                            Text("OK")
+                            Text(okText)
                         }
                     },
                 )
@@ -648,8 +668,8 @@ private fun SendFlowRouteToScreen(
                 presenter.setDisappearing()
                 presenter.alertState = null
             },
-            title = { Text(presenter.alertTitle()) },
-            text = { Text(presenter.alertMessage()) },
+            title = { Text(presenter.alertTitle().asString()) },
+            text = { Text(presenter.alertMessage().asString()) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -657,7 +677,7 @@ private fun SendFlowRouteToScreen(
                         presenter.alertButtonAction()?.invoke()
                     },
                 ) {
-                    Text("OK")
+                    Text(okText)
                 }
             },
         )

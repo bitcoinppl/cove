@@ -136,7 +136,7 @@ fun NewWalletSelectScreen(
             app.alertState =
                 TaggedItem(
                     AppAlertState.ErrorImportingHardwareWallet(
-                        message = e.message ?: "Unknown error",
+                        message = context.getString(R.string.app_alert_error_importing_hardware_message),
                     ),
                 )
         }
@@ -188,14 +188,14 @@ fun NewWalletSelectScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.new_wallet_flow_back),
                         )
                     }
                 } else {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.Filled.Menu,
-                            contentDescription = "Menu",
+                            contentDescription = stringResource(R.string.new_wallet_flow_menu),
                         )
                     }
                 }
@@ -204,13 +204,13 @@ fun NewWalletSelectScreen(
                 IconButton(onClick = onOpenQrScan) {
                     Icon(
                         painter = painterResource(id = R.drawable.icon_qr_code),
-                        contentDescription = "Scan QR",
+                        contentDescription = stringResource(R.string.new_wallet_flow_scan_qr),
                     )
                 }
                 IconButton(onClick = { triggerNfcScan() }) {
                     Icon(
                         painter = painterResource(id = R.drawable.icon_contactless),
-                        contentDescription = "NFC",
+                        contentDescription = stringResource(R.string.new_wallet_flow_nfc),
                     )
                 }
             },
@@ -303,7 +303,7 @@ fun NewWalletSelectScreen(
                     // NFC Help button - appears after NFC is called (matching iOS behavior)
                     if (nfcCalled) {
                         Text(
-                            text = "NFC Help",
+                            text = stringResource(R.string.new_wallet_flow_nfc_help),
                             color = Color.White,
                             modifier =
                                 Modifier
@@ -338,15 +338,15 @@ fun NewWalletSelectScreen(
                         .padding(bottom = 32.dp),
             ) {
                 Text(
-                    text = "Import Hardware Wallet",
+                    text = stringResource(R.string.new_wallet_flow_import_hardware_wallet),
                     style = MaterialTheme.typography.title3,
                     modifier = Modifier.padding(bottom = 16.dp),
                 )
 
                 // QR Code option
                 ListItem(
-                    headlineContent = { Text("QR Code") },
-                    supportingContent = { Text("Scan descriptor QR code") },
+                    headlineContent = { Text(stringResource(R.string.new_wallet_flow_qr_code)) },
+                    supportingContent = { Text(stringResource(R.string.new_wallet_flow_qr_code_subtitle)) },
                     leadingContent = {
                         Icon(
                             painter = painterResource(R.drawable.icon_qr_code),
@@ -362,8 +362,8 @@ fun NewWalletSelectScreen(
 
                 // File option
                 ListItem(
-                    headlineContent = { Text("File") },
-                    supportingContent = { Text("Import from file") },
+                    headlineContent = { Text(stringResource(R.string.new_wallet_flow_file)) },
+                    supportingContent = { Text(stringResource(R.string.new_wallet_flow_file_subtitle)) },
                     leadingContent = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.InsertDriveFile,
@@ -379,8 +379,8 @@ fun NewWalletSelectScreen(
 
                 // NFC option
                 ListItem(
-                    headlineContent = { Text("NFC") },
-                    supportingContent = { Text("Tap hardware wallet") },
+                    headlineContent = { Text(stringResource(R.string.new_wallet_flow_nfc)) },
+                    supportingContent = { Text(stringResource(R.string.new_wallet_flow_nfc_subtitle)) },
                     leadingContent = {
                         Icon(
                             painter = painterResource(R.drawable.icon_contactless),
@@ -396,8 +396,8 @@ fun NewWalletSelectScreen(
 
                 // Paste option
                 ListItem(
-                    headlineContent = { Text("Paste") },
-                    supportingContent = { Text("Paste from clipboard") },
+                    headlineContent = { Text(stringResource(R.string.new_wallet_flow_paste)) },
+                    supportingContent = { Text(stringResource(R.string.new_wallet_flow_paste_subtitle)) },
                     leadingContent = {
                         Icon(
                             imageVector = Icons.Default.ContentPaste,

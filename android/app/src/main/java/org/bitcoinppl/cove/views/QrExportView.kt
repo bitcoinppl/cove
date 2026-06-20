@@ -48,14 +48,16 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.ui.theme.callout
 import org.bitcoinppl.cove.ui.theme.title3
-import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 import org.bitcoinppl.cove_core.types.QrDensity
 import org.bitcoinppl.cove_core.types.QrExportFormat
@@ -95,7 +97,8 @@ fun QrExportView(
             error = null
             currentIndex = 0
         } catch (e: Exception) {
-            error = e.message ?: "Unknown error"
+            android.util.Log.e("QrExportView", "Failed to generate QR export", e)
+            error = context.getString(R.string.wallet_send_qr_export_failed)
             qrStrings = emptyList()
         }
     }
@@ -141,8 +144,8 @@ fun QrExportView(
                             try {
                                 val data = onCopy()
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("QR Data", data))
-                                Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                                clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.wallet_send_qr_data_clip_label), data))
+                                Toast.makeText(context, context.getString(R.string.wallet_send_copied), Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 android.util.Log.e("QrExportView", "Failed to copy data", e)
                             }
@@ -152,7 +155,7 @@ fun QrExportView(
                 ) {
                     Icon(
                         imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "Copy",
+                        contentDescription = stringResource(R.string.wallet_send_copy),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -206,7 +209,7 @@ fun QrExportView(
                         .aspectRatio(1f),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Loading...")
+                Text(stringResource(R.string.wallet_send_loading))
             }
         } else {
             // animated QR view
@@ -237,7 +240,7 @@ fun QrExportView(
                     ) {
                         Image(
                             bitmap = bitmap.asImageBitmap(),
-                            contentDescription = "QR code for transaction signing",
+                            contentDescription = stringResource(R.string.wallet_send_qr_transaction_signing_content_description),
                             modifier = Modifier.fillMaxWidth().aspectRatio(1f),
                             contentScale = ContentScale.FillBounds,
                         )
@@ -314,7 +317,7 @@ private fun MinusButton(
     ) {
         Icon(
             imageVector = Icons.Default.Remove,
-            contentDescription = "Decrease density",
+            contentDescription = stringResource(R.string.wallet_send_decrease_density_content_description),
             tint =
                 MaterialTheme.colorScheme.onSurfaceVariant.copy(
                     alpha = if (enabled) 1f else 0.3f,
@@ -340,7 +343,7 @@ private fun PlusButton(
     ) {
         Icon(
             imageVector = Icons.Default.Add,
-            contentDescription = "Increase density",
+            contentDescription = stringResource(R.string.wallet_send_increase_density_content_description),
             tint =
                 MaterialTheme.colorScheme.onSurfaceVariant.copy(
                     alpha = if (enabled) 1f else 0.3f,
@@ -375,7 +378,7 @@ private fun DensityButtons(
         ) {
             Icon(
                 imageVector = Icons.Default.Remove,
-                contentDescription = "Decrease density",
+                contentDescription = stringResource(R.string.wallet_send_decrease_density_content_description),
                 tint =
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(
                         alpha = if (canDecrease) 1f else 0.3f,
@@ -399,7 +402,7 @@ private fun DensityButtons(
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
-                contentDescription = "Increase density",
+                contentDescription = stringResource(R.string.wallet_send_increase_density_content_description),
                 tint =
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(
                         alpha = if (canIncrease) 1f else 0.3f,
@@ -419,8 +422,8 @@ fun QrExportView(
     modifier: Modifier = Modifier,
 ) {
     QrExportView(
-        title = "Scan this QR",
-        subtitle = "Scan with your hardware wallet\nto sign your transaction",
+        title = stringResource(R.string.wallet_send_scan_this_qr_title),
+        subtitle = stringResource(R.string.wallet_send_scan_hardware_wallet_subtitle),
         generateBbqrStrings = { density -> details.psbtToBbqrWithDensity(density) },
         generateUrStrings = { density -> details.psbtToUrWithDensity(density) },
         onCopy = { details.psbtToHex() },

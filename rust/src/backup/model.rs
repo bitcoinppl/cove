@@ -177,19 +177,6 @@ pub enum WalletSecretType {
     Unknown,
 }
 
-#[uniffi::export]
-impl WalletSecretType {
-    pub fn display_name(&self) -> String {
-        match self {
-            Self::Mnemonic => "Mnemonic",
-            Self::TapSignerBackup => "TapSigner",
-            Self::None => "Xpub Only",
-            Self::Unknown => "Unknown",
-        }
-        .to_string()
-    }
-}
-
 impl From<&WalletSecret> for WalletSecretType {
     fn from(secret: &WalletSecret) -> Self {
         match secret {

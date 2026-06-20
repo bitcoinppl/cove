@@ -132,7 +132,7 @@ fun HotWalletCreateScreen(
             app.resetRoute(result.routes)
         } catch (e: Exception) {
             Log.e("HotWalletCreate", "error saving wallet", e)
-            saveErrorMessage = e.message ?: "Unknown error occurred"
+            saveErrorMessage = context.getString(R.string.new_wallet_flow_unknown_error_occurred)
             showSaveError = true
             isSaving = false
         }
@@ -173,7 +173,7 @@ fun HotWalletCreateScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.new_wallet_flow_back),
                         )
                     }
                 },

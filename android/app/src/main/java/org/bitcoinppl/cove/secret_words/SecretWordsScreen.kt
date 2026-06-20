@@ -110,7 +110,7 @@ fun SecretWordsScreen(
         try {
             words = Mnemonic(id = walletId)
         } catch (e: Exception) {
-            errorMessage = e.message ?: "failed to load recovery words"
+            errorMessage = context.getString(R.string.common_remaining_failed_load_recovery_words)
             android.util.Log.e("SecretWordsScreen", "error loading mnemonic", e)
         }
     }
@@ -149,7 +149,7 @@ fun SecretWordsScreen(
                     IconButton(onClick = { app.popRoute() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "back",
+                            contentDescription = stringResource(R.string.content_description_back),
                             tint = Color.White,
                         )
                     }
@@ -158,7 +158,7 @@ fun SecretWordsScreen(
                     IconButton(onClick = { showSeedQrAlert = true }) {
                         Icon(
                             painter = painterResource(R.drawable.icon_qr_code),
-                            contentDescription = "Show Seed QR",
+                            contentDescription = stringResource(R.string.common_remaining_show_seed_qr),
                             tint = Color.White,
                         )
                     }
@@ -254,10 +254,10 @@ fun SecretWordsScreen(
     if (showSeedQrAlert) {
         AlertDialog(
             onDismissRequest = { showSeedQrAlert = false },
-            title = { Text("Show Seed QR?") },
+            title = { Text(stringResource(R.string.common_remaining_show_seed_qr_title)) },
             text = {
                 Text(
-                    "Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to.",
+                    stringResource(R.string.common_remaining_show_seed_qr_message),
                 )
             },
             confirmButton = {
@@ -267,12 +267,12 @@ fun SecretWordsScreen(
                         showSeedQrSheet = true
                     },
                 ) {
-                    Text("Show QR Code")
+                    Text(stringResource(R.string.common_remaining_show_qr_code))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSeedQrAlert = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -325,7 +325,7 @@ private fun SeedQrSheetContent(seedQrString: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "Seed QR",
+            text = stringResource(R.string.common_remaining_seed_qr_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
         )
@@ -333,7 +333,7 @@ private fun SeedQrSheetContent(seedQrString: String) {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Scan with a SeedQR-compatible device",
+            text = stringResource(R.string.common_remaining_seed_qr_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -365,7 +365,7 @@ private fun SeedQrSheetContent(seedQrString: String) {
             ) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Seed QR Code",
+                    contentDescription = stringResource(R.string.common_remaining_seed_qr_code_content_description),
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.FillBounds,
                 )

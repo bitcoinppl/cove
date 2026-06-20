@@ -35,8 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
@@ -65,7 +67,7 @@ internal fun CloudOnlySection(
     }
 
     CloudBackupTitledContentSection(
-        title = "Not on This Device",
+        title = stringResource(R.string.cloud_backup_cloud_only_title),
         icon = Icons.Default.PhoneAndroid,
         tint = cloudBackupVisualColors().primaryText,
     ) {
@@ -75,15 +77,15 @@ internal fun CloudOnlySection(
                     manager.dispatch(CloudBackupManagerAction.FetchCloudOnly)
                 }
                 CloudBackupProgressCard(
-                    title = "Loading wallets not on this device",
-                    message = "Checking Cloud Backup for wallets that are not local",
+                    title = stringResource(R.string.cloud_backup_cloud_only_loading_title),
+                    message = stringResource(R.string.cloud_backup_cloud_only_loading_message),
                 )
             }
 
             is CloudOnlyState.Loading -> {
                 CloudBackupProgressCard(
-                    title = "Loading wallets not on this device",
-                    message = "Checking Cloud Backup for wallets that are not local",
+                    title = stringResource(R.string.cloud_backup_cloud_only_loading_title),
+                    message = stringResource(R.string.cloud_backup_cloud_only_loading_message),
                 )
             }
 
@@ -140,18 +142,18 @@ internal fun CloudOnlySection(
     walletToDelete?.let { wallet ->
         AlertDialog(
             onDismissRequest = { walletToDelete = null },
-            title = { Text("Delete ${wallet.name}?") },
-            text = { Text("This wallet backup will be permanently removed from Cloud Backup") },
+            title = { Text(stringResource(R.string.cloud_backup_cloud_only_delete_title, wallet.name)) },
+            text = { Text(stringResource(R.string.cloud_backup_cloud_only_delete_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         walletToDelete = null
                         manager.dispatch(CloudBackupManagerAction.DeleteCloudWallet(wallet.recordId))
                     },
-                ) { Text("Delete Forever", color = MaterialTheme.colorScheme.error) }
+                ) { Text(stringResource(R.string.action_delete_forever), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { walletToDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { walletToDelete = null }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -159,10 +161,10 @@ internal fun CloudOnlySection(
     unsupportedRestoreWallet?.let { wallet ->
         AlertDialog(
             onDismissRequest = { unsupportedRestoreWallet = null },
-            title = { Text("Can't Restore ${wallet.name}") },
-            text = { Text("This backup uses a newer version of Cove and can't be restored on this device yet") },
+            title = { Text(stringResource(R.string.cloud_backup_cloud_only_unsupported_title, wallet.name)) },
+            text = { Text(stringResource(R.string.cloud_backup_cloud_only_unsupported_message)) },
             confirmButton = {
-                TextButton(onClick = { unsupportedRestoreWallet = null }) { Text("OK") }
+                TextButton(onClick = { unsupportedRestoreWallet = null }) { Text(stringResource(R.string.action_ok)) }
             },
         )
     }
@@ -206,7 +208,7 @@ private fun CloudOnlyWalletActionSheetContent(
         ) {
             Text(walletName, style = MaterialTheme.typography.titleLarge)
             Text(
-                "Restore this wallet to the device or delete it from Cloud Backup.",
+                stringResource(R.string.cloud_backup_cloud_only_restore_message),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -218,8 +220,8 @@ private fun CloudOnlyWalletActionSheetContent(
         )
 
         ListItem(
-            headlineContent = { Text("Restore to this device") },
-            supportingContent = { Text("Download and decrypt this backup") },
+            headlineContent = { Text(stringResource(R.string.cloud_backup_cloud_only_restore_to_device)) },
+            supportingContent = { Text(stringResource(R.string.cloud_backup_cloud_only_restore_supporting)) },
             leadingContent = {
                 Icon(
                     imageVector = Icons.Default.Restore,
@@ -240,11 +242,11 @@ private fun CloudOnlyWalletActionSheetContent(
         ListItem(
             headlineContent = {
                 Text(
-                    "Delete from Cloud Backup",
+                    stringResource(R.string.settings_action_delete_from_cloud_backup),
                     color = MaterialTheme.colorScheme.error,
                 )
             },
-            supportingContent = { Text("Remove the cloud copy permanently") },
+            supportingContent = { Text(stringResource(R.string.cloud_backup_cloud_only_delete_supporting)) },
             leadingContent = {
                 Icon(
                     imageVector = Icons.Default.Delete,

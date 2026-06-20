@@ -195,13 +195,15 @@ struct BackupImportView: View {
                 fileData = data
                 fileName = url.lastPathComponent
             } catch {
+                Log.error("Unable to read backup file for import: \(error.localizedDescription)")
                 fileData = nil
                 fileName = nil
-                errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                errorMessage = (error as? BackupError)?.localizedMessage ?? String(localized: "Unable to read this backup file. Please try again.")
             }
 
         case let .failure(error):
-            errorMessage = error.localizedDescription
+            Log.error("Unable to select backup file for import: \(error.localizedDescription)")
+            errorMessage = String(localized: "Unable to select this backup file. Please try again.")
         }
     }
 
@@ -217,8 +219,9 @@ struct BackupImportView: View {
                 }
             } catch {
                 await MainActor.run {
+                    Log.error("Unable to verify backup before import: \(error.localizedDescription)")
                     isVerifying = false
-                    errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                    errorMessage = (error as? BackupError)?.localizedMessage ?? String(localized: "Unable to verify this backup. Please try again.")
                 }
             }
         }
@@ -236,8 +239,9 @@ struct BackupImportView: View {
                 }
             } catch {
                 await MainActor.run {
+                    Log.error("Unable to import backup: \(error.localizedDescription)")
                     isImporting = false
-                    errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                    errorMessage = (error as? BackupError)?.localizedMessage ?? String(localized: "Unable to import this backup. Please try again.")
                 }
             }
         }

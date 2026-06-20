@@ -27,10 +27,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove_core.TapSignerConfirmPinArgs
 import org.bitcoinppl.cove_core.TapSignerNewPinArgs
 import org.bitcoinppl.cove_core.TapSignerRoute
@@ -89,16 +91,16 @@ fun TapSignerNewPinView(
             TextButton(onClick = { manager.popRoute() }) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.scoped_common_back),
                 )
-                Text("Back", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.scoped_common_back), fontWeight = FontWeight.SemiBold)
             }
         }
 
         // lock icon
         Icon(
             imageVector = Icons.Default.Lock,
-            contentDescription = "Lock",
+            contentDescription = stringResource(R.string.tap_signer_lock),
             modifier =
                 Modifier
                     .size(100.dp)
@@ -113,14 +115,13 @@ fun TapSignerNewPinView(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(
-                text = "Create New PIN",
+                text = stringResource(R.string.tap_signer_create_new_pin),
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
             )
 
             Text(
-                text =
-                    "The PIN code is a security feature that prevents unauthorized access to your key. Please back it up and keep it safe. You'll need it for signing transactions.",
+                text = stringResource(R.string.tap_signer_pin_security_body),
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )

@@ -131,7 +131,7 @@ private fun NetworkFeeBottomSheetPreview() {
             onClick = { showBottomSheet = true },
             modifier = Modifier.align(Alignment.Center),
         ) {
-            Text("Show Network Fee Bottom Sheet")
+            Text(stringResource(R.string.wallet_send_show_network_fee_bottom_sheet))
         }
         if (showBottomSheet) {
             val bottomSheetState =

@@ -46,11 +46,15 @@ import SwiftUI
                 Log.error(
                     "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
                 )
-                app.alertState = TaggedItem(.invalidFormat(message: multiFormatError.description))
+                app.alertState = TaggedItem(
+                    .invalidFormat(message: String(localized: "This data is not in a format Cove can import."))
+                )
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
-                app.alertState = TaggedItem(.invalidFileFormat(message: error.localizedDescription))
+                app.alertState = TaggedItem(
+                    .invalidFileFormat(message: String(localized: "This file is not in a format Cove can import."))
+                )
             }
         }
     }
@@ -66,11 +70,15 @@ import SwiftUI
                 Log.error(
                     "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
                 )
-                app.alertState = TaggedItem(.invalidFormat(message: multiFormatError.description))
+                app.alertState = TaggedItem(
+                    .invalidFormat(message: String(localized: "This data is not in a format Cove can import."))
+                )
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
-                app.alertState = TaggedItem(.invalidFileFormat(message: error.localizedDescription))
+                app.alertState = TaggedItem(
+                    .invalidFileFormat(message: String(localized: "This file is not in a format Cove can import."))
+                )
             }
         }
     }
@@ -113,7 +121,7 @@ import SwiftUI
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
                 Log.error("Unrecognized format multi format error: \(multiFormatError)")
                 app.alertState = TaggedItem(
-                    .invalidFileFormat(message: multiFormatError.localizedDescription)
+                    .invalidFileFormat(message: String(localized: "This file is not in a format Cove can import."))
                 )
 
             case let FileHandlerError.OpenFile(error):
@@ -150,13 +158,13 @@ extension ScanManager {
             default:
                 Log.error("Unable to import wallet: \(error)")
                 app.alertState = TaggedItem(
-                    .errorImportingHotWallet(message: error.localizedDescription)
+                    .errorImportingHotWallet(message: String(localized: "Unable to import this wallet. Please check the file or words and try again."))
                 )
             }
         } catch {
             Log.error("Unknown error \(error)")
             app.alertState = TaggedItem(
-                .errorImportingHotWallet(message: error.localizedDescription)
+                .errorImportingHotWallet(message: String(localized: "Unable to import this wallet. Please check the file or words and try again."))
             )
         }
     }
@@ -182,7 +190,7 @@ extension ScanManager {
             }
         } catch {
             app.alertState = TaggedItem(
-                .errorImportingHardwareWallet(message: error.localizedDescription)
+                .errorImportingHardwareWallet(message: String(localized: "Unable to import this hardware wallet. Please try again."))
             )
         }
     }
@@ -262,7 +270,7 @@ extension ScanManager {
     private func setInvalidLabels() {
         app.alertState = TaggedItem(
             .invalidFileFormat(
-                message: "Currently BIP329 labels must be imported through the wallet actions"
+                message: String(localized: "Currently BIP329 labels must be imported through the wallet actions")
             )
         )
     }

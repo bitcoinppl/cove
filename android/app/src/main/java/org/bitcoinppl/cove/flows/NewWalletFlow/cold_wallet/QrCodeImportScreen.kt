@@ -9,11 +9,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.QrCodeScanView
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
@@ -24,6 +27,7 @@ import org.bitcoinppl.cove_core.WalletException
 @Composable
 fun QrCodeImportScreen(app: AppManager, modifier: Modifier = Modifier) {
     var showHelp by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -33,7 +37,7 @@ fun QrCodeImportScreen(app: AppManager, modifier: Modifier = Modifier) {
                     IconButton(onClick = { app.popRoute() }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.new_wallet_flow_back),
                             tint = Color.White,
                         )
                     }
@@ -41,7 +45,7 @@ fun QrCodeImportScreen(app: AppManager, modifier: Modifier = Modifier) {
                 actions = {
                     TextButton(onClick = { showHelp = true }) {
                         Text(
-                            text = "?",
+                            text = stringResource(R.string.new_wallet_flow_help_button),
                             color = Color.White,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium,
@@ -81,7 +85,7 @@ fun QrCodeImportScreen(app: AppManager, modifier: Modifier = Modifier) {
                                 app.alertState =
                                     TaggedItem(
                                         AppAlertState.ErrorImportingHardwareWallet(
-                                            message = e.message ?: "Unknown error",
+                                            message = context.getString(R.string.app_alert_error_importing_hardware_message),
                                         ),
                                     )
                             }
@@ -91,8 +95,8 @@ fun QrCodeImportScreen(app: AppManager, modifier: Modifier = Modifier) {
                             app.alertState =
                                 TaggedItem(
                                     AppAlertState.General(
-                                        title = "Invalid QR Code",
-                                        message = "Please scan a valid hardware wallet export QR code",
+                                        title = context.getString(R.string.new_wallet_flow_invalid_qr_code),
+                                        message = context.getString(R.string.new_wallet_flow_invalid_hardware_qr),
                                     ),
                                 )
                         }
@@ -123,7 +127,7 @@ private fun HelpSheet(onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             Text(
-                text = "How do I get my wallet export QR code?",
+                text = stringResource(R.string.new_wallet_flow_wallet_export_qr_help_title),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
@@ -132,14 +136,14 @@ private fun HelpSheet(onDismiss: () -> Unit) {
                 // ColdCard Q1
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "ColdCard Q1",
+                        text = stringResource(R.string.new_wallet_flow_coldcard_q1),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
-                    Text("1. Go to 'Advanced / Tools'")
-                    Text("2. Export Wallet > Generic JSON")
-                    Text("3. Press the 'Enter' button, then the 'QR' button")
-                    Text("4. Scan the Generated QR code")
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_advanced_tools))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_export_generic_json))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_press_enter_qr))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_scan_generated_qr))
                 }
 
                 HorizontalDivider()
@@ -147,14 +151,14 @@ private fun HelpSheet(onDismiss: () -> Unit) {
                 // ColdCard MK3/MK4
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "ColdCard MK3/MK4",
+                        text = stringResource(R.string.new_wallet_flow_coldcard_mk3_mk4),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
-                    Text("1. Go to 'Advanced / Tools'")
-                    Text("2. Export Wallet > Descriptor")
-                    Text("3. Press the Enter (✓) and select your wallet type")
-                    Text("4. Scan the Generated QR code")
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_advanced_tools))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_export_descriptor))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_press_enter_select_wallet_type))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_scan_generated_qr))
                 }
 
                 HorizontalDivider()
@@ -162,15 +166,15 @@ private fun HelpSheet(onDismiss: () -> Unit) {
                 // Sparrow Desktop
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Sparrow Desktop",
+                        text = stringResource(R.string.new_wallet_flow_sparrow_desktop),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
-                    Text("1. Click on Settings, in the left side bar")
-                    Text("2. Click on 'Export...' button at the bottom")
-                    Text("3. Under 'Output Descriptor' click the 'Show...' button")
-                    Text("4. Make sure 'Show BBQr' is selected")
-                    Text("5. Scan the generated QR code")
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_sparrow_settings))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_sparrow_export))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_sparrow_show_descriptor))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_sparrow_show_bbqr))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_scan_generated_qr_lower))
                 }
 
                 HorizontalDivider()
@@ -178,15 +182,15 @@ private fun HelpSheet(onDismiss: () -> Unit) {
                 // Other Hardware Wallets
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Other Hardware Wallets",
+                        text = stringResource(R.string.new_wallet_flow_other_hardware_wallets),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
-                    Text("1. In your hardware wallet, go to settings")
-                    Text("2. Look for 'Export'")
-                    Text("3. Select 'Generic JSON', 'Sparrow', 'Electrum', and many other formats should also work")
-                    Text("4. Generate QR code")
-                    Text("5. Scan the Generated QR code")
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_hardware_settings))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_look_for_export))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_select_export_format))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_generate_qr))
+                    Text(stringResource(R.string.new_wallet_flow_qr_help_scan_generated_qr_step_5))
                 }
             }
 

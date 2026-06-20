@@ -273,14 +273,15 @@ struct SendFlowHardwareScreen: View {
 
             app.pushRoute(route)
         } catch {
-            alertState = .init(.fileError(error.localizedDescription))
+            Log.error("Unable to import signed transaction file: \(error)")
+            alertState = .init(.fileError(String(localized: "Unable to import this file. Please try again.")))
         }
     }
 
     func importPastedSignature() {
         let code = UIPasteboard.general.string ?? ""
         guard !code.isEmpty else {
-            alertState = .init(.pasteError("No text found on the clipboard."))
+            alertState = .init(.pasteError(String(localized: "No text found on the clipboard.")))
             return
         }
 
@@ -292,7 +293,8 @@ struct SendFlowHardwareScreen: View {
             )
             app.pushRoute(route)
         } catch {
-            alertState = .init(.pasteError(error.localizedDescription))
+            Log.error("Unable to import pasted signed transaction: \(error)")
+            alertState = .init(.pasteError(String(localized: "Unable to import the clipboard contents. Please try again.")))
         }
     }
 
@@ -313,7 +315,7 @@ struct SendFlowHardwareScreen: View {
             app.pushRoute(route)
         } catch {
             Log.error("Failed to handle scanned transaction: \(error), txn: \(txn)")
-            alertState = .init(.nfcError(error.localizedDescription))
+            alertState = .init(.nfcError(String(localized: "Unable to read this NFC transaction. Please try again.")))
         }
     }
 
@@ -427,41 +429,41 @@ struct SendFlowHardwareScreen: View {
         )
     }
 
-    private var alertTitle: String {
+    private var alertTitle: LocalizedStringKey {
         guard let alertState else { return "Error" }
         return MyAlert(alertState).title
     }
 
     private func MyAlert(_ alert: TaggedItem<AlertState>) -> some AlertBuilderProtocol {
         let singleOkCancel = {
-            Button("Ok", role: .cancel) {
+            Button("OK", role: .cancel) {
                 alertState = .none
             }
         }
 
         switch alert.item {
-        case let .bbqrError(message):
+        case .bbqrError:
             return AlertBuilder(
                 title: "QR Error",
-                message: "Unable to create BBQr: \(message)",
+                message: "Unable to create the QR export. Please try again.",
                 actions: singleOkCancel
             )
-        case let .fileError(message):
+        case .fileError:
             return AlertBuilder(
                 title: "File Import Error",
-                message: message,
+                message: "Unable to import this file. Please try again.",
                 actions: singleOkCancel
             )
-        case let .nfcError(error):
+        case .nfcError:
             return AlertBuilder(
                 title: "NFC Error",
-                message: error,
+                message: "Unable to read this NFC transaction. Please try again.",
                 actions: singleOkCancel
             )
-        case let .pasteError(error):
+        case .pasteError:
             return AlertBuilder(
                 title: "Paste Error",
-                message: error,
+                message: "Unable to import the clipboard contents. Please try again.",
                 actions: singleOkCancel
             )
         }

@@ -16,6 +16,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
 
 enum class NfcWritingState {
     WAITING,
@@ -35,7 +37,7 @@ class NfcWriter(
     var isWriting by mutableStateOf(false)
         private set
 
-    var message by mutableStateOf("")
+    var message by mutableStateOf<UiText?>(null)
         private set
 
     var writingState by mutableStateOf(NfcWritingState.WAITING)
@@ -43,28 +45,28 @@ class NfcWriter(
 
     private var dataToWrite: ByteArray? = null
 
-    private fun sendError(errorMessage: String) {
+    private fun sendError(errorMessage: UiText) {
         mainHandler.post {
             writingState = NfcWritingState.WAITING
-            message = "Hold your phone near the NFC tag"
+            message = UiText.resource(R.string.nfc_hold_near_tag)
         }
         _writeResults.trySend(NfcWriteResult.Error(errorMessage))
     }
 
     fun startWriting(data: ByteArray) {
         if (nfcAdapter == null) {
-            _writeResults.trySend(NfcWriteResult.Error("NFC is not supported on this device"))
+            _writeResults.trySend(NfcWriteResult.Error(UiText.resource(R.string.nfc_not_supported)))
             return
         }
 
         if (!nfcAdapter.isEnabled) {
-            _writeResults.trySend(NfcWriteResult.Error("NFC is disabled. Please enable it in Settings"))
+            _writeResults.trySend(NfcWriteResult.Error(UiText.resource(R.string.nfc_disabled)))
             return
         }
 
         dataToWrite = data
         isWriting = true
-        message = "Hold your phone near the NFC tag"
+        message = UiText.resource(R.string.nfc_hold_near_tag)
         writingState = NfcWritingState.WAITING
 
         // must be called on UI thread
@@ -88,7 +90,7 @@ class NfcWriter(
         // clear any pending delayed callbacks first
         mainHandler.removeCallbacksAndMessages(null)
         isWriting = false
-        message = ""
+        message = null
         writingState = NfcWritingState.WAITING
         dataToWrite = null
         // must be called on UI thread
@@ -102,14 +104,14 @@ class NfcWriter(
 
         val data = dataToWrite
         if (data == null) {
-            sendError("No data to write")
+            sendError(UiText.resource(R.string.nfc_no_data_to_write))
             return
         }
 
         // update state on main thread - tag detected
         mainHandler.post {
             writingState = NfcWritingState.TAG_DETECTED
-            message = "Tag detected"
+            message = UiText.resource(R.string.nfc_tag_detected)
         }
 
         try {
@@ -131,10 +133,12 @@ class NfcWriter(
                 return
             }
 
-            sendError("Tag doesn't support NDEF")
+            sendError(UiText.resource(R.string.nfc_tag_does_not_support_ndef))
         } catch (e: Exception) {
             Log.e(TAG, "Error writing NFC tag", e)
-            sendError("Error writing tag: ${e.message}")
+            sendError(
+                UiText.resource(R.string.nfc_error_writing_tag),
+            )
         }
     }
 
@@ -144,7 +148,7 @@ class NfcWriter(
     ) {
         mainHandler.post {
             writingState = NfcWritingState.WRITING
-            this.message = "Writing, please hold still..."
+            this.message = UiText.resource(R.string.nfc_writing_hold_still)
         }
 
         try {
@@ -152,14 +156,14 @@ class NfcWriter(
 
             if (!ndef.isWritable) {
                 ndef.close()
-                sendError("Tag is not writable")
+                sendError(UiText.resource(R.string.nfc_tag_not_writable))
                 return
             }
 
             val messageSize = message.toByteArray().size
             if (messageSize > ndef.maxSize) {
                 ndef.close()
-                sendError("Data too large for tag ($messageSize bytes, max ${ndef.maxSize})")
+                sendError(UiText.resource(R.string.nfc_data_too_large, messageSize, ndef.maxSize))
                 return
             }
 
@@ -171,7 +175,7 @@ class NfcWriter(
             // success
             mainHandler.post {
                 writingState = NfcWritingState.SUCCESS
-                this.message = "Tag written successfully!"
+                this.message = UiText.resource(R.string.nfc_tag_written_successfully)
             }
 
             // delay sending success result so UI can show success message
@@ -186,7 +190,9 @@ class NfcWriter(
             } catch (closeError: Exception) {
                 // ignore close errors
             }
-            sendError("Write failed: ${e.message}")
+            sendError(
+                UiText.resource(R.string.nfc_write_failed),
+            )
         }
     }
 
@@ -196,7 +202,7 @@ class NfcWriter(
     ) {
         mainHandler.post {
             writingState = NfcWritingState.WRITING
-            this.message = "Formatting and writing..."
+            this.message = UiText.resource(R.string.nfc_formatting_and_writing)
         }
 
         try {
@@ -209,7 +215,7 @@ class NfcWriter(
             // success
             mainHandler.post {
                 writingState = NfcWritingState.SUCCESS
-                this.message = "Tag written successfully!"
+                this.message = UiText.resource(R.string.nfc_tag_written_successfully)
             }
 
             // delay sending success result so UI can show success message
@@ -224,14 +230,16 @@ class NfcWriter(
             } catch (closeError: Exception) {
                 // ignore close errors
             }
-            sendError("Format failed: ${e.message}")
+            sendError(
+                UiText.resource(R.string.nfc_format_failed),
+            )
         }
     }
 
     fun reset() {
         stopWriting()
         isWriting = false
-        message = ""
+        message = null
         writingState = NfcWritingState.WAITING
         dataToWrite = null
     }
@@ -252,6 +260,6 @@ sealed class NfcWriteResult {
     data object Success : NfcWriteResult()
 
     data class Error(
-        val message: String,
+        val message: UiText,
     ) : NfcWriteResult()
 }

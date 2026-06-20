@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.views.NumberPadPinView
 
 private sealed class NewPinState {
@@ -25,7 +27,7 @@ fun NewPinView(
     when (val state = pinState) {
         is NewPinState.New -> {
             NumberPadPinView(
-                title = "Enter New PIN",
+                title = stringResource(R.string.settings_pin_enter_new),
                 isPinCorrect = { true },
                 backAction = backAction,
                 onUnlock = { enteredPin ->
@@ -36,7 +38,7 @@ fun NewPinView(
 
         is NewPinState.Confirm -> {
             NumberPadPinView(
-                title = "Confirm New PIN",
+                title = stringResource(R.string.settings_pin_confirm_new),
                 isPinCorrect = { it == state.pinToConfirm },
                 backAction = backAction,
                 onUnlock = onComplete,

@@ -82,8 +82,8 @@ struct TransactionsCardView: View {
                                         } catch {
                                             Log.error("Failed to delete unsigned transaction \(txn.id()): \(error)")
                                             app.alertState = .init(.general(
-                                                title: "Delete Failed",
-                                                message: "Unable to delete transaction: \(error.localizedDescription)"
+                                                title: String(localized: "Delete Failed"),
+                                                message: String(localized: "Unable to delete this transaction. Please try again.")
                                             ))
                                         }
                                     } label: {

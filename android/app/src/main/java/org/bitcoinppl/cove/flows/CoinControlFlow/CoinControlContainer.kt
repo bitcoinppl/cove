@@ -12,8 +12,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.CoinControlManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove_core.*
@@ -39,6 +41,12 @@ fun CoinControlContainer(
     var walletManager by remember(walletId) { mutableStateOf<WalletManager?>(null) }
     var manager by remember(walletId) { mutableStateOf<CoinControlManager?>(null) }
     val tag = "CoinControlContainer"
+    val initialScanIncompleteTitle = stringResource(R.string.common_remaining_initial_scan_incomplete_title)
+    val initialScanIncompleteMessage = stringResource(R.string.common_remaining_initial_scan_incomplete_message)
+    val walletNotFoundTitle = stringResource(R.string.common_remaining_wallet_not_found_title)
+    val walletNoLongerAvailableMessage = stringResource(R.string.common_remaining_wallet_no_longer_available_message)
+    val unableToOpenWalletTitle = stringResource(R.string.common_remaining_unable_to_open_wallet_title)
+    val unableToOpenCoinControlMessage = stringResource(R.string.coin_control_unable_to_open_wallet_message)
 
     // async initialize managers
     LaunchedEffect(walletId) {
@@ -53,7 +61,7 @@ fun CoinControlContainer(
             app.setCoinControlManager(ccm)
         } catch (e: WalletManagerException.InitialScanIncomplete) {
             android.util.Log.e(tag, "initial scan incomplete", e)
-            app.showInitialScanIncompleteAlert()
+            app.showInitialScanIncompleteAlert(initialScanIncompleteTitle, initialScanIncompleteMessage)
             app.popRoute()
         } catch (e: WalletManagerException.DatabaseCorruption) {
             android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
@@ -67,8 +75,8 @@ fun CoinControlContainer(
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
-                        title = "Wallet Not Found",
-                        message = "This wallet is no longer available.",
+                        title = walletNotFoundTitle,
+                        message = walletNoLongerAvailableMessage,
                     ),
                 )
             app.trySelectLatestOrNewWallet()
@@ -77,8 +85,8 @@ fun CoinControlContainer(
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
-                        title = "Unable to Open Wallet",
-                        message = "The wallet could not be opened for coin control. Please try again from the wallet screen.",
+                        title = unableToOpenWalletTitle,
+                        message = unableToOpenCoinControlMessage,
                     ),
                 )
             app.popRoute()
@@ -87,8 +95,8 @@ fun CoinControlContainer(
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
-                        title = "Unable to Open Wallet",
-                        message = "The wallet could not be opened for coin control. Please try again from the wallet screen.",
+                        title = unableToOpenWalletTitle,
+                        message = unableToOpenCoinControlMessage,
                     ),
                 )
             app.popRoute()

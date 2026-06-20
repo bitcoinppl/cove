@@ -57,7 +57,9 @@ struct TapSignerImportRetry: View {
             VStack(spacing: 14) {
                 Button("Retry") {
                     guard let pin = manager.enteredPin else {
-                        app.alertState = .init(.tapSignerDeriveFailed(message: "No PIN entered"))
+                        app.alertState = .init(
+                            .tapSignerDeriveFailed(message: String(localized: "Enter your TAPSIGNER PIN before trying again."))
+                        )
                         return
                     }
 
@@ -68,7 +70,9 @@ struct TapSignerImportRetry: View {
                         case let .success(deriveInfo):
                             manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
                         case let .failure(error):
-                            app.alertState = .init(.tapSignerDeriveFailed(message: error.description))
+                            app.alertState = .init(
+                                .tapSignerDeriveFailed(message: String(localized: "Unable to import this TAPSIGNER. Please try again."))
+                            )
                         }
                     }
                 }

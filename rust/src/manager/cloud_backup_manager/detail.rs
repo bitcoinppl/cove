@@ -65,7 +65,7 @@ pub enum CloudBackupVerificationPresentation {
     /// Failure is a result, not another request to show the decision sheet
     Failed {
         source: CloudBackupVerificationSource,
-        message: String,
+        failure: DeepVerificationFailure,
     },
 }
 

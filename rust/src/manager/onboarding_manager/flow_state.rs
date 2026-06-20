@@ -12,7 +12,7 @@ use crate::{
 use super::{
     CloudCheckIssue, CloudCheckOutcome, CloudRestoreProviderHint, Message, OnboardingAction,
     OnboardingBranch, OnboardingCloudRestoreState, OnboardingProgress, OnboardingRestoreState,
-    OnboardingState, OnboardingStep, OnboardingStorageSelection, cloud_check_inconclusive_message,
+    OnboardingState, OnboardingStep, OnboardingStorageSelection,
 };
 use crate::manager::deferred_sender::DeferredSender;
 
@@ -228,9 +228,8 @@ impl InternalState {
         if self.ui.cloud_restore_state != next_ui.cloud_restore_state {
             deferred.queue(Message::CloudRestoreState(next_ui.cloud_restore_state));
         }
-        if self.ui.cloud_restore_message != next_ui.cloud_restore_message {
-            deferred
-                .queue(Message::CloudRestoreMessageChanged(next_ui.cloud_restore_message.clone()));
+        if self.ui.cloud_restore_issue != next_ui.cloud_restore_issue {
+            deferred.queue(Message::CloudRestoreIssueChanged(next_ui.cloud_restore_issue));
         }
         if self.ui.cloud_restore_provider_hint != next_ui.cloud_restore_provider_hint {
             deferred.queue(Message::CloudRestoreProviderHintChanged(
@@ -916,7 +915,7 @@ impl FlowState {
     ) -> OnboardingState {
         OnboardingState {
             cloud_restore_state: cloud_restore_discovery.ui_state(),
-            cloud_restore_message: cloud_restore_discovery.message(),
+            cloud_restore_issue: cloud_restore_discovery.issue(),
             cloud_restore_provider_hint: cloud_restore_discovery.provider_hint(),
             should_offer_cloud_restore,
             cloud_restore_alert_visible,
@@ -938,7 +937,7 @@ impl FlowState {
             cloud_backup_enabled: flow.cloud_backup_enabled,
             secret_words_saved: flow.secret_words_saved,
             cloud_restore_state: cloud_restore_discovery.ui_state(),
-            cloud_restore_message: cloud_restore_discovery.message(),
+            cloud_restore_issue: cloud_restore_discovery.issue(),
             cloud_restore_provider_hint: cloud_restore_discovery.provider_hint(),
             should_offer_cloud_restore,
             cloud_restore_alert_visible,
@@ -1012,9 +1011,9 @@ impl CloudRestoreDiscovery {
         }
     }
 
-    fn message(&self) -> Option<String> {
+    fn issue(&self) -> Option<CloudCheckIssue> {
         match self {
-            Self::Inconclusive(issue) => Some(cloud_check_inconclusive_message(*issue)),
+            Self::Inconclusive(issue) => Some(*issue),
             _ => None,
         }
     }

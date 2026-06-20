@@ -167,19 +167,29 @@ private struct DeviceRestoreContent: View {
         case let .complete(report):
             let failedCount = Int(report.walletsFailed)
             VStack(spacing: 10) {
-                Text(failedCount == 0 ? "You’re all set" : "Some wallets were restored")
-                    .font(OnboardingRecoveryTypography.compactTitle)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
+                if failedCount == 0 {
+                    Text("You’re all set")
+                        .font(OnboardingRecoveryTypography.compactTitle)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text("Some wallets were restored")
+                        .font(OnboardingRecoveryTypography.compactTitle)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                }
 
-                Text(
-                    failedCount == 0
-                        ? "Your wallets have been restored."
-                        : "^[\(failedCount) wallet](inflect: true) could not be restored. You can retry from backup settings."
-                )
-                .font(OnboardingRecoveryTypography.body)
-                .foregroundStyle(.coveLightGray.opacity(0.7))
-                .multilineTextAlignment(.center)
+                if failedCount == 0 {
+                    Text("Your wallets have been restored.")
+                        .font(OnboardingRecoveryTypography.body)
+                        .foregroundStyle(.coveLightGray.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text("^[\(failedCount) wallet](inflect: true) could not be restored. You can retry from backup settings.")
+                        .font(OnboardingRecoveryTypography.body)
+                        .foregroundStyle(.coveLightGray.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                }
             }
             .padding(.horizontal, 12)
 
@@ -209,11 +219,14 @@ private struct DeviceRestoreContent: View {
         case let .complete(report):
             VStack(spacing: 16) {
                 if report.walletsFailed > 0 {
-                    warningCard(message: "\(report.walletsFailed) wallet(s) could not be restored")
+                    warningCard(
+                        message: Text("^[\(Int(report.walletsFailed)) wallet](inflect: true) could not be restored")
+                    )
                 }
                 if !report.labelsFailedWalletNames.isEmpty {
+                    let failedLabelWalletCount = report.labelsFailedWalletNames.count
                     warningCard(
-                        message: "\(report.labelsFailedWalletNames.count) restored wallet(s) had labels that could not be imported"
+                        message: Text("^[\(failedLabelWalletCount) restored wallet](inflect: true) had labels that could not be imported")
                     )
                 }
 
@@ -223,9 +236,9 @@ private struct DeviceRestoreContent: View {
                 .buttonStyle(OnboardingPrimaryButtonStyle())
             }
 
-        case let .failed(message):
+        case .failed:
             VStack(spacing: 18) {
-                warningCard(message: message)
+                warningCard(message: Text("Unable to restore from Cloud Backup. Please try again."))
 
                 Button(action: onRetry) {
                     Text("Retry")
@@ -240,14 +253,14 @@ private struct DeviceRestoreContent: View {
         }
     }
 
-    private func warningCard(message: String) -> some View {
+    private func warningCard(message: Text) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.orange)
                 .padding(.top, 2)
 
-            Text(message)
+            message
                 .font(OnboardingRecoveryTypography.footnote)
                 .foregroundStyle(.orange.opacity(0.92))
                 .fixedSize(horizontal: false, vertical: true)

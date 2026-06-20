@@ -323,7 +323,7 @@ struct MainSettingsScreen: View {
         )
     }
 
-    private var alertTitle: String {
+    private var alertTitle: LocalizedStringKey {
         guard let alertState else { return "Error" }
         return MyAlert(alertState).title
     }
@@ -480,10 +480,10 @@ struct MainSettingsScreen: View {
                 }
             ).eraseToAny()
 
-        case let .extraSetPinError(error):
+        case .extraSetPinError:
             AlertBuilder(
                 title: "Something went wrong!",
-                message: error,
+                message: "Unable to update the PIN. Please try again.",
                 actions: { Button("OK") { alertState = .none } }
             )
             .eraseToAny()
@@ -595,7 +595,7 @@ struct MainSettingsScreen: View {
                     if auth.checkWipeDataPin(pin) {
                         alertState = .init(
                             .extraSetPinError(
-                                "Can't update PIN because its the same as your wipe data PIN"
+                                String(localized: "Unable to update the PIN. Please try again.")
                             )
                         )
                         return
@@ -735,7 +735,8 @@ struct MainSettingsScreen: View {
 
         do { try auth.rust.setWipeDataPin(pin: pin) } catch {
             let error = error as! AuthManagerError
-            alertState = .init(.extraSetPinError(error.description))
+            Log.error("Unable to set wipe data PIN: \(error.description)")
+            alertState = .init(.extraSetPinError(String(localized: "Unable to update the PIN. Please try again.")))
         }
     }
 
@@ -748,7 +749,8 @@ struct MainSettingsScreen: View {
 
         do { try auth.rust.setDecoyPin(pin: pin) } catch {
             let error = error as! AuthManagerError
-            alertState = .init(.extraSetPinError(error.description))
+            Log.error("Unable to set decoy PIN: \(error.description)")
+            alertState = .init(.extraSetPinError(String(localized: "Unable to update the PIN. Please try again.")))
         }
     }
 }

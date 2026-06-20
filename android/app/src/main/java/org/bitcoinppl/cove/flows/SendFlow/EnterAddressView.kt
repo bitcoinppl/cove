@@ -91,7 +91,7 @@ fun EnterAddressView(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Clear,
-                        contentDescription = "Clear address",
+                        contentDescription = stringResource(R.string.wallet_send_clear_address),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp),
                     )

@@ -32,7 +32,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.localizedMessage
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
@@ -101,10 +104,10 @@ fun CloudBackupScreen(
     if (showRecreateConfirmation) {
         AlertDialog(
             onDismissRequest = { showRecreateConfirmation = false },
-            title = { Text("Recreate Backup Index") },
+            title = { Text(stringResource(R.string.cloud_backup_recreate_confirm_title)) },
             text = {
                 Text(
-                    "This will rebuild the backup index from wallets on this device. Wallets that only exist in the cloud backup will no longer be referenced.",
+                    stringResource(R.string.cloud_backup_recreate_confirm_message),
                 )
             },
             confirmButton = {
@@ -113,10 +116,10 @@ fun CloudBackupScreen(
                         showRecreateConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.RecreateManifest)
                     },
-                ) { Text("Recreate") }
+                ) { Text(stringResource(R.string.settings_action_recreate)) }
             },
             dismissButton = {
-                TextButton(onClick = { showRecreateConfirmation = false }) { Text("Cancel") }
+                TextButton(onClick = { showRecreateConfirmation = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -124,10 +127,10 @@ fun CloudBackupScreen(
     if (showReinitializeConfirmation) {
         AlertDialog(
             onDismissRequest = { showReinitializeConfirmation = false },
-            title = { Text("Reinitialize Cloud Backup") },
+            title = { Text(stringResource(R.string.cloud_backup_reinitialize_confirm_title)) },
             text = {
                 Text(
-                    "This will replace your entire cloud backup. Wallets that only exist in the current cloud backup will be lost.",
+                    stringResource(R.string.cloud_backup_reinitialize_confirm_message),
                 )
             },
             confirmButton = {
@@ -136,10 +139,10 @@ fun CloudBackupScreen(
                         showReinitializeConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.ReinitializeBackup)
                     },
-                ) { Text("Reinitialize") }
+                ) { Text(stringResource(R.string.settings_action_reinitialize)) }
             },
             dismissButton = {
-                TextButton(onClick = { showReinitializeConfirmation = false }) { Text("Cancel") }
+                TextButton(onClick = { showReinitializeConfirmation = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -162,7 +165,7 @@ internal fun CloudBackupScreenFrame(
     if (shouldShowCloudBackupEnableOnboarding(manager, lifecycle)) {
         CloudBackupSettingsEnableOnboarding(
             manager = manager,
-            message = (lifecycle as? CloudBackupLifecycle.Failed)?.v1?.message,
+            message = (lifecycle as? CloudBackupLifecycle.Failed)?.v1?.localizedMessage()?.asString(),
             onCancel = onBack,
         )
         return
@@ -183,19 +186,19 @@ internal fun CloudBackupScreenFrame(
             TopAppBar(
                 title = {
                     Text(
-                        "Cloud Backup",
+                        stringResource(R.string.title_cloud_backup),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = stringResource(R.string.content_description_back))
                     }
                 },
                 actions = {
                     IconButton(onClick = { isMenuOpen = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Cloud Backup options")
+                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.cloud_backup_options_content_description))
                     }
                     DropdownMenu(
                         expanded = isMenuOpen,
@@ -203,14 +206,14 @@ internal fun CloudBackupScreenFrame(
                     ) {
                         if (isConfigured) {
                             DropdownMenuItem(
-                                text = { Text("Recreate Backup Index") },
+                                text = { Text(stringResource(R.string.cloud_backup_recreate_confirm_title)) },
                                 onClick = {
                                     isMenuOpen = false
                                     onRecreate()
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Reinitialize Cloud Backup") },
+                                text = { Text(stringResource(R.string.cloud_backup_reinitialize_confirm_title)) },
                                 onClick = {
                                     isMenuOpen = false
                                     onReinitialize()
@@ -239,15 +242,15 @@ internal fun CloudBackupScreenFrame(
             when (lifecycle) {
                 is CloudBackupLifecycle.Restoring -> {
                     CloudBackupProgressContent(
-                        title = "Restoring from cloud backup",
-                        message = "Downloading and restoring your encrypted backups",
+                        title = stringResource(R.string.cloud_backup_restore_progress_title),
+                        message = stringResource(R.string.cloud_backup_restore_progress_message),
                     )
                 }
 
                 is CloudBackupLifecycle.Failed -> {
                     CloudBackupDetailContent(
                         manager = manager,
-                        headerError = lifecycle.v1.message,
+                        headerError = lifecycle.v1.localizedMessage().asString(),
                         onRecreate = onRecreate,
                         onReinitialize = onReinitialize,
                     )
@@ -291,9 +294,9 @@ private fun CloudBackupSettingsEnableOnboarding(
             manager.isLifecycleEnabling
     val primaryButtonTitle =
         if (needsManualPasskeyConfirmation) {
-            "Confirm Passkey"
+            stringResource(R.string.cloud_backup_enable_confirm_passkey)
         } else {
-            "Enable Cloud Backup"
+            stringResource(R.string.cloud_backup_enable_enable_cloud_backup)
         }
 
     Box(modifier = Modifier.fillMaxSize()) {

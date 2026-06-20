@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -38,7 +39,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.AppAlertState
@@ -75,8 +78,8 @@ fun TapSignerConfirmPinView(
                 app.alertState =
                     TaggedItem(
                         AppAlertState.General(
-                            title = "Error",
-                            message = "Unable to access NFC. Please try again.",
+                            title = context.getString(R.string.scoped_common_error),
+                            message = context.getString(R.string.tap_signer_error_unable_access_nfc),
                         ),
                     )
                 confirmPin = ""
@@ -108,16 +111,16 @@ fun TapSignerConfirmPinView(
             TextButton(onClick = { manager.popRoute() }) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.scoped_common_back),
                 )
-                Text("Back", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.scoped_common_back), fontWeight = FontWeight.SemiBold)
             }
         }
 
         // lock icon
         Icon(
             imageVector = Icons.Default.Lock,
-            contentDescription = "Lock",
+            contentDescription = stringResource(R.string.tap_signer_lock),
             modifier =
                 Modifier
                     .size(100.dp)
@@ -132,14 +135,13 @@ fun TapSignerConfirmPinView(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(
-                text = "Confirm New PIN",
+                text = stringResource(R.string.tap_signer_confirm_new_pin),
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
             )
 
             Text(
-                text =
-                    "The PIN code is a security feature that prevents unauthorized access to your key. Please back it up and keep it safe. You'll need it for signing transactions.",
+                text = stringResource(R.string.tap_signer_pin_security_body),
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
@@ -223,7 +225,7 @@ private suspend fun setupTapSigner(
     }
     nfcManager.onTagDetected = { manager.isTagDetected = true }
 
-    manager.scanMessage = "Hold your phone near the TapSigner to set up"
+    manager.scanMessage = UiText.resource(R.string.tap_signer_hold_setup)
     manager.isTagDetected = false
     manager.isScanning = true
 
@@ -261,7 +263,7 @@ private suspend fun setupTapSigner(
             app.sheetState = null
             app.alertState =
                 TaggedItem(
-                    AppAlertState.TapSignerSetupFailed(e.message ?: "Unknown error"),
+                    AppAlertState.TapSignerSetupFailed(activity.getString(R.string.app_alert_tapsigner_setup_failed_message)),
                 )
         }
     }
@@ -282,7 +284,7 @@ private suspend fun changeTapSignerPin(
     }
     nfcManager.onTagDetected = { manager.isTagDetected = true }
 
-    manager.scanMessage = "Hold your phone near the TapSigner to change PIN"
+    manager.scanMessage = UiText.resource(R.string.tap_signer_hold_change_pin)
     manager.isTagDetected = false
     manager.isScanning = true
 
@@ -297,8 +299,8 @@ private suspend fun changeTapSignerPin(
         app.alertState =
             TaggedItem(
                 AppAlertState.General(
-                    title = "PIN Changed",
-                    message = "Your TAPSIGNER PIN was changed successfully!",
+                    title = activity.getString(R.string.tap_signer_pin_changed_title),
+                    message = activity.getString(R.string.tap_signer_pin_changed_message),
                 ),
             )
     } catch (e: Exception) {
@@ -309,13 +311,11 @@ private suspend fun changeTapSignerPin(
 
         Log.e("TapSignerConfirmPin", "Error changing PIN")
 
-        // check error type and show appropriate alert
-        val errorMessage = e.message ?: "Unknown error"
         app.alertState =
             TaggedItem(
                 AppAlertState.General(
-                    title = "Error",
-                    message = errorMessage,
+                    title = activity.getString(R.string.scoped_common_error),
+                    message = activity.getString(R.string.app_alert_tapsigner_setup_failed_message),
                 ),
             )
     }

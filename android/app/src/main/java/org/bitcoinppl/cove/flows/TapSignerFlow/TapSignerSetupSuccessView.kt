@@ -28,10 +28,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove_core.types.WalletId
 
@@ -81,7 +83,7 @@ fun TapSignerSetupSuccessView(
             horizontalArrangement = Arrangement.Start,
         ) {
             TextButton(onClick = { app.sheetState = null }) {
-                Text("Cancel", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.scoped_common_cancel), fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -96,7 +98,7 @@ fun TapSignerSetupSuccessView(
         ) {
             Icon(
                 imageVector = Icons.Default.CheckCircle,
-                contentDescription = "Success",
+                contentDescription = stringResource(R.string.scoped_common_success),
                 modifier = Modifier.size(100.dp),
                 tint = Color.Green,
             )
@@ -108,13 +110,13 @@ fun TapSignerSetupSuccessView(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    text = "Setup Complete",
+                    text = stringResource(R.string.tap_signer_setup_complete_title),
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                 )
 
                 Text(
-                    text = "Your TAPSIGNER is ready to use.",
+                    text = stringResource(R.string.tap_signer_setup_complete_body),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                 )
@@ -123,8 +125,7 @@ fun TapSignerSetupSuccessView(
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text =
-                    "If you haven't already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore your wallet.",
+                text = stringResource(R.string.tap_signer_setup_backup_notice),
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
@@ -149,13 +150,13 @@ fun TapSignerSetupSuccessView(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "Download Backup",
+                            text = stringResource(R.string.tap_signer_download_backup),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
 
                         Text(
-                            text = "You need this backup to restore your wallet.",
+                            text = stringResource(R.string.tap_signer_download_backup_body),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -163,7 +164,7 @@ fun TapSignerSetupSuccessView(
 
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Next",
+                        contentDescription = stringResource(R.string.scoped_common_next),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -180,7 +181,7 @@ fun TapSignerSetupSuccessView(
             },
             modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp),
         ) {
-            Text("Continue")
+            Text(stringResource(R.string.scoped_common_continue))
         }
     }
 }

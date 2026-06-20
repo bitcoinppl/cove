@@ -10,8 +10,8 @@ import SwiftUI
 struct SettingsRow: View {
     @Environment(AppManager.self) private var app
 
-    let title: String
-    var subtitle: String? = nil
+    let title: Text
+    var subtitle: Text? = nil
 
     var route: SettingsRoute? = nil
 
@@ -20,16 +20,62 @@ struct SettingsRow: View {
 
     var onTapGesture: (() -> Void)? = nil
 
+    init(
+        title: LocalizedStringKey,
+        subtitle: LocalizedStringKey? = nil,
+        route: SettingsRoute? = nil,
+        icon: SettingsIcon? = nil,
+        symbol: String? = nil,
+        onTapGesture: (() -> Void)? = nil
+    ) {
+        self.title = Text(title)
+        self.subtitle = subtitle.map { Text($0) }
+        self.route = route
+        self.icon = icon
+        self.symbol = symbol
+        self.onTapGesture = onTapGesture
+    }
+
+    init(
+        verbatimTitle title: String,
+        route: SettingsRoute? = nil,
+        icon: SettingsIcon? = nil,
+        symbol: String? = nil,
+        onTapGesture: (() -> Void)? = nil
+    ) {
+        self.title = Text(verbatim: title)
+        self.route = route
+        self.icon = icon
+        self.symbol = symbol
+        self.onTapGesture = onTapGesture
+    }
+
+    init(
+        title: LocalizedStringKey,
+        verbatimSubtitle subtitle: String,
+        route: SettingsRoute? = nil,
+        icon: SettingsIcon? = nil,
+        symbol: String? = nil,
+        onTapGesture: (() -> Void)? = nil
+    ) {
+        self.title = Text(title)
+        self.subtitle = Text(verbatim: subtitle)
+        self.route = route
+        self.icon = icon
+        self.symbol = symbol
+        self.onTapGesture = onTapGesture
+    }
+
     var body: some View {
         HStack {
             icon ?? SettingsIcon(symbol: symbol ?? "")
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                title
                     .font(.subheadline)
 
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
+                if let subtitle {
+                    subtitle
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

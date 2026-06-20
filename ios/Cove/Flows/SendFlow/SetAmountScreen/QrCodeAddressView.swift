@@ -66,12 +66,12 @@ struct QrCodeAddressView: View {
 
                         if let progress {
                             VStack(spacing: 8) {
-                                Text(progress.displayText())
+                                Text(progress.localizedDisplayText)
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                                     .padding(.top, 8)
 
-                                if let detailText = progress.detailText() {
+                                if let detailText = progress.localizedDetailText {
                                     Text(detailText)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
@@ -107,8 +107,8 @@ struct QrCodeAddressView: View {
                         scanner.reset()
                         app.alertState = TaggedItem(
                             .general(
-                                title: "Invalid QR Code",
-                                message: "Please scan a valid Bitcoin address QR code"
+                                title: String(localized: "Invalid QR Code"),
+                                message: String(localized: "Please scan a valid Bitcoin address QR code.")
                             )
                         )
                     }
@@ -120,10 +120,11 @@ struct QrCodeAddressView: View {
             } catch {
                 scanner.reset()
                 dismiss()
+                Log.error("Unable to scan address QR code: \(error.localizedDescription)")
                 app.alertState = TaggedItem(
                     .general(
-                        title: "QR Scan Error",
-                        message: "Unable to scan QR code, error: \(error.localizedDescription)"
+                        title: String(localized: "QR Scan Error"),
+                        message: String(localized: "Unable to scan QR code. Please try again.")
                     )
                 )
             }

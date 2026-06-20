@@ -173,7 +173,10 @@ fun MainSettingsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { app.popRoute() }) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.content_description_back),
+                        )
                     }
                 },
                 actions = { },
@@ -303,11 +306,11 @@ fun MainSettingsScreen(
                     )
                 }
 
-                SectionHeader("About")
+                SectionHeader(stringResource(R.string.settings_title_about))
                 MaterialSection {
                     Column {
                         MaterialSettingsItem(
-                            title = "About",
+                            title = stringResource(R.string.settings_title_about),
                             icon = Icons.Default.Info,
                             onClick = {
                                 app.pushRoute(
@@ -355,20 +358,20 @@ fun MainSettingsScreen(
     if (showImportExportWarning) {
         AlertDialog(
             onDismissRequest = { showImportExportWarning = false },
-            title = { Text("Experimental Feature") },
-            text = { Text("This is a very experimental feature. Use with caution. This is mostly used by developers for testing purposes.") },
+            title = { Text(stringResource(R.string.settings_experimental_feature_title)) },
+            text = { Text(stringResource(R.string.settings_experimental_feature_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     Database().globalFlag().set(GlobalFlagKey.BETA_IMPORT_EXPORT_ENABLED, true)
                     isBetaImportExportEnabled = true
                     showImportExportWarning = false
                 }) {
-                    Text("Accept")
+                    Text(stringResource(R.string.settings_action_accept))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showImportExportWarning = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -411,7 +414,7 @@ private fun WalletSettingsSection(app: org.bitcoinppl.cove.AppManager) {
     val top5Wallets = wallets.take(topAmount)
     val hasMore = wallets.size > topAmount
 
-    SectionHeader("Wallet Settings")
+    SectionHeader(stringResource(R.string.settings_title_wallet_settings))
     MaterialSection {
         Column {
             top5Wallets.forEachIndexed { index, wallet ->
@@ -438,7 +441,7 @@ private fun WalletSettingsSection(app: org.bitcoinppl.cove.AppManager) {
 
             if (hasMore) {
                 MaterialSettingsItem(
-                    title = "More",
+                    title = stringResource(R.string.settings_title_more),
                     icon = Icons.Default.MoreHoriz,
                     onClick = {
                         app.pushRoute(
@@ -482,10 +485,10 @@ private fun BackupExportAuthDialog(
             )
             biometricPrompt.authenticate(
                 BiometricPrompt.PromptInfo.Builder()
-                    .setTitle("Unlock Backup Export")
-                    .setSubtitle("Verify your identity to export")
-                    .setNegativeButtonText("Cancel")
-                    .build()
+                    .setTitle(context.getString(R.string.settings_backup_export_auth_title))
+                    .setSubtitle(context.getString(R.string.settings_backup_export_auth_subtitle))
+                    .setNegativeButtonText(context.getString(R.string.action_cancel))
+                    .build(),
             )
         }
         return
@@ -514,10 +517,10 @@ private fun BackupExportAuthDialog(
             )
             biometricPrompt.authenticate(
                 BiometricPrompt.PromptInfo.Builder()
-                    .setTitle("Unlock Backup Export")
-                    .setSubtitle("Verify your identity to export")
-                    .setNegativeButtonText("Use PIN")
-                    .build()
+                    .setTitle(context.getString(R.string.settings_backup_export_auth_title))
+                    .setSubtitle(context.getString(R.string.settings_backup_export_auth_subtitle))
+                    .setNegativeButtonText(context.getString(R.string.settings_action_use_pin))
+                    .build(),
             )
         }
     }
@@ -534,7 +537,7 @@ private fun BackupExportAuthDialog(
                     .background(Color.Black),
             ) {
                 NumberPadPinView(
-                    title = "Enter PIN",
+                    title = stringResource(R.string.settings_pin_enter_pin),
                     isPinCorrect = { pin -> Auth.checkPin(pin) },
                     backAction = onDismiss,
                     onUnlock = { onUnlock() },
@@ -564,13 +567,13 @@ private fun BackupSection(
                 .padding(start = MaterialSpacing.medium, end = MaterialSpacing.medium, top = 12.dp, bottom = 4.dp),
         ) {
             Text(
-                text = "Backup",
+                text = stringResource(R.string.settings_title_backup),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "BETA",
+                text = stringResource(R.string.settings_beta_badge),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White,
@@ -583,19 +586,19 @@ private fun BackupSection(
     MaterialSection {
         Column {
             MaterialSettingsItem(
-                title = "Export All",
+                title = stringResource(R.string.settings_import_export_export_all),
                 icon = Icons.Default.FileUpload,
                 onClick = onExport,
             )
             MaterialDivider()
             MaterialSettingsItem(
-                title = "Import All",
+                title = stringResource(R.string.settings_import_export_import_all),
                 icon = Icons.Default.FileDownload,
                 onClick = onImport,
             )
             MaterialDivider()
             MaterialSettingsItem(
-                title = "Verify Backup",
+                title = stringResource(R.string.settings_backup_verify_title),
                 icon = Icons.Default.VerifiedUser,
                 onClick = onVerify,
             )
@@ -610,12 +613,12 @@ private fun BetaToggleSection(
     isBetaImportExportEnabled: Boolean,
     onImportExportToggle: (Boolean) -> Unit,
 ) {
-    SectionHeader("Beta")
+    SectionHeader(stringResource(R.string.settings_title_beta))
     MaterialSection {
         Column {
             MaterialSettingsItem(
-                title = "Beta Features",
-                subtitle = "Disable to hide experimental features",
+                title = stringResource(R.string.settings_beta_features_title),
+                subtitle = stringResource(R.string.settings_beta_features_subtitle),
                 icon = Icons.Default.Science,
                 isSwitch = true,
                 switchCheckedState = isBetaEnabled,
@@ -623,7 +626,7 @@ private fun BetaToggleSection(
             )
             MaterialDivider()
             MaterialSettingsItem(
-                title = "Enable Beta Import Export",
+                title = stringResource(R.string.settings_beta_import_export_title),
                 icon = Icons.Default.ImportExport,
                 isSwitch = true,
                 switchCheckedState = isBetaImportExportEnabled,

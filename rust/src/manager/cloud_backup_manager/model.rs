@@ -382,9 +382,7 @@ impl CloudBackupReducerState {
                 CloudBackupSettingsRowStatus::AuthorizationRequired(message.clone())
             }
             CloudSyncHealth::Unavailable => CloudBackupSettingsRowStatus::DriveUnavailable,
-            CloudSyncHealth::Failed(message) => {
-                CloudBackupSettingsRowStatus::Error(message.clone())
-            }
+            CloudSyncHealth::Failed(message) => CloudBackupSettingsRowStatus::Error(message.clone()),
         }
     }
 

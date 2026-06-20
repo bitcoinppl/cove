@@ -12,8 +12,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.WalletSelectionRecoveryResult
 import org.bitcoinppl.cove.components.FullPageLoadingView
@@ -42,6 +44,12 @@ fun TransactionDetailsContainer(
     var retryAttempt by remember(txId) { mutableStateOf(0) }
     var managerRetryAttempt by remember(walletId) { mutableStateOf(0) }
     var recoveringWalletSelection by remember(walletId) { mutableStateOf(false) }
+    val failedToLoadWallet = stringResource(R.string.transaction_details_failed_to_load_wallet)
+    val failedToLoadTransaction = stringResource(R.string.transaction_details_failed_to_load_transaction)
+    val unableToLoadWalletTitle = stringResource(R.string.transaction_details_unable_to_load_wallet_title)
+    val unableToLoadTransactionTitle = stringResource(R.string.transaction_details_unable_to_load_transaction_title)
+    val tryAgainText = stringResource(R.string.action_try_again)
+    val openWalletText = stringResource(R.string.transaction_details_open_wallet)
 
     fun recoverWalletSelection() {
         if (recoveringWalletSelection && !app.isNavigationSettled) return
@@ -95,7 +103,7 @@ fun TransactionDetailsContainer(
             throw e
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Failed to load wallet", e)
-            error = e.message ?: "failed to load wallet"
+            error = e.message ?: failedToLoadWallet
             loading = false
             recoverWalletSelection()
         }
@@ -118,7 +126,7 @@ fun TransactionDetailsContainer(
         } catch (e: KotlinCancellationException) {
             throw e
         } catch (e: Exception) {
-            detailsError = e.message ?: "failed to load transaction"
+            detailsError = e.message ?: failedToLoadTransaction
             android.util.Log.e(TAG, "Failed to load transaction details", e)
         }
     }
@@ -129,8 +137,10 @@ fun TransactionDetailsContainer(
             BackHandler(onBack = { recoverWalletSelection() })
 
             TransactionDetailsLoadError(
-                title = "Unable to load wallet",
+                title = unableToLoadWalletTitle,
                 message = error!!,
+                retryText = tryAgainText,
+                recoverWalletSelectionText = openWalletText,
                 onRetry = {
                     error = null
                     managerRetryAttempt++
@@ -151,8 +161,10 @@ fun TransactionDetailsContainer(
 
         detailsError != null -> {
             TransactionDetailsLoadError(
-                title = "Unable to load transaction",
+                title = unableToLoadTransactionTitle,
                 message = detailsError!!,
+                retryText = tryAgainText,
+                recoverWalletSelectionText = openWalletText,
                 onRetry = {
                     detailsError = null
                     didLoadInitialDetails = false
@@ -169,6 +181,8 @@ fun TransactionDetailsContainer(
 private fun TransactionDetailsLoadError(
     title: String,
     message: String,
+    retryText: String,
+    recoverWalletSelectionText: String,
     onRetry: () -> Unit,
     onRecoverWalletSelection: (() -> Unit)? = null,
 ) {
@@ -183,11 +197,11 @@ private fun TransactionDetailsLoadError(
             androidx.compose.material3.Text(title)
             androidx.compose.material3.Text(message)
             androidx.compose.material3.Button(onClick = onRetry) {
-                androidx.compose.material3.Text("Try again")
+                androidx.compose.material3.Text(retryText)
             }
             if (onRecoverWalletSelection != null) {
                 androidx.compose.material3.TextButton(onClick = onRecoverWalletSelection) {
-                    androidx.compose.material3.Text("Open wallet")
+                    androidx.compose.material3.Text(recoverWalletSelectionText)
                 }
             }
         }

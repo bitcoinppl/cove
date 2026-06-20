@@ -267,7 +267,8 @@ struct OnboardingHardwareFileImportView: View {
             case let .success(url):
                 importFile(url)
             case let .failure(error):
-                errorMessage = error.localizedDescription
+                Log.error("Hardware wallet file picker failed: \(error)")
+                errorMessage = String(localized: "Unable to open the selected file. Please try again.")
             }
         }
     }
@@ -287,7 +288,7 @@ struct OnboardingHardwareFileImportView: View {
         do {
             let multiFormat = try FileHandler(filePath: url.path).read()
             guard case let .hardwareExport(export) = multiFormat else {
-                errorMessage = "That file doesn’t contain a hardware wallet export."
+                errorMessage = String(localized: "That file doesn't contain a hardware wallet export.")
                 return
             }
 
@@ -296,7 +297,8 @@ struct OnboardingHardwareFileImportView: View {
         } catch let WalletError.WalletAlreadyExists(walletId) {
             onImported(walletId)
         } catch {
-            errorMessage = error.localizedDescription
+            Log.error("Hardware wallet file import failed: \(error)")
+            errorMessage = String(localized: "Unable to import that hardware wallet file. Please try again.")
         }
     }
 }
@@ -341,7 +343,7 @@ struct OnboardingHardwareNfcImportView: View {
         do {
             let multiFormat = try message.tryIntoMultiFormat()
             guard case let .hardwareExport(export) = multiFormat else {
-                errorMessage = "That NFC payload doesn’t contain a hardware wallet export."
+                errorMessage = String(localized: "That NFC payload doesn't contain a hardware wallet export.")
                 return
             }
 
@@ -350,13 +352,14 @@ struct OnboardingHardwareNfcImportView: View {
         } catch let WalletError.WalletAlreadyExists(walletId) {
             onImported(walletId)
         } catch {
-            errorMessage = error.localizedDescription
+            Log.error("Hardware wallet NFC import failed: \(error)")
+            errorMessage = String(localized: "Unable to import from NFC. Please try again.")
         }
     }
 }
 
 struct OnboardingEmbeddedNavigation<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let onBack: () -> Void
     @ViewBuilder let content: Content
 

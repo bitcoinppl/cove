@@ -114,11 +114,12 @@ struct NodeSelectionView: View {
             customNodeName = node?.name ?? customNodeName
         } catch {
             showParseUrlAlert = true
+            Log.error("Unable to parse custom node URL: \(error.localizedDescription)")
             switch error {
-            case let NodeSelectorError.ParseNodeUrlError(errorString):
-                parseUrlMessage = errorString
+            case NodeSelectorError.ParseNodeUrlError:
+                parseUrlMessage = String(localized: "Enter a valid node URL.")
             default:
-                parseUrlMessage = "Unknown error \(error.localizedDescription)"
+                parseUrlMessage = String(localized: "Unable to check this node URL. Please try again.")
             }
         }
 
@@ -130,12 +131,10 @@ struct NodeSelectionView: View {
                 switch result {
                 case .success:
                     refreshNodeState()
-                    completeLoading(.success("Connected to node successfully"))
+                    completeLoading(.success(String(localized: "Connected to node successfully.")))
                 case let .failure(error):
-                    let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
-                    let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
-
-                    completeLoading(.failure(formattedMessage))
+                    Log.error("Failed to connect to custom node: \(error.localizedDescription)")
+                    completeLoading(.failure(String(localized: "Failed to connect to node. Please check the URL and try again.")))
                 }
             }
         }
@@ -224,9 +223,10 @@ struct NodeSelectionView: View {
                 do {
                     try await nodeSelector.checkSelectedNode(node: node)
                     refreshNodeState()
-                    completeLoading(.success("Succesfully connected to \(node.url)"))
+                    completeLoading(.success(String(localized: "Connected to \(node.url).")))
                 } catch {
-                    completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
+                    Log.error("Failed to connect to \(node.url): \(error.localizedDescription)")
+                    completeLoading(.failure(String(localized: "Failed to connect to \(node.url). Please try again.")))
                 }
             }
             checkUrlTask = task

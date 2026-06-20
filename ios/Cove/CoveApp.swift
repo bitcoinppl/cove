@@ -137,7 +137,10 @@ extension CoveApp {
             try resetLocalDataForCatastrophicRecovery()
             rebootstrap()
         } catch {
-            startupState = .fatalError("Failed to reset local data: \(error.localizedDescription)")
+            Log.error("[STARTUP] failed to reset local data for catastrophic recovery: \(error)")
+            startupState = .fatalError(
+                String(localized: "Cove couldn't reset local data. Please contact feedback@covebitcoinwallet.com.")
+            )
         }
     }
 
@@ -194,7 +197,7 @@ extension CoveApp {
             } else {
                 Log.error("[STARTUP] bootstrap timed out, last step: \(step)")
                 startupState = .fatalError(
-                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+                    String(localized: "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com")
                 )
             }
         } else if error is CancellationError {
@@ -210,16 +213,18 @@ extension CoveApp {
             } else if case AppInitError.AlreadyCalled = error {
                 Log.error("[STARTUP] bootstrap already called at step: \(step)")
                 startupState = .fatalError(
-                    "App initialization error. Please force-quit and restart."
+                    String(localized: "App initialization error. Please force-quit and restart.")
                 )
             } else if case AppInitError.Cancelled = error {
                 Log.error("[STARTUP] bootstrap cancelled at step: \(step)")
                 startupState = .fatalError(
-                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+                    String(localized: "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com")
                 )
             } else {
                 Log.error("[STARTUP] bootstrap failed at step: \(step), error: \(error)")
-                startupState = .fatalError(error.localizedDescription)
+                startupState = .fatalError(
+                    String(localized: "Cove couldn't start. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com")
+                )
             }
         }
     }
@@ -273,8 +278,8 @@ extension CoveApp {
             let isICloudAvailable = await MainActor.run { FileManager.default.ubiquityIdentityToken != nil }
             guard isICloudAvailable else { return }
 
-            let warning = await CloudBackupManager.shared.rust.verifyBackupIntegrity()
-            if let warning { Log.error("[STARTUP] backup integrity warning: \(warning)") }
+            let issues = await CloudBackupManager.shared.rust.verifyBackupIntegrity()
+            if !issues.isEmpty { Log.error("[STARTUP] backup integrity issues: \(issues)") }
         }
     }
 }

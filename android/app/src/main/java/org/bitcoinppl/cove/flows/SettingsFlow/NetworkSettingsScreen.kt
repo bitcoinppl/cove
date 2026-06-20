@@ -35,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.localizedDisplayText
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.SectionHeader
@@ -69,7 +70,10 @@ fun NetworkSettingsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { app.popRoute() }) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.content_description_back),
+                        )
                     }
                 },
                 actions = { },
@@ -111,8 +115,15 @@ fun NetworkSettingsScreen(
     pendingNetworkChange?.let { network ->
         AlertDialog(
             onDismissRequest = { pendingNetworkChange = null },
-            title = { Text("Warning: Network Changed") },
-            text = { Text("You've changed your network to ${network.toString()}") },
+            title = { Text(stringResource(R.string.network_change_warning_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.network_change_warning_message,
+                        network.localizedDisplayText().asString(),
+                    ),
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -122,14 +133,14 @@ fun NetworkSettingsScreen(
                         app.popRoute()
                     },
                 ) {
-                    Text("Yes, Change Network")
+                    Text(stringResource(R.string.network_change_confirm))
                 }
             },
             dismissButton = {
                 TextButton(
                     onClick = { pendingNetworkChange = null },
                 ) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -152,14 +163,14 @@ private fun NetworkRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = network.toString(),
+            text = network.localizedDisplayText().asString(),
             style = MaterialTheme.typography.bodyMedium,
         )
 
         if (isSelected) {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
+                contentDescription = stringResource(R.string.content_description_selected),
                 tint = MaterialTheme.colorScheme.primary,
             )
         }

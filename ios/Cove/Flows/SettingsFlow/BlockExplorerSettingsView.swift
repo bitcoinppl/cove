@@ -34,7 +34,7 @@ struct BlockExplorerSettingsView: View {
                 Section {
                     Picker("Network", selection: $selectedNetwork) {
                         ForEach(editableNetworks, id: \.self) { network in
-                            Text(network.displayName()).tag(network)
+                            Text(network.localizedDisplayName).tag(network)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -103,7 +103,7 @@ struct BlockExplorerSettingsView: View {
 
     private func blockExplorerOptionRow(_ option: BlockExplorerOption) -> some View {
         HStack {
-            Text(option.displayName())
+            Text(option.localizedDisplayName)
 
             Spacer()
 
@@ -162,6 +162,7 @@ struct BlockExplorerSettingsView: View {
                 input: value
             )
         } catch {
+            Log.error("Unable to preview custom block explorer: \(error.localizedDescription)")
             preview = ""
         }
     }
@@ -187,11 +188,12 @@ struct BlockExplorerSettingsView: View {
             Task { @MainActor in
                 await dismissAllPopups()
                 try? await Task.sleep(for: .milliseconds(250))
-                await MiddlePopup(state: .success("Block explorer saved successfully"))
+                await MiddlePopup(state: .success(String(localized: "Block explorer saved successfully")))
                     .dismissAfter(2)
                     .present()
             }
         } catch {
+            Log.error("Unable to save custom block explorer: \(error.localizedDescription)")
             showInvalidUrlAlert = true
         }
 
@@ -203,7 +205,25 @@ struct BlockExplorerSettingsView: View {
             try config.clearCustomBlockExplorer(network: selectedNetwork)
             reload()
         } catch {
+            Log.error("Unable to reset custom block explorer: \(error.localizedDescription)")
             showUpdateFailedAlert = true
+        }
+    }
+}
+
+private extension BlockExplorerOption {
+    var localizedDisplayName: String {
+        switch self {
+        case .mempoolSpace:
+            String(localized: "Default explorer")
+        case .mempoolGuide:
+            String(localized: "mempool.guide")
+        case .bullBitcoin:
+            String(localized: "bullbitcoin.com")
+        case .blockstream:
+            String(localized: "blockstream.info")
+        case .custom:
+            String(localized: "Custom")
         }
     }
 }

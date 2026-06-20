@@ -97,6 +97,7 @@ fun NodeSettingsScreen(
     val errorUnknown = stringResource(R.string.node_error_unknown)
     val errorUrlEmpty = stringResource(R.string.node_error_url_empty)
     val errorParseTitle = stringResource(R.string.node_error_parse_title)
+    val errorParseMessage = stringResource(R.string.node_error_url_invalid)
 
     val showCustomFields =
         selectedNodeSelection is NodeSelection.Custom ||
@@ -161,16 +162,19 @@ fun NodeSettingsScreen(
                     )
                 }
             } catch (e: NodeSelectorException.NodeNotFound) {
+                android.util.Log.e("NodeSettingsScreen", "Node not found", e)
                 errorTitle = errorTitleDefault
-                errorMessage = errorNotFound.format(e.v1)
+                errorMessage = errorNotFound
                 showErrorDialog = true
             } catch (e: NodeSelectorException.NodeAccessException) {
+                android.util.Log.e("NodeSettingsScreen", "Unable to connect to node", e)
                 errorTitle = errorConnectionFailed
-                errorMessage = errorConnectionMessage.format(e.v1)
+                errorMessage = errorConnectionMessage
                 showErrorDialog = true
             } catch (e: Exception) {
+                android.util.Log.e("NodeSettingsScreen", "Unable to select node", e)
                 errorTitle = errorTitleDefault
-                errorMessage = errorUnknown.format(e.message ?: "")
+                errorMessage = errorUnknown
                 showErrorDialog = true
             } finally {
                 isLoading = false
@@ -208,16 +212,19 @@ fun NodeSettingsScreen(
                     snackbarHostState.showSnackbar(successSaved)
                 }
             } catch (e: NodeSelectorException.ParseNodeUrlException) {
+                android.util.Log.e("NodeSettingsScreen", "Unable to parse node URL", e)
                 errorTitle = errorParseTitle
-                errorMessage = e.v1
+                errorMessage = errorParseMessage
                 showErrorDialog = true
             } catch (e: NodeSelectorException.NodeAccessException) {
+                android.util.Log.e("NodeSettingsScreen", "Unable to connect to custom node", e)
                 errorTitle = errorConnectionFailed
-                errorMessage = errorConnectionMessage.format(e.v1)
+                errorMessage = errorConnectionMessage
                 showErrorDialog = true
             } catch (e: Exception) {
+                android.util.Log.e("NodeSettingsScreen", "Unable to save custom node", e)
                 errorTitle = errorTitleDefault
-                errorMessage = errorUnknown.format(e.message ?: "")
+                errorMessage = errorUnknown
                 showErrorDialog = true
             } finally {
                 isLoading = false
@@ -320,7 +327,7 @@ fun NodeSettingsScreen(
                 if (showCustomFields) {
                     Spacer(modifier = Modifier.height(MaterialSpacing.medium))
 
-                    SectionHeader("Custom node")
+                    SectionHeader(stringResource(R.string.settings_node_custom_section))
                     MaterialSection {
                         Column(
                             modifier =

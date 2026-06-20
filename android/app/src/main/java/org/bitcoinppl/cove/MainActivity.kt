@@ -47,7 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.fragment.app.FragmentActivity
@@ -207,7 +207,7 @@ class MainActivity : FragmentActivity() {
                 } catch (e: Exception) {
                     Log.e(TAG, "[STARTUP] catastrophic recovery $logContext failed", e)
                     needsCatastrophicRecovery = false
-                    bootstrapError = "Failed to reset local data: ${e.message ?: "Unknown error"}"
+                    bootstrapError = getString(R.string.common_remaining_failed_to_reset_local_data)
                 }
             }
 
@@ -244,7 +244,7 @@ class MainActivity : FragmentActivity() {
                         catastrophicCloudRestoreCheck =
                             CatastrophicCloudRestoreCheck.Complete(
                                 CatastrophicCloudRestoreResult.Inconclusive(
-                                    "Cove could not check for a Cloud Backup.",
+                                    getString(R.string.common_remaining_cloud_backup_check_failed),
                                 ),
                             )
                     } finally {
@@ -294,25 +294,43 @@ class MainActivity : FragmentActivity() {
                     BootstrapErrorView(
                         errorMessage = bootstrapError!!,
                         onCopyDiagnostics = {
-                            val report = startupDiagnosticsReport(bootstrapError!!)
+                            val report = startupDiagnosticsReport(this@MainActivity, bootstrapError!!)
                             val clipboard =
                                 getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("Cove diagnostics", report))
+                            clipboard.setPrimaryClip(
+                                ClipData.newPlainText(
+                                    getString(R.string.common_remaining_startup_diagnostics_subject),
+                                    report,
+                                ),
+                            )
                             // Android 13+ shows its own clipboard confirmation chip
                             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                Toast.makeText(this, "Diagnostics copied", Toast.LENGTH_SHORT).show()
+                                Toast
+                                    .makeText(
+                                        this,
+                                        getString(R.string.common_remaining_diagnostics_copied),
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
                             }
                         },
                         onShareDiagnostics = {
-                            val report = startupDiagnosticsReport(bootstrapError!!)
+                            val report = startupDiagnosticsReport(this@MainActivity, bootstrapError!!)
                             val intent =
                                 Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
-                                    putExtra(Intent.EXTRA_SUBJECT, "Cove startup diagnostics")
+                                    putExtra(
+                                        Intent.EXTRA_SUBJECT,
+                                        getString(R.string.common_remaining_startup_diagnostics_subject),
+                                    )
                                     putExtra(Intent.EXTRA_TEXT, report)
                                 }
                             runCatching {
-                                startActivity(Intent.createChooser(intent, "Share Diagnostics"))
+                                startActivity(
+                                    Intent.createChooser(
+                                        intent,
+                                        getString(R.string.common_remaining_share_diagnostics),
+                                    ),
+                                )
                             }.onFailure { error ->
                                 Log.w(TAG, "[STARTUP] failed to share diagnostics", error)
                             }
@@ -363,7 +381,7 @@ class MainActivity : FragmentActivity() {
                         val warning: String?
 
                         try {
-                            warning = runBootstrapWithWatchdog { status, progress ->
+                            warning = runBootstrapWithWatchdog(this@MainActivity) { status, progress ->
                                 splashStatus = status
                                 encryptionProgress = progress
                             }
@@ -377,7 +395,7 @@ class MainActivity : FragmentActivity() {
                             } else {
                                 Log.e(TAG, "[STARTUP] bootstrap timed out, last step: $step")
                                 bootstrapError =
-                                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+                                    getString(R.string.common_remaining_startup_timeout_error)
                             }
 
                             return@LaunchedEffect
@@ -401,7 +419,7 @@ class MainActivity : FragmentActivity() {
                                     resetCatastrophicCloudRestoreCheck()
                                     needsCatastrophicRecovery = true
                                 }
-                                is BootstrapFailure.Fatal -> bootstrapError = failure.message
+                                is BootstrapFailure.Fatal -> bootstrapError = failure.message.resolve(this@MainActivity)
                             }
                             return@LaunchedEffect
                         }
@@ -415,14 +433,14 @@ class MainActivity : FragmentActivity() {
             if (bdkMigrationWarning != null) {
                 AlertDialog(
                     onDismissRequest = { bdkMigrationWarning = null },
-                    title = { Text("Encryption Migration Issue") },
+                    title = { Text(stringResource(R.string.common_remaining_encryption_migration_issue_title)) },
                     text = {
                         Text(
-                            "Some wallet databases couldn't be encrypted. Your wallets still work and encryption will retry on next launch.\n\nIf this persists, please contact feedback@covebitcoinwallet.com"
+                            stringResource(R.string.common_remaining_encryption_migration_issue_message),
                         )
                     },
                     confirmButton = {
-                        TextButton(onClick = { bdkMigrationWarning = null }) { Text("OK") }
+                        TextButton(onClick = { bdkMigrationWarning = null }) { Text(stringResource(R.string.action_ok)) }
                     },
                 )
             }

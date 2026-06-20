@@ -198,9 +198,33 @@ struct OnboardingCloudRestoreChoiceCard: View {
 
 struct OnboardingPromptScreen<Footer: View>: View {
     let icon: String
-    let title: String
-    let subtitle: String
+    let title: Text
+    let subtitle: Text
     @ViewBuilder let footer: Footer
+
+    init(
+        icon: String,
+        title: Text,
+        subtitle: Text,
+        @ViewBuilder footer: () -> Footer
+    ) {
+        self.icon = icon
+        self.title = title
+        self.subtitle = subtitle
+        self.footer = footer()
+    }
+
+    init(
+        icon: String,
+        title: LocalizedStringKey,
+        subtitle: LocalizedStringKey,
+        @ViewBuilder footer: () -> Footer
+    ) {
+        self.icon = icon
+        self.title = Text(title)
+        self.subtitle = Text(subtitle)
+        self.footer = footer()
+    }
 
     var body: some View {
         ScrollView {
@@ -217,14 +241,14 @@ struct OnboardingPromptScreen<Footer: View>: View {
                     .frame(height: 36)
 
                 VStack(spacing: 12) {
-                    Text(title)
+                    title
                         .font(.system(size: 34, weight: .semibold))
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text(subtitle)
+                    subtitle
                         .font(.footnote)
                         .foregroundStyle(.coveLightGray.opacity(0.74))
                         .fixedSize(horizontal: false, vertical: true)
@@ -252,11 +276,25 @@ struct OnboardingPromptScreen<Footer: View>: View {
 }
 
 struct OnboardingChoiceCard: View {
-    let title: String
-    let subtitle: String
+    let title: Text
+    let subtitle: Text
     let systemImage: String
     var isSelected = false
     let action: () -> Void
+
+    init(
+        title: LocalizedStringKey,
+        subtitle: LocalizedStringKey,
+        systemImage: String,
+        isSelected: Bool = false,
+        action: @escaping () -> Void
+    ) {
+        self.title = Text(title)
+        self.subtitle = Text(subtitle)
+        self.systemImage = systemImage
+        self.isSelected = isSelected
+        self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
@@ -272,13 +310,13 @@ struct OnboardingChoiceCard: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(title)
+                    title
                         .font(.headline)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text(subtitle)
+                    subtitle
                         .font(.footnote)
                         .foregroundStyle(.coveLightGray.opacity(0.74))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -305,12 +343,28 @@ struct OnboardingChoiceCard: View {
 }
 
 struct OnboardingStatusCard: View {
-    let title: String
-    let subtitle: String
+    let title: Text
+    let subtitle: Text
     let systemImage: String
     let isComplete: Bool
-    let actionTitle: String
+    let actionTitle: LocalizedStringKey
     let action: () -> Void
+
+    init(
+        title: LocalizedStringKey,
+        subtitle: LocalizedStringKey,
+        systemImage: String,
+        isComplete: Bool,
+        actionTitle: LocalizedStringKey,
+        action: @escaping () -> Void
+    ) {
+        self.title = Text(title)
+        self.subtitle = Text(subtitle)
+        self.systemImage = systemImage
+        self.isComplete = isComplete
+        self.actionTitle = actionTitle
+        self.action = action
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -323,11 +377,11 @@ struct OnboardingStatusCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
+                    title
                         .font(.headline)
                         .foregroundStyle(.white)
 
-                    Text(subtitle)
+                    subtitle
                         .font(.footnote)
                         .foregroundStyle(.coveLightGray.opacity(0.74))
                 }
@@ -365,10 +419,18 @@ struct OnboardingStatusCard: View {
 }
 
 struct OnboardingInlineMessage: View {
-    let text: String
+    let text: Text
+
+    init(text: String) {
+        self.text = Text(verbatim: text)
+    }
+
+    init(text: LocalizedStringKey) {
+        self.text = Text(text)
+    }
 
     var body: some View {
-        Text(text)
+        text
             .font(.footnote)
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, alignment: .leading)

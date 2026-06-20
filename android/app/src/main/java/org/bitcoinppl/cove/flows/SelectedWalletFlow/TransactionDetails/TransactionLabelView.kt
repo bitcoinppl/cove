@@ -100,7 +100,7 @@ fun TransactionLabelView(
                 manager.updateTransactionDetailsCache(txId, details)
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Error getting updated label", e)
-                val message = context.getString(R.string.label_update_error, e.message ?: "Unknown error")
+                val message = context.getString(R.string.label_update_error)
                 snackbarHostState.showSnackbar(
                     message = message,
                     duration = SnackbarDuration.Short,
@@ -127,7 +127,7 @@ fun TransactionLabelView(
                 hasFocusedOnce = false
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Unable to save label", e)
-                val message = context.getString(R.string.label_save_error, e.message ?: "Unknown error")
+                val message = context.getString(R.string.label_save_error)
                 snackbarHostState.showSnackbar(
                     message = message,
                     duration = SnackbarDuration.Short,
@@ -153,7 +153,7 @@ fun TransactionLabelView(
                 updateDetails()
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Unable to delete label", e)
-                val message = context.getString(R.string.label_delete_error, e.message ?: "Unknown error")
+                val message = context.getString(R.string.label_delete_error)
                 snackbarHostState.showSnackbar(
                     message = message,
                     duration = SnackbarDuration.Short,

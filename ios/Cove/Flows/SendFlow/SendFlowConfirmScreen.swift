@@ -54,9 +54,21 @@ struct SendFlowConfirmScreen: View {
                     do {
                         finalizedTransaction = try await manager.rust.finalizePsbt(psbt: psbt)
                     } catch let error as WalletManagerError {
-                        app.alertState = .init(.general(title: "Unable to finalize transaction", message: error.description))
+                        Log.error("Unable to finalize transaction: \(error)")
+                        app.alertState = .init(
+                            .general(
+                                title: String(localized: "Unable to Finalize Transaction"),
+                                message: String(localized: "Unable to finalize this transaction. Please try again.")
+                            )
+                        )
                     } catch {
-                        app.alertState = .init(.general(title: "Unknown error", message: error.localizedDescription))
+                        Log.error("Unable to finalize transaction: \(error)")
+                        app.alertState = .init(
+                            .general(
+                                title: String(localized: "Error"),
+                                message: String(localized: "Unable to finalize this transaction. Please try again.")
+                            )
+                        )
                     }
                 }
         } else {
@@ -196,10 +208,12 @@ struct SendFlowConfirmScreen: View {
                             isShowingAlert = true
                             auth.unlock()
                         } catch let error as WalletManagerError {
-                            sendState = .error(error.description)
+                            Log.error("Unable to broadcast transaction: \(error)")
+                            sendState = .error(String(localized: "Unable to broadcast this transaction. Please try again."))
                             isShowingErrorAlert = true
                         } catch {
-                            sendState = .error(error.localizedDescription)
+                            Log.error("Unable to broadcast transaction: \(error)")
+                            sendState = .error(String(localized: "Unable to broadcast this transaction. Please try again."))
                             isShowingErrorAlert = true
                         }
                     }

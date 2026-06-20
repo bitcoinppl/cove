@@ -12,10 +12,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.R
 
 /**
  * NFC Help content showing instructions for ColdCard Q1 and MK4 hardware wallets.
@@ -31,7 +33,7 @@ fun NfcHelpSheet(modifier: Modifier = Modifier) {
                 .verticalScroll(rememberScrollState()),
     ) {
         Text(
-            text = "How do I import using NFC?",
+            text = stringResource(R.string.new_wallet_flow_nfc_help_title),
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 18.dp),
@@ -40,17 +42,17 @@ fun NfcHelpSheet(modifier: Modifier = Modifier) {
         // ColdCard Q1 instructions
         Column(modifier = Modifier.padding(bottom = 32.dp)) {
             Text(
-                text = "ColdCard Q1",
+                text = stringResource(R.string.new_wallet_flow_coldcard_q1),
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
 
-            InstructionStep("1. Enable NFC by going to 'Settings' > 'Hardware On/Off' > 'NFC Sharing' ")
-            InstructionStep("2. Go to 'Advanced / Tools'")
-            InstructionStep("3. Export Wallet > 'Descriptor' > 'Segwit P2WPKH'")
-            InstructionStep("4. Press the 'Enter' button, then the 'NFC' button")
-            InstructionStep("5. Bring the phone to the top of the screen")
+            InstructionStep(stringResource(R.string.new_wallet_flow_nfc_help_enable_nfc))
+            InstructionStep(stringResource(R.string.new_wallet_flow_nfc_help_advanced_tools))
+            InstructionStep(stringResource(R.string.new_wallet_flow_nfc_help_export_descriptor))
+            InstructionStep(stringResource(R.string.new_wallet_flow_nfc_help_press_enter_nfc))
+            InstructionStep(stringResource(R.string.new_wallet_flow_nfc_help_bring_phone_top))
         }
 
         HorizontalDivider(
@@ -61,17 +63,17 @@ fun NfcHelpSheet(modifier: Modifier = Modifier) {
         // ColdCard MK4 instructions
         Column {
             Text(
-                text = "ColdCard MK4",
+                text = stringResource(R.string.new_wallet_flow_coldcard_mk4),
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
 
-            InstructionStep("1. Enable NFC by going to 'Settings' > 'Hardware On/Off' > 'NFC Sharing' ")
-            InstructionStep("2. Go to 'Advanced / Tools'")
-            InstructionStep("3. Export Wallet > 'Descriptor' > 'Segwit P2WPKH'")
-            InstructionStep("4. Press the 'Enter' button, then the 'NFC' button")
-            InstructionStep("5. Bring the phone to the to the coldcard near the 8 button")
+            InstructionStep(stringResource(R.string.new_wallet_flow_nfc_help_enable_nfc))
+            InstructionStep(stringResource(R.string.new_wallet_flow_nfc_help_advanced_tools))
+            InstructionStep(stringResource(R.string.new_wallet_flow_nfc_help_export_descriptor))
+            InstructionStep(stringResource(R.string.new_wallet_flow_nfc_help_press_enter_nfc))
+            InstructionStep(stringResource(R.string.new_wallet_flow_nfc_help_bring_phone_8_button))
         }
 
         Spacer(modifier = Modifier.height(32.dp))

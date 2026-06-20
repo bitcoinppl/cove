@@ -28,6 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove_core.types.WalletId
 
@@ -63,6 +66,7 @@ fun TapSignerImportSuccessView(
     var saving by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     // save wallet on appear
     LaunchedEffect(tapSigner, deriveInfo) {
@@ -72,7 +76,7 @@ fun TapSignerImportSuccessView(
             walletId = persistWallet(tapSigner, deriveInfo)
         } catch (e: Exception) {
             android.util.Log.e("TapSignerImportSuccess", "Failed to save wallet", e)
-            error = e.message ?: "Failed to save wallet"
+            error = context.getString(R.string.tap_signer_failed_save_wallet)
         } finally {
             saving = false
         }
@@ -94,7 +98,7 @@ fun TapSignerImportSuccessView(
             horizontalArrangement = Arrangement.Start,
         ) {
             TextButton(onClick = { app.sheetState = null }) {
-                Text("Cancel", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.scoped_common_cancel), fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -112,7 +116,7 @@ fun TapSignerImportSuccessView(
                     CircularProgressIndicator(modifier = Modifier.size(60.dp))
                     Spacer(modifier = Modifier.height(20.dp))
                     Text(
-                        text = "Saving wallet...",
+                        text = stringResource(R.string.tap_signer_saving_wallet),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                     )
@@ -120,7 +124,7 @@ fun TapSignerImportSuccessView(
                 error != null -> {
                     Icon(
                         imageVector = Icons.Default.Error,
-                        contentDescription = "Error",
+                        contentDescription = stringResource(R.string.scoped_common_error),
                         modifier = Modifier.size(100.dp),
                         tint = MaterialTheme.colorScheme.error,
                     )
@@ -132,7 +136,7 @@ fun TapSignerImportSuccessView(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text(
-                            text = "Import Failed",
+                            text = stringResource(R.string.tap_signer_import_failed_title),
                             style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Bold,
                         )
@@ -156,20 +160,20 @@ fun TapSignerImportSuccessView(
                                     walletId = persistWallet(tapSigner, deriveInfo)
                                 } catch (e: Exception) {
                                     android.util.Log.e("TapSignerImportSuccess", "Failed to save wallet", e)
-                                    error = e.message ?: "Failed to save wallet"
+                                    error = context.getString(R.string.tap_signer_failed_save_wallet)
                                 } finally {
                                     saving = false
                                 }
                             }
                         },
                     ) {
-                        Text("Retry")
+                        Text(stringResource(R.string.scoped_common_retry))
                     }
                 }
                 else -> {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "Success",
+                        contentDescription = stringResource(R.string.scoped_common_success),
                         modifier = Modifier.size(100.dp),
                         tint = Color.Green,
                     )
@@ -181,13 +185,13 @@ fun TapSignerImportSuccessView(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text(
-                            text = "Import Complete",
+                            text = stringResource(R.string.tap_signer_import_complete_title),
                             style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Bold,
                         )
 
                         Text(
-                            text = "Your TAPSIGNER wallet has been imported successfully.",
+                            text = stringResource(R.string.tap_signer_import_complete_body),
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
@@ -211,7 +215,7 @@ fun TapSignerImportSuccessView(
                     .fillMaxWidth()
                     .padding(bottom = 30.dp),
         ) {
-            Text("Continue")
+            Text(stringResource(R.string.scoped_common_continue))
         }
     }
 }

@@ -108,7 +108,7 @@ impl CloudBackupVerificationCoordinator {
         CloudBackupVerificationEffect {
             presentation: Some(CloudBackupVerificationPresentation::Failed {
                 source,
-                message: failure.message(),
+                failure: failure.clone(),
             }),
             verification: Some(VerificationState::Failed(failure.clone())),
             recovery: Some(RecoveryState::Idle),
@@ -248,14 +248,14 @@ mod tests {
         let failure = DeepVerificationFailure::retry("verification failed", None, None);
         let effect = CloudBackupVerificationCoordinator::fail(
             CloudBackupVerificationSource::Settings,
-            failure,
+            failure.clone(),
         );
 
         assert_eq!(
             effect.presentation,
             Some(CloudBackupVerificationPresentation::Failed {
                 source: CloudBackupVerificationSource::Settings,
-                message: "verification failed".into()
+                failure
             })
         );
         assert!(matches!(effect.verification, Some(VerificationState::Failed(_))));

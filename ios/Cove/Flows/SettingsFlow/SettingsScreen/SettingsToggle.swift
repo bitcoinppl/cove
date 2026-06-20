@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct SettingsToggle: View {
-    let title: String
+    let title: LocalizedStringKey
     let symbol: String
     @Binding var item: Bool
 

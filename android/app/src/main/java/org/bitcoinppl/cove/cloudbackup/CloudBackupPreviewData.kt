@@ -152,7 +152,7 @@ private fun cloudBackupPreviewState(): CloudBackupState {
                     verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
                 ),
             ),
-        settingsRowStatus = CloudBackupSettingsRowStatus.Syncing,
+        settingsRowStatus = CloudBackupSettingsRowStatus.SYNCING,
     )
 }
 

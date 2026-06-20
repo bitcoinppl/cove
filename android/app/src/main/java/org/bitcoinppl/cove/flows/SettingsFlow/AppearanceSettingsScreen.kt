@@ -63,7 +63,10 @@ fun AppearanceSettingsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { app.popRoute() }) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.content_description_back),
+                        )
                     }
                 },
                 actions = { },
@@ -117,16 +120,24 @@ private fun ColorSchemeRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = colorScheme.capitalizedString(),
+            text = colorScheme.localizedName(),
             style = MaterialTheme.typography.bodyMedium,
         )
 
         if (isSelected) {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "Selected",
+                contentDescription = stringResource(R.string.content_description_selected),
                 tint = MaterialTheme.colorScheme.primary,
             )
         }
     }
 }
+
+@Composable
+private fun ColorSchemeSelection.localizedName(): String =
+    when (this) {
+        ColorSchemeSelection.LIGHT -> stringResource(R.string.common_remaining_color_scheme_light)
+        ColorSchemeSelection.DARK -> stringResource(R.string.common_remaining_color_scheme_dark)
+        ColorSchemeSelection.SYSTEM -> stringResource(R.string.common_remaining_color_scheme_system)
+    }

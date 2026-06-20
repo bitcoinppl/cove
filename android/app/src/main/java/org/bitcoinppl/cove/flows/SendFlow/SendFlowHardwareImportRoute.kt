@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
@@ -47,7 +48,7 @@ internal fun rememberSignedImportFilePicker(
 
                     app.pushRoute(signedImportRoute(fileContents.trim()))
                 } catch (e: Exception) {
-                    onError(e.message ?: TransactionImportErrors.FAILED_TO_IMPORT)
+                    onError(context.getString(R.string.wallet_send_failed_import_signed_transaction))
                 }
             }
         }

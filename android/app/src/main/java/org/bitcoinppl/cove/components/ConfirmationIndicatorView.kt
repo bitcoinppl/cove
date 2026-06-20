@@ -36,7 +36,7 @@ fun ConfirmationIndicatorView(
         )
 
         Text(
-            text = "$current of $total",
+            text = stringResource(R.string.label_confirmation_count, current, total),
             fontWeight = FontWeight.Bold,
             fontSize = 17.sp,
         )

@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
@@ -50,6 +51,7 @@ fun ImportWalletScreen(
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     // Pagination setup: if there are 24 words, we render two pages of 12 fields; otherwise a single page.
     val pages = if (totalWords == 24) 2 else 1
@@ -82,7 +84,7 @@ fun ImportWalletScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.content_description_back),
                         )
                     }
                 },
@@ -164,7 +166,7 @@ fun ImportWalletScreen(
                         } catch (e: Exception) {
                             Log.e("ImportWalletScreen", "Failed to import wallet", e)
                             snackbarHostState.showSnackbar(
-                                message = "Failed to import wallet: $e",
+                                message = context.getString(R.string.common_remaining_import_wallet_failed),
                                 duration = SnackbarDuration.Short,
                             )
                         } finally {

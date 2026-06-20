@@ -34,14 +34,29 @@ struct OnboardingContainer: View {
               manager.state.cloudRestoreState == .inconclusive
         else { return nil }
 
-        return manager.state.cloudRestoreMessage
+        return manager.state.cloudRestoreIssue?.localizedMessage
+    }
+
+    private var localizedErrorMessage: String? {
+        guard manager.state.errorMessage != nil else { return nil }
+
+        switch manager.state.step {
+        case .terms:
+            return String(localized: "Unable to complete onboarding. Please try again.")
+        case .restoreOffer, .restoring, .restoreComplete, .restoreFailed:
+            return String(localized: "Unable to restore from Cloud Backup. Please try again.")
+        case .welcome, .bitcoinChoice, .storageChoice, .creatingWallet, .backupWallet, .cloudBackup,
+             .cloudBackupSuccess, .secretWords, .exchangeFunding, .hardwareImport, .softwareImport,
+             .cloudCheck, .restoreOffline, .restoreUnavailable:
+            return String(localized: "Unable to continue setup. Please try again.")
+        }
     }
 
     @ViewBuilder
     private func stepView(for step: OnboardingStep) -> some View {
         switch step {
         case .terms:
-            TermsAndConditionsView(errorMessage: manager.state.errorMessage) {
+            TermsAndConditionsView(errorMessage: localizedErrorMessage) {
                 manager.dispatch(.acceptTerms)
             }
 
@@ -57,7 +72,7 @@ struct OnboardingContainer: View {
                     manager.dispatch(.skipRestore)
                 },
                 warningMessage: restoreWarningMessage,
-                errorMessage: manager.state.errorMessage,
+                errorMessage: localizedErrorMessage,
                 providerHint: manager.state.cloudRestoreProviderHint
             )
 
@@ -82,20 +97,20 @@ struct OnboardingContainer: View {
             )
 
         case .welcome:
-            OnboardingWelcomeScreen(errorMessage: manager.state.errorMessage) {
+            OnboardingWelcomeScreen(errorMessage: localizedErrorMessage) {
                 manager.dispatch(.continueFromWelcome)
             }
 
         case .bitcoinChoice:
             OnboardingBitcoinChoiceScreen(
-                errorMessage: manager.state.errorMessage,
+                errorMessage: localizedErrorMessage,
                 onNewHere: { manager.dispatch(.selectHasBitcoin(hasBitcoin: false)) },
                 onHasBitcoin: { manager.dispatch(.selectHasBitcoin(hasBitcoin: true)) }
             )
 
         case .storageChoice:
             OnboardingStorageChoiceScreen(
-                errorMessage: manager.state.errorMessage,
+                errorMessage: localizedErrorMessage,
                 onRestoreFromCoveBackup: onOpenCloudRestore,
                 onSelectStorage: { selection in
                     manager.dispatch(.selectStorage(selection: selection))
@@ -158,7 +173,7 @@ struct OnboardingContainer: View {
 
         case .softwareImport:
             OnboardingSoftwareImportFlowView(
-                errorMessage: manager.state.errorMessage,
+                errorMessage: localizedErrorMessage,
                 cloudRestoreAlertVisible: cloudRestoreAlertVisibleBinding,
                 onImported: { walletId in
                     manager.dispatch(.softwareImportCompleted(walletId: walletId))

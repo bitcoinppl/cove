@@ -71,11 +71,15 @@ struct OnboardingBackupWalletView: View {
         secretWordsSaved || cloudBackupEnabled
     }
 
-    private var title: String {
-        branch == .exchange ? "Back up your wallet before funding it" : "Back up your wallet"
+    private var title: LocalizedStringKey {
+        if branch == .exchange {
+            return "Back up your wallet before funding it"
+        }
+
+        return "Back up your wallet"
     }
 
-    private var subtitle: String {
+    private var subtitle: LocalizedStringKey {
         if branch == .exchange {
             return
                 "You’ll fund this wallet next. Save your recovery words or enable Cloud Backup first."
@@ -302,7 +306,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
 
     private var onboardingMessage: String? {
         if backupManager.isUnsupportedPasskeyProvider {
-            return "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password"
+            return String(localized: "This passkey provider did not confirm PRF support for Cloud Backup. Try Apple Passwords (iCloud Keychain) or another supported provider such as 1Password.")
         }
 
         if let message = backupManager.lifecycleFailureMessage {
@@ -311,7 +315,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
 
         switch backupManager.verificationState {
         case let .failed(failure):
-            return failure.message()
+            return failure.localizedMessage
         default:
             return nil
         }
@@ -350,8 +354,13 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private var primaryButtonTitle: String {
-        if case .failed = backupManager.verificationState { return "Try Again" }
-        return needsManualPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
+        if case .failed = backupManager.verificationState {
+            return String(localized: "Try Again")
+        }
+
+        return needsManualPasskeyConfirmation
+            ? String(localized: "Confirm Passkey")
+            : String(localized: "Enable Cloud Backup")
     }
 
     private func handleEnableTap() {
@@ -579,9 +588,9 @@ struct OnboardingExchangeFundingView: View {
     var body: some View {
         if let walletId {
             WalletManagerHost(walletId: walletId, loading: {
-                if let walletLoadingError {
+                if walletLoadingError != nil {
                     OnboardingExchangeFundingContent(
-                        initialErrorMessage: "The new wallet could not be loaded. \(walletLoadingError.localizedDescription)",
+                        initialErrorMessage: String(localized: "The new wallet could not be loaded. Please try again."),
                         onContinue: onContinue
                     )
                 } else {
@@ -595,7 +604,7 @@ struct OnboardingExchangeFundingView: View {
             }
         } else {
             OnboardingExchangeFundingContent(
-                initialErrorMessage: "The new wallet could not be loaded.",
+                initialErrorMessage: String(localized: "The new wallet could not be loaded. Please try again."),
                 onContinue: onContinue
             )
         }
@@ -675,7 +684,11 @@ private struct OnboardingExchangeFundingContent: View {
                             Button {
                                 copyAddress(addressInfo)
                             } label: {
-                                Text(didCopyAddress ? "Copied" : "Copy Address")
+                                if didCopyAddress {
+                                    Text("Copied")
+                                } else {
+                                    Text("Copy Address")
+                                }
                             }
                             .buttonStyle(OnboardingSecondaryButtonStyle())
                         }
@@ -724,7 +737,8 @@ private struct OnboardingExchangeFundingContent: View {
             }
         } catch {
             await MainActor.run {
-                errorMessage = error.localizedDescription
+                Log.error("Unable to load onboarding funding address: \(error)")
+                errorMessage = String(localized: "Unable to load the deposit address. Please try again.")
             }
         }
     }
@@ -737,7 +751,7 @@ private struct OnboardingExchangeFundingContent: View {
         }
 
         Task { @MainActor in
-            await FloaterPopup(text: "Address Copied")
+            await FloaterPopup(text: String(localized: "Address Copied"))
                 .dismissAfter(2)
                 .present()
         }
@@ -760,12 +774,12 @@ struct OnboardingWordCard: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text("\(index)")
+            Text(verbatim: "\(index)")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.btnGradientLight)
                 .frame(width: 24)
 
-            Text(word)
+            Text(verbatim: word)
                 .font(.system(.callout, design: .monospaced).weight(.medium))
                 .foregroundStyle(.white)
 
@@ -818,8 +832,13 @@ struct OnboardingAddressQr: View {
 }
 
 struct OnboardingErrorScreen: View {
-    let title: String
-    let message: String
+    let title: Text
+    let message: Text
+
+    init(title: LocalizedStringKey, message: LocalizedStringKey) {
+        self.title = Text(title)
+        self.message = Text(message)
+    }
 
     var body: some View {
         OnboardingPromptScreen(

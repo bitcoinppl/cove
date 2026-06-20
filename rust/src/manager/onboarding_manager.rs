@@ -47,7 +47,7 @@ use self::cloud_restore::{
     resolve_provider_hint,
 };
 pub(crate) use self::cloud_restore::{
-    cloud_check_inconclusive_message, determine_cloud_check_outcome, inspect_cloud_restore_backup,
+    determine_cloud_check_outcome, inspect_cloud_restore_backup,
 };
 #[cfg(test)]
 use self::flow_state::RestoreOrigin;
@@ -117,7 +117,7 @@ pub struct OnboardingState {
     pub cloud_backup_enabled: bool,
     pub secret_words_saved: bool,
     pub cloud_restore_state: OnboardingCloudRestoreState,
-    pub cloud_restore_message: Option<String>,
+    pub cloud_restore_issue: Option<CloudCheckIssue>,
     pub cloud_restore_provider_hint: Option<CloudRestoreProviderHint>,
     pub should_offer_cloud_restore: bool,
     pub cloud_restore_alert_visible: bool,
@@ -192,7 +192,7 @@ pub enum OnboardingReconcileMessage {
     CloudBackupEnabled(bool),
     SecretWordsSaved(bool),
     CloudRestoreState(OnboardingCloudRestoreState),
-    CloudRestoreMessageChanged(Option<String>),
+    CloudRestoreIssueChanged(Option<CloudCheckIssue>),
     CloudRestoreProviderHintChanged(Option<CloudRestoreProviderHint>),
     ShouldOfferCloudRestore(bool),
     CloudRestoreAlertVisible(bool),
@@ -213,8 +213,8 @@ pub(crate) enum CloudCheckOutcome {
     Inconclusive(CloudCheckIssue),
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) enum CloudCheckIssue {
+#[derive(Debug, Clone, Copy, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudCheckIssue {
     Offline,
     CloudUnavailable,
     Unknown,
@@ -2255,7 +2255,7 @@ mod tests {
         assert!(matches!(state.flow, FlowState::Welcome { error_message: None }));
         assert_eq!(state.ui.step, OnboardingStep::Welcome);
         assert_eq!(state.ui.cloud_restore_state, OnboardingCloudRestoreState::Checking);
-        assert_eq!(state.ui.cloud_restore_message, None);
+        assert_eq!(state.ui.cloud_restore_issue, None);
     }
 
     #[test]
@@ -2334,7 +2334,7 @@ mod tests {
         assert!(!manager.cloud_check_in_flight.load(Ordering::Acquire));
         assert!(!manager.pending_cloud_check_retry.load(Ordering::Acquire));
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
-        assert_eq!(manager.state().cloud_restore_message, None);
+        assert_eq!(manager.state().cloud_restore_issue, None);
         assert_no_reconcile_messages(&manager);
     }
 
@@ -2357,7 +2357,7 @@ mod tests {
         assert!(!manager.pending_cloud_check_retry.load(Ordering::Acquire));
         assert!(manager.prepare_offline_cloud_check_retry());
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
-        assert_eq!(manager.state().cloud_restore_message, None);
+        assert_eq!(manager.state().cloud_restore_issue, None);
     }
 
     #[test]
@@ -2379,7 +2379,7 @@ mod tests {
         assert!(!manager.pending_cloud_check_retry.load(Ordering::Acquire));
         assert_eq!(manager.state().step, OnboardingStep::CloudCheck);
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
-        assert_eq!(manager.state().cloud_restore_message, None);
+        assert_eq!(manager.state().cloud_restore_issue, None);
         assert_no_reconcile_messages(&manager);
     }
 

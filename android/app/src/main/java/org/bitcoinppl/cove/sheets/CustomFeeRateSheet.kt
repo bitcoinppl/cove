@@ -12,6 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -23,6 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
@@ -66,6 +70,7 @@ fun CustomFeeRateSheet(
     onUpdateFeeOptions: (FeeRateOptionsWithTotalFee, FeeRateOptionWithTotalFee) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
     var feeRateText by remember { mutableStateOf(selectedOption.feeRate().satPerVb().toString()) }
     var totalSats by remember { mutableStateOf<Long?>(null) }
     var feeCalculationJob by remember { mutableStateOf<Job?>(null) }
@@ -152,8 +157,8 @@ fun CustomFeeRateSheet(
                                 presenter.alertState =
                                     TaggedItem(
                                         SendFlowAlertState.General(
-                                            title = "Fee too high!",
-                                            message = "The fee rate you entered is too high, we automatically selected a lower fee",
+                                            title = context.getString(R.string.send_alert_fee_too_high),
+                                            message = context.getString(R.string.wallet_send_custom_fee_rate_too_high_adjusted),
                                         ),
                                     )
                             }
@@ -217,7 +222,7 @@ fun CustomFeeRateSheet(
         ) {
             // title
             Text(
-                text = "Set Custom Network Fee",
+                text = stringResource(R.string.title_set_custom_network_fee),
                 style = MaterialTheme.typography.title3,
                 fontWeight = FontWeight.Bold,
                 modifier =
@@ -232,7 +237,7 @@ fun CustomFeeRateSheet(
             Column(modifier = Modifier.fillMaxWidth()) {
                 // "satoshi/byte" label
                 Text(
-                    text = "satoshi/byte",
+                    text = stringResource(R.string.wallet_send_satoshi_per_byte),
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 16.sp,
@@ -294,7 +299,7 @@ fun CustomFeeRateSheet(
                         )
                     } else {
                         Text(
-                            text = "$totalSats sats",
+                            text = stringResource(R.string.wallet_send_total_sats_format, totalSats.toString()),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -331,7 +336,7 @@ fun CustomFeeRateSheet(
                 shape = RoundedCornerShape(10.dp),
             ) {
                 Text(
-                    text = "Done",
+                    text = stringResource(R.string.btn_done),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(vertical = 8.dp),
@@ -349,17 +354,18 @@ private fun DurationCapsule(
     fontColor: Color,
 ) {
     val durationText =
-        remember(speed) {
-            when (speed) {
-                is FeeSpeed.Fast -> "~10 min"
-                is FeeSpeed.Medium -> "~30 min"
-                is FeeSpeed.Slow -> "~1 hour"
-                is FeeSpeed.Custom -> {
-                    val mins = speed.durationMins.toInt()
-                    when {
-                        mins < 60 -> "~$mins min"
-                        mins < 120 -> "~1 hour"
-                        else -> "~${mins / 60} hours"
+        when (speed) {
+            is FeeSpeed.Fast -> stringResource(R.string.wallet_send_fee_eta_fast)
+            is FeeSpeed.Medium -> stringResource(R.string.wallet_send_fee_eta_medium)
+            is FeeSpeed.Slow -> stringResource(R.string.wallet_send_fee_eta_slow)
+            is FeeSpeed.Custom -> {
+                val mins = speed.durationMins.toInt()
+                when {
+                    mins < 60 -> pluralStringResource(R.plurals.wallet_send_fee_eta_minutes, mins, mins)
+                    mins < 120 -> stringResource(R.string.wallet_send_fee_eta_slow)
+                    else -> {
+                        val hours = mins / 60
+                        pluralStringResource(R.plurals.wallet_send_fee_eta_hours, hours, hours)
                     }
                 }
             }

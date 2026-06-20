@@ -44,7 +44,7 @@ struct CatastrophicErrorView: View {
             }
         }
 
-        var title: String {
+        var title: LocalizedStringKey {
             switch self {
             case .restore:
                 "Restore from Cloud Backup?"
@@ -53,7 +53,7 @@ struct CatastrophicErrorView: View {
             }
         }
 
-        var message: String {
+        var message: LocalizedStringKey {
             switch self {
             case .restore:
                 "Cove found Cloud Backup data for the selected iCloud account. This will erase the damaged local data on this device, then verify your passkey during restore."
@@ -62,7 +62,7 @@ struct CatastrophicErrorView: View {
             }
         }
 
-        var actionTitle: String {
+        var actionTitle: LocalizedStringKey {
             switch self {
             case .restore:
                 "Erase and Restore"
@@ -303,7 +303,7 @@ private struct CatastrophicErrorContent: View {
         .buttonStyle(OnboardingPrimaryButtonStyle())
     }
 
-    private func statusCard(icon: String, color: Color, text: String) -> some View {
+    private func statusCard(icon: String, color: Color, text: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .semibold))

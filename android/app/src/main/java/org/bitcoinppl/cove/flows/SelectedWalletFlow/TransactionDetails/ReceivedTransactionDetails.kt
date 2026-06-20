@@ -45,6 +45,7 @@ internal fun ReceivedTransactionDetails(
 ) {
     val context = LocalContext.current
     val tooltipText = stringResource(R.string.fiat_price_tooltip)
+    val addressClipLabel = stringResource(R.string.wallet_send_address_clip_label)
     var isCopied by remember { mutableStateOf(false) }
     val sub = MaterialTheme.colorScheme.onSurfaceVariant
     val fg = MaterialTheme.colorScheme.onBackground
@@ -120,7 +121,7 @@ internal fun ReceivedTransactionDetails(
                 OutlinedButton(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("address", address.unformatted())
+                        val clip = ClipData.newPlainText(addressClipLabel, address.unformatted())
                         clipboard.setPrimaryClip(clip)
                         isCopied = true
                     },

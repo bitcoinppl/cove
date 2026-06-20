@@ -90,22 +90,26 @@ fun WalletSettingsScreen(
     var requiredConfirmations by remember { mutableStateOf(1.toUByte()) }
     var deleteError by remember { mutableStateOf<String?>(null) }
     var accountNumber by remember { mutableStateOf<UInt?>(null) }
+    val deleteErrorFallback = stringResource(R.string.settings_wallet_delete_error_fallback)
     val finalDeleteConfirmationMessage =
         if (app.cloudBackupManager.isCloudBackupEnabled) {
-            "This wallet will be deleted from this device. You can recover it from " +
-                "the Cloud Backup screen, or permanently delete it from there."
+            stringResource(R.string.wallet_delete_final_cloud_backup)
         } else {
-            "This wallet is not backed up and contains funds. You will lose access to " +
-                "these funds forever."
+            stringResource(R.string.wallet_delete_final_not_backed_up)
         }
-    val finalDeleteButtonTitle = if (app.cloudBackupManager.isCloudBackupEnabled) "Delete" else "Delete Forever"
+    val finalDeleteButtonTitle =
+        if (app.cloudBackupManager.isCloudBackupEnabled) {
+            stringResource(R.string.delete)
+        } else {
+            stringResource(R.string.action_delete_forever)
+        }
 
     fun deleteWallet() {
         try {
             manager.deleteWallet()
             app.popRoute()
         } catch (e: Exception) {
-            deleteError = e.message ?: "Failed to delete wallet"
+            deleteError = deleteErrorFallback
             Log.e("WalletSettingsScreen", "failed to delete wallet", e)
         }
     }
@@ -134,14 +138,14 @@ fun WalletSettingsScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Failed to load wallet settings",
+                    text = stringResource(R.string.settings_wallet_failed_load),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.error,
                 )
                 androidx.compose.foundation.layout
                     .Spacer(modifier = Modifier.height(MaterialSpacing.medium))
                 TextButton(onClick = { app.popRoute() }) {
-                    Text("Go Back")
+                    Text(stringResource(R.string.settings_action_go_back))
                 }
             }
         }
@@ -168,7 +172,10 @@ fun WalletSettingsScreen(
                     IconButton(onClick = {
                         app.popRoute()
                     }) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.content_description_back),
+                        )
                     }
                 },
                 actions = { },
@@ -220,7 +227,7 @@ fun WalletSettingsScreen(
                         // show card identifier for TapSigner wallets
                         if (hardwareMeta is org.bitcoinppl.cove_core.HardwareWalletMetadata.TapSigner) {
                             MaterialSettingsItem(
-                                title = "Card Identifier",
+                                title = stringResource(R.string.label_wallet_card_identifier),
                                 subtitle = hardwareMeta.v1.fullCardIdent(),
                             )
                             MaterialDivider()
@@ -242,7 +249,7 @@ fun WalletSettingsScreen(
                             trailingContent = {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
-                                    contentDescription = "Edit",
+                                    contentDescription = stringResource(R.string.settings_content_description_edit),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             },
@@ -325,7 +332,7 @@ fun WalletSettingsScreen(
     if (showFirstDeleteConfirmation) {
         AlertDialog(
             onDismissRequest = { showFirstDeleteConfirmation = false },
-            title = { Text("Are you sure?") },
+            title = { Text(stringResource(R.string.common_remaining_are_you_sure)) },
             text = { Text(firstDeleteConfirmationMessage()) },
             confirmButton = {
                 TextButton(
@@ -338,12 +345,12 @@ fun WalletSettingsScreen(
                         }
                     },
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showFirstDeleteConfirmation = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -353,8 +360,8 @@ fun WalletSettingsScreen(
     if (showSecondDeleteConfirmation) {
         AlertDialog(
             onDismissRequest = { showSecondDeleteConfirmation = false },
-            title = { Text("Confirm Deletion") },
-            text = { Text("Are you sure you want to delete '${metadata.name}'?") },
+            title = { Text(stringResource(R.string.settings_wallet_delete_second_title)) },
+            text = { Text(stringResource(R.string.settings_wallet_delete_confirm_message, metadata.name)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -366,12 +373,12 @@ fun WalletSettingsScreen(
                         }
                     },
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSecondDeleteConfirmation = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -381,7 +388,7 @@ fun WalletSettingsScreen(
     if (showFinalDeleteConfirmation) {
         AlertDialog(
             onDismissRequest = { showFinalDeleteConfirmation = false },
-            title = { Text("Final Warning") },
+            title = { Text(stringResource(R.string.settings_wallet_delete_final_warning_title)) },
             text = { Text(finalDeleteConfirmationMessage) },
             confirmButton = {
                 TextButton(
@@ -395,7 +402,7 @@ fun WalletSettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showFinalDeleteConfirmation = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -405,22 +412,23 @@ fun WalletSettingsScreen(
     deleteError?.let { error ->
         AlertDialog(
             onDismissRequest = { deleteError = null },
-            title = { Text("Failed to Delete Wallet") },
+            title = { Text(stringResource(R.string.settings_wallet_delete_error_title)) },
             text = { Text(error) },
             confirmButton = {
                 TextButton(onClick = { deleteError = null }) {
-                    Text("OK")
+                    Text(stringResource(R.string.action_ok))
                 }
             },
         )
     }
 }
 
+@Composable
 private fun WalletBirthday.displayValue(): String =
     when (this) {
         is WalletBirthday.BlockHeight -> {
             val height = NumberFormat.getIntegerInstance(Locale.getDefault()).format(BigInteger(v1.toString()))
-            "Block $height"
+            stringResource(R.string.settings_wallet_block_height, height)
         }
 
         is WalletBirthday.Timestamp -> {

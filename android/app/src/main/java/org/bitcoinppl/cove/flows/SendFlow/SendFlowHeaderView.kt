@@ -78,7 +78,14 @@ fun SendFlowHeaderView(
             ) {
                 Icon(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = if (isHidden) "Hidden" else "Visible",
+                    contentDescription =
+                        stringResource(
+                            if (isHidden) {
+                                R.string.wallet_send_hidden
+                            } else {
+                                R.string.wallet_send_visible
+                            },
+                        ),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp),
                 )

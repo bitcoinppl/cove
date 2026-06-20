@@ -19,10 +19,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.callout
 import org.bitcoinppl.cove_core.TapSignerRoute
 
@@ -56,7 +58,7 @@ fun TapSignerChooseChainCode(
                 horizontalArrangement = Arrangement.Start,
             ) {
                 TextButton(onClick = { app.sheetState = null }) {
-                    Text("Cancel", fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.scoped_common_cancel), fontWeight = FontWeight.SemiBold)
                 }
             }
 
@@ -72,7 +74,7 @@ fun TapSignerChooseChainCode(
             ) {
                 // title
                 Text(
-                    text = "Setup Chain Code",
+                    text = stringResource(R.string.tap_signer_setup_chain_code),
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 20.dp),
@@ -84,14 +86,13 @@ fun TapSignerChooseChainCode(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        text = "A chain code works with your private key to generate Bitcoin addresses",
+                        text = stringResource(R.string.tap_signer_chain_code_body_one),
                         style = MaterialTheme.typography.callout,
                         textAlign = TextAlign.Center,
                     )
 
                     Text(
-                        text =
-                            "You can provide your own chain code for advanced setups, or let the app create one automatically for easy setup.",
+                        text = stringResource(R.string.tap_signer_chain_code_body_two),
                         style = MaterialTheme.typography.callout,
                         textAlign = TextAlign.Center,
                     )
@@ -119,20 +120,20 @@ fun TapSignerChooseChainCode(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "Automatic Setup",
+                                text = stringResource(R.string.tap_signer_automatic_setup),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold,
                             )
 
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Next",
+                                contentDescription = stringResource(R.string.scoped_common_next),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
 
                         Text(
-                            text = "Let the app create a chain code for you",
+                            text = stringResource(R.string.tap_signer_automatic_setup_body),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -151,7 +152,7 @@ fun TapSignerChooseChainCode(
                     modifier = Modifier.padding(bottom = 30.dp),
                 ) {
                     Text(
-                        text = "Advanced Setup",
+                        text = stringResource(R.string.tap_signer_advanced_setup),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
