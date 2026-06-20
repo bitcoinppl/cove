@@ -103,6 +103,16 @@ private class SelectedWalletPreviewModeProvider : PreviewParameterProvider<Boole
     override val values: Sequence<Boolean> = sequenceOf(false, true)
 }
 
+internal fun canRefreshSelectedWallet(
+    loadState: WalletLoadState,
+    scanStatus: WalletScanStatus,
+): Boolean =
+    when (loadState) {
+        is WalletLoadState.LOADED -> true
+        is WalletLoadState.SCANNING -> scanStatus == WalletScanStatus.Idle
+        is WalletLoadState.LOADING -> false
+    }
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SelectedWalletScreen(
@@ -393,7 +403,7 @@ fun SelectedWalletScreen(
                     PullToRefreshBox(
                         isRefreshing = isRefreshing,
                         onRefresh = {
-                            if (manager.loadState is WalletLoadState.LOADED &&
+                            if (canRefreshSelectedWallet(manager.loadState, manager.scanStatus) &&
                                 isRefreshInProgress.compareAndSet(false, true)
                             ) {
                                 scope.launch {
