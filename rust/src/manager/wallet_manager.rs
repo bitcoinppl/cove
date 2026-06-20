@@ -80,7 +80,7 @@ pub enum WalletManagerReconcileMessage {
     TransactionDetailsUpdated(Arc<TransactionDetails>),
     TransactionConfirmationsUpdated(TransactionConfirmationUpdate),
 
-    NodeConnectionFailed(String),
+    NodeConnectionFailed,
     WalletMetadataChanged(Box<WalletMetadata>),
     WalletBalanceChanged(Arc<Balance>),
 
@@ -95,7 +95,7 @@ pub enum WalletManagerReconcileMessage {
     ReceiveAddressUpdated(ReceiveAddressState),
     ReceiveAddressPresentationUpdated(ReceiveAddressPresentation),
     ReceiveAddressLoadingChanged(bool),
-    ReceiveAddressError(String),
+    ReceiveAddressError,
     ReceiveAddressClosed(u64),
 
     PayjoinTxBroadcast,
@@ -158,14 +158,14 @@ pub enum WalletScanStatus {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletErrorAlert {
-    NodeConnectionFailed(String),
+    NodeConnectionFailed,
     NoBalance,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SendFlowErrorAlert {
-    SignAndBroadcast(String),
-    ConfirmDetails(String),
+    SignAndBroadcast,
+    ConfirmDetails,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -312,8 +312,8 @@ pub enum WalletManagerError {
     #[error("Unable to get output labels: {0}")]
     OutputLabelsError(String),
 
-    #[error("Wallet database corrupted for {id}: {error}")]
-    DatabaseCorruption { id: WalletId, error: String },
+    #[error("Wallet database corrupted for {id}")]
+    DatabaseCorruption { id: WalletId },
 
     #[error("Receive address error: {0}")]
     ReceiveAddressError(String),

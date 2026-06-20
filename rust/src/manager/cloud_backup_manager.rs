@@ -151,8 +151,8 @@ pub enum CloudBackupSettingsRowStatus {
     Syncing,
     NoFiles,
     DriveUnavailable,
-    Error(String),
-    AuthorizationRequired(String),
+    Error,
+    AuthorizationRequired,
 }
 
 /// Whether saved passkey confirmation was user-triggered or flow-triggered
@@ -327,7 +327,7 @@ pub struct CloudBackupDetail {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupOtherBackupsState {
     Loaded { summary: CloudBackupOtherBackupsSummary },
-    LoadFailed { error: String },
+    LoadFailed,
 }
 
 /// Aggregate count of recoverable backup data in other namespaces
@@ -364,7 +364,7 @@ pub enum OtherBackupsOperation {
     Recovered { wallets_restored: u32, wallets_failed: u32, failed_wallet_errors: Vec<String> },
     Deleting,
     Deleted,
-    Failed { error: String },
+    Failed,
 }
 
 /// Outcome of deep verification before projection into UI state
@@ -967,7 +967,10 @@ impl RustCloudBackupManager {
         let sync = match outcome {
             CloudBackupSyncOutcome::Started => SyncState::Syncing,
             CloudBackupSyncOutcome::Completed => SyncState::Idle,
-            CloudBackupSyncOutcome::Failed(error) => SyncState::Failed(error),
+            CloudBackupSyncOutcome::Failed(error) => {
+                warn!("Cloud backup sync failed: {error}");
+                SyncState::Failed
+            }
         };
 
         self.apply_model_event(CloudBackupStateReducerEvent::SyncStateResolved(sync));

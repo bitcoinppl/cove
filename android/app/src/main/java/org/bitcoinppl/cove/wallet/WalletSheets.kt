@@ -93,7 +93,7 @@ internal fun WalletSheetsHost(
             onExportLabels = {
                 onDismissMoreOptions()
                 // show confirmation dialog instead of direct export
-                exportLabelManager = manager.rust.labelManager()
+                exportLabelManager = manager.labelManager()
                 showExportLabelsDialog = true
             },
             onExportTransactions = {
@@ -187,9 +187,9 @@ internal fun WalletSheetsHost(
                 QrExportView(
                     title = stringResource(R.string.wallet_send_export_labels),
                     subtitle = stringResource(R.string.wallet_send_scan_import_labels_subtitle),
-                    generateBbqrStrings = { density -> manager.rust.exportLabelsForQr(density) },
+                    generateBbqrStrings = { density -> manager.exportLabelsForQr(density) },
                     generateUrStrings = null,
-                    onCopy = { manager.rust.exportLabelsForShare().content },
+                    onCopy = { manager.exportLabelsForShare().content },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
                 )
             }
@@ -252,9 +252,9 @@ internal fun WalletSheetsHost(
             QrExportView(
                 title = stringResource(R.string.wallet_send_export_xpub),
                 subtitle = stringResource(R.string.wallet_send_xpub_descriptor_subtitle),
-                generateBbqrStrings = { density -> manager.rust.exportXpubForQr(density) },
+                generateBbqrStrings = { density -> manager.exportXpubForQr(density) },
                 generateUrStrings = null,
-                onCopy = { manager.rust.exportXpubForShare().content },
+                onCopy = { manager.exportXpubForShare().content },
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
             )
         }
@@ -266,7 +266,7 @@ internal fun WalletSheetsHost(
     LaunchedEffect(showNfcScanner, manager) {
         if (showNfcScanner) {
             try {
-                nfcLabelManager = manager.rust.labelManager()
+                nfcLabelManager = manager.labelManager()
             } catch (e: Exception) {
                 android.util.Log.e(tag, "Failed to get label manager")
                 nfcLabelManager = null
@@ -295,7 +295,7 @@ internal fun WalletSheetsHost(
                     scope.launch {
                         // refresh transactions with updated labels
                         try {
-                            manager.rust.getTransactions()
+                            manager.refreshTransactions()
                             snackbarHostState.showSnackbar(context.getString(R.string.wallet_send_labels_imported))
                         } catch (e: Exception) {
                             android.util.Log.e(tag, "Failed to refresh transactions after NFC label import")
@@ -337,7 +337,7 @@ private suspend fun shareLabelsFile(
     context: Context,
     manager: WalletManager,
 ) {
-    val result = manager.rust.exportLabelsForShare()
+    val result = manager.exportLabelsForShare()
 
     val uri =
         withContext(Dispatchers.IO) {
@@ -365,7 +365,7 @@ private suspend fun shareTransactionsFile(
     context: Context,
     manager: WalletManager,
 ) {
-    val result = manager.rust.exportTransactionsCsv()
+    val result = manager.exportTransactionsCsv()
 
     val uri =
         withContext(Dispatchers.IO) {
@@ -393,7 +393,7 @@ private suspend fun shareXpubFile(
     context: Context,
     manager: WalletManager,
 ) {
-    val result = manager.rust.exportXpubForShare()
+    val result = manager.exportXpubForShare()
 
     val uri =
         withContext(Dispatchers.IO) {

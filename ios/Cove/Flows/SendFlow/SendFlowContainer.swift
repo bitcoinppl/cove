@@ -135,10 +135,12 @@ private struct SendFlowLoadedView: View {
         return myAlert(alert).title
     }
 
-    private func myAlert(_: TaggedItem<SendFlowErrorAlert>) -> AnyAlertBuilder {
+    private func myAlert(_ alert: TaggedItem<SendFlowErrorAlert>) -> AnyAlertBuilder {
         AlertBuilder(
             title: "Error!",
-            message: "Unable to prepare the transaction. Please try again.",
+            message: {
+                Text(alert.item.localizedMessage)
+            },
             actions: {
                 Button("OK", action: { manager.sendFlowErrorAlert = .none })
             }
@@ -185,10 +187,10 @@ private struct SendFlowLoadedView: View {
         case WalletManagerError.InitialScanIncomplete:
             app.showInitialScanIncompleteAlert()
             app.popRoute()
-        case let WalletManagerError.DatabaseCorruption(walletId, errorMessage):
-            Log.error("Wallet database corrupted for \(walletId): \(errorMessage)")
+        case let WalletManagerError.DatabaseCorruption(walletId):
+            Log.error("Wallet database corrupted for \(walletId)")
             app.alertState = TaggedItem(
-                .walletDatabaseCorrupted(walletId: walletId, error: errorMessage)
+                .walletDatabaseCorrupted(walletId: walletId)
             )
             app.popRoute()
         case WalletManagerError.WalletDoesNotExist:

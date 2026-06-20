@@ -56,7 +56,7 @@ struct TapSignerEnterPin: View {
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .derive))
                 } else {
                     app.alertState = .init(
-                        .tapSignerDeriveFailed(message: String(localized: "Unable to import this TAPSIGNER. Please try again."))
+                        .tapSignerDeriveFailed
                     )
                 }
             }

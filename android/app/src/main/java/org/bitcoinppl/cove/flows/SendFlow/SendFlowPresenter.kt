@@ -11,7 +11,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.localizedMessage
+import org.bitcoinppl.cove.localizedTitle
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable

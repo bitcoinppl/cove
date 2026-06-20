@@ -62,18 +62,18 @@ private struct CloudOnlySectionContent: View {
                 onSelectWallet: onSelectWallet
             )
 
-            if case let .failed(error) = manager.cloudOnlyOperation {
-                Text(error)
+            if case .failed = manager.cloudOnlyOperation {
+                Text("Unable to update this wallet backup. Please try again.")
                     .font(.caption)
                     .foregroundStyle(Color.statusError)
-            } else if case let .warning(message: message, error: _) = manager.cloudOnlyOperation {
-                Text(message)
+            } else if case .warning = manager.cloudOnlyOperation {
+                Text("Wallet restored, but its labels could not be imported.")
                     .font(.caption)
                     .foregroundStyle(Color.statusWarning)
             }
 
-        case let .failed(error):
-            Text(error)
+        case .failed:
+            Text("Could not load wallets that are only in Cloud Backup.")
                 .font(.caption)
                 .foregroundStyle(Color.statusError)
         }

@@ -3,6 +3,10 @@ import SwiftUI
 
 extension WeakReconciler: CloudBackupManagerReconciler where Reconciler == CloudBackupManager {}
 
+struct CloudBackupDisableFailure {
+    let canKeepEnabled: Bool
+}
+
 @Observable
 final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @unchecked Sendable {
     static let shared = CloudBackupManager()
@@ -141,8 +145,10 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
 
     var syncError: String? {
         switch syncState {
-        case let .blocked(message), let .failed(message):
-            message
+        case .blocked:
+            String(localized: "Cloud backup sync is waiting for cloud authorization.")
+        case .failed:
+            String(localized: "Cloud backup sync failed.")
         default:
             nil
         }
@@ -161,12 +167,12 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         return false
     }
 
-    var disableFailure: (message: String, canKeepEnabled: Bool)? {
-        guard case let .disableFailed(message, canKeepEnabled) = destructiveOperationState else {
+    var disableFailure: CloudBackupDisableFailure? {
+        guard case let .disableFailed(canKeepEnabled) = destructiveOperationState else {
             return nil
         }
 
-        return (message, canKeepEnabled)
+        return CloudBackupDisableFailure(canKeepEnabled: canKeepEnabled)
     }
 
     var hasPendingUploadVerification: Bool {
@@ -227,8 +233,8 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
             .loading
         case let .loaded(state: loaded):
             loaded.cloudOnly
-        case let .failed(error):
-            .failed(error: error)
+        case .failed:
+            .failed
         }
     }
 

@@ -36,24 +36,15 @@ import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.OtherBackupsOperation
 
 @Composable
-internal fun OtherBackupsLoadFailedSection(error: String) {
+internal fun OtherBackupsLoadFailedSection() {
     SectionHeader(stringResource(R.string.cloud_backup_other_section_title), modifier = Modifier.padding(horizontal = 16.dp))
     MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Column {
-            Text(
-                text = stringResource(R.string.cloud_backup_other_load_failed),
-                style = MaterialTheme.typography.caption,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            )
-            MaterialDivider()
-            Text(
-                text = error,
-                style = MaterialTheme.typography.caption,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            )
-        }
+        Text(
+            text = stringResource(R.string.cloud_backup_other_load_failed),
+            style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
     }
 }
 

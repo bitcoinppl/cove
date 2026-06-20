@@ -84,9 +84,9 @@ fun SelectedWalletContainer(
         } catch (e: CancellationException) {
             throw e
         } catch (e: WalletManagerException.DatabaseCorruption) {
-            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
+            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}", e)
             app.alertState = TaggedItem(
-                AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`, error = e.`error`)
+                AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`)
             )
         } catch (e: Exception) {
             android.util.Log.e(tag, "something went very wrong", e)

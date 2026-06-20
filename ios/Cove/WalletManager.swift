@@ -90,7 +90,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         refreshState: .idle
     )
     var receiveAddressIsLoading = false
-    var receiveAddressError: TaggedString?
+    var receiveAddressError: TaggedItem<Void>?
 
     /// scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String?
@@ -457,9 +457,9 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
                 self.foundAddresses = addressTypes
             }
 
-        case let .nodeConnectionFailed(error):
-            self.errorAlert = WalletErrorAlert.nodeConnectionFailed(error)
-            self.logger.error(error)
+        case .nodeConnectionFailed:
+            self.errorAlert = WalletErrorAlert.nodeConnectionFailed
+            self.logger.error("Node connection failed")
             self.logger.error("set errorAlert")
 
         case let .walletError(error):
@@ -484,8 +484,8 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         case let .receiveAddressLoadingChanged(isLoading):
             self.receiveAddressIsLoading = isLoading
 
-        case let .receiveAddressError(error):
-            self.receiveAddressError = TaggedString(error)
+        case .receiveAddressError:
+            self.receiveAddressError = TaggedItem(())
 
         case let .receiveAddressClosed(requestId):
             if receiveAddressState?.requestId == requestId {

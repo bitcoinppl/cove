@@ -121,18 +121,21 @@ impl Actor for WalletActor {
 
         match error {
             Error::NodeConnectionFailed(error_string) => {
-                self.send(WalletManagerReconcileMessage::NodeConnectionFailed(error_string));
+                warn!("Node connection failed: {error_string}");
+                self.send(WalletManagerReconcileMessage::NodeConnectionFailed);
             }
 
             Error::SignAndBroadcastError(_) => {
+                warn!("Sign and broadcast failed: {error}");
                 self.send(WalletManagerReconcileMessage::SendFlowError(
-                    SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
+                    SendFlowErrorAlert::SignAndBroadcast,
                 ));
             }
 
             Error::GetConfirmDetailsError(_) => {
+                warn!("Unable to get confirm details: {error}");
                 self.send(WalletManagerReconcileMessage::SendFlowError(
-                    SendFlowErrorAlert::ConfirmDetails(error.to_string()),
+                    SendFlowErrorAlert::ConfirmDetails,
                 ));
             }
 
@@ -1262,7 +1265,7 @@ mod tests {
     }
 
     fn node_connection_failed(message: &WalletManagerReconcileMessage) -> bool {
-        matches!(message, WalletManagerReconcileMessage::NodeConnectionFailed(_))
+        matches!(message, WalletManagerReconcileMessage::NodeConnectionFailed)
     }
 
     async fn wait_for_wallet_scan_started(receiver: &flume::Receiver<SingleOrMany>) {

@@ -127,7 +127,7 @@ impl CloudBackupSupervisor {
             OtherBackupsOperation::Idle
                 | OtherBackupsOperation::Recovered { .. }
                 | OtherBackupsOperation::Deleted
-                | OtherBackupsOperation::Failed { .. }
+                | OtherBackupsOperation::Failed
         ) {
             return None;
         }

@@ -103,19 +103,30 @@ internal fun CloudOnlySection(
             }
 
             is CloudOnlyState.Failed -> {
-                ErrorInlineMessage(cloudOnly.error, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+                ErrorInlineMessage(
+                    stringResource(R.string.cloud_backup_cloud_only_fetch_failed),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                )
             }
         }
     }
 
     if (manager.cloudOnly is CloudOnlyState.Loaded) {
-        when (val operation = manager.cloudOnlyOperation) {
+        when (manager.cloudOnlyOperation) {
             is CloudOnlyOperation.Failed -> {
-                ErrorInlineMessage(operation.error, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+                ErrorInlineMessage(
+                    stringResource(R.string.cloud_backup_cloud_only_operation_failed),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                )
             }
+
             is CloudOnlyOperation.Warning -> {
-                ErrorInlineMessage(operation.message, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+                ErrorInlineMessage(
+                    stringResource(R.string.cloud_backup_cloud_only_restore_warning),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                )
             }
+
             else -> Unit
         }
     }

@@ -88,10 +88,10 @@ private struct CoinControlLoadedView: View {
         case WalletManagerError.InitialScanIncomplete:
             app.showInitialScanIncompleteAlert()
             app.popRoute()
-        case let WalletManagerError.DatabaseCorruption(walletId, errorMessage):
-            Log.error("Wallet database corrupted for \(walletId): \(errorMessage)")
+        case let WalletManagerError.DatabaseCorruption(walletId):
+            Log.error("Wallet database corrupted for \(walletId)")
             app.alertState = TaggedItem(
-                .walletDatabaseCorrupted(walletId: walletId, error: errorMessage)
+                .walletDatabaseCorrupted(walletId: walletId)
             )
             app.popRoute()
         case WalletManagerError.WalletDoesNotExist:

@@ -58,6 +58,32 @@ extension WalletAddressType {
     }
 }
 
+extension CatastrophicCloudRestoreProvider {
+    var localizedStorageName: String {
+        switch self {
+        case .iCloudDrive:
+            String(localized: "iCloud")
+        case .googleDrive:
+            String(localized: "Google Drive")
+        }
+    }
+}
+
+extension CatastrophicCloudRestoreInconclusiveReason {
+    func localizedCatastrophicRestoreMessage(provider: CatastrophicCloudRestoreProvider) -> LocalizedStringKey {
+        switch self {
+        case .authorizationRequired:
+            "\(provider.localizedStorageName) access is required before local data can be reset"
+        case .quotaExceeded:
+            "\(provider.localizedStorageName) quota is exceeded. Cove couldn't check for a Cloud Backup."
+        case .providerUnavailable:
+            "\(provider.localizedStorageName) is unavailable. Cove couldn't check for a Cloud Backup."
+        case .unknown:
+            "Cove couldn't check for a Cloud Backup."
+        }
+    }
+}
+
 extension CloudCheckIssue {
     var localizedMessage: String {
         switch self {
@@ -67,6 +93,41 @@ extension CloudCheckIssue {
             String(localized: "Cove couldn't confirm whether a cloud backup is available because cloud storage may be unavailable. You can still try restoring with your passkey if you're reinstalling this device.")
         case .unknown:
             String(localized: "Cove couldn't confirm whether a cloud backup is available. You can still try restoring with your passkey if you're reinstalling this device.")
+        }
+    }
+}
+
+extension OnboardingRestoreFailure {
+    var localizedMessage: String {
+        switch self {
+        case .timedOut:
+            String(localized: "Restore timed out. Please try again.")
+        case .failed:
+            String(localized: "Unable to restore from Cloud Backup. Please try again.")
+        }
+    }
+}
+
+extension OnboardingError {
+    var localizedMessage: String {
+        switch self {
+        case .walletCreationFailed:
+            String(localized: "Unable to continue setup. Please try again.")
+        case .completionFailed:
+            String(localized: "Unable to complete onboarding. Please try again.")
+        }
+    }
+}
+
+extension PinUpdateFailure {
+    var localizedMessage: LocalizedStringKey {
+        switch self {
+        case .updateFailed:
+            "Unable to update the PIN. Please try again."
+        case .sameAsWipeDataPin:
+            "Can't update PIN because it's the same as your wipe data PIN."
+        case .sameAsDecoyPin:
+            "Can't update PIN because it's the same as your decoy PIN."
         }
     }
 }
@@ -240,6 +301,17 @@ extension SendFlowError {
             String(localized: "Unable to calculate the maximum send amount. Please try again.")
         case .UnableToSaveUnsignedTransaction:
             String(localized: "Unable to save the unsigned transaction. Please try again.")
+        }
+    }
+}
+
+extension SendFlowErrorAlert {
+    var localizedMessage: String {
+        switch self {
+        case .signAndBroadcast:
+            String(localized: "Unable to broadcast this transaction. Please try again.")
+        case .confirmDetails:
+            String(localized: "Unable to prepare the transaction. Please try again.")
         }
     }
 }

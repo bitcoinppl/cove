@@ -21,10 +21,17 @@ pub enum CatastrophicRecoveryError {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CatastrophicCloudRestoreResult {
     BackupFound,
-    NoBackupFound { message: String },
-    Offline { message: String },
-    Unreadable { message: String },
-    Inconclusive { message: String },
+    NoBackupFound {
+        provider: CatastrophicCloudRestoreProvider,
+    },
+    Offline {
+        provider: CatastrophicCloudRestoreProvider,
+    },
+    Unreadable,
+    Inconclusive {
+        provider: CatastrophicCloudRestoreProvider,
+        reason: CatastrophicCloudRestoreInconclusiveReason,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -33,20 +40,12 @@ pub enum CatastrophicCloudRestoreProvider {
     GoogleDrive,
 }
 
-impl CatastrophicCloudRestoreProvider {
-    fn storage_name(self) -> &'static str {
-        match self {
-            Self::ICloudDrive => "iCloud",
-            Self::GoogleDrive => "Google Drive",
-        }
-    }
-
-    fn account_name(self) -> &'static str {
-        match self {
-            Self::ICloudDrive => "iCloud account",
-            Self::GoogleDrive => "Google account",
-        }
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CatastrophicCloudRestoreInconclusiveReason {
+    AuthorizationRequired,
+    QuotaExceeded,
+    ProviderUnavailable,
+    Unknown,
 }
 
 /// Reset local state for the database-encryption-key-mismatch recovery flow
@@ -76,12 +75,7 @@ fn catastrophic_cloud_restore_check_result(
 ) -> CatastrophicCloudRestoreResult {
     match result {
         Ok(true) => CatastrophicCloudRestoreResult::BackupFound,
-        Ok(false) => CatastrophicCloudRestoreResult::NoBackupFound {
-            message: format!(
-                "No Cloud Backup was found for the selected {}.",
-                provider.account_name()
-            ),
-        },
+        Ok(false) => CatastrophicCloudRestoreResult::NoBackupFound { provider },
         Err(error) => catastrophic_cloud_restore_error(error, provider),
     }
 }
@@ -92,43 +86,47 @@ fn catastrophic_cloud_restore_error(
 ) -> CatastrophicCloudRestoreResult {
     match error {
         CloudStorageError::AuthorizationRequired(message) => {
-            if message.trim().is_empty() {
-                return CatastrophicCloudRestoreResult::Inconclusive {
-                    message: format!(
-                        "{} access is required before local data can be reset.",
-                        provider.storage_name()
-                    ),
-                };
+            if !message.trim().is_empty() {
+                warn!("Catastrophic cloud restore check authorization required: {message}");
             }
 
-            CatastrophicCloudRestoreResult::Inconclusive { message }
+            CatastrophicCloudRestoreResult::Inconclusive {
+                provider,
+                reason: CatastrophicCloudRestoreInconclusiveReason::AuthorizationRequired,
+            }
         }
-        CloudStorageError::Offline(message) => CatastrophicCloudRestoreResult::Offline {
-            message: format!("Cannot check {} while offline: {message}", provider.storage_name()),
-        },
-        CloudStorageError::NotFound(_) => CatastrophicCloudRestoreResult::NoBackupFound {
-            message: format!(
-                "No Cloud Backup was found for the selected {}.",
-                provider.account_name()
-            ),
-        },
-        CloudStorageError::DownloadFailed(message) => CatastrophicCloudRestoreResult::Unreadable {
-            message: format!("Cloud Backup data could not be read: {message}"),
-        },
-        CloudStorageError::InvalidNamespace(_) => CatastrophicCloudRestoreResult::Unreadable {
-            message: "Cloud Backup data could not be read.".into(),
-        },
+        CloudStorageError::Offline(message) => {
+            warn!("Catastrophic cloud restore check offline: {message}");
+            CatastrophicCloudRestoreResult::Offline { provider }
+        }
+        CloudStorageError::NotFound(_) => {
+            CatastrophicCloudRestoreResult::NoBackupFound { provider }
+        }
+        CloudStorageError::DownloadFailed(message) => {
+            warn!("Catastrophic cloud restore check unreadable backup: {message}");
+            CatastrophicCloudRestoreResult::Unreadable
+        }
+        CloudStorageError::InvalidNamespace(message) => {
+            warn!("Catastrophic cloud restore check invalid namespace: {message}");
+            CatastrophicCloudRestoreResult::Unreadable
+        }
         CloudStorageError::QuotaExceeded => CatastrophicCloudRestoreResult::Inconclusive {
-            message: format!(
-                "{} quota is exceeded. Cove could not check for a Cloud Backup.",
-                provider.storage_name()
-            ),
+            provider,
+            reason: CatastrophicCloudRestoreInconclusiveReason::QuotaExceeded,
         },
-        CloudStorageError::NotAvailable(message) => CatastrophicCloudRestoreResult::Inconclusive {
-            message: format!("{} is unavailable: {message}", provider.storage_name()),
-        },
+        CloudStorageError::NotAvailable(message) => {
+            warn!("Catastrophic cloud restore check provider unavailable: {message}");
+            CatastrophicCloudRestoreResult::Inconclusive {
+                provider,
+                reason: CatastrophicCloudRestoreInconclusiveReason::ProviderUnavailable,
+            }
+        }
         CloudStorageError::UploadFailed(message) => {
-            CatastrophicCloudRestoreResult::Inconclusive { message }
+            warn!("Catastrophic cloud restore check failed: {message}");
+            CatastrophicCloudRestoreResult::Inconclusive {
+                provider,
+                reason: CatastrophicCloudRestoreInconclusiveReason::Unknown,
+            }
         }
     }
 }
@@ -282,13 +280,15 @@ mod tests {
 
     #[test]
     fn catastrophic_cloud_restore_check_result_reports_no_backup_found() {
-        assert!(matches!(
+        assert_eq!(
             catastrophic_cloud_restore_check_result(
                 Ok(false),
                 CatastrophicCloudRestoreProvider::ICloudDrive
             ),
-            CatastrophicCloudRestoreResult::NoBackupFound { .. }
-        ));
+            CatastrophicCloudRestoreResult::NoBackupFound {
+                provider: CatastrophicCloudRestoreProvider::ICloudDrive
+            }
+        );
     }
 
     #[test]
@@ -299,20 +299,22 @@ mod tests {
                 CatastrophicCloudRestoreProvider::ICloudDrive
             ),
             CatastrophicCloudRestoreResult::Inconclusive {
-                message: "iCloud access is required before local data can be reset.".into()
+                provider: CatastrophicCloudRestoreProvider::ICloudDrive,
+                reason: CatastrophicCloudRestoreInconclusiveReason::AuthorizationRequired
             }
         );
     }
 
     #[test]
-    fn catastrophic_cloud_restore_error_preserves_authorization_message() {
+    fn catastrophic_cloud_restore_error_classifies_authorization_message() {
         assert_eq!(
             catastrophic_cloud_restore_check_result(
                 Err(CloudStorageError::AuthorizationRequired("sign in before continuing".into())),
                 CatastrophicCloudRestoreProvider::GoogleDrive
             ),
             CatastrophicCloudRestoreResult::Inconclusive {
-                message: "sign in before continuing".into()
+                provider: CatastrophicCloudRestoreProvider::GoogleDrive,
+                reason: CatastrophicCloudRestoreInconclusiveReason::AuthorizationRequired
             }
         );
     }
@@ -325,7 +327,7 @@ mod tests {
                 CatastrophicCloudRestoreProvider::GoogleDrive
             ),
             CatastrophicCloudRestoreResult::Offline {
-                message: "Cannot check Google Drive while offline: offline".into()
+                provider: CatastrophicCloudRestoreProvider::GoogleDrive
             }
         );
     }
@@ -338,7 +340,7 @@ mod tests {
                 CatastrophicCloudRestoreProvider::ICloudDrive
             ),
             CatastrophicCloudRestoreResult::NoBackupFound {
-                message: "No Cloud Backup was found for the selected iCloud account.".into()
+                provider: CatastrophicCloudRestoreProvider::ICloudDrive
             }
         );
     }
@@ -350,9 +352,7 @@ mod tests {
                 Err(CloudStorageError::DownloadFailed("bad json".into())),
                 CatastrophicCloudRestoreProvider::GoogleDrive
             ),
-            CatastrophicCloudRestoreResult::Unreadable {
-                message: "Cloud Backup data could not be read: bad json".into()
-            }
+            CatastrophicCloudRestoreResult::Unreadable
         );
     }
 
@@ -363,9 +363,7 @@ mod tests {
                 Err(CloudStorageError::InvalidNamespace("bad namespace".into())),
                 CatastrophicCloudRestoreProvider::GoogleDrive
             ),
-            CatastrophicCloudRestoreResult::Unreadable {
-                message: "Cloud Backup data could not be read.".into()
-            }
+            CatastrophicCloudRestoreResult::Unreadable
         );
     }
 
@@ -377,8 +375,8 @@ mod tests {
                 CatastrophicCloudRestoreProvider::ICloudDrive
             ),
             CatastrophicCloudRestoreResult::Inconclusive {
-                message: "iCloud quota is exceeded. Cove could not check for a Cloud Backup."
-                    .into()
+                provider: CatastrophicCloudRestoreProvider::ICloudDrive,
+                reason: CatastrophicCloudRestoreInconclusiveReason::QuotaExceeded
             }
         );
     }
@@ -391,7 +389,8 @@ mod tests {
                 CatastrophicCloudRestoreProvider::GoogleDrive
             ),
             CatastrophicCloudRestoreResult::Inconclusive {
-                message: "Google Drive is unavailable: service unavailable".into()
+                provider: CatastrophicCloudRestoreProvider::GoogleDrive,
+                reason: CatastrophicCloudRestoreInconclusiveReason::ProviderUnavailable
             }
         );
     }
@@ -403,7 +402,10 @@ mod tests {
                 Err(CloudStorageError::UploadFailed("upload failed".into())),
                 CatastrophicCloudRestoreProvider::ICloudDrive
             ),
-            CatastrophicCloudRestoreResult::Inconclusive { message: "upload failed".into() }
+            CatastrophicCloudRestoreResult::Inconclusive {
+                provider: CatastrophicCloudRestoreProvider::ICloudDrive,
+                reason: CatastrophicCloudRestoreInconclusiveReason::Unknown
+            }
         );
     }
 

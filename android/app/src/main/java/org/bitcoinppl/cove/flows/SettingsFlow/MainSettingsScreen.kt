@@ -88,26 +88,26 @@ internal fun shouldShowCloudBackupSettings(
 
 @Composable
 private fun cloudBackupSettingsSubtitle(manager: CloudBackupManager): String =
-    when (val status = manager.settingsRowStatus) {
-        is CloudBackupSettingsRowStatus.Disabled -> stringResource(R.string.cloud_backup_status_off)
-        is CloudBackupSettingsRowStatus.Disabling -> stringResource(R.string.cloud_backup_status_disabling)
-        is CloudBackupSettingsRowStatus.SettingUp -> stringResource(R.string.cloud_backup_status_setting_up)
-        is CloudBackupSettingsRowStatus.Restoring -> stringResource(R.string.cloud_backup_status_restoring)
-        is CloudBackupSettingsRowStatus.Active -> stringResource(R.string.cloud_backup_status_active)
-        is CloudBackupSettingsRowStatus.PasskeyMissing -> stringResource(R.string.cloud_backup_status_passkey_missing)
-        is CloudBackupSettingsRowStatus.PasskeyProviderUnsupported ->
+    when (manager.settingsRowStatus) {
+        CloudBackupSettingsRowStatus.DISABLED -> stringResource(R.string.cloud_backup_status_off)
+        CloudBackupSettingsRowStatus.DISABLING -> stringResource(R.string.cloud_backup_status_disabling)
+        CloudBackupSettingsRowStatus.SETTING_UP -> stringResource(R.string.cloud_backup_status_setting_up)
+        CloudBackupSettingsRowStatus.RESTORING -> stringResource(R.string.cloud_backup_status_restoring)
+        CloudBackupSettingsRowStatus.ACTIVE -> stringResource(R.string.cloud_backup_status_active)
+        CloudBackupSettingsRowStatus.PASSKEY_MISSING -> stringResource(R.string.cloud_backup_status_passkey_missing)
+        CloudBackupSettingsRowStatus.PASSKEY_PROVIDER_UNSUPPORTED ->
             stringResource(R.string.cloud_backup_status_passkey_provider_unsupported)
-        is CloudBackupSettingsRowStatus.Unverified -> stringResource(R.string.cloud_backup_status_unverified)
-        is CloudBackupSettingsRowStatus.Confirming -> stringResource(R.string.cloud_backup_status_confirming)
-        is CloudBackupSettingsRowStatus.VerificationRecommended ->
+        CloudBackupSettingsRowStatus.UNVERIFIED -> stringResource(R.string.cloud_backup_status_unverified)
+        CloudBackupSettingsRowStatus.CONFIRMING -> stringResource(R.string.cloud_backup_status_confirming)
+        CloudBackupSettingsRowStatus.VERIFICATION_RECOMMENDED ->
             stringResource(R.string.cloud_backup_status_verification_recommended)
-        is CloudBackupSettingsRowStatus.CheckingSync -> stringResource(R.string.cloud_backup_status_checking_sync)
-        is CloudBackupSettingsRowStatus.Syncing -> stringResource(R.string.cloud_backup_status_syncing)
-        is CloudBackupSettingsRowStatus.NoFiles -> stringResource(R.string.cloud_backup_status_no_files)
-        is CloudBackupSettingsRowStatus.DriveUnavailable -> stringResource(R.string.cloud_backup_status_drive_unavailable)
-        is CloudBackupSettingsRowStatus.AuthorizationRequired ->
-            stringResource(R.string.cloud_backup_status_drive_authorization_required, status.v1)
-        is CloudBackupSettingsRowStatus.Error -> stringResource(R.string.cloud_backup_status_error, status.v1)
+        CloudBackupSettingsRowStatus.CHECKING_SYNC -> stringResource(R.string.cloud_backup_status_checking_sync)
+        CloudBackupSettingsRowStatus.SYNCING -> stringResource(R.string.cloud_backup_status_syncing)
+        CloudBackupSettingsRowStatus.NO_FILES -> stringResource(R.string.cloud_backup_status_no_files)
+        CloudBackupSettingsRowStatus.DRIVE_UNAVAILABLE -> stringResource(R.string.cloud_backup_status_drive_unavailable)
+        CloudBackupSettingsRowStatus.AUTHORIZATION_REQUIRED ->
+            stringResource(R.string.cloud_backup_status_drive_authorization_required)
+        CloudBackupSettingsRowStatus.ERROR -> stringResource(R.string.cloud_backup_status_error)
     }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -65,6 +65,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.OnboardingManager
 import org.bitcoinppl.cove.QrCodeGenerator
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableBusyOverlay
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingView
@@ -109,7 +110,7 @@ internal fun OnboardingCreatingWalletView(
             Spacer(modifier = Modifier.size(40.dp))
 
             Text(
-                text = "Creating your wallet",
+                text = stringResource(R.string.onboarding_creating_wallet_title),
                 color = Color.White,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
@@ -119,7 +120,7 @@ internal fun OnboardingCreatingWalletView(
             Spacer(modifier = Modifier.size(12.dp))
 
             Text(
-                text = "Generating keys and preparing your backup flow",
+                text = stringResource(R.string.onboarding_creating_wallet_subtitle),
                 color = OnboardingTextSecondary,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
@@ -209,4 +210,3 @@ internal fun OnboardingBackupWalletView(
         )
     }
 }
-

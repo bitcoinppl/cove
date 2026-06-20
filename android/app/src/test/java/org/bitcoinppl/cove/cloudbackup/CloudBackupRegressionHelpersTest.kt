@@ -1,5 +1,7 @@
 package org.bitcoinppl.cove.cloudbackup
 
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove_core.CloudBackupConfiguredState
 import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
@@ -53,7 +55,6 @@ class CloudBackupRegressionHelpersTest {
                         verification =
                             CloudBackupVerificationState.Failed(
                                 DeepVerificationFailure.Retry(
-                                    message = "Drive unavailable",
                                     detail = null,
                                     retryContext = null,
                                 ),
@@ -127,7 +128,7 @@ class CloudBackupRegressionHelpersTest {
                 manager =
                     cloudBackupManager(
                         verification = CloudBackupVerificationState.AwaitingUploadConfirmation,
-                        sync = CloudBackupSyncState.Blocked("authorization required"),
+                        sync = CloudBackupSyncState.BLOCKED,
                     ),
                 hasDetail = false,
             ),
@@ -200,7 +201,9 @@ class CloudBackupRegressionHelpersTest {
     @Test
     fun rootPromptVerificationResultsProduceFeedback() {
         assertEquals(
-            CloudBackupVerificationFeedback.SuccessFloater("Cloud Backup Verified"),
+            CloudBackupVerificationFeedback.SuccessFloater(
+                UiText.resource(R.string.cloud_backup_verified_floater),
+            ),
             cloudBackupVerificationFeedback(
                 CloudBackupVerificationPresentation.Completed(
                     CloudBackupVerificationSource.ROOT_PROMPT,
@@ -209,13 +212,17 @@ class CloudBackupRegressionHelpersTest {
         )
         assertEquals(
             CloudBackupVerificationFeedback.FailureAlert(
-                title = "Cloud Backup Verification Failed",
-                message = "Drive unavailable",
+                title = UiText.resource(R.string.cloud_backup_verification_failed_title),
+                message = UiText.resource(R.string.deep_verification_retry),
             ),
             cloudBackupVerificationFeedback(
                 CloudBackupVerificationPresentation.Failed(
                     source = CloudBackupVerificationSource.ROOT_PROMPT,
-                    message = "Drive unavailable",
+                    failure =
+                        DeepVerificationFailure.Retry(
+                            detail = null,
+                            retryContext = null,
+                        ),
                 ),
             ),
         )
@@ -234,7 +241,11 @@ class CloudBackupRegressionHelpersTest {
             cloudBackupVerificationFeedback(
                 CloudBackupVerificationPresentation.Failed(
                     source = CloudBackupVerificationSource.ONBOARDING,
-                    message = "Drive unavailable",
+                    failure =
+                        DeepVerificationFailure.Retry(
+                            detail = null,
+                            retryContext = null,
+                        ),
                 ),
             ),
         )
@@ -308,7 +319,7 @@ class CloudBackupRegressionHelpersTest {
     private fun cloudBackupManager(
         passkey: CloudBackupPasskeyState = CloudBackupPasskeyState.Available,
         verification: CloudBackupVerificationState = CloudBackupVerificationState.NotVerified,
-        sync: CloudBackupSyncState = CloudBackupSyncState.Idle,
+        sync: CloudBackupSyncState = CloudBackupSyncState.IDLE,
     ): CloudBackupManager {
         val state =
             CloudBackupState(
@@ -321,11 +332,11 @@ class CloudBackupRegressionHelpersTest {
                             destructiveOperation = CloudBackupDestructiveOperationState.Idle,
                             detail = CloudBackupDetailState.NotLoaded,
                             rootPrompt = CloudBackupRootPrompt.None,
-                            syncHealth = CloudSyncHealth.Unknown,
+                            syncHealth = CloudSyncHealth.UNKNOWN,
                             verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
                         ),
                     ),
-                settingsRowStatus = CloudBackupSettingsRowStatus.CheckingSync,
+                settingsRowStatus = CloudBackupSettingsRowStatus.CHECKING_SYNC,
             )
 
         return CloudBackupManager(state)

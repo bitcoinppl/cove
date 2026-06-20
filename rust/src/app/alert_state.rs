@@ -23,27 +23,27 @@ pub enum AppAlertState {
 
     // errors
     InvalidWordGroup,
-    ErrorImportingHotWallet { message: String },
+    ErrorImportingHotWallet,
     AddressWrongNetwork { address: Arc<Address>, network: Network, current_network: Network },
     FoundAddress { address: Arc<Address>, amount: Option<Arc<Amount>> },
     UnableToSelectWallet,
-    ErrorImportingHardwareWallet { message: String },
-    InvalidFileFormat { message: String },
+    ErrorImportingHardwareWallet,
+    InvalidFileFormat,
     NoWalletSelected { address: Arc<Address> },
-    InvalidFormat { message: String },
+    InvalidFormat,
     NoUnsignedTransactionFound { tx_id: Arc<TxId> },
-    UnableToGetAddress { error: String },
+    UnableToGetAddress,
     NoCameraPermission,
-    FailedToScanQr { error: String },
+    FailedToScanQr,
     CantSendOnWatchOnlyWallet,
-    TapSignerSetupFailed { message: String },
-    TapSignerDeriveFailed { message: String },
+    TapSignerSetupFailed,
+    TapSignerDeriveFailed,
     TapSignerInvalidAuth,
     TapSignerNoBackup { tap_signer: Arc<TapSigner> },
     TapSignerWrongPin { tap_signer: Arc<TapSigner>, action: AfterPinAction },
 
     // database corruption
-    WalletDatabaseCorrupted { wallet_id: WalletId, error: String },
+    WalletDatabaseCorrupted { wallet_id: WalletId },
 
     // generic message or error
     General { title: String, message: String },
@@ -72,9 +72,9 @@ impl AppAlertState {
 
     pub fn display_type(&self) -> AlertDisplayType {
         match self {
-            Self::ImportedLabelsSuccessfully
-            | Self::UnableToGetAddress { .. }
-            | Self::FailedToScanQr { .. } => AlertDisplayType::Toast,
+            Self::ImportedLabelsSuccessfully | Self::UnableToGetAddress | Self::FailedToScanQr => {
+                AlertDisplayType::Toast
+            }
             _ => AlertDisplayType::FullAlert,
         }
     }

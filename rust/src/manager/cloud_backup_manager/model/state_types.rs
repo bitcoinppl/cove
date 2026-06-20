@@ -22,7 +22,7 @@ pub enum CloudBackupPasskeyState {
 pub enum CloudBackupPasskeyRepairState {
     Idle,
     Running,
-    Failed(String),
+    Failed,
 }
 
 /// Public backup verification state shown by settings and prompts
@@ -41,8 +41,8 @@ pub enum CloudBackupVerificationState {
 pub enum CloudBackupSyncState {
     Idle,
     Syncing,
-    Blocked(String),
-    Failed(String),
+    Blocked,
+    Failed,
 }
 
 /// Public status for destructive operations that can affect remote backup data
@@ -52,7 +52,7 @@ pub enum CloudBackupDestructiveOperationState {
     RecreatingManifest,
     ReinitializingBackup,
     Disabling,
-    DisableFailed { message: String, can_keep_enabled: bool },
+    DisableFailed { can_keep_enabled: bool },
 }
 
 /// Detail payload shown after remote backup detail has loaded
@@ -70,7 +70,7 @@ pub enum CloudBackupDetailState {
     NotLoaded,
     Loading,
     Loaded { state: LoadedCloudBackupDetail },
-    Failed(String),
+    Failed,
 }
 
 /// Public configured-backup state projected from the private reducer
@@ -109,9 +109,9 @@ pub enum CloudBackupRestoreFlow {
 }
 
 /// Public terminal cloud backup failure
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct CloudBackupFailure {
-    pub message: String,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupFailure {
+    Failed,
 }
 
 /// Public top-level cloud backup lifecycle

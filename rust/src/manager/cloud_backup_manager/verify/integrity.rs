@@ -227,7 +227,7 @@ impl RustCloudBackupManager {
             Ok(summary) => CloudBackupOtherBackupsState::Loaded { summary },
             Err(error) => {
                 warn!("Backup integrity: {context} other backup summary failed: {error}");
-                CloudBackupOtherBackupsState::LoadFailed { error: error.to_string() }
+                CloudBackupOtherBackupsState::LoadFailed
             }
         }
     }

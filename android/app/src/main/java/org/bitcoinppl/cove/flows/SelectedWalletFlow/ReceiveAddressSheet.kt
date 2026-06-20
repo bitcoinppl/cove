@@ -80,6 +80,7 @@ fun ReceiveAddressSheet(
     val addressClipboardLabel = stringResource(R.string.wallet_send_bitcoin_address_clip_label)
     val addressCopied = stringResource(R.string.wallet_send_address_copied)
     val defaultWalletName = stringResource(R.string.wallet_send_default_wallet_name)
+    val unableToGetAddress = stringResource(R.string.app_alert_unable_get_address_message)
 
     fun closeReceiveAddress() {
         currentRequestId.value?.let { requestId ->
@@ -123,8 +124,8 @@ fun ReceiveAddressSheet(
     }
 
     LaunchedEffect(manager.receiveAddressError) {
-        val error = manager.receiveAddressError ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(error.item)
+        manager.receiveAddressError ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(unableToGetAddress)
         if (addressInfo == null) {
             onDismiss()
         }

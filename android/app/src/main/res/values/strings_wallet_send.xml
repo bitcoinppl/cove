@@ -101,6 +101,8 @@
     <string name="wallet_send_unsigned_transaction_content_description">Unsigned Transaction</string>
     <string name="wallet_send_delete_failed_title">Delete Failed</string>
     <string name="wallet_send_unable_to_delete_transaction">Unable to delete this transaction. Please try again.</string>
+    <string name="wallet_send_sign_and_broadcast_failed_message">Unable to broadcast this transaction. Please try again.</string>
+    <string name="wallet_send_confirm_details_failed_message">Unable to prepare the transaction. Please try again.</string>
     <string name="wallet_send_transaction_sent_on">Your transaction was sent on</string>
     <string name="wallet_send_transaction_received_successfully">Your transaction was successfully received</string>
     <string name="wallet_send_transaction_pending">Your transaction is pending.</string>

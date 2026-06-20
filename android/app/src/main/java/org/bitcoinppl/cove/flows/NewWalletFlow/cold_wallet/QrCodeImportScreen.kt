@@ -84,9 +84,7 @@ fun QrCodeImportScreen(app: AppManager, modifier: Modifier = Modifier) {
                                 app.popRoute()
                                 app.alertState =
                                     TaggedItem(
-                                        AppAlertState.ErrorImportingHardwareWallet(
-                                            message = context.getString(R.string.app_alert_error_importing_hardware_message),
-                                        ),
+                                        AppAlertState.ErrorImportingHardwareWallet,
                                     )
                             }
                         }

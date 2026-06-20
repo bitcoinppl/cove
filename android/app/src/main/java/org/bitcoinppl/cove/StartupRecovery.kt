@@ -25,16 +25,6 @@ internal sealed class CatastrophicCloudRestoreCheck {
     ) : CatastrophicCloudRestoreCheck()
 }
 
-internal val CatastrophicCloudRestoreResult.failureMessage: String?
-    get() =
-        when (this) {
-            CatastrophicCloudRestoreResult.BackupFound -> null
-            is CatastrophicCloudRestoreResult.Inconclusive -> message
-            is CatastrophicCloudRestoreResult.NoBackupFound -> message
-            is CatastrophicCloudRestoreResult.Offline -> message
-            is CatastrophicCloudRestoreResult.Unreadable -> message
-        }
-
 internal fun classifyBootstrapFailure(error: Exception): BootstrapFailure =
     when (error) {
         is AppInitException.DatabaseKeyMismatch -> BootstrapFailure.CatastrophicRecovery

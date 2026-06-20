@@ -1,29 +1,42 @@
 package org.bitcoinppl.cove
 
+import org.bitcoinppl.cove_core.CatastrophicCloudRestoreInconclusiveReason
+import org.bitcoinppl.cove_core.CatastrophicCloudRestoreProvider
 import org.bitcoinppl.cove_core.CatastrophicCloudRestoreResult
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class MainActivityHelpersTest {
     @Test
     fun catastrophicRestoreBackupFoundHasNoFailureMessage() {
-        assertEquals(null, CatastrophicCloudRestoreResult.BackupFound.failureMessage)
+        assertNull(CatastrophicCloudRestoreResult.BackupFound.localizedFailureMessage())
     }
 
     @Test
-    fun catastrophicRestoreAuthorizationErrorIsUserVisible() {
-        val message = CatastrophicCloudRestoreResult.Inconclusive("wrong google drive account")
-            .failureMessage
+    fun catastrophicRestoreAuthorizationRequiredMessageNamesProvider() {
+        val message =
+            CatastrophicCloudRestoreResult.Inconclusive(
+                provider = CatastrophicCloudRestoreProvider.GOOGLE_DRIVE,
+                reason = CatastrophicCloudRestoreInconclusiveReason.AUTHORIZATION_REQUIRED,
+            ).localizedFailureMessage()
 
-        assertEquals("wrong google drive account", message)
+        assertEquals(
+            UiText.resource(
+                R.string.common_remaining_cloud_backup_authorization_required,
+                UiText.resource(R.string.common_remaining_google_drive),
+            ),
+            message,
+        )
     }
 
     @Test
-    fun catastrophicRestoreUnreadableBackupErrorIsUserVisible() {
-        val message = CatastrophicCloudRestoreResult.Unreadable(
-            "Cloud Backup data could not be read: master key backup is unreadable",
-        ).failureMessage
+    fun catastrophicRestoreUnreadableBackupErrorUsesLocalizedMessage() {
+        val message = CatastrophicCloudRestoreResult.Unreadable.localizedFailureMessage()
 
-        assertEquals("Cloud Backup data could not be read: master key backup is unreadable", message)
+        assertEquals(
+            UiText.resource(R.string.common_remaining_cloud_backup_unreadable),
+            message,
+        )
     }
 }

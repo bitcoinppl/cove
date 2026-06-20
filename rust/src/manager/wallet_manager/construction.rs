@@ -90,8 +90,11 @@ impl RustWalletManager {
         };
 
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor = WalletActor::new(wallet, sender.clone(), scan_status.clone())
-            .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let wallet_actor =
+            WalletActor::new(wallet, sender.clone(), scan_status.clone()).map_err(|error| {
+                warn!("Wallet database corrupted for {id}: {error}");
+                Error::DatabaseCorruption { id: id.clone() }
+            })?;
         let actor = task::spawn_actor(wallet_actor);
 
         let discovery_scanner = start_discovery_scanner(metadata.clone(), sender);
@@ -122,8 +125,11 @@ impl RustWalletManager {
         let discovery_scanner = start_discovery_scanner(metadata.clone(), sender.clone());
 
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor = WalletActor::new(wallet, sender.clone(), scan_status.clone())
-            .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let wallet_actor =
+            WalletActor::new(wallet, sender.clone(), scan_status.clone()).map_err(|error| {
+                warn!("Wallet database corrupted for {id}: {error}");
+                Error::DatabaseCorruption { id: id.clone() }
+            })?;
         let actor = task::spawn_actor(wallet_actor);
         let label_manager = LabelManager::new(id.clone()).into();
 
@@ -159,8 +165,11 @@ impl RustWalletManager {
         let metadata = wallet.metadata.clone();
 
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor = WalletActor::new(wallet, sender.clone(), scan_status.clone())
-            .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let wallet_actor =
+            WalletActor::new(wallet, sender.clone(), scan_status.clone()).map_err(|error| {
+                warn!("Wallet database corrupted for {id}: {error}");
+                Error::DatabaseCorruption { id: id.clone() }
+            })?;
         let actor = task::spawn_actor(wallet_actor);
         let label_manager = LabelManager::new(id.clone()).into();
 

@@ -62,13 +62,13 @@ fun rememberWalletExportLaunchers(
                             } ?: throw Exception(context.getString(R.string.wallet_send_unable_to_read_file))
 
                         // validate import was successful before showing success message
-                        currentManager.rust.labelManager().use { labelManager ->
+                        currentManager.labelManager().use { labelManager ->
                             labelManager.import(fileContents.trim())
                         }
 
                         // refresh transactions with updated labels
                         try {
-                            currentManager.rust.getTransactions()
+                            currentManager.refreshTransactions()
                         } catch (refreshError: Exception) {
                             android.util.Log.e(tag, "failed to refresh transactions after label import", refreshError)
                             snackbarHostState.showSnackbar(context.getString(R.string.wallet_send_labels_imported_refresh_manual))
@@ -104,10 +104,10 @@ fun rememberWalletExportLaunchers(
                         val content =
                             when (currentExportType) {
                                 is ExportType.Transactions -> {
-                                    currentManager?.rust?.exportTransactionsCsv()?.content
+                                    currentManager?.exportTransactionsCsv()?.content
                                 }
                                 is ExportType.Labels -> {
-                                    currentManager?.rust?.exportLabelsForShare()?.content
+                                    currentManager?.exportLabelsForShare()?.content
                                 }
                                 null -> null
                             }

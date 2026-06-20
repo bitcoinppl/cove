@@ -110,7 +110,7 @@ class WalletManager :
         ),
     )
     var receiveAddressIsLoading by mutableStateOf(false)
-    var receiveAddressError by mutableStateOf<TaggedItem<String>?>(null)
+    var receiveAddressError by mutableStateOf<TaggedItem<Unit>?>(null)
 
     // scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String? by mutableStateOf(null)
@@ -735,8 +735,8 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.NodeConnectionFailed -> {
-                errorAlert = WalletErrorAlert.NodeConnectionFailed(message.v1)
-                logError(message.v1)
+                errorAlert = WalletErrorAlert.NODE_CONNECTION_FAILED
+                logError("Node connection failed")
             }
 
             is WalletManagerReconcileMessage.WalletException -> {
@@ -768,7 +768,7 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.ReceiveAddressError -> {
-                receiveAddressError = TaggedItem(message.v1)
+                receiveAddressError = TaggedItem(Unit)
             }
 
             is WalletManagerReconcileMessage.ReceiveAddressClosed -> {

@@ -2,14 +2,21 @@ package org.bitcoinppl.cove
 
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppAlertState
-import org.bitcoinppl.cove_core.CloudCheckIssue
-import org.bitcoinppl.cove_core.CloudBackupFailure
+import org.bitcoinppl.cove_core.CatastrophicCloudRestoreInconclusiveReason
+import org.bitcoinppl.cove_core.CatastrophicCloudRestoreProvider
+import org.bitcoinppl.cove_core.CatastrophicCloudRestoreResult
 import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
+import org.bitcoinppl.cove_core.CloudBackupFailure
+import org.bitcoinppl.cove_core.CloudCheckIssue
 import org.bitcoinppl.cove_core.DeepVerificationFailure
+import org.bitcoinppl.cove_core.OnboardingError
+import org.bitcoinppl.cove_core.OnboardingRestoreFailure
+import org.bitcoinppl.cove_core.PinUpdateFailure
 import org.bitcoinppl.cove_core.ScanProgress
 import org.bitcoinppl.cove_core.SendFlowAlertState
 import org.bitcoinppl.cove_core.SendFlowException
 import org.bitcoinppl.cove_core.WalletAddressType
+import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletSecretType
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.Network
@@ -45,11 +52,84 @@ fun WalletAddressType.localizedDisplayText(): UiText =
         WalletAddressType.LEGACY -> UiText.resource(R.string.wallet_address_type_legacy)
     }
 
+fun CatastrophicCloudRestoreResult.localizedFailureMessage(): UiText? =
+    when (this) {
+        CatastrophicCloudRestoreResult.BackupFound -> null
+        is CatastrophicCloudRestoreResult.NoBackupFound -> UiText.resource(
+            R.string.common_remaining_no_cloud_backup_found,
+            provider.localizedAccountName(),
+        )
+        is CatastrophicCloudRestoreResult.Offline -> UiText.resource(
+            R.string.common_remaining_cannot_check_cloud_backup_offline,
+            provider.localizedStorageName(),
+        )
+        CatastrophicCloudRestoreResult.Unreadable -> UiText.resource(
+            R.string.common_remaining_cloud_backup_unreadable,
+        )
+        is CatastrophicCloudRestoreResult.Inconclusive -> reason.localizedMessage(provider)
+    }
+
+private fun CatastrophicCloudRestoreProvider.localizedStorageName(): UiText =
+    when (this) {
+        CatastrophicCloudRestoreProvider.I_CLOUD_DRIVE -> UiText.resource(R.string.common_remaining_icloud)
+        CatastrophicCloudRestoreProvider.GOOGLE_DRIVE -> UiText.resource(R.string.common_remaining_google_drive)
+    }
+
+private fun CatastrophicCloudRestoreProvider.localizedAccountName(): UiText =
+    when (this) {
+        CatastrophicCloudRestoreProvider.I_CLOUD_DRIVE -> UiText.resource(R.string.common_remaining_icloud_account)
+        CatastrophicCloudRestoreProvider.GOOGLE_DRIVE -> UiText.resource(R.string.common_remaining_google_account)
+    }
+
+private fun CatastrophicCloudRestoreInconclusiveReason.localizedMessage(
+    provider: CatastrophicCloudRestoreProvider,
+): UiText =
+    when (this) {
+        CatastrophicCloudRestoreInconclusiveReason.AUTHORIZATION_REQUIRED -> UiText.resource(
+            R.string.common_remaining_cloud_backup_authorization_required,
+            provider.localizedStorageName(),
+        )
+        CatastrophicCloudRestoreInconclusiveReason.QUOTA_EXCEEDED -> UiText.resource(
+            R.string.common_remaining_cloud_backup_quota_exceeded,
+            provider.localizedStorageName(),
+        )
+        CatastrophicCloudRestoreInconclusiveReason.PROVIDER_UNAVAILABLE -> UiText.resource(
+            R.string.common_remaining_cloud_backup_provider_unavailable,
+            provider.localizedStorageName(),
+        )
+        CatastrophicCloudRestoreInconclusiveReason.UNKNOWN -> UiText.resource(
+            R.string.common_remaining_cloud_backup_check_failed,
+        )
+    }
+
 fun CloudCheckIssue.localizedMessage(): UiText =
     when (this) {
         CloudCheckIssue.OFFLINE -> UiText.resource(R.string.cloud_restore_issue_offline)
         CloudCheckIssue.CLOUD_UNAVAILABLE -> UiText.resource(R.string.cloud_restore_issue_cloud_unavailable)
         CloudCheckIssue.UNKNOWN -> UiText.resource(R.string.cloud_restore_issue_unknown)
+    }
+
+fun OnboardingRestoreFailure.localizedMessage(): UiText =
+    when (this) {
+        OnboardingRestoreFailure.TIMED_OUT -> UiText.resource(R.string.onboarding_restore_failure_timed_out)
+        OnboardingRestoreFailure.FAILED -> UiText.resource(R.string.onboarding_restore_failure_failed)
+    }
+
+fun OnboardingError.localizedMessage(): UiText =
+    when (this) {
+        OnboardingError.WALLET_CREATION_FAILED -> UiText.resource(R.string.onboarding_error_wallet_creation_failed)
+        OnboardingError.COMPLETION_FAILED -> UiText.resource(R.string.onboarding_error_completion_failed)
+    }
+
+fun PinUpdateFailure.localizedMessage(): UiText =
+    when (this) {
+        PinUpdateFailure.UPDATE_FAILED -> UiText.resource(R.string.settings_security_update_pin_error)
+        PinUpdateFailure.SAME_AS_WIPE_DATA_PIN -> UiText.resource(
+            R.string.settings_security_update_pin_same_as_wipe_data_pin,
+        )
+        PinUpdateFailure.SAME_AS_DECOY_PIN -> UiText.resource(
+            R.string.settings_security_update_pin_same_as_decoy_pin,
+        )
     }
 
 fun AfterPinAction.localizedUserMessage(): UiText =

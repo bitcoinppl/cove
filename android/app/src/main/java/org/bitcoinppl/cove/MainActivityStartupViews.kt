@@ -89,11 +89,11 @@ internal fun CatastrophicRecoveryView(
                     },
                 )
             }
-            val failureMessage = cloudRestoreResult?.failureMessage
+            val failureMessage = cloudRestoreResult?.localizedFailureMessage()
             if (failureMessage != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    failureMessage,
+                    failureMessage.asString(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )

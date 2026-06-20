@@ -3396,44 +3396,16 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
 
 
 
-sealed class CloudSyncHealth {
 
-    object Unknown : CloudSyncHealth()
+enum class CloudSyncHealth {
 
-
-    object AllUploaded : CloudSyncHealth()
-
-
-    object Uploading : CloudSyncHealth()
-
-
-    data class Failed(
-        val v1: kotlin.String) : CloudSyncHealth()
-
-    {
-
-
-        companion object
-    }
-
-    object NoFiles : CloudSyncHealth()
-
-
-    data class AuthorizationRequired(
-        val v1: kotlin.String) : CloudSyncHealth()
-
-    {
-
-
-        companion object
-    }
-
-    object Unavailable : CloudSyncHealth()
-
-
-
-
-
+    UNKNOWN,
+    ALL_UPLOADED,
+    UPLOADING,
+    FAILED,
+    NO_FILES,
+    AUTHORIZATION_REQUIRED,
+    UNAVAILABLE;
 
 
 
@@ -3441,107 +3413,21 @@ sealed class CloudSyncHealth {
     companion object
 }
 
+
 /**
  * @suppress
  */
-public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSyncHealth>{
-    override fun read(buf: ByteBuffer): CloudSyncHealth {
-        return when(buf.getInt()) {
-            1 -> CloudSyncHealth.Unknown
-            2 -> CloudSyncHealth.AllUploaded
-            3 -> CloudSyncHealth.Uploading
-            4 -> CloudSyncHealth.Failed(
-                FfiConverterString.read(buf),
-                )
-            5 -> CloudSyncHealth.NoFiles
-            6 -> CloudSyncHealth.AuthorizationRequired(
-                FfiConverterString.read(buf),
-                )
-            7 -> CloudSyncHealth.Unavailable
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
+public object FfiConverterTypeCloudSyncHealth: FfiConverterRustBuffer<CloudSyncHealth> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudSyncHealth.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
     }
 
-    override fun allocationSize(value: CloudSyncHealth): ULong = when(value) {
-        is CloudSyncHealth.Unknown -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is CloudSyncHealth.AllUploaded -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is CloudSyncHealth.Uploading -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is CloudSyncHealth.Failed -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
-            )
-        }
-        is CloudSyncHealth.NoFiles -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is CloudSyncHealth.AuthorizationRequired -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
-            )
-        }
-        is CloudSyncHealth.Unavailable -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-    }
+    override fun allocationSize(value: CloudSyncHealth) = 4UL
 
     override fun write(value: CloudSyncHealth, buf: ByteBuffer) {
-        when(value) {
-            is CloudSyncHealth.Unknown -> {
-                buf.putInt(1)
-                Unit
-            }
-            is CloudSyncHealth.AllUploaded -> {
-                buf.putInt(2)
-                Unit
-            }
-            is CloudSyncHealth.Uploading -> {
-                buf.putInt(3)
-                Unit
-            }
-            is CloudSyncHealth.Failed -> {
-                buf.putInt(4)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is CloudSyncHealth.NoFiles -> {
-                buf.putInt(5)
-                Unit
-            }
-            is CloudSyncHealth.AuthorizationRequired -> {
-                buf.putInt(6)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is CloudSyncHealth.Unavailable -> {
-                buf.putInt(7)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+        buf.putInt(value.ordinal + 1)
     }
 }
 

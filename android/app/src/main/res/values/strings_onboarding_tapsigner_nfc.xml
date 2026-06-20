@@ -198,6 +198,10 @@
     </plurals>
     <string name="onboarding_restore_failed_title">Restore Failed</string>
     <string name="onboarding_restore_failed_body">Something went wrong while restoring your wallets</string>
+    <string name="onboarding_restore_failure_failed">Unable to restore from Cloud Backup. Please try again.</string>
+    <string name="onboarding_restore_failure_timed_out">Restore timed out. Please try again.</string>
+    <string name="onboarding_error_wallet_creation_failed">Unable to continue setup. Please try again.</string>
+    <string name="onboarding_error_completion_failed">Unable to complete onboarding. Please try again.</string>
     <plurals name="onboarding_restore_wallets_failed_inline">
         <item quantity="one">%1$d wallet could not be restored</item>
         <item quantity="other">%1$d wallets could not be restored</item>
@@ -291,6 +295,7 @@
     <string name="tap_signer_hold_sign">Hold your phone near the TapSigner to sign</string>
     <string name="tap_signer_pin_changed_title">PIN Changed</string>
     <string name="tap_signer_pin_changed_message">Your TAPSIGNER PIN was changed successfully!</string>
+    <string name="tap_signer_pin_change_failed_message">Unable to change the TAPSIGNER PIN. Please try again.</string>
     <string name="tap_signer_enter_pin_import">Enter your TapSigner PIN to import the wallet</string>
     <string name="tap_signer_enter_pin_change">Enter your current PIN to change it</string>
     <string name="tap_signer_enter_pin_backup">Enter your PIN to backup your TapSigner</string>

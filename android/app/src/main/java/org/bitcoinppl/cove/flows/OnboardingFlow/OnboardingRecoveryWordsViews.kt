@@ -30,9 +30,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.caption
@@ -83,7 +85,7 @@ internal fun OnboardingSecretWordsView(
                         .padding(top = 32.dp),
             ) {
                 Text(
-                    text = "Your Recovery Words",
+                    text = stringResource(R.string.onboarding_recovery_words_title),
                     color = Color.White,
                     fontSize = 34.sp,
                     lineHeight = 38.sp,
@@ -93,7 +95,7 @@ internal fun OnboardingSecretWordsView(
                 Spacer(modifier = Modifier.size(12.dp))
 
                 Text(
-                    text = "Write these down exactly in order and keep them offline. Anyone with these words can control your Bitcoin.",
+                    text = stringResource(R.string.onboarding_recovery_words_warning),
                     color = OnboardingTextSecondary,
                     style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                 )
@@ -129,7 +131,7 @@ internal fun OnboardingSecretWordsView(
                         .padding(top = 12.dp, bottom = 24.dp),
             ) {
                 OnboardingPrimaryButton(
-                    text = "I Saved These Words",
+                    text = stringResource(R.string.onboarding_i_saved_words),
                     onClick = onSaved,
                     modifier = Modifier.testTag("onboarding.secretWords.saved"),
                 )

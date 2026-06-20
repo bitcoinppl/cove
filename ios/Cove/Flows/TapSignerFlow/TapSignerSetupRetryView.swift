@@ -68,12 +68,12 @@ struct TapSignerSetupRetry: View {
                             )
                             app.sheetState = nil
                             app.alertState = .init(
-                                .tapSignerSetupFailed(message: String(localized: "Unable to set up this TAPSIGNER. Please try again."))
+                                .tapSignerSetupFailed
                             )
                         case let .failure(error):
                             app.sheetState = nil
                             app.alertState = .init(
-                                .tapSignerSetupFailed(message: String(localized: "Unable to set up this TAPSIGNER. Please try again."))
+                                .tapSignerSetupFailed
                             )
                         }
                     }

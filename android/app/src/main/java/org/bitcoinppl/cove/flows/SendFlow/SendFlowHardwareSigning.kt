@@ -20,6 +20,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -169,7 +170,7 @@ internal fun HardwareConfirmationDialogs(
                                         } catch (e: Exception) {
                                             onAlert(
                                                 AlertState.PasteError,
-                                                context.getString(R.string.wallet_send_failed_import_signed_transaction),
+                                                context.getString(e.signedImportErrorStringRes()),
                                             )
                                         }
                                     }
@@ -240,10 +241,12 @@ internal fun HardwareQrScanner(
     onDismiss: () -> Unit,
 ) {
     if (showQrScanner) {
+        val context = LocalContext.current
+
         QrCodeScanView(
             onScanned = { multiFormat ->
                 onDismiss()
-                Scanner.handleMultiFormat(multiFormat)
+                Scanner.handleMultiFormat(context, multiFormat)
             },
             onDismiss = onDismiss,
             app = app,

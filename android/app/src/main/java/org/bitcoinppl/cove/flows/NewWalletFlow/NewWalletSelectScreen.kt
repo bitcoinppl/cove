@@ -120,12 +120,11 @@ fun NewWalletSelectScreen(
                 app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
             }
         } catch (e: WalletException.MultiFormat) {
+            android.util.Log.w("NewWalletSelectScreen", "Invalid hardware wallet export: ${e.v1}")
             app.popRoute()
             app.alertState =
                 TaggedItem(
-                    AppAlertState.ErrorImportingHardwareWallet(
-                        message = e.v1.toString(),
-                    ),
+                    AppAlertState.ErrorImportingHardwareWallet,
                 )
         } catch (e: WalletException.WalletAlreadyExists) {
             app.popRoute()
@@ -135,9 +134,7 @@ fun NewWalletSelectScreen(
             app.popRoute()
             app.alertState =
                 TaggedItem(
-                    AppAlertState.ErrorImportingHardwareWallet(
-                        message = context.getString(R.string.app_alert_error_importing_hardware_message),
-                    ),
+                    AppAlertState.ErrorImportingHardwareWallet,
                 )
         }
     }

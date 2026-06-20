@@ -93,12 +93,15 @@ fun NfcScanSheet(
 
                         // convert to MultiFormat and handle
                         val multiFormat = multiFormatTryFromNfcMessage(nfcMessage)
-                        Scanner.handleMultiFormat(multiFormat)
+                        Scanner.handleMultiFormat(context, multiFormat)
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to process NFC data: ${e.message}", e)
                         app.alertState =
                             TaggedItem(
-                                AppAlertState.InvalidFormat(context.getString(R.string.nfc_unable_to_process_data)),
+                                AppAlertState.General(
+                                    context.getString(R.string.app_alert_invalid_format_title),
+                                    context.getString(R.string.nfc_unable_to_process_data),
+                                ),
                             )
                     }
                 }

@@ -190,12 +190,12 @@ struct CloudBackupPendingUploadConfirmationSection: View {
                     Label("Waiting for iCloud authorization", systemImage: "icloud.slash")
                         .foregroundStyle(.orange)
                 }
-            } else if case let .failed(message) = manager.syncState {
+            } else if case .failed = manager.syncState {
                 Section {
                     Label("Latest upload could not be confirmed", systemImage: "exclamationmark.icloud")
                         .foregroundStyle(Color.statusError)
 
-                    Text(message)
+                    Text("Cloud backup sync failed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

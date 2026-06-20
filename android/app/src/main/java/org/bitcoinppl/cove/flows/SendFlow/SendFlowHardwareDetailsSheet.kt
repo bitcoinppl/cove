@@ -18,9 +18,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.ui.theme.coveColors
@@ -44,7 +46,7 @@ internal fun TransactionDetailsSheet(
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Text(
-            text = "More Details",
+            text = stringResource(R.string.wallet_send_more_details_title),
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -62,7 +64,7 @@ internal fun TransactionDetailsSheet(
                         .clickable(onClick = onShowInputOutput),
             ) {
                 Text(
-                    text = "Address",
+                    text = stringResource(R.string.label_address),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -85,7 +87,7 @@ internal fun TransactionDetailsSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "Network Fee",
+                    text = stringResource(R.string.label_network_fee),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -110,7 +112,7 @@ internal fun TransactionDetailsSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "They'll receive",
+                    text = stringResource(R.string.label_they_will_receive),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -126,7 +128,7 @@ internal fun TransactionDetailsSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "You'll pay",
+                    text = stringResource(R.string.label_you_will_pay),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -151,7 +153,7 @@ internal fun TransactionDetailsSheet(
             shape = RoundedCornerShape(10.dp),
         ) {
             Text(
-                text = "Close",
+                text = stringResource(R.string.wallet_send_close),
                 style = MaterialTheme.typography.caption,
                 modifier = Modifier.padding(vertical = 4.dp),
             )

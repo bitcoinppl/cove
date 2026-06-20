@@ -30,15 +30,7 @@ import SwiftUI
                     app.alertState = .init(.initializedTapSigner(tapSigner: tapSigner))
                 }
             case let .bip329Labels(labels):
-                guard let manager = app.walletManager else { return setInvalidLabels() }
-                guard let selectedWallet = Database().globalConfig().selectedWallet(),
-                      selectedWallet == manager.id
-                else {
-                    return setInvalidLabels()
-                }
-
-                try manager.importLabels(labels: labels)
-                app.alertState = .init(.importedLabelsSuccessfully)
+                importLabels(labels)
             }
         } catch {
             switch error {
@@ -47,13 +39,13 @@ import SwiftUI
                     "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
                 )
                 app.alertState = TaggedItem(
-                    .invalidFormat(message: String(localized: "This data is not in a format Cove can import."))
+                    .invalidFormat
                 )
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
                 app.alertState = TaggedItem(
-                    .invalidFileFormat(message: String(localized: "This file is not in a format Cove can import."))
+                    .invalidFileFormat
                 )
             }
         }
@@ -71,13 +63,13 @@ import SwiftUI
                     "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
                 )
                 app.alertState = TaggedItem(
-                    .invalidFormat(message: String(localized: "This data is not in a format Cove can import."))
+                    .invalidFormat
                 )
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
                 app.alertState = TaggedItem(
-                    .invalidFileFormat(message: String(localized: "This file is not in a format Cove can import."))
+                    .invalidFileFormat
                 )
             }
         }
@@ -105,14 +97,7 @@ import SwiftUI
                     "TAPSIGNER not implemented \(tapSigner) doesn't make sense for file import"
                 Log.error(panic)
             case let .bip329Labels(labels):
-                guard let manager = app.walletManager,
-                      let selectedWallet = Database().globalConfig().selectedWallet(),
-                      selectedWallet == manager.id
-                else {
-                    return setInvalidLabels()
-                }
-
-                return try manager.importLabels(labels: labels)
+                importLabels(labels)
             case let .signedPsbt(psbt):
                 handleSignedPsbt(psbt)
             }
@@ -121,7 +106,7 @@ import SwiftUI
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
                 Log.error("Unrecognized format multi format error: \(multiFormatError)")
                 app.alertState = TaggedItem(
-                    .invalidFileFormat(message: String(localized: "This file is not in a format Cove can import."))
+                    .invalidFileFormat
                 )
 
             case let FileHandlerError.OpenFile(error):
@@ -142,6 +127,29 @@ import SwiftUI
 
 extension ScanManager {
     @MainActor
+    private func importLabels(_ labels: Bip329Labels) {
+        guard let manager = app.walletManager,
+              let selectedWallet = Database().globalConfig().selectedWallet(),
+              selectedWallet == manager.id
+        else {
+            return setInvalidLabels()
+        }
+
+        do {
+            try manager.importLabels(labels: labels)
+            app.alertState = .init(.importedLabelsSuccessfully)
+        } catch {
+            Log.error("Failed to import labels: \(error)")
+            app.alertState = TaggedItem(
+                .general(
+                    title: String(localized: "Invalid File Format"),
+                    message: String(localized: "Failed to import labels")
+                )
+            )
+        }
+    }
+
+    @MainActor
     private func importHotWallet(_ words: [String]) {
         do {
             let manager = ImportWalletManager()
@@ -158,13 +166,13 @@ extension ScanManager {
             default:
                 Log.error("Unable to import wallet: \(error)")
                 app.alertState = TaggedItem(
-                    .errorImportingHotWallet(message: String(localized: "Unable to import this wallet. Please check the file or words and try again."))
+                    .errorImportingHotWallet
                 )
             }
         } catch {
             Log.error("Unknown error \(error)")
             app.alertState = TaggedItem(
-                .errorImportingHotWallet(message: String(localized: "Unable to import this wallet. Please check the file or words and try again."))
+                .errorImportingHotWallet
             )
         }
     }
@@ -190,7 +198,7 @@ extension ScanManager {
             }
         } catch {
             app.alertState = TaggedItem(
-                .errorImportingHardwareWallet(message: String(localized: "Unable to import this hardware wallet. Please try again."))
+                .errorImportingHardwareWallet
             )
         }
     }
@@ -269,7 +277,8 @@ extension ScanManager {
     @MainActor
     private func setInvalidLabels() {
         app.alertState = TaggedItem(
-            .invalidFileFormat(
+            .general(
+                title: String(localized: "Invalid File Format"),
                 message: String(localized: "Currently BIP329 labels must be imported through the wallet actions")
             )
         )

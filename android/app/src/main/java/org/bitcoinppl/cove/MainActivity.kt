@@ -68,6 +68,7 @@ import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.AlertDisplayType
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.CatastrophicCloudRestoreInconclusiveReason
 import org.bitcoinppl.cove_core.CatastrophicCloudRestoreProvider
 import org.bitcoinppl.cove_core.CatastrophicCloudRestoreResult
 import org.bitcoinppl.cove_core.ColdWalletRoute
@@ -244,7 +245,8 @@ class MainActivity : FragmentActivity() {
                         catastrophicCloudRestoreCheck =
                             CatastrophicCloudRestoreCheck.Complete(
                                 CatastrophicCloudRestoreResult.Inconclusive(
-                                    getString(R.string.common_remaining_cloud_backup_check_failed),
+                                    CatastrophicCloudRestoreProvider.GOOGLE_DRIVE,
+                                    CatastrophicCloudRestoreInconclusiveReason.UNKNOWN,
                                 ),
                             )
                     } finally {

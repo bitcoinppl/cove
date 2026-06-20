@@ -64,10 +64,10 @@ fun CoinControlContainer(
             app.showInitialScanIncompleteAlert(initialScanIncompleteTitle, initialScanIncompleteMessage)
             app.popRoute()
         } catch (e: WalletManagerException.DatabaseCorruption) {
-            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
+            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}", e)
             app.alertState =
                 TaggedItem(
-                    AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`, error = e.`error`),
+                    AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`),
                 )
             app.popRoute()
         } catch (e: WalletManagerException.WalletDoesNotExist) {

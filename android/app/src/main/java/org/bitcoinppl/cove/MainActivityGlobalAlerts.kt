@@ -471,9 +471,7 @@ private fun GlobalAlertDialog(
                                 } catch (e: Exception) {
                                     app.alertState =
                                         TaggedItem(
-                                            AppAlertState.ErrorImportingHardwareWallet(
-                                                e.message ?: context.getString(R.string.common_remaining_unknown_error),
-                                            ),
+                                            AppAlertState.ErrorImportingHardwareWallet,
                                         )
                                 }
                             }

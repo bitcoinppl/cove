@@ -1666,11 +1666,9 @@ public enum CloudSyncHealth: Equatable, Hashable {
     case unknown
     case allUploaded
     case uploading
-    case failed(String
-    )
+    case failed
     case noFiles
-    case authorizationRequired(String
-    )
+    case authorizationRequired
     case unavailable
 
 
@@ -1699,13 +1697,11 @@ public struct FfiConverterTypeCloudSyncHealth: FfiConverterRustBuffer {
 
         case 3: return .uploading
 
-        case 4: return .failed(try FfiConverterString.read(from: &buf)
-        )
+        case 4: return .failed
 
         case 5: return .noFiles
 
-        case 6: return .authorizationRequired(try FfiConverterString.read(from: &buf)
-        )
+        case 6: return .authorizationRequired
 
         case 7: return .unavailable
 
@@ -1729,18 +1725,16 @@ public struct FfiConverterTypeCloudSyncHealth: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
 
 
-        case let .failed(v1):
+        case .failed:
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(v1, into: &buf)
 
 
         case .noFiles:
             writeInt(&buf, Int32(5))
 
 
-        case let .authorizationRequired(v1):
+        case .authorizationRequired:
             writeInt(&buf, Int32(6))
-            FfiConverterString.write(v1, into: &buf)
 
 
         case .unavailable:

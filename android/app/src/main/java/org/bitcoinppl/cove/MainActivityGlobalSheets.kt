@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.flows.TapSignerFlow.TapSignerContainer
 import org.bitcoinppl.cove.nfc.NfcScanSheet
@@ -23,6 +24,8 @@ internal fun SheetContent(
     app: AppManager,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+
     when (state.item) {
         is AppSheetState.Qr -> {
             ModalBottomSheet(
@@ -37,7 +40,7 @@ internal fun SheetContent(
                     QrCodeScanView(
                         onScanned = { multiFormat ->
                             app.sheetState = null
-                            Scanner.handleMultiFormat(multiFormat)
+                            Scanner.handleMultiFormat(context, multiFormat)
                         },
                         onDismiss = onDismiss,
                         app = app,

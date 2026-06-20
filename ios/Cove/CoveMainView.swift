@@ -186,7 +186,7 @@ struct CoveMainView: View {
                 } catch {
                     DispatchQueue.main.async {
                         app.alertState = .init(
-                            .errorImportingHardwareWallet(message: String(localized: "Unable to import this hardware wallet. Please try again."))
+                            .errorImportingHardwareWallet
                         )
                     }
                 }
@@ -214,7 +214,7 @@ struct CoveMainView: View {
             Button("Cancel", role: .cancel) {
                 app.alertState = .none
             }
-        case let .walletDatabaseCorrupted(walletId, _):
+        case let .walletDatabaseCorrupted(walletId):
             Button("Delete Wallet", role: .destructive) {
                 app.alertState = .none
                 app.rust.deleteCorruptedWallet(id: walletId)

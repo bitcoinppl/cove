@@ -172,6 +172,8 @@
     <string name="settings_security_decoy_confirm_message">Enabling Decoy PIN will let you choose a PIN that if entered, will show you a different set of wallets.\n\nThese wallets will only be accessible by entering the decoy PIN instead of your regular PIN.\n\nTo access your regular wallets, you will have to close the app, start it again and enter your regular PIN.</string>
     <string name="settings_security_generic_error_title">Something went wrong!</string>
     <string name="settings_security_update_pin_error">Unable to update the PIN. Please try again.</string>
+    <string name="settings_security_update_pin_same_as_wipe_data_pin">Can\'t update PIN because it\'s the same as your wipe data PIN.</string>
+    <string name="settings_security_update_pin_same_as_decoy_pin">Can\'t update PIN because it\'s the same as your decoy PIN.</string>
 
     <string name="settings_pin_confirm_decoy">Confirm Decoy PIN</string>
     <string name="settings_pin_confirm_new">Confirm New PIN</string>
@@ -215,6 +217,7 @@
     <string name="cloud_backup_detail_verifying_title">Verifying cloud backup</string>
     <string name="cloud_backup_missing_passkey_body">Your cloud backup is not accessible until you use an existing passkey or add a new one. Without it, your backups can\'t be restored.</string>
     <string name="cloud_backup_missing_passkey_title">Cloud Backup passkey missing</string>
+    <string name="cloud_backup_passkey_repair_failed">Unable to update your Cloud Backup passkey. Please try again.</string>
     <string name="cloud_backup_sync_blocked">Cloud Backup needs authorization before syncing can continue.</string>
     <string name="cloud_backup_sync_failed">Unable to sync Cloud Backup. Please try again.</string>
     <string name="cloud_backup_unsupported_passkey_body">This passkey provider can\'t create the secure passkey required for Cloud Backup. Try again with a supported password manager such as Google Password Manager, 1Password, or Bitwarden.</string>

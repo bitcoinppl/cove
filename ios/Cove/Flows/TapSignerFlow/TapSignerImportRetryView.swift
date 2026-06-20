@@ -58,7 +58,10 @@ struct TapSignerImportRetry: View {
                 Button("Retry") {
                     guard let pin = manager.enteredPin else {
                         app.alertState = .init(
-                            .tapSignerDeriveFailed(message: String(localized: "Enter your TAPSIGNER PIN before trying again."))
+                            .general(
+                                title: String(localized: "TAPSIGNER Import Failed"),
+                                message: String(localized: "Enter your TAPSIGNER PIN before trying again.")
+                            )
                         )
                         return
                     }
@@ -71,7 +74,7 @@ struct TapSignerImportRetry: View {
                             manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
                         case let .failure(error):
                             app.alertState = .init(
-                                .tapSignerDeriveFailed(message: String(localized: "Unable to import this TAPSIGNER. Please try again."))
+                                .tapSignerDeriveFailed
                             )
                         }
                     }

@@ -113,7 +113,10 @@ fun TapSignerImportRetryView(
                 if (pin == null) {
                     app.alertState =
                         TaggedItem(
-                            AppAlertState.TapSignerDeriveFailed(context.getString(R.string.tap_signer_no_pin_entered)),
+                            AppAlertState.General(
+                                context.getString(R.string.app_alert_tapsigner_import_failed_title),
+                                context.getString(R.string.tap_signer_no_pin_entered),
+                            ),
                         )
                     return@Button
                 }
@@ -146,9 +149,7 @@ fun TapSignerImportRetryView(
 
                         app.alertState =
                             TaggedItem(
-                                AppAlertState.TapSignerDeriveFailed(
-                                    context.getString(R.string.app_alert_tapsigner_derive_failed_message),
-                                ),
+                                AppAlertState.TapSignerDeriveFailed,
                             )
                     }
                 }

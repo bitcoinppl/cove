@@ -59,7 +59,7 @@ struct TapSignerConfirmPinView: View {
                     Log.error("Failed to setup TapSigner: \(error)")
                     app.sheetState = .none
                     app.alertState = .init(
-                        .tapSignerSetupFailed(message: String(localized: "Unable to set up this TAPSIGNER. Please try again."))
+                        .tapSignerSetupFailed
                     )
                 }
             }

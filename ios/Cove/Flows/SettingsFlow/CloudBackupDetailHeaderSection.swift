@@ -70,8 +70,8 @@ private struct CloudBackupSyncHealthLabel: View {
                 .foregroundStyle(Color.statusSuccess)
         case .uploading:
             CloudBackupSyncProgressLabel(title: "Syncing to iCloud...")
-        case let .failed(message):
-            Label("Sync error: \(message)", systemImage: "exclamationmark.triangle.fill")
+        case .failed:
+            Label("Cloud Backup sync failed", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(Color.statusError)
         case .authorizationRequired:

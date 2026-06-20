@@ -30,7 +30,7 @@ private enum AlertState: Equatable {
     case notePinRequired
     indirect case noteFaceIdDisabling(AlertState)
     case confirmBetaImportExport
-    case extraSetPinError(String)
+    case extraSetPinError(PinUpdateFailure)
 }
 
 struct MainSettingsScreen: View {
@@ -480,10 +480,10 @@ struct MainSettingsScreen: View {
                 }
             ).eraseToAny()
 
-        case .extraSetPinError:
+        case let .extraSetPinError(failure):
             AlertBuilder(
                 title: "Something went wrong!",
-                message: "Unable to update the PIN. Please try again.",
+                message: failure.localizedMessage,
                 actions: { Button("OK") { alertState = .none } }
             )
             .eraseToAny()
@@ -592,11 +592,9 @@ struct MainSettingsScreen: View {
                     }
 
                     sheetState = .none
-                    if auth.checkWipeDataPin(pin) {
+                    if let failure = auth.rust.validateNewPin(newPin: pin) {
                         alertState = .init(
-                            .extraSetPinError(
-                                String(localized: "Unable to update the PIN. Please try again.")
-                            )
+                            .extraSetPinError(failure)
                         )
                         return
                     }
@@ -736,7 +734,7 @@ struct MainSettingsScreen: View {
         do { try auth.rust.setWipeDataPin(pin: pin) } catch {
             let error = error as! AuthManagerError
             Log.error("Unable to set wipe data PIN: \(error.description)")
-            alertState = .init(.extraSetPinError(String(localized: "Unable to update the PIN. Please try again.")))
+            alertState = .init(.extraSetPinError(.updateFailed))
         }
     }
 
@@ -750,7 +748,7 @@ struct MainSettingsScreen: View {
         do { try auth.rust.setDecoyPin(pin: pin) } catch {
             let error = error as! AuthManagerError
             Log.error("Unable to set decoy PIN: \(error.description)")
-            alertState = .init(.extraSetPinError(String(localized: "Unable to update the PIN. Please try again.")))
+            alertState = .init(.extraSetPinError(.updateFailed))
         }
     }
 }

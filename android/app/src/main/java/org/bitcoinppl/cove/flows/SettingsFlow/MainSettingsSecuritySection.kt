@@ -32,6 +32,7 @@ import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.findFragmentActivity
+import org.bitcoinppl.cove.localizedMessage
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
@@ -40,6 +41,7 @@ import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthManagerException
 import org.bitcoinppl.cove_core.AuthType
+import org.bitcoinppl.cove_core.PinUpdateFailure
 import org.bitcoinppl.cove_core.SecurityAlertState
 import org.bitcoinppl.cove_core.SecuritySettingsAction
 import org.bitcoinppl.cove_core.SecuritySettingsResult
@@ -165,7 +167,7 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
             auth.setWipeDataPin(pin)
         } catch (e: AuthManagerException) {
             Log.e("SecuritySection", "failed to set wipe data PIN", e)
-            alertState = SecurityAlertState.ExtraSetPinError(context.getString(R.string.settings_security_update_pin_error))
+            alertState = SecurityAlertState.ExtraSetPinError(PinUpdateFailure.UPDATE_FAILED)
         }
     }
 
@@ -180,7 +182,7 @@ internal fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
             auth.setDecoyPin(pin)
         } catch (e: AuthManagerException) {
             Log.e("SecuritySection", "failed to set decoy PIN", e)
-            alertState = SecurityAlertState.ExtraSetPinError(context.getString(R.string.settings_security_update_pin_error))
+            alertState = SecurityAlertState.ExtraSetPinError(PinUpdateFailure.UPDATE_FAILED)
         }
     }
 
@@ -604,7 +606,7 @@ private fun SecurityAlertDialog(
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(stringResource(R.string.settings_security_generic_error_title)) },
-                text = { Text(state.message) },
+                text = { Text(state.failure.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = onDismiss) {
                         Text(stringResource(R.string.action_ok))

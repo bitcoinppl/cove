@@ -155,11 +155,11 @@ internal fun VerificationSection(
         }
 
         when (manager.syncState) {
-            is CloudBackupSyncState.Failed -> {
+            CloudBackupSyncState.FAILED -> {
                 ErrorInlineMessage(stringResource(R.string.cloud_backup_sync_failed), modifier = Modifier.padding(horizontal = 14.dp))
             }
 
-            is CloudBackupSyncState.Blocked -> {
+            CloudBackupSyncState.BLOCKED -> {
                 ErrorInlineMessage(stringResource(R.string.cloud_backup_sync_blocked), modifier = Modifier.padding(horizontal = 14.dp))
             }
 
@@ -413,9 +413,9 @@ private fun VerificationFailureContent(
     }
 
     val repairState = manager.passkeyRepairState
-    if (repairState is CloudBackupPasskeyRepairState.Failed) {
+    if (repairState == CloudBackupPasskeyRepairState.FAILED) {
         MaterialDivider()
-        ErrorInlineMessage(repairState.v1, modifier = Modifier.padding(16.dp))
+        ErrorInlineMessage(stringResource(R.string.cloud_backup_passkey_repair_failed), modifier = Modifier.padding(16.dp))
     }
 }
 

@@ -135,7 +135,7 @@ fn default_initial_flow(has_wallets: bool) -> FlowState {
     if has_wallets {
         FlowState::terms(TermsContext::SelectLatestOrNew, None)
     } else {
-        FlowState::Welcome { error_message: None }
+        FlowState::Welcome { error: None }
     }
 }
 

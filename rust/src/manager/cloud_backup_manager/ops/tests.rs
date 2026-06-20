@@ -57,7 +57,6 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupStatus, PendingEnableSessionMaterial, UnpersistedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
-    SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
     cspp_exports::cspp_master_key_record_id,
     keychain::{
         CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, CloudBackupKeychainError,
@@ -341,13 +340,20 @@ fn disable_failure_message(manager: &RustCloudBackupManager) -> String {
     let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
         panic!("expected configured cloud backup lifecycle");
     };
-    let CloudBackupDestructiveOperationState::DisableFailed { message, .. } =
-        configured.destructive_operation
-    else {
+    if !matches!(
+        configured.destructive_operation,
+        CloudBackupDestructiveOperationState::DisableFailed { .. }
+    ) {
         panic!("expected disable failure");
+    }
+
+    let PersistedCloudBackupState::Disabling(disabling) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected persisted disabling state");
     };
 
-    message
+    disabling.last_error.unwrap_or_default()
 }
 
 mod cove_tokio {
@@ -2643,9 +2649,7 @@ async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() 
     persist_xpub_wallets(vec![metadata]);
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
     globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
-    manager.observe_sync_health(CloudSyncHealth::Failed(
-        SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into(),
-    ));
+    manager.observe_sync_health(CloudSyncHealth::Failed);
 
     run_repair_passkey_operation(&manager, true).await;
 
@@ -3476,13 +3480,9 @@ async fn detail_refresh_marks_other_backups_failed_when_namespace_inspection_fai
         panic!("expected cloud backup detail");
     };
 
-    let CloudBackupOtherBackupsState::LoadFailed { error } = detail.other_backups else {
+    let CloudBackupOtherBackupsState::LoadFailed = detail.other_backups else {
         panic!("expected failed other backups state");
     };
-    assert_eq!(
-        error,
-        "offline: Reconnect to the internet, then try refreshing cloud backup details again"
-    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4021,10 +4021,7 @@ async fn failed_blob_states_recover_only_after_last_failed_wallet_upload_recover
     run_wallet_upload_for_test_async(&manager, first_wallet.id.clone()).await;
     run_wallet_upload_for_test_async(&manager, second_wallet.id.clone()).await;
 
-    assert!(matches!(
-        manager.compute_sync_health().await,
-        CloudSyncHealth::Failed(message) if message.contains("upload failed")
-    ));
+    assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Failed);
     assert!(matches!(
         Database::global().cloud_blob_sync_states.get(&first_record_id).unwrap(),
         Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Failed(_), .. })
@@ -4039,10 +4036,7 @@ async fn failed_blob_states_recover_only_after_last_failed_wallet_upload_recover
     run_wallet_upload_for_test_async(&manager, first_wallet.id.clone()).await;
 
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
-    assert!(matches!(
-        manager.compute_sync_health().await,
-        CloudSyncHealth::Failed(message) if message.contains("upload failed")
-    ));
+    assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Failed);
     assert!(matches!(
         Database::global().cloud_blob_sync_states.get(&first_record_id).unwrap(),
         Some(PersistedCloudBlobSyncState {
@@ -4094,11 +4088,7 @@ async fn corrupt_blob_sync_state_projects_failed_sync_health() {
         ))
         .unwrap();
 
-    assert!(matches!(
-        manager.compute_sync_health().await,
-        CloudSyncHealth::Failed(message)
-            if message.contains("failed to decode persisted cloud backup blob sync state")
-    ));
+    assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Failed);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4130,10 +4120,7 @@ async fn connectivity_reconnect_preserves_failed_wallet_upload_health() {
 
     manager.handle_connectivity_change(ConnectivityStatus::Connected);
 
-    assert!(matches!(
-        manager.compute_sync_health().await,
-        CloudSyncHealth::Failed(message) if message.contains("upload failed")
-    ));
+    assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Failed);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4365,10 +4352,7 @@ async fn startup_resume_retries_authorization_failed_wallet_uploads() {
 
     resume_wallet_uploads_from_persisted_state_for_test_async(&manager).await;
 
-    assert_eq!(
-        manager.compute_sync_health().await,
-        CloudSyncHealth::AuthorizationRequired("failed".into()),
-    );
+    assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::AuthorizationRequired);
     wait_for_test_condition(
         Duration::from_secs(1),
         "startup resume should retry authorization failures",
@@ -4426,10 +4410,7 @@ async fn sync_health_reports_authorization_required_for_persisted_auth_failures(
         Some(CloudBlobFailureIssue::AuthorizationRequired),
     );
 
-    assert_eq!(
-        manager.compute_sync_health().await,
-        CloudSyncHealth::AuthorizationRequired("failed".into()),
-    );
+    assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::AuthorizationRequired);
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
@@ -4555,10 +4536,7 @@ async fn sync_health_reports_missing_master_key_without_pending_confirmation() {
     let metadata = xpub_only_wallet_metadata();
     persist_xpub_wallets(vec![metadata]);
 
-    assert_eq!(
-        manager.compute_sync_health().await,
-        CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into()),
-    );
+    assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Failed);
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
@@ -4576,10 +4554,7 @@ async fn sync_health_reports_missing_master_key_before_pending_wallet_uploads() 
     persist_xpub_wallets(vec![metadata.clone()]);
     persist_dirty_blob_state(metadata.id);
 
-    assert_eq!(
-        manager.compute_sync_health().await,
-        CloudSyncHealth::Failed(SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE.into()),
-    );
+    assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Failed);
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
@@ -5042,7 +5017,7 @@ async fn integrity_auto_backup_continues_when_other_backup_summary_fails() {
     assert!(issues.is_empty());
     assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
     let detail = manager.model_snapshot().detail.expect("expected cloud backup detail");
-    assert!(matches!(detail.other_backups, CloudBackupOtherBackupsState::LoadFailed { .. }));
+    assert!(matches!(detail.other_backups, CloudBackupOtherBackupsState::LoadFailed));
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 

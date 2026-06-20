@@ -73,7 +73,6 @@ fun SendFlowContainer(
     val walletNoLongerAvailableMessage = stringResource(R.string.common_remaining_wallet_no_longer_available_message)
     val unableToOpenWalletTitle = stringResource(R.string.common_remaining_unable_to_open_wallet_title)
     val unableToOpenSendMessage = stringResource(R.string.wallet_send_unable_to_open_wallet_for_sending)
-
     // initialize managers on appear
     LaunchedEffect(sendRoute) {
         try {
@@ -107,10 +106,10 @@ fun SendFlowContainer(
             app.showInitialScanIncompleteAlert(initialScanIncompleteTitle, initialScanIncompleteMessage)
             app.popRoute()
         } catch (e: WalletManagerException.DatabaseCorruption) {
-            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
+            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}", e)
             app.alertState =
                 TaggedItem(
-                    AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`, error = e.`error`),
+                    AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`),
                 )
             app.popRoute()
         } catch (e: WalletManagerException.WalletDoesNotExist) {
@@ -264,6 +263,10 @@ private fun SendFlowRouteToScreen(
     val sentSuccessfullyMessage = stringResource(R.string.wallet_send_transaction_sent_successfully)
     val errorTitle = stringResource(R.string.wallet_send_error)
     val failedToSendMessage = stringResource(R.string.wallet_send_failed_to_send_transaction)
+    val signAndBroadcastFailedMessage =
+        stringResource(R.string.wallet_send_sign_and_broadcast_failed_message)
+    val confirmDetailsFailedMessage =
+        stringResource(R.string.wallet_send_confirm_details_failed_message)
 
     when (sendRoute) {
         is SendRoute.SetAmount -> {
@@ -496,9 +499,11 @@ private fun SendFlowRouteToScreen(
             LaunchedEffect(walletManager.sendFlowErrorAlert) {
                 if (walletManager.sendFlowErrorAlert != null && sendState == SendState.Sending) {
                     val message =
-                        when (val alert = walletManager.sendFlowErrorAlert!!.item) {
-                            is SendFlowErrorAlert.SignAndBroadcast -> alert.v1
-                            is SendFlowErrorAlert.ConfirmDetails -> alert.v1
+                        when (walletManager.sendFlowErrorAlert!!.item) {
+                            SendFlowErrorAlert.SIGN_AND_BROADCAST ->
+                                signAndBroadcastFailedMessage
+                            SendFlowErrorAlert.CONFIRM_DETAILS ->
+                                confirmDetailsFailedMessage
                         }
                     sendState = SendState.Error(message)
                     showErrorAlert = true

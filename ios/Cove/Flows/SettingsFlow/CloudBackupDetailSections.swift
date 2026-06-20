@@ -27,8 +27,8 @@ struct DetailFormContent: View {
             if summary.namespaceCount > 0 {
                 OtherBackupsSection(summary: summary, manager: manager)
             }
-        case let .loadFailed(error):
-            OtherBackupsLoadFailedSection(error: error)
+        case .loadFailed:
+            OtherBackupsLoadFailedSection()
         }
     }
 
@@ -45,11 +45,9 @@ struct MissingPasskeyContent: View {
         return false
     }
 
-    private var repairError: String? {
-        if case let .failed(error) = manager.passkeyRepairState {
-            return error
-        }
-        return nil
+    private var repairFailed: Bool {
+        if case .failed = manager.passkeyRepairState { return true }
+        return false
     }
 
     var body: some View {
@@ -95,7 +93,7 @@ struct MissingPasskeyContent: View {
                 .foregroundStyle(.secondary)
         }
 
-        if repairError != nil {
+        if repairFailed {
             Section {
                 Label(String(localized: "Unable to open passkey options. Please try again."), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color.statusError)

@@ -45,8 +45,9 @@ impl WalletActor {
         match self.do_open_receive_address().await {
             Ok(_) => self.set_receive_address_loading(false),
             Err(error) => {
+                warn!("Unable to open receive address: {error}");
                 self.set_receive_address_loading(false);
-                self.send(WalletManagerReconcileMessage::ReceiveAddressError(error.to_string()));
+                self.send(WalletManagerReconcileMessage::ReceiveAddressError);
             }
         }
 
@@ -157,8 +158,9 @@ impl WalletActor {
         match self.do_create_new_receive_address() {
             Ok(_) => self.set_receive_address_loading(false),
             Err(error) => {
+                warn!("Unable to create receive address: {error}");
                 self.set_receive_address_loading(false);
-                self.send(WalletManagerReconcileMessage::ReceiveAddressError(error.to_string()));
+                self.send(WalletManagerReconcileMessage::ReceiveAddressError);
             }
         }
 

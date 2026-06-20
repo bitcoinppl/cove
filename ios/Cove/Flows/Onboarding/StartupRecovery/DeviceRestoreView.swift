@@ -236,9 +236,9 @@ private struct DeviceRestoreContent: View {
                 .buttonStyle(OnboardingPrimaryButtonStyle())
             }
 
-        case .failed:
+        case let .failed(failure):
             VStack(spacing: 18) {
-                warningCard(message: Text("Unable to restore from Cloud Backup. Please try again."))
+                warningCard(message: Text(failure.localizedMessage))
 
                 Button(action: onRetry) {
                     Text("Retry")
@@ -327,7 +327,7 @@ private struct DeviceRestoreContent: View {
 
 #Preview("Restore Error") {
     DeviceRestoreContent(
-        restoreState: .failed(message: "Restore timed out. Please try again."),
+        restoreState: .failed(failure: .timedOut),
         combinedProgress: 0,
         onDone: {},
         onRetry: {},

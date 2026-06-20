@@ -6,7 +6,7 @@ use bdk_wallet::chain::BlockId;
 use cove_tokio::FutureTimeoutExt as _;
 use cove_util::result_ext::ResultExt as _;
 use eyre::Result;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::{
     database::Database,
@@ -35,8 +35,8 @@ impl WalletActor {
         let reconciler = self.reconciler.clone();
         self.addr.send_fut(async move {
             if let Err(error) = check_node_connection_inner(&node).await {
-                let _ = reconciler
-                    .send(WalletManagerReconcileMessage::NodeConnectionFailed(error).into());
+                warn!("Node connection check failed: {error}");
+                let _ = reconciler.send(WalletManagerReconcileMessage::NodeConnectionFailed.into());
             }
         });
     }

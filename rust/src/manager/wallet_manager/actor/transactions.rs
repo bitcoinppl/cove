@@ -627,7 +627,7 @@ impl WalletActor {
             Err(error) => {
                 error!("payjoin broadcast failed: {error}");
                 self.send(WalletManagerReconcileMessage::SendFlowError(
-                    SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
+                    SendFlowErrorAlert::SignAndBroadcast,
                 ));
             }
         }

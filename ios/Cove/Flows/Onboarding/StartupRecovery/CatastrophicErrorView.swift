@@ -8,9 +8,9 @@ struct CatastrophicErrorView: View {
         case checking
         case available
         case noBackup
-        case offline(String)
-        case inconclusive(String)
-        case unreadable(String)
+        case offline
+        case inconclusive(provider: CatastrophicCloudRestoreProvider, reason: CatastrophicCloudRestoreInconclusiveReason)
+        case unreadable
 
         var allowsRestoreAttempt: Bool {
             switch self {
@@ -139,12 +139,12 @@ struct CatastrophicErrorView: View {
             .available
         case .noBackupFound:
             .noBackup
-        case let .offline(message):
-            .offline(message)
-        case let .inconclusive(message):
-            .inconclusive(message)
-        case let .unreadable(message):
-            .unreadable(message)
+        case .offline:
+            .offline
+        case let .inconclusive(provider, reason):
+            .inconclusive(provider: provider, reason: reason)
+        case .unreadable:
+            .unreadable
         }
     }
 }
@@ -249,11 +249,11 @@ private struct CatastrophicErrorContent: View {
                 text: "This device appears to be offline. Reconnect and try the cloud backup check again"
             )
 
-        case .inconclusive:
+        case let .inconclusive(provider, reason):
             statusCard(
                 icon: "icloud.slash",
                 color: .orange,
-                text: "We couldn’t confirm whether a cloud backup is available. Retry the check before restoring from cloud backup"
+                text: reason.localizedCatastrophicRestoreMessage(provider: provider)
             )
 
         case .unreadable:

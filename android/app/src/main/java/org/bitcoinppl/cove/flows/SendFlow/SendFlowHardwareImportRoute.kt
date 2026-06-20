@@ -19,13 +19,24 @@ import org.bitcoinppl.cove_core.SignedTransactionOrPsbt
 import org.bitcoinppl.cove_core.UnsignedTransactionRecord
 import org.bitcoinppl.cove_core.signedTransactionOrPsbtTryParse
 
-internal object TransactionImportErrors {
-    const val FAILED_TO_IMPORT = "Failed to import signed transaction"
-    const val INVALID_HEX_FORMAT = "Invalid transaction format. Expected hexadecimal string."
-    const val FILE_READ_ERROR = "Unable to read file"
-    const val CLIPBOARD_EMPTY = "No text found on the clipboard."
-    const val TRANSACTION_NOT_FOUND = "Transaction not found in pending transactions."
+internal enum class TransactionImportError {
+    InvalidFormat,
+    FileRead,
+    TransactionNotFound,
 }
+
+internal class TransactionImportException(
+    val importError: TransactionImportError,
+    cause: Throwable? = null,
+) : Exception(null, cause)
+
+internal fun Throwable.signedImportErrorStringRes(): Int =
+    when ((this as? TransactionImportException)?.importError) {
+        TransactionImportError.InvalidFormat -> R.string.wallet_send_invalid_transaction_format
+        TransactionImportError.FileRead -> R.string.wallet_send_unable_to_read_file
+        TransactionImportError.TransactionNotFound -> R.string.wallet_send_transaction_not_found
+        null -> R.string.wallet_send_failed_import_signed_transaction
+    }
 
 @Composable
 internal fun rememberSignedImportFilePicker(
@@ -44,11 +55,11 @@ internal fun rememberSignedImportFilePicker(
                             context.contentResolver.openInputStream(uri)?.use { input ->
                                 input.bufferedReader().use { it.readText() }
                             }
-                        } ?: throw Exception(TransactionImportErrors.FILE_READ_ERROR)
+                        } ?: throw TransactionImportException(TransactionImportError.FileRead)
 
                     app.pushRoute(signedImportRoute(fileContents.trim()))
                 } catch (e: Exception) {
-                    onError(context.getString(R.string.wallet_send_failed_import_signed_transaction))
+                    onError(context.getString(e.signedImportErrorStringRes()))
                 }
             }
         }
@@ -71,7 +82,7 @@ internal fun parseSignedImport(input: String): Pair<UnsignedTransactionRecord, S
         try {
             signedTransactionOrPsbtTryParse(input)
         } catch (e: Exception) {
-            throw IllegalArgumentException(TransactionImportErrors.INVALID_HEX_FORMAT, e)
+            throw TransactionImportException(TransactionImportError.InvalidFormat, e)
         }
 
     val db = Database().unsignedTransactions()
@@ -79,7 +90,7 @@ internal fun parseSignedImport(input: String): Pair<UnsignedTransactionRecord, S
         try {
             db.getTxThrow(txId = parsed.txId())
         } catch (e: Exception) {
-            throw IllegalArgumentException(TransactionImportErrors.TRANSACTION_NOT_FOUND, e)
+            throw TransactionImportException(TransactionImportError.TransactionNotFound, e)
         }
 
     return Pair(record, parsed)

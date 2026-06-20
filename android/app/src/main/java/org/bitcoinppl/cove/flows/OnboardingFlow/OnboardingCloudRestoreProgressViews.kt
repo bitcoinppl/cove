@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.localizedMessage
 import org.bitcoinppl.cove_core.CloudBackupRestoreFlow
 import org.bitcoinppl.cove_core.OnboardingRestoreState
 
@@ -215,7 +216,7 @@ private fun OnboardingRestoreContent(
                         OnboardingPrimaryButton(text = stringResource(R.string.wallet_send_done), onClick = onDone)
                     }
                     is OnboardingRestoreState.Failed -> {
-                        OnboardingInlineMessage(text = stringResource(R.string.onboarding_restore_failed_body))
+                        OnboardingInlineMessage(text = restoreState.failure.localizedMessage().asString())
                         Spacer(modifier = Modifier.size(18.dp))
                         OnboardingPrimaryButton(text = stringResource(R.string.scoped_common_retry), onClick = onRetry)
                         Spacer(modifier = Modifier.size(12.dp))

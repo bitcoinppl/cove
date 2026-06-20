@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove.localizedDisplayText
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
@@ -129,23 +130,23 @@ internal fun CloudBackupHeaderSection(
 
     val (icon, tint, label) =
         when (syncHealth) {
-            is CloudSyncHealth.Unknown ->
+            CloudSyncHealth.UNKNOWN ->
                 Triple(Icons.Default.CloudOff, colors.secondaryText, stringResource(R.string.cloud_backup_health_checking))
-            is CloudSyncHealth.AllUploaded ->
+            CloudSyncHealth.ALL_UPLOADED ->
                 Triple(Icons.Default.CloudDone, colors.success, stringResource(R.string.cloud_backup_health_all_confirmed))
-            is CloudSyncHealth.Uploading ->
+            CloudSyncHealth.UPLOADING ->
                 Triple(Icons.Default.CloudUpload, colors.cloudBlue, stringResource(R.string.cloud_backup_health_uploading))
-            is CloudSyncHealth.Failed ->
+            CloudSyncHealth.FAILED ->
                 Triple(Icons.Default.WarningAmber, colors.danger, stringResource(R.string.cloud_backup_health_failed))
-            is CloudSyncHealth.NoFiles ->
+            CloudSyncHealth.NO_FILES ->
                 Triple(Icons.Default.CloudOff, colors.secondaryText, stringResource(R.string.cloud_backup_health_no_files))
-            is CloudSyncHealth.AuthorizationRequired ->
+            CloudSyncHealth.AUTHORIZATION_REQUIRED ->
                 Triple(
                     Icons.Default.WarningAmber,
                     colors.danger,
                     stringResource(R.string.cloud_backup_health_authorization_required),
                 )
-            is CloudSyncHealth.Unavailable ->
+            CloudSyncHealth.UNAVAILABLE ->
                 Triple(Icons.Default.CloudOff, colors.secondaryText, stringResource(R.string.cloud_backup_health_unavailable))
         }
 
@@ -198,7 +199,7 @@ internal fun CloudBackupHeaderSection(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (syncHealth is CloudSyncHealth.Uploading) {
+                    if (syncHealth == CloudSyncHealth.UPLOADING) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
                             color = colors.cloudBlue,
@@ -222,15 +223,18 @@ internal fun CloudBackupHeaderSection(
 
 @Composable
 internal fun cloudBackupHeaderTitle(syncHealth: CloudSyncHealth): String =
+    cloudBackupHeaderTitleText(syncHealth).asString()
+
+internal fun cloudBackupHeaderTitleText(syncHealth: CloudSyncHealth): UiText =
     when (syncHealth) {
-        is CloudSyncHealth.AllUploaded -> stringResource(R.string.cloud_backup_header_active)
-        is CloudSyncHealth.Uploading -> stringResource(R.string.cloud_backup_header_syncing)
-        is CloudSyncHealth.Unknown -> stringResource(R.string.cloud_backup_header_checking)
-        is CloudSyncHealth.NoFiles,
-        is CloudSyncHealth.AuthorizationRequired,
-        is CloudSyncHealth.Unavailable,
-        is CloudSyncHealth.Failed,
-        -> stringResource(R.string.cloud_backup_header_attention)
+        CloudSyncHealth.ALL_UPLOADED -> UiText.resource(R.string.cloud_backup_header_active)
+        CloudSyncHealth.UPLOADING -> UiText.resource(R.string.cloud_backup_header_syncing)
+        CloudSyncHealth.UNKNOWN -> UiText.resource(R.string.cloud_backup_header_checking)
+        CloudSyncHealth.NO_FILES,
+        CloudSyncHealth.AUTHORIZATION_REQUIRED,
+        CloudSyncHealth.UNAVAILABLE,
+        CloudSyncHealth.FAILED,
+        -> UiText.resource(R.string.cloud_backup_header_attention)
     }
 
 @Composable

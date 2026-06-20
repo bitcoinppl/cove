@@ -11,7 +11,17 @@
     <string name="common_remaining_failed_to_reset_local_data">Failed to reset local data. Please try again.</string>
     <string name="common_remaining_startup_init_error">App initialization error. Please force-quit and restart.</string>
     <string name="common_remaining_startup_timeout_error">App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com</string>
+    <string name="common_remaining_icloud">iCloud</string>
+    <string name="common_remaining_google_drive">Google Drive</string>
+    <string name="common_remaining_icloud_account">iCloud account</string>
+    <string name="common_remaining_google_account">Google account</string>
     <string name="common_remaining_cloud_backup_check_failed">Cove could not check for a Cloud Backup.</string>
+    <string name="common_remaining_no_cloud_backup_found">No Cloud Backup was found for the selected %1$s.</string>
+    <string name="common_remaining_cannot_check_cloud_backup_offline">Cannot check %1$s while offline.</string>
+    <string name="common_remaining_cloud_backup_unreadable">Cloud Backup data could not be read.</string>
+    <string name="common_remaining_cloud_backup_authorization_required">%1$s access is required before local data can be reset.</string>
+    <string name="common_remaining_cloud_backup_quota_exceeded">%1$s quota is exceeded. Cove could not check for a Cloud Backup.</string>
+    <string name="common_remaining_cloud_backup_provider_unavailable">%1$s is unavailable. Cove could not check for a Cloud Backup.</string>
     <string name="common_remaining_diagnostics_title">Cove startup diagnostics</string>
     <string name="common_remaining_diagnostics_generated">Generated: %1$s</string>
     <string name="common_remaining_diagnostics_app_section">App</string>

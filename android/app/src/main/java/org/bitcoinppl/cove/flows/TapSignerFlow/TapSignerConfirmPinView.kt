@@ -263,7 +263,7 @@ private suspend fun setupTapSigner(
             app.sheetState = null
             app.alertState =
                 TaggedItem(
-                    AppAlertState.TapSignerSetupFailed(activity.getString(R.string.app_alert_tapsigner_setup_failed_message)),
+                    AppAlertState.TapSignerSetupFailed,
                 )
         }
     }
@@ -315,7 +315,7 @@ private suspend fun changeTapSignerPin(
             TaggedItem(
                 AppAlertState.General(
                     title = activity.getString(R.string.scoped_common_error),
-                    message = activity.getString(R.string.app_alert_tapsigner_setup_failed_message),
+                    message = activity.getString(R.string.tap_signer_pin_change_failed_message),
                 ),
             )
     }

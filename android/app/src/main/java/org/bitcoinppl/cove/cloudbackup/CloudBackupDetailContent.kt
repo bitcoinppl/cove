@@ -57,7 +57,7 @@ internal fun cloudBackupDetailBodyState(
         manager.isPasskeyMissing -> CloudBackupDetailBodyState.MISSING_PASSKEY
         manager.verificationState is CloudBackupVerificationState.Running -> CloudBackupDetailBodyState.VERIFYING
         hasDetail -> CloudBackupDetailBodyState.DETAIL
-        manager.hasPendingUploadVerification && manager.syncState is CloudBackupSyncState.Blocked ->
+        manager.hasPendingUploadVerification && manager.syncState == CloudBackupSyncState.BLOCKED ->
             CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED
         manager.verificationState !is CloudBackupVerificationState.Failed -> CloudBackupDetailBodyState.LOADING
         else -> null
@@ -135,7 +135,7 @@ internal fun CloudBackupDetailContent(
             bodyState != CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED &&
                 shouldShowPendingUploadConfirmationStatus(manager)
         ) {
-            PendingUploadConfirmationStatus(isBlockedOnAuthorization = manager.syncState is CloudBackupSyncState.Blocked)
+            PendingUploadConfirmationStatus(isBlockedOnAuthorization = manager.syncState == CloudBackupSyncState.BLOCKED)
         }
 
         if (showFallbackVerificationSection) {
@@ -227,13 +227,8 @@ private fun MissingPasskeyContent(
     manager: CloudBackupManager,
 ) {
     val repairState = manager.passkeyRepairState
-    val isRepairing = repairState is CloudBackupPasskeyRepairState.Running
-    val repairError =
-        if (repairState is CloudBackupPasskeyRepairState.Failed) {
-            repairState.v1
-        } else {
-            null
-        }
+    val isRepairing = repairState == CloudBackupPasskeyRepairState.RUNNING
+    val repairFailed = repairState == CloudBackupPasskeyRepairState.FAILED
 
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         ErrorStateCard(
@@ -260,8 +255,8 @@ private fun MissingPasskeyContent(
             )
         }
 
-        repairError?.let {
-            ErrorInlineMessage(it)
+        if (repairFailed) {
+            ErrorInlineMessage(stringResource(R.string.cloud_backup_passkey_repair_failed))
         }
     }
 }
@@ -308,7 +303,7 @@ private fun DetailFormContent(
                 }
             }
             is CloudBackupOtherBackupsState.LoadFailed -> {
-                OtherBackupsLoadFailedSection(error = otherBackups.error)
+                OtherBackupsLoadFailedSection()
             }
         }
     }

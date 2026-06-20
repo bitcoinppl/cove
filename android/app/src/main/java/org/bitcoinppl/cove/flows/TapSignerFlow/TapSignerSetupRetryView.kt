@@ -162,9 +162,7 @@ fun TapSignerSetupRetryView(
                         app.sheetState = null
                         app.alertState =
                             TaggedItem(
-                                AppAlertState.TapSignerSetupFailed(
-                                    context.getString(R.string.app_alert_tapsigner_setup_failed_message),
-                                ),
+                                AppAlertState.TapSignerSetupFailed,
                             )
                     }
                 }

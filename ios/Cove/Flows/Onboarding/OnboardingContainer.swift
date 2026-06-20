@@ -38,18 +38,7 @@ struct OnboardingContainer: View {
     }
 
     private var localizedErrorMessage: String? {
-        guard manager.state.errorMessage != nil else { return nil }
-
-        switch manager.state.step {
-        case .terms:
-            return String(localized: "Unable to complete onboarding. Please try again.")
-        case .restoreOffer, .restoring, .restoreComplete, .restoreFailed:
-            return String(localized: "Unable to restore from Cloud Backup. Please try again.")
-        case .welcome, .bitcoinChoice, .storageChoice, .creatingWallet, .backupWallet, .cloudBackup,
-             .cloudBackupSuccess, .secretWords, .exchangeFunding, .hardwareImport, .softwareImport,
-             .cloudCheck, .restoreOffline, .restoreUnavailable:
-            return String(localized: "Unable to continue setup. Please try again.")
-        }
+        manager.state.error?.localizedMessage
     }
 
     @ViewBuilder

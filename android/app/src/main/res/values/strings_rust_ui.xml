@@ -96,7 +96,7 @@
     <string name="send_message_save_unsigned_transaction">Unable to save the unsigned transaction. Please try again.</string>
     <string name="send_message_unable_load_fees">Cannot create a transaction without fee information. Check your internet connection and try again.</string>
     <string name="send_message_fee_too_high">The fee is higher than the amount you are sending.</string>
-    <string name="send_message_high_fee_warning">The fee is higher than 20%% of the amount you are sending.</string>
+    <string name="send_message_high_fee_warning" formatted="false">The fee is higher than 20% of the amount you are sending.</string>
     <string name="send_message_unable_read_locked_coins">Cove could not read the lock state for this wallet. Locked coins are excluded for safety. Please try again shortly.</string>
     <string name="send_message_balance_still_loading">Cove is still checking which coins are unlocked. Please try again shortly.</string>
 
