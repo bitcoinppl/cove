@@ -145,9 +145,9 @@ struct SelectedWalletScreen: View {
         }
 
         return switch manager.loadState {
-        case let .loaded(txns):
+        case let .loaded(txns), let .scanning(txns):
             txns
-        case .loading, .scanning:
+        case .loading:
             nil
         }
     }
