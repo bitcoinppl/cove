@@ -114,7 +114,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         self.sendAmountFiat = self.rust.sendAmountFiat()
     }
 
-    public func reconcileAfterLabelImport() {
+    public func reconcileAfterLabelsChanged() {
         dispatch(action: .refreshWalletBalance)
     }
 

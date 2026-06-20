@@ -301,15 +301,19 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     }
 
     func toggleTransactionLockState(for txId: TxId) async throws -> TransactionLockState {
-        try await rust.toggleTransactionLockState(txId: txId)
+        let state = try await rust.toggleTransactionLockState(txId: txId)
+        await AppManager.shared.reconcileAfterLabelsChanged(walletId: id)
+
+        return state
     }
 
+    @MainActor
     func importLabels(labels: Bip329Labels) throws {
         try LabelManager(id: id).import(labels: labels)
-        AppManager.shared.reconcileAfterLabelImport(walletId: id)
+        AppManager.shared.reconcileAfterLabelsChanged(walletId: id)
     }
 
-    func reconcileAfterLabelImport() {
+    func reconcileAfterLabelsChanged() {
         transactionDetails.removeAll()
         Task { await rust.getTransactions() }
     }

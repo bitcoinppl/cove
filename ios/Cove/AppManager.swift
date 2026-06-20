@@ -270,9 +270,10 @@ private let navigationSettleDelayMs = 800
         clearCoinControlManager()
     }
 
-    public func reconcileAfterLabelImport(walletId: WalletId) {
+    @MainActor
+    public func reconcileAfterLabelsChanged(walletId: WalletId) {
         if let walletManager, walletManager.id == walletId {
-            walletManager.reconcileAfterLabelImport()
+            walletManager.reconcileAfterLabelsChanged()
         }
 
         if let coinControlManager, coinControlManager.id == walletId {
@@ -280,7 +281,7 @@ private let navigationSettleDelayMs = 800
         }
 
         if let sendFlowManager, sendFlowManager.id == walletId {
-            sendFlowManager.reconcileAfterLabelImport()
+            sendFlowManager.reconcileAfterLabelsChanged()
         }
     }
 
