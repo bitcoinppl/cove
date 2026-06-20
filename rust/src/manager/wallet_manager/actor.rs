@@ -1507,7 +1507,6 @@ impl WalletActor {
             self.send(WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(
                 self.wallet.metadata.clone(),
             )));
-            self.send_ledger_state(WalletScanStatus::Idle);
         } else {
             self.save_last_scan_finished();
         }

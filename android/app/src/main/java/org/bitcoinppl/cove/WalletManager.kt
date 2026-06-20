@@ -270,7 +270,7 @@ class WalletManager :
         when (message) {
             is WalletManagerReconcileMessage.WalletScanStatusChanged -> {
                 scanStatus = message.v1
-                balancePresentationState = rust.balancePresentation(message.v1)
+                balancePresentationState = rust.balancePresentationForState(ledgerState)
                 if (message.v1.isActive) {
                     when (val current = loadState) {
                         is WalletLoadState.SCANNING -> Unit
@@ -291,7 +291,7 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.LedgerStateChanged -> {
                 ledgerState = message.v1
-                balancePresentationState = rust.balancePresentation(scanStatus)
+                balancePresentationState = rust.balancePresentationForState(message.v1)
                 reconcileLoadStateWithLedgerState()
             }
 
@@ -351,7 +351,7 @@ class WalletManager :
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
                 walletMetadata = message.v1
                 persistWalletMetadata(message.v1)
-                balancePresentationState = rust.balancePresentation(scanStatus)
+                balancePresentationState = rust.balancePresentationForState(ledgerState)
             }
 
             is WalletManagerReconcileMessage.WalletScannerResponse -> {

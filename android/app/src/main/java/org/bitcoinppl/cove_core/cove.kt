@@ -1573,6 +1573,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_balance_presentation(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_balance_presentation_for_state(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat(
@@ -2684,6 +2686,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustwalletmanager_balance(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_balance_presentation(`ptr`: Long,`scanStatus`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustwalletmanager_balance_presentation_for_state(`ptr`: Long,`ledgerState`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(`ptr`: Long,`signedTransaction`: Long,
     ): Long
@@ -4358,6 +4362,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance_presentation() != 27753.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance_presentation_for_state() != 65105.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4460,7 +4467,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_ledger_state() != 46786.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_ledger_state() != 45737.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates() != 34012.toShort()) {
@@ -21005,6 +21012,8 @@ public interface RustWalletManagerInterface {
 
     fun `balancePresentation`(`scanStatus`: WalletScanStatus): BalancePresentation
 
+    fun `balancePresentationForState`(`ledgerState`: WalletLedgerState): BalancePresentation
+
     suspend fun `broadcastTransaction`(`signedTransaction`: BitcoinTransaction)
 
     fun `convertAndDisplayFiat`(`amount`: Amount, `prices`: PriceResponse, `withSuffix`: kotlin.Boolean = true): kotlin.String
@@ -21139,6 +21148,9 @@ public interface RustWalletManagerInterface {
 
     fun `labelManager`(): LabelManager
 
+    /**
+     * Returns the metadata-derived bootstrap snapshot; live scan activity arrives through reconcile messages
+     */
     fun `ledgerState`(): WalletLedgerState
 
     fun `listenForUpdates`(`reconciler`: WalletManagerReconciler)
@@ -21377,6 +21389,20 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         it,
 
         FfiConverterTypeWalletScanStatus.lower(`scanStatus`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `balancePresentationForState`(`ledgerState`: WalletLedgerState): BalancePresentation {
+            return FfiConverterTypeBalancePresentation.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_balance_presentation_for_state(
+        it,
+
+        FfiConverterTypeWalletLedgerState.lower(`ledgerState`),_status)
 }
     }
     )
@@ -22049,7 +22075,10 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
 
 
-    override fun `ledgerState`(): WalletLedgerState {
+
+    /**
+     * Returns the metadata-derived bootstrap snapshot; live scan activity arrives through reconcile messages
+     */override fun `ledgerState`(): WalletLedgerState {
             return FfiConverterTypeWalletLedgerState.lift(
     callWithHandle {
     uniffiRustCall() { _status ->

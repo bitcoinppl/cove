@@ -229,7 +229,7 @@ extension WalletLedgerState {
         switch message {
         case let .walletScanStatusChanged(status):
             self.scanStatus = status
-            self.balancePresentation = rust.balancePresentation(scanStatus: status)
+            self.balancePresentation = rust.balancePresentationForState(ledgerState: ledgerState)
             if status.isActive {
                 switch self.loadState {
                 case .scanning:
@@ -247,7 +247,7 @@ extension WalletLedgerState {
 
         case let .ledgerStateChanged(ledgerState):
             self.ledgerState = ledgerState
-            self.balancePresentation = rust.balancePresentation(scanStatus: scanStatus)
+            self.balancePresentation = rust.balancePresentationForState(ledgerState: ledgerState)
             reconcileLoadStateWithLedgerState()
 
         case let .availableTransactions(txns):
@@ -286,7 +286,7 @@ extension WalletLedgerState {
         case let .walletMetadataChanged(metadata):
             withAnimation { self.walletMetadata = metadata }
             setWalletMetadata(metadata)
-            self.balancePresentation = rust.balancePresentation(scanStatus: scanStatus)
+            self.balancePresentation = rust.balancePresentationForState(ledgerState: ledgerState)
 
         case let .walletScannerResponse(scannerResponse):
             self.logger.debug("walletScannerResponse: \(scannerResponse)")

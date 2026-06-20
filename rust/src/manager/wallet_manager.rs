@@ -405,6 +405,14 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub fn balance_presentation_for_state(
+        &self,
+        ledger_state: WalletLedgerState,
+    ) -> BalancePresentation {
+        BalancePresentation::for_ledger_state(ledger_state)
+    }
+
+    #[uniffi::method]
     pub fn label_manager(&self) -> Arc<LabelManager> {
         self.label_manager.clone()
     }

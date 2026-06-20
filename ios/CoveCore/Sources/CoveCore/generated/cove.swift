@@ -9028,6 +9028,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func balancePresentation(scanStatus: WalletScanStatus)  -> BalancePresentation
 
+    func balancePresentationForState(ledgerState: WalletLedgerState)  -> BalancePresentation
+
     func broadcastTransaction(signedTransaction: BitcoinTransaction) async throws
 
     func convertAndDisplayFiat(amount: Amount, prices: PriceResponse, withSuffix: Bool)  -> String
@@ -9162,6 +9164,9 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func labelManager()  -> LabelManager
 
+    /**
+     * Returns the metadata-derived bootstrap snapshot; live scan activity arrives through reconcile messages
+     */
     func ledgerState()  -> WalletLedgerState
 
     func listenForUpdates(reconciler: WalletManagerReconciler)
@@ -9375,6 +9380,16 @@ open func balancePresentation(scanStatus: WalletScanStatus) -> BalancePresentati
     uniffi_cove_fn_method_rustwalletmanager_balance_presentation(
             self.uniffiCloneHandle(),
         FfiConverterTypeWalletScanStatus_lower(scanStatus),uniffiCallStatus
+    )
+})
+}
+
+open func balancePresentationForState(ledgerState: WalletLedgerState) -> BalancePresentation  {
+    return try!  FfiConverterTypeBalancePresentation_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustwalletmanager_balance_presentation_for_state(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWalletLedgerState_lower(ledgerState),uniffiCallStatus
     )
 })
 }
@@ -9900,6 +9915,9 @@ open func labelManager() -> LabelManager  {
 })
 }
 
+    /**
+     * Returns the metadata-derived bootstrap snapshot; live scan activity arrives through reconcile messages
+     */
 open func ledgerState() -> WalletLedgerState  {
     return try!  FfiConverterTypeWalletLedgerState_lift(try! rustCall() {
         uniffiCallStatus in
@@ -40437,6 +40455,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_balance_presentation() != 27753) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_balance_presentation_for_state() != 65105) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -40539,7 +40560,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_ledger_state() != 46786) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_ledger_state() != 45737) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates() != 34012) {
