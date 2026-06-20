@@ -1500,7 +1500,7 @@ impl WalletActor {
             }
         }
 
-        if full_scan_updates_initial_metadata(true, full_scan_type) {
+        if full_scan_updates_initial_metadata(full_scan_type) {
             let now = jiff::Timestamp::now().as_second() as u64;
             self.record_full_scan_performed(now)?;
             self.save_last_scan_finished();
@@ -2119,11 +2119,8 @@ fn should_skip_recent_scan(last_scan_finished: Option<Duration>, force_scan: boo
     last_scan_finished.is_some_and(|last_scan| elapsed_secs_since(last_scan) < 15)
 }
 
-const fn full_scan_updates_initial_metadata(
-    scan_succeeded: bool,
-    full_scan_type: FullScanType,
-) -> bool {
-    scan_succeeded && should_update_full_scan_metadata(full_scan_type)
+const fn full_scan_updates_initial_metadata(full_scan_type: FullScanType) -> bool {
+    should_update_full_scan_metadata(full_scan_type)
 }
 
 fn metadata_with_full_scan_performed(
@@ -2338,16 +2335,10 @@ mod tests {
     }
 
     #[test]
-    fn full_scan_failure_does_not_set_performed_full_scan_at() {
-        assert!(!full_scan_updates_initial_metadata(false, FullScanType::Full));
-        assert!(!full_scan_updates_initial_metadata(false, FullScanType::Rescan(150)));
-    }
-
-    #[test]
-    fn full_scan_success_updates_initial_metadata_for_full_range_scans() {
-        assert!(full_scan_updates_initial_metadata(true, FullScanType::Full));
-        assert!(full_scan_updates_initial_metadata(true, FullScanType::Rescan(150)));
-        assert!(!full_scan_updates_initial_metadata(true, FullScanType::Rescan(20)));
+    fn full_scan_updates_initial_metadata_for_full_range_scans() {
+        assert!(full_scan_updates_initial_metadata(FullScanType::Full));
+        assert!(full_scan_updates_initial_metadata(FullScanType::Rescan(150)));
+        assert!(!full_scan_updates_initial_metadata(FullScanType::Rescan(20)));
     }
 
     #[test]

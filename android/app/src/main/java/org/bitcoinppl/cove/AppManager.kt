@@ -155,7 +155,7 @@ class AppManager private constructor() : FfiReconcile {
             }
             // close old manager before replacing
             Log.d(tag, "closing old sendflow manager for ${it.id}")
-            it.close()
+            clearSendFlowManager()
         }
 
         Log.d(tag, "did not find SendFlowManager for ${wm.id}, creating new")
