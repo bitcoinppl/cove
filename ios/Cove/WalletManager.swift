@@ -3,7 +3,7 @@ import SwiftUI
 
 extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletManager {}
 
-private extension WalletScanStatus {
+extension WalletScanStatus {
     var isActive: Bool {
         switch self {
         case .idle:
@@ -25,6 +25,14 @@ extension WalletLedgerState {
 
     var initialScanIncomplete: Bool {
         !initialScanComplete
+    }
+
+    var initialScanActive: Bool {
+        if case .initialScanIncomplete(.active) = self {
+            return true
+        }
+
+        return false
     }
 }
 

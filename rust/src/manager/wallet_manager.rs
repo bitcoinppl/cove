@@ -1542,6 +1542,13 @@ impl RustWalletManager {
     }
 }
 
+const PREVIEW_FULL_SCAN_COMPLETED_AT: u64 = 0;
+
+fn preview_ledger_ready_metadata(mut metadata: WalletMetadata) -> WalletMetadata {
+    metadata.internal.performed_full_scan_at.get_or_insert(PREVIEW_FULL_SCAN_COMPLETED_AT);
+    metadata
+}
+
 #[uniffi::export]
 impl RustWalletManager {
     #[uniffi::constructor]
@@ -1552,6 +1559,7 @@ impl RustWalletManager {
 
     #[uniffi::constructor]
     pub fn preview_new_wallet_with_metadata(metadata: WalletMetadata) -> Self {
+        let metadata = preview_ledger_ready_metadata(metadata);
         let (sender, receiver) = flume::bounded(100);
 
         let wallet = Wallet::preview_new_wallet();
@@ -1570,6 +1578,22 @@ impl RustWalletManager {
             initial_load_state: WalletLoadState::Loading,
             discovery_scanner: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_wallet_metadata_is_ledger_ready_for_spend() {
+        let metadata = preview_ledger_ready_metadata(WalletMetadata::preview_new());
+
+        assert!(metadata.internal.performed_full_scan_at.is_some());
+        assert_eq!(
+            WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
+            WalletLedgerState::Complete
+        );
     }
 }
 

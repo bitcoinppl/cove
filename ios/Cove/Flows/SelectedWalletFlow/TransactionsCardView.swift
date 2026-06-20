@@ -28,16 +28,7 @@ struct TransactionsCardView: View {
     }
 
     private var isScanning: Bool {
-        if manager.ledgerState.initialScanIncomplete {
-            return true
-        }
-
-        return switch manager.scanStatus {
-        case .idle:
-            false
-        case .scanning, .scanningPendingProgress:
-            true
-        }
+        manager.ledgerState.initialScanActive || manager.scanStatus.isActive
     }
 
     private var scanSpinnerMessage: String? {
