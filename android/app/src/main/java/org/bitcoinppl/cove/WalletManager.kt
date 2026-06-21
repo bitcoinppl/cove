@@ -34,6 +34,9 @@ val WalletLedgerState.initialScanComplete: Boolean
 val WalletLedgerState.initialScanIncomplete: Boolean
     get() = !initialScanComplete
 
+val WalletLedgerState.initialScanActive: Boolean
+    get() = this is WalletLedgerState.InitialScanIncomplete && v1 == InitialScanActivity.ACTIVE
+
 /**
  * wallet manager - manages wallet state, balance, transactions
  * ported from iOS WalletManager.swift

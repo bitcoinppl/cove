@@ -5,7 +5,8 @@ use crate::{
     },
     historical_price_service::HistoricalPriceService,
     manager::wallet_manager::{
-        Error, SendFlowErrorAlert, WalletLedgerState, WalletManagerError, WalletScanStatus,
+        Error, SendFlowErrorAlert, WalletLedgerState, WalletManagerError, WalletScanPhase,
+        WalletScanStatus,
         receive_address::{
             CACHE_WINDOW, ReceiveAddressPresentation, ReceiveAddressRefreshState,
             ReceiveAddressSession, ReceiveAddressState, ReceiveAddressStatus,
@@ -1186,7 +1187,7 @@ impl WalletActor {
         self.stop_receive_address_refresh_timer();
         self.state = ActorState::Initial;
         self.transaction_watchers = HashMap::default();
-        self.send_scan_status(WalletScanStatus::Idle);
+        self.send_scan_idle_status();
     }
 
     async fn remove_watcher_for_txn(&mut self, tx_id: Txid) {
@@ -1423,9 +1424,11 @@ impl WalletActor {
         match event.into_kind() {
             WalletScanEventKind::FullScanStarted(scan_type) => {
                 self.state = ActorState::PerformingFullScan(scan_type);
+                self.send_initial_scan_active_ledger_state(scan_type.phase());
             }
             WalletScanEventKind::IncrementalScanStarted => {
                 self.state = ActorState::PerformingIncrementalScan;
+                self.send_initial_scan_active_ledger_state(WalletScanPhase::Incremental);
             }
             WalletScanEventKind::FullScanPrepareFailed(scan_type) => {
                 self.state =
@@ -1435,7 +1438,7 @@ impl WalletActor {
                 self.state = ActorState::FailedIncrementalScan;
             }
             WalletScanEventKind::StatusChanged(status) => {
-                self.send_scan_status(status);
+                self.send_scan_status_for_lifecycle_event(status);
             }
             WalletScanEventKind::PartialUpdate(scan_update) => {
                 self.handle_progressive_scan_update(scan_update);
@@ -1499,7 +1502,7 @@ impl WalletActor {
             }
             Err(error) => {
                 self.state = ActorState::FailedFullScan(full_scan_type);
-                self.send_scan_status(WalletScanStatus::Idle);
+                self.send_scan_idle_status();
                 return Err(error.into());
             }
         }
@@ -1519,7 +1522,7 @@ impl WalletActor {
         self.notify_scan_complete().await?;
 
         self.state = ActorState::FullScanComplete(full_scan_type);
-        self.send_scan_status(WalletScanStatus::Idle);
+        self.send_scan_idle_status();
 
         Produces::ok(())
     }
@@ -1532,7 +1535,7 @@ impl WalletActor {
             Ok(sync_result) => sync_result,
             Err(error) => {
                 self.state = ActorState::FailedIncrementalScan;
-                self.send_scan_status(WalletScanStatus::Idle);
+                self.send_scan_idle_status();
                 return Err(error.into());
             }
         };
@@ -1543,7 +1546,7 @@ impl WalletActor {
 
         self.notify_scan_complete().await?;
         self.state = ActorState::IncrementalScanComplete;
-        self.send_scan_status(WalletScanStatus::Idle);
+        self.send_scan_idle_status();
 
         Produces::ok(())
     }
@@ -2164,6 +2167,36 @@ impl WalletActor {
         self.send(WalletManagerReconcileMessage::WalletScanStatusChanged(status));
     }
 
+    fn send_scan_status_for_lifecycle_event(&self, status: WalletScanStatus) {
+        if status == WalletScanStatus::Idle {
+            self.send_scan_idle_status();
+            return;
+        }
+
+        self.send_scan_status(status);
+    }
+
+    fn send_scan_idle_status(&self) {
+        self.send_initial_scan_idle_ledger_state();
+        self.send_scan_status(WalletScanStatus::Idle);
+    }
+
+    fn send_initial_scan_active_ledger_state(&self, phase: WalletScanPhase) {
+        if self.completed_initial_scan() {
+            return;
+        }
+
+        self.send_ledger_state(WalletScanStatus::ScanningPendingProgress(phase));
+    }
+
+    fn send_initial_scan_idle_ledger_state(&self) {
+        if self.completed_initial_scan() {
+            return;
+        }
+
+        self.send_ledger_state(WalletScanStatus::Idle);
+    }
+
     fn send_ledger_state(&self, status: WalletScanStatus) {
         let state =
             WalletLedgerState::from_metadata_and_scan_status(&self.wallet.metadata, &status);
@@ -2174,6 +2207,8 @@ impl WalletActor {
         self.send(WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(
             self.wallet.metadata.clone(),
         )));
+
+        // metadata may be complete before the active scan status has reconciled idle
         self.send_ledger_state(self.scan_status.read().clone());
     }
 
@@ -2187,7 +2222,7 @@ impl WalletActor {
         reset_scan_lifecycle_state_for_address_type_switch(&mut self.state);
         self.last_scan_finished = None;
         self.last_height_fetched = None;
-        self.send_scan_status(WalletScanStatus::Idle);
+        self.send_scan_idle_status();
     }
 
     fn advance_scan_generation(&mut self) -> WalletScanGeneration {

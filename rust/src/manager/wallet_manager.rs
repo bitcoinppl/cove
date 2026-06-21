@@ -1543,6 +1543,8 @@ impl RustWalletManager {
         *self.metadata.write() = metadata.clone();
         self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
         let scan_status = self.current_scan_status();
+
+        // address type switches may already have reconciled idle; repeating it is harmless
         self.reconciler.send(Message::LedgerStateChanged(
             WalletLedgerState::from_metadata_and_scan_status(&metadata, &scan_status),
         ));

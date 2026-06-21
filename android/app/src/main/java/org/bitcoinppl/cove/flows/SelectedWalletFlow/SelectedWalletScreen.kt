@@ -351,6 +351,8 @@ fun SelectedWalletScreen(
                     when (loadState) {
                         is WalletLoadState.SCANNING -> {
                             val txns = loadState.txns
+
+                            // pre-migration wallets stay first-scan until a new full scan completes
                             val firstScan = manager.ledgerState.initialScanIncomplete
                             Pair(txns, firstScan)
                         }

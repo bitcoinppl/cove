@@ -607,6 +607,7 @@ impl WalletScanActor {
         scan_generation: ScanActorGeneration,
     ) -> ActorResult<()> {
         if should_accept_scan_generation(self.active_generation, scan_generation) {
+            // address type switches already emitted idle when resetting the scan lifecycle
             self.clear_active_scan();
         }
 
