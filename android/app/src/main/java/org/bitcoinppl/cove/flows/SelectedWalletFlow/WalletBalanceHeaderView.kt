@@ -258,6 +258,7 @@ private fun SendReceiveButtons(
             text = stringResource(R.string.btn_send),
             leadingIcon = rememberVectorPainter(Icons.Filled.NorthEast),
             onClick = onSend,
+            enabled = !sendUnavailable,
             colors =
                 androidx.compose.material3.ButtonDefaults.buttonColors(
                     containerColor = if (sendUnavailable) Color.Gray else CoveColor.btnPrimary,

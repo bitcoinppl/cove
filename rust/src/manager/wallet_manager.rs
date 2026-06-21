@@ -1427,7 +1427,6 @@ impl RustWalletManager {
             Action::SelectDifferentWalletAddressType(wallet_address_type) => {
                 candidate.address_type = wallet_address_type;
                 candidate.discovery_state = DiscoveryState::ChoseAdressType;
-                candidate.internal.reset_scan_state_for_address_type_switch();
             }
 
             Action::ToggleShowLabels => candidate.show_labels = !candidate.show_labels,
