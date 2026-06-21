@@ -1081,7 +1081,7 @@ impl RustWalletManager {
         let mut metadata = before_metadata.clone();
         metadata.wallet_type = wallet_type;
 
-        Database::global()
+        metadata = Database::global()
             .wallets
             .update_wallet_metadata(metadata.clone())
             .map_err_debug(Error::SetWalletTypeError)?;
@@ -1108,10 +1108,13 @@ impl RustWalletManager {
         let mut metadata = before_metadata.clone();
         metadata.name = name;
 
-        if let Err(error) = Database::global().wallets.update_wallet_metadata(metadata.clone()) {
-            error!("Unable to update wallet metadata: {error:?}");
-            return;
-        }
+        let metadata = match Database::global().wallets.update_wallet_metadata(metadata.clone()) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                error!("Unable to update wallet metadata: {error:?}");
+                return;
+            }
+        };
 
         *self.metadata.write() = metadata.clone();
         self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
@@ -1456,10 +1459,13 @@ impl RustWalletManager {
             }
         }
 
-        if let Err(error) = Database::global().wallets.update_wallet_metadata(candidate.clone()) {
-            error!("Unable to update wallet metadata: {error:?}");
-            return;
-        }
+        let candidate = match Database::global().wallets.update_wallet_metadata(candidate.clone()) {
+            Ok(candidate) => candidate,
+            Err(error) => {
+                error!("Unable to update wallet metadata: {error:?}");
+                return;
+            }
+        };
 
         *self.metadata.write() = candidate.clone();
         self.reconciler.send(Message::WalletMetadataChanged(Box::new(candidate.clone())));
@@ -1660,9 +1666,10 @@ fn downgrade_and_notify_if_needed(
     updated.wallet_type = WalletType::WatchOnly;
     updated.hardware_metadata = None;
 
-    Database::global().wallets.update_wallet_metadata(updated.clone()).map_err(|e| {
-        Error::UnknownError(format!("failed to persist watch-only downgrade for {id}: {e}",))
-    })?;
+    let updated =
+        Database::global().wallets.update_wallet_metadata(updated.clone()).map_err(|e| {
+            Error::UnknownError(format!("failed to persist watch-only downgrade for {id}: {e}",))
+        })?;
 
     deferred.queue(Message::HotWalletKeyMissing(updated.id.clone()));
     Ok(updated)

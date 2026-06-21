@@ -120,7 +120,7 @@ impl BdkStore {
 
         Database::global()
             .wallets()
-            .update_wallet_metadata(metadata)
+            .replace_wallet_metadata(metadata)
             .context("unable to save updated metadata")?;
 
         Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);

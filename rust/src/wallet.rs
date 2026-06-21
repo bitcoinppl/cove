@@ -470,7 +470,7 @@ impl Wallet {
         self.metadata.address_type = address_type;
         self.metadata.discovery_state = DiscoveryState::ChoseAdressType;
         self.metadata.internal.reset_scan_state_for_address_type_switch();
-        Database::global().wallets.update_wallet_metadata(self.metadata.clone())?;
+        Database::global().wallets.replace_wallet_metadata(self.metadata.clone())?;
 
         Ok(())
     }
@@ -505,7 +505,7 @@ impl Wallet {
         self.metadata.address_type = address_type;
         self.metadata.discovery_state = DiscoveryState::ChoseAdressType;
         self.metadata.internal.reset_scan_state_for_address_type_switch();
-        Database::global().wallets.update_wallet_metadata(self.metadata.clone())?;
+        Database::global().wallets.replace_wallet_metadata(self.metadata.clone())?;
 
         Ok(())
     }
@@ -687,7 +687,7 @@ impl Wallet {
             descriptors.internal.extended_descriptor,
         )?;
 
-        database.wallets.update_wallet_metadata(metadata.clone())?;
+        database.wallets.update_wallet_metadata(metadata)?;
         database.global_config.select_wallet(id.clone())?;
 
         Updater::send_update(Update::ClearCachedWalletManager(id.clone()));
