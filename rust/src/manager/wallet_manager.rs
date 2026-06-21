@@ -412,6 +412,7 @@ impl RustWalletManager {
         &self,
         ledger_state: WalletLedgerState,
     ) -> BalancePresentation {
+        // ffi adapter for platform-owned ledger snapshots; no manager state is needed
         BalancePresentation::for_ledger_state(ledger_state)
     }
 

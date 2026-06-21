@@ -29,7 +29,8 @@ class SelectedWalletScreenHelpersTest {
     }
 
     @Test
-    fun idleIncompleteScanCanRefresh() {
+    fun completedInitialScanCanRefreshWhenLoadStateScanningAndScanStatusIdle() {
+        // scanning load state can lag after the ledger reports initial scan complete
         assertTrue(
             canRefreshSelectedWallet(
                 WalletLoadState.SCANNING(emptyList()),

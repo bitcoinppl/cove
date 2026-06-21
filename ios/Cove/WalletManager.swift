@@ -5,6 +5,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
 extension WalletScanStatus {
     var isActive: Bool {
+        // internal visibility lets wallet screens share the same active-scan definition
         switch self {
         case .idle:
             false

@@ -28,6 +28,7 @@ struct TransactionsCardView: View {
     }
 
     private var isScanning: Bool {
+        // keep both sources so reconcile message ordering cannot hide active scanning
         manager.ledgerState.initialScanActive || manager.scanStatus.isActive
     }
 
