@@ -1508,9 +1508,7 @@ impl WalletActor {
             let now = jiff::Timestamp::now().as_second() as u64;
             self.record_full_scan_performed(now)?;
             self.save_last_scan_finished();
-            self.send(WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(
-                self.wallet.metadata.clone(),
-            )));
+            self.send_metadata_changed();
         } else {
             self.save_last_scan_finished();
         }
@@ -2167,6 +2165,13 @@ impl WalletActor {
         let state =
             WalletLedgerState::from_metadata_and_scan_status(&self.wallet.metadata, &status);
         self.send(WalletManagerReconcileMessage::LedgerStateChanged(state));
+    }
+
+    fn send_metadata_changed(&self) {
+        self.send(WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(
+            self.wallet.metadata.clone(),
+        )));
+        self.send_ledger_state(self.scan_status.read().clone());
     }
 
     fn reset_scan_lifecycle_for_address_type_switch(&mut self) {

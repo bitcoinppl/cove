@@ -428,7 +428,7 @@ impl RustWalletManager {
         self.ensure_ledger_ready_for_spend()?;
 
         let me = self.clone();
-        let metadata = self.metadata.read().clone();
+        let metadata = self.current_metadata();
 
         Ok(RustSendFlowManager::new(metadata, balance, me))
     }

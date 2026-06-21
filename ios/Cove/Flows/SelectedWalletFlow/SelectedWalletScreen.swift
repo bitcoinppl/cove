@@ -140,14 +140,16 @@ struct SelectedWalletScreen: View {
     }
 
     private var refreshableTransactions: [CoveCore.Transaction]? {
-        guard !manager.ledgerState.initialScanActive, !manager.scanStatus.isActive else {
+        guard !manager.scanStatus.isActive else {
             return nil
         }
 
         return switch manager.loadState {
-        case let .loaded(txns), let .scanning(txns):
+        case let .loaded(txns) where manager.ledgerState.initialScanComplete:
             txns
-        case .loading:
+        case let .scanning(txns) where !manager.ledgerState.initialScanActive:
+            txns
+        case .loaded, .scanning, .loading:
             nil
         }
     }

@@ -351,7 +351,6 @@ class WalletManager :
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
                 walletMetadata = message.v1
                 persistWalletMetadata(message.v1)
-                balancePresentationState = rust.balancePresentationForState(ledgerState)
             }
 
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
