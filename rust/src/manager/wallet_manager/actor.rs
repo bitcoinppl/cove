@@ -61,6 +61,7 @@ use cove_types::{
 use cove_util::result_ext::ResultExt as _;
 use eyre::Result;
 use flume::Sender;
+use parking_lot::RwLock;
 use rand::RngExt as _;
 use std::{
     sync::Arc,
@@ -90,6 +91,7 @@ pub struct WalletActor {
     pub db: WalletDataDb,
     pub state: ActorState,
     pub receive_address: ReceiveAddressSession,
+    pub scan_status: Arc<RwLock<WalletScanStatus>>,
 
     seed: u64,
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
@@ -179,6 +181,7 @@ impl WalletActor {
     pub fn new(
         wallet: Wallet,
         reconciler: Sender<SingleOrMany>,
+        scan_status: Arc<RwLock<WalletScanStatus>>,
     ) -> Result<Self, crate::database::wallet_data::WalletDataError> {
         let db = WalletDataDb::new_or_existing(wallet.id.clone())?;
         let seed = rand::rng().random();
@@ -193,6 +196,7 @@ impl WalletActor {
             last_height_fetched: None,
             state: ActorState::Initial,
             receive_address: ReceiveAddressSession::default(),
+            scan_status,
             transaction_watchers: HashMap::default(),
             receive_address_watcher: None,
             receive_address_refresh_timer: None,
@@ -2153,6 +2157,8 @@ impl WalletActor {
     }
 
     fn send_scan_status(&self, status: WalletScanStatus) {
+        *self.scan_status.write() = status.clone();
+
         self.send_ledger_state(status.clone());
         self.send(WalletManagerReconcileMessage::WalletScanStatusChanged(status));
     }

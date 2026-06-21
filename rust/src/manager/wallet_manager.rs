@@ -195,6 +195,7 @@ pub struct RustWalletManager {
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: MessageSender<Message>,
     pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
+    scan_status: Arc<RwLock<WalletScanStatus>>,
 
     label_manager: Arc<LabelManager>,
     initial_load_state: WalletLoadState,
@@ -361,7 +362,8 @@ impl RustWalletManager {
             WalletLoadState::Scanning(cached_transactions)
         };
 
-        let wallet_actor = WalletActor::new(wallet, sender.clone())
+        let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
+        let wallet_actor = WalletActor::new(wallet, sender.clone(), scan_status.clone())
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
         let actor = task::spawn_actor(wallet_actor);
 
@@ -375,6 +377,7 @@ impl RustWalletManager {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler,
             reconcile_receiver: Arc::new(receiver),
+            scan_status,
             label_manager,
             initial_load_state,
             discovery_scanner,
@@ -464,7 +467,8 @@ impl RustWalletManager {
 
         let discovery_scanner = start_discovery_scanner(metadata.clone(), sender.clone());
 
-        let wallet_actor = WalletActor::new(wallet, sender.clone())
+        let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
+        let wallet_actor = WalletActor::new(wallet, sender.clone(), scan_status.clone())
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
         let actor = task::spawn_actor(wallet_actor);
         let label_manager = LabelManager::new(id.clone()).into();
@@ -475,6 +479,7 @@ impl RustWalletManager {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
+            scan_status,
             label_manager,
             initial_load_state: WalletLoadState::Loading,
             discovery_scanner,
@@ -499,7 +504,8 @@ impl RustWalletManager {
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
-        let wallet_actor = WalletActor::new(wallet, sender.clone())
+        let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
+        let wallet_actor = WalletActor::new(wallet, sender.clone(), scan_status.clone())
             .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
         let actor = task::spawn_actor(wallet_actor);
         let label_manager = LabelManager::new(id.clone()).into();
@@ -510,6 +516,7 @@ impl RustWalletManager {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
+            scan_status,
             label_manager,
             initial_load_state: WalletLoadState::Loading,
             discovery_scanner: None,
@@ -1456,8 +1463,9 @@ impl RustWalletManager {
 
         *self.metadata.write() = candidate.clone();
         self.reconciler.send(Message::WalletMetadataChanged(Box::new(candidate.clone())));
+        let scan_status = self.current_scan_status();
         self.reconciler.send(Message::LedgerStateChanged(
-            WalletLedgerState::from_metadata_and_scan_status(&candidate, &WalletScanStatus::Idle),
+            WalletLedgerState::from_metadata_and_scan_status(&candidate, &scan_status),
         ));
         CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &candidate);
     }
@@ -1476,6 +1484,10 @@ impl RustWalletManager {
 }
 
 impl RustWalletManager {
+    fn current_scan_status(&self) -> WalletScanStatus {
+        self.scan_status.read().clone()
+    }
+
     fn current_metadata(&self) -> WalletMetadata {
         let cached_metadata = self.metadata.read().clone();
         Database::global()
@@ -1503,8 +1515,9 @@ impl RustWalletManager {
 
         *self.metadata.write() = metadata.clone();
         self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
+        let scan_status = self.current_scan_status();
         self.reconciler.send(Message::LedgerStateChanged(
-            WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
+            WalletLedgerState::from_metadata_and_scan_status(&metadata, &scan_status),
         ));
         CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
 
@@ -1573,7 +1586,8 @@ impl RustWalletManager {
 
         let wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
         let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();
-        let wallet_actor = WalletActor::new(wallet, sender.clone())
+        let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
+        let wallet_actor = WalletActor::new(wallet, sender.clone(), scan_status.clone())
             .expect("failed to open wallet database for preview wallet");
         let actor = task::spawn_actor(wallet_actor);
 
@@ -1583,6 +1597,7 @@ impl RustWalletManager {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
+            scan_status,
             label_manager,
             initial_load_state: WalletLoadState::Loading,
             discovery_scanner: None,

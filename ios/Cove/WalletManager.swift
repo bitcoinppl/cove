@@ -347,6 +347,7 @@ extension WalletLedgerState {
         {
             loadState = .loaded(txns)
         } else if ledgerState.initialScanIncomplete,
+                  scanStatus.isActive,
                   case let .loaded(txns) = loadState
         {
             loadState = .scanning(txns)

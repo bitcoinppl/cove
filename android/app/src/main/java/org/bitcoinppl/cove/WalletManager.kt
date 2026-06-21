@@ -455,7 +455,7 @@ class WalletManager :
                 }
             }
             is WalletLoadState.LOADED -> {
-                if (ledgerState.initialScanIncomplete) {
+                if (ledgerState.initialScanIncomplete && scanStatus.isActive) {
                     loadState = WalletLoadState.SCANNING(current.txns)
                 }
             }
