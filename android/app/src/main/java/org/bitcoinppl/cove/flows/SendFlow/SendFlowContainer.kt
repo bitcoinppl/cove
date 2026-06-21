@@ -131,6 +131,16 @@ fun SendFlowContainer(
                     ),
                 )
             app.popRoute()
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "unable to initialize send flow", e)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Unable to Open Wallet",
+                        message = "The wallet could not be opened for sending. Please try again from the wallet screen.",
+                    ),
+                )
+            app.popRoute()
         }
     }
 

@@ -1506,7 +1506,10 @@ impl WalletActor {
 
         if full_scan_updates_initial_metadata(full_scan_type) {
             let now = jiff::Timestamp::now().as_second() as u64;
+
+            // scan actor error handling sends Idle for this terminal metadata check
             self.record_full_scan_performed(now)?;
+
             self.save_last_scan_finished();
             self.send_metadata_changed();
         } else {

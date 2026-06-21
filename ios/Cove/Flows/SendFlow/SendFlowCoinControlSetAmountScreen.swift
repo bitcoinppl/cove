@@ -578,18 +578,18 @@ struct SendFlowCoinControlSetAmountScreen: View {
         NavigationStack {
             let manager = WalletManager(preview: "preview_only")
             let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
-            let sendFlowManager = SendFlowManager(
-                try! manager.rust.newSendFlowManager(balance: manager.balance),
-                presenter: presenter
-            )
 
-            SendFlowCoinControlSetAmountScreen(
-                id: WalletId(), utxos: previewNewUtxoList(outputCount: 15, changeCount: 3)
-            )
-            .environment(manager)
-            .environment(AppManager.shared)
-            .environment(presenter)
-            .environment(sendFlowManager)
+            if let rustSendFlowManager = try? manager.rust.newSendFlowManager(balance: manager.balance) {
+                let sendFlowManager = SendFlowManager(rustSendFlowManager, presenter: presenter)
+
+                SendFlowCoinControlSetAmountScreen(
+                    id: WalletId(), utxos: previewNewUtxoList(outputCount: 15, changeCount: 3)
+                )
+                .environment(manager)
+                .environment(AppManager.shared)
+                .environment(presenter)
+                .environment(sendFlowManager)
+            }
         }
     }
 }

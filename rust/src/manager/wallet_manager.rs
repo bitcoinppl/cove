@@ -1496,12 +1496,33 @@ impl RustWalletManager {
 
     fn current_metadata(&self) -> WalletMetadata {
         let cached_metadata = self.metadata.read().clone();
-        Database::global()
-            .wallets()
-            .get(&self.id, cached_metadata.network, cached_metadata.wallet_mode)
-            .ok()
-            .flatten()
-            .unwrap_or(cached_metadata)
+        let database_metadata = Database::global().wallets().get(
+            &self.id,
+            cached_metadata.network,
+            cached_metadata.wallet_mode,
+        );
+
+        match database_metadata {
+            Ok(Some(metadata)) => metadata,
+            Ok(None) => {
+                let id = &self.id;
+                let network = cached_metadata.network;
+                let wallet_mode = cached_metadata.wallet_mode;
+                warn!(
+                    "wallet metadata missing id={id:?} network={network:?} wallet_mode={wallet_mode}, using cached metadata"
+                );
+                cached_metadata
+            }
+            Err(error) => {
+                let id = &self.id;
+                let network = cached_metadata.network;
+                let wallet_mode = cached_metadata.wallet_mode;
+                warn!(
+                    "unable to load wallet metadata id={id:?} network={network:?} wallet_mode={wallet_mode}: {error}, using cached metadata"
+                );
+                cached_metadata
+            }
+        }
     }
 
     fn ensure_ledger_ready_for_spend(&self) -> Result<(), Error> {
