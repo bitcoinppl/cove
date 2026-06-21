@@ -19,6 +19,16 @@ class SelectedWalletScreenHelpersTest {
     }
 
     @Test
+    fun loadedWalletCannotRefreshDuringActiveScan() {
+        assertFalse(
+            canRefreshSelectedWallet(
+                WalletLoadState.LOADED(emptyList()),
+                WalletScanStatus.ScanningPendingProgress(WalletScanPhase.FULL),
+            ),
+        )
+    }
+
+    @Test
     fun idleIncompleteScanCanRefresh() {
         assertTrue(
             canRefreshSelectedWallet(

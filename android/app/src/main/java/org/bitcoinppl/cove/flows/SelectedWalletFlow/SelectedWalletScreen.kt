@@ -108,7 +108,7 @@ internal fun canRefreshSelectedWallet(
     scanStatus: WalletScanStatus,
 ): Boolean =
     when (loadState) {
-        is WalletLoadState.LOADED -> true
+        is WalletLoadState.LOADED -> scanStatus == WalletScanStatus.Idle
         is WalletLoadState.SCANNING -> scanStatus == WalletScanStatus.Idle
         is WalletLoadState.LOADING -> false
     }

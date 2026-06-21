@@ -437,7 +437,7 @@ impl RustWalletManager {
     pub async fn new_coin_control_manager(&self) -> Result<Arc<RustCoinControlManager>, Error> {
         self.ensure_ledger_ready_for_spend()?;
 
-        let metadata = self.metadata.read().clone();
+        let metadata = self.current_metadata();
         let unspent = call!(self.actor.list_unspent()).await.expect("actor failed")?;
 
         let manager = RustCoinControlManager::new(metadata, unspent);
