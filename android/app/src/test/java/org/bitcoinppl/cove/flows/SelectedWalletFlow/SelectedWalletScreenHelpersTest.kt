@@ -46,6 +46,7 @@ class SelectedWalletScreenHelpersTest {
             canRefreshSelectedWallet(
                 WalletLoadState.LOADED(emptyList()),
                 WalletScanStatus.Idle,
+                WalletLedgerState.Complete,
             ),
         )
     }
@@ -56,6 +57,18 @@ class SelectedWalletScreenHelpersTest {
             canRefreshSelectedWallet(
                 WalletLoadState.LOADED(emptyList()),
                 WalletScanStatus.ScanningPendingProgress(WalletScanPhase.FULL),
+                WalletLedgerState.Complete,
+            ),
+        )
+    }
+
+    @Test
+    fun loadedWalletCanRetryWhenInitialScanIsIncompleteAndIdle() {
+        assertTrue(
+            canRefreshSelectedWallet(
+                WalletLoadState.LOADED(emptyList()),
+                WalletScanStatus.Idle,
+                WalletLedgerState.InitialScanIncomplete(InitialScanActivity.IDLE),
             ),
         )
     }
@@ -67,6 +80,18 @@ class SelectedWalletScreenHelpersTest {
             canRefreshSelectedWallet(
                 WalletLoadState.SCANNING(emptyList()),
                 WalletScanStatus.Idle,
+                WalletLedgerState.Complete,
+            ),
+        )
+    }
+
+    @Test
+    fun scanningLoadStateCanRetryWhenInitialScanIsIncompleteAndIdle() {
+        assertTrue(
+            canRefreshSelectedWallet(
+                WalletLoadState.SCANNING(emptyList()),
+                WalletScanStatus.Idle,
+                WalletLedgerState.InitialScanIncomplete(InitialScanActivity.IDLE),
             ),
         )
     }
@@ -77,6 +102,18 @@ class SelectedWalletScreenHelpersTest {
             canRefreshSelectedWallet(
                 WalletLoadState.SCANNING(emptyList()),
                 WalletScanStatus.ScanningPendingProgress(WalletScanPhase.FULL),
+                WalletLedgerState.Complete,
+            ),
+        )
+    }
+
+    @Test
+    fun activeInitialScanCannotRefreshEvenBeforeProgressArrives() {
+        assertFalse(
+            canRefreshSelectedWallet(
+                WalletLoadState.SCANNING(emptyList()),
+                WalletScanStatus.Idle,
+                WalletLedgerState.InitialScanIncomplete(InitialScanActivity.ACTIVE),
             ),
         )
     }
@@ -87,6 +124,7 @@ class SelectedWalletScreenHelpersTest {
             canRefreshSelectedWallet(
                 WalletLoadState.LOADING,
                 WalletScanStatus.Idle,
+                WalletLedgerState.Complete,
             ),
         )
     }

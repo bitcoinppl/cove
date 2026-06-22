@@ -143,6 +143,24 @@ impl WalletAddressType {
 }
 
 impl Wallet {
+    fn current_database_metadata(&self) -> Result<WalletMetadata, WalletError> {
+        Database::global()
+            .wallets
+            .get(&self.id, self.network, self.metadata.wallet_mode)?
+            .ok_or(WalletError::MetadataNotFound)
+    }
+
+    fn persist_address_type_switch_metadata(
+        &mut self,
+        metadata: WalletMetadata,
+    ) -> Result<(), WalletError> {
+        let metadata = Database::global().wallets.replace_wallet_metadata(metadata)?;
+
+        self.metadata = metadata;
+
+        Ok(())
+    }
+
     /// Create a new wallet from the given mnemonic save the bdk wallet filestore, save in our database and select it
     pub fn try_new_persisted_and_selected(
         metadata: WalletMetadata,
@@ -467,10 +485,9 @@ impl Wallet {
         // switch db and wallet
         self.bdk = wallet;
         self.db = Mutex::new(db);
-        self.metadata.address_type = address_type;
-        self.metadata.discovery_state = DiscoveryState::ChoseAdressType;
-        self.metadata.internal.reset_scan_state_for_address_type_switch();
-        Database::global().wallets.replace_wallet_metadata(self.metadata.clone())?;
+        let metadata = self.current_database_metadata()?;
+        let metadata = metadata_for_address_type_switch(metadata, address_type);
+        self.persist_address_type_switch_metadata(metadata)?;
 
         Ok(())
     }
@@ -493,19 +510,20 @@ impl Wallet {
             .flatten()
             .ok_or(WalletError::WalletNotFound)?;
 
+        let metadata_for_new_wallet = self.current_database_metadata()?;
         let mut me = Self::try_new_persisted_from_mnemonic(
-            self.metadata.clone(),
+            metadata_for_new_wallet,
             mnemonic,
             None,
             address_type,
         )?;
+        let current_metadata = self.current_database_metadata()?;
+        let metadata =
+            metadata_for_mnemonic_address_type_switch(current_metadata, &me.metadata, address_type);
 
-        // swap th wallet to the new one
+        // swap the wallet to the new one
         std::mem::swap(&mut me, self);
-        self.metadata.address_type = address_type;
-        self.metadata.discovery_state = DiscoveryState::ChoseAdressType;
-        self.metadata.internal.reset_scan_state_for_address_type_switch();
-        Database::global().wallets.replace_wallet_metadata(self.metadata.clone())?;
+        self.persist_address_type_switch_metadata(metadata)?;
 
         Ok(())
     }
@@ -796,6 +814,27 @@ impl WalletAddressType {
     }
 }
 
+fn metadata_for_address_type_switch(
+    mut metadata: WalletMetadata,
+    address_type: WalletAddressType,
+) -> WalletMetadata {
+    metadata.address_type = address_type;
+    metadata.discovery_state = DiscoveryState::ChoseAdressType;
+    metadata.internal.reset_scan_state_for_address_type_switch();
+    metadata
+}
+
+fn metadata_for_mnemonic_address_type_switch(
+    current_metadata: WalletMetadata,
+    derived_metadata: &WalletMetadata,
+    address_type: WalletAddressType,
+) -> WalletMetadata {
+    let mut metadata = metadata_for_address_type_switch(current_metadata, address_type);
+    metadata.master_fingerprint = derived_metadata.master_fingerprint.clone();
+    metadata.origin = derived_metadata.origin.clone();
+    metadata
+}
+
 // delete wallet filestore / sqlite store and wallet data database
 pub fn delete_wallet_specific_data(wallet_id: &WalletId) -> eyre::Result<()> {
     BdkStore::delete_wallet_stores(wallet_id)?;
@@ -1016,6 +1055,80 @@ mod tests {
 
         assert_eq!(last_revealed_after, last_revealed_before);
         assert_eq!(unused_after, unused_before);
+    }
+
+    #[test]
+    fn address_type_switch_metadata_preserves_current_fields_and_resets_scan_fields() {
+        let mut current_metadata = WalletMetadata::preview_new();
+        current_metadata.name = "renamed while discovering".to_string();
+        current_metadata.selected_unit = crate::transaction::Unit::Sat;
+        current_metadata.sensitive_visible = false;
+        current_metadata.details_expanded = true;
+        current_metadata.show_labels = false;
+        current_metadata.internal.address_index =
+            Some(cove_types::AddressIndex { last_seen_index: 4, address_list_hash: 2 });
+        current_metadata.internal.last_scan_finished = Some(std::time::Duration::from_secs(10));
+        current_metadata.internal.last_height_fetched = Some(cove_types::BlockSizeLast {
+            block_height: 1,
+            last_seen: std::time::Duration::from_secs(20),
+        });
+        current_metadata.internal.performed_full_scan_at = Some(30);
+        current_metadata.internal.store_type = metadata::StoreType::FileStore;
+
+        let mut stale_actor_metadata = current_metadata.clone();
+        stale_actor_metadata.name = "stale actor name".to_string();
+        stale_actor_metadata.selected_unit = crate::transaction::Unit::Btc;
+        stale_actor_metadata.sensitive_visible = true;
+        stale_actor_metadata.details_expanded = false;
+        stale_actor_metadata.show_labels = true;
+
+        let updated =
+            metadata_for_address_type_switch(current_metadata.clone(), WalletAddressType::Legacy);
+
+        assert_eq!(updated.name, current_metadata.name);
+        assert_eq!(updated.selected_unit, current_metadata.selected_unit);
+        assert_eq!(updated.sensitive_visible, current_metadata.sensitive_visible);
+        assert_eq!(updated.details_expanded, current_metadata.details_expanded);
+        assert_eq!(updated.show_labels, current_metadata.show_labels);
+        assert_ne!(updated.name, stale_actor_metadata.name);
+        assert_ne!(updated.selected_unit, stale_actor_metadata.selected_unit);
+        assert_ne!(updated.sensitive_visible, stale_actor_metadata.sensitive_visible);
+        assert_ne!(updated.details_expanded, stale_actor_metadata.details_expanded);
+        assert_ne!(updated.show_labels, stale_actor_metadata.show_labels);
+        assert_eq!(updated.address_type, WalletAddressType::Legacy);
+        assert_eq!(updated.discovery_state, DiscoveryState::ChoseAdressType);
+        assert_eq!(updated.internal.address_index, None);
+        assert_eq!(updated.internal.last_scan_finished, None);
+        assert_eq!(updated.internal.last_height_fetched, None);
+        assert_eq!(updated.internal.performed_full_scan_at, None);
+        assert_eq!(updated.internal.store_type, metadata::StoreType::FileStore);
+    }
+
+    #[test]
+    fn mnemonic_address_type_switch_metadata_keeps_new_derived_origin() {
+        let mut current_metadata = WalletMetadata::preview_new();
+        current_metadata.name = "current database name".to_string();
+        current_metadata.origin = Some("wpkh([73c5da0a/84'/0'/0'])".to_string());
+        current_metadata.internal.last_scan_finished = Some(std::time::Duration::from_secs(10));
+
+        let mut derived_metadata = current_metadata.clone();
+        derived_metadata.name =
+            "derived metadata should not replace current database name".to_string();
+        derived_metadata.origin = Some("pkh([73c5da0a/44'/0'/0'])".to_string());
+
+        let updated = metadata_for_mnemonic_address_type_switch(
+            current_metadata.clone(),
+            &derived_metadata,
+            WalletAddressType::Legacy,
+        );
+
+        assert_eq!(updated.name, current_metadata.name);
+        assert_ne!(updated.name, derived_metadata.name);
+        assert_eq!(updated.origin, derived_metadata.origin);
+        assert_ne!(updated.origin, current_metadata.origin);
+        assert_eq!(updated.address_type, WalletAddressType::Legacy);
+        assert_eq!(updated.discovery_state, DiscoveryState::ChoseAdressType);
+        assert_eq!(updated.internal.last_scan_finished, None);
     }
 
     #[test]

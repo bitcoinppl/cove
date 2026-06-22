@@ -65,6 +65,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.initialScanActive
 import org.bitcoinppl.cove.initialScanIncomplete
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
@@ -75,6 +76,7 @@ import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
+import org.bitcoinppl.cove_core.WalletLedgerState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletScanStatus
 import org.bitcoinppl.cove_core.WalletSettingsRoute
@@ -106,11 +108,12 @@ private class SelectedWalletPreviewModeProvider : PreviewParameterProvider<Boole
 internal fun canRefreshSelectedWallet(
     loadState: WalletLoadState,
     scanStatus: WalletScanStatus,
+    ledgerState: WalletLedgerState,
 ): Boolean =
-    when (loadState) {
-        is WalletLoadState.LOADED -> scanStatus == WalletScanStatus.Idle
-        is WalletLoadState.SCANNING -> scanStatus == WalletScanStatus.Idle
-        is WalletLoadState.LOADING -> false
+    when {
+        loadState is WalletLoadState.LOADING -> false
+        ledgerState.initialScanActive -> false
+        else -> scanStatus == WalletScanStatus.Idle
     }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -405,7 +408,11 @@ fun SelectedWalletScreen(
                     PullToRefreshBox(
                         isRefreshing = isRefreshing,
                         onRefresh = {
-                            if (canRefreshSelectedWallet(manager.loadState, manager.scanStatus) &&
+                            if (canRefreshSelectedWallet(
+                                    manager.loadState,
+                                    manager.scanStatus,
+                                    manager.ledgerState,
+                                ) &&
                                 isRefreshInProgress.compareAndSet(false, true)
                             ) {
                                 scope.launch {
