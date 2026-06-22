@@ -30,7 +30,6 @@ import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SendRoute
-import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.WalletId
@@ -111,13 +110,6 @@ fun SelectedWalletContainer(
             throw e
         } catch (e: Exception) {
             android.util.Log.e(tag, "wallet scan failed: ${e.message}", e)
-        }
-    }
-
-    // cleanup on disappear
-    DisposableEffect(id) {
-        onDispose {
-            manager?.dispatch(WalletManagerAction.SelectedWalletDisappeared)
         }
     }
 

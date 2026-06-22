@@ -59,9 +59,6 @@ struct SelectedWalletContainer: View {
                         Log.error("Wallet Scan Failed \(error.localizedDescription)")
                     }
                 }
-                .onDisappear {
-                    manager.dispatch(.selectedWalletDisappeared)
-                }
         }
     }
 
