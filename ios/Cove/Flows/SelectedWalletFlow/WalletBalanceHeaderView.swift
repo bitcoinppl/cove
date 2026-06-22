@@ -30,10 +30,6 @@ struct WalletBalanceHeaderView: View {
         metadata.walletType == .watchOnly || initialScanIsIncomplete
     }
 
-    private var showsInitialScanMessage: Bool {
-        metadata.walletType != .watchOnly && initialScanIsIncomplete
-    }
-
     private var sendButtonForegroundColor: Color {
         sendButtonIsUnavailable ? Color.secondary : Color.midnightBtn
     }
@@ -165,17 +161,6 @@ struct WalletBalanceHeaderView: View {
                     manager.dispatch(action: .updateUnit(.sat))
                     manager.dispatch(action: .updateFiatOrBtc(.btc))
                 }
-            }
-
-            if showsInitialScanMessage {
-                HStack(spacing: 8) {
-                    Image(systemName: "clock.arrow.circlepath")
-                    Text("Can't send until initial scan completes")
-                }
-                .font(.footnote.weight(.semibold))
-                .foregroundColor(.white.opacity(balancePresentation.secondaryOpacity))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .combine)
             }
 
             HStack(spacing: 16) {

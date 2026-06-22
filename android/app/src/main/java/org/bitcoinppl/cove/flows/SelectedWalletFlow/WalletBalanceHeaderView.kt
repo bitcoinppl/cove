@@ -238,27 +238,11 @@ private fun SendReceiveButtons(
 ) {
     val sendUnavailable = isWatchOnly || initialScanIncomplete
 
-    if (initialScanIncomplete && !isWatchOnly) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                text = "Can't send until initial scan completes",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
-
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         ImageButton(
             text = stringResource(R.string.btn_send),
             leadingIcon = rememberVectorPainter(Icons.Filled.NorthEast),
             onClick = onSend,
-            enabled = !sendUnavailable,
             colors =
                 androidx.compose.material3.ButtonDefaults.buttonColors(
                     containerColor = if (sendUnavailable) Color.Gray else CoveColor.btnPrimary,
