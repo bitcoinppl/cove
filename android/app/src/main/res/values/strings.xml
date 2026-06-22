@@ -96,6 +96,7 @@
     <string name="btn_hide_details">Hide Details</string>
     <string name="snackbar_transaction_lock_update_error">Unable to update transaction lock.</string>
     <string name="snackbar_transaction_lock_load_error">Unable to load transaction lock state.</string>
+    <string name="snackbar_label_refresh_failed">Changes saved, but the transaction list may need manual refresh.</string>
     <string name="label_transaction_lock_state_locked">Locked</string>
     <string name="label_transaction_lock_state_mixed">Mixed</string>
     <string name="label_transaction_lock_state_unlocked">Unlocked</string>

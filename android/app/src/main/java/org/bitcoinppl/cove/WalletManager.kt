@@ -90,6 +90,8 @@ class WalletManager :
     // errors
     var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
+    var labelRefreshFailed by mutableStateOf<TaggedItem<Unit>?>(null)
+        private set
 
     // cached transaction details (observable for Compose)
     val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
@@ -308,7 +310,12 @@ class WalletManager :
 
     suspend fun transactionLockState(txId: TxId): TransactionLockState = rust.transactionLockState(txId)
 
-    suspend fun toggleTransactionLockState(txId: TxId): TransactionLockState = rust.toggleTransactionLockState(txId)
+    suspend fun toggleTransactionLockState(txId: TxId): TransactionLockState {
+        val state = rust.toggleTransactionLockState(txId)
+        AppManager.getInstance().reconcileAfterLabelImport(id)
+
+        return state
+    }
 
     fun importLabels(labels: Bip329Labels) {
         LabelManager(id = id).use { it.importLabels(labels) }
@@ -317,7 +324,10 @@ class WalletManager :
 
     fun reconcileAfterLabelImport() {
         mainScope.launch {
-            reconcileAfterLabelImportAndWait()
+            val refreshed = reconcileAfterLabelImportAndWait()
+            if (!refreshed) {
+                notifyLabelRefreshFailed()
+            }
         }
     }
 
@@ -327,10 +337,18 @@ class WalletManager :
         return try {
             rust.getTransactions()
             true
-        } catch (e: Exception) {
+        } catch (e: IllegalStateException) {
             Log.e(tag, "failed to refresh transactions after label import", e)
             false
         }
+    }
+
+    fun notifyLabelRefreshFailed() {
+        labelRefreshFailed = TaggedItem(Unit)
+    }
+
+    fun clearLabelRefreshFailed() {
+        labelRefreshFailed = null
     }
 
     fun updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {

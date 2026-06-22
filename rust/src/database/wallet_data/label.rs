@@ -731,6 +731,41 @@ mod tests {
     }
 
     #[test]
+    fn export_import_round_trip_preserves_lock_only_output_record() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let (source_wallet_db, _source_tmp) =
+            new_test_wallet_data_db(WalletId::preview_new_random());
+        let source_db = &source_wallet_db.labels;
+
+        source_db.set_output_spendability(outpoint, false).expect("failed to lock output");
+        let exported = source_db.all_labels().expect("failed to load labels").export().unwrap();
+
+        let (destination_wallet_db, _destination_tmp) =
+            new_test_wallet_data_db(WalletId::preview_new_random());
+        let destination_db = &destination_wallet_db.labels;
+        destination_db
+            .insert_imported_labels(
+                Labels::try_from_str_with_metadata(&exported)
+                    .expect("failed to parse exported labels"),
+            )
+            .expect("failed to import exported labels");
+
+        let record = destination_db
+            .get_output_record(outpoint)
+            .expect("failed to get imported output record")
+            .expect("missing imported output record");
+        let locked =
+            destination_db.locked_output_outpoints().expect("failed to get locked outputs");
+
+        assert_eq!(record.item.label, None);
+        assert!(!record.item.spendable);
+        assert!(locked.contains(&outpoint));
+    }
+
+    #[test]
     fn unlocking_lock_only_record_removes_output_record() {
         let outpoint = OutPoint::from_str(
             "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",

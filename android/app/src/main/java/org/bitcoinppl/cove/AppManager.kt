@@ -190,7 +190,12 @@ class AppManager private constructor() : FfiReconcile {
 
     fun reconcileAfterLabelImport(walletId: WalletId) {
         mainScope.launch {
-            reconcileAfterLabelImportAndWait(walletId)
+            val refreshed = reconcileAfterLabelImportAndWait(walletId)
+            if (!refreshed) {
+                walletManager
+                    ?.takeIf { it.id == walletId }
+                    ?.notifyLabelRefreshFailed()
+            }
         }
     }
 
