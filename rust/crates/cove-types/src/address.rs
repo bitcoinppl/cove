@@ -242,9 +242,9 @@ fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
         return Ok(ParsedBitcoinUri { address, amount, payjoin });
     }
 
-    // Fallback: strip payjoin params (pj, pjos) and re-parse as regular bitcoin URI.
-    // Per BIP 78 backward compatibility, non-payjoin senders should ignore pj/pjos
-    // and proceed with a normal payment.
+    // Fallback: strip pj and pjos, re-parse as a regular bitcoin URI.
+    // Both params are stripped because pjos without pj= causes the v2 crate to reject the URI
+    // entirely; stripping both lets the address/amount still be extracted for a normal payment.
     let stripped = strip_payjoin_params(&normalized);
     let uri = payjoin::Uri::try_from(stripped.as_str()).map_err(|_| Error::InvalidAddress)?;
     let amount = uri.amount.map(|a| Amount::from_sat(a.to_sat()));
@@ -254,7 +254,11 @@ fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
     Ok(ParsedBitcoinUri { address, amount, payjoin: None })
 }
 
-/// Strips `pj` and `pjos` query parameters from a `bitcoin:` URI string.
+/// Strips `pj` and `pjos` from a `bitcoin:` URI string.
+///
+/// `pjos` is BIP78-specific but the v2-only payjoin crate rejects any URI containing it
+/// without a corresponding `pj=` endpoint. Both are stripped together so a legacy BIP78
+/// payment request still yields a usable address/amount as a regular payment.
 fn strip_payjoin_params(uri: &str) -> String {
     let (base, query) = match uri.split_once('?') {
         Some((b, q)) => (b, q),
@@ -668,6 +672,17 @@ mod tests {
     fn test_parse_bitcoin_uri_no_pj() {
         let a = "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001";
         let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.payjoin, None);
+    }
+
+    #[test]
+    fn test_parse_bitcoin_uri_pjos_without_pj() {
+        // pjos without a pj= causes the v2 crate to reject the URI;
+        // both are stripped so address and amount are still extracted
+        let a = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001&pjos=0";
+        let parsed = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(parsed.address, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
+        assert_eq!(parsed.amount, Some(Amount::from_btc(0.001).unwrap()));
         assert_eq!(parsed.payjoin, None);
     }
 
