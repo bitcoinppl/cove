@@ -633,6 +633,12 @@ impl WalletActor {
             return Produces::ok(Err(error));
         }
 
+        if self.payjoin_actor.is_some() {
+            return Produces::ok(Err(Error::SignAndBroadcastError(
+                "a payjoin session is already in progress".to_string(),
+            )));
+        }
+
         let Some(endpoint) = payjoin_endpoint else {
             // non-payjoin path: synchronous sign and broadcast
             let result = self.do_sign_and_broadcast_transaction(psbt).await;
@@ -648,19 +654,13 @@ impl WalletActor {
         psbt: Psbt,
         endpoint: String,
     ) -> Result<(), Error> {
-        if self.payjoin_actor.is_some() {
-            return Err(Error::SignAndBroadcastError(
-                "a payjoin session is already in progress".to_string(),
-            ));
-        }
-
         // sign the original PSBT first so we have both the
         // signed PSBT to POST to the directory and a valid fallback tx
         let (signed_psbt, fallback_tx) = self.do_sign_original_psbt(psbt).await?;
 
         let network: bitcoin::Network = self.wallet.network.into();
 
-        let sender = match build_sender(signed_psbt, endpoint, network) {
+        let sender = match build_sender(signed_psbt, &fallback_tx, endpoint, network) {
             Ok(s) => s,
             Err(e) => {
                 warn!("payjoin setup failed, broadcasting fallback tx: {e}");

@@ -2,7 +2,7 @@ use act_zero::*;
 use bdk_wallet::chain::bitcoin::Psbt;
 use bitcoin::{Amount, FeeRate as BdkFeeRate, Transaction as BdkTransaction, params::Params};
 use payjoin::{
-    Uri, UriExt,
+    PjParam, Uri, UriExt,
     persist::{NoopSessionPersister, OptionalTransitionOutcome},
     send::{
         ResponseError,
@@ -108,22 +108,19 @@ fn recipient_output_index(psbt: &Psbt) -> eyre::Result<usize> {
 /// Builds the v2 sender state machine from a signed PSBT and payjoin endpoint
 pub(crate) fn build_sender(
     signed_psbt: Psbt,
+    fallback_tx: &BdkTransaction,
     endpoint: String,
     network: bitcoin::Network,
 ) -> eyre::Result<PayjoinSender> {
     // TODO: anti-probing (inputs_seen), verify our inputs have not appeared in a prior session
     // TODO: surface payjoin downgrade to the user when the fallback tx is broadcast instead of the proposal
 
-    // reject v1 endpoints: SenderBuilder::new (v2) panics with unimplemented! on non-OHTTP URIs
+    // SenderBuilder::new (v2) panics on non-OHTTP URIs; '#' in the endpoint signals v2
     if !endpoint.contains('#') {
-        return Err(eyre::eyre!(
-            "payjoin endpoint is not a BIP77 v2 OHTTP endpoint (no '#' fragment); \
-             v1 endpoints are not supported — broadcast the fallback transaction instead"
-        ));
+        return Err(eyre::eyre!("not a BIP77 v2 endpoint; v1 not supported"));
     }
 
-    // '#' is the URI fragment delimiter (carries OHTTP key, reply key, and expiry) and must be
-    // percent-encoded as '%23' in the pj= param so it survives BIP21 URI round-trips
+    // '#' must be percent-encoded as '%23' in the pj= param to survive BIP21 round-trips
     let encoded_endpoint = endpoint.replace('#', "%23");
 
     let idx = recipient_output_index(&signed_psbt)?;
@@ -140,13 +137,19 @@ pub(crate) fn build_sender(
         .check_pj_supported()
         .map_err(|_| eyre::eyre!("URI does not support payjoin (missing pj= param)"))?;
 
-    // use the original PSBT's effective fee rate as the minimum the receiver must match;
-    // BROADCAST_MIN is only used as a fallback if the fee cannot be computed
+    // double check a v1 URL with a '#' would pass the check above but panic in SenderBuilder
+    if !matches!(pj_uri.extras.pj_param(), PjParam::V2(_)) {
+        return Err(eyre::eyre!(
+            "payjoin endpoint is v1; only BIP77 v2 OHTTP endpoints are supported"
+        ));
+    }
+
+    // use the signed tx weight (includes witness bytes) so the fee floor isn't inflated for SegWit
     let fee_rate = signed_psbt
         .fee()
         .ok()
         .and_then(|fee| {
-            let wu = signed_psbt.unsigned_tx.weight().to_wu();
+            let wu = fallback_tx.weight().to_wu();
             let sat_per_kwu = fee.to_sat() * 1000;
             sat_per_kwu.checked_div(wu).map(BdkFeeRate::from_sat_per_kwu)
         })
