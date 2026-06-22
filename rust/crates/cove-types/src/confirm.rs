@@ -333,7 +333,7 @@ impl ConfirmDetails {
         use cove_ur::CryptoPsbt;
         use foundation_ur::Encoder as UrEncoder;
 
-        // wrap PSBT in CryptoPsbt and encode to untagged CBOR
+        // untagged crypto-psbt CBOR for hardware-wallet interop
         let crypto_psbt = CryptoPsbt::new(self.psbt.0.clone());
 
         let cbor_psbt = crypto_psbt.encode().map_err(|e| {
@@ -509,11 +509,26 @@ mod tests {
 
         let parts = confirm_details.psbt_to_ur(10_000).unwrap();
 
-        assert_eq!(parts.len(), 1);
+        assert_ur_parts_export_untagged_crypto_psbt(&confirm_details, &parts);
+    }
 
+    #[test]
+    fn psbt_to_ur_exports_multi_part_untagged_crypto_psbt() {
+        let confirm_details = confirm_details_preview_new();
+
+        let parts = confirm_details.psbt_to_ur(50).unwrap();
+
+        assert!(parts.len() > 1, "expected multiple UR parts, got {}", parts.len());
+        assert_ur_parts_export_untagged_crypto_psbt(&confirm_details, &parts);
+    }
+
+    fn assert_ur_parts_export_untagged_crypto_psbt(
+        confirm_details: &ConfirmDetails,
+        parts: &[String],
+    ) {
         let mut decoder = UrDecoder::default();
         for part in parts {
-            let ur = UR::parse(&part).unwrap();
+            let ur = UR::parse(part).unwrap();
             assert_eq!(ur.as_type(), "crypto-psbt");
             decoder.receive(ur).unwrap();
         }
@@ -524,7 +539,6 @@ mod tests {
         let cbor = decoder.message().unwrap().unwrap();
         assert!(!cbor.is_empty());
         assert_eq!(cbor[0] >> 5, 2);
-        assert_ne!(cbor[0], 0xD9);
 
         let crypto_psbt = CryptoPsbt::decode(cbor.to_vec()).unwrap();
         assert_eq!(crypto_psbt.to_psbt_bytes(), confirm_details.psbt.0.serialize());

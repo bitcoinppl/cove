@@ -2,14 +2,17 @@
 //! BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
 //!
 //! Note: This type uses manual CBOR encoding/decoding (not derive macros) because:
-//! 1. The structure is `bytes` - a simple byte string, not a map
-//! 2. Decoding must support both tagged and untagged formats for interoperability
+//! 1. Decoding must support both tagged and untagged formats for interoperability
+//! 2. The structure is `bytes` - a simple byte string, not a map
 //! 3. Derive macros don't provide significant simplification for this structure
 
 use bitcoin::psbt::Psbt as BdkPsbt;
 use cove_util::ResultExt as _;
 use foundation_ur::{UR, bytewords};
-use minicbor::{Decoder, Encoder, data::Tag};
+use minicbor::{
+    Decoder, Encoder,
+    data::{Tag, Type},
+};
 
 use crate::{
     error::{Result, ToUrError, UrError},
@@ -76,13 +79,12 @@ impl CryptoPsbt {
     pub fn from_cbor(cbor: &[u8]) -> Result<Self> {
         let mut decoder = Decoder::new(cbor);
 
-        if let Ok(tag) = decoder.tag() {
+        if decoder.datatype().map_err_cbor_decode()? == Type::Tag {
+            let tag = decoder.tag().map_err_cbor_decode()?;
+
             if tag != Tag::new(CRYPTO_PSBT) {
                 return Err(UrError::InvalidTag { expected: CRYPTO_PSBT, actual: tag.as_u64() });
             }
-        } else {
-            // untagged format: reset decoder to start
-            decoder = Decoder::new(cbor);
         }
 
         // read byte string
@@ -245,7 +247,6 @@ mod tests {
 
         assert!(!cbor.is_empty());
         assert_eq!(cbor[0] >> 5, 2);
-        assert_ne!(cbor[0], 0xD9);
 
         let mut expected_cbor = Vec::new();
         let mut encoder = Encoder::new(&mut expected_cbor);
@@ -385,6 +386,21 @@ mod tests {
         let result = CryptoPsbt::from_cbor(&invalid_cbor);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
+
+    /// Test malformed CBOR: truncated tag header
+    #[test]
+    fn test_crypto_psbt_truncated_tag_reports_cbor_read_error() {
+        let result = CryptoPsbt::from_cbor(&[0xD9, 0x01]);
+
+        let err = result.unwrap_err();
+        match err {
+            UrError::CborDecodeError(message) => {
+                assert!(message.contains("end of input bytes"), "{message}");
+                assert!(!message.contains("expected bytes"), "{message}");
+            }
+            err => panic!("Expected CBOR decode error, got {err:?}"),
+        }
     }
 
     /// Test malformed CBOR: truncated data

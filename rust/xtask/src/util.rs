@@ -270,7 +270,7 @@ fn generate_ur_gif(psbt_bytes: &[u8], output_path: &str) -> Result<()> {
     use foundation_ur::Encoder;
 
     let crypto_psbt = CryptoPsbt::from_psbt_bytes(psbt_bytes.to_vec())
-        .map_err(|e| eyre!("CryptoPsbt encoding failed: {e}"))?;
+        .map_err(|e| eyre!("Invalid PSBT bytes: {e}"))?;
 
     let cbor = crypto_psbt.encode().map_err(|e| eyre!("CBOR encoding failed: {e}"))?;
 
