@@ -61,6 +61,8 @@ type Reconciler = dyn SendFlowManagerReconciler;
 type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 type DeferredSender = deferred_sender::DeferredSender<Message>;
 
+const LOCK_STATE_LOAD_FAILED_ERROR_ID: &str = "send_flow_lock_state_load_failed";
+
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SetAmountFocusField {
     Amount,
@@ -91,8 +93,9 @@ fn amount_exceeds_spendable_balance(amount: Option<u64>, spendable_balance: Opti
         return false;
     }
 
-    // fail closed when the unlocked balance cannot be loaded
-    let spendable = spendable_balance.unwrap_or(0);
+    let Some(spendable) = spendable_balance else {
+        return false;
+    };
 
     amount > spendable
 }
@@ -100,6 +103,28 @@ fn amount_exceeds_spendable_balance(amount: Option<u64>, spendable_balance: Opti
 fn spendable_balance_for_validation(unlocked_spendable_sats: Option<u64>) -> u64 {
     // fail closed so amount validation cannot overspend locked or unknown UTXOs
     unlocked_spendable_sats.unwrap_or(0)
+}
+
+fn unavailable_spendable_balance_alert(
+    unlocked_spendable_sats: Option<u64>,
+    lock_state_load_failed: bool,
+) -> Option<SendFlowAlertState> {
+    if lock_state_load_failed {
+        return Some(SendFlowAlertState::General {
+            title: "Unable to Read Locked Coins".to_string(),
+            message: "Cove could not read the lock state for this wallet. Locked coins are excluded for safety. Please try again shortly.".to_string(),
+        });
+    }
+
+    if unlocked_spendable_sats.is_none() {
+        return Some(SendFlowAlertState::General {
+            title: "Balance Still Loading".to_string(),
+            message: "Cove is still checking which coins are unlocked. Please try again shortly."
+                .to_string(),
+        });
+    }
+
+    None
 }
 
 #[uniffi::export(callback_interface)]
@@ -531,13 +556,30 @@ impl RustSendFlowManager {
             return false;
         }
 
-        let spendable_balance = {
+        let (spendable_balance, unavailable_balance_alert, is_max_selected) = {
             let state = self.state.lock();
-            spendable_balance_for_validation(state.unlocked_spendable_sats)
+            (
+                spendable_balance_for_validation(state.unlocked_spendable_sats),
+                unavailable_spendable_balance_alert(
+                    state.unlocked_spendable_sats,
+                    state.lock_state_load_failed,
+                ),
+                state.max_selected.is_some(),
+            )
         };
 
         if spendable_balance < amount {
-            let is_max_selected = self.state.lock().max_selected.is_some();
+            if let Some(alert) = unavailable_balance_alert {
+                let msg = Message::SetAlert(alert);
+                if display_alert {
+                    sender.queue(msg);
+                } else {
+                    debug!("validate_amount_failed: {msg:?}");
+                }
+
+                return false;
+            }
+
             if is_max_selected {
                 let me = self.clone();
                 cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
@@ -2006,13 +2048,25 @@ impl RustSendFlowManager {
         let unlocked_spendable_sats =
             self.wallet_manager.unlocked_spendable_balance().await.map(|amount| amount.as_sats());
         if let Err(error) = &unlocked_spendable_sats {
-            error!("failed to get unlocked spendable balance: {error}");
+            error!(
+                error_id = LOCK_STATE_LOAD_FAILED_ERROR_ID,
+                "failed to get unlocked spendable balance: {error}"
+            );
         }
 
         let wallet_balance = Arc::new(balance);
         let mut state = self.state.lock();
         state.wallet_balance = Some(wallet_balance);
-        state.unlocked_spendable_sats = unlocked_spendable_sats.ok();
+        match unlocked_spendable_sats {
+            Ok(unlocked_spendable_sats) => {
+                state.unlocked_spendable_sats = Some(unlocked_spendable_sats);
+                state.lock_state_load_failed = false;
+            }
+            Err(_) => {
+                state.unlocked_spendable_sats = None;
+                state.lock_state_load_failed = true;
+            }
+        }
     }
 }
 
@@ -2023,7 +2077,7 @@ mod tests {
         assert!(super::amount_exceeds_spendable_balance(Some(6_000), Some(5_000)));
         assert!(!super::amount_exceeds_spendable_balance(Some(5_000), Some(5_000)));
         assert!(!super::amount_exceeds_spendable_balance(Some(0), Some(0)));
-        assert!(super::amount_exceeds_spendable_balance(Some(1), None));
+        assert!(!super::amount_exceeds_spendable_balance(Some(1), None));
         assert!(!super::amount_exceeds_spendable_balance(Some(0), None));
     }
 
@@ -2031,5 +2085,26 @@ mod tests {
     fn validation_spendable_balance_uses_zero_when_unlocked_balance_is_unknown() {
         assert_eq!(super::spendable_balance_for_validation(Some(5_000)), 5_000);
         assert_eq!(super::spendable_balance_for_validation(None), 0);
+    }
+
+    #[test]
+    fn unavailable_balance_alert_distinguishes_lock_state_failures() {
+        let alert = super::unavailable_spendable_balance_alert(None, true);
+
+        assert!(matches!(
+            alert,
+            Some(super::SendFlowAlertState::General { title, .. }) if title.contains("Locked")
+        ));
+    }
+
+    #[test]
+    fn unavailable_balance_alert_distinguishes_loading_state() {
+        let alert = super::unavailable_spendable_balance_alert(None, false);
+
+        assert!(matches!(
+            alert,
+            Some(super::SendFlowAlertState::General { title, .. }) if title.contains("Loading")
+        ));
+        assert_eq!(super::unavailable_spendable_balance_alert(Some(5_000), false), None);
     }
 }
