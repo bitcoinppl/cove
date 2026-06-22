@@ -220,6 +220,10 @@ class WalletManager :
         rust.forceWalletScan()
     }
 
+    suspend fun startWalletScan() {
+        rust.startWalletScan()
+    }
+
     fun setScanning() {
         val currentTxns =
             when (val state = loadState) {

@@ -38,7 +38,7 @@ import org.bitcoinppl.cove_core.types.WalletId
 private const val BALANCE_UPDATE_DELAY_MS = 500L
 
 /**
- * Selected wallet container - manages WalletManager lifecycle
+ * Selected wallet container - uses the app-owned WalletManager
  * Ported from iOS SelectedWalletContainer.swift
  */
 @Composable
@@ -73,8 +73,6 @@ fun SelectedWalletContainer(
                 delay(BALANCE_UPDATE_DELAY_MS)
                 wm.updateWalletBalance()
             } else {
-                // close stale manager to prevent leak
-                wm.close()
                 android.util.Log.d(tag, "discarding stale wallet load for $requestedId, now loading $id")
             }
         } catch (e: WalletManagerException.DatabaseCorruption) {
@@ -105,7 +103,7 @@ fun SelectedWalletContainer(
     LaunchedEffect(manager) {
         val wm = manager ?: return@LaunchedEffect
         try {
-            wm.rust.startWalletScan()
+            wm.startWalletScan()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
