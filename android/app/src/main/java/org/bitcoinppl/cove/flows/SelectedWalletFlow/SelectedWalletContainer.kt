@@ -39,6 +39,8 @@ private const val BALANCE_UPDATE_DELAY_MS = 500L
 
 /**
  * Selected wallet container - uses the app-owned WalletManager
+ *
+ * App-owned managers stay alive across route changes so an in-flight initial scan can continue
  * Ported from iOS SelectedWalletContainer.swift
  */
 @Composable
@@ -73,6 +75,8 @@ fun SelectedWalletContainer(
                 delay(BALANCE_UPDATE_DELAY_MS)
                 wm.updateWalletBalance()
             } else {
+                // app-owned managers stay alive here so an in-flight initial scan can continue
+                // until AppManager replaces it for another wallet
                 android.util.Log.d(tag, "discarding stale wallet load for $requestedId, now loading $id")
             }
         } catch (e: WalletManagerException.DatabaseCorruption) {

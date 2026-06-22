@@ -53375,15 +53375,6 @@ sealed class WalletManagerAction: Disposable  {
     object SelectCurrentWalletAddressType : WalletManagerAction()
 
 
-    data class SelectDifferentWalletAddressType(
-        val v1: org.bitcoinppl.cove_core.WalletAddressType) : WalletManagerAction()
-
-    {
-
-
-        companion object
-    }
-
     object SelectedWalletDisappeared : WalletManagerAction()
 
 
@@ -53456,13 +53447,6 @@ sealed class WalletManagerAction: Disposable  {
             }
             is WalletManagerAction.SelectCurrentWalletAddressType -> {// Nothing to destroy
             }
-            is WalletManagerAction.SelectDifferentWalletAddressType -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
             is WalletManagerAction.SelectedWalletDisappeared -> {// Nothing to destroy
             }
             is WalletManagerAction.StartTransactionWatcher -> {
@@ -53518,16 +53502,13 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             8 -> WalletManagerAction.ToggleFiatBtcPrimarySecondary
             9 -> WalletManagerAction.ToggleShowLabels
             10 -> WalletManagerAction.SelectCurrentWalletAddressType
-            11 -> WalletManagerAction.SelectDifferentWalletAddressType(
-                FfiConverterTypeWalletAddressType.read(buf),
-                )
-            12 -> WalletManagerAction.SelectedWalletDisappeared
-            13 -> WalletManagerAction.StartTransactionWatcher(
+            11 -> WalletManagerAction.SelectedWalletDisappeared
+            12 -> WalletManagerAction.StartTransactionWatcher(
                 FfiConverterTypeTxId.read(buf),
                 )
-            14 -> WalletManagerAction.OpenReceiveAddress
-            15 -> WalletManagerAction.CreateNewReceiveAddress
-            16 -> WalletManagerAction.CloseReceiveAddress(
+            13 -> WalletManagerAction.OpenReceiveAddress
+            14 -> WalletManagerAction.CreateNewReceiveAddress
+            15 -> WalletManagerAction.CloseReceiveAddress(
                 FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -53597,13 +53578,6 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-            )
-        }
-        is WalletManagerAction.SelectDifferentWalletAddressType -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeWalletAddressType.allocationSize(value.v1)
             )
         }
         is WalletManagerAction.SelectedWalletDisappeared -> {
@@ -53686,30 +53660,25 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
                 buf.putInt(10)
                 Unit
             }
-            is WalletManagerAction.SelectDifferentWalletAddressType -> {
-                buf.putInt(11)
-                FfiConverterTypeWalletAddressType.write(value.v1, buf)
-                Unit
-            }
             is WalletManagerAction.SelectedWalletDisappeared -> {
-                buf.putInt(12)
+                buf.putInt(11)
                 Unit
             }
             is WalletManagerAction.StartTransactionWatcher -> {
-                buf.putInt(13)
+                buf.putInt(12)
                 FfiConverterTypeTxId.write(value.v1, buf)
                 Unit
             }
             is WalletManagerAction.OpenReceiveAddress -> {
-                buf.putInt(14)
+                buf.putInt(13)
                 Unit
             }
             is WalletManagerAction.CreateNewReceiveAddress -> {
-                buf.putInt(15)
+                buf.putInt(14)
                 Unit
             }
             is WalletManagerAction.CloseReceiveAddress -> {
-                buf.putInt(16)
+                buf.putInt(15)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }

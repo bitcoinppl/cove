@@ -125,7 +125,8 @@ class AppManager private constructor() : FfiReconcile {
                 Log.d(tag, "found and using wallet manager for $id")
                 return it
             }
-            // close old manager before replacing
+
+            // selecting a different wallet is the boundary for ending in-flight scans
             Log.d(tag, "closing old wallet manager for ${it.id}")
             it.close()
         }

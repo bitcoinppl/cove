@@ -34230,8 +34230,6 @@ public enum WalletManagerAction {
     case toggleFiatBtcPrimarySecondary
     case toggleShowLabels
     case selectCurrentWalletAddressType
-    case selectDifferentWalletAddressType(WalletAddressType
-    )
     case selectedWalletDisappeared
     case startTransactionWatcher(TxId
     )
@@ -34284,19 +34282,16 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
 
         case 10: return .selectCurrentWalletAddressType
 
-        case 11: return .selectDifferentWalletAddressType(try FfiConverterTypeWalletAddressType.read(from: &buf)
+        case 11: return .selectedWalletDisappeared
+
+        case 12: return .startTransactionWatcher(try FfiConverterTypeTxId.read(from: &buf)
         )
 
-        case 12: return .selectedWalletDisappeared
+        case 13: return .openReceiveAddress
 
-        case 13: return .startTransactionWatcher(try FfiConverterTypeTxId.read(from: &buf)
-        )
+        case 14: return .createNewReceiveAddress
 
-        case 14: return .openReceiveAddress
-
-        case 15: return .createNewReceiveAddress
-
-        case 16: return .closeReceiveAddress(try FfiConverterUInt64.read(from: &buf)
+        case 15: return .closeReceiveAddress(try FfiConverterUInt64.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -34351,30 +34346,25 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(10))
 
 
-        case let .selectDifferentWalletAddressType(v1):
-            writeInt(&buf, Int32(11))
-            FfiConverterTypeWalletAddressType.write(v1, into: &buf)
-
-
         case .selectedWalletDisappeared:
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(11))
 
 
         case let .startTransactionWatcher(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeTxId.write(v1, into: &buf)
 
 
         case .openReceiveAddress:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(13))
 
 
         case .createNewReceiveAddress:
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(14))
 
 
         case let .closeReceiveAddress(v1):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(15))
             FfiConverterUInt64.write(v1, into: &buf)
 
         }

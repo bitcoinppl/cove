@@ -110,7 +110,6 @@ pub enum WalletManagerAction {
     ToggleFiatBtcPrimarySecondary,
     ToggleShowLabels,
     SelectCurrentWalletAddressType,
-    SelectDifferentWalletAddressType(WalletAddressType),
     SelectedWalletDisappeared,
     StartTransactionWatcher(Arc<TxId>),
     OpenReceiveAddress,
@@ -1422,11 +1421,6 @@ impl RustWalletManager {
             }
 
             Action::SelectCurrentWalletAddressType => {
-                candidate.discovery_state = DiscoveryState::ChoseAdressType;
-            }
-
-            Action::SelectDifferentWalletAddressType(wallet_address_type) => {
-                candidate.address_type = wallet_address_type;
                 candidate.discovery_state = DiscoveryState::ChoseAdressType;
             }
 
