@@ -333,9 +333,9 @@ impl ConfirmDetails {
         use cove_ur::CryptoPsbt;
         use foundation_ur::Encoder as UrEncoder;
 
-        // untagged crypto-psbt CBOR for hardware-wallet interop
         let crypto_psbt = CryptoPsbt::new(self.psbt.0.clone());
 
+        // encode untagged crypto-psbt CBOR for hardware-wallet interop
         let cbor_psbt = crypto_psbt.encode().map_err(|e| {
             ConfirmDetailsError::QrCodeCreation(format!("CBOR encoding failed: {e}"))
         })?;
@@ -509,6 +509,7 @@ mod tests {
 
         let parts = confirm_details.psbt_to_ur(10_000).unwrap();
 
+        assert_eq!(parts.len(), 1);
         assert_ur_parts_export_untagged_crypto_psbt(&confirm_details, &parts);
     }
 
@@ -538,6 +539,7 @@ mod tests {
 
         let cbor = decoder.message().unwrap().unwrap();
         assert!(!cbor.is_empty());
+        // cbor major type 2 is byte string
         assert_eq!(cbor[0] >> 5, 2);
 
         let crypto_psbt = CryptoPsbt::decode(cbor.to_vec()).unwrap();

@@ -246,6 +246,7 @@ mod tests {
         let cbor = crypto_psbt.to_cbor().unwrap();
 
         assert!(!cbor.is_empty());
+        // cbor major type 2 is byte string
         assert_eq!(cbor[0] >> 5, 2);
 
         let mut expected_cbor = Vec::new();
@@ -266,6 +267,22 @@ mod tests {
         encoder.bytes(&psbt_bytes).unwrap();
 
         let decoded = CryptoPsbt::from_cbor(&tagged_cbor).unwrap();
+        assert_eq!(decoded.psbt(), &psbt);
+    }
+
+    #[test]
+    fn test_crypto_psbt_legacy_tagged_ur_string() {
+        let psbt = test_psbt();
+        let psbt_bytes = psbt.serialize();
+
+        let mut tagged_cbor = Vec::new();
+        let mut encoder = Encoder::new(&mut tagged_cbor);
+        encoder.tag(Tag::new(CRYPTO_PSBT)).unwrap();
+        encoder.bytes(&psbt_bytes).unwrap();
+
+        let ur_string = UR::new("crypto-psbt", &tagged_cbor).to_string();
+        let decoded = CryptoPsbt::from_ur_string(&ur_string).unwrap();
+
         assert_eq!(decoded.psbt(), &psbt);
     }
 
@@ -365,15 +382,23 @@ mod tests {
         assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
     }
 
-    /// Test malformed CBOR: empty byte string
+    /// Test malformed CBOR: empty byte string value
     #[test]
-    fn test_crypto_psbt_empty_byte_string() {
+    fn test_crypto_psbt_empty_byte_string_value() {
         let mut cbor = Vec::new();
         let mut encoder = Encoder::new(&mut cbor);
 
         encoder.bytes(&[]).unwrap();
 
         let result = CryptoPsbt::from_cbor(&cbor);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
+    }
+
+    /// Test malformed CBOR: empty input
+    #[test]
+    fn test_crypto_psbt_empty_cbor_input() {
+        let result = CryptoPsbt::from_cbor(&[]);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), UrError::CborDecodeError(_)));
     }
