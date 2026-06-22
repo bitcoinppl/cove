@@ -37,6 +37,10 @@ extension WalletLedgerState {
     }
 }
 
+private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
+    let notify: () -> Void
+}
+
 @Observable final class WalletManager: AnyReconciler, WalletManagerReconciler {
     typealias Message = WalletManagerReconcileMessage
     typealias Action = WalletManagerAction
@@ -48,6 +52,9 @@ extension WalletLedgerState {
     let rust: RustWalletManager
     @ObservationIgnored
     private let closeState = OSAllocatedUnfairLock(initialState: false)
+    @ObservationIgnored
+    private let initialScanLifecycleChanged =
+        OSAllocatedUnfairLock<InitialScanLifecycleChangedHandler?>(initialState: nil)
 
     var walletMetadata: WalletMetadata
     var ledgerState: WalletLedgerState
@@ -57,6 +64,11 @@ extension WalletLedgerState {
     var balance: Balance = .zero()
     var foundAddresses: [FoundAddress] = []
     var unsignedTransactions: [UnsignedTransaction] = []
+
+    var activeIncompleteInitialScan: Bool {
+        // ledger activity and scan status arrive as separate reconcile messages
+        ledgerState.initialScanActive || (ledgerState.initialScanIncomplete && scanStatus.isActive)
+    }
 
     /// general wallet errors
     var errorAlert: WalletErrorAlert? = nil
@@ -98,6 +110,17 @@ extension WalletLedgerState {
     func close() {
         guard markClosedIfNeeded() else { return }
         rust.shutdown()
+    }
+
+    func setInitialScanLifecycleChanged(_ notify: (() -> Void)?) {
+        initialScanLifecycleChanged.withLock { handler in
+            handler = notify.map(InitialScanLifecycleChangedHandler.init(notify:))
+        }
+    }
+
+    private func notifyInitialScanLifecycleChanged() {
+        let handler = initialScanLifecycleChanged.withLock { $0?.notify }
+        handler?()
     }
 
     private func markClosedIfNeeded() -> Bool {
@@ -245,11 +268,13 @@ extension WalletLedgerState {
                     self.loadState = .loaded(txns)
                 }
             }
+            notifyInitialScanLifecycleChanged()
 
         case let .ledgerStateChanged(ledgerState):
             self.ledgerState = ledgerState
             self.balancePresentation = rust.balancePresentationForState(ledgerState: ledgerState)
             reconcileLoadStateWithLedgerState()
+            notifyInitialScanLifecycleChanged()
 
         case let .availableTransactions(txns):
             switch self.loadState {
@@ -277,6 +302,7 @@ extension WalletLedgerState {
 
         case let .scanComplete(txns):
             self.loadState = ledgerState.initialScanComplete ? .loaded(txns) : .scanning(txns)
+            notifyInitialScanLifecycleChanged()
 
         case let .walletBalanceChanged(balance):
             withAnimation { self.balance = balance }
