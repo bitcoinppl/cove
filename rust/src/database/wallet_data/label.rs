@@ -539,6 +539,39 @@ impl From<redb::StorageError> for Error {
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use std::sync::Arc;
+
+    use redb::TableDefinition;
+
+    use super::LabelsTable;
+    use crate::{database::wallet_data::WalletDataDb, wallet::metadata::WalletId};
+
+    const MISMATCHED_OUTPUT_TABLE: TableDefinition<&'static str, &'static str> =
+        TableDefinition::new("output_records_v2.cbor");
+
+    pub(crate) fn wallet_data_db_with_mismatched_output_table(
+        id: WalletId,
+    ) -> (WalletDataDb, tempfile::TempDir) {
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let db_path = tmp.path().join("wallet_data.encrypted.json.redb");
+        let db = Arc::new(redb::Database::create(db_path).expect("failed to create test db"));
+        let write_txn = db.begin_write().expect("failed to begin write transaction");
+        {
+            let mut table =
+                write_txn.open_table(MISMATCHED_OUTPUT_TABLE).expect("failed to create table");
+            table.insert("key", "value").expect("failed to insert mismatched value");
+        }
+        write_txn.commit().expect("failed to commit write transaction");
+
+        let labels = LabelsTable { db: db.clone() };
+        let wallet_db = WalletDataDb { id, db, labels };
+
+        (wallet_db, tmp)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::str::FromStr as _;
 

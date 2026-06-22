@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -190,7 +191,15 @@ class AppManager private constructor() : FfiReconcile {
 
     fun reconcileAfterLabelImport(walletId: WalletId) {
         mainScope.launch {
-            val refreshed = reconcileAfterLabelImportAndWait(walletId)
+            val refreshed =
+                try {
+                    reconcileAfterLabelImportAndWait(walletId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(tag, "failed to reconcile after label import", e)
+                    false
+                }
             if (!refreshed) {
                 walletManager
                     ?.takeIf { it.id == walletId }

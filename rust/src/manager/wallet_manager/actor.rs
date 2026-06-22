@@ -2498,7 +2498,10 @@ mod tests {
         should_skip_recent_scan, trusted_spendable_output, wallet_scan_progress_start,
     };
     use crate::{
-        database::wallet_data::test_support::new_test_wallet_data_db,
+        database::wallet_data::{
+            label::test_support::wallet_data_db_with_mismatched_output_table,
+            test_support::new_test_wallet_data_db,
+        },
         manager::wallet_manager::TransactionLockState,
         wallet::{Address, Wallet, metadata::WalletId},
     };
@@ -2682,6 +2685,23 @@ mod tests {
         let expected = bdk_spendable - expected_locked_spendable;
 
         assert_eq!(actor.unlocked_trusted_spendable_balance_inner().unwrap(), expected);
+    }
+
+    #[test]
+    fn unlocked_trusted_spendable_balance_propagates_lock_state_read_errors() {
+        crate::database::test_support::init_test_database();
+
+        let wallet = Wallet::preview_new_wallet();
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = super::WalletActor::new(wallet, sender).expect("actor is created");
+        let (db, _tmp) = wallet_data_db_with_mismatched_output_table(actor.wallet.id.clone());
+        actor.db = db;
+
+        let error = actor
+            .unlocked_trusted_spendable_balance_inner()
+            .expect_err("lock-state read errors must block spendable balance calculation");
+
+        assert!(matches!(error, super::Error::OutputLabelsError(_)));
     }
 
     #[test]

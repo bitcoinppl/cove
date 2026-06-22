@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -322,22 +323,15 @@ class WalletManager :
         AppManager.getInstance().reconcileAfterLabelImport(id)
     }
 
-    fun reconcileAfterLabelImport() {
-        mainScope.launch {
-            val refreshed = reconcileAfterLabelImportAndWait()
-            if (!refreshed) {
-                notifyLabelRefreshFailed()
-            }
-        }
-    }
-
     suspend fun reconcileAfterLabelImportAndWait(): Boolean {
         transactionDetailsCache.clear()
 
         return try {
             rust.getTransactions()
             true
-        } catch (e: IllegalStateException) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             Log.e(tag, "failed to refresh transactions after label import", e)
             false
         }

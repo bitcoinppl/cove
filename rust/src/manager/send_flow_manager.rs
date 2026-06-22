@@ -2072,6 +2072,34 @@ impl RustSendFlowManager {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use crate::{
+        manager::{deferred_sender::SingleOrMany, wallet_manager::RustWalletManager},
+        wallet::{balance::Balance, metadata::WalletMetadata},
+    };
+    fn manager_for_validation() -> Arc<super::RustSendFlowManager> {
+        crate::database::test_support::init_test_database();
+        crate::test_support::ensure_tokio_runtime();
+
+        let (sender, receiver) = flume::bounded(50);
+        let balance = Arc::new(Balance::default());
+        let state = super::State::new(WalletMetadata::preview_new(), balance);
+        let wallet_manager = Arc::new(RustWalletManager::preview_new_wallet());
+
+        Arc::new(super::RustSendFlowManager {
+            app: super::App::global().clone(),
+            wallet_manager,
+            state: state.into_inner(),
+            reconciler: super::MessageSender::new(sender),
+            reconcile_receiver: Arc::new(receiver),
+            fee_check_task: super::DebouncedTask::new(
+                "fee_check",
+                super::Duration::from_millis(200),
+            ),
+        })
+    }
+
     #[test]
     fn amount_exceeds_spendable_balance_uses_unlocked_balance() {
         assert!(super::amount_exceeds_spendable_balance(Some(6_000), Some(5_000)));
@@ -2106,5 +2134,28 @@ mod tests {
             Some(super::SendFlowAlertState::General { title, .. }) if title.contains("Loading")
         ));
         assert_eq!(super::unavailable_spendable_balance_alert(Some(5_000), false), None);
+    }
+
+    #[test]
+    fn validate_amount_blocks_send_when_lock_state_load_failed() {
+        let manager = manager_for_validation();
+        {
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(50_000);
+            state.unlocked_spendable_sats = None;
+            state.lock_state_load_failed = true;
+        }
+
+        assert!(!manager.validate_amount(true));
+
+        let message = manager.reconcile_receiver.try_recv().expect("alert is reconciled");
+        let SingleOrMany::Single(super::Message::SetAlert(alert)) = message else {
+            panic!("expected a single lock-state load failure alert");
+        };
+
+        assert!(matches!(
+            alert,
+            super::SendFlowAlertState::General { title, .. } if title.contains("Locked")
+        ));
     }
 }

@@ -82,10 +82,24 @@ class CoinControlManager(
      * update selected utxos and dispatch notification
      */
     fun updateSelected(value: Set<ULong>) {
-        val spendableIds = utxos.filter { it.spendable }.map { it.outpoint.hashToUint() }.toSet()
-        val spendableSelection = value.intersect(spendableIds)
+        if (isClosed.get()) return
+
+        val visibleIds = utxos.map { it.outpoint.hashToUint() }.toSet()
+        val visibleSpendableIds = utxos.filter { it.spendable }.map { it.outpoint.hashToUint() }.toSet()
+        val selectedOutsideVisibleSearch = selected.subtract(visibleIds)
+        val spendableSelection = selectedOutsideVisibleSearch.union(value.intersect(visibleSpendableIds))
         selected = spendableSelection
-        val outpoints = utxos.filter { spendableSelection.contains(it.outpoint.hashToUint()) }.map { it.outpoint }
+
+        val hiddenSelectedOutpoints =
+            rust
+                .selectedUtxos()
+                .filter { selectedOutsideVisibleSearch.contains(it.outpoint.hashToUint()) }
+                .map { it.outpoint }
+        val visibleSelectedOutpoints =
+            utxos
+                .filter { it.spendable && spendableSelection.contains(it.outpoint.hashToUint()) }
+                .map { it.outpoint }
+        val outpoints = hiddenSelectedOutpoints + visibleSelectedOutpoints
         dispatch(CoinControlManagerAction.NotifySelectedUtxosChanged(outpoints))
     }
 
@@ -123,8 +137,10 @@ class CoinControlManager(
      * navigates forward to CoinControlSetAmount screen with selected UTXOs
      */
     fun continuePressed(app: AppManager) {
+        if (isClosed.get()) return
+
         val walletId = id
-        val selectedUtxos = utxos.filter { it.spendable && selected.contains(it.outpoint.hashToUint()) }
+        val selectedUtxos = rust.selectedUtxos()
 
         // navigate forward to coin control set amount screen
         val sendRoute = SendRoute.CoinControlSetAmount(walletId, selectedUtxos)
@@ -137,8 +153,9 @@ class CoinControlManager(
         updateSendFlowManagerTask =
             mainScope.launch {
                 delay(SEND_FLOW_UPDATE_DELAY_MS)
-                if (!isActive) return@launch
-                val selectedUtxos = utxos.filter { it.spendable && selected.contains(it.outpoint.hashToUint()) }
+                if (!isActive || isClosed.get()) return@launch
+
+                val selectedUtxos = rust.selectedUtxos()
                 sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
             }
     }
@@ -195,7 +212,7 @@ class CoinControlManager(
         outpoint: OutPoint,
         spendable: Boolean,
     ) {
-        if (isClosed.get()) return
+        check(!isClosed.get()) { "CoinControlManager is closed" }
 
         rust.setUtxoSpendability(outpoint, spendable)
     }
