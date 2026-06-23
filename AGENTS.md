@@ -20,3 +20,4 @@
 - data structures and UniFFI-derived Rust types may change when they directly serve the requested work; update generated bindings and affected Swift/Kotlin call sites when exported APIs change
 - don't mix test-only code into production code; `#[cfg(test)]` helpers should live in `mod tests` or dedicated `test_support` modules
 - add blank lines between logical steps in function bodies across Rust, Swift, and Kotlin: after setup/result bindings before new control flow, after multi-line `if`/`match`/`guard`/`do`/`Task` blocks before the next independent statement, between state mutations and final returns, and between multi-line `match`/`switch` arms. Keep tightly related consecutive assignments together
+- don't limit scope just to avoid uniffi changes, do it correctly the first time
