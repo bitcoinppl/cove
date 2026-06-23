@@ -156,7 +156,7 @@ private fun RouteContent(app: AppManager, route: Route) {
             TransactionDetailsContainer(
                 app = app,
                 walletId = route.id,
-                details = route.details,
+                txId = route.txId,
             )
         }
 
