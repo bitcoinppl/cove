@@ -14,10 +14,6 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     // private
     @State private var customAmount: Double = 0.0
-    @State private var previousAmount: Double = .init(minSendSats)
-    @State private var isEditing: Bool = false
-    @State private var pinState: PinState = .hard
-    private enum PinState { case none, soft, hard }
 
     @State private var enteringAmount: String? = nil
 
@@ -27,59 +23,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         manager.presenter
     }
 
-    private var smartSnapBinding: Binding<Double> {
-        Binding(
-            get: { customAmount },
-            set: { raw in
-                enteringAmount = nil
-                let goingUp = raw > previousAmount
-                let goingDown = raw < previousAmount
-                var adjusted = raw
 
-                switch pinState {
-                case .hard:
-                    if goingDown {
-                        pinState = .soft
-                        adjusted = softMaxSend
-                    } else {
-                        // hold at pin
-                        adjusted = maxSend
-                    }
-
-                case .soft:
-                    // crossing upward → snap to hard
-                    if goingUp {
-                        pinState = .hard
-                        adjusted = maxSend
-                    } else if raw < softMaxSend - step {
-                        // pulled a full step below band → release pin
-                        pinState = .none
-                        adjusted = raw
-                    } else {
-                        // hold at pin
-                        adjusted = softMaxSend
-                    }
-
-                case .none:
-                    if raw >= softMaxSend {
-                        pinState = goingUp ? .hard : .soft
-                        adjusted = goingUp ? maxSend : softMaxSend
-                    }
-                }
-
-                // update model only on real change
-                if customAmount != adjusted {
-                    customAmount = adjusted
-                    manager.debouncedDispatch(
-                        .notifyCoinControlAmountChanged(adjusted),
-                        for: .milliseconds(200)
-                    )
-                }
-
-                previousAmount = raw
-            }
-        )
-    }
 
     private var divider: some View {
         Divider()
@@ -87,13 +31,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
             .foregroundStyle(.red)
     }
 
-    private var minSend: Double {
-        satToDouble(minSendSats)
-    }
 
-    private var step: Double {
-        satToDouble(10)
-    }
 
     private var maxSend: Double {
         var amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: minSendSatsU + 1000)
@@ -210,20 +148,11 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                 .fontWeight(.semibold)
 
                 HStack {
-                    Text("Use the slider to set the amount.")
+                    Text("Tap the amount field to enter a custom amount.")
                     Spacer()
                 }
                 .foregroundStyle(.secondary)
                 .font(.caption2)
-
-                Slider(
-                    value: smartSnapBinding,
-                    in: minSend ... maxSend,
-                    step: step,
-                    onEditingChanged: { isEditing = $0 }
-                )
-                .accessibilityLabel("Send amount slider")
-                .accessibilityValue("\(displayAmount()) \(selectedUnitSymbol)")
             }
         }
         .padding()
@@ -233,17 +162,9 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         .onChange(of: metadata.selectedUnit, initial: true) { _, _ in
             self.customAmount = manager.amount.map(amountToDouble) ?? maxSend
         }
-        .onChange(of: isEditing) { old, new in
-            Log.debug("isEditing changed from \(old) -> \(new)")
 
-            // stopped editing dispatch the amount
-            if old == true, new == false {
-                manager.dispatch(.notifyCoinControlAmountChanged(customAmount))
-            }
-        }
         .onChange(of: manager.amount) { _, new in
             guard let newAmount = new else { return }
-            if isEditing { return }
 
             switch metadata.selectedUnit {
             case .sat: customAmount = Double(newAmount.asSats())
