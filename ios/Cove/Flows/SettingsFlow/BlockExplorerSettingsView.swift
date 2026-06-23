@@ -162,7 +162,10 @@ struct BlockExplorerSettingsView: View {
             )
             input = normalized ?? ""
             preview = config.effectiveBlockExplorerPreview(network: selectedNetwork)
-            selectedOption = config.selectedBlockExplorerOption(network: selectedNetwork)
+            selectedOption = .custom
+            if normalized == nil {
+                selectedOption = config.selectedBlockExplorerOption(network: selectedNetwork)
+            }
             validationError = nil
         } catch {
             validationError = error.localizedDescription

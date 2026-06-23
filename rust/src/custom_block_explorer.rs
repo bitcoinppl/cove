@@ -47,7 +47,10 @@ impl BlockExplorerOption {
         }
     }
 
-    pub(crate) fn matching_stored_template(stored_template: Option<&str>) -> Self {
+    pub(crate) fn matching_stored_template(
+        network: Network,
+        stored_template: Option<&str>,
+    ) -> Self {
         let Some(stored_template) = stored_template else {
             return Self::MempoolSpace;
         };
@@ -58,7 +61,7 @@ impl BlockExplorerOption {
 
         Self::all()
             .into_iter()
-            .find(|option| option.matches_template(&template))
+            .find(|option| option.matches_template(network, &template))
             .unwrap_or(Self::Custom)
     }
 
@@ -72,16 +75,21 @@ impl BlockExplorerOption {
         }
     }
 
-    fn matches_template(&self, template: &CustomBlockExplorerTemplate) -> bool {
-        let preset_template = match self {
-            Self::MempoolSpace => Some(CustomBlockExplorerTemplate::default_for(Network::Bitcoin)),
+    fn template_for_network(&self, network: Network) -> Option<CustomBlockExplorerTemplate> {
+        match self {
+            Self::MempoolSpace => Some(CustomBlockExplorerTemplate::default_for(network)),
             Self::Custom => None,
             _ => self.base_url().and_then(|base_url| {
-                CustomBlockExplorerTemplate::parse(Network::Bitcoin, base_url).ok()
+                parse_http_url(base_url)
+                    .ok()
+                    .map(|url| CustomBlockExplorerTemplate::from_base_url(network, url))
             }),
-        };
+        }
+    }
 
-        preset_template.is_some_and(|preset_template| preset_template.as_str() == template.as_str())
+    fn matches_template(&self, network: Network, template: &CustomBlockExplorerTemplate) -> bool {
+        self.template_for_network(network)
+            .is_some_and(|preset_template| preset_template.as_str() == template.as_str())
     }
 }
 
@@ -182,17 +190,25 @@ impl CustomBlockExplorerTemplate {
     }
 
     fn parse_base_url(network: Network, input: &str) -> Result<Self, CustomBlockExplorerError> {
-        let mut url = parse_http_url_with_optional_scheme(input)?;
+        let url = parse_http_url_with_optional_scheme(input)?;
         if url.fragment().is_some() {
             return Err(CustomBlockExplorerError::Fragment);
         }
 
+        if let Some(template) = known_template_for_input_url(network, &url) {
+            return Ok(template);
+        }
+
+        Ok(Self::from_base_url(network, url))
+    }
+
+    fn from_base_url(network: Network, mut url: Url) -> Self {
         let placeholder_marker = placeholder_marker_absent_from(url.as_str());
         let path = canonical_base_path(&url, network, &placeholder_marker);
         url.set_path(&path);
 
         let canonical = url.to_string().replace(&placeholder_marker, PLACEHOLDER);
-        Ok(Self(canonical))
+        Self(canonical)
     }
 }
 
@@ -236,12 +252,69 @@ fn parse_http_url_with_optional_scheme(input: &str) -> Result<Url, CustomBlockEx
     }
 }
 
+fn known_template_for_input_url(
+    network: Network,
+    url: &Url,
+) -> Option<CustomBlockExplorerTemplate> {
+    BlockExplorerOption::all()
+        .into_iter()
+        .filter_map(|option| option.template_for_network(network))
+        .find(|template| known_template_matches_input_url(template, url))
+}
+
+fn known_template_matches_input_url(
+    template: &CustomBlockExplorerTemplate,
+    input_url: &Url,
+) -> bool {
+    if input_url.query().is_some() {
+        return false;
+    }
+
+    let placeholder_marker = placeholder_marker_absent_from(template.as_str());
+    let probe = template.as_str().replace(PLACEHOLDER, &placeholder_marker);
+    let Ok(template_url) = parse_http_url(&probe) else {
+        return false;
+    };
+
+    if input_url.scheme() != template_url.scheme()
+        || input_url.host_str() != template_url.host_str()
+        || input_url.port_or_known_default() != template_url.port_or_known_default()
+    {
+        return false;
+    }
+
+    let Some(transaction_path) =
+        normalized_template_transaction_path(&template_url, &placeholder_marker)
+    else {
+        return false;
+    };
+    let base_path = transaction_path
+        .strip_suffix("/tx")
+        .unwrap_or_else(|| if transaction_path == "tx" { "" } else { transaction_path });
+    let input_path = normalized_path(input_url.path());
+
+    input_path.is_empty() || input_path == base_path || input_path == transaction_path
+}
+
+fn normalized_template_transaction_path<'a>(url: &'a Url, marker: &str) -> Option<&'a str> {
+    let path = normalized_path(url.path());
+    let path = path.strip_suffix(marker)?;
+
+    Some(path.trim_end_matches('/'))
+}
+
+fn normalized_path(path: &str) -> &str {
+    path.trim_end_matches('/').trim_start_matches('/')
+}
+
 fn canonical_base_path(url: &Url, network: Network, placeholder_marker: &str) -> String {
-    let path = url.path().trim_end_matches('/').trim_start_matches('/');
+    let path = normalized_path(url.path());
     let path = canonicalize_known_host_path(url.host_str(), network, path);
 
     if path.is_empty() {
         format!("/tx/{placeholder_marker}")
+    } else if path.rsplit('/').next() == Some("tx") {
+        format!("/{path}/{placeholder_marker}")
     } else {
         format!("/{path}/tx/{placeholder_marker}")
     }
@@ -421,12 +494,16 @@ mod tests {
         let cases = [
             (" https://example.com ", "https://example.com/tx/{txid}"),
             ("example.com", "https://example.com/tx/{txid}"),
+            ("example.com/tx", "https://example.com/tx/{txid}"),
             ("mempool.space", "https://mempool.space/tx/{txid}"),
+            ("mempool.space/tx", "https://mempool.space/tx/{txid}"),
             ("https://mempool.guide/", "https://mempool.guide/tx/{txid}"),
             ("mempool.guide", "https://mempool.guide/tx/{txid}"),
+            ("mempool.guide/tx", "https://mempool.guide/tx/{txid}"),
             ("https://mempool.bullbitcoin.com/", "https://mempool.bullbitcoin.com/tx/{txid}"),
             ("https://blockstream.info/", "https://blockstream.info/tx/{txid}"),
             ("blockstream.info", "https://blockstream.info/tx/{txid}"),
+            ("blockstream.info/tx", "https://blockstream.info/tx/{txid}"),
         ];
 
         for (input, expected) in cases {
@@ -486,10 +563,17 @@ mod tests {
                 .unwrap();
         let signet =
             CustomBlockExplorerTemplate::parse(Network::Signet, "https://mutinynet.com").unwrap();
+        let testnet_tx =
+            CustomBlockExplorerTemplate::parse(Network::Testnet, "mempool.space/testnet/tx")
+                .unwrap();
+        let signet_tx =
+            CustomBlockExplorerTemplate::parse(Network::Signet, "mutinynet.com/tx").unwrap();
 
         assert_eq!(testnet.as_str(), "https://mempool.space/testnet/tx/{txid}");
         assert_eq!(testnet4.as_str(), "https://mempool.space/testnet4/tx/{txid}");
         assert_eq!(signet.as_str(), "https://mutinynet.com/tx/{txid}");
+        assert_eq!(testnet_tx.as_str(), "https://mempool.space/testnet/tx/{txid}");
+        assert_eq!(signet_tx.as_str(), "https://mutinynet.com/tx/{txid}");
     }
 
     #[test]

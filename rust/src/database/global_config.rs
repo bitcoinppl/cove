@@ -309,7 +309,7 @@ impl GlobalConfigTable {
         let stored_template =
             self.get(GlobalConfigKey::CustomBlockExplorer(network)).ok().flatten();
 
-        BlockExplorerOption::matching_stored_template(stored_template.as_deref())
+        BlockExplorerOption::matching_stored_template(network, stored_template.as_deref())
     }
 
     pub fn effective_block_explorer_preview(&self, network: Network) -> String {
@@ -571,7 +571,7 @@ mod tests {
         let (_tmp, table) = test_table();
 
         let saved = table
-            .set_custom_block_explorer(Network::Bitcoin, "blockstream.info".to_string())
+            .set_custom_block_explorer(Network::Bitcoin, "blockstream.info/tx".to_string())
             .unwrap();
 
         assert_eq!(saved.as_deref(), Some("https://blockstream.info/tx/{txid}"));

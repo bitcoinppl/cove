@@ -89,9 +89,13 @@ fun BlockExplorerSettingsScreen(
 
     fun save() {
         try {
-            input = config.setCustomBlockExplorer(selectedNetwork, input) ?: ""
+            val normalized = config.setCustomBlockExplorer(selectedNetwork, input)
+            input = normalized ?: ""
             preview = config.effectiveBlockExplorerPreview(selectedNetwork)
-            selectedOption = config.selectedBlockExplorerOption(selectedNetwork)
+            selectedOption = BlockExplorerOption.CUSTOM
+            if (normalized == null) {
+                selectedOption = config.selectedBlockExplorerOption(selectedNetwork)
+            }
             validationError = null
         } catch (error: Exception) {
             validationError = error.message ?: error.toString()
