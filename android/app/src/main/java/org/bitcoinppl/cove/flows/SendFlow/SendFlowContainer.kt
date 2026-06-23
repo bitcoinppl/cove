@@ -87,15 +87,53 @@ fun SendFlowContainer(
                 else -> {}
             }
 
-            // wait for initialization, rust handles alert + popRoute on failure
+            // wait for initialization after Rust accepts the send path
             val initSuccess = sfm.waitForInit()
             if (initSuccess) {
                 walletManager = wm
                 sendFlowManager = sfm
                 initCompleted = true
             }
+        } catch (e: WalletManagerException.InitialScanIncomplete) {
+            android.util.Log.e(tag, "initial scan incomplete", e)
+            app.showInitialScanIncompleteAlert()
+            app.popRoute()
+        } catch (e: WalletManagerException.DatabaseCorruption) {
+            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`, error = e.`error`),
+                )
+            app.popRoute()
+        } catch (e: WalletManagerException.WalletDoesNotExist) {
+            android.util.Log.e(tag, "wallet does not exist for SendRoute $walletId", e)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Wallet Not Found",
+                        message = "This wallet is no longer available.",
+                    ),
+                )
+            app.trySelectLatestOrNewWallet()
+        } catch (e: WalletManagerException) {
+            android.util.Log.e(tag, "unable to open wallet for send flow", e)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Unable to Open Wallet",
+                        message = "The wallet could not be opened for sending. Please try again from the wallet screen.",
+                    ),
+                )
+            app.popRoute()
         } catch (e: Exception) {
-            android.util.Log.e(tag, "something went very wrong", e)
+            android.util.Log.e(tag, "unable to initialize send flow", e)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Unable to Open Wallet",
+                        message = "The wallet could not be opened for sending. Please try again from the wallet screen.",
+                    ),
+                )
             app.popRoute()
         }
     }

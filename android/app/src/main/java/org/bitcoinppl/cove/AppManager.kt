@@ -107,6 +107,16 @@ class AppManager private constructor() : FfiReconcile {
         wallets = runCatching { Database().wallets().all() }.getOrElse { emptyList() }
     }
 
+    fun showInitialScanIncompleteAlert() {
+        alertState =
+            TaggedItem(
+                AppAlertState.General(
+                    title = "Initial Scan Incomplete",
+                    message = "Can't send until initial scan completes.",
+                ),
+            )
+    }
+
     /**
      * set the cached wallet manager instance
      */
@@ -125,7 +135,8 @@ class AppManager private constructor() : FfiReconcile {
                 Log.d(tag, "found and using wallet manager for $id")
                 return it
             }
-            // close old manager before replacing
+
+            // selecting a different wallet is the boundary for ending in-flight scans
             Log.d(tag, "closing old wallet manager for ${it.id}")
             it.close()
         }
@@ -155,7 +166,7 @@ class AppManager private constructor() : FfiReconcile {
             }
             // close old manager before replacing
             Log.d(tag, "closing old sendflow manager for ${it.id}")
-            it.close()
+            clearSendFlowManager()
         }
 
         Log.d(tag, "did not find SendFlowManager for ${wm.id}, creating new")

@@ -329,13 +329,14 @@ private struct UtxoRow: View {
         let wm = WalletManager(preview: "preview_only")
         let ap = AppManager.shared
         let presenter = SendFlowPresenter(app: ap, manager: wm)
-        let sendFlowManager = ap.getSendFlowManager(wm, presenter: presenter)
         let utxos = previewNewUtxoList(outputCount: 2, changeCount: 1)
 
-        SendFlowUtxoCustomAmountSheetView(utxos: utxos)
-            .environment(wm)
-            .environment(ap)
-            .environment(presenter)
-            .environment(sendFlowManager)
+        if let sendFlowManager = try? ap.getSendFlowManager(wm, presenter: presenter) {
+            SendFlowUtxoCustomAmountSheetView(utxos: utxos)
+                .environment(wm)
+                .environment(ap)
+                .environment(presenter)
+                .environment(sendFlowManager)
+        }
     }
 }

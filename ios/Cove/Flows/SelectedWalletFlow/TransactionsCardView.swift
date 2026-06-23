@@ -28,12 +28,12 @@ struct TransactionsCardView: View {
     }
 
     private var isScanning: Bool {
-        switch manager.scanStatus {
-        case .idle:
-            false
-        case .scanning, .scanningPendingProgress:
-            true
-        }
+        // keep both sources so reconcile message ordering cannot hide active scanning
+        manager.ledgerState.initialScanActive || manager.scanStatus.isActive
+    }
+
+    private var scanSpinnerMessage: String? {
+        manager.ledgerState.initialScanComplete ? nil : "Checking wallet history"
     }
 
     private var isScanProgressVisible: Bool {
@@ -61,7 +61,7 @@ struct TransactionsCardView: View {
                         TransactionsScanProgressStrip(progressFraction: scanProgressFraction)
                             .padding(.bottom, 10)
                     } else {
-                        TransactionsScanSpinnerStrip()
+                        TransactionsScanSpinnerStrip(message: scanSpinnerMessage)
                             .padding(.bottom, 10)
                     }
                 }
@@ -112,7 +112,7 @@ struct TransactionsCardView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 56)
                     } else {
-                        EmptyWalletScanSpinnerState()
+                        EmptyWalletScanSpinnerState(message: scanSpinnerMessage)
                             .frame(maxWidth: .infinity)
                             .padding(.top, 56)
                     }
@@ -143,12 +143,26 @@ struct TransactionsCardView: View {
 }
 
 struct TransactionsScanSpinnerStrip: View {
+    let message: String?
+
+    init(message: String? = nil) {
+        self.message = message
+    }
+
     var body: some View {
-        ProgressView()
-            .scaleEffect(0.75)
-            .tint(.secondary)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .frame(height: 18)
+        HStack(spacing: 8) {
+            ProgressView()
+                .scaleEffect(0.75)
+                .tint(.secondary)
+
+            if let message {
+                Text(message)
+                    .foregroundStyle(.secondary.opacity(0.7))
+                    .font(.caption2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(height: 18)
     }
 }
 
@@ -170,9 +184,23 @@ struct TransactionsScanProgressStrip: View {
 }
 
 struct EmptyWalletScanSpinnerState: View {
+    let message: String?
+
+    init(message: String? = nil) {
+        self.message = message
+    }
+
     var body: some View {
-        ProgressView()
-            .tint(.primary)
+        VStack(spacing: 10) {
+            ProgressView()
+                .tint(.primary)
+
+            if let message {
+                Text(message)
+                    .foregroundStyle(.secondary)
+                    .font(.body)
+            }
+        }
     }
 }
 
@@ -245,15 +273,15 @@ struct ConfirmedTransactionView: View {
     private var amount: String {
         if case .btc = metadata.fiatOrBtc {
             return privateShow(
-                manager.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+                manager.displaySentAndReceivedAmount(txn.sentAndReceived())
             )
         }
 
         // fiat
         guard let fiatAmount = txn.fiatAmount() else { return privateShow("---") }
         return privateShow(
-            manager.rust.displayFiatAmountWithDirection(
-                amount: fiatAmount.amount,
+            manager.displayFiatAmountWithDirection(
+                fiatAmount.amount,
                 direction: txn.sentAndReceived().direction()
             )
         )
@@ -264,8 +292,8 @@ struct ConfirmedTransactionView: View {
             // primary is BTC, secondary is fiat
             guard let fiatAmount = txn.fiatAmount() else { return privateShow("---") }
             return privateShow(
-                manager.rust.displayFiatAmountWithDirection(
-                    amount: fiatAmount.amount,
+                manager.displayFiatAmountWithDirection(
+                    fiatAmount.amount,
                     direction: txn.sentAndReceived().direction()
                 )
             )
@@ -273,7 +301,7 @@ struct ConfirmedTransactionView: View {
 
         // primary is fiat, secondary is BTC/sats
         return privateShow(
-            manager.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+            manager.displaySentAndReceivedAmount(txn.sentAndReceived())
         )
     }
 
@@ -370,15 +398,15 @@ struct UnconfirmedTransactionView: View {
     private var amount: String {
         if case .btc = metadata.fiatOrBtc {
             return privateShow(
-                manager.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+                manager.displaySentAndReceivedAmount(txn.sentAndReceived())
             )
         }
 
         // fiat
         if let fiatAmount = txn.fiatAmount() {
             return privateShow(
-                manager.rust.displayFiatAmountWithDirection(
-                    amount: fiatAmount.amount,
+                manager.displayFiatAmountWithDirection(
+                    fiatAmount.amount,
                     direction: txn.sentAndReceived().direction()
                 )
             )
@@ -392,8 +420,8 @@ struct UnconfirmedTransactionView: View {
             // primary is BTC, secondary is fiat
             if let fiatAmount = txn.fiatAmount() {
                 return privateShow(
-                    manager.rust.displayFiatAmountWithDirection(
-                        amount: fiatAmount.amount,
+                    manager.displayFiatAmountWithDirection(
+                        fiatAmount.amount,
                         direction: txn.sentAndReceived().direction()
                     )
                 )
@@ -404,7 +432,7 @@ struct UnconfirmedTransactionView: View {
 
         // primary is fiat, secondary is BTC/sats
         return privateShow(
-            manager.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+            manager.displaySentAndReceivedAmount(txn.sentAndReceived())
         )
     }
 
@@ -472,13 +500,15 @@ struct UnsignedTransactionView: View {
     private var amount: String {
         // btc or sats (unsigned transactions are always outgoing)
         if case .btc = metadata.fiatOrBtc {
-            return privateShow(manager.rust.displayAmountWithDirection(amount: txn.spendingAmount(), direction: .outgoing))
+            return privateShow(
+                manager.displayAmountWithDirection(txn.spendingAmount(), direction: .outgoing)
+            )
         }
 
         // fiat
         guard let fiatAmount else { return privateShow("---") }
         return privateShow(
-            manager.rust.displayFiatAmountWithDirection(amount: fiatAmount, direction: .outgoing)
+            manager.displayFiatAmountWithDirection(fiatAmount, direction: .outgoing)
         )
     }
 
@@ -487,12 +517,14 @@ struct UnsignedTransactionView: View {
             // primary is BTC, secondary is fiat
             guard let fiatAmount else { return privateShow("---") }
             return privateShow(
-                manager.rust.displayFiatAmountWithDirection(amount: fiatAmount, direction: .outgoing)
+                manager.displayFiatAmountWithDirection(fiatAmount, direction: .outgoing)
             )
         }
 
         // primary is fiat, secondary is BTC/sats
-        return privateShow(manager.rust.displayAmountWithDirection(amount: txn.spendingAmount(), direction: .outgoing))
+        return privateShow(
+            manager.displayAmountWithDirection(txn.spendingAmount(), direction: .outgoing)
+        )
     }
 
     var body: some View {
@@ -531,8 +563,7 @@ struct UnsignedTransactionView: View {
             }
         }
         .task {
-            fiatAmount =
-                try? await manager.rust.amountInFiat(amount: txn.spendingAmount())
+            fiatAmount = manager.amountInFiatCached(txn.spendingAmount())
         }
         .contentShape(Rectangle())
         .onTapGesture {

@@ -89,6 +89,13 @@ private fun WalletScanStatus.progressOrNull(): WalletScanProgress? =
 private fun WalletScanProgress?.fraction(): Float =
     (this?.progressBasisPoints?.toFloat() ?: 0f) / SCAN_PROGRESS_BASIS_POINTS
 
+@Composable
+private fun checkingWalletHistoryMessage(isFirstScan: Boolean): String? {
+    if (!isFirstScan) return null
+
+    return stringResource(R.string.checking_wallet_history)
+}
+
 /**
  * Displays the list of transactions with a header
  *
@@ -174,6 +181,7 @@ fun TransactionsCardView(
                 )
             } else {
                 TransactionsScanSpinnerStrip(
+                    message = checkingWalletHistoryMessage(isFirstScan),
                     secondaryText = secondaryText,
                     modifier = Modifier.padding(bottom = 10.dp),
                 )
@@ -197,6 +205,7 @@ fun TransactionsCardView(
                     )
                 } else {
                     EmptyWalletScanSpinnerState(
+                        message = checkingWalletHistoryMessage(isFirstScan),
                         primaryText = primaryText,
                         modifier =
                             Modifier
@@ -294,21 +303,32 @@ fun TransactionsCardView(
 
 @Composable
 internal fun TransactionsScanSpinnerStrip(
+    message: String? = null,
     secondaryText: Color,
     modifier: Modifier = Modifier,
 ) {
-    Box(
+    Row(
         modifier =
             modifier
                 .fillMaxWidth()
                 .height(18.dp),
-        contentAlignment = Alignment.Center,
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         CircularProgressIndicator(
             modifier = Modifier.size(16.dp),
             color = secondaryText,
             strokeWidth = 2.dp,
         )
+
+        if (message != null) {
+            Spacer(Modifier.size(8.dp))
+            Text(
+                text = message,
+                color = secondaryText.copy(alpha = 0.7f),
+                fontSize = 11.sp,
+            )
+        }
     }
 }
 
@@ -346,18 +366,28 @@ internal fun TransactionsScanProgressStrip(
 
 @Composable
 internal fun EmptyWalletScanSpinnerState(
+    message: String? = null,
     primaryText: Color,
     modifier: Modifier = Modifier,
 ) {
-    Box(
+    Column(
         modifier = modifier,
-        contentAlignment = Alignment.TopCenter,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         CircularProgressIndicator(
             modifier = Modifier.size(28.dp),
             color = primaryText,
             strokeWidth = 2.5.dp,
         )
+
+        if (message != null) {
+            Text(
+                text = message,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+            )
+        }
     }
 }
 
@@ -511,9 +541,9 @@ private fun formatAmountFor(
         }
 
     return if (showFiat) {
-        fiatAmount?.let { manager.rust.displayFiatAmountWithDirection(it.amount, direction) } ?: "---"
+        fiatAmount?.let { manager.displayFiatAmountWithDirection(it.amount, direction) } ?: "---"
     } else {
-        manager.rust.displaySentAndReceivedAmount(sentAndReceived)
+        manager.displaySentAndReceivedAmount(sentAndReceived)
     }
 }
 
@@ -742,13 +772,7 @@ internal fun UnsignedTransactionWidget(
     // fetch fiat amount asynchronously (matches iOS .task behavior)
     LaunchedEffect(txn.id()) {
         fiatAmount = null
-        fiatAmount =
-            try {
-                manager.rust.amountInFiat(txn.spendingAmount())
-            } catch (e: Exception) {
-                android.util.Log.d("UnsignedTxWidget", "Fiat fetch failed", e)
-                null
-            }
+        fiatAmount = manager.amountInFiatCached(txn.spendingAmount())
     }
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
@@ -760,11 +784,11 @@ internal fun UnsignedTransactionWidget(
     // format the spending amount (unsigned transactions are always outgoing)
     val formattedAmount =
         when (fiatOrBtc) {
-            FiatOrBtc.BTC -> manager.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
+            FiatOrBtc.BTC -> manager.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
             FiatOrBtc.FIAT -> {
                 val amount = fiatAmount
                 if (amount != null) {
-                    manager.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
+                    manager.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
                 } else {
                     "---"
                 }
@@ -776,12 +800,12 @@ internal fun UnsignedTransactionWidget(
             FiatOrBtc.BTC -> {
                 val amount = fiatAmount
                 if (amount != null) {
-                    manager.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
+                    manager.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
                 } else {
                     "---"
                 }
             }
-            FiatOrBtc.FIAT -> manager.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
+            FiatOrBtc.FIAT -> manager.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
         }
 
     Box {
@@ -955,6 +979,7 @@ fun LazyListScope.transactionItems(
                 )
             } else {
                 TransactionsScanSpinnerStrip(
+                    message = checkingWalletHistoryMessage(isFirstScan),
                     secondaryText = secondaryText,
                     modifier =
                         Modifier
@@ -1028,6 +1053,7 @@ fun LazyListScope.transactionItems(
                 )
             } else {
                 EmptyWalletScanSpinnerState(
+                    message = checkingWalletHistoryMessage(isFirstScan),
                     primaryText = primaryText,
                     modifier =
                         Modifier

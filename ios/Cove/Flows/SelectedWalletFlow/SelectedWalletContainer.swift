@@ -10,38 +10,10 @@ import SwiftUI
 struct SelectedWalletContainer: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(AppManager.self) private var app
-    @Environment(\.navigate) private var navigate
 
     let id: WalletId
-    @State private var manager: WalletManager? = nil
 
-    func loadManager() {
-        if manager != nil, app.walletManager == nil { return }
-
-        do {
-            Log.debug("Getting wallet \(id)")
-            manager = try app.getWalletManager(id: id)
-        } catch let WalletManagerError.DatabaseCorruption(walletId, errorMessage) {
-            Log.error("Wallet database corrupted for \(walletId): \(errorMessage)")
-            app.alertState = TaggedItem(
-                .walletDatabaseCorrupted(walletId: walletId, error: errorMessage)
-            )
-        } catch {
-            Log.error("Something went very wrong: \(error)")
-            do {
-                let wallets = try Database().wallets().all()
-                let wallet = wallets.first(where: { $0.id != id })
-
-                if let wallet {
-                    try app.selectWalletOrThrow(wallet.id)
-                } else {
-                    app.loadAndReset(to: Route.newWallet(.select))
-                }
-            } catch {
-                app.loadAndReset(to: Route.newWallet(.select))
-            }
-        }
-    }
+    @State private var manager: WalletManager?
 
     private var iOS26OrLater: Bool {
         if #available(iOS 26.0, *) { return true }
@@ -76,28 +48,54 @@ struct SelectedWalletContainer: View {
                             )
                     )
                     .background(iOS26OrLater ? nil : Color.white)
-
             } else {
-                Text("Loading...")
+                FullPageLoadingView(title: "Loading wallet...")
             }
         }
         .onAppear(perform: loadManager)
         .task {
-            // start scan immediately (sends cached data first, then scans)
-            if let manager {
-                do {
-                    try await manager.rust.startWalletScan()
-                } catch {
-                    Log.error("Wallet Scan Failed \(error.localizedDescription)")
-                }
+            guard let manager else { return }
+
+            do {
+                try await manager.rust.startWalletScan()
+            } catch {
+                Log.error("Wallet Scan Failed \(error.localizedDescription)")
             }
         }
-        .onDisappear {
-            manager?.dispatch(.selectedWalletDisappeared)
+    }
+
+    private func loadManager() {
+        if manager != nil { return }
+
+        do {
+            Log.debug("Getting wallet \(id)")
+            manager = try app.getWalletManager(id: id)
+        } catch {
+            handleManagerError(error)
         }
-        .task(id: manager?.loadState) {
-            guard case .loaded = manager?.loadState, let manager else { return }
-            app.updateWalletVm(manager)
+    }
+
+    private func handleManagerError(_ error: Error) {
+        switch error {
+        case let WalletManagerError.DatabaseCorruption(walletId, errorMessage):
+            Log.error("Wallet database corrupted for \(walletId): \(errorMessage)")
+            app.alertState = TaggedItem(
+                .walletDatabaseCorrupted(walletId: walletId, error: errorMessage)
+            )
+        default:
+            Log.error("Something went very wrong: \(error)")
+            do {
+                let wallets = try Database().wallets().all()
+                let wallet = wallets.first(where: { $0.id != id })
+
+                if let wallet {
+                    try app.selectWalletOrThrow(wallet.id)
+                } else {
+                    app.loadAndReset(to: Route.newWallet(.select))
+                }
+            } catch {
+                app.loadAndReset(to: Route.newWallet(.select))
+            }
         }
     }
 }

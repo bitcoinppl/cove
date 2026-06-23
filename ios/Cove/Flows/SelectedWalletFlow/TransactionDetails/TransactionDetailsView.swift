@@ -99,7 +99,7 @@ struct TransactionDetailsView: View {
         }
 
         VStack(spacing: 8) {
-            Text(manager.rust.displayAmount(amount: transactionDetails.amount()))
+            Text(transactionDetails.displayAmount(metadata: metadata))
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .padding(.top, 12)
@@ -186,7 +186,7 @@ struct TransactionDetailsView: View {
         }
 
         VStack(spacing: 8) {
-            Text(manager.rust.displayAmount(amount: transactionDetails.amount()))
+            Text(transactionDetails.displayAmount(metadata: metadata))
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .padding(.top, 12)

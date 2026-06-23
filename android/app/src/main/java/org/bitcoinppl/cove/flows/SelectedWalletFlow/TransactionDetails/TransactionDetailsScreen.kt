@@ -285,7 +285,7 @@ fun TransactionDetailsScreen(
     val formattedDate = transactionDetails.confirmationDateTime() ?: ""
 
     // format amounts
-    val txAmountPrimary = manager.rust.displayAmount(amount = transactionDetails.amount())
+    val txAmountPrimary = transactionDetails.displayAmount(metadata = metadata)
 
     // details expanded from metadata
     val isExpanded = metadata.detailsExpanded

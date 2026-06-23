@@ -65,6 +65,8 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.initialScanActive
+import org.bitcoinppl.cove.initialScanIncomplete
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.AutoSizeText
@@ -74,6 +76,7 @@ import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
+import org.bitcoinppl.cove_core.WalletLedgerState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletScanStatus
 import org.bitcoinppl.cove_core.WalletSettingsRoute
@@ -102,12 +105,24 @@ private class SelectedWalletPreviewModeProvider : PreviewParameterProvider<Boole
     override val values: Sequence<Boolean> = sequenceOf(false, true)
 }
 
+internal fun canRefreshSelectedWallet(
+    loadState: WalletLoadState,
+    scanStatus: WalletScanStatus,
+    ledgerState: WalletLedgerState,
+): Boolean =
+    when {
+        loadState is WalletLoadState.LOADING -> false
+        ledgerState.initialScanActive -> false
+        else -> scanStatus == WalletScanStatus.Idle
+    }
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SelectedWalletScreen(
     onBack: () -> Unit,
     canGoBack: Boolean = false,
     onSend: () -> Unit,
+    onSendUnavailable: () -> Unit = {},
     onReceive: () -> Unit,
     onQrCode: () -> Unit,
     onMore: () -> Unit,
@@ -123,21 +138,21 @@ fun SelectedWalletScreen(
     val actualSatsPending =
         remember(manager.balance, manager.walletMetadata?.selectedUnit) {
             val pending = manager.balance.untrustedPending()
-            manager.rust.displayAmountPendingFmt(pending)
+            manager.displayAmountPendingFmt(pending)
         }
 
     val fiatBalance =
         remember(manager.balance, app.prices) {
-            manager.rust.amountInFiat(manager.balance.spendable())?.let { fiat ->
-                manager.rust.displayFiatAmount(fiat)
+            manager.amountInFiatCached(manager.balance.spendable())?.let { fiat ->
+                manager.displayFiatAmount(fiat)
             }
         }
 
     val fiatBalancePending =
         remember(manager.balance, app.prices) {
             val pending = manager.balance.untrustedPending()
-            manager.rust.amountInFiat(pending)?.let { fiat ->
-                manager.rust.displayFiatAmountPendingFmt(fiat, withSuffix = true)
+            manager.amountInFiatCached(pending)?.let { fiat ->
+                manager.displayFiatAmountPendingFmt(fiat, withSuffix = true)
             }
         }
 
@@ -340,7 +355,9 @@ fun SelectedWalletScreen(
                     when (loadState) {
                         is WalletLoadState.SCANNING -> {
                             val txns = loadState.txns
-                            val firstScan = manager.walletMetadata?.internal?.lastScanFinished == null
+
+                            // pre-migration wallets stay first-scan until a new full scan completes
+                            val firstScan = manager.ledgerState.initialScanIncomplete
                             Pair(txns, firstScan)
                         }
                         is WalletLoadState.LOADED -> Pair(loadState.txns, false)
@@ -392,7 +409,11 @@ fun SelectedWalletScreen(
                     PullToRefreshBox(
                         isRefreshing = isRefreshing,
                         onRefresh = {
-                            if (manager.loadState is WalletLoadState.LOADED &&
+                            if (canRefreshSelectedWallet(
+                                    manager.loadState,
+                                    manager.scanStatus,
+                                    manager.ledgerState,
+                                ) &&
                                 isRefreshInProgress.compareAndSet(false, true)
                             ) {
                                 scope.launch {
@@ -429,8 +450,10 @@ fun SelectedWalletScreen(
                                     onToggleUnit = { manager.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
                                     onToggleSensitive = { manager.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
                                     onSend = onSend,
+                                    onSendUnavailable = onSendUnavailable,
                                     onReceive = onReceive,
                                     isWatchOnly = isWatchOnly,
+                                    initialScanIncomplete = manager.ledgerState.initialScanIncomplete,
                                 )
                             }
 

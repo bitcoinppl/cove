@@ -373,6 +373,7 @@ struct CoveMainView: View {
 
         if newPhase == .active {
             showCover = false
+            app.endInitialScanBackgroundTask()
             guard app.asyncRuntimeReady else { return }
             app.dispatch(action: AppAction.updateFees)
             app.dispatch(action: AppAction.updateFiatPrices)
@@ -406,7 +407,10 @@ struct CoveMainView: View {
             }
         }
 
-        if newPhase == .background { app.isSidebarVisible = false }
+        if newPhase == .background {
+            app.isSidebarVisible = false
+            app.beginInitialScanBackgroundTaskIfNeeded()
+        }
 
         // close all open sheets when going into the background
         if auth.isAuthEnabled, newPhase == .background {

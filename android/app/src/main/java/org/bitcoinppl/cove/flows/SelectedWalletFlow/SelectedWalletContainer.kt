@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.initialScanIncomplete
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.wallet.WalletExportState
 import org.bitcoinppl.cove.wallet.WalletSheetsHost
@@ -29,7 +30,6 @@ import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SendRoute
-import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.WalletId
@@ -38,7 +38,9 @@ import org.bitcoinppl.cove_core.types.WalletId
 private const val BALANCE_UPDATE_DELAY_MS = 500L
 
 /**
- * Selected wallet container - manages WalletManager lifecycle
+ * Selected wallet container - uses the app-owned WalletManager
+ *
+ * App-owned managers stay alive across route changes so an in-flight initial scan can continue
  * Ported from iOS SelectedWalletContainer.swift
  */
 @Composable
@@ -73,8 +75,8 @@ fun SelectedWalletContainer(
                 delay(BALANCE_UPDATE_DELAY_MS)
                 wm.updateWalletBalance()
             } else {
-                // close stale manager to prevent leak
-                wm.close()
+                // app-owned managers stay alive here so an in-flight initial scan can continue
+                // until AppManager replaces it for another wallet
                 android.util.Log.d(tag, "discarding stale wallet load for $requestedId, now loading $id")
             }
         } catch (e: WalletManagerException.DatabaseCorruption) {
@@ -105,18 +107,11 @@ fun SelectedWalletContainer(
     LaunchedEffect(manager) {
         val wm = manager ?: return@LaunchedEffect
         try {
-            wm.rust.startWalletScan()
+            wm.startWalletScan()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             android.util.Log.e(tag, "wallet scan failed: ${e.message}", e)
-        }
-    }
-
-    // cleanup on disappear
-    DisposableEffect(id) {
-        onDispose {
-            manager?.dispatch(WalletManagerAction.SelectedWalletDisappeared)
         }
     }
 
@@ -182,6 +177,26 @@ fun SelectedWalletContainer(
         else -> {
             val canGoBack = app.rust.canGoBack()
             android.util.Log.d("SelectedWalletContainer", "canGoBack=$canGoBack, routes=${app.router.routes.size}, default=${app.router.default}")
+            val handleSend = send@{
+                if (wm.walletMetadata?.walletType == WalletType.WATCH_ONLY) {
+                    app.alertState = TaggedItem(AppAlertState.CantSendOnWatchOnlyWallet)
+                    return@send
+                }
+
+                if (wm.ledgerState.initialScanIncomplete) {
+                    app.showInitialScanIncompleteAlert()
+                    return@send
+                }
+
+                val balance = wm.balance.spendable().asSats()
+                if (balance > 0u.toULong()) {
+                    app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))
+                } else {
+                    scope.launch {
+                        snackbarHostState.showSnackbar("No funds available to send")
+                    }
+                }
+            }
 
             SelectedWalletScreen(
                 onBack = {
@@ -192,20 +207,8 @@ fun SelectedWalletContainer(
                     }
                 },
                 canGoBack = canGoBack,
-                onSend = {
-                    if (wm.walletMetadata?.walletType == WalletType.WATCH_ONLY) {
-                        app.alertState = TaggedItem(AppAlertState.CantSendOnWatchOnlyWallet)
-                        return@SelectedWalletScreen
-                    }
-                    val balance = wm.balance.spendable().asSats()
-                    if (balance > 0u.toULong()) {
-                        app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))
-                    } else {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("No funds available to send")
-                        }
-                    }
-                },
+                onSend = handleSend,
+                onSendUnavailable = handleSend,
                 onReceive = {
                     showReceiveSheet = true
                 },
