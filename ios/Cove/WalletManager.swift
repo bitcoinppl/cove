@@ -217,7 +217,65 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     }
 
     func displayAmount(_ amount: Amount, showUnit: Bool = true) -> String {
-        self.rust.displayAmount(amount: amount, showUnit: showUnit)
+        walletDisplayAmount(metadata: walletMetadata, amount: amount, showUnit: showUnit)
+    }
+
+    func displayAmountPendingFmt(_ amount: Amount) -> String? {
+        walletDisplayAmountPendingFmt(metadata: walletMetadata, amount: amount)
+    }
+
+    func displayAmountWithDirection(
+        _ amount: Amount,
+        direction: TransactionDirection
+    ) -> String {
+        walletDisplayAmountWithDirection(
+            metadata: walletMetadata,
+            amount: amount,
+            direction: direction
+        )
+    }
+
+    func displaySentAndReceivedAmount(_ sentAndReceived: SentAndReceived) -> String {
+        walletDisplaySentAndReceivedAmount(
+            metadata: walletMetadata,
+            sentAndReceived: sentAndReceived
+        )
+    }
+
+    func displayFiatAmount(_ amount: Double, withSuffix: Bool = true) -> String {
+        walletDisplayFiatAmount(
+            metadata: walletMetadata,
+            amount: amount,
+            withSuffix: withSuffix
+        )
+    }
+
+    func displayFiatAmountPendingFmt(
+        _ amount: Double,
+        withSuffix: Bool = true
+    ) -> String? {
+        walletDisplayFiatAmountPendingFmt(
+            metadata: walletMetadata,
+            amount: amount,
+            withSuffix: withSuffix
+        )
+    }
+
+    func displayFiatAmountWithDirection(
+        _ amount: Double,
+        direction: TransactionDirection,
+        withSuffix: Bool = true
+    ) -> String {
+        walletDisplayFiatAmountWithDirection(
+            metadata: walletMetadata,
+            amount: amount,
+            direction: direction,
+            withSuffix: withSuffix
+        )
+    }
+
+    func amountInFiatCached(_ amount: Amount) -> Double? {
+        walletAmountInFiatCached(amount: amount)
     }
 
     func amountFmtUnit(_ amount: Amount) -> String {

@@ -45,7 +45,7 @@ use crate::{
         TxId, Unit, ffi::BitcoinTransaction, unsigned_transaction::UnsignedTransaction,
     },
     wallet::{
-        Address, AddressInfo, Wallet, WalletAddressType, WalletError,
+        Address, AddressInfo, Wallet, WalletAddressType, WalletError, amount_display,
         balance::Balance,
         fingerprint::Fingerprint,
         metadata::{
@@ -811,8 +811,7 @@ impl RustWalletManager {
     /// Sync method using cached prices, returns None if no cached prices
     #[uniffi::method]
     pub fn amount_in_fiat(&self, amount: Arc<Amount>) -> Option<f64> {
-        let currency = self.selected_fiat_currency();
-        FIAT_CLIENT.value_in_currency_cached(*amount, currency)
+        amount_display::wallet_amount_in_fiat_cached(amount)
     }
 
     /// Formats a raw amount for display (e.g., "0.00050000 BTC")
@@ -822,27 +821,16 @@ impl RustWalletManager {
     /// for transaction amounts that need +/- indicators.
     #[uniffi::method(default(show_unit = true))]
     pub fn display_amount(&self, amount: Arc<Amount>, show_unit: bool) -> String {
-        {
-            let sensitive_visible = self.metadata.read().sensitive_visible;
-            if !sensitive_visible {
-                return "••••••".to_string();
-            }
-        }
-
-        let unit = self.metadata.read().selected_unit;
-        if show_unit { amount.fmt_string_with_unit(unit) } else { amount.fmt_string(unit) }
+        let metadata = self.metadata.read().clone();
+        amount_display::wallet_display_amount(metadata, amount, show_unit)
     }
 
     /// Formats a pending BTC amount (e.g. "+ 0.00050000 BTC pending")
     /// Returns None if the amount is zero.
     #[uniffi::method]
     pub fn display_amount_pending_fmt(&self, amount: Arc<Amount>) -> Option<String> {
-        if amount.as_sats() == 0 {
-            return None;
-        }
-
-        let formatted = self.display_amount(amount, true);
-        Some(format!("+ {formatted} pending"))
+        let metadata = self.metadata.read().clone();
+        amount_display::wallet_display_amount_pending_fmt(metadata, amount)
     }
 
     /// Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
@@ -855,11 +843,8 @@ impl RustWalletManager {
         amount: Arc<Amount>,
         direction: TransactionDirection,
     ) -> String {
-        let formatted = self.display_amount(amount, true);
-        match direction {
-            TransactionDirection::Outgoing => format!("-{formatted}"),
-            TransactionDirection::Incoming => formatted,
-        }
+        let metadata = self.metadata.read().clone();
+        amount_display::wallet_display_amount_with_direction(metadata, amount, direction)
     }
 
     /// Formats a transaction amount with direction prefix (e.g., "-0.00050000 BTC")
@@ -871,37 +856,14 @@ impl RustWalletManager {
         &self,
         sent_and_received: Arc<SentAndReceived>,
     ) -> String {
-        {
-            let sensitive_visible = self.metadata.read().sensitive_visible;
-            if !sensitive_visible {
-                return "••••••".to_string();
-            }
-        }
-
-        let unit = self.metadata.read().selected_unit;
-        sent_and_received.amount_fmt(unit)
+        let metadata = self.metadata.read().clone();
+        amount_display::wallet_display_sent_and_received_amount(metadata, sent_and_received)
     }
 
     #[uniffi::method(default(with_suffix = true))]
     pub fn display_fiat_amount(&self, amount: f64, with_suffix: bool) -> String {
-        {
-            let sensitive_visible = self.metadata.read().sensitive_visible;
-            if !sensitive_visible {
-                return "**************".to_string();
-            }
-        }
-
-        let fiat = amount.thousands_fiat();
-
-        let currency = self.selected_fiat_currency();
-        let symbol = currency.symbol();
-        let suffix = currency.suffix();
-
-        if with_suffix && !suffix.is_empty() {
-            return format!("{symbol}{fiat} {suffix}");
-        }
-
-        format!("{symbol}{fiat}")
+        let metadata = self.metadata.read().clone();
+        amount_display::wallet_display_fiat_amount(metadata, amount, with_suffix)
     }
 
     /// Formats a pending fiat amount (e.g. "+ $50.00 pending")
@@ -912,12 +874,8 @@ impl RustWalletManager {
         amount: f64,
         with_suffix: bool,
     ) -> Option<String> {
-        if amount <= 0.0 {
-            return None;
-        }
-
-        let formatted = self.display_fiat_amount(amount, with_suffix);
-        Some(format!("+ {formatted} pending"))
+        let metadata = self.metadata.read().clone();
+        amount_display::wallet_display_fiat_amount_pending_fmt(metadata, amount, with_suffix)
     }
 
     /// Formats a fiat amount with direction prefix (e.g., "-$50.00")
@@ -931,11 +889,13 @@ impl RustWalletManager {
         direction: TransactionDirection,
         with_suffix: bool,
     ) -> String {
-        let prefix = match direction {
-            TransactionDirection::Incoming => "",
-            TransactionDirection::Outgoing => "-",
-        };
-        format!("{prefix}{}", self.display_fiat_amount(amount, with_suffix))
+        let metadata = self.metadata.read().clone();
+        amount_display::wallet_display_fiat_amount_with_direction(
+            metadata,
+            amount,
+            direction,
+            with_suffix,
+        )
     }
 
     #[uniffi::method]

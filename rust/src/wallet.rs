@@ -1,3 +1,4 @@
+pub mod amount_display;
 pub mod balance;
 pub mod ffi;
 pub mod fingerprint;

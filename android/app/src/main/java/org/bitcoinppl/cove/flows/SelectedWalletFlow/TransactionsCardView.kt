@@ -534,9 +534,9 @@ private fun formatAmountFor(
         }
 
     return if (showFiat) {
-        fiatAmount?.let { manager.rust.displayFiatAmountWithDirection(it.amount, direction) } ?: "---"
+        fiatAmount?.let { manager.displayFiatAmountWithDirection(it.amount, direction) } ?: "---"
     } else {
-        manager.rust.displaySentAndReceivedAmount(sentAndReceived)
+        manager.displaySentAndReceivedAmount(sentAndReceived)
     }
 }
 
@@ -765,13 +765,7 @@ internal fun UnsignedTransactionWidget(
     // fetch fiat amount asynchronously (matches iOS .task behavior)
     LaunchedEffect(txn.id()) {
         fiatAmount = null
-        fiatAmount =
-            try {
-                manager.rust.amountInFiat(txn.spendingAmount())
-            } catch (e: Exception) {
-                android.util.Log.d("UnsignedTxWidget", "Fiat fetch failed", e)
-                null
-            }
+        fiatAmount = manager.amountInFiatCached(txn.spendingAmount())
     }
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
@@ -783,11 +777,11 @@ internal fun UnsignedTransactionWidget(
     // format the spending amount (unsigned transactions are always outgoing)
     val formattedAmount =
         when (fiatOrBtc) {
-            FiatOrBtc.BTC -> manager.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
+            FiatOrBtc.BTC -> manager.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
             FiatOrBtc.FIAT -> {
                 val amount = fiatAmount
                 if (amount != null) {
-                    manager.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
+                    manager.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
                 } else {
                     "---"
                 }
@@ -799,12 +793,12 @@ internal fun UnsignedTransactionWidget(
             FiatOrBtc.BTC -> {
                 val amount = fiatAmount
                 if (amount != null) {
-                    manager.rust.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
+                    manager.displayFiatAmountWithDirection(amount, TransactionDirection.OUTGOING)
                 } else {
                     "---"
                 }
             }
-            FiatOrBtc.FIAT -> manager.rust.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
+            FiatOrBtc.FIAT -> manager.displayAmountWithDirection(txn.spendingAmount(), TransactionDirection.OUTGOING)
         }
 
     Box {

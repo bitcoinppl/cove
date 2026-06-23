@@ -63,7 +63,7 @@ struct WalletBalanceHeaderView: View {
             Text("••••••")
         } else if metadata.fiatOrBtc == .fiat {
             if let fiatBalance {
-                Text(manager.rust.displayFiatAmount(amount: fiatBalance))
+                Text(manager.displayFiatAmount(fiatBalance))
             } else {
                 ProgressView()
                     .tint(.white.opacity(balancePresentation.primaryOpacity))
@@ -79,7 +79,7 @@ struct WalletBalanceHeaderView: View {
             Text("••••••")
         } else if metadata.fiatOrBtc == .btc {
             if let fiatBalance {
-                Text(manager.rust.displayFiatAmount(amount: fiatBalance))
+                Text(manager.displayFiatAmount(fiatBalance))
             } else {
                 ProgressView()
                     .tint(.white.opacity(balancePresentation.secondaryOpacity))
@@ -95,7 +95,7 @@ struct WalletBalanceHeaderView: View {
         let pending = manager.balance.untrustedPending()
 
         if metadata.fiatOrBtc == .fiat, let fiatPendingBalance,
-           let pendingStr = manager.rust.displayFiatAmountPendingFmt(amount: fiatPendingBalance, withSuffix: true)
+           let pendingStr = manager.displayFiatAmountPendingFmt(fiatPendingBalance)
         {
             HStack {
                 Text(pendingStr)
@@ -104,7 +104,7 @@ struct WalletBalanceHeaderView: View {
                     .padding(.leading, 2)
                 Spacer()
             }
-        } else if let pendingStr = manager.rust.displayAmountPendingFmt(amount: pending) {
+        } else if let pendingStr = manager.displayAmountPendingFmt(pending) {
             HStack {
                 Text(pendingStr)
                     .foregroundColor(.white.opacity(balancePresentation.pendingOpacity))
@@ -223,18 +223,20 @@ struct WalletBalanceHeaderView: View {
         )
         .background(.midnightBlue)
         .onAppear {
-            if fiatBalance == nil { fiatBalance = manager.rust.amountInFiat(amount: balance) }
-            if fiatPendingBalance == nil { fiatPendingBalance = manager.rust.amountInFiat(amount: manager.balance.untrustedPending()) }
+            if fiatBalance == nil { fiatBalance = manager.amountInFiatCached(balance) }
+            if fiatPendingBalance == nil {
+                fiatPendingBalance = manager.amountInFiatCached(manager.balance.untrustedPending())
+            }
         }
         .onChange(of: manager.balance, initial: false) { _, newBalance in
             // recalculate fiat when balance changes
-            fiatBalance = manager.rust.amountInFiat(amount: newBalance.spendable())
-            fiatPendingBalance = manager.rust.amountInFiat(amount: newBalance.untrustedPending())
+            fiatBalance = manager.amountInFiatCached(newBalance.spendable())
+            fiatPendingBalance = manager.amountInFiatCached(newBalance.untrustedPending())
         }
         .onChange(of: app.prices, initial: false) { _, _ in
             // recalculate fiat when prices are loaded/updated
-            fiatBalance = manager.rust.amountInFiat(amount: balance)
-            fiatPendingBalance = manager.rust.amountInFiat(amount: manager.balance.untrustedPending())
+            fiatBalance = manager.amountInFiatCached(balance)
+            fiatPendingBalance = manager.amountInFiatCached(manager.balance.untrustedPending())
         }
     }
 }

@@ -10870,6 +10870,8 @@ public protocol TransactionDetailsProtocol: AnyObject, Sendable {
 
     func confirmationDateTime()  -> String?
 
+    func displayAmount(metadata: WalletMetadata, showUnit: Bool)  -> String
+
     func feeFiatFmt() async throws  -> String
 
     func feeFiatFmtCached()  -> String?
@@ -11118,6 +11120,17 @@ open func confirmationDateTime() -> String?  {
         uniffiCallStatus in
     uniffi_cove_fn_method_transactiondetails_confirmation_date_time(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func displayAmount(metadata: WalletMetadata, showUnit: Bool = true) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_transactiondetails_display_amount(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWalletMetadata_lower(metadata),
+        FfiConverterBool.lower(showUnit),uniffiCallStatus
     )
 })
 }
@@ -39631,6 +39644,83 @@ public func transactionsPreviewNew(confirmed: UInt8, unconfirmed: UInt8) -> [Tra
     )
 })
 }
+public func walletAmountInFiatCached(amount: Amount) -> Double?  {
+    return try!  FfiConverterOptionDouble.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_wallet_amount_in_fiat_cached(
+        FfiConverterTypeAmount_lower(amount),uniffiCallStatus
+    )
+})
+}
+public func walletDisplayAmount(metadata: WalletMetadata, amount: Amount, showUnit: Bool) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_wallet_display_amount(
+        FfiConverterTypeWalletMetadata_lower(metadata),
+        FfiConverterTypeAmount_lower(amount),
+        FfiConverterBool.lower(showUnit),uniffiCallStatus
+    )
+})
+}
+public func walletDisplayAmountPendingFmt(metadata: WalletMetadata, amount: Amount) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_wallet_display_amount_pending_fmt(
+        FfiConverterTypeWalletMetadata_lower(metadata),
+        FfiConverterTypeAmount_lower(amount),uniffiCallStatus
+    )
+})
+}
+public func walletDisplayAmountWithDirection(metadata: WalletMetadata, amount: Amount, direction: TransactionDirection) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_wallet_display_amount_with_direction(
+        FfiConverterTypeWalletMetadata_lower(metadata),
+        FfiConverterTypeAmount_lower(amount),
+        FfiConverterTypeTransactionDirection_lower(direction),uniffiCallStatus
+    )
+})
+}
+public func walletDisplayFiatAmount(metadata: WalletMetadata, amount: Double, withSuffix: Bool) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_wallet_display_fiat_amount(
+        FfiConverterTypeWalletMetadata_lower(metadata),
+        FfiConverterDouble.lower(amount),
+        FfiConverterBool.lower(withSuffix),uniffiCallStatus
+    )
+})
+}
+public func walletDisplayFiatAmountPendingFmt(metadata: WalletMetadata, amount: Double, withSuffix: Bool) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_wallet_display_fiat_amount_pending_fmt(
+        FfiConverterTypeWalletMetadata_lower(metadata),
+        FfiConverterDouble.lower(amount),
+        FfiConverterBool.lower(withSuffix),uniffiCallStatus
+    )
+})
+}
+public func walletDisplayFiatAmountWithDirection(metadata: WalletMetadata, amount: Double, direction: TransactionDirection, withSuffix: Bool) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_wallet_display_fiat_amount_with_direction(
+        FfiConverterTypeWalletMetadata_lower(metadata),
+        FfiConverterDouble.lower(amount),
+        FfiConverterTypeTransactionDirection_lower(direction),
+        FfiConverterBool.lower(withSuffix),uniffiCallStatus
+    )
+})
+}
+public func walletDisplaySentAndReceivedAmount(metadata: WalletMetadata, sentAndReceived: SentAndReceived) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_wallet_display_sent_and_received_amount(
+        FfiConverterTypeWalletMetadata_lower(metadata),
+        FfiConverterTypeSentAndReceived_lower(sentAndReceived),uniffiCallStatus
+    )
+})
+}
 public func ffiMinSendAmount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
@@ -39825,6 +39915,30 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_transactions_preview_new() != 39646) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_amount_in_fiat_cached() != 26689) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_display_amount() != 61536) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_display_amount_pending_fmt() != 28974) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_display_amount_with_direction() != 31040) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_display_fiat_amount() != 19771) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_display_fiat_amount_pending_fmt() != 9763) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_display_fiat_amount_with_direction() != 59603) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_display_sent_and_received_amount() != 2923) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_ffi_min_send_amount() != 61138) {
@@ -40839,6 +40953,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 59432) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_transactiondetails_display_amount() != 46360) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt() != 57101) {

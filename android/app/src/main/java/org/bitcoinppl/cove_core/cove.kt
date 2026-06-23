@@ -1161,6 +1161,22 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_transactions_preview_new(
     ): Short
+    external fun uniffi_cove_checksum_func_wallet_amount_in_fiat_cached(
+    ): Short
+    external fun uniffi_cove_checksum_func_wallet_display_amount(
+    ): Short
+    external fun uniffi_cove_checksum_func_wallet_display_amount_pending_fmt(
+    ): Short
+    external fun uniffi_cove_checksum_func_wallet_display_amount_with_direction(
+    ): Short
+    external fun uniffi_cove_checksum_func_wallet_display_fiat_amount(
+    ): Short
+    external fun uniffi_cove_checksum_func_wallet_display_fiat_amount_pending_fmt(
+    ): Short
+    external fun uniffi_cove_checksum_func_wallet_display_fiat_amount_with_direction(
+    ): Short
+    external fun uniffi_cove_checksum_func_wallet_display_sent_and_received_amount(
+    ): Short
     external fun uniffi_cove_checksum_func_ffi_min_send_amount(
     ): Short
     external fun uniffi_cove_checksum_func_ffi_min_send_sats(
@@ -1836,6 +1852,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_transactiondetails_block_number_fmt(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_confirmation_date_time(
+    ): Short
+    external fun uniffi_cove_checksum_method_transactiondetails_display_amount(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt(
     ): Short
@@ -3055,6 +3073,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_confirmation_date_time(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_transactiondetails_display_amount(`ptr`: Long,`metadata`: RustBuffer.ByValue,`showUnit`: Byte,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt_cached(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3475,6 +3495,22 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_transactions_preview_new(`confirmed`: Byte,`unconfirmed`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_wallet_amount_in_fiat_cached(`amount`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_wallet_display_amount(`metadata`: RustBuffer.ByValue,`amount`: Long,`showUnit`: Byte,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_wallet_display_amount_pending_fmt(`metadata`: RustBuffer.ByValue,`amount`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_wallet_display_amount_with_direction(`metadata`: RustBuffer.ByValue,`amount`: Long,`direction`: RustBufferTransactionDirection.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_wallet_display_fiat_amount(`metadata`: RustBuffer.ByValue,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_wallet_display_fiat_amount_pending_fmt(`metadata`: RustBuffer.ByValue,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_wallet_display_fiat_amount_with_direction(`metadata`: RustBuffer.ByValue,`amount`: Double,`direction`: RustBufferTransactionDirection.ByValue,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_wallet_display_sent_and_received_amount(`metadata`: RustBuffer.ByValue,`sentAndReceived`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_ffi_min_send_amount(uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_func_ffi_min_send_sats(uniffi_out_err: UniffiRustCallStatus,
@@ -3742,6 +3778,30 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_transactions_preview_new() != 39646.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_wallet_amount_in_fiat_cached() != 26689.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_wallet_display_amount() != 61536.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_wallet_display_amount_pending_fmt() != 28974.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_wallet_display_amount_with_direction() != 31040.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_wallet_display_fiat_amount() != 19771.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_wallet_display_fiat_amount_pending_fmt() != 9763.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_wallet_display_fiat_amount_with_direction() != 59603.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_wallet_display_sent_and_received_amount() != 2923.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_ffi_min_send_amount() != 61138.toShort()) {
@@ -4756,6 +4816,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 59432.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_display_amount() != 46360.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt() != 57101.toShort()) {
@@ -23855,6 +23918,8 @@ public interface TransactionDetailsInterface {
 
     fun `confirmationDateTime`(): kotlin.String?
 
+    fun `displayAmount`(`metadata`: WalletMetadata, `showUnit`: kotlin.Boolean = true): kotlin.String
+
     suspend fun `feeFiatFmt`(): kotlin.String
 
     fun `feeFiatFmtCached`(): kotlin.String?
@@ -24142,6 +24207,21 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     UniffiLib.uniffi_cove_fn_method_transactiondetails_confirmation_date_time(
         it,
         _status)
+}
+    }
+    )
+    }
+
+
+    override fun `displayAmount`(`metadata`: WalletMetadata, `showUnit`: kotlin.Boolean): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_display_amount(
+        it,
+
+        FfiConverterTypeWalletMetadata.lower(`metadata`),
+        FfiConverterBoolean.lower(`showUnit`),_status)
 }
     }
     )
@@ -59218,6 +59298,107 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 
         FfiConverterUByte.lower(`confirmed`),
         FfiConverterUByte.lower(`unconfirmed`),_status)
+}
+    )
+    }
+
+ fun `walletAmountInFiatCached`(`amount`: Amount): kotlin.Double? {
+            return FfiConverterOptionalDouble.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_wallet_amount_in_fiat_cached(
+
+
+        FfiConverterTypeAmount.lower(`amount`),_status)
+}
+    )
+    }
+
+ fun `walletDisplayAmount`(`metadata`: WalletMetadata, `amount`: Amount, `showUnit`: kotlin.Boolean): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_wallet_display_amount(
+
+
+        FfiConverterTypeWalletMetadata.lower(`metadata`),
+        FfiConverterTypeAmount.lower(`amount`),
+        FfiConverterBoolean.lower(`showUnit`),_status)
+}
+    )
+    }
+
+ fun `walletDisplayAmountPendingFmt`(`metadata`: WalletMetadata, `amount`: Amount): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_wallet_display_amount_pending_fmt(
+
+
+        FfiConverterTypeWalletMetadata.lower(`metadata`),
+        FfiConverterTypeAmount.lower(`amount`),_status)
+}
+    )
+    }
+
+ fun `walletDisplayAmountWithDirection`(`metadata`: WalletMetadata, `amount`: Amount, `direction`: TransactionDirection): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_wallet_display_amount_with_direction(
+
+
+        FfiConverterTypeWalletMetadata.lower(`metadata`),
+        FfiConverterTypeAmount.lower(`amount`),
+        FfiConverterTypeTransactionDirection.lower(`direction`),_status)
+}
+    )
+    }
+
+ fun `walletDisplayFiatAmount`(`metadata`: WalletMetadata, `amount`: kotlin.Double, `withSuffix`: kotlin.Boolean): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_wallet_display_fiat_amount(
+
+
+        FfiConverterTypeWalletMetadata.lower(`metadata`),
+        FfiConverterDouble.lower(`amount`),
+        FfiConverterBoolean.lower(`withSuffix`),_status)
+}
+    )
+    }
+
+ fun `walletDisplayFiatAmountPendingFmt`(`metadata`: WalletMetadata, `amount`: kotlin.Double, `withSuffix`: kotlin.Boolean): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_wallet_display_fiat_amount_pending_fmt(
+
+
+        FfiConverterTypeWalletMetadata.lower(`metadata`),
+        FfiConverterDouble.lower(`amount`),
+        FfiConverterBoolean.lower(`withSuffix`),_status)
+}
+    )
+    }
+
+ fun `walletDisplayFiatAmountWithDirection`(`metadata`: WalletMetadata, `amount`: kotlin.Double, `direction`: TransactionDirection, `withSuffix`: kotlin.Boolean): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_wallet_display_fiat_amount_with_direction(
+
+
+        FfiConverterTypeWalletMetadata.lower(`metadata`),
+        FfiConverterDouble.lower(`amount`),
+        FfiConverterTypeTransactionDirection.lower(`direction`),
+        FfiConverterBoolean.lower(`withSuffix`),_status)
+}
+    )
+    }
+
+ fun `walletDisplaySentAndReceivedAmount`(`metadata`: WalletMetadata, `sentAndReceived`: SentAndReceived): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_wallet_display_sent_and_received_amount(
+
+
+        FfiConverterTypeWalletMetadata.lower(`metadata`),
+        FfiConverterTypeSentAndReceived.lower(`sentAndReceived`),_status)
 }
     )
     }

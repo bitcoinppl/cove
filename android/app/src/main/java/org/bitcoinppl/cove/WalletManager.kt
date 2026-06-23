@@ -134,6 +134,9 @@ class WalletManager :
     val accentColor: Color
         get() = walletMetadata?.color?.toComposeColor() ?: CoveColor.pastelBlue
 
+    private val requiredWalletMetadata: WalletMetadata
+        get() = walletMetadata ?: error("wallet metadata is not initialized")
+
     // private constructor - use companion factory methods
     private constructor(
         walletId: WalletId,
@@ -243,7 +246,48 @@ class WalletManager :
             else -> amount.satsString()
         }
 
-    fun displayAmount(amount: Amount, showUnit: Boolean = true): String = rust.displayAmount(amount, showUnit)
+    fun displayAmount(amount: Amount, showUnit: Boolean = true): String {
+        return walletDisplayAmount(requiredWalletMetadata, amount, showUnit)
+    }
+
+    fun displayAmountPendingFmt(amount: Amount): String? {
+        return walletDisplayAmountPendingFmt(requiredWalletMetadata, amount)
+    }
+
+    fun displayAmountWithDirection(
+        amount: Amount,
+        direction: TransactionDirection,
+    ): String {
+        return walletDisplayAmountWithDirection(requiredWalletMetadata, amount, direction)
+    }
+
+    fun displaySentAndReceivedAmount(sentAndReceived: SentAndReceived): String {
+        return walletDisplaySentAndReceivedAmount(requiredWalletMetadata, sentAndReceived)
+    }
+
+    fun displayFiatAmount(
+        amount: Double,
+        withSuffix: Boolean = true,
+    ): String {
+        return walletDisplayFiatAmount(requiredWalletMetadata, amount, withSuffix)
+    }
+
+    fun displayFiatAmountPendingFmt(
+        amount: Double,
+        withSuffix: Boolean = true,
+    ): String? {
+        return walletDisplayFiatAmountPendingFmt(requiredWalletMetadata, amount, withSuffix)
+    }
+
+    fun displayFiatAmountWithDirection(
+        amount: Double,
+        direction: TransactionDirection,
+        withSuffix: Boolean = true,
+    ): String {
+        return walletDisplayFiatAmountWithDirection(requiredWalletMetadata, amount, direction, withSuffix)
+    }
+
+    fun amountInFiatCached(amount: Amount): Double? = walletAmountInFiatCached(amount)
 
     fun amountFmtUnit(amount: Amount): String =
         when (walletMetadata?.selectedUnit) {

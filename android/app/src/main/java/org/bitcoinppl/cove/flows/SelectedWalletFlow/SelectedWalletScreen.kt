@@ -138,21 +138,21 @@ fun SelectedWalletScreen(
     val actualSatsPending =
         remember(manager.balance, manager.walletMetadata?.selectedUnit) {
             val pending = manager.balance.untrustedPending()
-            manager.rust.displayAmountPendingFmt(pending)
+            manager.displayAmountPendingFmt(pending)
         }
 
     val fiatBalance =
         remember(manager.balance, app.prices) {
-            manager.rust.amountInFiat(manager.balance.spendable())?.let { fiat ->
-                manager.rust.displayFiatAmount(fiat)
+            manager.amountInFiatCached(manager.balance.spendable())?.let { fiat ->
+                manager.displayFiatAmount(fiat)
             }
         }
 
     val fiatBalancePending =
         remember(manager.balance, app.prices) {
             val pending = manager.balance.untrustedPending()
-            manager.rust.amountInFiat(pending)?.let { fiat ->
-                manager.rust.displayFiatAmountPendingFmt(fiat, withSuffix = true)
+            manager.amountInFiatCached(pending)?.let { fiat ->
+                manager.displayFiatAmountPendingFmt(fiat, withSuffix = true)
             }
         }
 

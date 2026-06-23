@@ -21,7 +21,7 @@ use cove_tokio::task;
 
 use crate::{
     device::Device,
-    wallet::{Address, address},
+    wallet::{Address, address, amount_display, metadata::WalletMetadata},
 };
 use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
 use tap::TapFallible;
@@ -235,6 +235,16 @@ impl TransactionDetails {
     #[uniffi::method]
     pub fn amount(&self) -> Amount {
         self.sent_and_received.amount()
+    }
+
+    #[uniffi::method(default(show_unit = true))]
+    pub fn display_amount(&self, metadata: WalletMetadata, show_unit: bool) -> String {
+        amount_display::display_amount(
+            metadata.sensitive_visible,
+            metadata.selected_unit,
+            self.amount(),
+            show_unit,
+        )
     }
 
     #[uniffi::method]
@@ -557,6 +567,7 @@ fn fmt_historical_fiat(amount: f64) -> String {
 mod tests {
     use super::*;
     use bitcoin::Sequence;
+    use cove_types::unit::BitcoinUnit;
 
     /// Mirrors the detection logic in `try_new`: returns `true` when any input
     /// sequence signals opt-in RBF (nSequence < 0xFFFFFFFE, per BIP 125).
@@ -605,5 +616,23 @@ mod tests {
     fn preview_constructors_default_to_not_rbf() {
         assert!(!TransactionDetails::preview_new_confirmed().is_rbf_signaling);
         assert!(!TransactionDetails::preview_pending_sent().is_rbf_signaling);
+    }
+
+    #[test]
+    fn display_amount_uses_metadata_without_exporting_amount() {
+        let mut details = TransactionDetails::preview_new_confirmed();
+        details.sent_and_received = SentAndReceived {
+            direction: TransactionDirection::Incoming,
+            sent: Amount::ZERO,
+            received: Amount::from_sat(12_000),
+        };
+
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.selected_unit = BitcoinUnit::Sat;
+
+        assert_eq!(details.display_amount(metadata.clone(), true), "12,000 SATS");
+
+        metadata.sensitive_visible = false;
+        assert_eq!(details.display_amount(metadata, true), "••••••");
     }
 }
