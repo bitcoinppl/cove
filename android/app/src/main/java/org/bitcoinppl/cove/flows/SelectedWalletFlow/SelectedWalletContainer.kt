@@ -177,6 +177,26 @@ fun SelectedWalletContainer(
         else -> {
             val canGoBack = app.rust.canGoBack()
             android.util.Log.d("SelectedWalletContainer", "canGoBack=$canGoBack, routes=${app.router.routes.size}, default=${app.router.default}")
+            val handleSend = send@{
+                if (wm.walletMetadata?.walletType == WalletType.WATCH_ONLY) {
+                    app.alertState = TaggedItem(AppAlertState.CantSendOnWatchOnlyWallet)
+                    return@send
+                }
+
+                if (wm.ledgerState.initialScanIncomplete) {
+                    app.showInitialScanIncompleteAlert()
+                    return@send
+                }
+
+                val balance = wm.balance.spendable().asSats()
+                if (balance > 0u.toULong()) {
+                    app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))
+                } else {
+                    scope.launch {
+                        snackbarHostState.showSnackbar("No funds available to send")
+                    }
+                }
+            }
 
             SelectedWalletScreen(
                 onBack = {
@@ -187,30 +207,8 @@ fun SelectedWalletContainer(
                     }
                 },
                 canGoBack = canGoBack,
-                onSend = {
-                    if (wm.walletMetadata?.walletType == WalletType.WATCH_ONLY) {
-                        app.alertState = TaggedItem(AppAlertState.CantSendOnWatchOnlyWallet)
-                        return@SelectedWalletScreen
-                    }
-                    if (wm.ledgerState.initialScanIncomplete) {
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.General(
-                                    title = "Initial Scan Incomplete",
-                                    message = "Can't send until initial scan completes.",
-                                ),
-                            )
-                        return@SelectedWalletScreen
-                    }
-                    val balance = wm.balance.spendable().asSats()
-                    if (balance > 0u.toULong()) {
-                        app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))
-                    } else {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("No funds available to send")
-                        }
-                    }
-                },
+                onSend = handleSend,
+                onSendUnavailable = handleSend,
                 onReceive = {
                     showReceiveSheet = true
                 },

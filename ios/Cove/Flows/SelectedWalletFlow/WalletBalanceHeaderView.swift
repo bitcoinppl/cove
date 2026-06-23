@@ -38,6 +38,25 @@ struct WalletBalanceHeaderView: View {
         sendButtonIsUnavailable ? Color.gray : Color.btnPrimary
     }
 
+    private func sendButtonPressed() {
+        if metadata.walletType == .watchOnly {
+            app.alertState = .init(.cantSendOnWatchOnlyWallet)
+            return
+        }
+
+        if initialScanIsIncomplete {
+            app.showInitialScanIncompleteAlert()
+            return
+        }
+
+        if balance.asSats() == 0 {
+            manager.errorAlert = .noBalance
+            return
+        }
+
+        app.pushRoute(RouteFactory().sendSetAmount(id: metadata.id))
+    }
+
     @ViewBuilder
     private var primaryBalanceView: some View {
         if !metadata.sensitiveVisible {
@@ -164,27 +183,7 @@ struct WalletBalanceHeaderView: View {
             }
 
             HStack(spacing: 16) {
-                Button(action: {
-                    if metadata.walletType == .watchOnly {
-                        app.alertState = .init(.cantSendOnWatchOnlyWallet)
-                        return
-                    }
-
-                    if initialScanIsIncomplete {
-                        app.alertState = .init(.general(
-                            title: "Initial Scan Incomplete",
-                            message: "Can't send until initial scan completes."
-                        ))
-                        return
-                    }
-
-                    if balance.asSats() == 0 {
-                        manager.errorAlert = .noBalance
-                        return
-                    }
-
-                    app.pushRoute(RouteFactory().sendSetAmount(id: metadata.id))
-                }) {
+                Button(action: sendButtonPressed) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.up.right")
                         Text("Send")

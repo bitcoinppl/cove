@@ -73,10 +73,7 @@ private struct SendFlowLoadedView: View {
         .environment(sendFlowManager)
         .onAppear {
             if manager.ledgerState.initialScanIncomplete {
-                app.alertState = .init(.general(
-                    title: "Initial Scan Incomplete",
-                    message: "Can't send until initial scan completes."
-                ))
+                app.showInitialScanIncompleteAlert()
                 app.popRoute()
                 return
             }
@@ -193,10 +190,7 @@ private struct SendFlowLoadedView: View {
     private func handleSendFlowManagerError(_ error: Error) {
         switch error {
         case WalletManagerError.InitialScanIncomplete:
-            app.alertState = .init(.general(
-                title: "Initial Scan Incomplete",
-                message: "Can't send until initial scan completes."
-            ))
+            app.showInitialScanIncompleteAlert()
             app.popRoute()
         case let WalletManagerError.DatabaseCorruption(walletId, errorMessage):
             Log.error("Wallet database corrupted for \(walletId): \(errorMessage)")

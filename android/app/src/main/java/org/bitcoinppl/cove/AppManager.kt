@@ -107,6 +107,16 @@ class AppManager private constructor() : FfiReconcile {
         wallets = runCatching { Database().wallets().all() }.getOrElse { emptyList() }
     }
 
+    fun showInitialScanIncompleteAlert() {
+        alertState =
+            TaggedItem(
+                AppAlertState.General(
+                    title = "Initial Scan Incomplete",
+                    message = "Can't send until initial scan completes.",
+                ),
+            )
+    }
+
     /**
      * set the cached wallet manager instance
      */

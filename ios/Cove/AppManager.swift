@@ -107,6 +107,13 @@ private let navigationSettleDelayMs = 800
         self.rust.listenForUpdates(updater: self)
     }
 
+    func showInitialScanIncompleteAlert() {
+        alertState = .init(.general(
+            title: "Initial Scan Incomplete",
+            message: "Can't send until initial scan completes."
+        ))
+    }
+
     func cachedWalletManager(id: WalletId) -> WalletManager? {
         guard let walletManager, walletManager.id == id else { return nil }
         return walletManager

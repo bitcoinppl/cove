@@ -53,13 +53,7 @@ fun CoinControlContainer(
             manager = ccm
         } catch (e: WalletManagerException.InitialScanIncomplete) {
             android.util.Log.e(tag, "initial scan incomplete", e)
-            app.alertState =
-                TaggedItem(
-                    AppAlertState.General(
-                        title = "Initial Scan Incomplete",
-                        message = "Can't send until initial scan completes.",
-                    ),
-                )
+            app.showInitialScanIncompleteAlert()
             app.popRoute()
         } catch (e: WalletManagerException.DatabaseCorruption) {
             android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
