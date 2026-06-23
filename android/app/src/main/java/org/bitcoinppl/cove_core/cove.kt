@@ -3705,7 +3705,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_active_migration() != 29388.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_all_block_explorer_options() != 48219.toShort()) {
+    if (lib.uniffi_cove_checksum_func_all_block_explorer_options() != 60996.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_all_fiat_currencies() != 53482.toShort()) {
@@ -34659,7 +34659,10 @@ enum class BlockExplorerOption {
     BLOCKSTREAM,
     CUSTOM;
 
-     fun `displayName`(): kotlin.String {
+
+    /**
+     * Returns the user-visible label for this explorer option.
+     */ fun `displayName`(): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_blockexploreroption_display_name(FfiConverterTypeBlockExplorerOption.lower(this),
@@ -59266,7 +59269,10 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     )
     }
 
- fun `allBlockExplorerOptions`(): List<BlockExplorerOption> {
+
+        /**
+         * Returns every block explorer option exposed to mobile clients.
+         */ fun `allBlockExplorerOptions`(): List<BlockExplorerOption> {
             return FfiConverterSequenceTypeBlockExplorerOption.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_all_block_explorer_options(
