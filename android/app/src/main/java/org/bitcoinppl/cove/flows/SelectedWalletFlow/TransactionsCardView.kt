@@ -89,6 +89,13 @@ private fun WalletScanStatus.progressOrNull(): WalletScanProgress? =
 private fun WalletScanProgress?.fraction(): Float =
     (this?.progressBasisPoints?.toFloat() ?: 0f) / SCAN_PROGRESS_BASIS_POINTS
 
+@Composable
+private fun checkingWalletHistoryMessage(isFirstScan: Boolean): String? {
+    if (!isFirstScan) return null
+
+    return stringResource(R.string.checking_wallet_history)
+}
+
 /**
  * Displays the list of transactions with a header
  *
@@ -174,7 +181,7 @@ fun TransactionsCardView(
                 )
             } else {
                 TransactionsScanSpinnerStrip(
-                    message = if (isFirstScan) "Checking wallet history" else null,
+                    message = checkingWalletHistoryMessage(isFirstScan),
                     secondaryText = secondaryText,
                     modifier = Modifier.padding(bottom = 10.dp),
                 )
@@ -198,7 +205,7 @@ fun TransactionsCardView(
                     )
                 } else {
                     EmptyWalletScanSpinnerState(
-                        message = if (isFirstScan) "Checking wallet history" else null,
+                        message = checkingWalletHistoryMessage(isFirstScan),
                         primaryText = primaryText,
                         modifier =
                             Modifier
@@ -972,7 +979,7 @@ fun LazyListScope.transactionItems(
                 )
             } else {
                 TransactionsScanSpinnerStrip(
-                    message = if (isFirstScan) "Checking wallet history" else null,
+                    message = checkingWalletHistoryMessage(isFirstScan),
                     secondaryText = secondaryText,
                     modifier =
                         Modifier
@@ -1046,7 +1053,7 @@ fun LazyListScope.transactionItems(
                 )
             } else {
                 EmptyWalletScanSpinnerState(
-                    message = if (isFirstScan) "Checking wallet history" else null,
+                    message = checkingWalletHistoryMessage(isFirstScan),
                     primaryText = primaryText,
                     modifier =
                         Modifier
