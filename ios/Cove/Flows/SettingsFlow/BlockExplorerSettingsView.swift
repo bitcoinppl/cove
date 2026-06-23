@@ -37,12 +37,14 @@ struct BlockExplorerSettingsView: View {
                 }
             }
 
-            Section("Block Explorer") {
+            Section {
                 Text(
                     "Block explorers are public websites for checking Bitcoin transaction details and confirmations. Cove opens the selected explorer when you view a transaction."
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            } header: {
+                Text("Description")
             }
 
             Section("Preview") {

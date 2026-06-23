@@ -27,6 +27,7 @@
     <string name="title_settings_node">Node</string>
     <string name="title_settings_currency">Currency</string>
     <string name="block_explorer_preview">Preview</string>
+    <string name="block_explorer_description_title">Description</string>
     <string name="block_explorer_description">Block explorers are public websites for checking Bitcoin transaction details and confirmations. Cove opens the selected explorer when you view a transaction.</string>
     <string name="block_explorer_options">Explorer</string>
     <string name="block_explorer_url_placeholder">URL or template</string>

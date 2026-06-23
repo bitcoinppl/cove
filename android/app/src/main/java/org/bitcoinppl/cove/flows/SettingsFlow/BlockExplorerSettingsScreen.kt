@@ -180,7 +180,7 @@ fun BlockExplorerSettingsScreen(
                 }
             }
 
-            SectionHeader(stringResource(R.string.title_settings_block_explorer), showDivider = false)
+            SectionHeader(stringResource(R.string.block_explorer_description_title), showDivider = false)
             MaterialSection {
                 Text(
                     text = stringResource(R.string.block_explorer_description),
