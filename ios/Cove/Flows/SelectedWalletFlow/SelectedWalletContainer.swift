@@ -156,8 +156,6 @@ private struct SelectedWalletLoadingScreen: View {
         .toolbar { toolbarContent }
         .navigationTitleView { titleContent }
         .adaptiveToolbarStyle(showNavBar: false, reduceTransparency: reduceTransparency)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     var body: some View {
@@ -177,14 +175,23 @@ private struct SelectedWalletLoadingScreen: View {
         )
         .modifier(ScrollViewBackgroundModifier(iOS26OrLater: iOS26OrLater))
         .scrollIndicators(.hidden)
-        .modifier(SoftScrollEdgeModifier())
+        .modifier(HiddenTopScrollEdgeModifier())
         .modifier(OuterBackgroundModifier(iOS26OrLater: iOS26OrLater))
-        .background(Color.midnightBlue.ignoresSafeArea(edges: .top))
         .onAppear {
             app.isPastHeader = false
         }
         .onDisappear {
             app.isPastHeader = false
+        }
+    }
+}
+
+private struct HiddenTopScrollEdgeModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            content
         }
     }
 }
