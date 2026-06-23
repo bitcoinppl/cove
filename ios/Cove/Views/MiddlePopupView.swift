@@ -118,7 +118,7 @@ struct MiddlePopupView: View {
 
             } else {
                 ProgressView(label: {
-                    Text("Working on it...")
+                    Text(popupMessage.isEmpty ? "Working on it..." : popupMessage)
                         .font(.caption)
                         .padding(.top, 6)
                 })
