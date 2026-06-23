@@ -3908,7 +3908,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route() != 16208.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 21077.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 21603.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_needs_onboarding() != 25615.toShort()) {
@@ -10279,7 +10279,7 @@ public interface FfiAppInterface {
 
     /**
      * Load and reset the default route
-     * Shows a laoding screen, and then resets the default route
+     * Shows a loading screen, and then resets the default route
      */
     fun `loadAndResetDefaultRouteAfter`(`route`: Route, `afterMillis`: kotlin.UInt)
 
@@ -10718,7 +10718,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 
     /**
      * Load and reset the default route
-     * Shows a laoding screen, and then resets the default route
+     * Shows a loading screen, and then resets the default route
      */override fun `loadAndResetDefaultRouteAfter`(`route`: Route, `afterMillis`: kotlin.UInt)
         =
     callWithHandle {
