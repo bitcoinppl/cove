@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -44,6 +45,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -159,6 +161,7 @@ fun BlockExplorerSettingsScreen(
         when (option) {
             BlockExplorerOption.CUSTOM -> {
                 selectedOption = BlockExplorerOption.CUSTOM
+                input = ""
                 updatePreview(input)
             }
             else -> savePreset(option)
@@ -281,10 +284,11 @@ fun BlockExplorerSettingsScreen(
                             keyboardOptions =
                                 KeyboardOptions(
                                     capitalization = KeyboardCapitalization.None,
+                                    imeAction = ImeAction.Done,
                                     keyboardType = KeyboardType.Uri,
                                 ),
-                            minLines = 1,
-                            maxLines = 4,
+                            keyboardActions = KeyboardActions(onDone = { save() }),
+                            singleLine = true,
                             isError = validationError != null,
                             supportingText = validationError?.let { error -> { Text(error) } },
                             modifier = Modifier.fillMaxWidth(),

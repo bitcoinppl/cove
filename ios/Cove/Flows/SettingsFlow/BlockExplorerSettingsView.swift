@@ -64,15 +64,17 @@ struct BlockExplorerSettingsView: View {
 
             if selectedOption == .custom {
                 Section("Custom") {
-                    TextField("URL or template", text: $input, axis: .vertical)
+                    TextField("URL or template", text: $input)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .lineLimit(2 ... 5)
+                        .lineLimit(1)
+                        .submitLabel(.done)
                         .focused($isInputFocused)
                         .onChange(of: input) { _, newValue in
                             updatePreview(for: newValue)
                         }
+                        .onSubmit(save)
 
                     if let validationError {
                         Text(validationError)
@@ -117,6 +119,7 @@ struct BlockExplorerSettingsView: View {
         switch option {
         case .custom:
             selectedOption = .custom
+            input = ""
             updatePreview(for: input)
         default:
             savePreset(option)
@@ -165,7 +168,7 @@ struct BlockExplorerSettingsView: View {
         let networkToSave = selectedNetwork
         Task { @MainActor in
             isSaving = true
-            await MiddlePopup(state: .loading).present()
+            Task { await MiddlePopup(state: .loading).present() }
 
             do {
                 let normalized = try config.setCustomBlockExplorer(
