@@ -1308,8 +1308,8 @@ impl WalletActor {
             send!(scan_actor.shutdown(scan_generation));
         }
 
-        // cancel any in-flight payjoin negotiation; handle_payjoin_fallback clears the field
-        if let Some(ref actor) = self.payjoin_actor {
+        // cancel any in-flight payjoin negotiation and drop our strong actor handle
+        if let Some(actor) = self.payjoin_actor.take() {
             send!(actor.cancel_and_fallback());
         }
         self.stop_receive_address_watcher();

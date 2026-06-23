@@ -170,15 +170,19 @@ pub(crate) fn build_sender(
 enum PayjoinSession {
     /// Initial POST has not been sent yet; holds the sender state machine ready to POST
     PrePost { sender: V2Sender<WithReplyKey> },
+    /// POST request is in flight, so the sender state machine is owned by the request future
+    Posting,
     /// POST was accepted by the directory; now polling for the receiver's proposal
     Polling { polling_sender: V2Sender<PollingForProposal> },
+    /// Session is canceled or terminal; late async completions must be ignored
+    Closed,
 }
 
 pub(crate) struct PayjoinActor {
     addr: WeakAddr<Self>,
     wallet_addr: WeakAddr<WalletActor>,
     fallback_tx: BdkTransaction,
-    session: Option<PayjoinSession>,
+    session: PayjoinSession,
     poll_deadline: Option<Instant>,
 }
 
@@ -192,7 +196,7 @@ impl PayjoinActor {
             addr: WeakAddr::default(),
             wallet_addr,
             fallback_tx,
-            session: Some(PayjoinSession::PrePost { sender }),
+            session: PayjoinSession::PrePost { sender },
             poll_deadline: None,
         }
     }
@@ -208,8 +212,7 @@ impl Actor for PayjoinActor {
 
     async fn error(&mut self, error: ActorError) -> bool {
         error!("PayjoinActor error: {error:?}");
-        let fallback_tx = self.fallback_tx.clone();
-        send!(self.wallet_addr.handle_payjoin_fallback(fallback_tx));
+        self.complete_with_fallback();
         false
     }
 }
@@ -217,8 +220,12 @@ impl Actor for PayjoinActor {
 impl PayjoinActor {
     /// POSTs the signed PSBT to the payjoin directory and transitions to polling
     pub(crate) async fn start_post(&mut self) -> ActorResult<()> {
-        let sender = match self.session.take() {
-            Some(PayjoinSession::PrePost { sender }) => sender,
+        let sender = match std::mem::replace(&mut self.session, PayjoinSession::Posting) {
+            PayjoinSession::PrePost { sender } => sender,
+            PayjoinSession::Closed => {
+                self.session = PayjoinSession::Closed;
+                return Produces::ok(());
+            }
             unexpected => {
                 self.session = unexpected;
                 warn!("payjoin start_post called in unexpected state");
@@ -226,15 +233,12 @@ impl PayjoinActor {
             }
         };
 
-        let wallet_addr = self.wallet_addr.clone();
-        let fallback_tx = self.fallback_tx.clone();
-
         self.addr.send_fut_with(|addr| async move {
             let client = match cove_http::new_client() {
                 Ok(c) => c,
                 Err(e) => {
                     warn!("payjoin POST: failed to create HTTP client: {e:?}");
-                    send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
+                    send!(addr.complete_with_fallback_msg());
                     return;
                 }
             };
@@ -248,7 +252,7 @@ impl PayjoinActor {
                     Ok(pair) => pair,
                     Err(e) => {
                         warn!("payjoin POST: all relays failed: {e}");
-                        send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
+                        send!(addr.complete_with_fallback_msg());
                         return;
                     }
                 };
@@ -259,7 +263,7 @@ impl PayjoinActor {
                     Ok(ps) => ps,
                     Err(e) => {
                         warn!("payjoin POST: failed to process response: {e:?}");
-                        send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
+                        send!(addr.complete_with_fallback_msg());
                         return;
                     }
                 };
@@ -275,39 +279,48 @@ impl PayjoinActor {
         &mut self,
         polling_sender: V2Sender<PollingForProposal>,
     ) -> ActorResult<()> {
+        if matches!(self.session, PayjoinSession::Closed) {
+            return Produces::ok(());
+        }
+
+        if !matches!(self.session, PayjoinSession::Posting) {
+            warn!("payjoin post_succeeded called in unexpected state");
+            return Produces::ok(());
+        }
+
         self.poll_deadline = Some(Instant::now() + PAYJOIN_SESSION_TIMEOUT);
-        self.session = Some(PayjoinSession::Polling { polling_sender });
+        self.session = PayjoinSession::Polling { polling_sender };
         self.begin_next_poll();
         Produces::ok(())
     }
 
     /// Poll the directory for the receiver's proposal PSBT
     pub(crate) async fn begin_poll(&mut self) -> ActorResult<()> {
+        if matches!(self.session, PayjoinSession::Closed) {
+            return Produces::ok(());
+        }
+
         // if the session deadline has passed, broadcast the fallback immediately
         if self.poll_deadline.is_some_and(|d| Instant::now() >= d) {
-            let fallback_tx = self.fallback_tx.clone();
-            send!(self.wallet_addr.handle_payjoin_fallback(fallback_tx));
+            self.complete_with_fallback();
             return Produces::ok(());
         }
 
         // clone so the original stays in self.session, allowing retry if all relays fail this tick
         let polling_sender = match &self.session {
-            Some(PayjoinSession::Polling { polling_sender }) => polling_sender.clone(),
+            PayjoinSession::Polling { polling_sender } => polling_sender.clone(),
             _ => {
                 warn!("payjoin begin_poll called in unexpected state");
                 return Produces::ok(());
             }
         };
 
-        let wallet_addr = self.wallet_addr.clone();
-        let fallback_tx = self.fallback_tx.clone();
-
         self.addr.send_fut_with(|addr| async move {
             let client = match cove_http::new_client() {
                 Ok(c) => c,
                 Err(e) => {
                     warn!("payjoin poll: failed to create HTTP client: {e:?}");
-                    send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
+                    send!(addr.complete_with_fallback_msg());
                     return;
                 }
             };
@@ -333,7 +346,7 @@ impl PayjoinActor {
             let persister = NoopSessionPersister::<PayjoinSessionEvent>::default();
             match polling_sender.process_response(&poll_response, poll_ctx).save(&persister) {
                 Ok(OptionalTransitionOutcome::Progress(proposal_psbt)) => {
-                    send!(wallet_addr.handle_payjoin_success(proposal_psbt, fallback_tx));
+                    send!(addr.complete_with_success(proposal_psbt));
                 }
                 Ok(OptionalTransitionOutcome::Stasis(next)) => {
                     debug!("payjoin poll: no proposal yet, continuing");
@@ -347,7 +360,7 @@ impl PayjoinActor {
                         Some(ResponseError::WellKnown(_))
                         | Some(ResponseError::Unrecognized { .. }) => {
                             warn!("payjoin poll: receiver rejected session: {e:?}");
-                            send!(wallet_addr.handle_payjoin_fallback(fallback_tx));
+                            send!(addr.complete_with_fallback_msg());
                         }
                         _ => {
                             warn!("payjoin poll: transient error, retrying: {e:?}");
@@ -366,13 +379,26 @@ impl PayjoinActor {
         &mut self,
         next: V2Sender<PollingForProposal>,
     ) -> ActorResult<()> {
-        self.session = Some(PayjoinSession::Polling { polling_sender: next });
+        if matches!(self.session, PayjoinSession::Closed) {
+            return Produces::ok(());
+        }
+
+        if !matches!(self.session, PayjoinSession::Polling { .. }) {
+            warn!("payjoin update_polling_sender called in unexpected state");
+            return Produces::ok(());
+        }
+
+        self.session = PayjoinSession::Polling { polling_sender: next };
         self.begin_next_poll();
         Produces::ok(())
     }
 
     /// Queues the next poll immediately, called from async task context
     pub(crate) async fn begin_next_poll_msg(&mut self) -> ActorResult<()> {
+        if matches!(self.session, PayjoinSession::Closed) {
+            return Produces::ok(());
+        }
+
         self.begin_next_poll();
         Produces::ok(())
     }
@@ -386,9 +412,42 @@ impl PayjoinActor {
 
     /// Cancels the session and broadcasts the fallback transaction
     pub(crate) async fn cancel_and_fallback(&mut self) -> ActorResult<()> {
+        self.complete_with_fallback();
+        Produces::ok(())
+    }
+
+    async fn complete_with_success(&mut self, proposal_psbt: Psbt) -> ActorResult<()> {
+        if !self.close_session() {
+            return Produces::ok(());
+        }
+
+        let fallback_tx = self.fallback_tx.clone();
+        send!(self.wallet_addr.handle_payjoin_success(proposal_psbt, fallback_tx));
+        Produces::ok(())
+    }
+
+    async fn complete_with_fallback_msg(&mut self) -> ActorResult<()> {
+        self.complete_with_fallback();
+        Produces::ok(())
+    }
+
+    fn complete_with_fallback(&mut self) {
+        if !self.close_session() {
+            return;
+        }
+
         let fallback_tx = self.fallback_tx.clone();
         send!(self.wallet_addr.handle_payjoin_fallback(fallback_tx));
-        Produces::ok(())
+    }
+
+    fn close_session(&mut self) -> bool {
+        if matches!(self.session, PayjoinSession::Closed) {
+            return false;
+        }
+
+        self.session = PayjoinSession::Closed;
+        self.poll_deadline = None;
+        true
     }
 }
 
@@ -428,6 +487,31 @@ mod tests {
             }
         }
         psbt
+    }
+
+    fn empty_transaction() -> Transaction {
+        Transaction {
+            version: Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![],
+            output: vec![],
+        }
+    }
+
+    #[test]
+    fn test_close_session_is_idempotent() {
+        let mut actor = PayjoinActor {
+            addr: WeakAddr::default(),
+            wallet_addr: WeakAddr::default(),
+            fallback_tx: empty_transaction(),
+            session: PayjoinSession::Posting,
+            poll_deadline: Some(Instant::now()),
+        };
+
+        assert!(actor.close_session());
+        assert!(matches!(actor.session, PayjoinSession::Closed));
+        assert!(actor.poll_deadline.is_none());
+        assert!(!actor.close_session());
     }
 
     #[test]
