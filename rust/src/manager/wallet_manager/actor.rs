@@ -2490,8 +2490,8 @@ mod tests {
     use crate::wallet::metadata::WalletMetadata;
 
     use super::{
-        ActorState, BlockId, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType,
-        InitialScanRoute, RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart,
+        ActorState, BlockId, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, InitialScanRoute,
+        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart,
         full_scan_updates_initial_metadata, initial_scan_route, ledger_ready_for_spend,
         metadata_with_full_scan_performed, progressive_scan_update_response,
         reset_scan_lifecycle_state_for_address_type_switch, should_accept_wallet_scan_generation,

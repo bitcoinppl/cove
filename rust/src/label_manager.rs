@@ -333,21 +333,25 @@ impl LabelManager {
             if txn_label_created_at != record.timestamps.created_at
                 || !is_auto_output_label(txn_label_text.as_deref(), record.item.label.as_deref())
             {
+                // skip output labels that were changed independently
                 continue;
             }
 
             if record.item.spendable {
                 labels_to_delete.push(Label::from(record.item));
-            } else {
-                labels_to_delete.push(Label::from(record.item.clone()));
 
-                let mut item = record.item;
-                item.label = None;
-
-                let mut timestamps = record.timestamps;
-                timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
-                lock_only_records.push(Record::with_timestamps(Label::from(item), timestamps));
+                // spendable outputs do not need a lock-only replacement record
+                continue;
             }
+
+            labels_to_delete.push(Label::from(record.item.clone()));
+
+            let mut item = record.item;
+            item.label = None;
+
+            let mut timestamps = record.timestamps;
+            timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+            lock_only_records.push(Record::with_timestamps(Label::from(item), timestamps));
         }
 
         self.db
