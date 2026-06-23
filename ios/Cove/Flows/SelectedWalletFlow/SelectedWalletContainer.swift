@@ -22,7 +22,7 @@ struct SelectedWalletContainer: View {
         WalletManagerHost(
             walletId: id,
             loading: {
-                Text("Loading...")
+                FullPageLoadingView(title: "Loading wallet...")
             },
             onError: handleManagerError
         ) { manager in
@@ -58,9 +58,6 @@ struct SelectedWalletContainer: View {
                     } catch {
                         Log.error("Wallet Scan Failed \(error.localizedDescription)")
                     }
-                }
-                .onDisappear {
-                    manager.dispatch(.selectedWalletDisappeared)
                 }
         }
     }

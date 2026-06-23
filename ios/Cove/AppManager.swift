@@ -1,6 +1,7 @@
 import MijickPopups
 import Observation
 import SwiftUI
+import UIKit
 
 private let walletModeChangeDelayMs = 250
 private let sidebarNavigationDelayMs = 250
@@ -53,6 +54,13 @@ private let navigationSettleDelayMs = 800
 
     /// AppManager is the sole owner of the live wallet manager used by wallet-backed routes.
     private(set) var walletManager: WalletManager?
+    /// Background time is tied to the cached wallet manager, not a route instance
+    @ObservationIgnored
+    private var initialScanBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+    @ObservationIgnored
+    private weak var initialScanBackgroundTaskWalletManager: WalletManager?
+    @ObservationIgnored
+    private var initialScanBackgroundTaskAllowed = false
 
     private(set) var sendFlowManager: SendFlowManager?
 
@@ -99,6 +107,13 @@ private let navigationSettleDelayMs = 800
         self.rust.listenForUpdates(updater: self)
     }
 
+    func showInitialScanIncompleteAlert() {
+        alertState = .init(.general(
+            title: "Initial Scan Incomplete",
+            message: "Can't send until initial scan completes."
+        ))
+    }
+
     func cachedWalletManager(id: WalletId) -> WalletManager? {
         guard let walletManager, walletManager.id == id else { return nil }
         return walletManager
@@ -116,8 +131,90 @@ private let navigationSettleDelayMs = 800
         clearWalletManager()
 
         let walletManager = try WalletManager(id: id)
+        observeInitialScanLifecycle(for: walletManager)
         self.walletManager = walletManager
         return walletManager
+    }
+
+    private func observeInitialScanLifecycle(for walletManager: WalletManager) {
+        walletManager.setInitialScanLifecycleChanged { [weak self, weak walletManager] in
+            DispatchQueue.main.async { [weak self, weak walletManager] in
+                guard let self, let walletManager else { return }
+                guard self.walletManager === walletManager else { return }
+
+                self.updateInitialScanBackgroundTask()
+            }
+        }
+    }
+
+    func beginInitialScanBackgroundTaskIfNeeded() {
+        initialScanBackgroundTaskAllowed = true
+        updateInitialScanBackgroundTask()
+    }
+
+    func endInitialScanBackgroundTask() {
+        initialScanBackgroundTaskAllowed = false
+        endInitialScanBackgroundTaskHandle()
+    }
+
+    private func updateInitialScanBackgroundTask() {
+        guard let walletManager, walletManager.activeIncompleteInitialScan else {
+            endInitialScanBackgroundTaskHandle()
+            return
+        }
+
+        guard initialScanBackgroundTaskAllowed else {
+            endInitialScanBackgroundTaskHandle()
+            return
+        }
+
+        guard initialScanBackgroundTask == .invalid else {
+            endInitialScanBackgroundTaskIfInactive()
+            return
+        }
+
+        let backgroundTask = UIApplication.shared.beginBackgroundTask(
+            withName: "Initial wallet scan"
+        ) { [weak self] in
+            DispatchQueue.main.async { [weak self] in
+                Log.warn("Initial wallet scan background task expired")
+                self?.endInitialScanBackgroundTask()
+            }
+        }
+
+        guard backgroundTask != .invalid else {
+            Log.warn("Unable to start initial wallet scan background task")
+            return
+        }
+
+        initialScanBackgroundTask = backgroundTask
+        initialScanBackgroundTaskWalletManager = walletManager
+        logger.debug("Started initial wallet scan background task for wallet \(walletManager.id)")
+
+        endInitialScanBackgroundTaskIfInactive()
+    }
+
+    private func endInitialScanBackgroundTaskHandle() {
+        guard initialScanBackgroundTask != .invalid else { return }
+
+        let backgroundTask = initialScanBackgroundTask
+        initialScanBackgroundTask = .invalid
+        initialScanBackgroundTaskWalletManager = nil
+
+        UIApplication.shared.endBackgroundTask(backgroundTask)
+        logger.debug("Ended initial wallet scan background task")
+    }
+
+    private func endInitialScanBackgroundTaskIfInactive() {
+        guard initialScanBackgroundTask != .invalid else { return }
+        guard let walletManager,
+              let initialScanBackgroundTaskWalletManager,
+              walletManager === initialScanBackgroundTaskWalletManager,
+              walletManager.activeIncompleteInitialScan
+        else {
+            endInitialScanBackgroundTaskHandle()
+            return
+        }
     }
 
     func cachedSendFlowManager(id: WalletId) -> SendFlowManager? {
@@ -128,7 +225,7 @@ private let navigationSettleDelayMs = 800
     func ensureSendFlowManager(
         _ walletManager: WalletManager,
         presenter: SendFlowPresenter
-    ) -> SendFlowManager {
+    ) throws -> SendFlowManager {
         if let sendFlowManager = cachedSendFlowManager(id: walletManager.id) {
             logger.debug("found and using sendflow manager for \(walletManager.id)")
             sendFlowManager.presenter = presenter
@@ -138,7 +235,7 @@ private let navigationSettleDelayMs = 800
         logger.debug("did not find SendFlowManager for \(walletManager.id), creating new")
         clearSendFlowManager()
 
-        let sendFlowManager = SendFlowManager(
+        let sendFlowManager = try SendFlowManager(
             walletManager.rust.newSendFlowManager(balance: walletManager.balance),
             presenter: presenter
         )
@@ -154,6 +251,8 @@ private let navigationSettleDelayMs = 800
 
     func clearWalletManager(id: WalletId? = nil) {
         if id == nil {
+            endInitialScanBackgroundTask()
+            walletManager?.setInitialScanLifecycleChanged(nil)
             walletManager?.close()
             walletManager = nil
             clearSendFlowManager()
@@ -161,6 +260,8 @@ private let navigationSettleDelayMs = 800
         }
 
         if walletManager?.id == id {
+            endInitialScanBackgroundTask()
+            walletManager?.setInitialScanLifecycleChanged(nil)
             walletManager?.close()
             walletManager = nil
         }
@@ -235,6 +336,9 @@ private let navigationSettleDelayMs = 800
     private func selectWalletWithoutNavigationGeneration(_ id: WalletId) throws {
         try rust.dispatch(action: .selectWallet(id: id))
         isSidebarVisible = false
+
+        // prewarm the app-owned manager before the queued route update renders the destination
+        _ = try ensureWalletManager(id: id)
     }
 
     func trySelectLatestOrNewWallet() {

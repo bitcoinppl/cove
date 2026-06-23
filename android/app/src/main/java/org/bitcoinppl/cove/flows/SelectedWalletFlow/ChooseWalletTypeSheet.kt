@@ -96,9 +96,6 @@ fun ChooseWalletTypeSheet(
                     isProcessing = true
                     try {
                         manager.rust.switchToDifferentWalletAddressType(foundAddress.type)
-                        manager.dispatch(
-                            WalletManagerAction.SelectDifferentWalletAddressType(foundAddress.type),
-                        )
                         onDismiss()
                     } catch (e: Exception) {
                         Log.e(tag, "Failed to switch wallet address type", e)

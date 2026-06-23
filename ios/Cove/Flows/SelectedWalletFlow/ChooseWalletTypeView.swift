@@ -35,9 +35,7 @@ public struct ChooseWalletTypeView: View {
                     return
                 }
 
-                // update the metadata
                 await MainActor.run {
-                    manager.dispatch(action: .selectDifferentWalletAddressType(foundAddress.type))
                     dismiss()
                 }
             }

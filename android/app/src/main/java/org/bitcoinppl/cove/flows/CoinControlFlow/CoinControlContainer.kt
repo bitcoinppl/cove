@@ -51,15 +51,47 @@ fun CoinControlContainer(
 
             walletManager = wm
             manager = ccm
-        } catch (e: Exception) {
-            android.util.Log.e(tag, "unable to get wallet: ${e.message}", e)
+        } catch (e: WalletManagerException.InitialScanIncomplete) {
+            android.util.Log.e(tag, "initial scan incomplete", e)
+            app.showInitialScanIncompleteAlert()
+            app.popRoute()
+        } catch (e: WalletManagerException.DatabaseCorruption) {
+            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`, error = e.`error`),
+                )
+            app.popRoute()
+        } catch (e: WalletManagerException.WalletDoesNotExist) {
+            android.util.Log.e(tag, "wallet does not exist for CoinControlRoute $walletId", e)
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
-                        title = "Error!",
-                        message = "Unable to get wallet: ${e.message}",
+                        title = "Wallet Not Found",
+                        message = "This wallet is no longer available.",
                     ),
                 )
+            app.trySelectLatestOrNewWallet()
+        } catch (e: WalletManagerException) {
+            android.util.Log.e(tag, "unable to open wallet for coin control", e)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Unable to Open Wallet",
+                        message = "The wallet could not be opened for coin control. Please try again from the wallet screen.",
+                    ),
+                )
+            app.popRoute()
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "unable to initialize coin control", e)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Unable to Open Wallet",
+                        message = "The wallet could not be opened for coin control. Please try again from the wallet screen.",
+                    ),
+                )
+            app.popRoute()
         }
     }
 

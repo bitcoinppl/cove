@@ -72,7 +72,12 @@ private struct SendFlowLoadedView: View {
         .environment(presenter)
         .environment(sendFlowManager)
         .onAppear {
-            // if zero balance, show alert and send back
+            if manager.ledgerState.initialScanIncomplete {
+                app.showInitialScanIncompleteAlert()
+                app.popRoute()
+                return
+            }
+
             if manager.balance.spendable().asSats() == 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation(.easeInOut(duration: 0.4)) {
@@ -162,7 +167,13 @@ private struct SendFlowLoadedView: View {
         if initializedSendFlowManager != nil { return }
 
         let presenter = SendFlowPresenter(app: app, manager: manager)
-        let sendFlowManager = app.ensureSendFlowManager(manager, presenter: presenter)
+        let sendFlowManager: SendFlowManager
+        do {
+            sendFlowManager = try app.ensureSendFlowManager(manager, presenter: presenter)
+        } catch {
+            handleSendFlowManagerError(error)
+            return
+        }
         let sendFlowManagerId = ObjectIdentifier(sendFlowManager)
 
         initializedSendFlowManagerId = nil
@@ -173,6 +184,41 @@ private struct SendFlowLoadedView: View {
             guard !Task.isCancelled else { return }
 
             initializedSendFlowManagerId = sendFlowManagerId
+        }
+    }
+
+    private func handleSendFlowManagerError(_ error: Error) {
+        switch error {
+        case WalletManagerError.InitialScanIncomplete:
+            app.showInitialScanIncompleteAlert()
+            app.popRoute()
+        case let WalletManagerError.DatabaseCorruption(walletId, errorMessage):
+            Log.error("Wallet database corrupted for \(walletId): \(errorMessage)")
+            app.alertState = TaggedItem(
+                .walletDatabaseCorrupted(walletId: walletId, error: errorMessage)
+            )
+            app.popRoute()
+        case WalletManagerError.WalletDoesNotExist:
+            Log.error("Wallet does not exist for send route \(sendRoute)")
+            app.alertState = .init(.general(
+                title: "Wallet Not Found",
+                message: "This wallet is no longer available."
+            ))
+            app.trySelectLatestOrNewWallet()
+        case let walletError as WalletManagerError:
+            Log.error("Unable to open wallet for send flow: \(walletError)")
+            app.alertState = .init(.general(
+                title: "Unable to Open Wallet",
+                message: "The wallet could not be opened for sending. Please try again from the wallet screen."
+            ))
+            app.popRoute()
+        default:
+            Log.error("Unable to open wallet for send flow: \(error)")
+            app.alertState = .init(.general(
+                title: "Unable to Open Wallet",
+                message: "The wallet could not be opened for sending. Please try again from the wallet screen."
+            ))
+            app.popRoute()
         }
     }
 }

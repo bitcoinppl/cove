@@ -40,6 +40,12 @@ pub enum WalletTableError {
 #[derive(Debug, Clone, Copy, uniffi::Object)]
 pub struct WalletKey(Network, Version, WalletMode);
 
+#[derive(Debug, Clone, Copy)]
+enum InternalMetadataUpdate {
+    PreserveExisting,
+    Replace,
+}
+
 impl Display for WalletKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.2 == WalletMode::Main {
@@ -210,7 +216,25 @@ impl WalletsTable {
         Ok(value)
     }
 
-    pub fn update_wallet_metadata(&self, metadata: WalletMetadata) -> Result<(), Error> {
+    pub fn update_wallet_metadata(
+        &self,
+        metadata: WalletMetadata,
+    ) -> Result<WalletMetadata, Error> {
+        self.update_wallet_metadata_inner(metadata, InternalMetadataUpdate::PreserveExisting)
+    }
+
+    pub(crate) fn replace_wallet_metadata(
+        &self,
+        metadata: WalletMetadata,
+    ) -> Result<WalletMetadata, Error> {
+        self.update_wallet_metadata_inner(metadata, InternalMetadataUpdate::Replace)
+    }
+
+    fn update_wallet_metadata_inner(
+        &self,
+        mut metadata: WalletMetadata,
+        internal_update: InternalMetadataUpdate,
+    ) -> Result<WalletMetadata, Error> {
         let network = metadata.network;
         let mode = metadata.wallet_mode;
 
@@ -219,13 +243,17 @@ impl WalletsTable {
         // update the wallet
         for wallet in &mut wallets {
             if wallet.id == metadata.id {
+                if matches!(internal_update, InternalMetadataUpdate::PreserveExisting) {
+                    metadata.internal = wallet.internal.clone();
+                }
+
                 *wallet = metadata.clone();
             }
         }
 
         self.save_all_wallets(network, mode, wallets)?;
 
-        Ok(())
+        Ok(metadata)
     }
 
     // update just the discovery state
@@ -336,3 +364,58 @@ impl WalletsTable {
 }
 
 // redb::Key for WalletId is now implemented in the cove-types crate
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wallet_table() -> (tempfile::TempDir, WalletsTable) {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
+        let write_txn = db.begin_write().unwrap();
+        let table = WalletsTable::new(db, &write_txn);
+        write_txn.commit().unwrap();
+
+        (tmp, table)
+    }
+
+    #[test]
+    fn update_wallet_metadata_preserves_existing_internal_metadata() {
+        let (_tmp, table) = wallet_table();
+        let mut stored = WalletMetadata::preview_new();
+        stored.internal.last_scan_finished = Some(Duration::from_secs(10));
+        stored.internal.performed_full_scan_at = Some(20);
+
+        table.save_all_wallets(stored.network, stored.wallet_mode, vec![stored.clone()]).unwrap();
+
+        let mut stale_update = stored.clone();
+        stale_update.name = "renamed wallet".to_string();
+        stale_update.internal = Default::default();
+
+        let updated = table.update_wallet_metadata(stale_update).unwrap();
+        let persisted = table.get(&stored.id, stored.network, stored.wallet_mode).unwrap().unwrap();
+
+        assert_eq!(updated.name, "renamed wallet");
+        assert_eq!(updated.internal, stored.internal);
+        assert_eq!(persisted.internal, stored.internal);
+    }
+
+    #[test]
+    fn replace_wallet_metadata_allows_internal_metadata_reset() {
+        let (_tmp, table) = wallet_table();
+        let mut stored = WalletMetadata::preview_new();
+        stored.internal.last_scan_finished = Some(Duration::from_secs(10));
+        stored.internal.performed_full_scan_at = Some(20);
+
+        table.save_all_wallets(stored.network, stored.wallet_mode, vec![stored.clone()]).unwrap();
+
+        let mut replacement = stored.clone();
+        replacement.internal = Default::default();
+
+        let updated = table.replace_wallet_metadata(replacement).unwrap();
+        let persisted = table.get(&stored.id, stored.network, stored.wallet_mode).unwrap().unwrap();
+
+        assert_eq!(updated.internal, Default::default());
+        assert_eq!(persisted.internal, Default::default());
+    }
+}

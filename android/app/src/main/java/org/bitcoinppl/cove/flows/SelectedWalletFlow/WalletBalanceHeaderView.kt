@@ -57,8 +57,10 @@ fun WalletBalanceHeaderView(
     onToggleUnit: () -> Unit,
     onToggleSensitive: () -> Unit,
     onSend: () -> Unit,
+    onSendUnavailable: () -> Unit = {},
     onReceive: () -> Unit,
     isWatchOnly: Boolean = false,
+    initialScanIncomplete: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // get status bar height for edge-to-edge display
@@ -107,8 +109,10 @@ fun WalletBalanceHeaderView(
 
             SendReceiveButtons(
                 onSend = onSend,
+                onSendUnavailable = onSendUnavailable,
                 onReceive = onReceive,
                 isWatchOnly = isWatchOnly,
+                initialScanIncomplete = initialScanIncomplete,
             )
         }
     }
@@ -230,18 +234,22 @@ private fun AmountDisplay(
 @Composable
 private fun SendReceiveButtons(
     onSend: () -> Unit,
+    onSendUnavailable: () -> Unit = {},
     onReceive: () -> Unit,
     isWatchOnly: Boolean = false,
+    initialScanIncomplete: Boolean = false,
 ) {
+    val sendUnavailable = isWatchOnly || initialScanIncomplete
+
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         ImageButton(
             text = stringResource(R.string.btn_send),
             leadingIcon = rememberVectorPainter(Icons.Filled.NorthEast),
-            onClick = onSend,
+            onClick = if (sendUnavailable) onSendUnavailable else onSend,
             colors =
                 androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = if (isWatchOnly) Color.Gray else CoveColor.btnPrimary,
-                    contentColor = if (isWatchOnly) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue,
+                    containerColor = if (sendUnavailable) Color.Gray else CoveColor.btnPrimary,
+                    contentColor = if (sendUnavailable) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue,
                 ),
             modifier = Modifier.weight(1f),
         )

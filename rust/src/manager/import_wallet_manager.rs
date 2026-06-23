@@ -177,7 +177,7 @@ impl RustImportWalletManager {
         metadata.hardware_metadata = None;
         metadata.verified = true;
 
-        Database::global().wallets.update_wallet_metadata(metadata.clone())?;
+        metadata = Database::global().wallets.update_wallet_metadata(metadata)?;
         Database::global().global_config.select_wallet(id.clone())?;
         Updater::send_update(Update::ClearCachedWalletManager(id));
         CLOUD_BACKUP_MANAGER.handle_wallet_backup_change_and_reverify(metadata.id.clone());

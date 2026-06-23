@@ -1,6 +1,4 @@
-use std::time::Duration;
-
-use super::WalletScanStatus;
+use super::ledger_state::WalletLedgerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
 pub struct BalancePresentation {
@@ -18,18 +16,45 @@ impl BalancePresentation {
         Self { primary_opacity: 0.48, secondary_opacity: 0.42, pending_opacity: 0.38 }
     }
 
-    pub(crate) fn for_scan(
-        last_scan_finished: Option<Duration>,
-        scan_status: &WalletScanStatus,
-    ) -> Self {
-        let scan_is_active = matches!(
-            scan_status,
-            WalletScanStatus::Scanning(_) | WalletScanStatus::ScanningPendingProgress(_)
-        );
-        if last_scan_finished.is_none() && scan_is_active {
-            return Self::provisional();
+    pub(crate) fn for_ledger_state(ledger_state: WalletLedgerState) -> Self {
+        match ledger_state {
+            WalletLedgerState::Complete => Self::normal(),
+            WalletLedgerState::InitialScanIncomplete(_) => Self::provisional(),
         }
+    }
+}
 
-        Self::normal()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use super::super::ledger_state::InitialScanActivity;
+
+    #[test]
+    fn complete_ledger_uses_normal_balance_presentation() {
+        assert_eq!(
+            BalancePresentation::for_ledger_state(WalletLedgerState::Complete),
+            BalancePresentation::normal()
+        );
+    }
+
+    #[test]
+    fn incomplete_active_initial_scan_uses_provisional_balance_presentation() {
+        assert_eq!(
+            BalancePresentation::for_ledger_state(WalletLedgerState::InitialScanIncomplete(
+                InitialScanActivity::Active
+            )),
+            BalancePresentation::provisional()
+        );
+    }
+
+    #[test]
+    fn incomplete_idle_initial_scan_uses_provisional_balance_presentation() {
+        assert_eq!(
+            BalancePresentation::for_ledger_state(WalletLedgerState::InitialScanIncomplete(
+                InitialScanActivity::Idle
+            )),
+            BalancePresentation::provisional()
+        );
     }
 }

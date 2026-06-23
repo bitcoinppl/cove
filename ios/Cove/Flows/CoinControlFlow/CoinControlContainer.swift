@@ -37,6 +37,8 @@ struct CoinControlContainer: View {
 }
 
 private struct CoinControlLoadedView: View {
+    @Environment(AppManager.self) private var app
+
     let route: CoinControlRoute
     let walletManager: WalletManager
 
@@ -62,7 +64,46 @@ private struct CoinControlLoadedView: View {
     @MainActor
     private func loadManager() async {
         manager = nil
-        let rustManager = await walletManager.rust.newCoinControlManager()
-        manager = CoinControlManager(rustManager)
+        do {
+            let rustManager = try await walletManager.rust.newCoinControlManager()
+            manager = CoinControlManager(rustManager)
+        } catch {
+            handleCoinControlManagerError(error)
+        }
+    }
+
+    private func handleCoinControlManagerError(_ error: Error) {
+        switch error {
+        case WalletManagerError.InitialScanIncomplete:
+            app.showInitialScanIncompleteAlert()
+            app.popRoute()
+        case let WalletManagerError.DatabaseCorruption(walletId, errorMessage):
+            Log.error("Wallet database corrupted for \(walletId): \(errorMessage)")
+            app.alertState = TaggedItem(
+                .walletDatabaseCorrupted(walletId: walletId, error: errorMessage)
+            )
+            app.popRoute()
+        case WalletManagerError.WalletDoesNotExist:
+            Log.error("Wallet does not exist for coin control route \(route)")
+            app.alertState = .init(.general(
+                title: "Wallet Not Found",
+                message: "This wallet is no longer available."
+            ))
+            app.trySelectLatestOrNewWallet()
+        case let walletError as WalletManagerError:
+            Log.error("Unable to open wallet for coin control: \(walletError)")
+            app.alertState = .init(.general(
+                title: "Unable to Open Wallet",
+                message: "The wallet could not be opened for coin control. Please try again from the wallet screen."
+            ))
+            app.popRoute()
+        default:
+            Log.error("Unable to open wallet for coin control: \(error)")
+            app.alertState = .init(.general(
+                title: "Unable to Open Wallet",
+                message: "The wallet could not be opened for coin control. Please try again from the wallet screen."
+            ))
+            app.popRoute()
+        }
     }
 }
