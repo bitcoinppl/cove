@@ -9,7 +9,7 @@ use crate::{
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
     custom_block_explorer::{
-        CustomBlockExplorerError, CustomBlockExplorerTemplate, PREVIEW_TXID,
+        BlockExplorerOption, CustomBlockExplorerError, CustomBlockExplorerTemplate, PREVIEW_TXID,
         effective_transaction_url,
     },
     fiat::FiatCurrency,
@@ -305,6 +305,13 @@ impl GlobalConfigTable {
         )
     }
 
+    pub fn selected_block_explorer_option(&self, network: Network) -> BlockExplorerOption {
+        let stored_template =
+            self.get(GlobalConfigKey::CustomBlockExplorer(network)).ok().flatten();
+
+        BlockExplorerOption::matching_stored_template(stored_template.as_deref())
+    }
+
     pub fn effective_block_explorer_preview(&self, network: Network) -> String {
         self.custom_block_explorer_transaction_url(network, PREVIEW_TXID.to_string())
     }
@@ -345,6 +352,24 @@ impl GlobalConfigTable {
         self.set(GlobalConfigKey::CustomBlockExplorer(network), canonical.clone())?;
 
         Ok(Some(canonical))
+    }
+
+    pub fn set_block_explorer_option(
+        &self,
+        network: Network,
+        option: BlockExplorerOption,
+    ) -> Result<Option<String>> {
+        match option {
+            BlockExplorerOption::MempoolSpace => {
+                self.clear_custom_block_explorer(network)?;
+                Ok(None)
+            }
+            BlockExplorerOption::Custom => Ok(self.custom_block_explorer(network)),
+            _ => {
+                let base_url = option.base_url().expect("preset block explorer has a base URL");
+                self.set_custom_block_explorer(network, base_url.to_string())
+            }
+        }
     }
 
     pub fn clear_custom_block_explorer(&self, network: Network) -> Result<()> {
@@ -452,6 +477,7 @@ impl GlobalConfigTable {
 
 #[cfg(test)]
 mod tests {
+    use crate::custom_block_explorer::BlockExplorerOption;
     use cove_types::Network;
 
     #[test]
@@ -499,6 +525,44 @@ mod tests {
         let cleared = table.set_custom_block_explorer(Network::Bitcoin, "   ".to_string()).unwrap();
         assert_eq!(cleared, None);
         assert_eq!(table.custom_block_explorer(Network::Bitcoin), None);
+    }
+
+    #[test]
+    fn block_explorer_option_setter_selects_presets_and_clears_default() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        assert_eq!(
+            table.selected_block_explorer_option(Network::Bitcoin),
+            BlockExplorerOption::MempoolSpace
+        );
+
+        let saved = table
+            .set_block_explorer_option(Network::Bitcoin, BlockExplorerOption::Blockstream)
+            .unwrap();
+        assert_eq!(saved.as_deref(), Some("https://blockstream.info/tx/{txid}"));
+        assert_eq!(
+            table.selected_block_explorer_option(Network::Bitcoin),
+            BlockExplorerOption::Blockstream
+        );
+
+        table
+            .set_custom_block_explorer(Network::Bitcoin, "https://example.com".to_string())
+            .unwrap();
+        assert_eq!(
+            table.selected_block_explorer_option(Network::Bitcoin),
+            BlockExplorerOption::Custom
+        );
+
+        let cleared = table
+            .set_block_explorer_option(Network::Bitcoin, BlockExplorerOption::MempoolSpace)
+            .unwrap();
+        assert_eq!(cleared, None);
+        assert_eq!(table.custom_block_explorer(Network::Bitcoin), None);
+        assert_eq!(
+            table.selected_block_explorer_option(Network::Bitcoin),
+            BlockExplorerOption::MempoolSpace
+        );
     }
 
     #[test]
@@ -556,6 +620,10 @@ mod tests {
             "https://mempool.space/tx/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         );
         assert_eq!(table.custom_block_explorer(Network::Bitcoin), None);
+        assert_eq!(
+            table.selected_block_explorer_option(Network::Bitcoin),
+            BlockExplorerOption::MempoolSpace
+        );
     }
 
     fn test_table() -> (tempfile::TempDir, super::GlobalConfigTable) {

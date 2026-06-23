@@ -42,7 +42,9 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.SectionHeader
+import org.bitcoinppl.cove_core.BlockExplorerOption
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.allBlockExplorerOptions
 import org.bitcoinppl.cove_core.types.Network
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,11 +64,16 @@ fun BlockExplorerSettingsScreen(
     var preview by remember(selectedNetwork) {
         mutableStateOf(config.effectiveBlockExplorerPreview(selectedNetwork))
     }
+    var selectedOption by remember(selectedNetwork) {
+        mutableStateOf(config.selectedBlockExplorerOption(selectedNetwork))
+    }
     var validationError by remember(selectedNetwork) { mutableStateOf<String?>(null) }
+    val blockExplorerOptions = remember { allBlockExplorerOptions() }
 
     fun reload() {
         input = config.customBlockExplorer(selectedNetwork) ?: ""
         preview = config.effectiveBlockExplorerPreview(selectedNetwork)
+        selectedOption = config.selectedBlockExplorerOption(selectedNetwork)
         validationError = null
     }
 
@@ -83,6 +90,18 @@ fun BlockExplorerSettingsScreen(
         try {
             input = config.setCustomBlockExplorer(selectedNetwork, input) ?: ""
             preview = config.effectiveBlockExplorerPreview(selectedNetwork)
+            selectedOption = config.selectedBlockExplorerOption(selectedNetwork)
+            validationError = null
+        } catch (error: Exception) {
+            validationError = error.message ?: error.toString()
+        }
+    }
+
+    fun savePreset(option: BlockExplorerOption) {
+        try {
+            input = config.setBlockExplorerOption(selectedNetwork, option) ?: ""
+            preview = config.effectiveBlockExplorerPreview(selectedNetwork)
+            selectedOption = config.selectedBlockExplorerOption(selectedNetwork)
             validationError = null
         } catch (error: Exception) {
             validationError = error.message ?: error.toString()
@@ -95,6 +114,16 @@ fun BlockExplorerSettingsScreen(
             reload()
         } catch (error: Exception) {
             validationError = error.message ?: error.toString()
+        }
+    }
+
+    fun selectOption(option: BlockExplorerOption) {
+        when (option) {
+            BlockExplorerOption.CUSTOM -> {
+                selectedOption = BlockExplorerOption.CUSTOM
+                updatePreview(input)
+            }
+            else -> savePreset(option)
         }
     }
 
@@ -150,6 +179,15 @@ fun BlockExplorerSettingsScreen(
                 }
             }
 
+            MaterialSection {
+                Text(
+                    text = stringResource(R.string.block_explorer_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+
             SectionHeader(stringResource(R.string.block_explorer_preview), showDivider = false)
             MaterialSection {
                 Text(
@@ -160,44 +198,95 @@ fun BlockExplorerSettingsScreen(
                 )
             }
 
+            SectionHeader(stringResource(R.string.block_explorer_options))
             MaterialSection {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = {
-                            input = it
-                            updatePreview(it)
-                        },
-                        label = { Text(stringResource(R.string.block_explorer_url_placeholder)) },
-                        keyboardOptions =
-                            KeyboardOptions(
-                                capitalization = KeyboardCapitalization.None,
-                                keyboardType = KeyboardType.Uri,
-                            ),
-                        minLines = 1,
-                        maxLines = 4,
-                        isError = validationError != null,
-                        supportingText = validationError?.let { error -> { Text(error) } },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                Column {
+                    blockExplorerOptions.forEachIndexed { index, option ->
+                        BlockExplorerOptionRow(
+                            option = option,
+                            isSelected = selectedOption == option,
+                            onClick = { selectOption(option) },
+                        )
 
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Button(onClick = ::save) {
-                            Text(stringResource(R.string.block_explorer_save))
-                        }
-
-                        TextButton(onClick = ::reset) {
-                            Text(stringResource(R.string.block_explorer_reset))
+                        if (index < blockExplorerOptions.size - 1) {
+                            MaterialDivider()
                         }
                     }
                 }
             }
+
+            if (selectedOption == BlockExplorerOption.CUSTOM) {
+                SectionHeader(BlockExplorerOption.CUSTOM.displayName())
+                MaterialSection {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        OutlinedTextField(
+                            value = input,
+                            onValueChange = {
+                                input = it
+                                selectedOption = BlockExplorerOption.CUSTOM
+                                updatePreview(it)
+                            },
+                            label = { Text(stringResource(R.string.block_explorer_url_placeholder)) },
+                            keyboardOptions =
+                                KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    keyboardType = KeyboardType.Uri,
+                                ),
+                            minLines = 1,
+                            maxLines = 4,
+                            isError = validationError != null,
+                            supportingText = validationError?.let { error -> { Text(error) } },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Button(onClick = ::save) {
+                                Text(stringResource(R.string.block_explorer_save))
+                            }
+
+                            TextButton(onClick = ::reset) {
+                                Text(stringResource(R.string.block_explorer_reset))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BlockExplorerOptionRow(
+    option: BlockExplorerOption,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = option.displayName(),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+
+        if (isSelected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

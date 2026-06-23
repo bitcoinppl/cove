@@ -6,15 +6,18 @@ struct BlockExplorerSettingsView: View {
     @State private var selectedNetwork: Network
     @State private var input: String
     @State private var preview: String
+    @State private var selectedOption: BlockExplorerOption
     @State private var validationError: String?
 
     init() {
         // only Bitcoin explorer overrides are editable; other networks use built-in defaults
         let network = Network.bitcoin
         let config = Database().globalConfig()
+        let input = config.customBlockExplorer(network: network) ?? ""
         _selectedNetwork = State(initialValue: network)
-        _input = State(initialValue: config.customBlockExplorer(network: network) ?? "")
+        _input = State(initialValue: input)
         _preview = State(initialValue: config.effectiveBlockExplorerPreview(network: network))
+        _selectedOption = State(initialValue: config.selectedBlockExplorerOption(network: network))
     }
 
     private var editableNetworks: [Network] {
@@ -34,32 +37,48 @@ struct BlockExplorerSettingsView: View {
                 }
             }
 
+            Section {
+                Text(
+                    "Block explorers are public websites for checking Bitcoin transaction details and confirmations. Cove opens the selected explorer when you view a transaction."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
             Section("Preview") {
                 Text(preview)
                     .font(.footnote.monospaced())
                     .textSelection(.enabled)
             }
 
-            Section {
-                TextField("URL or template", text: $input, axis: .vertical)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .lineLimit(2 ... 5)
-                    .onChange(of: input) { _, newValue in
-                        updatePreview(for: newValue)
+            Section("Explorer") {
+                ForEach(allBlockExplorerOptions(), id: \.self) { option in
+                    blockExplorerOptionRow(option)
+                }
+            }
+
+            if selectedOption == .custom {
+                Section("Custom") {
+                    TextField("URL or template", text: $input, axis: .vertical)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .lineLimit(2 ... 5)
+                        .onChange(of: input) { _, newValue in
+                            updatePreview(for: newValue)
+                        }
+
+                    if let validationError {
+                        Text(validationError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
                     }
 
-                if let validationError {
-                    Text(validationError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                    Button("Save", action: save)
+                        .disabled(input == (config.customBlockExplorer(network: selectedNetwork) ?? ""))
+
+                    Button("Reset to Default", role: .destructive, action: reset)
                 }
-
-                Button("Save", action: save)
-                    .disabled(input == (config.customBlockExplorer(network: selectedNetwork) ?? ""))
-
-                Button("Reset to Default", role: .destructive, action: reset)
             }
         }
         .scrollContentBackground(.hidden)
@@ -69,9 +88,54 @@ struct BlockExplorerSettingsView: View {
         }
     }
 
+    private func blockExplorerOptionRow(_ option: BlockExplorerOption) -> some View {
+        HStack {
+            Text(option.displayName())
+
+            Spacer()
+
+            if selectedOption == option {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.blue)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            select(option)
+        }
+    }
+
+    private func select(_ option: BlockExplorerOption) {
+        switch option {
+        case .custom:
+            selectedOption = .custom
+            updatePreview(for: input)
+        default:
+            savePreset(option)
+        }
+    }
+
+    private func savePreset(_ option: BlockExplorerOption) {
+        do {
+            let normalized = try config.setBlockExplorerOption(
+                network: selectedNetwork,
+                option: option
+            )
+            input = normalized ?? ""
+            preview = config.effectiveBlockExplorerPreview(network: selectedNetwork)
+            selectedOption = config.selectedBlockExplorerOption(network: selectedNetwork)
+            validationError = nil
+        } catch {
+            validationError = error.localizedDescription
+        }
+    }
+
     private func reload() {
         input = config.customBlockExplorer(network: selectedNetwork) ?? ""
         preview = config.effectiveBlockExplorerPreview(network: selectedNetwork)
+        selectedOption = config.selectedBlockExplorerOption(network: selectedNetwork)
         validationError = nil
     }
 
@@ -95,6 +159,7 @@ struct BlockExplorerSettingsView: View {
             )
             input = normalized ?? ""
             preview = config.effectiveBlockExplorerPreview(network: selectedNetwork)
+            selectedOption = config.selectedBlockExplorerOption(network: selectedNetwork)
             validationError = nil
         } catch {
             validationError = error.localizedDescription

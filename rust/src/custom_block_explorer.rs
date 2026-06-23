@@ -9,6 +9,87 @@ const SUPPORTED_PLACEHOLDERS: [&str; 3] = ["{0}", "{txid}", "{tx_id}"];
 
 pub const PREVIEW_TXID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum BlockExplorerOption {
+    MempoolSpace,
+    MempoolGuide,
+    BullBitcoin,
+    Blockstream,
+    Custom,
+}
+
+#[uniffi::export]
+impl BlockExplorerOption {
+    pub fn display_name(&self) -> String {
+        self.as_display_name().to_string()
+    }
+}
+
+impl BlockExplorerOption {
+    const PRESETS: [Self; 5] = [
+        Self::MempoolSpace,
+        Self::MempoolGuide,
+        Self::BullBitcoin,
+        Self::Blockstream,
+        Self::Custom,
+    ];
+
+    pub(crate) const fn all() -> [Self; 5] {
+        Self::PRESETS
+    }
+
+    pub(crate) const fn base_url(&self) -> Option<&'static str> {
+        match self {
+            Self::MempoolSpace | Self::Custom => None,
+            Self::MempoolGuide => Some("https://mempool.guide/"),
+            Self::BullBitcoin => Some("https://mempool.bullbitcoin.com/"),
+            Self::Blockstream => Some("https://blockstream.info/"),
+        }
+    }
+
+    pub(crate) fn matching_stored_template(stored_template: Option<&str>) -> Self {
+        let Some(stored_template) = stored_template else {
+            return Self::MempoolSpace;
+        };
+
+        let Ok(template) = CustomBlockExplorerTemplate::parse_stored(stored_template) else {
+            return Self::MempoolSpace;
+        };
+
+        Self::all()
+            .into_iter()
+            .find(|option| option.matches_template(&template))
+            .unwrap_or(Self::Custom)
+    }
+
+    fn as_display_name(&self) -> &'static str {
+        match self {
+            Self::MempoolSpace => "Default (mempool.space)",
+            Self::MempoolGuide => "mempool.guide",
+            Self::BullBitcoin => "mempool.bullbitcoin.com",
+            Self::Blockstream => "blockstream.info",
+            Self::Custom => "Custom",
+        }
+    }
+
+    fn matches_template(&self, template: &CustomBlockExplorerTemplate) -> bool {
+        let preset_template = match self {
+            Self::MempoolSpace => Some(CustomBlockExplorerTemplate::default_for(Network::Bitcoin)),
+            Self::Custom => None,
+            _ => self.base_url().and_then(|base_url| {
+                CustomBlockExplorerTemplate::parse(Network::Bitcoin, base_url).ok()
+            }),
+        };
+
+        preset_template.is_some_and(|preset_template| preset_template.as_str() == template.as_str())
+    }
+}
+
+#[uniffi::export]
+pub fn all_block_explorer_options() -> Vec<BlockExplorerOption> {
+    BlockExplorerOption::all().to_vec()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CustomBlockExplorerError {
     #[error("Block explorer URL cannot be empty")]
@@ -246,10 +327,28 @@ fn replace_supported_placeholders(input: &str, replacement: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{CustomBlockExplorerError, CustomBlockExplorerTemplate};
+    use super::{BlockExplorerOption, CustomBlockExplorerError, CustomBlockExplorerTemplate};
     use crate::network::Network;
 
     const TXID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    #[test]
+    fn block_explorer_options_expose_expected_order_and_labels() {
+        let options = super::all_block_explorer_options();
+
+        assert_eq!(
+            options.as_slice(),
+            &[
+                BlockExplorerOption::MempoolSpace,
+                BlockExplorerOption::MempoolGuide,
+                BlockExplorerOption::BullBitcoin,
+                BlockExplorerOption::Blockstream,
+                BlockExplorerOption::Custom,
+            ]
+        );
+        assert_eq!(BlockExplorerOption::MempoolSpace.display_name(), "Default (mempool.space)");
+        assert_eq!(BlockExplorerOption::Blockstream.display_name(), "blockstream.info");
+    }
 
     #[test]
     fn defaults_match_existing_transaction_urls() {
@@ -302,10 +401,18 @@ mod tests {
 
     #[test]
     fn plain_base_url_normalizes_to_transaction_template() {
-        let template =
-            CustomBlockExplorerTemplate::parse(Network::Bitcoin, " https://example.com ").unwrap();
+        let cases = [
+            (" https://example.com ", "https://example.com/tx/{txid}"),
+            ("https://mempool.guide/", "https://mempool.guide/tx/{txid}"),
+            ("https://mempool.bullbitcoin.com/", "https://mempool.bullbitcoin.com/tx/{txid}"),
+            ("https://blockstream.info/", "https://blockstream.info/tx/{txid}"),
+        ];
 
-        assert_eq!(template.as_str(), "https://example.com/tx/{txid}");
+        for (input, expected) in cases {
+            let template = CustomBlockExplorerTemplate::parse(Network::Bitcoin, input).unwrap();
+
+            assert_eq!(template.as_str(), expected);
+        }
     }
 
     #[test]
