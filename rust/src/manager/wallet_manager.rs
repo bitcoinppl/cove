@@ -194,6 +194,17 @@ pub struct XpubExportResult {
     pub filename: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct WalletInitialState {
+    pub metadata: WalletMetadata,
+    pub ledger_state: WalletLedgerState,
+    pub load_state: WalletLoadState,
+    pub scan_status: WalletScanStatus,
+    pub balance_presentation: BalancePresentation,
+    pub balance: Arc<Balance>,
+    pub unsigned_transactions: Vec<Arc<UnsignedTransaction>>,
+}
+
 #[uniffi::export(callback_interface)]
 pub trait WalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     fn reconcile(&self, message: Message);
@@ -214,7 +225,7 @@ pub struct RustWalletManager {
     scan_status: Arc<RwLock<WalletScanStatus>>,
 
     label_manager: Arc<LabelManager>,
-    initial_load_state: WalletLoadState,
+    initial_state: WalletInitialState,
     discovery_scanner: Option<Addr<WalletDiscoveryScanner>>,
 }
 
@@ -323,7 +334,12 @@ pub enum WalletManagerError {
 impl RustWalletManager {
     #[uniffi::method]
     pub fn initial_load_state(&self) -> WalletLoadState {
-        self.initial_load_state.clone()
+        self.initial_state.load_state.clone()
+    }
+
+    #[uniffi::method]
+    pub fn initial_state(&self) -> WalletInitialState {
+        self.initial_state.clone()
     }
 
     /// Returns the metadata-derived bootstrap snapshot; live scan activity arrives through reconcile messages
@@ -1010,7 +1026,18 @@ impl RustWalletManager {
             reconcile_receiver: Arc::new(receiver),
             scan_status,
             label_manager,
-            initial_load_state: WalletLoadState::Loading,
+            initial_state: WalletInitialState {
+                metadata: metadata.clone(),
+                ledger_state: WalletLedgerState::from_metadata_and_scan_status(
+                    &metadata,
+                    &WalletScanStatus::Idle,
+                ),
+                load_state: WalletLoadState::Loading,
+                scan_status: WalletScanStatus::Idle,
+                balance_presentation: BalancePresentation::provisional(),
+                balance: Arc::new(Balance::zero()),
+                unsigned_transactions: Vec::new(),
+            },
             discovery_scanner: None,
         }
     }
