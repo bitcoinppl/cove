@@ -414,8 +414,7 @@ impl FfiApp {
     pub fn go_to_selected_wallet(&self) -> Option<WalletId> {
         let selected_wallet = Database::global().global_config.selected_wallet()?;
 
-        // change default route to selected wallet
-        self.load_and_reset_default_route(Route::SelectedWallet(selected_wallet.clone()));
+        self.reset_default_route_to(Route::SelectedWallet(selected_wallet.clone()));
 
         Some(selected_wallet)
     }
@@ -454,7 +453,7 @@ impl FfiApp {
     }
 
     /// Load and reset the default route
-    /// Shows a laoding screen, and then resets the default route
+    /// Shows a loading screen, and then resets the default route
     pub fn load_and_reset_default_route_after(&self, route: Route, after_millis: u32) {
         let loading_route = route.load_and_reset_after(after_millis);
         self.reset_default_route_to(loading_route);
@@ -465,7 +464,7 @@ impl FfiApp {
     pub fn reset_nested_routes_to(&self, default_route: Route, nested_routes: Vec<Route>) {
         let loading_route = RouteFactory.load_and_reset_nested_to(default_route, nested_routes);
         debug!("loading and resetting default route to: {:?}", loading_route);
-        self.load_and_reset_default_route(loading_route);
+        self.reset_default_route_to(loading_route);
     }
 
     /// Reset to the default route with nested routes, only used by the `LoadingAndResetContainer`
@@ -676,7 +675,7 @@ impl FfiApp {
             let wallet_route = Route::SelectedWallet(id.clone());
             let loading_route =
                 RouteFactory.load_and_reset_nested_to(wallet_route, vec![next_route]);
-            self.load_and_reset_default_route(loading_route);
+            self.reset_default_route_to(loading_route);
         } else {
             self.go_to_selected_wallet();
         }

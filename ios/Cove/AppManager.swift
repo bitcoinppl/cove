@@ -534,6 +534,12 @@ private let navigationSettleDelayMs = 800
     func closeSidebarAndSelectWallet(_ id: WalletId) {
         closeSidebarThenNavigate {
             do {
+                _ = try self.ensureWalletManager(id: id)
+            } catch {
+                Log.error("Unable to prepare wallet \(id), error: \(error)")
+            }
+
+            do {
                 try self.selectWalletWithoutNavigationGeneration(id)
             } catch {
                 Log.error("Unable to select wallet \(id), error: \(error)")
