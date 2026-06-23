@@ -38,6 +38,13 @@ val WalletLedgerState.initialScanIncomplete: Boolean
 val WalletLedgerState.initialScanActive: Boolean
     get() = this is WalletLedgerState.InitialScanIncomplete && v1 == InitialScanActivity.ACTIVE
 
+private fun org.bitcoinppl.cove_core.WalletLoadState.toWalletLoadState(): WalletLoadState =
+    when (this) {
+        is org.bitcoinppl.cove_core.WalletLoadState.Loading -> WalletLoadState.LOADING
+        is org.bitcoinppl.cove_core.WalletLoadState.Scanning -> WalletLoadState.SCANNING(v1)
+        is org.bitcoinppl.cove_core.WalletLoadState.Loaded -> WalletLoadState.LOADED(v1)
+    }
+
 /**
  * wallet manager - manages wallet state, balance, transactions
  * ported from iOS WalletManager.swift
@@ -149,21 +156,18 @@ class WalletManager :
     private constructor(
         walletId: WalletId,
         rustManager: RustWalletManager,
-        metadata: WalletMetadata,
     ) {
+        val initialState = rustManager.initialState()
+
         this.id = walletId
         this.rust = rustManager
-        this.walletMetadata = metadata
-        this.ledgerState = rustManager.ledgerState()
-        this.balancePresentationState = rustManager.balancePresentation(WalletScanStatus.Idle)
-        this.unsignedTransactions = runCatching { rustManager.getUnsignedTransactions() }.getOrElse { emptyList() }
-
-        // set initial load state from Rust cached data
-        loadState = when (val rustLoadState = rustManager.initialLoadState()) {
-            is org.bitcoinppl.cove_core.WalletLoadState.Loading -> WalletLoadState.LOADING
-            is org.bitcoinppl.cove_core.WalletLoadState.Scanning -> WalletLoadState.SCANNING(rustLoadState.v1)
-            is org.bitcoinppl.cove_core.WalletLoadState.Loaded -> WalletLoadState.LOADED(rustLoadState.v1)
-        }
+        this.walletMetadata = initialState.metadata
+        this.ledgerState = initialState.ledgerState
+        this.loadState = initialState.loadState.toWalletLoadState()
+        this.scanStatus = initialState.scanStatus
+        this.balancePresentationState = initialState.balancePresentation
+        this.balance = initialState.balance
+        this.unsignedTransactions = initialState.unsignedTransactions
 
         rustManager.listenForUpdates(this)
     }
@@ -172,17 +176,16 @@ class WalletManager :
         // create from wallet ID
         operator fun invoke(id: WalletId): WalletManager {
             val rust = RustWalletManager(id)
-            val metadata = rust.walletMetadata()
             android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
-            return WalletManager(id, rust, metadata)
+            return WalletManager(id, rust)
         }
 
         // create from xpub
         fun fromXpub(xpub: String): WalletManager {
             val rust = RustWalletManager.tryNewFromXpub(xpub)
-            val metadata = rust.walletMetadata()
+            val metadata = rust.initialState().metadata
             android.util.Log.d("WalletManager", "Initialized WalletManager from xpub")
-            return WalletManager(metadata.id, rust, metadata)
+            return WalletManager(metadata.id, rust)
         }
 
         // create from TapSigner
@@ -199,15 +202,15 @@ class WalletManager :
                     backup,
                     birthday,
                 )
-            val metadata = rust.walletMetadata()
+            val metadata = rust.initialState().metadata
             android.util.Log.d("WalletManager", "Initialized WalletManager from TapSigner")
-            return WalletManager(metadata.id, rust, metadata)
+            return WalletManager(metadata.id, rust)
         }
 
         internal fun previewNew(): WalletManager {
             val rust = RustWalletManager.previewNewWallet()
-            val metadata = rust.walletMetadata()
-            return WalletManager(metadata.id, rust, metadata)
+            val metadata = rust.initialState().metadata
+            return WalletManager(metadata.id, rust)
         }
     }
 

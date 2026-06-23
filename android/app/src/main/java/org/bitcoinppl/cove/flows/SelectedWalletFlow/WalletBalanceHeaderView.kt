@@ -61,6 +61,7 @@ fun WalletBalanceHeaderView(
     onReceive: () -> Unit,
     isWatchOnly: Boolean = false,
     initialScanIncomplete: Boolean = false,
+    balanceUnavailable: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // get status bar height for edge-to-edge display
@@ -113,6 +114,7 @@ fun WalletBalanceHeaderView(
                 onReceive = onReceive,
                 isWatchOnly = isWatchOnly,
                 initialScanIncomplete = initialScanIncomplete,
+                balanceUnavailable = balanceUnavailable,
             )
         }
     }
@@ -238,8 +240,9 @@ private fun SendReceiveButtons(
     onReceive: () -> Unit,
     isWatchOnly: Boolean = false,
     initialScanIncomplete: Boolean = false,
+    balanceUnavailable: Boolean = false,
 ) {
-    val sendUnavailable = isWatchOnly || initialScanIncomplete
+    val sendUnavailable = isWatchOnly || initialScanIncomplete || balanceUnavailable
 
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         ImageButton(

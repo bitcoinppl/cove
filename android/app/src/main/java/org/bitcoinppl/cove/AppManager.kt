@@ -155,6 +155,22 @@ class AppManager private constructor() : FfiReconcile {
         walletManager = manager
     }
 
+    fun cachedWalletManager(id: WalletId): WalletManager? {
+        val manager = walletManager ?: return null
+        if (manager.id != id) return null
+
+        return manager
+    }
+
+    fun walletMetadata(id: WalletId): WalletMetadata? {
+        cachedWalletManager(id)?.walletMetadata?.let { return it }
+        wallets.firstOrNull { it.id == id }?.let { return it }
+
+        return runCatching {
+            Database().wallets().all().firstOrNull { it.id == id }
+        }.getOrNull()
+    }
+
     /**
      * get or create wallet manager for the given wallet id
      * caches the instance so we don't recreate unnecessarily
@@ -169,6 +185,8 @@ class AppManager private constructor() : FfiReconcile {
             // selecting a different wallet is the boundary for ending in-flight scans
             Log.d(tag, "closing old wallet manager for ${it.id}")
             it.close()
+            walletManager = null
+            clearSendFlowManager()
         }
 
         Log.d(tag, "did not find wallet manager for $id, creating new: ${walletManager?.id}")
@@ -387,6 +405,7 @@ class AppManager private constructor() : FfiReconcile {
 
     @Throws(Exception::class)
     private fun selectWalletWithoutNavigationGeneration(id: WalletId) {
+        getWalletManager(id)
         dispatchResult(AppAction.SelectWallet(id)).getOrThrow()
         isSidebarVisible = false
     }

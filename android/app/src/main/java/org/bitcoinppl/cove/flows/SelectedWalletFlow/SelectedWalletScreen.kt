@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -133,7 +132,8 @@ fun SelectedWalletScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val actualWalletName = manager.walletMetadata?.name ?: "Wallet"
-    val actualSatsAmount = manager.displayAmount(manager.balance.spendable(), showUnit = true)
+    val spendableBalance = manager.balance.spendable()
+    val actualSatsAmount = manager.displayAmount(spendableBalance, showUnit = true)
 
     val actualSatsPending =
         remember(manager.balance, manager.walletMetadata?.selectedUnit) {
@@ -143,7 +143,7 @@ fun SelectedWalletScreen(
 
     val fiatBalance =
         remember(manager.balance, app.prices) {
-            manager.amountInFiatCached(manager.balance.spendable())?.let { fiat ->
+            manager.amountInFiatCached(spendableBalance)?.let { fiat ->
                 manager.displayFiatAmount(fiat)
             }
         }
@@ -349,6 +349,7 @@ fun SelectedWalletScreen(
                 val isScanStatusActive =
                     manager.scanStatus is WalletScanStatus.Scanning ||
                         manager.scanStatus is WalletScanStatus.ScanningPendingProgress
+                val transactionsAreLoading = loadState is WalletLoadState.LOADING
 
                 // determine transaction data based on load state
                 val (transactions, isFirstScan) =
@@ -361,7 +362,7 @@ fun SelectedWalletScreen(
                             Pair(txns, firstScan)
                         }
                         is WalletLoadState.LOADED -> Pair(loadState.txns, false)
-                        else -> Pair(emptyList(), false)
+                        is WalletLoadState.LOADING -> Pair(emptyList(), true)
                     }
 
                 // transfer pending scroll ID to active when returning from details screen
@@ -454,6 +455,7 @@ fun SelectedWalletScreen(
                                     onReceive = onReceive,
                                     isWatchOnly = isWatchOnly,
                                     initialScanIncomplete = manager.ledgerState.initialScanIncomplete,
+                                    balanceUnavailable = false,
                                 )
                             }
 
@@ -466,34 +468,20 @@ fun SelectedWalletScreen(
                                 )
                             }
 
-                            // transaction items
-                            when {
-                                loadState is WalletLoadState.LOADING -> {
-                                    item(key = "loading") {
-                                        TransactionsLoadingView(
-                                            secondaryText = secondaryText,
-                                            primaryText = primaryText,
-                                            modifier = Modifier.fillParentMaxHeight(0.5f),
-                                        )
-                                    }
-                                }
-                                else -> {
-                                    transactionItems(
-                                        transactions = transactions,
-                                        unsignedTransactions = unsignedTransactions,
-                                        isScanning = isScanStatusActive,
-                                        isFirstScan = isFirstScan,
-                                        fiatOrBtc = fiatOrBtc,
-                                        sensitiveVisible = sensitiveVisible,
-                                        showLabels = showLabels,
-                                        manager = manager,
-                                        app = app,
-                                        primaryText = primaryText,
-                                        secondaryText = secondaryText,
-                                        dividerColor = dividerColor,
-                                    )
-                                }
-                            }
+                            transactionItems(
+                                transactions = transactions,
+                                unsignedTransactions = unsignedTransactions,
+                                isScanning = isScanStatusActive || transactionsAreLoading,
+                                isFirstScan = isFirstScan,
+                                fiatOrBtc = fiatOrBtc,
+                                sensitiveVisible = sensitiveVisible,
+                                showLabels = showLabels,
+                                manager = manager,
+                                app = app,
+                                primaryText = primaryText,
+                                secondaryText = secondaryText,
+                                dividerColor = dividerColor,
+                            )
                         }
                     }
                 }
@@ -564,41 +552,6 @@ private fun VerifyReminder(
                     tint = Color.Red.copy(alpha = 0.85f),
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun TransactionsLoadingView(
-    secondaryText: Color,
-    primaryText: Color,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.title_transactions),
-            color = secondaryText,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-        )
-
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            contentAlignment = Alignment.TopCenter,
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.padding(top = 80.dp),
-                color = primaryText,
-            )
         }
     }
 }
