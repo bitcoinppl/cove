@@ -405,7 +405,6 @@ class AppManager private constructor() : FfiReconcile {
 
     @Throws(Exception::class)
     private fun selectWalletWithoutNavigationGeneration(id: WalletId) {
-        getWalletManager(id)
         dispatchResult(AppAction.SelectWallet(id)).getOrThrow()
         isSidebarVisible = false
     }
