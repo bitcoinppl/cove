@@ -78,6 +78,7 @@ fun TransactionDetailsContainer(
                 },
             )
         }
+
         manager != null && details != null -> {
             TransactionDetailsScreen(
                 app = app,
@@ -87,6 +88,7 @@ fun TransactionDetailsContainer(
                 refreshOnAppear = !didLoadInitialDetails,
             )
         }
+
         detailsError != null -> {
             TransactionDetailsLoadError(
                 message = detailsError!!,
@@ -97,6 +99,7 @@ fun TransactionDetailsContainer(
                 },
             )
         }
+
         else -> FullPageLoadingView()
     }
 }

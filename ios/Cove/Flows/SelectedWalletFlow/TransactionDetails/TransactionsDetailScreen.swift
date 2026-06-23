@@ -80,7 +80,7 @@ private struct TransactionDetailsLoader: View {
                 self.error = error
             }
 
-            Log.error("Unable to get transaction details: \(error.localizedDescription), for txn: \(txId)")
+            Log.error("Unable to get transaction details: \(error.localizedDescription)")
         }
     }
 }

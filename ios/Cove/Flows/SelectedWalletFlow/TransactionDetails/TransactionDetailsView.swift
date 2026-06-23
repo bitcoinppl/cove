@@ -308,7 +308,7 @@ struct TransactionDetailsView: View {
         .refreshable {
             await refreshTransactionDetails()
         }
-        .task {
+        .task(id: txId) {
             // fetch fresh details on load
             if refreshOnAppear {
                 await refreshTransactionDetails()
