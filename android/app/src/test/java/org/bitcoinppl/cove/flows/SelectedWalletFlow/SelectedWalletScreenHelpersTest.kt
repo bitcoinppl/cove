@@ -1,11 +1,11 @@
 package org.bitcoinppl.cove.flows.SelectedWalletFlow
 
-import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.initialScanActive
 import org.bitcoinppl.cove.initialScanComplete
 import org.bitcoinppl.cove.initialScanIncomplete
 import org.bitcoinppl.cove_core.InitialScanActivity
 import org.bitcoinppl.cove_core.WalletLedgerState
+import org.bitcoinppl.cove_core.WalletLoadState
 import org.bitcoinppl.cove_core.WalletScanPhase
 import org.bitcoinppl.cove_core.WalletScanStatus
 import org.junit.Assert.assertFalse
@@ -44,7 +44,7 @@ class SelectedWalletScreenHelpersTest {
     fun loadedWalletCanRefresh() {
         assertTrue(
             canRefreshSelectedWallet(
-                WalletLoadState.LOADED(emptyList()),
+                WalletLoadState.Loaded(emptyList()),
                 WalletScanStatus.Idle,
                 WalletLedgerState.Complete,
             ),
@@ -55,7 +55,7 @@ class SelectedWalletScreenHelpersTest {
     fun loadedWalletCannotRefreshDuringActiveScan() {
         assertFalse(
             canRefreshSelectedWallet(
-                WalletLoadState.LOADED(emptyList()),
+                WalletLoadState.Loaded(emptyList()),
                 WalletScanStatus.ScanningPendingProgress(WalletScanPhase.FULL),
                 WalletLedgerState.Complete,
             ),
@@ -66,7 +66,7 @@ class SelectedWalletScreenHelpersTest {
     fun loadedWalletCanRetryWhenInitialScanIsIncompleteAndIdle() {
         assertTrue(
             canRefreshSelectedWallet(
-                WalletLoadState.LOADED(emptyList()),
+                WalletLoadState.Loaded(emptyList()),
                 WalletScanStatus.Idle,
                 WalletLedgerState.InitialScanIncomplete(InitialScanActivity.IDLE),
             ),
@@ -78,7 +78,7 @@ class SelectedWalletScreenHelpersTest {
         // scanning load state can lag after the ledger reports initial scan complete
         assertTrue(
             canRefreshSelectedWallet(
-                WalletLoadState.SCANNING(emptyList()),
+                WalletLoadState.Scanning(emptyList()),
                 WalletScanStatus.Idle,
                 WalletLedgerState.Complete,
             ),
@@ -89,7 +89,7 @@ class SelectedWalletScreenHelpersTest {
     fun scanningLoadStateCanRetryWhenInitialScanIsIncompleteAndIdle() {
         assertTrue(
             canRefreshSelectedWallet(
-                WalletLoadState.SCANNING(emptyList()),
+                WalletLoadState.Scanning(emptyList()),
                 WalletScanStatus.Idle,
                 WalletLedgerState.InitialScanIncomplete(InitialScanActivity.IDLE),
             ),
@@ -100,7 +100,7 @@ class SelectedWalletScreenHelpersTest {
     fun activeScanCannotRefresh() {
         assertFalse(
             canRefreshSelectedWallet(
-                WalletLoadState.SCANNING(emptyList()),
+                WalletLoadState.Scanning(emptyList()),
                 WalletScanStatus.ScanningPendingProgress(WalletScanPhase.FULL),
                 WalletLedgerState.Complete,
             ),
@@ -111,7 +111,7 @@ class SelectedWalletScreenHelpersTest {
     fun activeInitialScanCannotRefreshEvenBeforeProgressArrives() {
         assertFalse(
             canRefreshSelectedWallet(
-                WalletLoadState.SCANNING(emptyList()),
+                WalletLoadState.Scanning(emptyList()),
                 WalletScanStatus.Idle,
                 WalletLedgerState.InitialScanIncomplete(InitialScanActivity.ACTIVE),
             ),
@@ -122,7 +122,7 @@ class SelectedWalletScreenHelpersTest {
     fun loadingWalletCannotRefresh() {
         assertFalse(
             canRefreshSelectedWallet(
-                WalletLoadState.LOADING,
+                WalletLoadState.Loading,
                 WalletScanStatus.Idle,
                 WalletLedgerState.Complete,
             ),

@@ -44,7 +44,6 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
-import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.initialScanIncomplete
@@ -63,6 +62,7 @@ import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SendRoute
+import org.bitcoinppl.cove_core.WalletLoadState
 import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletType
@@ -151,7 +151,7 @@ fun SelectedWalletContainer(
     val loadedManager = manager
     val loadState = loadedManager?.loadState
     LaunchedEffect(loadedManager, loadState) {
-        if (loadedManager != null && loadState is WalletLoadState.LOADED) {
+        if (loadedManager != null && loadState is WalletLoadState.Loaded) {
             app.setWalletManager(loadedManager)
         }
     }

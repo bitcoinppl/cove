@@ -62,7 +62,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.initialScanActive
 import org.bitcoinppl.cove.initialScanIncomplete
@@ -76,6 +75,7 @@ import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletLedgerState
+import org.bitcoinppl.cove_core.WalletLoadState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletScanStatus
 import org.bitcoinppl.cove_core.WalletSettingsRoute
@@ -110,7 +110,7 @@ internal fun canRefreshSelectedWallet(
     ledgerState: WalletLedgerState,
 ): Boolean =
     when {
-        loadState is WalletLoadState.LOADING -> false
+        loadState is WalletLoadState.Loading -> false
         ledgerState.initialScanActive -> false
         else -> scanStatus == WalletScanStatus.Idle
     }
@@ -336,8 +336,8 @@ fun SelectedWalletScreen(
 
                 val hasTransactions =
                     when (val loadState = manager.loadState) {
-                        is WalletLoadState.SCANNING -> loadState.txns.isNotEmpty() || unsignedTransactions.isNotEmpty()
-                        is WalletLoadState.LOADED -> loadState.txns.isNotEmpty() || unsignedTransactions.isNotEmpty()
+                        is WalletLoadState.Scanning -> loadState.v1.isNotEmpty() || unsignedTransactions.isNotEmpty()
+                        is WalletLoadState.Loaded -> loadState.v1.isNotEmpty() || unsignedTransactions.isNotEmpty()
                         else -> false
                     }
 
@@ -349,20 +349,20 @@ fun SelectedWalletScreen(
                 val isScanStatusActive =
                     manager.scanStatus is WalletScanStatus.Scanning ||
                         manager.scanStatus is WalletScanStatus.ScanningPendingProgress
-                val transactionsAreLoading = loadState is WalletLoadState.LOADING
+                val transactionsAreLoading = loadState is WalletLoadState.Loading
 
                 // determine transaction data based on load state
                 val (transactions, isFirstScan) =
                     when (loadState) {
-                        is WalletLoadState.SCANNING -> {
-                            val txns = loadState.txns
+                        is WalletLoadState.Scanning -> {
+                            val txns = loadState.v1
 
                             // pre-migration wallets stay first-scan until a new full scan completes
                             val firstScan = manager.ledgerState.initialScanIncomplete
                             Pair(txns, firstScan)
                         }
-                        is WalletLoadState.LOADED -> Pair(loadState.txns, false)
-                        is WalletLoadState.LOADING -> Pair(emptyList(), true)
+                        is WalletLoadState.Loaded -> Pair(loadState.v1, false)
+                        is WalletLoadState.Loading -> Pair(emptyList(), true)
                     }
 
                 // transfer pending scroll ID to active when returning from details screen
