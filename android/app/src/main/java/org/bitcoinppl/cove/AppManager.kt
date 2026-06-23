@@ -641,14 +641,6 @@ class AppManager private constructor() : FfiReconcile {
     }
 }
 
-private fun Route.isSameNavigationDestination(other: Route): Boolean =
-    when {
-        this is Route.TransactionDetails && other is Route.TransactionDetails ->
-            id == other.id &&
-                details.txId().asHashString() == other.details.txId().asHashString()
-        else -> this == other
-    }
-
 // global accessor for convenience
 val App: AppManager
     get() = AppManager.getInstance()

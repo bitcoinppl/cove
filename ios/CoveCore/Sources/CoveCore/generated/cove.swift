@@ -28697,6 +28697,16 @@ public enum Route {
 
 
 
+public func isSameNavigationDestination(routeToCheck: Route) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_route_issamenavigationdestination(
+            FfiConverterTypeRoute_lower(self),
+        FfiConverterTypeRoute_lower(routeToCheck),uniffiCallStatus
+    )
+})
+}
+
 public func isEqual(routeToCheck: Route) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in

@@ -312,7 +312,7 @@ private let navigationSettleDelayMs = 800
     }
 
     private func isDuplicateTopRoute(_ route: Route) -> Bool {
-        currentRoute.isSameNavigationDestination(as: route)
+        currentRoute.isSameNavigationDestination(routeToCheck: route)
     }
 
     var hasWallets: Bool {
@@ -650,20 +650,6 @@ private let navigationSettleDelayMs = 800
             try rust.dispatch(action: action)
         } catch {
             logger.error("Unable to dispatch app action \(action), error: \(error)")
-        }
-    }
-}
-
-private extension Route {
-    func isSameNavigationDestination(as other: Route) -> Bool {
-        switch (self, other) {
-        case let (
-            .transactionDetails(id: currentId, details: currentDetails),
-            .transactionDetails(id: nextId, details: nextDetails)
-        ):
-            currentId == nextId && currentDetails.txId() == nextDetails.txId()
-        default:
-            self == other
         }
     }
 }
