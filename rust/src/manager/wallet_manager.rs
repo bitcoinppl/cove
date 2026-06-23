@@ -1649,22 +1649,6 @@ impl RustWalletManager {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn preview_wallet_metadata_is_ledger_ready_for_spend() {
-        let metadata = preview_ledger_ready_metadata(WalletMetadata::preview_new());
-
-        assert_eq!(metadata.internal.performed_full_scan_at, Some(PREVIEW_FULL_SCAN_COMPLETED_AT));
-        assert_eq!(
-            WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
-            WalletLedgerState::Complete
-        );
-    }
-}
-
 impl Drop for RustWalletManager {
     fn drop(&mut self) {
         self.shutdown();
@@ -1777,12 +1761,26 @@ mod tests {
     use bitcoin::{OutPoint, Txid, hashes::Hash as _};
 
     use super::{
-        TransactionLockState, spendability_for_transaction_lock_toggle,
+        PREVIEW_FULL_SCAN_COMPLETED_AT, TransactionLockState, WalletLedgerState, WalletScanStatus,
+        preview_ledger_ready_metadata, spendability_for_transaction_lock_toggle,
         transaction_lock_toggle_update,
     };
 
+    use crate::wallet::metadata::WalletMetadata;
+
     fn outpoint(vout: u32) -> OutPoint {
         OutPoint { txid: Txid::from_byte_array([1; 32]), vout }
+    }
+
+    #[test]
+    fn preview_wallet_metadata_is_ledger_ready_for_spend() {
+        let metadata = preview_ledger_ready_metadata(WalletMetadata::preview_new());
+
+        assert_eq!(metadata.internal.performed_full_scan_at, Some(PREVIEW_FULL_SCAN_COMPLETED_AT));
+        assert_eq!(
+            WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
+            WalletLedgerState::Complete
+        );
     }
 
     #[test]

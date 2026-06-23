@@ -2482,8 +2482,10 @@ mod tests {
         hashes::Hash as _,
     };
     use cove_bdk_progressive_scan::ScanUpdate;
+    use parking_lot::RwLock;
     use std::{
         collections::{BTreeMap, HashSet},
+        sync::Arc,
         time::UNIX_EPOCH,
     };
 
@@ -2502,7 +2504,7 @@ mod tests {
             label::test_support::wallet_data_db_with_mismatched_output_table,
             test_support::new_test_wallet_data_db,
         },
-        manager::wallet_manager::TransactionLockState,
+        manager::wallet_manager::{TransactionLockState, WalletScanStatus},
         wallet::{Address, Wallet, metadata::WalletId},
     };
 
@@ -2568,10 +2570,19 @@ mod tests {
             .expect("address is regtest")
     }
 
+    fn test_scan_status() -> Arc<RwLock<WalletScanStatus>> {
+        Arc::new(RwLock::new(WalletScanStatus::Idle))
+    }
+
+    fn mark_wallet_ledger_ready(wallet: &mut Wallet) {
+        wallet.metadata.internal.performed_full_scan_at = Some(1);
+    }
+
     fn locked_actor_fixture() -> LockedActorFixture {
         crate::database::test_support::init_test_database();
 
         let mut wallet = Wallet::preview_new_wallet();
+        mark_wallet_ledger_ready(&mut wallet);
         insert_checkpoint(
             &mut wallet.bdk,
             BlockId { height: 1, hash: BlockHash::from_byte_array([2; 32]) },
@@ -2580,7 +2591,8 @@ mod tests {
         let unlocked = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(80_000));
 
         let (sender, _receiver) = flume::bounded(10);
-        let mut actor = super::WalletActor::new(wallet, sender).expect("actor is created");
+        let mut actor =
+            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
         let (db, tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
         db.labels.set_output_spendability(locked, false).expect("output is locked");
         actor.db = db;
@@ -2672,7 +2684,8 @@ mod tests {
             receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(80_000));
 
         let (sender, _receiver) = flume::bounded(10);
-        let mut actor = super::WalletActor::new(wallet, sender).expect("actor is created");
+        let mut actor =
+            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
         actor.db = db;
 
@@ -2693,7 +2706,8 @@ mod tests {
 
         let wallet = Wallet::preview_new_wallet();
         let (sender, _receiver) = flume::bounded(10);
-        let mut actor = super::WalletActor::new(wallet, sender).expect("actor is created");
+        let mut actor =
+            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
         let (db, _tmp) = wallet_data_db_with_mismatched_output_table(actor.wallet.id.clone());
         actor.db = db;
 
@@ -3021,7 +3035,7 @@ mod tests {
 
     #[test]
     fn spend_guard_rejects_incomplete_initial_scan() {
-        assert_eq!(ledger_ready_for_spend(false), Err(Error::InitialScanIncomplete));
+        assert_eq!(ledger_ready_for_spend(false), Err(super::Error::InitialScanIncomplete));
     }
 
     #[test]
