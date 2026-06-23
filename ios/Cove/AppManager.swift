@@ -336,6 +336,9 @@ private let navigationSettleDelayMs = 800
     private func selectWalletWithoutNavigationGeneration(_ id: WalletId) throws {
         try rust.dispatch(action: .selectWallet(id: id))
         isSidebarVisible = false
+
+        // prewarm the app-owned manager before the queued route update renders the destination
+        _ = try ensureWalletManager(id: id)
     }
 
     func trySelectLatestOrNewWallet() {

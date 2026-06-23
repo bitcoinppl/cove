@@ -22,7 +22,7 @@ struct SelectedWalletContainer: View {
         WalletManagerHost(
             walletId: id,
             loading: {
-                Text("Loading...")
+                FullPageLoadingView(title: "Loading wallet...")
             },
             onError: handleManagerError
         ) { manager in
