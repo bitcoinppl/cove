@@ -189,11 +189,65 @@ fn parse_http_url(input: &str) -> Result<Url, CustomBlockExplorerError> {
         _ => return Err(CustomBlockExplorerError::InvalidScheme),
     }
 
-    if url.host_str().is_none() {
+    let Some(host) = url.host() else {
         return Err(CustomBlockExplorerError::MissingHost);
-    }
+    };
+
+    validate_host(host)?;
 
     Ok(url)
+}
+
+fn validate_host(host: Host<&str>) -> Result<(), CustomBlockExplorerError> {
+    match host {
+        Host::Ipv4(_) | Host::Ipv6(_) => Ok(()),
+        Host::Domain(host) => validate_domain_host(host),
+    }
+}
+
+fn validate_domain_host(host: &str) -> Result<(), CustomBlockExplorerError> {
+    let host = host.trim_end_matches('.');
+    if host.eq_ignore_ascii_case("localhost") {
+        return Ok(());
+    }
+
+    if host.is_empty() || host.len() > 253 || !host.contains('.') {
+        return Err(CustomBlockExplorerError::InvalidUrl);
+    }
+
+    let labels = host.split('.');
+    for label in labels {
+        if !is_valid_domain_label(label) {
+            return Err(CustomBlockExplorerError::InvalidUrl);
+        }
+    }
+
+    let Some(top_level_domain) = host.rsplit('.').next() else {
+        return Err(CustomBlockExplorerError::InvalidUrl);
+    };
+    if top_level_domain.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(CustomBlockExplorerError::InvalidUrl);
+    }
+
+    Ok(())
+}
+
+fn is_valid_domain_label(label: &str) -> bool {
+    if label.is_empty() || label.len() > 63 {
+        return false;
+    }
+
+    let Some(first) = label.as_bytes().first() else {
+        return false;
+    };
+    let Some(last) = label.as_bytes().last() else {
+        return false;
+    };
+    if *first == b'-' || *last == b'-' {
+        return false;
+    }
+
+    label.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
 /// Parses a URL, inferring a scheme when the user omitted one.
@@ -225,7 +279,8 @@ fn scheme_less_input_prefers_http(input: &str) -> bool {
     match url.host() {
         Some(Host::Ipv4(_) | Host::Ipv6(_)) => true,
         Some(Host::Domain(host)) => {
-            host.trim_end_matches('.').to_ascii_lowercase().ends_with(".local")
+            let host = host.trim_end_matches('.').to_ascii_lowercase();
+            host == "localhost" || host.ends_with(".local")
         }
         None => false,
     }
@@ -422,10 +477,12 @@ mod tests {
             (" https://example.com ", "https://example.com/tx/{txid}"),
             ("example.com", "https://example.com/tx/{txid}"),
             ("example.com/tx", "https://example.com/tx/{txid}"),
+            ("bitcoin.local", "http://bitcoin.local/tx/{txid}"),
             ("https://node.local", "https://node.local/tx/{txid}"),
             ("https://192.168.1.10:3000/explorer", "https://192.168.1.10:3000/explorer/tx/{txid}"),
             ("node.local", "http://node.local/tx/{txid}"),
             ("node.local:3000/explorer", "http://node.local:3000/explorer/tx/{txid}"),
+            ("localhost:3000/explorer", "http://localhost:3000/explorer/tx/{txid}"),
             ("192.168.1.10:3000/explorer", "http://192.168.1.10:3000/explorer/tx/{txid}"),
             ("[::1]:3000/explorer", "http://[::1]:3000/explorer/tx/{txid}"),
             ("mempool.space", "https://mempool.space/tx/{txid}"),
@@ -521,6 +578,24 @@ mod tests {
         );
         assert_eq!(
             CustomBlockExplorerTemplate::parse(Network::Bitcoin, "https://").unwrap_err(),
+            CustomBlockExplorerError::InvalidUrl
+        );
+        assert_eq!(
+            CustomBlockExplorerTemplate::parse(Network::Bitcoin, "bitcoin").unwrap_err(),
+            CustomBlockExplorerError::InvalidUrl
+        );
+        assert_eq!(
+            CustomBlockExplorerTemplate::parse(Network::Bitcoin, "https://bitcoin").unwrap_err(),
+            CustomBlockExplorerError::InvalidUrl
+        );
+        assert_eq!(
+            CustomBlockExplorerTemplate::parse(Network::Bitcoin, "https://not_valid.example.com")
+                .unwrap_err(),
+            CustomBlockExplorerError::InvalidUrl
+        );
+        assert_eq!(
+            CustomBlockExplorerTemplate::parse(Network::Bitcoin, "https://example.123")
+                .unwrap_err(),
             CustomBlockExplorerError::InvalidUrl
         );
         assert_eq!(

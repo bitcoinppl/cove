@@ -133,6 +133,10 @@ fun NodeSettingsScreen(
     }
 
     fun selectPresetNode(nodeName: String) {
+        if (selectedNodeName == nodeName) {
+            return
+        }
+
         selectedNodeName = nodeName
         customUrl = ""
         customNodeName = ""

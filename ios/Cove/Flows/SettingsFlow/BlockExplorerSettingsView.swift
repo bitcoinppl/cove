@@ -10,6 +10,7 @@ struct BlockExplorerSettingsView: View {
     @State private var selectedOption: BlockExplorerOption
     @State private var validationError: String?
     @State private var isSaving = false
+    @State private var showInvalidUrlAlert = false
     @FocusState private var isInputFocused: Bool
 
     init() {
@@ -94,6 +95,11 @@ struct BlockExplorerSettingsView: View {
         .onChange(of: selectedNetwork) { _, _ in
             reload()
         }
+        .alert("Invalid URL", isPresented: $showInvalidUrlAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Enter a valid URL, IP address, or block explorer template.")
+        }
     }
 
     private func blockExplorerOptionRow(_ option: BlockExplorerOption) -> some View {
@@ -166,35 +172,43 @@ struct BlockExplorerSettingsView: View {
 
         let inputToSave = input
         let networkToSave = selectedNetwork
-        Task { @MainActor in
-            isSaving = true
-            Task { await MiddlePopup(state: .loading).present() }
 
-            do {
-                let normalized = try config.setCustomBlockExplorer(
-                    network: networkToSave,
-                    input: inputToSave
-                )
-                input = normalized ?? ""
-                preview = config.effectiveBlockExplorerPreview(network: networkToSave)
-                selectedOption = .custom
-                if normalized == nil {
-                    selectedOption = config.selectedBlockExplorerOption(network: networkToSave)
-                }
-                validationError = nil
-                isInputFocused = false
+        do {
+            _ = try config.previewCustomBlockExplorer(
+                network: networkToSave,
+                input: inputToSave
+            )
+        } catch {
+            validationError = error.localizedDescription
+            showInvalidUrlAlert = true
+            return
+        }
 
-                await dismissAllPopups()
-                try? await Task.sleep(for: .milliseconds(250))
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            let normalized = try config.setCustomBlockExplorer(
+                network: networkToSave,
+                input: inputToSave
+            )
+            input = normalized ?? ""
+            preview = config.effectiveBlockExplorerPreview(network: networkToSave)
+            selectedOption = .custom
+            if normalized == nil {
+                selectedOption = config.selectedBlockExplorerOption(network: networkToSave)
+            }
+            validationError = nil
+            isInputFocused = false
+
+            Task { @MainActor in
                 await MiddlePopup(state: .success("Block explorer saved successfully"))
                     .dismissAfter(2)
                     .present()
-            } catch {
-                validationError = error.localizedDescription
-                await dismissAllPopups()
             }
-
-            isSaving = false
+        } catch {
+            validationError = error.localizedDescription
+            showInvalidUrlAlert = true
         }
     }
 
