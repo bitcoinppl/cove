@@ -29,11 +29,16 @@ struct TransactionsCardView: View {
 
     private var isScanning: Bool {
         // keep both sources so reconcile message ordering cannot hide active scanning
-        manager.ledgerState.initialScanActive || manager.scanStatus.isActive
+        manager.loadState == .loading || manager.ledgerState.initialScanActive
+            || manager.scanStatus.isActive
     }
 
     private var scanSpinnerMessage: String? {
-        manager.ledgerState.initialScanComplete ? nil : "Checking wallet history"
+        if manager.loadState == .loading {
+            return "Checking wallet history"
+        }
+
+        return manager.ledgerState.initialScanComplete ? nil : "Checking wallet history"
     }
 
     private var isScanProgressVisible: Bool {

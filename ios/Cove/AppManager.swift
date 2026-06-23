@@ -123,6 +123,18 @@ private let navigationSettleDelayMs = 800
         return walletManager
     }
 
+    func walletMetadata(id: WalletId) -> WalletMetadata? {
+        if let walletManager = cachedWalletManager(id: id) {
+            return walletManager.walletMetadata
+        }
+
+        if let wallet = wallets.first(where: { $0.id == id }) {
+            return wallet
+        }
+
+        return try? database.wallets().all().first(where: { $0.id == id })
+    }
+
     func ensureWalletManager(id: WalletId) throws -> WalletManager {
         if let walletManager = cachedWalletManager(id: id) {
             logger.debug("found and using vm for \(id)")

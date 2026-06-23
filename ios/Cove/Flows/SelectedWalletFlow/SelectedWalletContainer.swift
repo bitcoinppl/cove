@@ -22,7 +22,11 @@ struct SelectedWalletContainer: View {
         WalletManagerHost(
             walletId: id,
             loading: {
-                FullPageLoadingView(title: "Loading wallet...")
+                if let metadata = app.walletMetadata(id: id) {
+                    SelectedWalletLoadingScreen(metadata: metadata)
+                } else {
+                    FullPageLoadingView(title: "Loading wallet...")
+                }
             },
             onError: handleManagerError
         ) { manager in
@@ -30,13 +34,6 @@ struct SelectedWalletContainer: View {
                 .background(
                     iOS26OrLater
                         ? nil
-                        : manager.loadState == .loading
-                        ? LinearGradient(
-                            colors: [
-                                .black.opacity(colorScheme == .dark ? 0.9 : 0),
-                                .black.opacity(colorScheme == .dark ? 0.9 : 0),
-                            ], startPoint: .top, endPoint: .bottom
-                        )
                         : LinearGradient(
                             stops: [
                                 .init(
@@ -83,6 +80,224 @@ struct SelectedWalletContainer: View {
             } catch {
                 app.loadAndReset(to: Route.newWallet(.select))
             }
+        }
+    }
+}
+
+private struct SelectedWalletLoadingScreen: View {
+    @Environment(\.safeAreaInsets) private var safeAreaInsets
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(AppManager.self) private var app
+
+    let metadata: WalletMetadata
+
+    private let screenHeight = UIScreen.main.bounds.height
+    private let navBarAndScrollInsets: CGFloat = 100
+
+    private var iOS26OrLater: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
+    }
+
+    private var toolbarTextColor: Color {
+        .white
+    }
+
+    private var titleContent: some View {
+        HStack(spacing: 10) {
+            if case .cold = metadata.walletType {
+                BitcoinShieldIcon(width: 13, color: toolbarTextColor)
+            }
+
+            Text(metadata.name)
+                .foregroundStyle(toolbarTextColor)
+                .font(.callout)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.vertical, 20)
+        .padding(.horizontal, 28)
+    }
+
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigationBarTrailing) {
+            HStack(spacing: 5) {
+                Button(action: {
+                    app.sheetState = .init(.qr)
+                }) {
+                    Image(systemName: "qrcode")
+                        .adaptiveToolbarItemStyle(isPastHeader: false)
+                        .font(.callout)
+                }
+
+                Button(action: {}) {
+                    Image(systemName: "ellipsis.circle")
+                        .adaptiveToolbarItemStyle(isPastHeader: false)
+                        .font(.callout)
+                }
+                .disabled(true)
+            }
+        }
+    }
+
+    private var content: some View {
+        VStack(spacing: 0) {
+            WalletBalanceLoadingHeaderView(metadata: metadata)
+
+            if !CloudBackupManager.shared.isConfigured {
+                VerifyReminder(walletId: metadata.id, isVerified: metadata.verified)
+            }
+
+            TransactionsLoadingCardView()
+                .background(Color.coveBg)
+        }
+        .background(Color.coveBg)
+        .toolbar { toolbarContent }
+        .navigationTitleView { titleContent }
+        .adaptiveToolbarStyle(showNavBar: false, reduceTransparency: reduceTransparency)
+    }
+
+    var body: some View {
+        ScrollView {
+            content
+                .background(
+                    VStack(spacing: 0) {
+                        Color.midnightBlue
+                            .frame(height: screenHeight * 0.40 + 500)
+                        Color.coveBg
+                    }
+                    .offset(y: -500)
+                )
+        }
+        .contentMargins(
+            .top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent
+        )
+        .modifier(ScrollViewBackgroundModifier(iOS26OrLater: iOS26OrLater))
+        .scrollIndicators(.hidden)
+        .modifier(SoftScrollEdgeModifier())
+        .modifier(OuterBackgroundModifier(iOS26OrLater: iOS26OrLater))
+        .onAppear {
+            app.isPastHeader = false
+        }
+        .onDisappear {
+            app.isPastHeader = false
+        }
+    }
+}
+
+private struct WalletBalanceLoadingHeaderView: View {
+    @Environment(\.safeAreaInsets) private var safeAreaInsets
+
+    let metadata: WalletMetadata
+
+    private var balancePresentation: BalancePresentation {
+        BalancePresentation(primaryOpacity: 0.48, secondaryOpacity: 0.42, pendingOpacity: 0.38)
+    }
+
+    private var eyeIcon: String {
+        metadata.sensitiveVisible ? "eye" : "eye.slash"
+    }
+
+    private func balanceLoadingView(size: ControlSize = .regular, scale: CGFloat = 1) -> some View {
+        Group {
+            if metadata.sensitiveVisible {
+                ProgressView()
+                    .controlSize(size)
+                    .scaleEffect(scale)
+            } else {
+                Text("••••••")
+            }
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 28) {
+            VStack(spacing: 6) {
+                HStack {
+                    balanceLoadingView(scale: 0.7)
+                        .foregroundColor(.white.opacity(balancePresentation.secondaryOpacity))
+                        .tint(.white.opacity(balancePresentation.secondaryOpacity))
+                        .font(.footnote)
+                        .padding(.leading, 2)
+
+                    Spacer()
+                }
+
+                HStack {
+                    balanceLoadingView(size: .large)
+                        .foregroundStyle(.white.opacity(balancePresentation.primaryOpacity))
+                        .tint(.white.opacity(balancePresentation.primaryOpacity))
+                        .font(.system(size: 34, weight: .bold))
+
+                    Spacer()
+
+                    Image(systemName: eyeIcon)
+                        .foregroundColor(.gray)
+                }
+            }
+
+            HStack(spacing: 16) {
+                LoadingHeaderButton(title: "Send", systemImage: "arrow.up.right")
+                LoadingHeaderButton(title: "Receive", systemImage: "arrow.down.left")
+            }
+        }
+        .padding()
+        .padding(.vertical, 22)
+        .padding(.top, safeAreaInsets.top + 75)
+        .background(
+            Image(.headerPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: 300, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+                .brightness(0.1)
+        )
+        .background(.midnightBlue)
+    }
+}
+
+private struct LoadingHeaderButton: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+            Text(title)
+        }
+        .foregroundColor(Color.midnightBtn.opacity(0.6))
+        .frame(maxWidth: .infinity)
+        .padding()
+        .padding(.vertical, 4)
+        .background(Color.gray)
+        .cornerRadius(10)
+    }
+}
+
+private struct TransactionsLoadingCardView: View {
+    var body: some View {
+        VStack {
+            VStack {
+                HStack {
+                    Text("Transactions")
+                        .foregroundStyle(.secondary)
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+
+                    Spacer()
+                }
+                .padding(.bottom, 12)
+
+                EmptyWalletScanSpinnerState(message: "Checking wallet history")
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 56)
+
+                Spacer()
+                    .frame(minHeight: UIScreen.main.bounds.height * 0.2)
+            }
+            .padding()
+            .padding(.top, 5)
         }
     }
 }

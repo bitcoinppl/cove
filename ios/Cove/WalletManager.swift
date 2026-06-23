@@ -98,16 +98,16 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     init(id: WalletId) throws {
         self.id = id
         let rust = try RustWalletManager(id: id)
-        let loadState = rust.initialLoadState()
+        let initialState = rust.initialState()
 
         self.rust = rust
-        self.loadState = loadState
-        self.scanStatus = .idle
-        self.ledgerState = rust.ledgerState()
-        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
-
-        walletMetadata = rust.walletMetadata()
-        unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
+        self.loadState = initialState.loadState
+        self.scanStatus = initialState.scanStatus
+        self.ledgerState = initialState.ledgerState
+        self.balancePresentation = initialState.balancePresentation
+        self.balance = initialState.balance
+        walletMetadata = initialState.metadata
+        unsignedTransactions = initialState.unsignedTransactions
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
@@ -138,15 +138,17 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
 
     init(xpub: String) throws {
         let rust = try RustWalletManager.tryNewFromXpub(xpub: xpub)
-        let metadata = rust.walletMetadata()
+        let initialState = rust.initialState()
 
         self.rust = rust
-        self.loadState = .loading
-        self.scanStatus = .idle
-        self.ledgerState = rust.ledgerState()
-        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
-        walletMetadata = metadata
-        id = metadata.id
+        self.loadState = initialState.loadState
+        self.scanStatus = initialState.scanStatus
+        self.ledgerState = initialState.ledgerState
+        self.balancePresentation = initialState.balancePresentation
+        self.balance = initialState.balance
+        walletMetadata = initialState.metadata
+        unsignedTransactions = initialState.unsignedTransactions
+        id = initialState.metadata.id
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
@@ -163,16 +165,17 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             backup: backup,
             birthday: birthday
         )
-
-        let metadata = rust.walletMetadata()
+        let initialState = rust.initialState()
 
         self.rust = rust
-        self.loadState = .loading
-        self.scanStatus = .idle
-        self.ledgerState = rust.ledgerState()
-        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
-        walletMetadata = metadata
-        id = metadata.id
+        self.loadState = initialState.loadState
+        self.scanStatus = initialState.scanStatus
+        self.ledgerState = initialState.ledgerState
+        self.balancePresentation = initialState.balancePresentation
+        self.balance = initialState.balance
+        walletMetadata = initialState.metadata
+        unsignedTransactions = initialState.unsignedTransactions
+        id = initialState.metadata.id
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
@@ -574,11 +577,14 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             }
 
         self.rust = rust
-        self.loadState = .loading
-        self.scanStatus = .idle
-        self.ledgerState = rust.ledgerState()
-        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
-        self.walletMetadata = rust.walletMetadata()
+        let initialState = rust.initialState()
+        self.loadState = initialState.loadState
+        self.scanStatus = initialState.scanStatus
+        self.ledgerState = initialState.ledgerState
+        self.balancePresentation = initialState.balancePresentation
+        self.balance = initialState.balance
+        self.walletMetadata = initialState.metadata
+        self.unsignedTransactions = initialState.unsignedTransactions
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }

@@ -14,7 +14,7 @@ struct WalletBalanceHeaderView: View {
 
     // args
     // trusted spendable balance
-    let balance: Amount
+    let balance: Amount?
     let balancePresentation: BalancePresentation
     @State var fiatBalance: Double? = nil
     @State var fiatPendingBalance: Double? = nil
@@ -27,7 +27,7 @@ struct WalletBalanceHeaderView: View {
     }
 
     private var sendButtonIsUnavailable: Bool {
-        metadata.walletType == .watchOnly || initialScanIsIncomplete
+        metadata.walletType == .watchOnly || initialScanIsIncomplete || balance == nil
     }
 
     private var sendButtonForegroundColor: Color {
@@ -49,6 +49,8 @@ struct WalletBalanceHeaderView: View {
             return
         }
 
+        guard let balance else { return }
+
         if balance.asSats() == 0 {
             manager.errorAlert = .noBalance
             return
@@ -62,7 +64,7 @@ struct WalletBalanceHeaderView: View {
     }
 
     var fontSize: CGFloat {
-        let btc = balance.asBtc()
+        let btc = balance?.asBtc() ?? 0
 
         // Base font size
         let baseFontSize: CGFloat = 34
@@ -116,6 +118,7 @@ struct WalletBalanceHeaderView: View {
                 }
 
                 WalletBalancePendingView(
+                    balance: balance,
                     pending: manager.balance.untrustedPending(),
                     fiatPendingBalance: fiatPendingBalance,
                     metadata: metadata,
@@ -183,8 +186,10 @@ struct WalletBalanceHeaderView: View {
         )
         .background(.midnightBlue)
         .onAppear {
-            if fiatBalance == nil { fiatBalance = manager.amountInFiatCached(balance) }
-            if fiatPendingBalance == nil {
+            if fiatBalance == nil, let balance {
+                fiatBalance = manager.amountInFiatCached(balance)
+            }
+            if balance != nil, fiatPendingBalance == nil {
                 fiatPendingBalance = manager.amountInFiatCached(manager.balance.untrustedPending())
             }
         }
@@ -195,14 +200,16 @@ struct WalletBalanceHeaderView: View {
         }
         .onChange(of: app.prices, initial: false) { _, _ in
             // recalculate fiat when prices are loaded/updated
-            fiatBalance = manager.amountInFiatCached(balance)
-            fiatPendingBalance = manager.amountInFiatCached(manager.balance.untrustedPending())
+            if let balance {
+                fiatBalance = manager.amountInFiatCached(balance)
+                fiatPendingBalance = manager.amountInFiatCached(manager.balance.untrustedPending())
+            }
         }
     }
 }
 
 private struct WalletBalancePrimaryView: View {
-    let balance: Amount
+    let balance: Amount?
     let fiatBalance: Double?
     let metadata: WalletMetadata
     let manager: WalletManager
@@ -211,21 +218,24 @@ private struct WalletBalancePrimaryView: View {
     var body: some View {
         if !metadata.sensitiveVisible {
             Text("••••••")
-        } else if metadata.fiatOrBtc == .fiat {
+        } else if let balance, metadata.fiatOrBtc == .fiat {
             if let fiatBalance {
                 Text(manager.displayFiatAmount(fiatBalance))
             } else {
                 ProgressView()
                     .tint(.white.opacity(opacity))
             }
-        } else {
+        } else if let balance {
             Text(manager.amountFmtUnit(balance))
+        } else {
+            ProgressView()
+                .tint(.white.opacity(opacity))
         }
     }
 }
 
 private struct WalletBalanceSecondaryView: View {
-    let balance: Amount
+    let balance: Amount?
     let fiatBalance: Double?
     let metadata: WalletMetadata
     let manager: WalletManager
@@ -234,7 +244,7 @@ private struct WalletBalanceSecondaryView: View {
     var body: some View {
         if !metadata.sensitiveVisible {
             Text("••••••")
-        } else if metadata.fiatOrBtc == .btc {
+        } else if let balance, metadata.fiatOrBtc == .btc {
             if let fiatBalance {
                 Text(manager.displayFiatAmount(fiatBalance))
             } else {
@@ -242,13 +252,18 @@ private struct WalletBalanceSecondaryView: View {
                     .tint(.white.opacity(opacity))
                     .scaleEffect(0.7)
             }
-        } else {
+        } else if let balance {
             Text(manager.amountFmtUnit(balance))
+        } else {
+            ProgressView()
+                .tint(.white.opacity(opacity))
+                .scaleEffect(0.7)
         }
     }
 }
 
 private struct WalletBalancePendingView: View {
+    let balance: Amount?
     let pending: Amount
     let fiatPendingBalance: Double?
     let metadata: WalletMetadata
@@ -256,12 +271,14 @@ private struct WalletBalancePendingView: View {
     let opacity: Double
 
     var body: some View {
-        if metadata.fiatOrBtc == .fiat, let fiatPendingBalance,
-           let pendingStr = manager.displayFiatAmountPendingFmt(fiatPendingBalance)
-        {
-            pendingText(pendingStr)
-        } else if let pendingStr = manager.displayAmountPendingFmt(pending) {
-            pendingText(pendingStr)
+        if balance != nil {
+            if metadata.fiatOrBtc == .fiat, let fiatPendingBalance,
+               let pendingStr = manager.displayFiatAmountPendingFmt(fiatPendingBalance)
+            {
+                pendingText(pendingStr)
+            } else if let pendingStr = manager.displayAmountPendingFmt(pending) {
+                pendingText(pendingStr)
+            }
         }
     }
 
