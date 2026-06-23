@@ -230,12 +230,17 @@ impl WalletScanActor {
         }
     }
 
-    /// Starts a full wallet scan and replaces any active scan generation
+    /// Starts a full wallet scan unless another scan is already active
     pub(crate) async fn start_full_scan(
         &mut self,
         wallet_generation: WalletScanGeneration,
         progress_start: ScanProgressStart,
     ) -> ActorResult<()> {
+        if self.scan_in_progress() {
+            debug!("scan already in progress, skipping full scan");
+            return Produces::ok(());
+        }
+
         self.begin_scan(RunningScan::Full(FullScanType::Full), progress_start, wallet_generation)
     }
 
@@ -1244,6 +1249,29 @@ mod tests {
                 .is_ok()
         );
 
+        assert_eq!(scan_actor.active_generation, Some(active_generation));
+        assert_eq!(scan_actor.next_generation, next_generation);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn full_scan_request_is_ignored_while_scan_is_active() {
+        let mut scan_actor = WalletScanActor::new(WeakAddr::default());
+        let active_generation = ScanActorGeneration(7);
+        let next_generation = ScanActorGeneration(11);
+        let cancel_token = CancellationToken::new();
+        let token_observer = cancel_token.clone();
+        scan_actor.active_cancel_token = Some(cancel_token);
+        scan_actor.active_generation = Some(active_generation);
+        scan_actor.next_generation = next_generation;
+
+        assert!(
+            scan_actor
+                .start_full_scan(WalletScanGeneration::INITIAL, ScanProgressStart::Immediate)
+                .await
+                .is_ok()
+        );
+
+        assert!(!token_observer.is_cancelled());
         assert_eq!(scan_actor.active_generation, Some(active_generation));
         assert_eq!(scan_actor.next_generation, next_generation);
     }
