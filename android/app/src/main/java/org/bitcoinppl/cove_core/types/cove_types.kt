@@ -9428,7 +9428,7 @@ data class Utxo (
     var `type`: UtxoType
     ,
     /**
-     * Cached lock state for display and selection filtering; transaction building rechecks the labels DB
+     * Cached lock state for display and selection filtering only; transaction building rechecks the labels DB
      */
     var `spendable`: kotlin.Boolean
 

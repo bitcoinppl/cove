@@ -4692,7 +4692,7 @@ public struct Utxo: Equatable, Hashable {
     public var blockHeight: UInt32
     public var type: UtxoType
     /**
-     * Cached lock state for display and selection filtering; transaction building rechecks the labels DB
+     * Cached lock state for display and selection filtering only; transaction building rechecks the labels DB
      */
     public var spendable: Bool
 
@@ -4700,7 +4700,7 @@ public struct Utxo: Equatable, Hashable {
     // declare one manually.
     public init(outpoint: OutPoint, label: String?, datetime: UInt64, amount: Amount, address: Address, derivationIndex: UInt32, blockHeight: UInt32, type: UtxoType,
         /**
-         * Cached lock state for display and selection filtering; transaction building rechecks the labels DB
+         * Cached lock state for display and selection filtering only; transaction building rechecks the labels DB
          */spendable: Bool) {
         self.outpoint = outpoint
         self.label = label
