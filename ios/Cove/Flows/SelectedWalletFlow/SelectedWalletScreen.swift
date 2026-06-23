@@ -22,7 +22,6 @@ private enum SheetState: Equatable {
 
 struct SelectedWalletScreen: View {
     @Environment(\.safeAreaInsets) private var safeAreaInsets
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(AppManager.self) private var app
     @Environment(\.navigate) private var navigate
@@ -69,7 +68,25 @@ struct SelectedWalletScreen: View {
     }
 
     private var refreshControlTintColor: UIColor {
-        iOS26OrLater ? UIColor.label : UIColor.white
+        UIColor.white
+    }
+
+    private func configureRefreshControl(in scrollView: UIScrollView) {
+        configureRefreshControlIfAvailable(in: scrollView)
+
+        DispatchQueue.main.async {
+            self.configureRefreshControlIfAvailable(in: scrollView)
+        }
+    }
+
+    private func configureRefreshControlIfAvailable(in scrollView: UIScrollView) {
+        guard let refreshControl = scrollView.refreshControl else { return }
+
+        refreshControl.tintColor = refreshControlTintColor
+        refreshControl.backgroundColor = .clear
+
+        // keep the indicator above the opaque hosted background while pulling at the top
+        refreshControl.superview?.bringSubviewToFront(refreshControl)
     }
 
     func updater(_ action: WalletManagerAction) {
@@ -523,16 +540,13 @@ struct SelectedWalletScreen: View {
                 await manager.updateWalletBalance()
             }
             .introspect(.scrollView, on: .iOS(.v18, .v26)) { scrollView in
-                scrollView.refreshControl?.tintColor = refreshControlTintColor
+                configureRefreshControl(in: scrollView)
             }
             .onAppear {
                 // Reset SendFlowManager so new send flow is fresh
                 UIRefreshControl.appearance().tintColor = refreshControlTintColor
                 app.clearSendFlowManager(id: manager.id)
                 handleScrollToTransaction(proxy: proxy)
-            }
-            .onChange(of: colorScheme) {
-                UIRefreshControl.appearance().tintColor = refreshControlTintColor
             }
             .onChange(of: manager.loadState, initial: true) {
                 handleScrollToTransaction(proxy: proxy)
