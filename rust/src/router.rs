@@ -9,7 +9,7 @@ use crate::{
     mnemonic::NumberOfBip39Words,
     psbt::Psbt,
     tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
-    transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
+    transaction::{Amount, TxId, ffi::BitcoinTransaction},
     wallet::Address,
 };
 
@@ -24,7 +24,7 @@ pub enum Route {
     NewWallet(NewWalletRoute),
     Settings(SettingsRoute),
     SecretWords(WalletId),
-    TransactionDetails { id: WalletId, details: Arc<TransactionDetails> },
+    TransactionDetails { id: WalletId, tx_id: Arc<TxId> },
     Send(SendRoute),
     CoinControl(CoinControlRoute),
 }
@@ -444,6 +444,17 @@ impl Route {
         self == &route_to_check
     }
 
+    #[uniffi::method(name = "isSameNavigationDestination")]
+    fn is_same_navigation_destination(&self, route_to_check: Route) -> bool {
+        match (self, route_to_check) {
+            (
+                Self::TransactionDetails { id: current_id, tx_id: current_tx_id },
+                Self::TransactionDetails { id: next_id, tx_id: next_tx_id },
+            ) => current_id == &next_id && current_tx_id == &next_tx_id,
+            (current, next) => current == &next,
+        }
+    }
+
     #[uniffi::method(name = "stableHash")]
     fn stable_hash(&self) -> u64 {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -455,6 +466,59 @@ impl Route {
 impl From<SettingsRoute> for Route {
     fn from(settings_route: SettingsRoute) -> Self {
         Self::Settings(settings_route)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transaction_details_with_same_wallet_and_txid_are_same_navigation_destination() {
+        let wallet_id = WalletId::from("wallet-id".to_string());
+        let tx_id = Arc::new(TxId::preview_new());
+
+        let current = Route::TransactionDetails { id: wallet_id.clone(), tx_id: tx_id.clone() };
+        let next = Route::TransactionDetails { id: wallet_id, tx_id };
+
+        assert!(current.is_equal(next.clone()));
+        assert!(current.is_same_navigation_destination(next));
+    }
+
+    #[test]
+    fn transaction_details_for_different_wallets_are_different_navigation_destinations() {
+        let tx_id = Arc::new(TxId::preview_new());
+        let current = Route::TransactionDetails {
+            id: WalletId::from("wallet-one".to_string()),
+            tx_id: tx_id.clone(),
+        };
+        let next =
+            Route::TransactionDetails { id: WalletId::from("wallet-two".to_string()), tx_id };
+
+        assert!(!current.is_same_navigation_destination(next));
+    }
+
+    #[test]
+    fn transaction_details_for_different_txids_are_different_navigation_destinations() {
+        let wallet_id = WalletId::from("wallet-id".to_string());
+        let current = Route::TransactionDetails {
+            id: wallet_id.clone(),
+            tx_id: Arc::new(TxId::preview_new()),
+        };
+        let next =
+            Route::TransactionDetails { id: wallet_id, tx_id: Arc::new(TxId::preview_new()) };
+
+        assert!(!current.is_same_navigation_destination(next));
+    }
+
+    #[test]
+    fn non_transaction_routes_use_full_route_equality_for_navigation_destination() {
+        let current = Route::SelectedWallet(WalletId::from("wallet-one".to_string()));
+        let matching = Route::SelectedWallet(WalletId::from("wallet-one".to_string()));
+        let different = Route::SelectedWallet(WalletId::from("wallet-two".to_string()));
+
+        assert!(current.is_same_navigation_destination(matching));
+        assert!(!current.is_same_navigation_destination(different));
     }
 }
 

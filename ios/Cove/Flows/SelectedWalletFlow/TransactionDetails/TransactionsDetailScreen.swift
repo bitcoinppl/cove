@@ -11,17 +11,27 @@ let detailsExpandedPadding: CGFloat = 28
 
 struct TransactionsDetailScreen: View {
     @Environment(AppManager.self) private var app
-    @Environment(\.navigate) private var navigate
 
     // public
     let id: WalletId
-    let transactionDetails: TransactionDetails
+    let txId: TxId
 
-    /// private
-    @State var manager: WalletManager? = nil
+    @State private var manager: WalletManager?
 
-    func loadManager() {
-        if manager != nil { return }
+    var body: some View {
+        Group {
+            if let manager {
+                TransactionDetailsLoader(id: id, txId: txId, manager: manager)
+            } else {
+                FullPageLoadingView(backgroundColor: .background)
+            }
+        }
+        .task(id: id) {
+            loadManager()
+        }
+    }
+
+    private func loadManager() {
         if manager != nil { return }
 
         do {
@@ -32,17 +42,77 @@ struct TransactionsDetailScreen: View {
             app.trySelectLatestOrNewWallet()
         }
     }
+}
+
+private struct TransactionDetailsLoader: View {
+    let id: WalletId
+    let txId: TxId
+    var manager: WalletManager
+
+    @State private var error: Error?
+    @State private var didLoadInitialDetails = false
+
+    private var transactionDetails: TransactionDetails? {
+        manager.transactionDetails[txId]
+    }
 
     var body: some View {
         Group {
-            if let manager {
+            if let transactionDetails {
                 TransactionDetailsView(
-                    id: id, transactionDetails: transactionDetails, manager: manager
+                    id: id,
+                    txId: txId,
+                    transactionDetails: transactionDetails,
+                    refreshOnAppear: !didLoadInitialDetails,
+                    manager: manager
                 )
+            } else if let error {
+                TransactionDetailsLoadErrorView(error: error) {
+                    Task { await loadTransactionDetails() }
+                }
             } else {
-                Text("Loading...")
+                FullPageLoadingView(backgroundColor: .background)
             }
         }
-        .task { loadManager() }
+        .task(id: txId) {
+            await loadTransactionDetails()
+        }
+    }
+
+    private func loadTransactionDetails() async {
+        if transactionDetails != nil { return }
+
+        await MainActor.run {
+            error = nil
+        }
+
+        do {
+            _ = try await manager.transactionDetails(for: txId)
+            await MainActor.run {
+                didLoadInitialDetails = true
+            }
+        } catch {
+            await MainActor.run {
+                self.error = error
+            }
+
+            Log.error("Unable to get transaction details: \(error.localizedDescription)")
+        }
+    }
+}
+
+private struct TransactionDetailsLoadErrorView: View {
+    let error: Error
+    let retry: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Unable to Load Transaction", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(error.localizedDescription)
+        } actions: {
+            Button("Try Again", action: retry)
+                .buttonStyle(.borderedProminent)
+        }
     }
 }

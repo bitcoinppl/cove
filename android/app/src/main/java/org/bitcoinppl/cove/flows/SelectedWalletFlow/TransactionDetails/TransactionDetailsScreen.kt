@@ -81,6 +81,7 @@ import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.TransactionState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.types.FfiColorScheme
+import org.bitcoinppl.cove_core.types.TxId
 import org.bitcoinppl.cove_core.types.TransactionDirection
 
 private const val INITIAL_DELAY_MS = 2000L
@@ -99,6 +100,8 @@ fun TransactionDetailsScreen(
     app: AppManager,
     manager: WalletManager,
     details: TransactionDetails,
+    txId: TxId,
+    refreshOnAppear: Boolean = true,
 ) {
     // reset status bar icons to match theme (needed after navigating from SelectedWalletScreen
     // which forces white icons for its dark header)
@@ -107,7 +110,6 @@ fun TransactionDetailsScreen(
     val context = LocalContext.current
     val metadata = manager.walletMetadata ?: return
     val scope = rememberCoroutineScope()
-    val txId = details.txId()
 
     // read transaction details from cache (observable), fallback to passed-in details
     val transactionDetails = manager.transactionDetailsCache[txId] ?: details
@@ -126,7 +128,9 @@ fun TransactionDetailsScreen(
     val isDark = !MaterialTheme.colorScheme.isLight
 
     // immediately fetch fresh transaction details on screen load
-    LaunchedEffect(manager, txId) {
+    LaunchedEffect(manager, txId, refreshOnAppear) {
+        if (!refreshOnAppear) return@LaunchedEffect
+
         try {
             val freshDetails = manager.rust.transactionDetails(txId = txId)
             manager.updateTransactionDetailsCache(txId, freshDetails)

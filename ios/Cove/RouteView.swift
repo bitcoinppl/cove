@@ -44,8 +44,8 @@ struct RouteView: View {
             SelectedWalletContainer(id: walletId)
         case let .secretWords(id: walletId):
             SecretWordsScreen(id: walletId)
-        case let .transactionDetails(id: id, details: details):
-            TransactionsDetailScreen(id: id, transactionDetails: details)
+        case let .transactionDetails(id: id, txId: txId):
+            TransactionsDetailScreen(id: id, txId: txId)
         case let .send(sendRoute):
             SendFlowContainer(sendRoute: sendRoute)
         case let .coinControl(route):

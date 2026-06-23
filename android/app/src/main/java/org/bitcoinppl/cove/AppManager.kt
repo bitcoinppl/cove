@@ -241,6 +241,9 @@ class AppManager private constructor() : FfiReconcile {
     val currentRoute: Route
         get() = router.currentRoute
 
+    private fun isDuplicateTopRoute(route: Route): Boolean =
+        currentRoute.isSameNavigationDestination(route)
+
     val hasWallets: Boolean
         get() = rust.hasWallets()
 
@@ -337,6 +340,11 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun pushRoute(route: Route) {
+        if (isDuplicateTopRoute(route)) {
+            isSidebarVisible = false
+            return
+        }
+
         advanceNavigationGeneration()
         pushRouteWithoutNavigationGeneration(route)
     }
@@ -344,6 +352,8 @@ class AppManager private constructor() : FfiReconcile {
     private fun pushRouteWithoutNavigationGeneration(route: Route) {
         Log.d(tag, "pushRoute: $route")
         isSidebarVisible = false
+        if (isDuplicateTopRoute(route)) return
+
         val newRoutes = router.routes.toMutableList().apply { add(route) }
 
         // only dispatch if routes actually changed
@@ -499,6 +509,11 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.PushedRoute -> {
+                    if (isDuplicateTopRoute(message.v1)) {
+                        isSidebarVisible = false
+                        return@launch
+                    }
+
                     val newRoutes = (router.routes + message.v1).toList()
                     updateRoutesAndClearInactiveSendFlowManager(newRoutes)
                     scheduleNavigationSettledForCurrentGeneration()

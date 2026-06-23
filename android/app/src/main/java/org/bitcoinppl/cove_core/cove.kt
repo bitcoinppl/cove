@@ -3313,6 +3313,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_afterpinaction_usermessage(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_route_issamenavigationdestination(`ptr`: RustBuffer.ByValue,`routeToCheck`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_method_route_is_equal(`ptr`: RustBuffer.ByValue,`routeToCheck`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_route_stablehash(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -45474,7 +45476,7 @@ sealed class Route: Disposable  {
 
     data class TransactionDetails(
         val `id`: org.bitcoinppl.cove_core.types.WalletId,
-        val `details`: org.bitcoinppl.cove_core.TransactionDetails) : Route()
+        val `txId`: org.bitcoinppl.cove_core.types.TxId) : Route()
 
     {
 
@@ -45545,7 +45547,7 @@ sealed class Route: Disposable  {
 
     Disposable.destroy(
         this.`id`,
-        this.`details`
+        this.`txId`
     )
 
             }
@@ -45566,6 +45568,17 @@ sealed class Route: Disposable  {
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
+
+
+     fun `isSameNavigationDestination`(`routeToCheck`: Route): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_route_issamenavigationdestination(FfiConverterTypeRoute.lower(this),
+
+        FfiConverterTypeRoute.lower(`routeToCheck`),_status)
+}
+    )
+    }
 
 
      fun `isEqual`(`routeToCheck`: Route): kotlin.Boolean {
@@ -45619,7 +45632,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
                 )
             6 -> Route.TransactionDetails(
                 FfiConverterTypeWalletId.read(buf),
-                FfiConverterTypeTransactionDetails.read(buf),
+                FfiConverterTypeTxId.read(buf),
                 )
             7 -> Route.Send(
                 FfiConverterTypeSendRoute.read(buf),
@@ -45673,7 +45686,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
             (
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.`id`)
-                + FfiConverterTypeTransactionDetails.allocationSize(value.`details`)
+                + FfiConverterTypeTxId.allocationSize(value.`txId`)
             )
         }
         is Route.Send -> {
@@ -45723,7 +45736,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
             is Route.TransactionDetails -> {
                 buf.putInt(6)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
-                FfiConverterTypeTransactionDetails.write(value.`details`, buf)
+                FfiConverterTypeTxId.write(value.`txId`, buf)
                 Unit
             }
             is Route.Send -> {

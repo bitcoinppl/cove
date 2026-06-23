@@ -304,6 +304,10 @@ private let navigationSettleDelayMs = 800
         router.routes.last ?? router.default
     }
 
+    private func isDuplicateTopRoute(_ route: Route) -> Bool {
+        currentRoute.isSameNavigationDestination(routeToCheck: route)
+    }
+
     var hasWallets: Bool {
         rust.hasWallets()
     }
@@ -357,12 +361,19 @@ private let navigationSettleDelayMs = 800
     }
 
     func pushRoute(_ route: Route) {
+        guard !isDuplicateTopRoute(route) else {
+            isSidebarVisible = false
+            return
+        }
+
         advanceNavigationGeneration()
         pushRouteWithoutNavigationGeneration(route)
     }
 
     private func pushRouteWithoutNavigationGeneration(_ route: Route) {
         isSidebarVisible = false
+        guard !isDuplicateTopRoute(route) else { return }
+
         router.routes.append(route)
     }
 
@@ -556,6 +567,11 @@ private let navigationSettleDelayMs = 800
                 }
 
             case let .pushedRoute(route):
+                guard !isDuplicateTopRoute(route) else {
+                    isSidebarVisible = false
+                    return
+                }
+
                 router.routes.append(route)
                 scheduleNavigationSettledForCurrentGeneration()
 
