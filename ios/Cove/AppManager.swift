@@ -574,7 +574,10 @@ private let navigationSettleDelayMs = 800
                 }
 
             case let .pushedRoute(route):
-                guard !isDuplicateTopRoute(route) else { return }
+                guard !isDuplicateTopRoute(route) else {
+                    isSidebarVisible = false
+                    return
+                }
 
                 router.routes.append(route)
                 scheduleNavigationSettledForCurrentGeneration()
