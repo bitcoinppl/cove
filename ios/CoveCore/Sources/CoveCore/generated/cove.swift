@@ -3031,7 +3031,7 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
 
     /**
      * Load and reset the default route
-     * Shows a laoding screen, and then resets the default route
+     * Shows a loading screen, and then resets the default route
      */
     func loadAndResetDefaultRouteAfter(route: Route, afterMillis: UInt32)
 
@@ -3349,7 +3349,7 @@ open func loadAndResetDefaultRoute(route: Route)  {try! rustCall() {
 
     /**
      * Load and reset the default route
-     * Shows a laoding screen, and then resets the default route
+     * Shows a loading screen, and then resets the default route
      */
 open func loadAndResetDefaultRouteAfter(route: Route, afterMillis: UInt32)  {try! rustCall() {
         uniffiCallStatus in
@@ -40424,7 +40424,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route() != 16208) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 21077) {
+    if (uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 21603) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_needs_onboarding() != 25615) {
