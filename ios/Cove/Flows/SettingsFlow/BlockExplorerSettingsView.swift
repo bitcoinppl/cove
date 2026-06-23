@@ -3,8 +3,6 @@ import SwiftUI
 
 struct BlockExplorerSettingsView: View {
     private let config = Database().globalConfig()
-    private static let previewTransactionId = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    private static let knownBitcoinTransactionId = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
 
     @State private var selectedNetwork: Network
     @State private var input: String
@@ -237,25 +235,12 @@ struct BlockExplorerSettingsView: View {
 
     private func blockExplorerCheckUrl(network: Network, input: String) throws -> URL {
         let previewUrl = try config.previewCustomBlockExplorer(network: network, input: input)
-        let checkUrl = previewUrl.replacingOccurrences(
-            of: Self.previewTransactionId,
-            with: knownTransactionId(for: network)
-        )
 
-        guard let url = URL(string: checkUrl) else {
+        guard let url = URL(string: previewUrl) else {
             throw BlockExplorerCheckError.invalidUrl
         }
 
         return url
-    }
-
-    private func knownTransactionId(for network: Network) -> String {
-        switch network {
-        case .bitcoin:
-            Self.knownBitcoinTransactionId
-        case .testnet, .testnet4, .signet:
-            Self.knownBitcoinTransactionId
-        }
     }
 
     private func checkBlockExplorerUrl(_ url: URL) async throws {

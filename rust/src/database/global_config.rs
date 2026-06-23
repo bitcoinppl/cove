@@ -593,7 +593,7 @@ mod tests {
             table
                 .preview_custom_block_explorer(Network::Bitcoin, "https://example.com".to_string())
                 .unwrap(),
-            "https://example.com/tx/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            "https://example.com/tx/4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
         );
         assert!(table.custom_block_explorer(Network::Bitcoin).is_none());
 
@@ -616,7 +616,7 @@ mod tests {
 
         assert_eq!(
             table.preview_custom_block_explorer(Network::Signet, "   ".to_string()).unwrap(),
-            "https://mutinynet.com/tx/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            "https://mutinynet.com/tx/4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
         );
     }
 
