@@ -145,10 +145,11 @@ struct BlockExplorerSettingsView: View {
                 network: selectedNetwork,
                 input: value
             )
-            validationError = nil
         } catch {
-            validationError = error.localizedDescription
+            // keep save as the validation point while the user is still typing
         }
+
+        validationError = nil
     }
 
     private func save() {

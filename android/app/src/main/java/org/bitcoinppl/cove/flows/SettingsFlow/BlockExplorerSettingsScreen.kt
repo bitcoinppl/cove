@@ -80,10 +80,11 @@ fun BlockExplorerSettingsScreen(
     fun updatePreview(value: String) {
         try {
             preview = config.previewCustomBlockExplorer(selectedNetwork, value)
-            validationError = null
-        } catch (error: Exception) {
-            validationError = error.message ?: error.toString()
+        } catch (_: Exception) {
+            // keep save as the validation point while the user is still typing
         }
+
+        validationError = null
     }
 
     fun save() {

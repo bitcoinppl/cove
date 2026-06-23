@@ -170,7 +170,7 @@ impl CustomBlockExplorerTemplate {
     fn parse_template(input: &str) -> Result<Self, CustomBlockExplorerError> {
         let placeholder_marker = placeholder_marker_absent_from(input);
         let probe = replace_supported_placeholders(input, &placeholder_marker);
-        let url = parse_http_url(&probe)?;
+        let url = parse_http_url_with_optional_scheme(&probe)?;
         if url.fragment().is_some() {
             return Err(CustomBlockExplorerError::Fragment);
         }
@@ -182,7 +182,7 @@ impl CustomBlockExplorerTemplate {
     }
 
     fn parse_base_url(network: Network, input: &str) -> Result<Self, CustomBlockExplorerError> {
-        let mut url = parse_http_url(input)?;
+        let mut url = parse_http_url_with_optional_scheme(input)?;
         if url.fragment().is_some() {
             return Err(CustomBlockExplorerError::Fragment);
         }
@@ -223,6 +223,17 @@ fn parse_http_url(input: &str) -> Result<Url, CustomBlockExplorerError> {
     }
 
     Ok(url)
+}
+
+fn parse_http_url_with_optional_scheme(input: &str) -> Result<Url, CustomBlockExplorerError> {
+    match parse_http_url(input) {
+        Ok(url) => Ok(url),
+        Err(error) if !input.contains("://") => {
+            let input_with_scheme = format!("https://{input}");
+            parse_http_url(&input_with_scheme).map_err(|_| error)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn canonical_base_path(url: &Url, network: Network, placeholder_marker: &str) -> String {
@@ -397,15 +408,25 @@ mod tests {
             template.render(TXID),
             "https://example.com/search?q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         );
+
+        let template =
+            CustomBlockExplorerTemplate::parse(Network::Bitcoin, "example.com/search?q={txid}")
+                .unwrap();
+
+        assert_eq!(template.as_str(), "https://example.com/search?q={txid}");
     }
 
     #[test]
     fn plain_base_url_normalizes_to_transaction_template() {
         let cases = [
             (" https://example.com ", "https://example.com/tx/{txid}"),
+            ("example.com", "https://example.com/tx/{txid}"),
+            ("mempool.space", "https://mempool.space/tx/{txid}"),
             ("https://mempool.guide/", "https://mempool.guide/tx/{txid}"),
+            ("mempool.guide", "https://mempool.guide/tx/{txid}"),
             ("https://mempool.bullbitcoin.com/", "https://mempool.bullbitcoin.com/tx/{txid}"),
             ("https://blockstream.info/", "https://blockstream.info/tx/{txid}"),
+            ("blockstream.info", "https://blockstream.info/tx/{txid}"),
         ];
 
         for (input, expected) in cases {
@@ -424,6 +445,11 @@ mod tests {
         .unwrap();
 
         assert_eq!(template.as_str(), "http://192.168.1.10:3000/explorer/tx/{txid}?source=cove");
+
+        let template =
+            CustomBlockExplorerTemplate::parse(Network::Bitcoin, "example.com/explorer").unwrap();
+
+        assert_eq!(template.as_str(), "https://example.com/explorer/tx/{txid}");
     }
 
     #[test]

@@ -566,6 +566,26 @@ mod tests {
     }
 
     #[test]
+    fn custom_block_explorer_setter_expands_bare_domain_to_known_preset_template() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let saved = table
+            .set_custom_block_explorer(Network::Bitcoin, "blockstream.info".to_string())
+            .unwrap();
+
+        assert_eq!(saved.as_deref(), Some("https://blockstream.info/tx/{txid}"));
+        assert_eq!(
+            table.custom_block_explorer(Network::Bitcoin).as_deref(),
+            Some("https://blockstream.info/tx/{txid}")
+        );
+        assert_eq!(
+            table.selected_block_explorer_option(Network::Bitcoin),
+            BlockExplorerOption::Blockstream
+        );
+    }
+
+    #[test]
     fn custom_block_explorer_input_preview_validates_without_saving() {
         let (_tmp, table) = test_table();
 
