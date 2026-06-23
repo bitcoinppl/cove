@@ -28,6 +28,8 @@ pub struct SendFlowManagerState {
     pub(crate) selected_fiat_currency: FiatCurrency,
     pub(crate) first_address: Option<Arc<Address>>,
     pub(crate) wallet_balance: Option<Arc<Balance>>,
+    pub(crate) unlocked_spendable_sats: Option<u64>,
+    pub(crate) lock_state_load_failed: bool,
     /// True once we have base fee rates (either from cache or network)
     /// UI can show immediately once this is true (total fees pending calculation)
     pub(crate) has_base_fees: bool,
@@ -143,6 +145,8 @@ impl SendFlowManagerState {
             focus_field: None,
             address: None,
             wallet_balance: Some(balance),
+            unlocked_spendable_sats: None,
+            lock_state_load_failed: false,
             fee_selection: None,
             btc_price_in_fiat,
             selected_fiat_currency,
@@ -170,5 +174,31 @@ impl From<SendFlowManagerState> for State {
 impl From<Arc<Mutex<SendFlowManagerState>>> for State {
     fn from(state: Arc<Mutex<SendFlowManagerState>>) -> Self {
         Self(state)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use bitcoin::Amount as BdkAmount;
+
+    use super::*;
+
+    #[test]
+    fn new_starts_with_unknown_unlocked_spendable_balance() {
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let balance = Arc::new(Balance(bdk_wallet::Balance {
+            confirmed: BdkAmount::from_sat(50_000),
+            ..Default::default()
+        }));
+
+        let state = SendFlowManagerState::new(metadata, balance);
+
+        assert_eq!(state.wallet_balance.as_ref().unwrap().spendable().as_sats(), 50_000);
+        assert_eq!(state.unlocked_spendable_sats, None);
+        assert!(!state.lock_state_load_failed);
     }
 }

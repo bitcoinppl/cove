@@ -10,11 +10,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletLoadState
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.initialScanIncomplete
@@ -22,7 +25,6 @@ import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.wallet.WalletExportState
 import org.bitcoinppl.cove.wallet.WalletSheetsHost
 import org.bitcoinppl.cove.wallet.rememberWalletExportLaunchers
-import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.DiscoveryState
@@ -134,6 +136,16 @@ fun SelectedWalletContainer(
 
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val labelRefreshFailed = manager?.labelRefreshFailed
+    val labelRefreshFailedMessage = stringResource(R.string.snackbar_label_refresh_failed)
+
+    LaunchedEffect(labelRefreshFailed?.id) {
+        val currentManager = manager ?: return@LaunchedEffect
+        if (labelRefreshFailed == null) return@LaunchedEffect
+
+        snackbarHostState.showSnackbar(labelRefreshFailedMessage)
+        currentManager.clearLabelRefreshFailed()
+    }
 
     // cleanup on dispose - clear alert state if export is in progress
     // keyed on exportState so effect restarts when wallet changes (exportState is remember(id))

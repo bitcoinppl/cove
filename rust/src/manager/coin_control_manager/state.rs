@@ -7,6 +7,7 @@ use cove_types::{
     unit::BitcoinUnit,
     utxo::{Utxo, UtxoType},
 };
+use tracing::error;
 
 use crate::{database::wallet_data::WalletDataDb, wallet::metadata::WalletMetadata};
 
@@ -27,6 +28,7 @@ pub struct CoinControlManagerState {
     pub sort: SortState,
     pub selected_utxos: Vec<Arc<OutPoint>>,
     pub search: String,
+    pub lock_state_load_failed: bool,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, uniffi::Object)]
@@ -47,6 +49,7 @@ impl State {
         let sort = SortState::default();
         let selected_utxos = vec![];
         let search = String::new();
+        let lock_state_load_failed = false;
 
         Self {
             wallet_id,
@@ -57,6 +60,7 @@ impl State {
             selected_utxos,
             search,
             filtered_utxos: FilteredUtxos::All,
+            lock_state_load_failed,
         }
     }
 
@@ -67,30 +71,90 @@ impl State {
         }
     }
 
-    pub fn load_utxo_labels(&mut self) {
+    pub fn load_utxo_labels(&mut self) -> bool {
         let utxos = &mut self.utxos;
 
-        let Some(wallet_db) = WalletDataDb::new_or_existing(self.wallet_id.clone()).ok() else {
-            return;
+        let wallet_db = match WalletDataDb::new_or_existing(self.wallet_id.clone()) {
+            Ok(wallet_db) => wallet_db,
+            Err(error) => {
+                let wallet_id = &self.wallet_id;
+                error!("failed to open wallet label database wallet_id={wallet_id}: {error}");
+
+                self.lock_state_load_failed = true;
+
+                // fail closed so a lock-state read failure cannot make locked UTXOs selectable
+                for utxo in utxos {
+                    utxo.spendable = false;
+                }
+
+                let selection_changed = self.prune_locked_selected_utxos();
+                self.refresh_search_results();
+
+                return selection_changed;
+            }
         };
         let labels_db = wallet_db.labels;
+        let mut lock_state_load_failed = false;
 
         for utxo in utxos.iter_mut() {
-            let label = labels_db
-                .get_txn_label_record(utxo.outpoint.txid)
-                .ok()
-                .flatten()
-                .map(|record| record.item.label)
-                .unwrap_or_else(|| {
-                    labels_db
-                        .get_address_record(utxo.address.as_unchecked())
-                        .ok()
-                        .flatten()
-                        .and_then(|record| record.item.label)
-                });
+            let outpoint = bitcoin::OutPoint::from(utxo.outpoint.as_ref());
+            let output_record = match labels_db.get_output_record(outpoint) {
+                Ok(record) => record,
+                Err(error) => {
+                    error!("failed to load output lock state outpoint={outpoint}: {error}");
+                    lock_state_load_failed = true;
+
+                    // fail closed so a single read failure cannot make this output selectable
+                    utxo.spendable = false;
+                    utxo.label = None;
+                    continue;
+                }
+            };
+
+            let txn_label = match labels_db.get_txn_label_record(utxo.outpoint.txid) {
+                Ok(record) => record.and_then(|record| record.item.label),
+                Err(error) => {
+                    let txid = utxo.outpoint.txid;
+                    error!("failed to load transaction label txid={txid}: {error}");
+                    None
+                }
+            };
+
+            let label = txn_label.or_else(|| {
+                match labels_db.get_address_record(utxo.address.as_unchecked()) {
+                    Ok(record) => record.and_then(|record| record.item.label),
+                    Err(error) => {
+                        let address = utxo.address.as_unchecked();
+                        error!("failed to load address label address={address:?}: {error}");
+                        None
+                    }
+                }
+            });
 
             utxo.label = label;
+            utxo.spendable = output_record.map(|record| record.item.spendable).unwrap_or(true);
         }
+
+        self.lock_state_load_failed = lock_state_load_failed;
+
+        let selection_changed = self.prune_locked_selected_utxos();
+        self.refresh_search_results();
+
+        selection_changed
+    }
+
+    pub fn prune_locked_selected_utxos(&mut self) -> bool {
+        let old_selected_utxos = self.selected_utxos.clone();
+        let spendable_outpoints = self
+            .utxos
+            .iter()
+            .filter(|utxo| utxo.spendable)
+            .map(|utxo| utxo.outpoint.clone())
+            .collect::<std::collections::HashSet<_>>();
+
+        self.selected_utxos.retain(|outpoint| spendable_outpoints.contains(outpoint));
+
+        self.selected_utxos != old_selected_utxos
     }
 
     pub fn sort_utxos(&mut self, sort: ListSort) {
@@ -137,6 +201,16 @@ impl State {
         self.search = String::new();
         self.filtered_utxos = FilteredUtxos::All;
         self.sort_utxos(sort);
+    }
+
+    fn refresh_search_results(&mut self) {
+        if self.search.is_empty() {
+            self.filtered_utxos = FilteredUtxos::All;
+            return;
+        }
+
+        let search = self.search.clone();
+        self.filter_utxos(&search);
     }
 
     pub fn filter_utxos(&mut self, search: &str) {
@@ -241,7 +315,18 @@ impl CoinControlManagerState {
         let selected_utxos = vec![];
         let search = String::new();
         let filtered_utxos = FilteredUtxos::All;
+        let lock_state_load_failed = false;
 
-        Self { wallet_id, unit, network, utxos, filtered_utxos, sort, selected_utxos, search }
+        Self {
+            wallet_id,
+            unit,
+            network,
+            utxos,
+            filtered_utxos,
+            sort,
+            selected_utxos,
+            search,
+            lock_state_load_failed,
+        }
     }
 }

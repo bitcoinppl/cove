@@ -1014,10 +1014,15 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 5);
 
+    let locked_output_ref = "d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:0";
+    let labels_jsonl = format!(
+        "{}\n{{\"type\":\"output\",\"ref\":\"{locked_output_ref}\",\"spendable\":false}}",
+        sample_labels_jsonl()
+    );
     let metadata = xpub_only_wallet_metadata();
     let wallet = DownloadedWalletBackup {
         metadata: metadata.clone(),
-        entry: wallet_entry_with_labels(&metadata, Some(sample_labels_jsonl())),
+        entry: wallet_entry_with_labels(&metadata, Some(&labels_jsonl)),
     };
 
     let outcome =
@@ -1035,6 +1040,8 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
 
     let exported = LabelManager::new(metadata.id.clone()).export().await.unwrap();
     assert!(exported.contains("\"label\":\"last txn received\""));
+    assert!(exported.contains(&format!("\"ref\":\"{locked_output_ref}\"")));
+    assert!(exported.contains("\"spendable\":false"));
 }
 
 #[tokio::test(flavor = "current_thread")]

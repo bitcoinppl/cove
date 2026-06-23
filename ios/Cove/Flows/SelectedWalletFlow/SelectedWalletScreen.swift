@@ -485,7 +485,7 @@ struct SelectedWalletScreen: View {
         }
 
         do {
-            try labelManager.importLabels(labels: labels)
+            try manager.importLabels(labels: labels)
             app.alertState = .init(
                 .general(
                     title: "Success!",

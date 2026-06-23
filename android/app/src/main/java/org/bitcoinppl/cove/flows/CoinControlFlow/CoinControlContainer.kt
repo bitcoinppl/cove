@@ -51,6 +51,7 @@ fun CoinControlContainer(
 
             walletManager = wm
             manager = ccm
+            app.setCoinControlManager(ccm)
         } catch (e: WalletManagerException.InitialScanIncomplete) {
             android.util.Log.e(tag, "initial scan incomplete", e)
             app.showInitialScanIncompleteAlert()
@@ -98,7 +99,10 @@ fun CoinControlContainer(
     // cleanup on disappear or wallet change
     DisposableEffect(walletId) {
         onDispose {
-            manager?.close()
+            manager?.let {
+                app.clearCoinControlManager(it)
+                it.close()
+            }
         }
     }
 

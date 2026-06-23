@@ -31,6 +31,9 @@
 
 mod database;
 
+#[cfg(test)]
+mod test_support;
+
 mod app;
 mod bootstrap;
 mod router;

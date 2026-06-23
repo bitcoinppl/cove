@@ -78,6 +78,7 @@ import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.HeaderIconPresenter
 import org.bitcoinppl.cove_core.TransactionDetails
+import org.bitcoinppl.cove_core.TransactionLockState
 import org.bitcoinppl.cove_core.TransactionState
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.types.FfiColorScheme
@@ -117,6 +118,9 @@ fun TransactionDetailsScreen(
     // state for confirmation polling and pull-to-refresh
     var numberOfConfirmations by remember { mutableStateOf<Int?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var lockState by remember { mutableStateOf<TransactionLockState?>(null) }
+    var isUpdatingLockState by remember { mutableStateOf(false) }
+    var lockStateLoadFailed by remember { mutableStateOf(false) }
 
     // use cached fiat values for immediate display, null shows spinner
     var feeFiatFmt by remember { mutableStateOf(transactionDetails.feeFiatFmtCached()) }
@@ -126,6 +130,49 @@ fun TransactionDetailsScreen(
 
     // get current color scheme (respects in-app theme toggle)
     val isDark = !MaterialTheme.colorScheme.isLight
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val transactionLockUpdateErrorMessage =
+        stringResource(R.string.snackbar_transaction_lock_update_error)
+    val transactionLockLoadErrorMessage =
+        stringResource(R.string.snackbar_transaction_lock_load_error)
+
+    suspend fun refreshTransactionLockState(showSnackbar: Boolean) {
+        try {
+            lockState = manager.transactionLockState(txId)
+            lockStateLoadFailed = false
+        } catch (e: Exception) {
+            android.util.Log.e("TransactionDetails", "error fetching transaction lock state", e)
+            lockStateLoadFailed = true
+            if (showSnackbar) {
+                snackbarHostState.showSnackbar(transactionLockLoadErrorMessage)
+            }
+        }
+    }
+
+    fun retryTransactionLockState() {
+        scope.launch {
+            refreshTransactionLockState(showSnackbar = true)
+        }
+    }
+
+    fun toggleTransactionLockState() {
+        if (isUpdatingLockState) {
+            return
+        }
+
+        isUpdatingLockState = true
+        scope.launch {
+            try {
+                lockState = manager.toggleTransactionLockState(txId)
+            } catch (e: Exception) {
+                android.util.Log.e("TransactionDetails", "error toggling transaction lock state", e)
+                snackbarHostState.showSnackbar(transactionLockUpdateErrorMessage)
+            } finally {
+                isUpdatingLockState = false
+            }
+        }
+    }
 
     // immediately fetch fresh transaction details on screen load
     LaunchedEffect(manager, txId, refreshOnAppear) {
@@ -137,6 +184,8 @@ fun TransactionDetailsScreen(
         } catch (e: Exception) {
             android.util.Log.e("TransactionDetails", "error fetching fresh details", e)
         }
+
+        refreshTransactionLockState(showSnackbar = false)
     }
 
     // load fiat amounts (update cached values with fresh async values)
@@ -224,8 +273,6 @@ fun TransactionDetailsScreen(
             }
         }
     }
-
-    val snackbarHostState = remember { SnackbarHostState() }
 
     // theme colors
     val bg = MaterialTheme.colorScheme.background
@@ -369,6 +416,8 @@ fun TransactionDetailsScreen(
                     } catch (e: Exception) {
                         android.util.Log.e("TransactionDetails", "error refreshing details", e)
                     }
+
+                    refreshTransactionLockState(showSnackbar = true)
                     isRefreshing = false
                 }
             },
@@ -513,6 +562,15 @@ fun TransactionDetailsScreen(
                         showStroke = capsuleConfig.third,
                     )
 
+                    TransactionLockControls(
+                        state = lockState,
+                        loadFailed = lockStateLoadFailed,
+                        updating = isUpdatingLockState,
+                        color = sub,
+                        onRetry = ::retryTransactionLockState,
+                        onToggle = ::toggleTransactionLockState,
+                    )
+
                     Spacer(Modifier.height(32.dp))
 
                     // show confirmation indicator if < 3 confirmations
@@ -604,6 +662,102 @@ fun TransactionDetailsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TransactionLockControls(
+    state: TransactionLockState?,
+    loadFailed: Boolean,
+    updating: Boolean,
+    color: Color,
+    onRetry: () -> Unit,
+    onToggle: () -> Unit,
+) {
+    val actionState = state?.takeUnless { it == TransactionLockState.NONE }
+
+    when {
+        loadFailed -> {
+            Spacer(Modifier.height(12.dp))
+            TransactionLockLoadError(
+                color = color,
+                onRetry = onRetry,
+            )
+        }
+
+        actionState != null -> {
+            Spacer(Modifier.height(12.dp))
+            TransactionLockAction(
+                state = actionState,
+                updating = updating,
+                color = color,
+                onToggle = onToggle,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TransactionLockAction(
+    state: TransactionLockState,
+    updating: Boolean,
+    color: Color,
+    onToggle: () -> Unit,
+) {
+    val stateText =
+        when (state) {
+            TransactionLockState.LOCKED -> stringResource(R.string.label_transaction_lock_state_locked)
+            TransactionLockState.MIXED -> stringResource(R.string.label_transaction_lock_state_mixed)
+            TransactionLockState.UNLOCKED -> stringResource(R.string.label_transaction_lock_state_unlocked)
+            TransactionLockState.NONE -> ""
+        }
+    val buttonText =
+        when (state) {
+            TransactionLockState.LOCKED -> stringResource(R.string.btn_unlock_transaction)
+            TransactionLockState.MIXED, TransactionLockState.UNLOCKED -> stringResource(R.string.btn_lock_transaction)
+            TransactionLockState.NONE -> ""
+        }
+    val updatingText = stringResource(R.string.label_transaction_lock_updating)
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = stateText,
+            color = color,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        TextButton(
+            onClick = onToggle,
+            enabled = !updating,
+        ) {
+            Text(
+                text = if (updating) updatingText else buttonText,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TransactionLockLoadError(
+    color: Color,
+    onRetry: () -> Unit,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = stringResource(R.string.label_transaction_lock_load_failed),
+            color = color,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        TextButton(onClick = onRetry) {
+            Text(
+                text = stringResource(R.string.btn_retry),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }

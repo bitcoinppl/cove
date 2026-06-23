@@ -829,27 +829,7 @@ impl TestGlobals {
 }
 
 pub(crate) fn ensure_cloud_backup_test_tokio_runtime() {
-    static INIT: OnceLock<()> = OnceLock::new();
-    INIT.get_or_init(|| {
-        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-        std::thread::Builder::new()
-            .name("cloud-backup-test-tokio".into())
-            .spawn(move || {
-                let runtime = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("create cloud backup test tokio runtime");
-
-                let drive_runtime = tokio::runtime::Runtime::block_on;
-                drive_runtime(&runtime, async move {
-                    cove_tokio::init();
-                    sender.send(()).expect("signal cloud backup test tokio runtime");
-                    std::future::pending::<()>().await;
-                });
-            })
-            .expect("spawn cloud backup test tokio runtime thread");
-        receiver.recv().expect("wait for cloud backup test tokio runtime");
-    });
+    crate::test_support::ensure_tokio_runtime();
 }
 
 pub(crate) fn test_globals() -> &'static TestGlobals {

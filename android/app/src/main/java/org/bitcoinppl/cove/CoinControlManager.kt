@@ -23,13 +23,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 @Stable
 class CoinControlManager(
-    val rust: RustCoinControlManager,
+    private val rust: RustCoinControlManager,
 ) : CoinControlManagerReconciler,
     Closeable {
     private val tag = "CoinControlManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val isClosed = AtomicBoolean(false)
+
+    val id: WalletId = rust.id()
 
     var sort by mutableStateOf<CoinControlListSort?>(
         CoinControlListSort.Date(ListSortDirection.DESCENDING),
@@ -46,6 +48,9 @@ class CoinControlManager(
     var utxos by mutableStateOf<List<Utxo>>(emptyList())
         private set
 
+    var lockStateLoadFailed by mutableStateOf(false)
+        private set
+
     var unit by mutableStateOf(BitcoinUnit.SAT)
         private set
 
@@ -54,6 +59,7 @@ class CoinControlManager(
     init {
         logDebug("Initializing CoinControlManager")
         utxos = rust.utxos()
+        lockStateLoadFailed = rust.lockStateLoadFailed()
         unit = rust.unit()
         rust.listenForUpdates(this)
     }
@@ -76,16 +82,40 @@ class CoinControlManager(
      * update selected utxos and dispatch notification
      */
     fun updateSelected(value: Set<ULong>) {
-        selected = value
-        val outpoints = utxos.filter { value.contains(it.outpoint.hashToUint()) }.map { it.outpoint }
+        if (isClosed.get()) return
+
+        val visibleIds = utxos.map { it.outpoint.hashToUint() }.toSet()
+        val visibleSpendableIds = utxos.filter { it.spendable }.map { it.outpoint.hashToUint() }.toSet()
+        val selectedOutsideVisibleSearch = selected.subtract(visibleIds)
+        val spendableSelection = selectedOutsideVisibleSearch.union(value.intersect(visibleSpendableIds))
+        selected = spendableSelection
+
+        val hiddenSelectedOutpoints =
+            rust
+                .selectedUtxos()
+                .filter { selectedOutsideVisibleSearch.contains(it.outpoint.hashToUint()) }
+                .map { it.outpoint }
+        val visibleSelectedOutpoints =
+            utxos
+                .filter { it.spendable && spendableSelection.contains(it.outpoint.hashToUint()) }
+                .map { it.outpoint }
+        val outpoints = hiddenSelectedOutpoints + visibleSelectedOutpoints
         dispatch(CoinControlManagerAction.NotifySelectedUtxosChanged(outpoints))
+    }
+
+    /**
+     * get current button presentation based on sort state
+     */
+    fun buttonPresentation(key: CoinControlListSortKey): ButtonPresentation? {
+        if (isClosed.get()) return null
+        return rust.buttonPresentation(key)
     }
 
     /**
      * get button arrow icon based on sort state
      */
     fun buttonArrow(key: CoinControlListSortKey): String? =
-        when (val presentation = rust.buttonPresentation(key)) {
+        when (val presentation = buttonPresentation(key)) {
             is ButtonPresentation.Selected -> {
                 when (presentation.v1) {
                     ListSortDirection.ASCENDING -> "arrow_upward"
@@ -93,21 +123,24 @@ class CoinControlManager(
                 }
             }
             is ButtonPresentation.NotSelected -> null
+            null -> null
         }
 
     val totalSelectedAmount: String
         get() = displayAmount(totalSelected)
 
-    val totalSelectedSats: Int
-        get() = totalSelected.asSats().toInt()
+    val totalSelectedSats: Long
+        get() = totalSelected.asSats().toLong()
 
     /**
      * called when user presses continue button
      * navigates forward to CoinControlSetAmount screen with selected UTXOs
      */
     fun continuePressed(app: AppManager) {
-        val walletId = rust.id()
-        val selectedUtxos = utxos.filter { selected.contains(it.outpoint.hashToUint()) }
+        if (isClosed.get()) return
+
+        val walletId = id
+        val selectedUtxos = rust.selectedUtxos()
 
         // navigate forward to coin control set amount screen
         val sendRoute = SendRoute.CoinControlSetAmount(walletId, selectedUtxos)
@@ -120,8 +153,9 @@ class CoinControlManager(
         updateSendFlowManagerTask =
             mainScope.launch {
                 delay(SEND_FLOW_UPDATE_DELAY_MS)
-                if (!isActive) return@launch
-                val selectedUtxos = utxos.filter { selected.contains(it.outpoint.hashToUint()) }
+                if (!isActive || isClosed.get()) return@launch
+
+                val selectedUtxos = rust.selectedUtxos()
                 sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
             }
     }
@@ -154,9 +188,8 @@ class CoinControlManager(
                 unit = message.v1
             }
 
-            is CoinControlManagerReconcileMessage.UpdateTotalSelectedAmount -> {
-                updateSendFlowManager()
-                totalSelected = message.v1
+            is CoinControlManagerReconcileMessage.UpdateLockStateLoadFailed -> {
+                lockStateLoadFailed = message.v1
             }
         }
     }
@@ -170,19 +203,42 @@ class CoinControlManager(
             else -> amount.satsStringWithUnit()
         }
 
+    suspend fun reloadLabels() {
+        if (isClosed.get()) return
+        rust.reloadLabels()
+    }
+
+    suspend fun setSpendability(
+        outpoint: OutPoint,
+        spendable: Boolean,
+    ) {
+        check(!isClosed.get()) { "CoinControlManager is closed" }
+
+        rust.setUtxoSpendability(outpoint, spendable)
+    }
+
     override fun reconcile(message: CoinControlManagerReconcileMessage) {
+        if (isClosed.get()) return
+
         logDebug("reconcile: $message")
         mainScope.launch { apply(message) }
     }
 
     override fun reconcileMany(messages: List<CoinControlManagerReconcileMessage>) {
+        if (isClosed.get()) return
+
         logDebug("reconcile_messages: ${messages.size} messages")
         mainScope.launch { messages.forEach { apply(it) } }
     }
 
     fun dispatch(action: CoinControlManagerAction) {
+        if (isClosed.get()) return
+
         logDebug("dispatch: $action")
-        mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
+        mainScope.launch(Dispatchers.IO) {
+            if (isClosed.get()) return@launch
+            rust.dispatch(action)
+        }
     }
 
     override fun close() {

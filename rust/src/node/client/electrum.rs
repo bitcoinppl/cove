@@ -334,7 +334,7 @@ mod tests {
     #[tokio::test]
     #[ignore] // requires external network connection to blockstream electrum server
     async fn test_get_confirmed_transaction_fallback() {
-        cove_tokio::init();
+        crate::test_support::ensure_tokio_runtime();
 
         // blockstream.info does not support verbose transactions
         let client = ElectrumClient::new_from_node(&crate::node::Node {

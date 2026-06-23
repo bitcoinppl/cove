@@ -64,6 +64,9 @@ private let navigationSettleDelayMs = 800
 
     private(set) var sendFlowManager: SendFlowManager?
 
+    @ObservationIgnored
+    weak var coinControlManager: CoinControlManager?
+
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
         case .light:
@@ -243,6 +246,45 @@ private let navigationSettleDelayMs = 800
         return sendFlowManager
     }
 
+    public func setCoinControlManager(_ manager: CoinControlManager) {
+        coinControlManager = manager
+    }
+
+    public func clearCoinControlManager(_ manager: CoinControlManager) {
+        if coinControlManager === manager {
+            coinControlManager = nil
+        }
+    }
+
+    private func clearCoinControlManager() {
+        guard let coinControlManager else { return }
+
+        self.coinControlManager = nil
+        coinControlManager.close()
+    }
+
+    private func reconcileCoinControlManagerOwnership() {
+        guard coinControlManager != nil else { return }
+        guard !router.containsCoinControlRoute else { return }
+
+        clearCoinControlManager()
+    }
+
+    @MainActor
+    public func reconcileAfterLabelsChanged(walletId: WalletId) {
+        if let walletManager, walletManager.id == walletId {
+            walletManager.reconcileAfterLabelsChanged()
+        }
+
+        if let coinControlManager, coinControlManager.id == walletId {
+            Task { await coinControlManager.reloadLabels() }
+        }
+
+        if let sendFlowManager, sendFlowManager.id == walletId {
+            sendFlowManager.reconcileAfterLabelsChanged()
+        }
+    }
+
     public var fullVersionId: String {
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
         let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
@@ -296,6 +338,8 @@ private let navigationSettleDelayMs = 800
 
         database = Database()
         clearWalletManager()
+        coinControlManager?.close()
+        coinControlManager = nil
 
         let state = rust.state()
         router = state.router
@@ -382,6 +426,7 @@ private let navigationSettleDelayMs = 800
         guard !isDuplicateTopRoute(route) else { return }
 
         router.routes.append(route)
+        reconcileCoinControlManagerOwnership()
     }
 
     func pushRoutes(_ routes: [Route]) {
@@ -392,6 +437,7 @@ private let navigationSettleDelayMs = 800
     private func pushRoutesWithoutNavigationGeneration(_ routes: [Route]) {
         isSidebarVisible = false
         router.routes.append(contentsOf: routes)
+        reconcileCoinControlManagerOwnership()
     }
 
     func popRoute() {
@@ -399,12 +445,14 @@ private let navigationSettleDelayMs = 800
 
         if !router.routes.isEmpty {
             router.routes.removeLast()
+            reconcileCoinControlManagerOwnership()
         }
     }
 
     func setRoute(_ routes: [Route]) {
         advanceNavigationGeneration()
         router.routes = routes
+        reconcileCoinControlManagerOwnership()
     }
 
     func scanQr() {
@@ -569,6 +617,8 @@ private let navigationSettleDelayMs = 800
             case let .routeUpdated(routes: routes):
                 let didChangeRoute = router.routes != routes
                 router.routes = routes
+                reconcileCoinControlManagerOwnership()
+
                 if didChangeRoute {
                     scheduleNavigationSettledForCurrentGeneration()
                 }
@@ -580,6 +630,7 @@ private let navigationSettleDelayMs = 800
                 }
 
                 router.routes.append(route)
+                reconcileCoinControlManagerOwnership()
                 scheduleNavigationSettledForCurrentGeneration()
 
             case .databaseUpdated:
@@ -599,6 +650,7 @@ private let navigationSettleDelayMs = 800
                 router.routes = nestedRoutes
                 router.default = route
                 routeId = UUID()
+                reconcileCoinControlManagerOwnership()
                 scheduleNavigationSettledForCurrentGeneration()
 
             case let .fiatPricesChanged(prices):
@@ -654,5 +706,18 @@ private let navigationSettleDelayMs = 800
         } catch {
             logger.error("Unable to dispatch app action \(action), error: \(error)")
         }
+    }
+}
+
+private extension Router {
+    var containsCoinControlRoute: Bool {
+        self.default.isCoinControlRoute || routes.contains { $0.isCoinControlRoute }
+    }
+}
+
+private extension Route {
+    var isCoinControlRoute: Bool {
+        if case .coinControl = self { return true }
+        return false
     }
 }
