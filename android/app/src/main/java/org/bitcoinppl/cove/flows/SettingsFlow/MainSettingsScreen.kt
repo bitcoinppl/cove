@@ -94,7 +94,6 @@ import org.bitcoinppl.cove_core.SecuritySheetState
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletSettingsRoute
-import org.bitcoinppl.cove_core.types.Network
 
 internal fun shouldShowCloudBackupSettings(
     isInDecoyMode: Boolean,
@@ -239,7 +238,6 @@ fun MainSettingsScreen(
                         MaterialDivider()
                         MaterialSettingsItem(
                             title = stringResource(R.string.title_settings_block_explorer),
-                            subtitle = Database().globalConfig().effectiveBlockExplorerHost(Network.BITCOIN),
                             icon = Icons.Default.Public,
                             onClick = {
                                 app.pushRoute(

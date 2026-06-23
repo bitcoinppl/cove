@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, net::IpAddr};
 
 use cove_types::Network;
 use url::Url;
@@ -245,11 +245,31 @@ fn parse_http_url_with_optional_scheme(input: &str) -> Result<Url, CustomBlockEx
     match parse_http_url(input) {
         Ok(url) => Ok(url),
         Err(error) if !input.contains("://") => {
-            let input_with_scheme = format!("https://{input}");
+            let scheme = default_scheme_for_scheme_less_input(input);
+            let input_with_scheme = format!("{scheme}://{input}");
             parse_http_url(&input_with_scheme).map_err(|_| error)
         }
         Err(error) => Err(error),
     }
+}
+
+fn default_scheme_for_scheme_less_input(input: &str) -> &'static str {
+    if scheme_less_input_prefers_http(input) { "http" } else { "https" }
+}
+
+fn scheme_less_input_prefers_http(input: &str) -> bool {
+    let probe = format!("https://{input}");
+    let Ok(url) = Url::parse(&probe) else {
+        return false;
+    };
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+
+    let host = host.trim_end_matches('.');
+    let host_for_ip = host.trim_matches(&['[', ']'][..]);
+
+    host_for_ip.parse::<IpAddr>().is_ok() || host.to_ascii_lowercase().ends_with(".local")
 }
 
 fn known_template_for_input_url(
@@ -487,6 +507,12 @@ mod tests {
                 .unwrap();
 
         assert_eq!(template.as_str(), "https://example.com/search?q={txid}");
+
+        let template =
+            CustomBlockExplorerTemplate::parse(Network::Bitcoin, "node.local/search?q={txid}")
+                .unwrap();
+
+        assert_eq!(template.as_str(), "http://node.local/search?q={txid}");
     }
 
     #[test]
@@ -495,6 +521,10 @@ mod tests {
             (" https://example.com ", "https://example.com/tx/{txid}"),
             ("example.com", "https://example.com/tx/{txid}"),
             ("example.com/tx", "https://example.com/tx/{txid}"),
+            ("node.local", "http://node.local/tx/{txid}"),
+            ("node.local:3000/explorer", "http://node.local:3000/explorer/tx/{txid}"),
+            ("192.168.1.10:3000/explorer", "http://192.168.1.10:3000/explorer/tx/{txid}"),
+            ("[::1]:3000/explorer", "http://[::1]:3000/explorer/tx/{txid}"),
             ("mempool.space", "https://mempool.space/tx/{txid}"),
             ("mempool.space/tx", "https://mempool.space/tx/{txid}"),
             ("https://mempool.guide/", "https://mempool.guide/tx/{txid}"),

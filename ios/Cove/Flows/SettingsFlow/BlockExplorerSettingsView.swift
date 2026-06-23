@@ -1,3 +1,4 @@
+import MijickPopups
 import SwiftUI
 
 struct BlockExplorerSettingsView: View {
@@ -8,6 +9,8 @@ struct BlockExplorerSettingsView: View {
     @State private var preview: String
     @State private var selectedOption: BlockExplorerOption
     @State private var validationError: String?
+    @State private var isSaving = false
+    @FocusState private var isInputFocused: Bool
 
     init() {
         // only Bitcoin explorer overrides are editable; other networks use built-in defaults
@@ -66,6 +69,7 @@ struct BlockExplorerSettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .lineLimit(2 ... 5)
+                        .focused($isInputFocused)
                         .onChange(of: input) { _, newValue in
                             updatePreview(for: newValue)
                         }
@@ -77,7 +81,7 @@ struct BlockExplorerSettingsView: View {
                     }
 
                     Button("Save", action: save)
-                        .disabled(input == (config.customBlockExplorer(network: selectedNetwork) ?? ""))
+                        .disabled(isSaving || input == (config.customBlockExplorer(network: selectedNetwork) ?? ""))
 
                     Button("Reset to Default", role: .destructive, action: reset)
                 }
@@ -155,20 +159,39 @@ struct BlockExplorerSettingsView: View {
     }
 
     private func save() {
-        do {
-            let normalized = try config.setCustomBlockExplorer(
-                network: selectedNetwork,
-                input: input
-            )
-            input = normalized ?? ""
-            preview = config.effectiveBlockExplorerPreview(network: selectedNetwork)
-            selectedOption = .custom
-            if normalized == nil {
-                selectedOption = config.selectedBlockExplorerOption(network: selectedNetwork)
+        guard !isSaving else { return }
+
+        let inputToSave = input
+        let networkToSave = selectedNetwork
+        Task { @MainActor in
+            isSaving = true
+            await MiddlePopup(state: .loading).present()
+
+            do {
+                let normalized = try config.setCustomBlockExplorer(
+                    network: networkToSave,
+                    input: inputToSave
+                )
+                input = normalized ?? ""
+                preview = config.effectiveBlockExplorerPreview(network: networkToSave)
+                selectedOption = .custom
+                if normalized == nil {
+                    selectedOption = config.selectedBlockExplorerOption(network: networkToSave)
+                }
+                validationError = nil
+                isInputFocused = false
+
+                await dismissAllPopups()
+                try? await Task.sleep(for: .milliseconds(250))
+                await MiddlePopup(state: .success("Block explorer saved successfully"))
+                    .dismissAfter(2)
+                    .present()
+            } catch {
+                validationError = error.localizedDescription
+                await dismissAllPopups()
             }
-            validationError = nil
-        } catch {
-            validationError = error.localizedDescription
+
+            isSaving = false
         }
     }
 

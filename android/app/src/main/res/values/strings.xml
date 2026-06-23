@@ -32,6 +32,7 @@
     <string name="block_explorer_options">Explorer</string>
     <string name="block_explorer_url_placeholder">URL or template</string>
     <string name="block_explorer_save">Save</string>
+    <string name="block_explorer_saved">Block explorer saved successfully</string>
     <string name="block_explorer_reset">Reset to Default</string>
     <string name="title_wallet_information">Wallet information</string>
     <string name="label_wallet_network">Network</string>
