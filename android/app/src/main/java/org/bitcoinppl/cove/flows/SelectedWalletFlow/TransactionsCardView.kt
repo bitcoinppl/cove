@@ -563,6 +563,9 @@ internal fun ConfirmedTransactionWidget(
     sensitiveVisible: Boolean,
 ) {
     val scope = rememberCoroutineScope()
+    val txId = transaction.v1.id()
+    val txIdHash = txId.asHashString()
+    var isOpeningDetails by remember(txIdHash) { mutableStateOf(false) }
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
@@ -576,18 +579,24 @@ internal fun ConfirmedTransactionWidget(
             Modifier
                 .fillMaxWidth()
                 .padding(vertical = 6.dp)
-                .clickable {
+                .graphicsLayer { alpha = if (isOpeningDetails) 0.65f else 1f }
+                .clickable(enabled = !isOpeningDetails) {
+                    isOpeningDetails = true
                     scope.launch {
                         try {
-                            val details = manager.transactionDetails(transaction.v1.id())
+                            val details = manager.transactionDetails(txId)
                             val walletId = manager.walletMetadata?.id
                             if (walletId != null) {
                                 if (index > SCROLL_THRESHOLD_INDEX) {
-                                    manager.pendingScrollTransactionId = transaction.v1.id().toString()
+                                    manager.pendingScrollTransactionId = txId.toString()
                                 }
                                 app.pushRoute(Route.TransactionDetails(walletId, details))
+                                isOpeningDetails = false
+                            } else {
+                                isOpeningDetails = false
                             }
                         } catch (e: Exception) {
+                            isOpeningDetails = false
                             android.util.Log.e("ConfirmedTxWidget", "Failed to load transaction details", e)
                         }
                     }
@@ -602,12 +611,20 @@ internal fun ConfirmedTransactionWidget(
                     .background(iconBackground),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = iconForeground,
-                modifier = Modifier.size(24.dp),
-            )
+            if (isOpeningDetails) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = iconForeground,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = iconForeground,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
         }
 
         Spacer(modifier = Modifier.size(12.dp))
@@ -669,6 +686,9 @@ internal fun UnconfirmedTransactionWidget(
     sensitiveVisible: Boolean,
 ) {
     val scope = rememberCoroutineScope()
+    val txId = transaction.v1.id()
+    val txIdHash = txId.asHashString()
+    var isOpeningDetails by remember(txIdHash) { mutableStateOf(false) }
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
@@ -681,18 +701,24 @@ internal fun UnconfirmedTransactionWidget(
             Modifier
                 .fillMaxWidth()
                 .padding(vertical = 6.dp)
-                .clickable {
+                .graphicsLayer { alpha = if (isOpeningDetails) 0.65f else 1f }
+                .clickable(enabled = !isOpeningDetails) {
+                    isOpeningDetails = true
                     scope.launch {
                         try {
-                            val details = manager.transactionDetails(transaction.v1.id())
+                            val details = manager.transactionDetails(txId)
                             val walletId = manager.walletMetadata?.id
                             if (walletId != null) {
                                 if (index > SCROLL_THRESHOLD_INDEX) {
-                                    manager.pendingScrollTransactionId = transaction.v1.id().toString()
+                                    manager.pendingScrollTransactionId = txId.toString()
                                 }
                                 app.pushRoute(Route.TransactionDetails(walletId, details))
+                                isOpeningDetails = false
+                            } else {
+                                isOpeningDetails = false
                             }
                         } catch (e: Exception) {
+                            isOpeningDetails = false
                             android.util.Log.e("UnconfirmedTxWidget", "Failed to load transaction details", e)
                         }
                     }
@@ -708,12 +734,20 @@ internal fun UnconfirmedTransactionWidget(
                         .background(iconBackground),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Schedule,
-                    contentDescription = label,
-                    tint = iconForeground,
-                    modifier = Modifier.size(24.dp),
-                )
+                if (isOpeningDetails) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = iconForeground,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Schedule,
+                        contentDescription = label,
+                        tint = iconForeground,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
             }
         }
 

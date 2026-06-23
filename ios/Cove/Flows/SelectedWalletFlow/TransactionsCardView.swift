@@ -266,9 +266,7 @@ struct ConfirmedTransactionView: View {
     let metadata: WalletMetadata
     let index: Int
 
-    // private
-    @State private var transactionDetails: TransactionDetails? = nil
-    @State private var loading: Bool = false
+    @State private var isOpeningDetails = false
 
     private var amount: String {
         if case .btc = metadata.fiatOrBtc {
@@ -314,26 +312,39 @@ struct ConfirmedTransactionView: View {
     }
 
     private func goToTransactionDetails() {
+        guard !isOpeningDetails else { return }
+
         let txId = txn.id()
+        isOpeningDetails = true
 
         if let details = manager.transactionDetails[txId] {
-            if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
-            return navigate(Route.transactionDetails(id: metadata.id, details: details))
+            navigateToTransactionDetails(txId: txId, details: details)
+            return
         }
 
         Task {
             do {
                 let details = try await manager.transactionDetails(for: txId)
                 await MainActor.run {
-                    if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
-                    navigate(Route.transactionDetails(id: metadata.id, details: details))
+                    navigateToTransactionDetails(txId: txId, details: details)
                 }
             } catch {
+                await MainActor.run {
+                    isOpeningDetails = false
+                }
+
                 Log.error(
                     "Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())"
                 )
             }
         }
+    }
+
+    @MainActor
+    private func navigateToTransactionDetails(txId: TxId, details: TransactionDetails) {
+        if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
+        navigate(Route.transactionDetails(id: metadata.id, details: details))
+        isOpeningDetails = false
     }
 
     var label: String {
@@ -343,7 +354,7 @@ struct ConfirmedTransactionView: View {
 
     var body: some View {
         HStack {
-            TxnIcon(direction: txn.sentAndReceived().direction())
+            TxnIcon(direction: txn.sentAndReceived().direction(), isLoading: isOpeningDetails)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(label)
@@ -372,6 +383,8 @@ struct ConfirmedTransactionView: View {
                     .foregroundColor(.secondary)
             }
         }
+        .opacity(isOpeningDetails ? 0.65 : 1)
+        .animation(.easeInOut(duration: 0.12), value: isOpeningDetails)
         .contentShape(Rectangle())
         .onTapGesture {
             goToTransactionDetails()
@@ -386,6 +399,8 @@ struct UnconfirmedTransactionView: View {
     let txn: UnconfirmedTransaction
     let metadata: WalletMetadata
     let index: Int
+
+    @State private var isOpeningDetails = false
 
     func privateShow(_ text: String, placeholder: String = "••••••") -> String {
         if !metadata.sensitiveVisible {
@@ -436,10 +451,45 @@ struct UnconfirmedTransactionView: View {
         )
     }
 
+    private func goToTransactionDetails() {
+        guard !isOpeningDetails else { return }
+
+        let txId = txn.id()
+        isOpeningDetails = true
+
+        Task {
+            do {
+                let details = try await manager.transactionDetails(for: txId)
+                await MainActor.run {
+                    navigateToTransactionDetails(txId: txId, details: details)
+                }
+            } catch {
+                await MainActor.run {
+                    isOpeningDetails = false
+                }
+
+                Log.error(
+                    "Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())"
+                )
+            }
+        }
+    }
+
+    @MainActor
+    private func navigateToTransactionDetails(txId: TxId, details: TransactionDetails) {
+        if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
+        navigate(Route.transactionDetails(id: metadata.id, details: details))
+        isOpeningDetails = false
+    }
+
     var body: some View {
         HStack {
-            TxnIcon(direction: txn.sentAndReceived().direction(), confirmed: false)
-                .opacity(0.6)
+            TxnIcon(
+                direction: txn.sentAndReceived().direction(),
+                confirmed: false,
+                isLoading: isOpeningDetails
+            )
+            .opacity(0.6)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(txn.label())
@@ -457,21 +507,11 @@ struct UnconfirmedTransactionView: View {
                     .foregroundColor(.secondary)
             }
         }
+        .opacity(isOpeningDetails ? 0.65 : 1)
+        .animation(.easeInOut(duration: 0.12), value: isOpeningDetails)
         .contentShape(Rectangle())
         .onTapGesture {
-            Task {
-                do {
-                    let details = try await manager.rust.transactionDetails(txId: txn.id())
-                    await MainActor.run {
-                        if index > scrollThresholdIndex { manager.scrolledTransactionId = txn.id().description }
-                        navigate(Route.transactionDetails(id: metadata.id, details: details))
-                    }
-                } catch {
-                    Log.error(
-                        "Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())"
-                    )
-                }
-            }
+            goToTransactionDetails()
         }
     }
 }
@@ -585,6 +625,7 @@ private struct TxnIcon: View {
 
     let direction: TransactionDirection
     var confirmed: Bool = true
+    var isLoading: Bool = false
 
     var iconColor: Color {
         colorScheme == .dark ? .gray.opacity(0.35) : .primary.opacity(0.75)
@@ -604,13 +645,22 @@ private struct TxnIcon: View {
     }
 
     var body: some View {
-        Image(systemName: arrow)
-            .foregroundColor(.white)
-            .padding()
-            .frame(width: 50, height: 50)
-            .background(iconColor)
-            .cornerRadius(6)
-            .padding(.trailing, 5)
+        ZStack {
+            if isLoading {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(.white)
+                    .scaleEffect(0.75)
+            } else {
+                Image(systemName: arrow)
+                    .foregroundColor(.white)
+                    .padding()
+            }
+        }
+        .frame(width: 50, height: 50)
+        .background(iconColor)
+        .cornerRadius(6)
+        .padding(.trailing, 5)
     }
 }
 

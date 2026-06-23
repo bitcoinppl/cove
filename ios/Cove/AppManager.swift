@@ -311,6 +311,10 @@ private let navigationSettleDelayMs = 800
         router.routes.last ?? router.default
     }
 
+    private func isDuplicateTopRoute(_ route: Route) -> Bool {
+        currentRoute.isSameNavigationDestination(as: route)
+    }
+
     var hasWallets: Bool {
         rust.hasWallets()
     }
@@ -364,12 +368,19 @@ private let navigationSettleDelayMs = 800
     }
 
     func pushRoute(_ route: Route) {
+        guard !isDuplicateTopRoute(route) else {
+            isSidebarVisible = false
+            return
+        }
+
         advanceNavigationGeneration()
         pushRouteWithoutNavigationGeneration(route)
     }
 
     private func pushRouteWithoutNavigationGeneration(_ route: Route) {
         isSidebarVisible = false
+        guard !isDuplicateTopRoute(route) else { return }
+
         router.routes.append(route)
     }
 
@@ -563,6 +574,8 @@ private let navigationSettleDelayMs = 800
                 }
 
             case let .pushedRoute(route):
+                guard !isDuplicateTopRoute(route) else { return }
+
                 router.routes.append(route)
                 scheduleNavigationSettledForCurrentGeneration()
 
@@ -637,6 +650,20 @@ private let navigationSettleDelayMs = 800
             try rust.dispatch(action: action)
         } catch {
             logger.error("Unable to dispatch app action \(action), error: \(error)")
+        }
+    }
+}
+
+private extension Route {
+    func isSameNavigationDestination(as other: Route) -> Bool {
+        switch (self, other) {
+        case let (
+            .transactionDetails(id: currentId, details: currentDetails),
+            .transactionDetails(id: nextId, details: nextDetails)
+        ):
+            currentId == nextId && currentDetails.txId() == nextDetails.txId()
+        default:
+            self == other
         }
     }
 }
