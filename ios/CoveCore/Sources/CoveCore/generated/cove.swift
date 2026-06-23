@@ -19256,6 +19256,9 @@ public enum BlockExplorerOption: Equatable, Hashable {
 
 
 
+    /**
+     * Returns the user-visible label for this explorer option.
+     */
 public func displayName() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -39676,6 +39679,9 @@ public func activeMigration() -> Migration?  {
     )
 })
 }
+/**
+ * Returns every block explorer option exposed to mobile clients.
+ */
 public func allBlockExplorerOptions() -> [BlockExplorerOption]  {
     return try!  FfiConverterSequenceTypeBlockExplorerOption.lift(try! rustCall() {
         uniffiCallStatus in
@@ -40165,7 +40171,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_active_migration() != 29388) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_all_block_explorer_options() != 48219) {
+    if (uniffi_cove_checksum_func_all_block_explorer_options() != 60996) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_all_fiat_currencies() != 53482) {
