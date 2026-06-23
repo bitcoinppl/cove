@@ -156,6 +156,8 @@ private struct SelectedWalletLoadingScreen: View {
         .toolbar { toolbarContent }
         .navigationTitleView { titleContent }
         .adaptiveToolbarStyle(showNavBar: false, reduceTransparency: reduceTransparency)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     var body: some View {
@@ -177,6 +179,7 @@ private struct SelectedWalletLoadingScreen: View {
         .scrollIndicators(.hidden)
         .modifier(SoftScrollEdgeModifier())
         .modifier(OuterBackgroundModifier(iOS26OrLater: iOS26OrLater))
+        .background(Color.midnightBlue.ignoresSafeArea(edges: .top))
         .onAppear {
             app.isPastHeader = false
         }
