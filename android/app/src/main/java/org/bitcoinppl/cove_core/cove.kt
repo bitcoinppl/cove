@@ -45663,7 +45663,7 @@ sealed class Route: Disposable  {
 
     data class TransactionDetails(
         val `id`: org.bitcoinppl.cove_core.types.WalletId,
-        val `details`: org.bitcoinppl.cove_core.TransactionDetails) : Route()
+        val `txId`: org.bitcoinppl.cove_core.types.TxId) : Route()
 
     {
 
@@ -45734,7 +45734,7 @@ sealed class Route: Disposable  {
 
     Disposable.destroy(
         this.`id`,
-        this.`details`
+        this.`txId`
     )
 
             }
@@ -45819,7 +45819,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
                 )
             6 -> Route.TransactionDetails(
                 FfiConverterTypeWalletId.read(buf),
-                FfiConverterTypeTransactionDetails.read(buf),
+                FfiConverterTypeTxId.read(buf),
                 )
             7 -> Route.Send(
                 FfiConverterTypeSendRoute.read(buf),
@@ -45873,7 +45873,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
             (
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.`id`)
-                + FfiConverterTypeTransactionDetails.allocationSize(value.`details`)
+                + FfiConverterTypeTxId.allocationSize(value.`txId`)
             )
         }
         is Route.Send -> {
@@ -45923,7 +45923,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
             is Route.TransactionDetails -> {
                 buf.putInt(6)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
-                FfiConverterTypeTransactionDetails.write(value.`details`, buf)
+                FfiConverterTypeTxId.write(value.`txId`, buf)
                 Unit
             }
             is Route.Send -> {

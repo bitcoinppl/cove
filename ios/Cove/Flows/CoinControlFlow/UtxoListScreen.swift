@@ -5,7 +5,6 @@
 //  Created by Praveen Perera on 5/19/25.
 //
 
-import MijickPopups
 import SwiftUI
 
 // MARK: - View
@@ -24,24 +23,7 @@ struct UtxoListScreen: View {
         let txId = utxo.id.txid()
         let walletId = walletManager.walletMetadata.id
 
-        if let details = walletManager.transactionDetails[txId] {
-            return navigate(Route.transactionDetails(id: walletId, details: details))
-        }
-
-        Task {
-            await MiddlePopup(state: .loading).present()
-            do {
-                let details = try await walletManager.transactionDetails(for: txId)
-                await MainActor.run {
-                    Task { await dismissAllPopups() }
-                    navigate(Route.transactionDetails(id: walletId, details: details))
-                }
-            } catch {
-                Log.error(
-                    "Unable to get transaction details: \(error.localizedDescription), for txn: \(txId)"
-                )
-            }
-        }
+        navigate(Route.transactionDetails(id: walletId, txId: txId))
     }
 
     func UtxoList() -> some View {

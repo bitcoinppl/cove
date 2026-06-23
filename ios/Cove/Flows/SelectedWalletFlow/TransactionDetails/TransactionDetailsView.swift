@@ -9,12 +9,8 @@ import SwiftUI
 
 struct TransactionDetailsView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(AppManager.self) private var app
     @Environment(\.openURL) private var openURL
     @Environment(\.sizeCategory) var sizeCategory
-
-    private let screenWidth = UIScreen.main.bounds.width
-    private let screenHeight = UIScreen.main.bounds.height
 
     @State private var numberOfConfirmations: Int? = nil
     @State private var scrollPosition = ScrollPosition()
@@ -24,17 +20,27 @@ struct TransactionDetailsView: View {
 
     // public
     let id: WalletId
+    let txId: TxId
     private let initialDetails: TransactionDetails
+    let refreshOnAppear: Bool
     var manager: WalletManager
 
     /// read from cache (observable), fallback to initial details
     var transactionDetails: TransactionDetails {
-        manager.transactionDetails[initialDetails.txId()] ?? initialDetails
+        manager.transactionDetails[txId] ?? initialDetails
     }
 
-    init(id: WalletId, transactionDetails: TransactionDetails, manager: WalletManager) {
+    init(
+        id: WalletId,
+        txId: TxId,
+        transactionDetails: TransactionDetails,
+        refreshOnAppear: Bool = true,
+        manager: WalletManager
+    ) {
         self.id = id
+        self.txId = txId
         self.initialDetails = transactionDetails
+        self.refreshOnAppear = refreshOnAppear
         self.manager = manager
     }
 
@@ -304,7 +310,9 @@ struct TransactionDetailsView: View {
         }
         .task {
             // fetch fresh details on load
-            await refreshTransactionDetails()
+            if refreshOnAppear {
+                await refreshTransactionDetails()
+            }
 
             // start watcher after a delay to avoid race condition with onDisappear
             if !transactionDetails.isConfirmed() {
@@ -339,7 +347,6 @@ struct TransactionDetailsView: View {
     }
 
     func refreshTransactionDetails() async {
-        let txId = initialDetails.txId()
         do {
             let details = try await manager.rust.transactionDetails(txId: txId)
             await MainActor.run {
@@ -382,7 +389,6 @@ struct TransactionDetailsView: View {
     }
 
     func updateNumberOfConfirmations() async {
-        let txId = initialDetails.txId()
         var needsFrequentCheck = true
         var errors = 0
 
@@ -433,9 +439,12 @@ struct TransactionDetailsView: View {
 
 #Preview("confirmed received") {
     AsyncPreview {
+        let details = TransactionDetails.previewConfirmedReceived()
+
         TransactionDetailsView(
             id: WalletId(),
-            transactionDetails: TransactionDetails.previewConfirmedReceived(),
+            txId: details.txId(),
+            transactionDetails: details,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)
@@ -444,9 +453,12 @@ struct TransactionDetailsView: View {
 
 #Preview("confirmed sent") {
     AsyncPreview {
+        let details = TransactionDetails.previewConfirmedSent()
+
         TransactionDetailsView(
             id: WalletId(),
-            transactionDetails: TransactionDetails.previewConfirmedSent(),
+            txId: details.txId(),
+            transactionDetails: details,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)
@@ -455,9 +467,12 @@ struct TransactionDetailsView: View {
 
 #Preview("pending received") {
     AsyncPreview {
+        let details = TransactionDetails.previewPendingReceived()
+
         TransactionDetailsView(
             id: WalletId(),
-            transactionDetails: TransactionDetails.previewPendingReceived(),
+            txId: details.txId(),
+            transactionDetails: details,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)
@@ -466,9 +481,12 @@ struct TransactionDetailsView: View {
 
 #Preview("pending sent") {
     AsyncPreview {
+        let details = TransactionDetails.previewPendingSent()
+
         TransactionDetailsView(
             id: WalletId(),
-            transactionDetails: TransactionDetails.previewPendingSent(),
+            txId: details.txId(),
+            transactionDetails: details,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)

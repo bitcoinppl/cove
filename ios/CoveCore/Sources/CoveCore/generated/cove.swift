@@ -28688,7 +28688,7 @@ public enum Route {
     )
     case secretWords(WalletId
     )
-    case transactionDetails(id: WalletId, details: TransactionDetails
+    case transactionDetails(id: WalletId, txId: TxId
     )
     case send(SendRoute
     )
@@ -28759,7 +28759,7 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case 5: return .secretWords(try FfiConverterTypeWalletId.read(from: &buf)
         )
 
-        case 6: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
+        case 6: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), txId: try FfiConverterTypeTxId.read(from: &buf)
         )
 
         case 7: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
@@ -28802,10 +28802,10 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
             FfiConverterTypeWalletId.write(v1, into: &buf)
 
 
-        case let .transactionDetails(id,details):
+        case let .transactionDetails(id,txId):
             writeInt(&buf, Int32(6))
             FfiConverterTypeWalletId.write(id, into: &buf)
-            FfiConverterTypeTransactionDetails.write(details, into: &buf)
+            FfiConverterTypeTxId.write(txId, into: &buf)
 
 
         case let .send(v1):
