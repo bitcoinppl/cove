@@ -54809,7 +54809,7 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             19 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
                 FfiConverterULong.read(buf),
                 )
-            19 -> WalletManagerReconcileMessage.PayjoinTxBroadcast
+            20 -> WalletManagerReconcileMessage.PayjoinTxBroadcast
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -55052,7 +55052,7 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 Unit
             }
             is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {
-                buf.putInt(19)
+                buf.putInt(20)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
