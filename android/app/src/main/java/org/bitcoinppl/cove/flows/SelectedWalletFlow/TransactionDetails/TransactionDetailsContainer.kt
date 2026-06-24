@@ -58,11 +58,11 @@ fun TransactionDetailsContainer(
         } catch (e: Exception) {
             android.util.Log.e("TransactionDetails", "Failed to load wallet", e)
             error = e.message ?: "failed to load wallet"
-            recoveringWalletSelection = true
             loading = false
 
             try {
                 app.selectLatestOrNewWallet()
+                recoveringWalletSelection = true
             } catch (recoveryError: Exception) {
                 android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", recoveryError)
             }

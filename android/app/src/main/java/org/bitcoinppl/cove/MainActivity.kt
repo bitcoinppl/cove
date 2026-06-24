@@ -493,14 +493,14 @@ class MainActivity : FragmentActivity() {
             val snackbarHostState = remember { SnackbarHostState() }
             val cloudBackupLifecycle = app.cloudBackupManager.lifecycle
             val hasWallets = app.wallets.isNotEmpty() || app.hasWallets
-            val readPersistedOnboardingProgress = {
+            val readPersistedOnboardingProgress: () -> Result<String?> = {
                 runCatching {
                     Database().globalConfig().get(GlobalConfigKey.OnboardingProgress)
                 }.onFailure { error ->
                     Log.w(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
-                }.getOrNull()
+                }
             }
-            var persistedOnboardingProgress by remember { mutableStateOf(readPersistedOnboardingProgress()) }
+            var persistedOnboardingProgress by remember { mutableStateOf(readPersistedOnboardingProgress().getOrNull()) }
             var startupMode by remember {
                 mutableStateOf(
                     resolveStartupMode(
@@ -513,7 +513,9 @@ class MainActivity : FragmentActivity() {
             }
             LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupLifecycle) {
                 val freshProgress = readPersistedOnboardingProgress()
-                persistedOnboardingProgress = freshProgress
+                val effectiveProgress = freshProgress.getOrElse { persistedOnboardingProgress }
+
+                persistedOnboardingProgress = effectiveProgress
 
                 startupMode =
                     resolveStartupModeTransition(
@@ -521,7 +523,7 @@ class MainActivity : FragmentActivity() {
                         termsAccepted = app.isTermsAccepted,
                         hasWallets = hasWallets,
                         cloudBackupLifecycle = cloudBackupLifecycle,
-                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(freshProgress),
+                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(effectiveProgress),
                     )
             }
             val onboardingManager =
