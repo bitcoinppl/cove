@@ -1,11 +1,15 @@
 package org.bitcoinppl.cove.cloudbackup
 
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -17,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
@@ -98,30 +103,20 @@ internal fun CloudOnlySection(
     }
 
     selectedWallet?.let { wallet ->
-        AlertDialog(
-            onDismissRequest = { selectedWallet = null },
-            title = { Text(wallet.name) },
-            text = { Text("Restore this wallet to the device or delete it from Cloud Backup") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        selectedWallet = null
-                        if (wallet.syncStatus == CloudBackupWalletStatus.UNSUPPORTED_VERSION) {
-                            unsupportedRestoreWallet = wallet
-                        } else {
-                            manager.dispatch(CloudBackupManagerAction.RestoreCloudWallet(wallet.recordId))
-                        }
-                    },
-                ) { Text("Restore") }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        selectedWallet = null
-                        walletToDelete = wallet
-                    }) { Text("Delete from Cloud Backup", color = MaterialTheme.colorScheme.error) }
-                    TextButton(onClick = { selectedWallet = null }) { Text("Cancel") }
+        CloudOnlyWalletActionDialog(
+            wallet = wallet,
+            onDismiss = { selectedWallet = null },
+            onRestore = {
+                selectedWallet = null
+                if (wallet.syncStatus == CloudBackupWalletStatus.UNSUPPORTED_VERSION) {
+                    unsupportedRestoreWallet = wallet
+                } else {
+                    manager.dispatch(CloudBackupManagerAction.RestoreCloudWallet(wallet.recordId))
                 }
+            },
+            onDelete = {
+                selectedWallet = null
+                walletToDelete = wallet
             },
         )
     }
@@ -154,5 +149,62 @@ internal fun CloudOnlySection(
                 TextButton(onClick = { unsupportedRestoreWallet = null }) { Text("OK") }
             },
         )
+    }
+}
+
+@Composable
+private fun CloudOnlyWalletActionDialog(
+    wallet: CloudBackupWalletItem,
+    onDismiss: () -> Unit,
+    onRestore: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(wallet.name, style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        "Restore this wallet to the device or delete it from Cloud Backup",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onRestore,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Restore")
+                    }
+
+                    TextButton(
+                        onClick = onDelete,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Delete from Cloud Backup", color = MaterialTheme.colorScheme.error)
+                    }
+
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
     }
 }
