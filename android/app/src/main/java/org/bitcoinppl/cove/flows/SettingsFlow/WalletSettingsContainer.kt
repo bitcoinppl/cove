@@ -48,7 +48,7 @@ fun WalletSettingsContainer(
     }
     var loadAttempt by remember(id) { mutableStateOf(0) }
     var recoveryGeneration by remember(id) { mutableStateOf(0) }
-    var didShowLoadFailureAlert by remember(id, route) { mutableStateOf(false) }
+    var lastLoadFailureAlertMessage by remember(id, route) { mutableStateOf<String?>(null) }
     val tag = "WalletSettingsContainer"
 
     fun startWalletSelectionRecovery(message: String) {
@@ -67,6 +67,11 @@ fun WalletSettingsContainer(
             WalletSelectionRecoveryResult.Recovered -> Unit
             is WalletSelectionRecoveryResult.PoppedRoute -> {
                 android.util.Log.e(tag, "failed to recover wallet selection", result.recoveryError)
+            }
+            is WalletSelectionRecoveryResult.NoRouteToPop -> {
+                android.util.Log.e(tag, "failed to recover wallet selection", result.recoveryError)
+                android.util.Log.e(tag, "no route available to leave wallet settings after recovery failure")
+                loadState = WalletSettingsLoadState.Failed(message)
             }
             is WalletSelectionRecoveryResult.FailedToPopRoute -> {
                 android.util.Log.e(tag, "failed to recover wallet selection", result.recoveryError)
@@ -100,7 +105,7 @@ fun WalletSettingsContainer(
             val failureGeneration = recoveryGeneration
             loadState = WalletSettingsLoadState.Failed(message)
 
-            if (!didShowLoadFailureAlert) {
+            if (lastLoadFailureAlertMessage != message) {
                 app.alertState =
                     TaggedItem(
                         AppAlertState.General(
@@ -108,7 +113,7 @@ fun WalletSettingsContainer(
                             message = "Unable to load wallet: $message",
                         ),
                     )
-                didShowLoadFailureAlert = true
+                lastLoadFailureAlertMessage = message
             }
 
             // leave the alert visible before route recovery replaces this screen

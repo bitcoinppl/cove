@@ -15,7 +15,10 @@ class WalletSelectionRecoveryTest {
         val result =
             recoverWalletSelectionOrPopRoute(
                 selectLatestOrNewWallet = {},
-                popRoute = { didPopRoute = true },
+                popRoute = {
+                    didPopRoute = true
+                    true
+                },
             )
 
         assertEquals(WalletSelectionRecoveryResult.Recovered, result)
@@ -30,11 +33,27 @@ class WalletSelectionRecoveryTest {
         val result =
             recoverWalletSelectionOrPopRoute(
                 selectLatestOrNewWallet = { throw recoveryError },
-                popRoute = { didPopRoute = true },
+                popRoute = {
+                    didPopRoute = true
+                    true
+                },
             )
 
         assertTrue(didPopRoute)
         assertSame(recoveryError, (result as WalletSelectionRecoveryResult.PoppedRoute).recoveryError)
+    }
+
+    @Test
+    fun reportsNoRouteToPopWhenRecoveryFailsAndPopIsNoop() {
+        val recoveryError = IllegalStateException("wallet selection failed")
+
+        val result =
+            recoverWalletSelectionOrPopRoute(
+                selectLatestOrNewWallet = { throw recoveryError },
+                popRoute = { false },
+            ) as WalletSelectionRecoveryResult.NoRouteToPop
+
+        assertSame(recoveryError, result.recoveryError)
     }
 
     @Test
@@ -59,7 +78,10 @@ class WalletSelectionRecoveryTest {
         try {
             recoverWalletSelectionOrPopRoute(
                 selectLatestOrNewWallet = { throw CancellationException("cancelled") },
-                popRoute = { didPopRoute = true },
+                popRoute = {
+                    didPopRoute = true
+                    true
+                },
             )
         } finally {
             assertFalse(didPopRoute)

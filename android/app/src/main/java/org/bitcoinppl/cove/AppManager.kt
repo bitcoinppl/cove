@@ -443,18 +443,22 @@ class AppManager private constructor() : FfiReconcile {
         updateRoutesAndClearInactiveSendFlowManager(newRoutes)
     }
 
-    fun popRoute() {
-        advanceNavigationGeneration()
+    fun popRoute(): Boolean {
         Log.d(tag, "popRoute")
-        if (rust.canGoBack()) {
-            val newRoutes = router.routes.dropLast(1)
-
-            // only dispatch if routes actually changed
-            if (newRoutes != router.routes) {
-                dispatch(AppAction.UpdateRoute(newRoutes))
-            }
-            updateRoutesAndClearInactiveSendFlowManager(newRoutes)
+        if (!rust.canGoBack()) {
+            return false
         }
+
+        val newRoutes = router.routes.dropLast(1)
+        if (newRoutes == router.routes) {
+            return false
+        }
+
+        advanceNavigationGeneration()
+        dispatch(AppAction.UpdateRoute(newRoutes))
+        updateRoutesAndClearInactiveSendFlowManager(newRoutes)
+
+        return true
     }
 
     fun setRoute(routes: List<Route>) {

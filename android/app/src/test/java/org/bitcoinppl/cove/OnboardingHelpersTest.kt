@@ -189,13 +189,24 @@ class OnboardingHelpersTest {
 
         assertTrue(recoveredProgress)
         assertEquals(
+            StartupMode.READY,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.READY,
+                termsAccepted = true,
+                hasWallets = true,
+                cloudBackupLifecycle = configuredLifecycle(),
+                hasPersistedOnboardingProgress = true,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
+            ),
+        )
+        assertEquals(
             StartupMode.ONBOARDING,
             resolveStartupModeTransition(
                 currentMode = StartupMode.READY,
                 termsAccepted = true,
                 hasWallets = true,
                 cloudBackupLifecycle = configuredLifecycle(),
-                hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(freshProgress.getOrNull()),
+                hasPersistedOnboardingProgress = true,
                 hasRecoveredOnboardingProgressAfterReadFailure = recoveredProgress,
             ),
         )

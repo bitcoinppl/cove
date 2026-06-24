@@ -59,6 +59,11 @@ fun TransactionDetailsContainer(
                 android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", result.recoveryError)
                 recoveringWalletSelection = false
             }
+            is WalletSelectionRecoveryResult.NoRouteToPop -> {
+                android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", result.recoveryError)
+                android.util.Log.e("TransactionDetails", "No route available to leave transaction details after recovery failure")
+                recoveringWalletSelection = false
+            }
             is WalletSelectionRecoveryResult.FailedToPopRoute -> {
                 android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", result.recoveryError)
                 android.util.Log.e(
