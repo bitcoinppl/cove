@@ -13,9 +13,11 @@ use cove_types::{
     unit::BitcoinUnit,
     utxo::{Utxo, UtxoType},
 };
+use cove_util::result_ext::ResultExt as _;
 use parking_lot::Mutex;
 
 use crate::{
+    label_manager::{LabelManager, LabelManagerError},
     manager::deferred_sender::{self, DeferredSender},
     wallet::metadata::WalletMetadata,
 };
@@ -52,8 +54,8 @@ pub enum CoinControlManagerReconcileMessage {
     UpdateUtxos(Vec<Utxo>),
     UpdateSearch(String),
     UpdateSelectedUtxos { utxos: Vec<Arc<OutPoint>>, total_value: Arc<Amount> },
-    UpdateTotalSelectedAmount(Arc<Amount>),
     UpdateUnit(BitcoinUnit),
+    UpdateLockStateLoadFailed(bool),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -87,34 +89,44 @@ impl RustCoinControlManager {
     }
 
     #[uniffi::method]
+    pub fn lock_state_load_failed(&self) -> bool {
+        self.state.lock().lock_state_load_failed
+    }
+
+    #[uniffi::method]
     pub async fn reload_labels(&self) {
-        let utxos = {
+        let (utxos, selected_utxos, total_value, lock_state_load_failed) = {
             let mut state = self.state.lock();
 
-            let old_utxos_hash = {
-                let mut hasher = DefaultHasher::new();
-                state.utxos.hash(&mut hasher);
-                hasher.finish()
-            };
+            let old_utxos_hash = hash_utxos(&state.utxos());
+            let old_lock_state_load_failed = state.lock_state_load_failed;
 
-            state.load_utxo_labels();
+            let selection_changed = state.load_utxo_labels();
 
-            let new_utxos = state.utxos.clone();
+            let new_utxos = state.utxos();
+            let lock_state_load_failed = state.lock_state_load_failed;
+            let new_utxos_hash = hash_utxos(&new_utxos);
 
-            let new_utxos_hash = {
-                let mut hasher = DefaultHasher::new();
-                new_utxos.hash(&mut hasher);
-                hasher.finish()
-            };
-
-            if old_utxos_hash == new_utxos_hash {
+            if old_utxos_hash == new_utxos_hash
+                && !selection_changed
+                && old_lock_state_load_failed == lock_state_load_failed
+            {
                 return;
             }
 
-            new_utxos
+            let selected_utxos = state.selected_utxos.clone();
+            let total_value = total_value_of_spendable_utxos(&state.utxos, &selected_utxos).into();
+
+            (new_utxos, selected_utxos, total_value, lock_state_load_failed)
         };
 
         self.reconciler.send_async(Message::UpdateUtxos(utxos)).await;
+        self.reconciler
+            .send_async(Message::UpdateSelectedUtxos { utxos: selected_utxos, total_value })
+            .await;
+        self.reconciler
+            .send_async(Message::UpdateLockStateLoadFailed(lock_state_load_failed))
+            .await;
     }
 
     #[uniffi::method]
@@ -123,13 +135,34 @@ impl RustCoinControlManager {
     }
 
     #[uniffi::method]
-    pub fn selected_utxos(&self) -> Vec<Utxo> {
-        let selected_utxos_ids: HashSet<Arc<OutPoint>> =
-            self.state.lock().selected_utxos.iter().cloned().collect();
+    pub async fn set_utxo_spendability(
+        &self,
+        outpoint: Arc<OutPoint>,
+        spendable: bool,
+    ) -> Result<(), LabelManagerError> {
+        let wallet_id = self.state.lock().wallet_id.clone();
+        let outpoint = bitcoin::OutPoint::from(outpoint.as_ref());
 
-        self.utxos()
-            .into_iter()
-            .filter(|utxo| selected_utxos_ids.contains(&utxo.outpoint))
+        LabelManager::try_new(wallet_id)
+            .map_err_str(LabelManagerError::SaveOutputLabels)?
+            .set_output_spendability_for_outpoints(vec![outpoint], spendable)?;
+
+        self.reload_labels().await;
+
+        Ok(())
+    }
+
+    #[uniffi::method]
+    pub fn selected_utxos(&self) -> Vec<Utxo> {
+        let state = self.state.lock();
+        let selected_utxos_ids: HashSet<Arc<OutPoint>> =
+            state.selected_utxos.iter().cloned().collect();
+
+        state
+            .utxos
+            .iter()
+            .filter(|utxo| utxo.spendable && selected_utxos_ids.contains(&utxo.outpoint))
+            .cloned()
             .collect()
     }
 
@@ -225,16 +258,8 @@ impl RustCoinControlManager {
     }
 
     pub fn total_value_of_utxos(&self, selected_utxo_ids: &[Arc<OutPoint>]) -> Amount {
-        let selected_ids: HashSet<Arc<OutPoint>> = selected_utxo_ids.iter().cloned().collect();
-
-        let final_amount_sats = self
-            .utxos()
-            .into_iter()
-            .filter(|utxo| selected_ids.contains(&utxo.outpoint))
-            .map(|utxo| utxo.amount.as_sats())
-            .sum();
-
-        Amount::from_sat(final_amount_sats)
+        let state = self.state.lock();
+        total_value_of_spendable_utxos(&state.utxos, selected_utxo_ids)
     }
 
     fn sort_button_pressed(self: Arc<Self>, sort_button_pressed: CoinControlListSortKey) {
@@ -280,7 +305,11 @@ impl RustCoinControlManager {
         let old_selected_utxos = self.state.lock().selected_utxos.clone();
 
         let new_selected_utxos = if old_selected_utxos.is_empty() {
-            self.utxos().into_iter().map(|utxo| utxo.outpoint).collect()
+            self.utxos()
+                .into_iter()
+                .filter(|utxo| utxo.spendable)
+                .map(|utxo| utxo.outpoint)
+                .collect()
         } else {
             vec![]
         };
@@ -295,9 +324,26 @@ impl RustCoinControlManager {
     }
 
     fn notify_selected_utxos_changed(self: Arc<Self>, selected_utxos: Vec<Arc<OutPoint>>) {
-        let total_value = self.total_value_of_utxos(&selected_utxos).into();
-        self.state.lock().selected_utxos = selected_utxos;
-        self.reconciler.send(Message::UpdateTotalSelectedAmount(total_value));
+        let (selected_utxos, total_value) = {
+            let mut state = self.state.lock();
+            let spendable_outpoints = state
+                .utxos
+                .iter()
+                .filter(|utxo| utxo.spendable)
+                .map(|utxo| utxo.outpoint.clone())
+                .collect::<HashSet<_>>();
+            let selected_utxos = selected_utxos
+                .into_iter()
+                .filter(|outpoint| spendable_outpoints.contains(outpoint))
+                .collect::<Vec<_>>();
+            let total_value = total_value_of_spendable_utxos(&state.utxos, &selected_utxos).into();
+
+            state.selected_utxos = selected_utxos.clone();
+
+            (selected_utxos, total_value)
+        };
+
+        self.reconciler.send(Message::UpdateSelectedUtxos { utxos: selected_utxos, total_value });
     }
 
     fn notify_search_changed(self: Arc<Self>, search: String) {
@@ -337,6 +383,256 @@ impl RustCoinControlManager {
             self.state.lock().sort = SortState::Inactive(sort);
             sender.queue(Message::ClearSort);
         }
+    }
+}
+
+fn total_value_of_spendable_utxos(utxos: &[Utxo], selected_utxo_ids: &[Arc<OutPoint>]) -> Amount {
+    let selected_ids: HashSet<Arc<OutPoint>> = selected_utxo_ids.iter().cloned().collect();
+
+    let final_amount_sats = utxos
+        .iter()
+        .filter(|utxo| utxo.spendable && selected_ids.contains(&utxo.outpoint))
+        .map(|utxo| utxo.amount.as_sats())
+        .sum();
+
+    Amount::from_sat(final_amount_sats)
+}
+
+fn hash_utxos(utxos: &[Utxo]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    utxos.hash(&mut hasher);
+    hasher.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::wallet_data::test_support::new_test_wallet_data_db;
+    use bdk_wallet::{
+        KeychainKind,
+        chain::{BlockId, ChainPosition, ConfirmationBlockTime},
+    };
+    use bitcoin::{
+        BlockHash, CompressedPublicKey, OutPoint as BitcoinOutPoint, PrivateKey, ScriptBuf, TxOut,
+        Txid, hashes::Hash as _, secp256k1::SecretKey,
+    };
+
+    fn preview_manager_with_locked_first_utxo() -> Arc<RustCoinControlManager> {
+        let manager = Arc::new(RustCoinControlManager::preview_new(2, 0));
+        manager.state.lock().utxos[0].spendable = false;
+
+        manager
+    }
+
+    fn confirmed_position() -> ChainPosition<ConfirmationBlockTime> {
+        ChainPosition::Confirmed {
+            anchor: ConfirmationBlockTime {
+                block_id: BlockId { height: 1, hash: BlockHash::all_zeros() },
+                confirmation_time: 1,
+            },
+            transitively: None,
+        }
+    }
+
+    fn mainnet_script() -> ScriptBuf {
+        let secp = bitcoin::secp256k1::Secp256k1::new();
+        let secret_key = SecretKey::from_slice(&[1; 32]).expect("failed to create secret key");
+        let private_key = PrivateKey::new(secret_key, bitcoin::Network::Bitcoin);
+        let public_key = CompressedPublicKey::from_private_key(&secp, &private_key)
+            .expect("failed to create public key");
+
+        bitcoin::Address::p2wpkh(&public_key, bitcoin::Network::Bitcoin).script_pubkey()
+    }
+
+    fn local_output(
+        outpoint: BitcoinOutPoint,
+        chain_position: ChainPosition<ConfirmationBlockTime>,
+    ) -> LocalOutput {
+        LocalOutput {
+            outpoint,
+            txout: TxOut {
+                value: bitcoin::Amount::from_sat(1_000),
+                script_pubkey: mainnet_script(),
+            },
+            keychain: KeychainKind::External,
+            is_spent: false,
+            derivation_index: 0,
+            chain_position,
+        }
+    }
+
+    #[test]
+    fn load_utxo_labels_loads_spendability_and_prunes_locked_selection() {
+        let manager = RustCoinControlManager::preview_new(2, 0);
+        let wallet_id = manager.state.lock().wallet_id.clone();
+        let locked = manager.state.lock().utxos[0].outpoint.clone();
+        let unlocked = manager.state.lock().utxos[1].outpoint.clone();
+        let (wallet_db, _tmp) = new_test_wallet_data_db(wallet_id);
+
+        wallet_db
+            .labels
+            .set_output_spendability(bitcoin::OutPoint::from(locked.as_ref()), false)
+            .expect("failed to lock output");
+
+        let selection_changed = {
+            let mut state = manager.state.lock();
+            state.selected_utxos = vec![locked.clone(), unlocked.clone()];
+            state.load_utxo_labels()
+        };
+
+        let state = manager.state.lock();
+
+        assert!(selection_changed);
+        assert!(!state.utxos[0].spendable);
+        assert_eq!(state.selected_utxos, vec![unlocked]);
+    }
+
+    #[test]
+    fn load_utxo_labels_fails_closed_when_wallet_database_cannot_open() {
+        let mut state = State::preview_new(2, 0);
+        state.wallet_id = WalletId::from("invalid\0wallet-id");
+        state.selected_utxos = vec![state.utxos[0].outpoint.clone()];
+
+        let selection_changed = state.load_utxo_labels();
+
+        assert!(selection_changed);
+        assert!(state.lock_state_load_failed);
+        assert!(state.selected_utxos.is_empty());
+        assert!(state.utxos.iter().all(|utxo| !utxo.spendable));
+    }
+
+    #[test]
+    fn select_all_skips_locked_utxos() {
+        let manager = preview_manager_with_locked_first_utxo();
+        let locked = manager.state.lock().utxos[0].outpoint.clone();
+
+        manager.clone().toggle_select_all();
+
+        let selected = manager.state.lock().selected_utxos.clone();
+        assert_eq!(selected.len(), 1);
+        assert!(!selected.contains(&locked));
+    }
+
+    #[test]
+    fn direct_selection_prunes_locked_utxos() {
+        let manager = preview_manager_with_locked_first_utxo();
+        let locked = manager.state.lock().utxos[0].outpoint.clone();
+        let unlocked = manager.state.lock().utxos[1].outpoint.clone();
+
+        manager.clone().notify_selected_utxos_changed(vec![locked, unlocked.clone()]);
+
+        assert_eq!(manager.state.lock().selected_utxos, vec![unlocked]);
+    }
+
+    #[test]
+    fn selected_utxos_excludes_locked_utxos() {
+        let manager = preview_manager_with_locked_first_utxo();
+        let locked = manager.state.lock().utxos[0].outpoint.clone();
+        let unlocked = manager.state.lock().utxos[1].outpoint.clone();
+        manager.state.lock().selected_utxos = vec![locked, unlocked.clone()];
+
+        let selected = manager.selected_utxos();
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].outpoint, unlocked);
+    }
+
+    #[test]
+    fn direct_selection_preserves_selected_utxos_outside_active_search() {
+        let manager = Arc::new(RustCoinControlManager::preview_new(2, 0));
+        let hidden = manager.state.lock().utxos[0].outpoint.clone();
+        let visible = manager.state.lock().utxos[1].outpoint.clone();
+        let expected_total = {
+            let mut state = manager.state.lock();
+            state.utxos[0].label = Some("outside active search".to_string());
+            state.utxos[1].label = Some("needle".to_string());
+            state.utxos[0].amount.as_sats() + state.utxos[1].amount.as_sats()
+        };
+
+        manager.clone().notify_search_changed("needle".to_string());
+
+        let visible_outpoints =
+            manager.utxos().into_iter().map(|utxo| utxo.outpoint).collect::<Vec<_>>();
+        assert_eq!(visible_outpoints, vec![visible.clone()]);
+
+        manager.clone().notify_selected_utxos_changed(vec![hidden.clone(), visible.clone()]);
+
+        let selected_utxos = manager.state.lock().selected_utxos.clone();
+
+        assert_eq!(selected_utxos, vec![hidden, visible]);
+        assert_eq!(manager.total_value_of_utxos(&selected_utxos).as_sats(), expected_total);
+        assert_eq!(manager.selected_utxos().len(), 2);
+    }
+
+    #[test]
+    fn selected_total_excludes_locked_utxos() {
+        let manager = preview_manager_with_locked_first_utxo();
+        let locked = manager.state.lock().utxos[0].outpoint.clone();
+        let unlocked = manager.state.lock().utxos[1].outpoint.clone();
+        let unlocked_amount = manager.state.lock().utxos[1].amount.as_sats();
+
+        let total = manager.total_value_of_utxos(&[locked, unlocked]);
+
+        assert_eq!(total.as_sats(), unlocked_amount);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn reload_labels_preserves_active_search_results() {
+        let manager = Arc::new(RustCoinControlManager::preview_new(2, 0));
+        let wallet_id = manager.state.lock().wallet_id.clone();
+        let visible = manager.state.lock().utxos[1].outpoint.clone();
+        let search = visible.txid.to_string();
+        let (wallet_db, _tmp) = new_test_wallet_data_db(wallet_id);
+
+        manager.clone().notify_search_changed(search);
+        while manager.reconcile_receiver.try_recv().is_ok() {}
+
+        wallet_db
+            .labels
+            .set_output_spendability(bitcoin::OutPoint::from(visible.as_ref()), false)
+            .expect("failed to lock searched output");
+
+        manager.reload_labels().await;
+
+        let message = manager.reconcile_receiver.recv_async().await.expect("reconcile message");
+        let SingleOrMany::Single(Message::UpdateUtxos(utxos)) = message else {
+            panic!("expected utxo update");
+        };
+
+        assert_eq!(utxos.len(), 1);
+        assert_eq!(utxos[0].outpoint, visible);
+        assert!(!utxos[0].spendable);
+    }
+
+    #[test]
+    fn pending_locked_output_appears_locked_after_confirmation() {
+        let metadata = WalletMetadata::preview_new();
+        let wallet_id = metadata.id.clone();
+        let outpoint = BitcoinOutPoint { txid: Txid::from_byte_array([3; 32]), vout: 0 };
+        let (wallet_db, _tmp) = new_test_wallet_data_db(wallet_id);
+
+        wallet_db
+            .labels
+            .set_output_spendability(outpoint, false)
+            .expect("failed to lock pending output");
+
+        let mut pending_state = State::new(
+            metadata.clone(),
+            vec![local_output(
+                outpoint,
+                ChainPosition::Unconfirmed { first_seen: Some(1), last_seen: Some(1) },
+            )],
+        );
+        pending_state.load_utxo_labels();
+
+        assert!(pending_state.utxos.is_empty());
+
+        let mut confirmed_state =
+            State::new(metadata, vec![local_output(outpoint, confirmed_position())]);
+        confirmed_state.load_utxo_labels();
+
+        assert_eq!(confirmed_state.utxos.len(), 1);
+        assert!(!confirmed_state.utxos[0].spendable);
     }
 }
 

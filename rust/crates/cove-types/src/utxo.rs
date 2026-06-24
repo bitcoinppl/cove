@@ -40,6 +40,8 @@ pub struct Utxo {
     pub derivation_index: u32,
     pub block_height: u32,
     pub type_: UtxoType,
+    /// Cached lock state for display and selection filtering only; transaction building rechecks the labels DB
+    pub spendable: bool,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
@@ -106,6 +108,7 @@ impl Utxo {
             derivation_index,
             block_height,
             type_,
+            spendable: true,
         };
 
         Ok(utxo)
@@ -238,6 +241,7 @@ pub mod ffi_preview {
                 derivation_index: 0,
                 block_height,
                 type_,
+                spendable: true,
             }
         }
     }

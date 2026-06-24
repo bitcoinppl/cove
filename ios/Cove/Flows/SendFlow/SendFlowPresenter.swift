@@ -82,6 +82,8 @@ import SwiftUI
             "Unable to get max send"
         case .UnableToSaveUnsignedTransaction:
             "Unable to Save Unsigned Transaction"
+        case .WalletManager(.LockedOutputsSelected):
+            "Insufficient Funds"
         case .WalletManager:
             "Error"
         case .UnableToGetFeeDetails:
@@ -119,6 +121,8 @@ import SwiftUI
             "Send amount is too low. Please send atleast 5000 sats"
         case .UnableToGetFeeRate:
             "Are you connected to the internet?"
+        case .WalletManager(.LockedOutputsSelected):
+            "Selected coins include locked coins. Unlock them or choose different coins."
         case let .WalletManager(msg):
             msg.description
         case let .UnableToGetFeeDetails(msg):

@@ -95,7 +95,11 @@ class SendFlowPresenter(
             is SendFlowException.UnableToBuildTxn -> "Unable to build transaction"
             is SendFlowException.UnableToGetMaxSend -> "Unable to get max send"
             is SendFlowException.UnableToSaveUnsignedTransaction -> "Unable to Save Unsigned Transaction"
-            is SendFlowException.WalletManager -> "Error"
+            is SendFlowException.WalletManager ->
+                when (error.v1) {
+                    is WalletManagerException.LockedOutputsSelected -> "Insufficient Funds"
+                    else -> "Error"
+                }
             is SendFlowException.UnableToGetFeeDetails -> "Fee Details Error"
         }
 
@@ -139,7 +143,11 @@ class SendFlowPresenter(
                 "Are you connected to the internet?"
 
             is SendFlowException.WalletManager ->
-                error.v1.message ?: "Wallet Manager Error"
+                when (error.v1) {
+                    is WalletManagerException.LockedOutputsSelected ->
+                        "Selected coins include locked coins. Unlock them or choose different coins."
+                    else -> error.v1.message ?: "Wallet Manager Error"
+                }
 
             is SendFlowException.UnableToGetFeeDetails ->
                 error.v1

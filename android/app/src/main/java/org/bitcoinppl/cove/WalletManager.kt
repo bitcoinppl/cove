@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -90,6 +91,8 @@ class WalletManager :
     // errors
     var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
+    var labelRefreshFailed by mutableStateOf<TaggedItem<Unit>?>(null)
+        private set
 
     // non-null when a payjoin transaction has been broadcast (success or fallback);
     // TaggedItem ensures a new unique key each time so Compose always re-fires the observer
@@ -308,6 +311,42 @@ class WalletManager :
         val details = rust.transactionDetails(txId)
         transactionDetailsCache[txId] = details
         return details
+    }
+
+    suspend fun transactionLockState(txId: TxId): TransactionLockState = rust.transactionLockState(txId)
+
+    suspend fun toggleTransactionLockState(txId: TxId): TransactionLockState {
+        val state = rust.toggleTransactionLockState(txId)
+        AppManager.getInstance().reconcileAfterLabelImport(id)
+
+        return state
+    }
+
+    fun importLabels(labels: Bip329Labels) {
+        LabelManager(id = id).use { it.importLabels(labels) }
+        AppManager.getInstance().reconcileAfterLabelImport(id)
+    }
+
+    suspend fun reconcileAfterLabelImportAndWait(): Boolean {
+        transactionDetailsCache.clear()
+
+        return try {
+            rust.getTransactions()
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(tag, "failed to refresh transactions after label import", e)
+            false
+        }
+    }
+
+    fun notifyLabelRefreshFailed() {
+        labelRefreshFailed = TaggedItem(Unit)
+    }
+
+    fun clearLabelRefreshFailed() {
+        labelRefreshFailed = null
     }
 
     fun updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {

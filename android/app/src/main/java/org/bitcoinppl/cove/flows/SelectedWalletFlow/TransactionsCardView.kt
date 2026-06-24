@@ -41,7 +41,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,7 +52,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
@@ -562,7 +560,7 @@ internal fun ConfirmedTransactionWidget(
     manager: WalletManager,
     sensitiveVisible: Boolean,
 ) {
-    val scope = rememberCoroutineScope()
+    val txId = transaction.v1.id()
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
@@ -577,19 +575,13 @@ internal fun ConfirmedTransactionWidget(
                 .fillMaxWidth()
                 .padding(vertical = 6.dp)
                 .clickable {
-                    scope.launch {
-                        try {
-                            val details = manager.transactionDetails(transaction.v1.id())
-                            val walletId = manager.walletMetadata?.id
-                            if (walletId != null) {
-                                if (index > SCROLL_THRESHOLD_INDEX) {
-                                    manager.pendingScrollTransactionId = transaction.v1.id().toString()
-                                }
-                                app.pushRoute(Route.TransactionDetails(walletId, details))
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.e("ConfirmedTxWidget", "Failed to load transaction details", e)
+                    val walletId = manager.walletMetadata?.id
+                    if (walletId != null) {
+                        if (index > SCROLL_THRESHOLD_INDEX) {
+                            manager.pendingScrollTransactionId = txId.toString()
                         }
+
+                        app.pushRoute(Route.TransactionDetails(walletId, txId))
                     }
                 },
         verticalAlignment = Alignment.CenterVertically,
@@ -668,7 +660,7 @@ internal fun UnconfirmedTransactionWidget(
     manager: WalletManager,
     sensitiveVisible: Boolean,
 ) {
-    val scope = rememberCoroutineScope()
+    val txId = transaction.v1.id()
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
@@ -682,19 +674,13 @@ internal fun UnconfirmedTransactionWidget(
                 .fillMaxWidth()
                 .padding(vertical = 6.dp)
                 .clickable {
-                    scope.launch {
-                        try {
-                            val details = manager.transactionDetails(transaction.v1.id())
-                            val walletId = manager.walletMetadata?.id
-                            if (walletId != null) {
-                                if (index > SCROLL_THRESHOLD_INDEX) {
-                                    manager.pendingScrollTransactionId = transaction.v1.id().toString()
-                                }
-                                app.pushRoute(Route.TransactionDetails(walletId, details))
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.e("UnconfirmedTxWidget", "Failed to load transaction details", e)
+                    val walletId = manager.walletMetadata?.id
+                    if (walletId != null) {
+                        if (index > SCROLL_THRESHOLD_INDEX) {
+                            manager.pendingScrollTransactionId = txId.toString()
                         }
+
+                        app.pushRoute(Route.TransactionDetails(walletId, txId))
                     }
                 },
         verticalAlignment = Alignment.CenterVertically,

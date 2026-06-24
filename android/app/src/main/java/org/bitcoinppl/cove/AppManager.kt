@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -99,6 +100,9 @@ class AppManager private constructor() : FfiReconcile {
     internal var sendFlowManager: SendFlowManager? = null
         private set
 
+    internal var coinControlManager: CoinControlManager? = null
+        private set
+
     val cloudBackupManager: CloudBackupManager = CloudBackupManager.getInstance()
 
     init {
@@ -175,6 +179,53 @@ class AppManager private constructor() : FfiReconcile {
         return manager
     }
 
+    fun setCoinControlManager(manager: CoinControlManager) {
+        coinControlManager = manager
+    }
+
+    fun clearCoinControlManager(manager: CoinControlManager) {
+        if (coinControlManager === manager) {
+            coinControlManager = null
+        }
+    }
+
+    fun reconcileAfterLabelImport(walletId: WalletId) {
+        mainScope.launch {
+            val refreshed =
+                try {
+                    reconcileAfterLabelImportAndWait(walletId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(tag, "failed to reconcile after label import", e)
+                    false
+                }
+            if (!refreshed) {
+                walletManager
+                    ?.takeIf { it.id == walletId }
+                    ?.notifyLabelRefreshFailed()
+            }
+        }
+    }
+
+    suspend fun reconcileAfterLabelImportAndWait(walletId: WalletId): Boolean {
+        val refreshed =
+            walletManager
+                ?.takeIf { it.id == walletId }
+                ?.reconcileAfterLabelImportAndWait()
+                ?: false
+
+        coinControlManager
+            ?.takeIf { it.id == walletId }
+            ?.reloadLabels()
+
+        sendFlowManager
+            ?.takeIf { it.id == walletId }
+            ?.reconcileAfterLabelImport()
+
+        return refreshed
+    }
+
     fun clearWalletManager() {
         try {
             walletManager?.close()
@@ -229,10 +280,12 @@ class AppManager private constructor() : FfiReconcile {
         // close managers before clearing them
         walletManager?.close()
         sendFlowManager?.close()
+        coinControlManager?.close()
 
         database = Database()
         walletManager = null
         sendFlowManager = null
+        coinControlManager = null
 
         val state = rust.state()
         router = RouterManager(state.router)
@@ -240,6 +293,9 @@ class AppManager private constructor() : FfiReconcile {
 
     val currentRoute: Route
         get() = router.currentRoute
+
+    private fun isDuplicateTopRoute(route: Route): Boolean =
+        currentRoute.isSameNavigationDestination(route)
 
     val hasWallets: Boolean
         get() = rust.hasWallets()
@@ -337,6 +393,11 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun pushRoute(route: Route) {
+        if (isDuplicateTopRoute(route)) {
+            isSidebarVisible = false
+            return
+        }
+
         advanceNavigationGeneration()
         pushRouteWithoutNavigationGeneration(route)
     }
@@ -344,6 +405,8 @@ class AppManager private constructor() : FfiReconcile {
     private fun pushRouteWithoutNavigationGeneration(route: Route) {
         Log.d(tag, "pushRoute: $route")
         isSidebarVisible = false
+        if (isDuplicateTopRoute(route)) return
+
         val newRoutes = router.routes.toMutableList().apply { add(route) }
 
         // only dispatch if routes actually changed
@@ -499,6 +562,11 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.PushedRoute -> {
+                    if (isDuplicateTopRoute(message.v1)) {
+                        isSidebarVisible = false
+                        return@launch
+                    }
+
                     val newRoutes = (router.routes + message.v1).toList()
                     updateRoutesAndClearInactiveSendFlowManager(newRoutes)
                     scheduleNavigationSettledForCurrentGeneration()

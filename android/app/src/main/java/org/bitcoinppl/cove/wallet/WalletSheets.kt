@@ -285,14 +285,16 @@ internal fun WalletSheetsHost(
                 onSuccess = {
                     onDismissNfcScanner()
                     scope.launch {
-                        // refresh transactions with updated labels
-                        try {
-                            manager.rust.getTransactions()
-                            snackbarHostState.showSnackbar("Labels imported successfully")
-                        } catch (e: Exception) {
-                            android.util.Log.e(tag, "Failed to refresh transactions after NFC label import")
-                            snackbarHostState.showSnackbar("Labels imported, but failed to refresh transactions")
-                        }
+                        val refreshed =
+                            AppManager.getInstance().reconcileAfterLabelImportAndWait(manager.id)
+                        val message =
+                            if (refreshed) {
+                                "Labels imported successfully"
+                            } else {
+                                "Labels imported successfully, but transaction list may need manual refresh"
+                            }
+
+                        snackbarHostState.showSnackbar(message)
                     }
                 },
                 onError = { errorMsg ->

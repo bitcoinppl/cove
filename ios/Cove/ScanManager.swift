@@ -31,13 +31,14 @@ import SwiftUI
                 }
             case let .bip329Labels(labels):
                 guard let manager = app.walletManager else { return setInvalidLabels() }
-                guard let selectedWallet = Database().globalConfig().selectedWallet() else {
+                guard let selectedWallet = Database().globalConfig().selectedWallet(),
+                      selectedWallet == manager.id
+                else {
                     return setInvalidLabels()
                 }
 
-                try LabelManager(id: selectedWallet).import(labels: labels)
+                try manager.importLabels(labels: labels)
                 app.alertState = .init(.importedLabelsSuccessfully)
-                Task { await manager.rust.getTransactions() }
             }
         } catch {
             switch error {
@@ -96,16 +97,14 @@ import SwiftUI
                     "TAPSIGNER not implemented \(tapSigner) doesn't make sense for file import"
                 Log.error(panic)
             case let .bip329Labels(labels):
-                if let selectedWallet = Database().globalConfig().selectedWallet() {
-                    return try LabelManager(id: selectedWallet).import(labels: labels)
+                guard let manager = app.walletManager,
+                      let selectedWallet = Database().globalConfig().selectedWallet(),
+                      selectedWallet == manager.id
+                else {
+                    return setInvalidLabels()
                 }
 
-                app.alertState = TaggedItem(
-                    .invalidFileFormat(
-                        message:
-                        "Currently BIP329 labels must be imported through the wallet actions"
-                    )
-                )
+                return try manager.importLabels(labels: labels)
             case let .signedPsbt(psbt):
                 handleSignedPsbt(psbt)
             }

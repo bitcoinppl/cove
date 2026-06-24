@@ -57,6 +57,7 @@ use crate::{
     word_validator::WordValidator,
 };
 
+use bitcoin::OutPoint;
 use cove_types::confirm::{ConfirmDetails, QrDensity, SplitOutput};
 use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
 
@@ -174,6 +175,14 @@ pub struct TransactionExportResult {
     pub filename: String,
 }
 
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum TransactionLockState {
+    None,
+    Unlocked,
+    Locked,
+    Mixed,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct XpubExportResult {
     pub content: String,
@@ -268,6 +277,9 @@ pub enum WalletManagerError {
     #[error("insufficient funds: {0}")]
     InsufficientFunds(String),
 
+    #[error("selected UTXOs include locked outputs")]
+    LockedOutputsSelected,
+
     #[error("Unable to get confirm details, {0}")]
     GetConfirmDetailsError(String),
 
@@ -291,6 +303,9 @@ pub enum WalletManagerError {
 
     #[error("Unable to add UTXOs to PSBT: {0}")]
     AddUtxosError(String),
+
+    #[error("Unable to get output labels: {0}")]
+    OutputLabelsError(String),
 
     #[error("Wallet database corrupted for {id}: {error}")]
     DatabaseCorruption { id: WalletId, error: String },
@@ -773,6 +788,19 @@ impl RustWalletManager {
     /// Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
     /// direct broadcast otherwise.
     #[uniffi::method]
+    pub async fn unlocked_spendable_balance(&self) -> Result<Amount, Error> {
+        let amount = call!(self.actor.unlocked_trusted_spendable_balance())
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
+
+        Ok(amount.into())
+    }
+
+    /// Send entry point for unsigned hot wallet PSBTs
+    ///
+    /// Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+    /// PayJoin negotiation is handled in the actor stub.
+    #[uniffi::method]
     pub async fn initiate_payment(
         &self,
         psbt: Arc<Psbt>,
@@ -953,24 +981,61 @@ impl RustWalletManager {
         let tx_id = Arc::unwrap_or_clone(tx_id);
         let actor = self.actor.clone();
 
-        crate::loading_popup::with_loading_popup(async move {
-            let details = task::spawn(async move {
-                call!(actor.transaction_details(tx_id))
-                    .await
-                    .map_err_str(Error::TransactionDetailsError)
-            })
-            .await
-            .map_err_str(Error::TransactionDetailsError)??;
-
-            // for unconfirmed transactions, trigger a background sync to update status
-            // this uses SyncRequest with just this txid so it's fast
-            if !details.is_confirmed() {
-                send!(self.actor.perform_scan_for_single_tx_id(details.tx_id().0));
-            }
-
-            Ok(details)
+        let details = task::spawn(async move {
+            call!(actor.transaction_details(tx_id))
+                .await
+                .map_err_str(Error::TransactionDetailsError)
         })
         .await
+        .map_err_str(Error::TransactionDetailsError)??;
+
+        // for unconfirmed transactions, trigger a background sync to update status
+        // this uses SyncRequest with just this txid so it's fast
+        if !details.is_confirmed() {
+            send!(self.actor.perform_scan_for_single_tx_id(details.tx_id().0));
+        }
+
+        Ok(details)
+    }
+
+    #[uniffi::method]
+    pub async fn transaction_lock_state(
+        &self,
+        tx_id: Arc<TxId>,
+    ) -> Result<TransactionLockState, Error> {
+        let tx_id = Arc::unwrap_or_clone(tx_id);
+        let state = call!(self.actor.transaction_lock_state(tx_id))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
+
+        Ok(state)
+    }
+
+    #[uniffi::method]
+    pub async fn toggle_transaction_lock_state(
+        &self,
+        tx_id: Arc<TxId>,
+    ) -> Result<TransactionLockState, Error> {
+        let tx_id = Arc::unwrap_or_clone(tx_id);
+        let state = call!(self.actor.transaction_lock_state(tx_id))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
+        let outpoints = call!(self.actor.current_wallet_unspent_outpoints_for_txn(tx_id))
+            .await
+            .map_err(|_| Error::ActorNotFound)?;
+        let Some((outpoints, spendable)) = transaction_lock_toggle_update(state, outpoints) else {
+            return Ok(TransactionLockState::None);
+        };
+
+        self.label_manager
+            .set_output_spendability_for_outpoints(outpoints, spendable)
+            .map_err_str(Error::OutputLabelsError)?;
+
+        let state = call!(self.actor.transaction_lock_state(tx_id))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
+
+        Ok(state)
     }
 
     #[uniffi::method]
@@ -1589,22 +1654,6 @@ impl RustWalletManager {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn preview_wallet_metadata_is_ledger_ready_for_spend() {
-        let metadata = preview_ledger_ready_metadata(WalletMetadata::preview_new());
-
-        assert_eq!(metadata.internal.performed_full_scan_at, Some(PREVIEW_FULL_SCAN_COMPLETED_AT));
-        assert_eq!(
-            WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
-            WalletLedgerState::Complete
-        );
-    }
-}
-
 impl Drop for RustWalletManager {
     fn drop(&mut self) {
         self.shutdown();
@@ -1689,6 +1738,96 @@ fn wallet_account_number(id: &WalletId) -> Option<u32> {
             .ok()
             .flatten()
             .and_then(|(external, _)| external.account_index()),
+    }
+}
+
+fn spendability_for_transaction_lock_toggle(state: TransactionLockState) -> Option<bool> {
+    match state {
+        TransactionLockState::None => None,
+        TransactionLockState::Locked => Some(true),
+        TransactionLockState::Unlocked | TransactionLockState::Mixed => Some(false),
+    }
+}
+
+fn transaction_lock_toggle_update(
+    state: TransactionLockState,
+    outpoints: Vec<OutPoint>,
+) -> Option<(Vec<OutPoint>, bool)> {
+    let spendable = spendability_for_transaction_lock_toggle(state)?;
+    if outpoints.is_empty() {
+        return None;
+    }
+
+    Some((outpoints, spendable))
+}
+
+#[cfg(test)]
+mod tests {
+    use bitcoin::{OutPoint, Txid, hashes::Hash as _};
+
+    use super::{
+        PREVIEW_FULL_SCAN_COMPLETED_AT, TransactionLockState, WalletLedgerState, WalletScanStatus,
+        preview_ledger_ready_metadata, spendability_for_transaction_lock_toggle,
+        transaction_lock_toggle_update,
+    };
+
+    use crate::wallet::metadata::WalletMetadata;
+
+    fn outpoint(vout: u32) -> OutPoint {
+        OutPoint { txid: Txid::from_byte_array([1; 32]), vout }
+    }
+
+    #[test]
+    fn preview_wallet_metadata_is_ledger_ready_for_spend() {
+        let metadata = preview_ledger_ready_metadata(WalletMetadata::preview_new());
+
+        assert_eq!(metadata.internal.performed_full_scan_at, Some(PREVIEW_FULL_SCAN_COMPLETED_AT));
+        assert_eq!(
+            WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
+            WalletLedgerState::Complete
+        );
+    }
+
+    #[test]
+    fn transaction_lock_toggle_decides_target_spendability_from_state() {
+        assert_eq!(spendability_for_transaction_lock_toggle(TransactionLockState::None), None);
+        assert_eq!(
+            spendability_for_transaction_lock_toggle(TransactionLockState::Unlocked),
+            Some(false)
+        );
+        assert_eq!(
+            spendability_for_transaction_lock_toggle(TransactionLockState::Mixed),
+            Some(false)
+        );
+        assert_eq!(
+            spendability_for_transaction_lock_toggle(TransactionLockState::Locked),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn transaction_lock_toggle_uses_current_outpoints_for_bulk_label_update() {
+        let outpoints = vec![outpoint(0), outpoint(2)];
+
+        assert_eq!(
+            transaction_lock_toggle_update(TransactionLockState::Unlocked, outpoints.clone()),
+            Some((outpoints.clone(), false))
+        );
+        assert_eq!(
+            transaction_lock_toggle_update(TransactionLockState::Mixed, outpoints.clone()),
+            Some((outpoints.clone(), false))
+        );
+        assert_eq!(
+            transaction_lock_toggle_update(TransactionLockState::Locked, outpoints.clone()),
+            Some((outpoints, true))
+        );
+    }
+
+    #[test]
+    fn transaction_lock_toggle_noops_without_current_outpoints() {
+        assert_eq!(transaction_lock_toggle_update(TransactionLockState::None, vec![]), None);
+        assert_eq!(transaction_lock_toggle_update(TransactionLockState::Unlocked, vec![]), None);
+        assert_eq!(transaction_lock_toggle_update(TransactionLockState::Locked, vec![]), None);
     }
 }
 

@@ -9,32 +9,42 @@ import SwiftUI
 
 struct TransactionDetailsView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(AppManager.self) private var app
     @Environment(\.openURL) private var openURL
     @Environment(\.sizeCategory) var sizeCategory
-
-    private let screenWidth = UIScreen.main.bounds.width
-    private let screenHeight = UIScreen.main.bounds.height
 
     @State private var numberOfConfirmations: Int? = nil
     @State private var scrollPosition = ScrollPosition()
 
     @State private var initialOffset: Double? = nil
     @State private var currentOffset: Double = 0
+    @State private var lockState: TransactionLockState? = nil
+    @State private var isUpdatingLockState = false
+    @State private var lockStateError: String? = nil
+    @State private var lockStateLoadError: String? = nil
 
     // public
     let id: WalletId
+    let txId: TxId
     private let initialDetails: TransactionDetails
+    let refreshOnAppear: Bool
     var manager: WalletManager
 
     /// read from cache (observable), fallback to initial details
     var transactionDetails: TransactionDetails {
-        manager.transactionDetails[initialDetails.txId()] ?? initialDetails
+        manager.transactionDetails[txId] ?? initialDetails
     }
 
-    init(id: WalletId, transactionDetails: TransactionDetails, manager: WalletManager) {
+    init(
+        id: WalletId,
+        txId: TxId,
+        transactionDetails: TransactionDetails,
+        refreshOnAppear: Bool = true,
+        manager: WalletManager
+    ) {
         self.id = id
+        self.txId = txId
         self.initialDetails = transactionDetails
+        self.refreshOnAppear = refreshOnAppear
         self.manager = manager
     }
 
@@ -123,6 +133,8 @@ struct TransactionDetailsView: View {
             }
         }
         .padding(.top, 12)
+
+        TransactionLockControl
 
         // confirmations pills
         if let confirmations = numberOfConfirmations, confirmations < 3 {
@@ -214,6 +226,8 @@ struct TransactionDetailsView: View {
         }
         .padding(.top, 12)
 
+        TransactionLockControl
+
         if let confirmations = numberOfConfirmations, confirmations < 3 {
             VStack {
                 Divider().padding(.vertical, 18)
@@ -227,6 +241,121 @@ struct TransactionDetailsView: View {
                 manager: manager, transactionDetails: transactionDetails,
                 numberOfConfirmations: numberOfConfirmations
             )
+        }
+    }
+
+    @ViewBuilder
+    var TransactionLockControl: some View {
+        if lockStateLoadError != nil {
+            transactionLockControlContent(
+                title: String(localized: "Unable to load lock state"),
+                buttonTitle: String(localized: "Retry"),
+                systemImage: "arrow.clockwise",
+                action: { Task { await refreshTransactionLockState() } }
+            )
+        } else {
+            switch lockState {
+            case .some(.none), nil:
+                EmptyView()
+            case .some(.unlocked), .some(.locked), .some(.mixed):
+                transactionLockControlContent(
+                    title: lockStateText,
+                    buttonTitle: isUpdatingLockState
+                        ? String(localized: "Updating...")
+                        : lockStateButtonText,
+                    systemImage: lockStateButtonIcon,
+                    isUpdating: isUpdatingLockState,
+                    action: {
+                        guard !isUpdatingLockState else { return }
+
+                        isUpdatingLockState = true
+                        Task { await toggleTransactionLockState() }
+                    }
+                )
+            }
+        }
+    }
+
+    func transactionLockControlContent(
+        title: String,
+        buttonTitle: String,
+        systemImage: String,
+        isUpdating: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    if isUpdating {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Image(systemName: systemImage)
+                            .font(.footnote.weight(.semibold))
+                    }
+
+                    Text(buttonTitle)
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(Color.systemGray5)
+                .foregroundStyle(.primary)
+                .clipShape(Capsule())
+                .opacity(isUpdating ? 0.72 : 1)
+            }
+            .buttonStyle(.plain)
+            .disabled(isUpdating)
+        }
+        .padding(.top, 2)
+    }
+
+    var lockStateText: String {
+        switch lockState {
+        case .some(.locked):
+            String(localized: "Locked")
+        case .some(.mixed):
+            String(localized: "Mixed")
+        case .some(.unlocked):
+            String(localized: "Unlocked")
+        case .some(.none), nil:
+            ""
+        }
+    }
+
+    var lockStateButtonText: String {
+        switch lockState {
+        case .some(.locked):
+            String(localized: "Unlock Transaction")
+        case .some(.mixed):
+            String(localized: "Lock Transaction")
+        case .some(.unlocked):
+            String(localized: "Lock Transaction")
+        case .some(.none), nil:
+            ""
+        }
+    }
+
+    var lockStateButtonIcon: String {
+        switch lockState {
+        case .some(.locked):
+            "lock.open"
+        case .some(.mixed), .some(.unlocked):
+            "lock"
+        case .some(.none), nil:
+            "lock"
         }
     }
 
@@ -301,10 +430,15 @@ struct TransactionDetailsView: View {
         }
         .refreshable {
             await refreshTransactionDetails()
+            await refreshTransactionLockState()
         }
-        .task {
+        .task(id: txId) {
             // fetch fresh details on load
-            await refreshTransactionDetails()
+            if refreshOnAppear {
+                await refreshTransactionDetails()
+            }
+
+            await refreshTransactionLockState()
 
             // start watcher after a delay to avoid race condition with onDisappear
             if !transactionDetails.isConfirmed() {
@@ -336,10 +470,19 @@ struct TransactionDetailsView: View {
         .onDisappear {
             UIRefreshControl.appearance().tintColor = UIColor.secondaryLabel
         }
+        .alert("Unable to Update Lock", isPresented: Binding(
+            get: { lockStateError != nil },
+            set: { if !$0 { lockStateError = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                lockStateError = nil
+            }
+        } message: {
+            Text(lockStateError ?? "")
+        }
     }
 
     func refreshTransactionDetails() async {
-        let txId = initialDetails.txId()
         do {
             let details = try await manager.rust.transactionDetails(txId: txId)
             await MainActor.run {
@@ -358,6 +501,40 @@ struct TransactionDetailsView: View {
             }
         } catch {
             Log.error("Error refreshing transaction details: \(error)")
+        }
+    }
+
+    func refreshTransactionLockState() async {
+        do {
+            let state = try await manager.transactionLockState(for: initialDetails.txId())
+            await MainActor.run {
+                withAnimation {
+                    lockState = state
+                    lockStateLoadError = nil
+                }
+            }
+        } catch {
+            Log.error("Error refreshing transaction lock state: \(error)")
+            await MainActor.run {
+                lockStateLoadError = error.localizedDescription
+            }
+        }
+    }
+
+    func toggleTransactionLockState() async {
+        do {
+            let state = try await manager.toggleTransactionLockState(for: initialDetails.txId())
+            await MainActor.run {
+                withAnimation {
+                    lockState = state
+                }
+                isUpdatingLockState = false
+            }
+        } catch {
+            await MainActor.run {
+                lockStateError = error.localizedDescription
+                isUpdatingLockState = false
+            }
         }
     }
 
@@ -382,7 +559,6 @@ struct TransactionDetailsView: View {
     }
 
     func updateNumberOfConfirmations() async {
-        let txId = initialDetails.txId()
         var needsFrequentCheck = true
         var errors = 0
 
@@ -433,9 +609,12 @@ struct TransactionDetailsView: View {
 
 #Preview("confirmed received") {
     AsyncPreview {
+        let details = TransactionDetails.previewConfirmedReceived()
+
         TransactionDetailsView(
             id: WalletId(),
-            transactionDetails: TransactionDetails.previewConfirmedReceived(),
+            txId: details.txId(),
+            transactionDetails: details,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)
@@ -444,9 +623,12 @@ struct TransactionDetailsView: View {
 
 #Preview("confirmed sent") {
     AsyncPreview {
+        let details = TransactionDetails.previewConfirmedSent()
+
         TransactionDetailsView(
             id: WalletId(),
-            transactionDetails: TransactionDetails.previewConfirmedSent(),
+            txId: details.txId(),
+            transactionDetails: details,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)
@@ -455,9 +637,12 @@ struct TransactionDetailsView: View {
 
 #Preview("pending received") {
     AsyncPreview {
+        let details = TransactionDetails.previewPendingReceived()
+
         TransactionDetailsView(
             id: WalletId(),
-            transactionDetails: TransactionDetails.previewPendingReceived(),
+            txId: details.txId(),
+            transactionDetails: details,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)
@@ -466,9 +651,12 @@ struct TransactionDetailsView: View {
 
 #Preview("pending sent") {
     AsyncPreview {
+        let details = TransactionDetails.previewPendingSent()
+
         TransactionDetailsView(
             id: WalletId(),
-            transactionDetails: TransactionDetails.previewPendingSent(),
+            txId: details.txId(),
+            transactionDetails: details,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)

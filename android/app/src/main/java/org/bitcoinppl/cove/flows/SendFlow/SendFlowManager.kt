@@ -280,6 +280,10 @@ class SendFlowManager(
             }
     }
 
+    fun reconcileAfterLabelImport() {
+        dispatch(SendFlowManagerAction.RefreshWalletBalance)
+    }
+
     suspend fun getNewCustomFeeRateWithTotal(
         feeRate: FeeRate,
         feeSpeed: FeeSpeed,

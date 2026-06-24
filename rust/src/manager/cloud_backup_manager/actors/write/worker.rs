@@ -126,7 +126,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn delete_active_wallet_fails_closed_when_listing_is_missing() {
         let _guard = async_test_lock().lock().await;
-        cove_tokio::init();
+        crate::test_support::ensure_tokio_runtime();
         let globals = test_globals();
         globals.cloud.reset();
 

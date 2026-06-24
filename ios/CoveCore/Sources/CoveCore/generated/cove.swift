@@ -7700,9 +7700,13 @@ public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
 
     func listenForUpdates(reconciler: CoinControlManagerReconciler)
 
+    func lockStateLoadFailed()  -> Bool
+
     func reloadLabels() async
 
     func selectedUtxos()  -> [Utxo]
+
+    func setUtxoSpendability(outpoint: OutPoint, spendable: Bool) async throws
 
     func unit()  -> BitcoinUnit
 
@@ -7812,6 +7816,15 @@ open func listenForUpdates(reconciler: CoinControlManagerReconciler)  {try! rust
 }
 }
 
+open func lockStateLoadFailed() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustcoincontrolmanager_lock_state_load_failed(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 open func reloadLabels()async   {
     return
         try!  await uniffiRustCallAsync(
@@ -7837,6 +7850,23 @@ open func selectedUtxos() -> [Utxo]  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+
+open func setUtxoSpendability(outpoint: OutPoint, spendable: Bool)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustcoincontrolmanager_set_utxo_spendability(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeOutPoint_lower(outpoint),FfiConverterBool.lower(spendable)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeLabelManagerError_lift
+        )
 }
 
 open func unit() -> BitcoinUnit  {
@@ -9212,7 +9242,13 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func switchToDifferentWalletAddressType(walletAddressType: WalletAddressType) async throws
 
+    func toggleTransactionLockState(txId: TxId) async throws  -> TransactionLockState
+
     func transactionDetails(txId: TxId) async throws  -> TransactionDetails
+
+    func transactionLockState(txId: TxId) async throws  -> TransactionLockState
+
+    func unlockedSpendableBalance() async throws  -> Amount
 
     func validateMetadata()
 
@@ -10170,6 +10206,23 @@ open func switchToDifferentWalletAddressType(walletAddressType: WalletAddressTyp
         )
 }
 
+open func toggleTransactionLockState(txId: TxId)async throws  -> TransactionLockState  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_toggle_transaction_lock_state(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTxId_lower(txId)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTransactionLockState_lift,
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+
 open func transactionDetails(txId: TxId)async throws  -> TransactionDetails  {
     return
         try  await uniffiRustCallAsync(
@@ -10183,6 +10236,40 @@ open func transactionDetails(txId: TxId)async throws  -> TransactionDetails  {
             completeFunc: ffi_cove_rust_future_complete_u64,
             freeFunc: ffi_cove_rust_future_free_u64,
             liftFunc: FfiConverterTypeTransactionDetails_lift,
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+
+open func transactionLockState(txId: TxId)async throws  -> TransactionLockState  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_transaction_lock_state(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTxId_lower(txId)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTransactionLockState_lift,
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+
+open func unlockedSpendableBalance()async throws  -> Amount  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_unlocked_spendable_balance(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_u64,
+            completeFunc: ffi_cove_rust_future_complete_u64,
+            freeFunc: ffi_cove_rust_future_free_u64,
+            liftFunc: FfiConverterTypeAmount_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
@@ -22651,9 +22738,9 @@ public enum CoinControlManagerReconcileMessage {
     )
     case updateSelectedUtxos(utxos: [OutPoint], totalValue: Amount
     )
-    case updateTotalSelectedAmount(Amount
-    )
     case updateUnit(BitcoinUnit
+    )
+    case updateLockStateLoadFailed(Bool
     )
 
 
@@ -22690,10 +22777,10 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         case 5: return .updateSelectedUtxos(utxos: try FfiConverterSequenceTypeOutPoint.read(from: &buf), totalValue: try FfiConverterTypeAmount.read(from: &buf)
         )
 
-        case 6: return .updateTotalSelectedAmount(try FfiConverterTypeAmount.read(from: &buf)
+        case 6: return .updateUnit(try FfiConverterTypeBitcoinUnit.read(from: &buf)
         )
 
-        case 7: return .updateUnit(try FfiConverterTypeBitcoinUnit.read(from: &buf)
+        case 7: return .updateLockStateLoadFailed(try FfiConverterBool.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -22729,14 +22816,14 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
             FfiConverterTypeAmount.write(totalValue, into: &buf)
 
 
-        case let .updateTotalSelectedAmount(v1):
-            writeInt(&buf, Int32(6))
-            FfiConverterTypeAmount.write(v1, into: &buf)
-
-
         case let .updateUnit(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeBitcoinUnit.write(v1, into: &buf)
+
+
+        case let .updateLockStateLoadFailed(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterBool.write(v1, into: &buf)
 
         }
     }
@@ -25991,6 +26078,7 @@ enum LabelManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     )
     case SaveAddressLabels(String
     )
+    case WalletNotSelected
 
 
 
@@ -26061,6 +26149,7 @@ public struct FfiConverterTypeLabelManagerError: FfiConverterRustBuffer {
         case 10: return .SaveAddressLabels(
             try FfiConverterString.read(from: &buf)
             )
+        case 11: return .WalletNotSelected
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -26121,6 +26210,10 @@ public struct FfiConverterTypeLabelManagerError: FfiConverterRustBuffer {
         case let .SaveAddressLabels(v1):
             writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
+
+
+        case .WalletNotSelected:
+            writeInt(&buf, Int32(11))
 
         }
     }
@@ -28684,7 +28777,7 @@ public enum Route {
     )
     case secretWords(WalletId
     )
-    case transactionDetails(id: WalletId, details: TransactionDetails
+    case transactionDetails(id: WalletId, txId: TxId
     )
     case send(SendRoute
     )
@@ -28692,6 +28785,16 @@ public enum Route {
     )
 
 
+
+public func isSameNavigationDestination(routeToCheck: Route) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_route_issamenavigationdestination(
+            FfiConverterTypeRoute_lower(self),
+        FfiConverterTypeRoute_lower(routeToCheck),uniffiCallStatus
+    )
+})
+}
 
 public func isEqual(routeToCheck: Route) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
@@ -28745,7 +28848,7 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case 5: return .secretWords(try FfiConverterTypeWalletId.read(from: &buf)
         )
 
-        case 6: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
+        case 6: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), txId: try FfiConverterTypeTxId.read(from: &buf)
         )
 
         case 7: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
@@ -28788,10 +28891,10 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
             FfiConverterTypeWalletId.write(v1, into: &buf)
 
 
-        case let .transactionDetails(id,details):
+        case let .transactionDetails(id,txId):
             writeInt(&buf, Int32(6))
             FfiConverterTypeWalletId.write(id, into: &buf)
-            FfiConverterTypeTransactionDetails.write(details, into: &buf)
+            FfiConverterTypeTxId.write(txId, into: &buf)
 
 
         case let .send(v1):
@@ -30420,6 +30523,7 @@ public enum SendFlowManagerAction {
     case selectMaxSend
     case clearSendAmount
     case clearAddress
+    case refreshWalletBalance
     case setCoinControlMode([Utxo]
     )
     case disableCoinControlMode
@@ -30485,54 +30589,56 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
 
         case 5: return .clearAddress
 
-        case 6: return .setCoinControlMode(try FfiConverterSequenceTypeUtxo.read(from: &buf)
+        case 6: return .refreshWalletBalance
+
+        case 7: return .setCoinControlMode(try FfiConverterSequenceTypeUtxo.read(from: &buf)
         )
 
-        case 7: return .disableCoinControlMode
+        case 8: return .disableCoinControlMode
 
-        case 8: return .selectFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        case 9: return .selectFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
         )
 
-        case 9: return .notifyEnteringBtcAmountChanged(try FfiConverterString.read(from: &buf)
+        case 10: return .notifyEnteringBtcAmountChanged(try FfiConverterString.read(from: &buf)
         )
 
-        case 10: return .notifyEnteringFiatAmountChanged(try FfiConverterString.read(from: &buf)
+        case 11: return .notifyEnteringFiatAmountChanged(try FfiConverterString.read(from: &buf)
         )
 
-        case 11: return .notifyEnteringAddressChanged(try FfiConverterString.read(from: &buf)
+        case 12: return .notifyEnteringAddressChanged(try FfiConverterString.read(from: &buf)
         )
 
-        case 12: return .notifySelectedUnitedChanged(old: try FfiConverterTypeBitcoinUnit.read(from: &buf), new: try FfiConverterTypeBitcoinUnit.read(from: &buf)
+        case 13: return .notifySelectedUnitedChanged(old: try FfiConverterTypeBitcoinUnit.read(from: &buf), new: try FfiConverterTypeBitcoinUnit.read(from: &buf)
         )
 
-        case 13: return .notifyBtcOrFiatChanged(old: try FfiConverterTypeFiatOrBtc.read(from: &buf), new: try FfiConverterTypeFiatOrBtc.read(from: &buf)
+        case 14: return .notifyBtcOrFiatChanged(old: try FfiConverterTypeFiatOrBtc.read(from: &buf), new: try FfiConverterTypeFiatOrBtc.read(from: &buf)
         )
 
-        case 14: return .notifyScanCodeChanged(old: try FfiConverterString.read(from: &buf), new: try FfiConverterString.read(from: &buf)
+        case 15: return .notifyScanCodeChanged(old: try FfiConverterString.read(from: &buf), new: try FfiConverterString.read(from: &buf)
         )
 
-        case 15: return .notifyPricesChanged(try FfiConverterTypePriceResponse.read(from: &buf)
+        case 16: return .notifyPricesChanged(try FfiConverterTypePriceResponse.read(from: &buf)
         )
 
-        case 16: return .notifyFocusFieldChanged(old: try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf), new: try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
+        case 17: return .notifyFocusFieldChanged(old: try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf), new: try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
         )
 
-        case 17: return .notifyAddressChanged(try FfiConverterTypeAddress.read(from: &buf)
+        case 18: return .notifyAddressChanged(try FfiConverterTypeAddress.read(from: &buf)
         )
 
-        case 18: return .notifyAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
+        case 19: return .notifyAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
         )
 
-        case 19: return .notifyCoinControlAmountChanged(try FfiConverterDouble.read(from: &buf)
+        case 20: return .notifyCoinControlAmountChanged(try FfiConverterDouble.read(from: &buf)
         )
 
-        case 20: return .notifyCoinControlEnteredAmountChanged(try FfiConverterString.read(from: &buf), try FfiConverterBool.read(from: &buf)
+        case 21: return .notifyCoinControlEnteredAmountChanged(try FfiConverterString.read(from: &buf), try FfiConverterBool.read(from: &buf)
         )
 
-        case 21: return .changeFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
+        case 22: return .changeFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
         )
 
-        case 22: return .finalizeAndGoToNextScreen
+        case 23: return .finalizeAndGoToNextScreen
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -30564,92 +30670,96 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
 
 
-        case let .setCoinControlMode(v1):
+        case .refreshWalletBalance:
             writeInt(&buf, Int32(6))
+
+
+        case let .setCoinControlMode(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterSequenceTypeUtxo.write(v1, into: &buf)
 
 
         case .disableCoinControlMode:
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
 
 
         case let .selectFeeRate(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeFeeRateOptionWithTotalFee.write(v1, into: &buf)
 
 
         case let .notifyEnteringBtcAmountChanged(v1):
-            writeInt(&buf, Int32(9))
-            FfiConverterString.write(v1, into: &buf)
-
-
-        case let .notifyEnteringFiatAmountChanged(v1):
             writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .notifyEnteringAddressChanged(v1):
+        case let .notifyEnteringFiatAmountChanged(v1):
             writeInt(&buf, Int32(11))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .notifySelectedUnitedChanged(old,new):
+        case let .notifyEnteringAddressChanged(v1):
             writeInt(&buf, Int32(12))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .notifySelectedUnitedChanged(old,new):
+            writeInt(&buf, Int32(13))
             FfiConverterTypeBitcoinUnit.write(old, into: &buf)
             FfiConverterTypeBitcoinUnit.write(new, into: &buf)
 
 
         case let .notifyBtcOrFiatChanged(old,new):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeFiatOrBtc.write(old, into: &buf)
             FfiConverterTypeFiatOrBtc.write(new, into: &buf)
 
 
         case let .notifyScanCodeChanged(old,new):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(15))
             FfiConverterString.write(old, into: &buf)
             FfiConverterString.write(new, into: &buf)
 
 
         case let .notifyPricesChanged(v1):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(16))
             FfiConverterTypePriceResponse.write(v1, into: &buf)
 
 
         case let .notifyFocusFieldChanged(old,new):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(17))
             FfiConverterOptionTypeSetAmountFocusField.write(old, into: &buf)
             FfiConverterOptionTypeSetAmountFocusField.write(new, into: &buf)
 
 
         case let .notifyAddressChanged(v1):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(18))
             FfiConverterTypeAddress.write(v1, into: &buf)
 
 
         case let .notifyAmountChanged(v1):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(19))
             FfiConverterTypeAmount.write(v1, into: &buf)
 
 
         case let .notifyCoinControlAmountChanged(v1):
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(20))
             FfiConverterDouble.write(v1, into: &buf)
 
 
         case let .notifyCoinControlEnteredAmountChanged(v1,v2):
-            writeInt(&buf, Int32(20))
+            writeInt(&buf, Int32(21))
             FfiConverterString.write(v1, into: &buf)
             FfiConverterBool.write(v2, into: &buf)
 
 
         case let .changeFeeRateOptions(v1):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(22))
             FfiConverterTypeFeeRateOptionsWithTotalFee.write(v1, into: &buf)
 
 
         case .finalizeAndGoToNextScreen:
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(23))
 
         }
     }
@@ -32563,6 +32673,86 @@ public func FfiConverterTypeTransactionDetailError_lower(_ value: TransactionDet
 
 
 
+public enum TransactionLockState: Equatable, Hashable {
+
+    case none
+    case unlocked
+    case locked
+    case mixed
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TransactionLockState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransactionLockState: FfiConverterRustBuffer {
+    typealias SwiftType = TransactionLockState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionLockState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .none
+
+        case 2: return .unlocked
+
+        case 3: return .locked
+
+        case 4: return .mixed
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TransactionLockState, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .none:
+            writeInt(&buf, Int32(1))
+
+
+        case .unlocked:
+            writeInt(&buf, Int32(2))
+
+
+        case .locked:
+            writeInt(&buf, Int32(3))
+
+
+        case .mixed:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionLockState_lift(_ buf: RustBuffer) throws -> TransactionLockState {
+    return try FfiConverterTypeTransactionLockState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionLockState_lower(_ value: TransactionLockState) -> RustBuffer {
+    return FfiConverterTypeTransactionLockState.lower(value)
+}
+
+
+
+
 public enum TransactionState: Equatable, Hashable {
 
     case pending
@@ -34438,6 +34628,7 @@ enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     )
     case InsufficientFunds(String
     )
+    case LockedOutputsSelected
     case GetConfirmDetailsError(String
     )
     case SignAndBroadcastError(String
@@ -34453,6 +34644,8 @@ enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     case CsvCreationError(String
     )
     case AddUtxosError(String
+    )
+    case OutputLabelsError(String
     )
     case DatabaseCorruption(id: WalletId, error: String
     )
@@ -34551,35 +34744,39 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
         case 20: return .InsufficientFunds(
             try FfiConverterString.read(from: &buf)
             )
-        case 21: return .GetConfirmDetailsError(
+        case 21: return .LockedOutputsSelected
+        case 22: return .GetConfirmDetailsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 22: return .SignAndBroadcastError(
+        case 23: return .SignAndBroadcastError(
             try FfiConverterString.read(from: &buf)
             )
-        case 23: return .Converter(
+        case 24: return .Converter(
             try FfiConverterTypeConverterError.read(from: &buf)
             )
-        case 24: return .UnknownError(
+        case 25: return .UnknownError(
             try FfiConverterString.read(from: &buf)
             )
-        case 25: return .PsbtFinalizeError(
+        case 26: return .PsbtFinalizeError(
             try FfiConverterString.read(from: &buf)
             )
-        case 26: return .GetHistoricalPricesError(
+        case 27: return .GetHistoricalPricesError(
             try FfiConverterString.read(from: &buf)
             )
-        case 27: return .CsvCreationError(
+        case 28: return .CsvCreationError(
             try FfiConverterString.read(from: &buf)
             )
-        case 28: return .AddUtxosError(
+        case 29: return .AddUtxosError(
             try FfiConverterString.read(from: &buf)
             )
-        case 29: return .DatabaseCorruption(
+        case 30: return .OutputLabelsError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 31: return .DatabaseCorruption(
             id: try FfiConverterTypeWalletId.read(from: &buf),
             error: try FfiConverterString.read(from: &buf)
             )
-        case 30: return .ReceiveAddressError(
+        case 32: return .ReceiveAddressError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -34691,54 +34888,63 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .GetConfirmDetailsError(v1):
+        case .LockedOutputsSelected:
             writeInt(&buf, Int32(21))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .SignAndBroadcastError(v1):
+        case let .GetConfirmDetailsError(v1):
             writeInt(&buf, Int32(22))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Converter(v1):
+        case let .SignAndBroadcastError(v1):
             writeInt(&buf, Int32(23))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Converter(v1):
+            writeInt(&buf, Int32(24))
             FfiConverterTypeConverterError.write(v1, into: &buf)
 
 
         case let .UnknownError(v1):
-            writeInt(&buf, Int32(24))
-            FfiConverterString.write(v1, into: &buf)
-
-
-        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(25))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .GetHistoricalPricesError(v1):
+        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(26))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .CsvCreationError(v1):
+        case let .GetHistoricalPricesError(v1):
             writeInt(&buf, Int32(27))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .AddUtxosError(v1):
+        case let .CsvCreationError(v1):
             writeInt(&buf, Int32(28))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .DatabaseCorruption(id,error):
+        case let .AddUtxosError(v1):
             writeInt(&buf, Int32(29))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .OutputLabelsError(v1):
+            writeInt(&buf, Int32(30))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .DatabaseCorruption(id,error):
+            writeInt(&buf, Int32(31))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterString.write(error, into: &buf)
 
 
         case let .ReceiveAddressError(v1):
-            writeInt(&buf, Int32(30))
+            writeInt(&buf, Int32(32))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -40409,10 +40615,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates() != 53354) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_lock_state_load_failed() != 30996) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_reload_labels() != 44692) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_selected_utxos() != 30072) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_set_utxo_spendability() != 52265) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_unit() != 17965) {
@@ -40730,7 +40942,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_wallet_address_type() != 37401) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_toggle_transaction_lock_state() != 4815) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_transaction_details() != 34155) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state() != 22037) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_unlocked_spendable_balance() != 11834) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 36684) {

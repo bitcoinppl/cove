@@ -266,10 +266,6 @@ struct ConfirmedTransactionView: View {
     let metadata: WalletMetadata
     let index: Int
 
-    // private
-    @State private var transactionDetails: TransactionDetails? = nil
-    @State private var loading: Bool = false
-
     private var amount: String {
         if case .btc = metadata.fiatOrBtc {
             return privateShow(
@@ -315,25 +311,8 @@ struct ConfirmedTransactionView: View {
 
     private func goToTransactionDetails() {
         let txId = txn.id()
-
-        if let details = manager.transactionDetails[txId] {
-            if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
-            return navigate(Route.transactionDetails(id: metadata.id, details: details))
-        }
-
-        Task {
-            do {
-                let details = try await manager.transactionDetails(for: txId)
-                await MainActor.run {
-                    if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
-                    navigate(Route.transactionDetails(id: metadata.id, details: details))
-                }
-            } catch {
-                Log.error(
-                    "Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())"
-                )
-            }
-        }
+        if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
+        navigate(Route.transactionDetails(id: metadata.id, txId: txId))
     }
 
     var label: String {
@@ -436,10 +415,19 @@ struct UnconfirmedTransactionView: View {
         )
     }
 
+    private func goToTransactionDetails() {
+        let txId = txn.id()
+        if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
+        navigate(Route.transactionDetails(id: metadata.id, txId: txId))
+    }
+
     var body: some View {
         HStack {
-            TxnIcon(direction: txn.sentAndReceived().direction(), confirmed: false)
-                .opacity(0.6)
+            TxnIcon(
+                direction: txn.sentAndReceived().direction(),
+                confirmed: false
+            )
+            .opacity(0.6)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(txn.label())
@@ -459,19 +447,7 @@ struct UnconfirmedTransactionView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            Task {
-                do {
-                    let details = try await manager.rust.transactionDetails(txId: txn.id())
-                    await MainActor.run {
-                        if index > scrollThresholdIndex { manager.scrolledTransactionId = txn.id().description }
-                        navigate(Route.transactionDetails(id: metadata.id, details: details))
-                    }
-                } catch {
-                    Log.error(
-                        "Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())"
-                    )
-                }
-            }
+            goToTransactionDetails()
         }
     }
 }
@@ -604,13 +580,15 @@ private struct TxnIcon: View {
     }
 
     var body: some View {
-        Image(systemName: arrow)
-            .foregroundColor(.white)
-            .padding()
-            .frame(width: 50, height: 50)
-            .background(iconColor)
-            .cornerRadius(6)
-            .padding(.trailing, 5)
+        ZStack {
+            Image(systemName: arrow)
+                .foregroundColor(.white)
+                .padding()
+        }
+        .frame(width: 50, height: 50)
+        .background(iconColor)
+        .cornerRadius(6)
+        .padding(.trailing, 5)
     }
 }
 

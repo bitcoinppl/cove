@@ -143,8 +143,8 @@ impl MultiFormat {
         }
 
         // try and parse bip329 labels
-        if let Ok(labels) = bip329::Labels::try_from_str(string) {
-            return Ok(Self::Bip329Labels(Arc::new(labels.into())));
+        if let Ok(labels) = Bip329Labels::try_from_str(string) {
+            return Ok(Self::Bip329Labels(Arc::new(labels)));
         }
 
         if string.contains("tapsigner.com/start") {
@@ -344,19 +344,16 @@ impl StringOrData {
     }
 }
 
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    uniffi::Object,
-    derive_more::Into,
-    derive_more::From,
-    derive_more::Deref,
-    derive_more::AsRef,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
+pub struct Bip329Labels(pub(crate) bip329::ParsedLabels);
 
-pub struct Bip329Labels(pub bip329::Labels);
+impl Bip329Labels {
+    pub(crate) fn try_from_str(string: &str) -> Result<Self, bip329::error::ParseError> {
+        let parsed = bip329::Labels::try_from_str_with_metadata(string)?;
+
+        Ok(Self(parsed))
+    }
+}
 
 impl From<cove_tap_card::TapSigner> for MultiFormat {
     fn from(tap_signer: cove_tap_card::TapSigner) -> Self {

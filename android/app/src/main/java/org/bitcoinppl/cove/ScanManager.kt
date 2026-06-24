@@ -1,10 +1,6 @@
 package org.bitcoinppl.cove
 
 import androidx.compose.runtime.Stable
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.tapcard.*
@@ -13,7 +9,6 @@ import org.bitcoinppl.cove_core.types.*
 @Stable
 class ScanManager private constructor() {
     private val tag = "ScanManager"
-    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val app: AppManager get() = AppManager.getInstance()
 
@@ -56,35 +51,7 @@ class ScanManager private constructor() {
                 }
 
                 is MultiFormat.Bip329Labels -> {
-                    val selectedWallet = Database().globalConfig().selectedWallet()
-                    if (selectedWallet == null) {
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.InvalidFileFormat(
-                                    "Currently BIP329 labels must be imported through the wallet actions",
-                                ),
-                            )
-                        return
-                    }
-
-                    try {
-                        LabelManager(id = selectedWallet).use { it.importLabels(multiFormat.v1) }
-                        app.alertState = TaggedItem(AppAlertState.ImportedLabelsSuccessfully)
-
-                        app.walletManager?.let { wm ->
-                            mainScope.launch {
-                                wm.rust.getTransactions()
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e(tag, "Failed to import labels", e)
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.InvalidFileFormat(
-                                    e.message ?: "Failed to import labels",
-                                ),
-                            )
-                    }
+                    importLabels(multiFormat.v1)
                 }
             }
         } catch (e: Exception) {
@@ -92,6 +59,33 @@ class ScanManager private constructor() {
             app.alertState =
                 TaggedItem(
                     AppAlertState.InvalidFileFormat(e.message ?: "Unknown error"),
+                )
+        }
+    }
+
+    private fun importLabels(labels: Bip329Labels) {
+        val manager = app.walletManager
+        val selectedWallet = Database().globalConfig().selectedWallet()
+        if (manager == null || selectedWallet != manager.id) {
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.InvalidFileFormat(
+                        "Currently BIP329 labels must be imported through the wallet actions",
+                    ),
+                )
+            return
+        }
+
+        try {
+            manager.importLabels(labels)
+            app.alertState = TaggedItem(AppAlertState.ImportedLabelsSuccessfully)
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to import labels", e)
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.InvalidFileFormat(
+                        e.message ?: "Failed to import labels",
+                    ),
                 )
         }
     }

@@ -65,11 +65,10 @@ fun rememberWalletExportLaunchers(
                             labelManager.import(fileContents.trim())
                         }
 
-                        // refresh transactions with updated labels
-                        try {
-                            currentManager.rust.getTransactions()
-                        } catch (refreshError: Exception) {
-                            android.util.Log.e(tag, "failed to refresh transactions after label import", refreshError)
+                        val refreshed =
+                            AppManager.getInstance()
+                                .reconcileAfterLabelImportAndWait(currentManager.id)
+                        if (!refreshed) {
                             snackbarHostState.showSnackbar("Labels imported successfully, but transaction list may need manual refresh")
                             return@launch
                         }
