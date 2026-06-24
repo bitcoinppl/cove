@@ -266,14 +266,13 @@ fn generate_bbqr_gif(psbt_bytes: &[u8], output_path: &str) -> Result<()> {
 
 /// Generate an animated GIF with UR-encoded QR codes (crypto-psbt)
 fn generate_ur_gif(psbt_bytes: &[u8], output_path: &str) -> Result<()> {
+    use cove_ur::CryptoPsbt;
     use foundation_ur::Encoder;
-    use minicbor::data::Tag;
 
-    // Encode PSBT as crypto-psbt CBOR (tag 310 + bytes)
-    let mut cbor = Vec::new();
-    let mut encoder = minicbor::Encoder::new(&mut cbor);
-    encoder.tag(Tag::new(310)).map_err(|e| eyre!("CBOR tag error: {e}"))?;
-    encoder.bytes(psbt_bytes).map_err(|e| eyre!("CBOR encode error: {e}"))?;
+    let crypto_psbt = CryptoPsbt::from_psbt_bytes(psbt_bytes.to_vec())
+        .map_err(|e| eyre!("Invalid PSBT bytes: {e}"))?;
+
+    let cbor = crypto_psbt.encode().map_err(|e| eyre!("CBOR encoding failed: {e}"))?;
 
     // Calculate max fragment length for QR code version 15
     // QR v15 alphanumeric capacity is ~758 chars, leaving room for UR overhead

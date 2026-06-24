@@ -16,10 +16,10 @@ bdk_wallet = { version = "3.0.0", features = ["keys-bip39"] }
 bitcoin = "0.32.9"
 bip39 = "2.2.2"
 base64 = "0.22.1"
+cove-ur = { path = "../crates/cove-ur" }
 qrcode = "0.14.1"
 image = { version = "0.25.10", features = ["gif"] }
 gif = "0.14.2"
 bbqr = { version = "0.3.5", default-features = false }
 foundation-ur = { version = "0.4.0", default-features = false, features = ["std"] }
-minicbor = { version = "2.2.1", features = ["derive", "std"] }
 hex = "0.4.3"

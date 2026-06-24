@@ -699,7 +699,7 @@ public func FfiConverterTypeCryptoHdkey_lower(_ value: CryptoHdkey) -> UInt64 {
 
 
 /**
- * crypto-psbt: PSBT encoded as CBOR byte string with tag 310
+ * crypto-psbt: PSBT encoded as a CBOR byte string
  * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 public protocol CryptoPsbtProtocol: AnyObject, Sendable {
@@ -727,7 +727,7 @@ public protocol CryptoPsbtProtocol: AnyObject, Sendable {
 
 }
 /**
- * crypto-psbt: PSBT encoded as CBOR byte string with tag 310
+ * crypto-psbt: PSBT encoded as a CBOR byte string
  * BCR-2020-006: <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md>
  */
 open class CryptoPsbt: CryptoPsbtProtocol, @unchecked Sendable {
