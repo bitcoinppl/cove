@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.FullPageLoadingView
@@ -44,6 +45,8 @@ fun TransactionDetailsContainer(
         try {
             manager = app.getWalletManager(walletId)
             loading = false
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             error = e.message ?: "failed to load wallet"
             loading = false
@@ -61,6 +64,8 @@ fun TransactionDetailsContainer(
         try {
             currentManager.transactionDetails(txId)
             didLoadInitialDetails = true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             detailsError = e.message ?: "failed to load transaction"
             android.util.Log.e("TransactionDetails", "Failed to load transaction details", e)
