@@ -74,6 +74,7 @@ internal fun resolveStartupModeTransition(
     cloudBackupLifecycle: CloudBackupLifecycle,
     hasPersistedOnboardingProgress: Boolean,
 ): StartupMode {
+    // after startup reaches ready, deleting the last wallet should not restart onboarding
     if (currentMode == StartupMode.READY && termsAccepted) return StartupMode.READY
 
     return resolveStartupMode(
