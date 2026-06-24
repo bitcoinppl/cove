@@ -348,7 +348,8 @@ fun SelectedWalletScreen(
                 val loadState = manager.loadState
                 val isScanStatusActive =
                     manager.scanStatus is WalletScanStatus.Scanning ||
-                        manager.scanStatus is WalletScanStatus.ScanningPendingProgress
+                        manager.scanStatus is WalletScanStatus.ScanningPendingProgress ||
+                        manager.ledgerState.initialScanActive
                 val transactionsAreLoading = loadState is WalletLoadState.Loading
 
                 // determine transaction data based on load state
