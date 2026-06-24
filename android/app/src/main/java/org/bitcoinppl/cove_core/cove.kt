@@ -4549,7 +4549,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 58472.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 15850.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571.toShort()) {
@@ -4627,7 +4627,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state() != 22037.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_unlocked_spendable_balance() != 11834.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_unlocked_spendable_balance() != 54797.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 36684.toShort()) {
@@ -21280,8 +21280,10 @@ public interface RustWalletManagerInterface {
     fun `initialLoadState`(): WalletLoadState
 
     /**
-     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
-     * direct broadcast otherwise.
+     * Send entry point for unsigned hot wallet PSBTs
+     *
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
      */
     suspend fun `initiatePayment`(`psbt`: Psbt, `payjoinEndpoint`: kotlin.String?)
 
@@ -21343,6 +21345,10 @@ public interface RustWalletManagerInterface {
 
     suspend fun `transactionLockState`(`txId`: TxId): TransactionLockState
 
+    /**
+     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
+     * direct broadcast otherwise.
+     */
     suspend fun `unlockedSpendableBalance`(): Amount
 
     fun `validateMetadata`()
@@ -22179,8 +22185,10 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
 
     /**
-     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
-     * direct broadcast otherwise.
+     * Send entry point for unsigned hot wallet PSBTs
+     *
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
      */
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
@@ -22641,6 +22649,10 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
 
 
+    /**
+     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
+     * direct broadcast otherwise.
+     */
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `unlockedSpendableBalance`() : Amount {

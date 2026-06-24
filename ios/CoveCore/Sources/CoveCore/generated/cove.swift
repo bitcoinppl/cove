@@ -9185,8 +9185,10 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func initialLoadState()  -> WalletLoadState
 
     /**
-     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
-     * direct broadcast otherwise.
+     * Send entry point for unsigned hot wallet PSBTs
+     *
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
      */
     func initiatePayment(psbt: Psbt, payjoinEndpoint: String?) async throws
 
@@ -9248,6 +9250,10 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func transactionLockState(txId: TxId) async throws  -> TransactionLockState
 
+    /**
+     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
+     * direct broadcast otherwise.
+     */
     func unlockedSpendableBalance() async throws  -> Amount
 
     func validateMetadata()
@@ -9918,8 +9924,10 @@ open func initialLoadState() -> WalletLoadState  {
 }
 
     /**
-     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
-     * direct broadcast otherwise.
+     * Send entry point for unsigned hot wallet PSBTs
+     *
+     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
+     * PayJoin negotiation is handled in the actor stub.
      */
 open func initiatePayment(psbt: Psbt, payjoinEndpoint: String?)async throws   {
     return
@@ -10257,6 +10265,10 @@ open func transactionLockState(txId: TxId)async throws  -> TransactionLockState 
         )
 }
 
+    /**
+     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
+     * direct broadcast otherwise.
+     */
 open func unlockedSpendableBalance()async throws  -> Amount  {
     return
         try  await uniffiRustCallAsync(
@@ -40873,7 +40885,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 58472) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 15850) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571) {
@@ -40951,7 +40963,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state() != 22037) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_unlocked_spendable_balance() != 11834) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_unlocked_spendable_balance() != 54797) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 36684) {
