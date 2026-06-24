@@ -3203,15 +3203,14 @@ async fn persisted_disabling_on_restart_resumes_to_disabled() {
         .unwrap();
 
     let restarted_manager = init_manager();
-    for _ in 0..20 {
-        if Database::global().cloud_backup_state.get().unwrap().status()
-            == PersistedCloudBackupStatus::Disabled
-        {
-            break;
-        }
-
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    wait_for_test_condition(Duration::from_secs(2), "restart disable recovery finishes", || {
+        !globals.cloud.has_namespace(&namespace)
+            && Database::global().cloud_backup_state.get().unwrap().status()
+                == PersistedCloudBackupStatus::Disabled
+            && CloudBackupKeychain::global().namespace_id().is_none()
+            && restarted_manager.model_snapshot().status == CloudBackupStatus::Disabled
+    })
+    .await;
 
     assert!(!globals.cloud.has_namespace(&namespace));
     assert_eq!(
