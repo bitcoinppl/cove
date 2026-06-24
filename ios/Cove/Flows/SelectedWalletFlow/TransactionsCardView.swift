@@ -28,7 +28,7 @@ struct TransactionsCardView: View {
     }
 
     private var isScanning: Bool {
-        // keep both sources so reconcile message ordering cannot hide active scanning
+        // keep all sources so reconcile message ordering cannot hide active scanning
         manager.loadState == .loading || manager.ledgerState.initialScanActive
             || manager.scanStatus.isActive
     }
