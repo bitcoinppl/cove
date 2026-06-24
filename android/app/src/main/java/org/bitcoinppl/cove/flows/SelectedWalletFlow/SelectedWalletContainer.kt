@@ -224,7 +224,7 @@ fun SelectedWalletContainer(
                     modifier = modifier,
                 )
             } else {
-                FullPageLoadingView(modifier = modifier, message = "Loading wallet")
+                FullPageLoadingView(modifier = modifier, message = stringResource(R.string.label_loading))
             }
         }
         else -> {
