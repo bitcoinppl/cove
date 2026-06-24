@@ -235,6 +235,16 @@ class AppManager private constructor() : FfiReconcile {
         walletManager = null
     }
 
+    private fun clearWalletManager(id: WalletId) {
+        if (walletManager?.id == id) {
+            clearWalletManager()
+        }
+
+        if (sendFlowManager?.id == id) {
+            clearSendFlowManager()
+        }
+    }
+
     private fun clearSendFlowManager() {
         try {
             sendFlowManager?.close()
@@ -635,9 +645,7 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.ClearCachedWalletManager -> {
-                    if (walletManager?.id == message.v1) {
-                        clearWalletManager()
-                    }
+                    clearWalletManager(message.v1)
                 }
 
                 is AppStateReconcileMessage.ShowLoadingPopup -> {

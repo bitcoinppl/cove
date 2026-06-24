@@ -23,7 +23,10 @@ use cove_tokio::task::{self, spawn_actor};
 use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
 
 use crate::{
-    app::FfiApp,
+    app::{
+        FfiApp,
+        reconcile::{Update, Updater},
+    },
     converter::{Converter, ConverterError},
     database::{Database, error::DatabaseError},
     discovery_scanner::{ScannerResponse, WalletDiscoveryScanner},
@@ -1073,6 +1076,8 @@ impl RustWalletManager {
         if let Err(error) = crate::wallet::delete_wallet_specific_data(&wallet_id) {
             error!("Unable to delete wallet persisted bdk data and wallet data database: {error}");
         }
+
+        Updater::send_update(Update::ClearCachedWalletManager(wallet_id.clone()));
 
         // unselect the wallet in the database
         match database.global_config.selected_wallet() {
