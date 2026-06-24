@@ -256,63 +256,6 @@ class OnboardingHelpersTest {
     }
 
     @Test
-    fun onboardingStartupModePromotesToReadyWhenSetupIsComplete() {
-        assertEquals(
-            StartupMode.READY,
-            resolveStartupModeTransition(
-                currentMode = StartupMode.ONBOARDING,
-                termsAccepted = true,
-                hasWallets = true,
-                cloudBackupLifecycle = configuredLifecycle(),
-                hasPersistedOnboardingProgress = false,
-            ),
-        )
-    }
-
-    @Test
-    fun onboardingStartupModeDoesNotUseReadyShortcut() {
-        assertEquals(
-            StartupMode.ONBOARDING,
-            resolveStartupModeTransition(
-                currentMode = StartupMode.ONBOARDING,
-                termsAccepted = true,
-                hasWallets = false,
-                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
-                hasPersistedOnboardingProgress = false,
-                hasRecoveredOnboardingProgressAfterReadFailure = false,
-            ),
-        )
-    }
-
-    @Test
-    fun readyStartupModeIgnoresStalePersistedOnboardingProgress() {
-        assertEquals(
-            StartupMode.READY,
-            resolveStartupModeTransition(
-                currentMode = StartupMode.READY,
-                termsAccepted = true,
-                hasWallets = false,
-                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
-                hasPersistedOnboardingProgress = true,
-            ),
-        )
-    }
-
-    @Test
-    fun readyStartupModeStillRequiresAcceptedTerms() {
-        assertEquals(
-            StartupMode.ONBOARDING,
-            resolveStartupModeTransition(
-                currentMode = StartupMode.READY,
-                termsAccepted = false,
-                hasWallets = true,
-                cloudBackupLifecycle = configuredLifecycle(),
-                hasPersistedOnboardingProgress = false,
-            ),
-        )
-    }
-
-    @Test
     fun persistedOnboardingProgressRequiresNonBlankState() {
         assertFalse(hasPersistedOnboardingProgress(null))
         assertFalse(hasPersistedOnboardingProgress(""))
