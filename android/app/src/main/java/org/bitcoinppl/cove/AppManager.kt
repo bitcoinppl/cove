@@ -167,7 +167,9 @@ class AppManager private constructor() : FfiReconcile {
         wallets.firstOrNull { it.id == id }?.let { return it }
 
         return runCatching {
-            Database().wallets().all().firstOrNull { it.id == id }
+            database.wallets().all().firstOrNull { it.id == id }
+        }.onFailure {
+            Log.w(tag, "Unable to reload wallet metadata for $id", it)
         }.getOrNull()
     }
 

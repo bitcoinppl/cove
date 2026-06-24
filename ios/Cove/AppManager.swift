@@ -132,7 +132,12 @@ private let navigationSettleDelayMs = 800
             return wallet
         }
 
-        return try? database.wallets().all().first(where: { $0.id == id })
+        do {
+            return try database.wallets().all().first(where: { $0.id == id })
+        } catch {
+            logger.warn("Unable to reload wallet metadata for \(id): \(error)")
+            return nil
+        }
     }
 
     func ensureWalletManager(id: WalletId) throws -> WalletManager {
