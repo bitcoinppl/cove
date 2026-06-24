@@ -103,6 +103,10 @@ private struct SelectedWalletLoadingScreen: View {
         .white
     }
 
+    private var canGoBack: Bool {
+        app.rust.canGoBack()
+    }
+
     private var titleContent: some View {
         HStack(spacing: 10) {
             if case .cold = metadata.walletType {
@@ -120,7 +124,25 @@ private struct SelectedWalletLoadingScreen: View {
         .padding(.horizontal, 28)
     }
 
+    @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button(action: {
+                if canGoBack {
+                    app.popRoute()
+                } else {
+                    withAnimation {
+                        app.toggleSidebar()
+                    }
+                }
+            }) {
+                Image(systemName: canGoBack ? "chevron.left" : "line.horizontal.3")
+                    .adaptiveToolbarItemStyle(isPastHeader: false)
+                    .font(.callout)
+            }
+            .contentShape(Rectangle())
+        }
+
         ToolbarItemGroup(placement: .navigationBarTrailing) {
             HStack(spacing: 5) {
                 Button(action: {
@@ -290,7 +312,7 @@ private struct TransactionsLoadingCardView: View {
         VStack {
             VStack {
                 HStack {
-                    Text("Transactions")
+                    Text(String(localized: "Transactions"))
                         .foregroundStyle(.secondary)
                         .font(.subheadline)
                         .fontWeight(.bold)
@@ -299,7 +321,7 @@ private struct TransactionsLoadingCardView: View {
                 }
                 .padding(.bottom, 12)
 
-                EmptyWalletScanSpinnerState(message: "Checking wallet history")
+                EmptyWalletScanSpinnerState(message: TransactionsCopy.checkingWalletHistory)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 56)
 
