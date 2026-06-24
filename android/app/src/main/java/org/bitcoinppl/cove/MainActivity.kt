@@ -497,7 +497,7 @@ class MainActivity : FragmentActivity() {
                 runCatching {
                     Database().globalConfig().get(GlobalConfigKey.OnboardingProgress)
                 }.onFailure { error ->
-                    Log.w(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
+                    Log.e(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
                 }
             }
             var persistedOnboardingProgress by remember { mutableStateOf(readPersistedOnboardingProgress().getOrNull()) }

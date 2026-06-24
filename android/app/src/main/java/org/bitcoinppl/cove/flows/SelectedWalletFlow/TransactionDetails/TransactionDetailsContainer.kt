@@ -1,8 +1,9 @@
 package org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,6 +19,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove_core.types.TxId
 import org.bitcoinppl.cove_core.types.WalletId
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * lifecycle container for transaction details screen
@@ -37,6 +39,21 @@ fun TransactionDetailsContainer(
     var retryAttempt by remember(txId) { mutableStateOf(0) }
     var managerRetryAttempt by remember(walletId) { mutableStateOf(0) }
     var recoveringWalletSelection by remember(walletId) { mutableStateOf(false) }
+
+    fun recoverWalletSelection() {
+        if (recoveringWalletSelection && !app.isNavigationSettled) return
+
+        recoveringWalletSelection = true
+
+        try {
+            app.selectLatestOrNewWallet()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (recoveryError: Exception) {
+            android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", recoveryError)
+            app.popRoute()
+        }
+    }
 
     LaunchedEffect(recoveringWalletSelection, app.isNavigationSettled) {
         if (recoveringWalletSelection && app.isNavigationSettled) {
@@ -59,13 +76,7 @@ fun TransactionDetailsContainer(
             android.util.Log.e("TransactionDetails", "Failed to load wallet", e)
             error = e.message ?: "failed to load wallet"
             loading = false
-
-            try {
-                app.selectLatestOrNewWallet()
-                recoveringWalletSelection = true
-            } catch (recoveryError: Exception) {
-                android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", recoveryError)
-            }
+            recoverWalletSelection()
         }
     }
 
@@ -94,13 +105,15 @@ fun TransactionDetailsContainer(
     when {
         loading || suppressWalletLoadRetry -> FullPageLoadingView()
         error != null -> {
+            BackHandler(onBack = { recoverWalletSelection() })
+
             TransactionDetailsLoadError(
                 message = error!!,
                 onRetry = {
                     error = null
                     managerRetryAttempt++
                 },
-                onRecoverWalletSelection = { app.trySelectLatestOrNewWallet() },
+                onRecoverWalletSelection = { recoverWalletSelection() },
             )
         }
 

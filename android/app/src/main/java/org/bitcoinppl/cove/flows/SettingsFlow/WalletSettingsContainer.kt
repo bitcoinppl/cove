@@ -29,6 +29,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.types.*
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Wallet settings container - lazy loads WalletManager for wallet settings
@@ -45,7 +46,30 @@ fun WalletSettingsContainer(
         mutableStateOf<WalletSettingsLoadState>(WalletSettingsLoadState.Loading)
     }
     var loadAttempt by remember(id) { mutableStateOf(0) }
+    var didShowLoadFailureAlert by remember(id, route) { mutableStateOf(false) }
     val tag = "WalletSettingsContainer"
+
+    fun startWalletSelectionRecovery(message: String) {
+        if (loadState is WalletSettingsLoadState.Recovering && !app.isNavigationSettled) return
+
+        loadState = WalletSettingsLoadState.Recovering(message)
+
+        try {
+            app.selectLatestOrNewWallet()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (recoveryError: Exception) {
+            android.util.Log.e(tag, "failed to recover wallet selection", recoveryError)
+            loadState = WalletSettingsLoadState.Failed(message)
+        }
+    }
+
+    LaunchedEffect(loadState, app.isNavigationSettled) {
+        val state = loadState
+        if (state is WalletSettingsLoadState.Recovering && app.isNavigationSettled) {
+            loadState = WalletSettingsLoadState.Failed(state.message)
+        }
+    }
 
     // lazy load wallet manager
     LaunchedEffect(id, loadAttempt) {
@@ -54,34 +78,37 @@ fun WalletSettingsContainer(
         try {
             android.util.Log.d(tag, "getting wallet $id")
             loadState = WalletSettingsLoadState.Ready(app.getWalletManager(id))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val message = e.message ?: "Unknown error"
 
             android.util.Log.e(tag, "failed to load wallet", e)
             loadState = WalletSettingsLoadState.Failed(message)
-            app.alertState =
-                TaggedItem(
-                    AppAlertState.General(
-                        title = "Error!",
-                        message = "Unable to load wallet: $message",
-                    ),
-                )
+
+            if (!didShowLoadFailureAlert) {
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.General(
+                            title = "Error!",
+                            message = "Unable to load wallet: $message",
+                        ),
+                    )
+                didShowLoadFailureAlert = true
+            }
 
             // leave the alert visible before route recovery replaces this screen
             delay(WALLET_LOAD_ERROR_RECOVERY_DELAY_MS)
             ensureActive()
 
-            try {
-                app.selectLatestOrNewWallet()
-            } catch (recoveryError: Exception) {
-                android.util.Log.e(tag, "failed to recover wallet selection", recoveryError)
-            }
+            startWalletSelectionRecovery(message)
         }
     }
 
     // render
     when (val state = loadState) {
-        WalletSettingsLoadState.Loading -> {
+        WalletSettingsLoadState.Loading,
+        is WalletSettingsLoadState.Recovering -> {
             Box(
                 modifier = modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
@@ -91,7 +118,7 @@ fun WalletSettingsContainer(
         }
 
         is WalletSettingsLoadState.Failed -> {
-            val recoverWalletSelection = { app.trySelectLatestOrNewWallet() }
+            val recoverWalletSelection = { startWalletSelectionRecovery(state.message) }
 
             BackHandler(onBack = recoverWalletSelection)
 
@@ -132,6 +159,10 @@ private sealed interface WalletSettingsLoadState {
     ) : WalletSettingsLoadState
 
     data class Failed(
+        val message: String,
+    ) : WalletSettingsLoadState
+
+    data class Recovering(
         val message: String,
     ) : WalletSettingsLoadState
 }
