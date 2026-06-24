@@ -356,7 +356,9 @@ impl GlobalConfigTable {
                 Ok(None)
             }
             BlockExplorerOption::Custom => Ok(self.custom_block_explorer(network)),
-            _ => {
+            BlockExplorerOption::MempoolGuide
+            | BlockExplorerOption::BullBitcoin
+            | BlockExplorerOption::Blockstream => {
                 let base_url = option.base_url().expect("preset block explorer has a base URL");
                 self.set_custom_block_explorer(network, base_url.to_string())
             }
