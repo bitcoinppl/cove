@@ -256,6 +256,34 @@ class OnboardingHelpersTest {
     }
 
     @Test
+    fun onboardingStartupModePromotesToReadyWhenSetupIsComplete() {
+        assertEquals(
+            StartupMode.READY,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.ONBOARDING,
+                termsAccepted = true,
+                hasWallets = true,
+                cloudBackupLifecycle = configuredLifecycle(),
+                hasPersistedOnboardingProgress = false,
+            ),
+        )
+    }
+
+    @Test
+    fun readyStartupModeIgnoresStalePersistedOnboardingProgress() {
+        assertEquals(
+            StartupMode.READY,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.READY,
+                termsAccepted = true,
+                hasWallets = false,
+                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
+                hasPersistedOnboardingProgress = true,
+            ),
+        )
+    }
+
+    @Test
     fun readyStartupModeStillRequiresAcceptedTerms() {
         assertEquals(
             StartupMode.ONBOARDING,
