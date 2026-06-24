@@ -542,6 +542,8 @@ impl FfiApp {
             error!("Unable to delete wallet persisted data: {error}");
         }
 
+        Updater::send_update(AppMessage::ClearCachedWalletManager(id.clone()));
+
         match database.global_config.selected_wallet() {
             Some(selected_id) if selected_id == id => {
                 let _ = database.global_config.clear_selected_wallet().tap_err(|error| {
@@ -581,6 +583,8 @@ impl FfiApp {
             if let Err(error) = crate::wallet::delete_wallet_specific_data(wallet_id) {
                 error!("Unable to delete wallet persisted bdk data: {error}");
             }
+
+            Updater::send_update(AppMessage::ClearCachedWalletManager(wallet_id.clone()));
         }
 
         if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
