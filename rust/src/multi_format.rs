@@ -183,7 +183,7 @@ impl MultiFormat {
             Err(_) => {}
         }
 
-        warn!("could not parse string as MultiFormat: {string}");
+        warn!(input_len = string.len(), "could not parse string as MultiFormat");
         Err(MultiFormatError::UnrecognizedFormat)
     }
 

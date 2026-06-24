@@ -536,7 +536,7 @@ fn index(type_: WalletAddressType) -> usize {
     match type_ {
         WalletAddressType::WrappedSegwit => 0,
         WalletAddressType::Legacy => 1,
-        WalletAddressType::NativeSegwit => panic!("Not scanning the default one NativeSegwit"),
+        WalletAddressType::NativeSegwit => panic!("NativeSegwit has no alternate discovery slot"),
     }
 }
 

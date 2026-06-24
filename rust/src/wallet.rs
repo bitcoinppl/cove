@@ -24,6 +24,7 @@ use bdk_wallet::KeychainKind;
 use bdk_wallet::bitcoin::bip32::Xpub;
 use bdk_wallet::chain::rusqlite::Connection;
 use bdk_wallet::chain::spk_client::FullScanRequest;
+use bdk_wallet::miniscript::descriptor::ShInner;
 use bip39::Mnemonic;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_common::consts::GAP_LIMIT;
@@ -302,7 +303,6 @@ impl Wallet {
             Format::Json(json) => {
                 let (descriptors, address_type) = preferred_json_descriptors(&json)?;
 
-                metadata.address_type = address_type;
                 if should_start_json_discovery(&json, address_type) {
                     metadata.discovery_state =
                         DiscoveryState::StartedJson(Arc::new((*json).into()));
@@ -317,6 +317,7 @@ impl Wallet {
 
         // compute xpub and descriptors early so they're available for the upgrade path
         let descriptors: Descriptors = pubport_descriptors.into();
+        metadata.address_type = address_type_from_descriptors(&descriptors)?;
         let fingerprint = descriptors.fingerprint();
         let xpub = xpub_from_descriptors(&descriptors)?;
 
@@ -821,10 +822,47 @@ fn xpub_from_descriptors(descriptors: &Descriptors) -> Result<Xpub, WalletError>
     )))
 }
 
+fn address_type_from_descriptors(
+    descriptors: &Descriptors,
+) -> Result<WalletAddressType, WalletError> {
+    let external = address_type_from_descriptor(&descriptors.external)?;
+    let internal = address_type_from_descriptor(&descriptors.internal)?;
+
+    if external != internal {
+        return Err(WalletError::UnsupportedWallet(
+            "external and internal descriptors use different address types".to_string(),
+        ));
+    }
+
+    Ok(external)
+}
+
+fn address_type_from_descriptor(descriptor: &Descriptor) -> Result<WalletAddressType, WalletError> {
+    match &descriptor.extended_descriptor {
+        bdk_wallet::miniscript::Descriptor::Pkh(_) => Ok(WalletAddressType::Legacy),
+        bdk_wallet::miniscript::Descriptor::Wpkh(_) => Ok(WalletAddressType::NativeSegwit),
+        bdk_wallet::miniscript::Descriptor::Sh(sh) => match sh.as_inner() {
+            ShInner::Wpkh(_) => Ok(WalletAddressType::WrappedSegwit),
+            _ => Err(unsupported_descriptor_address_type("non-wrapped-SegWit P2SH")),
+        },
+        bdk_wallet::miniscript::Descriptor::Tr(_) => {
+            Err(unsupported_descriptor_address_type("Taproot"))
+        }
+        _ => Err(unsupported_descriptor_address_type("this descriptor type")),
+    }
+}
+
+fn unsupported_descriptor_address_type(name: &str) -> WalletError {
+    WalletError::UnsupportedWallet(format!("{name} descriptors are not supported"))
+}
+
 /// Returns whether a JSON import needs alternate address-type discovery
 ///
 /// Discovery only starts when the export has a supported alternate that differs from the
 /// primary wallet, because the primary descriptor is synced by the main wallet
+///
+/// Native SegWit (`bip84`) is intentionally absent because it is the preferred primary
+/// descriptor when present, not an alternate discovery target
 fn should_start_json_discovery(
     json: &pubport::formats::Json,
     address_type: WalletAddressType,
@@ -970,6 +1008,12 @@ mod tests {
         )
     }
 
+    fn bip86_descriptors() -> pubport::descriptor::Descriptors {
+        pubport_descriptors(
+            "tr([817e7be0/86h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)",
+        )
+    }
+
     fn assert_missing_supported_xpub(error: WalletError) {
         let WalletError::ParseXpubError(xpub::XpubError::MissingXpub(message)) = error else {
             panic!("expected missing xpub error");
@@ -1080,6 +1124,30 @@ mod tests {
                 pubport_descriptors.xpub().unwrap()
             );
         }
+    }
+
+    #[test]
+    fn descriptor_address_type_infers_supported_descriptor_formats() {
+        for (pubport_descriptors, expected) in [
+            (bip84_descriptors(), WalletAddressType::NativeSegwit),
+            (bip49_descriptors(), WalletAddressType::WrappedSegwit),
+            (bip44_descriptors(), WalletAddressType::Legacy),
+        ] {
+            let descriptors = Descriptors::from(pubport_descriptors);
+
+            assert_eq!(address_type_from_descriptors(&descriptors).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn descriptor_address_type_rejects_taproot() {
+        let descriptors = Descriptors::from(bip86_descriptors());
+        let error = address_type_from_descriptors(&descriptors).unwrap_err();
+
+        assert_eq!(
+            error,
+            WalletError::UnsupportedWallet("Taproot descriptors are not supported".to_string())
+        );
     }
 
     #[test]
