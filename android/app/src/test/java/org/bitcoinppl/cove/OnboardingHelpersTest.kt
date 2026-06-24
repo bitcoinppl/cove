@@ -256,6 +256,20 @@ class OnboardingHelpersTest {
     }
 
     @Test
+    fun readyStartupModeStillRequiresAcceptedTerms() {
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.READY,
+                termsAccepted = false,
+                hasWallets = true,
+                cloudBackupLifecycle = configuredLifecycle(),
+                hasPersistedOnboardingProgress = false,
+            ),
+        )
+    }
+
+    @Test
     fun persistedOnboardingProgressRequiresNonBlankState() {
         assertFalse(hasPersistedOnboardingProgress(null))
         assertFalse(hasPersistedOnboardingProgress(""))
