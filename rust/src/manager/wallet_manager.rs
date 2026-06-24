@@ -333,11 +333,6 @@ pub enum WalletManagerError {
 #[uniffi::export(async_runtime = "tokio")]
 impl RustWalletManager {
     #[uniffi::method]
-    pub fn initial_load_state(&self) -> WalletLoadState {
-        self.initial_state.load_state.clone()
-    }
-
-    #[uniffi::method]
     pub fn initial_state(&self) -> WalletInitialState {
         self.initial_state.clone()
     }
