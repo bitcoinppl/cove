@@ -568,7 +568,6 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     init(preview: String, _ walletMetadata: WalletMetadata? = nil) {
         assert(preview == "preview_only")
 
-        id = WalletId()
         let rust =
             if let walletMetadata {
                 RustWalletManager.previewNewWalletWithMetadata(metadata: walletMetadata)
@@ -584,6 +583,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         self.balancePresentation = initialState.balancePresentation
         self.balance = initialState.balance
         self.walletMetadata = initialState.metadata
+        self.id = initialState.metadata.id
         self.unsignedTransactions = initialState.unsignedTransactions
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
