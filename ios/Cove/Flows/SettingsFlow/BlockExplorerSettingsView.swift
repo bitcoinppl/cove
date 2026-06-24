@@ -8,9 +8,9 @@ struct BlockExplorerSettingsView: View {
     @State private var input: String
     @State private var preview: String
     @State private var selectedOption: BlockExplorerOption
-    @State private var validationError: String?
     @State private var isSaving = false
     @State private var showInvalidUrlAlert = false
+    @State private var showUpdateFailedAlert = false
     @FocusState private var isInputFocused: Bool
 
     init() {
@@ -77,12 +77,6 @@ struct BlockExplorerSettingsView: View {
                         }
                         .onSubmit(save)
 
-                    if let validationError {
-                        Text(validationError)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
                     Button("Save", action: save)
                         .disabled(isSaving || input == (config.customBlockExplorer(network: selectedNetwork) ?? ""))
 
@@ -99,6 +93,11 @@ struct BlockExplorerSettingsView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Enter a valid URL, IP address, or block explorer template.")
+        }
+        .alert("Unable to Update Block Explorer", isPresented: $showUpdateFailedAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Try again later.")
         }
     }
 
@@ -141,9 +140,8 @@ struct BlockExplorerSettingsView: View {
             input = normalized ?? ""
             preview = config.effectiveBlockExplorerPreview(network: selectedNetwork)
             selectedOption = config.selectedBlockExplorerOption(network: selectedNetwork)
-            validationError = nil
         } catch {
-            validationError = error.localizedDescription
+            showUpdateFailedAlert = true
         }
     }
 
@@ -151,7 +149,6 @@ struct BlockExplorerSettingsView: View {
         input = config.customBlockExplorer(network: selectedNetwork) ?? ""
         preview = config.effectiveBlockExplorerPreview(network: selectedNetwork)
         selectedOption = config.selectedBlockExplorerOption(network: selectedNetwork)
-        validationError = nil
     }
 
     private func updatePreview(for value: String) {
@@ -160,10 +157,8 @@ struct BlockExplorerSettingsView: View {
                 network: selectedNetwork,
                 input: value
             )
-            validationError = nil
         } catch {
             preview = ""
-            validationError = error.localizedDescription
         }
     }
 
@@ -184,7 +179,6 @@ struct BlockExplorerSettingsView: View {
             input = normalized ?? ""
             preview = config.effectiveBlockExplorerPreview(network: networkToSave)
             selectedOption = config.selectedBlockExplorerOption(network: networkToSave)
-            validationError = nil
 
             Task { @MainActor in
                 await dismissAllPopups()
@@ -194,7 +188,6 @@ struct BlockExplorerSettingsView: View {
                     .present()
             }
         } catch {
-            validationError = error.localizedDescription
             showInvalidUrlAlert = true
         }
 
@@ -206,7 +199,7 @@ struct BlockExplorerSettingsView: View {
             try config.clearCustomBlockExplorer(network: selectedNetwork)
             reload()
         } catch {
-            validationError = error.localizedDescription
+            showUpdateFailedAlert = true
         }
     }
 }

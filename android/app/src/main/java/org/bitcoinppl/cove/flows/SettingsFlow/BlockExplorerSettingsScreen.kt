@@ -52,9 +52,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.SectionHeader
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.BlockExplorerOption
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.allBlockExplorerOptions
@@ -71,6 +73,10 @@ fun BlockExplorerSettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val keyboardController = LocalSoftwareKeyboardController.current
     val savedMessage = stringResource(R.string.block_explorer_saved)
+    val invalidUrlTitle = stringResource(R.string.block_explorer_invalid_url_title)
+    val invalidUrlMessage = stringResource(R.string.block_explorer_invalid_url_message)
+    val updateFailedTitle = stringResource(R.string.block_explorer_update_failed_title)
+    val updateFailedMessage = stringResource(R.string.block_explorer_update_failed_message)
 
     // only Bitcoin explorer overrides are editable; other networks use built-in defaults
     val editableNetworks = remember { listOf(Network.BITCOIN) }
@@ -84,24 +90,33 @@ fun BlockExplorerSettingsScreen(
     var selectedOption by remember(selectedNetwork) {
         mutableStateOf(config.selectedBlockExplorerOption(selectedNetwork))
     }
-    var validationError by remember(selectedNetwork) { mutableStateOf<String?>(null) }
     var isSaving by remember(selectedNetwork) { mutableStateOf(false) }
     val blockExplorerOptions = remember { allBlockExplorerOptions() }
+
+    fun showAlert(
+        title: String,
+        message: String,
+    ) {
+        app.alertState =
+            TaggedItem(
+                AppAlertState.General(
+                    title = title,
+                    message = message,
+                ),
+            )
+    }
 
     fun reload() {
         input = config.customBlockExplorer(selectedNetwork) ?: ""
         preview = config.effectiveBlockExplorerPreview(selectedNetwork)
         selectedOption = config.selectedBlockExplorerOption(selectedNetwork)
-        validationError = null
     }
 
     fun updatePreview(value: String) {
         try {
             preview = config.previewCustomBlockExplorer(selectedNetwork, value)
-            validationError = null
-        } catch (error: Exception) {
+        } catch (e: Exception) {
             preview = ""
-            validationError = error.message ?: error.toString()
         }
     }
 
@@ -120,15 +135,14 @@ fun BlockExplorerSettingsScreen(
                 input = normalized ?: ""
                 preview = config.effectiveBlockExplorerPreview(networkToSave)
                 selectedOption = config.selectedBlockExplorerOption(networkToSave)
-                validationError = null
                 keyboardController?.hide()
                 isSaving = false
 
                 launch {
                     snackbarHostState.showSnackbar(savedMessage)
                 }
-            } catch (error: Exception) {
-                validationError = error.message ?: error.toString()
+            } catch (e: Exception) {
+                showAlert(invalidUrlTitle, invalidUrlMessage)
                 isSaving = false
             }
         }
@@ -139,9 +153,8 @@ fun BlockExplorerSettingsScreen(
             input = config.setBlockExplorerOption(selectedNetwork, option) ?: ""
             preview = config.effectiveBlockExplorerPreview(selectedNetwork)
             selectedOption = config.selectedBlockExplorerOption(selectedNetwork)
-            validationError = null
-        } catch (error: Exception) {
-            validationError = error.message ?: error.toString()
+        } catch (e: Exception) {
+            showAlert(updateFailedTitle, updateFailedMessage)
         }
     }
 
@@ -149,8 +162,8 @@ fun BlockExplorerSettingsScreen(
         try {
             config.clearCustomBlockExplorer(selectedNetwork)
             reload()
-        } catch (error: Exception) {
-            validationError = error.message ?: error.toString()
+        } catch (e: Exception) {
+            showAlert(updateFailedTitle, updateFailedMessage)
         }
     }
 
@@ -286,8 +299,6 @@ fun BlockExplorerSettingsScreen(
                                 ),
                             keyboardActions = KeyboardActions(onDone = { save() }),
                             singleLine = true,
-                            isError = validationError != null,
-                            supportingText = validationError?.let { error -> { Text(error) } },
                             modifier = Modifier.fillMaxWidth(),
                         )
 

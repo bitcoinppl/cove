@@ -34,6 +34,10 @@
     <string name="block_explorer_save">Save</string>
     <string name="block_explorer_saved">Block explorer saved successfully</string>
     <string name="block_explorer_reset">Reset to Default</string>
+    <string name="block_explorer_invalid_url_title">Invalid URL</string>
+    <string name="block_explorer_invalid_url_message">Enter a valid URL, IP address, or block explorer template.</string>
+    <string name="block_explorer_update_failed_title">Unable to Update Block Explorer</string>
+    <string name="block_explorer_update_failed_message">Try again later.</string>
     <string name="title_wallet_information">Wallet information</string>
     <string name="label_wallet_network">Network</string>
     <string name="label_wallet_birthday">Birthday</string>
