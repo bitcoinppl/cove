@@ -55,7 +55,19 @@ internal fun hasPersistedOnboardingProgress(
 internal fun resolveEffectiveOnboardingProgress(
     freshProgress: Result<String?>,
     previousProgress: String?,
-): String? = freshProgress.getOrElse { previousProgress }
+): String? {
+    // keep last known progress when a transient read failure would otherwise drop onboarding state
+    return freshProgress.getOrElse { previousProgress }
+}
+
+internal fun hasRecoveredOnboardingProgressAfterReadFailure(
+    freshProgress: Result<String?>,
+    previousProgress: String?,
+    previousReadFailed: Boolean,
+): Boolean =
+    previousReadFailed &&
+        !hasPersistedOnboardingProgress(previousProgress) &&
+        hasPersistedOnboardingProgress(freshProgress.getOrNull())
 
 internal fun resolveStartupMode(
     termsAccepted: Boolean,
@@ -78,9 +90,17 @@ internal fun resolveStartupModeTransition(
     hasWallets: Boolean,
     cloudBackupLifecycle: CloudBackupLifecycle,
     hasPersistedOnboardingProgress: Boolean,
+    hasRecoveredOnboardingProgressAfterReadFailure: Boolean = false,
 ): StartupMode {
     // after startup reaches ready, deleting the last wallet should not restart onboarding
-    if (currentMode == StartupMode.READY && termsAccepted) return StartupMode.READY
+    // recovered persisted progress means ready may have been chosen from an earlier failed read
+    if (
+        currentMode == StartupMode.READY &&
+        termsAccepted &&
+        !hasRecoveredOnboardingProgressAfterReadFailure
+    ) {
+        return StartupMode.READY
+    }
 
     return resolveStartupMode(
         termsAccepted = termsAccepted,

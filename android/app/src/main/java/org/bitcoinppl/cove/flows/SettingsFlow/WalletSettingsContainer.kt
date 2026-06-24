@@ -22,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
@@ -46,12 +45,14 @@ fun WalletSettingsContainer(
         mutableStateOf<WalletSettingsLoadState>(WalletSettingsLoadState.Loading)
     }
     var loadAttempt by remember(id) { mutableStateOf(0) }
+    var recoveryGeneration by remember(id) { mutableStateOf(0) }
     var didShowLoadFailureAlert by remember(id, route) { mutableStateOf(false) }
     val tag = "WalletSettingsContainer"
 
     fun startWalletSelectionRecovery(message: String) {
         if (loadState is WalletSettingsLoadState.Recovering && !app.isNavigationSettled) return
 
+        recoveryGeneration += 1
         loadState = WalletSettingsLoadState.Recovering(message)
 
         try {
@@ -84,6 +85,8 @@ fun WalletSettingsContainer(
             val message = e.message ?: "Unknown error"
 
             android.util.Log.e(tag, "failed to load wallet", e)
+            recoveryGeneration += 1
+            val failureGeneration = recoveryGeneration
             loadState = WalletSettingsLoadState.Failed(message)
 
             if (!didShowLoadFailureAlert) {
@@ -99,9 +102,15 @@ fun WalletSettingsContainer(
 
             // leave the alert visible before route recovery replaces this screen
             delay(WALLET_LOAD_ERROR_RECOVERY_DELAY_MS)
-            ensureActive()
 
-            startWalletSelectionRecovery(message)
+            val state = loadState
+            if (
+                recoveryGeneration == failureGeneration &&
+                state is WalletSettingsLoadState.Failed &&
+                state.message == message
+            ) {
+                startWalletSelectionRecovery(message)
+            }
         }
     }
 
@@ -124,7 +133,10 @@ fun WalletSettingsContainer(
 
             WalletSettingsLoadError(
                 message = state.message,
-                onRetry = { loadAttempt++ },
+                onRetry = {
+                    recoveryGeneration += 1
+                    loadAttempt++
+                },
                 onBack = recoverWalletSelection,
                 modifier = modifier,
             )

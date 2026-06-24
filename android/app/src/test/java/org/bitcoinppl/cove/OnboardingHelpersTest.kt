@@ -154,6 +154,15 @@ class OnboardingHelpersTest {
 
     @Test
     fun readyStartupModeIgnoresStalePersistedOnboardingProgress() {
+        val freshProgress = Result.success("""{"step":"backup_wallet"}""")
+        val recoveredProgress =
+            hasRecoveredOnboardingProgressAfterReadFailure(
+                freshProgress = freshProgress,
+                previousProgress = null,
+                previousReadFailed = false,
+            )
+
+        assertFalse(recoveredProgress)
         assertEquals(
             StartupMode.READY,
             resolveStartupModeTransition(
@@ -162,6 +171,31 @@ class OnboardingHelpersTest {
                 hasWallets = false,
                 cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
                 hasPersistedOnboardingProgress = true,
+                hasRecoveredOnboardingProgressAfterReadFailure = recoveredProgress,
+            ),
+        )
+    }
+
+    @Test
+    fun readyStartupModeReevaluatesRecoveredPersistedOnboardingProgress() {
+        val freshProgress = Result.success("""{"step":"backup_wallet"}""")
+        val recoveredProgress =
+            hasRecoveredOnboardingProgressAfterReadFailure(
+                freshProgress = freshProgress,
+                previousProgress = null,
+                previousReadFailed = true,
+            )
+
+        assertTrue(recoveredProgress)
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.READY,
+                termsAccepted = true,
+                hasWallets = true,
+                cloudBackupLifecycle = configuredLifecycle(),
+                hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(freshProgress.getOrNull()),
+                hasRecoveredOnboardingProgressAfterReadFailure = recoveredProgress,
             ),
         )
     }
