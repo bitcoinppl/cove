@@ -74,7 +74,7 @@ internal fun resolveStartupModeTransition(
     cloudBackupLifecycle: CloudBackupLifecycle,
     hasPersistedOnboardingProgress: Boolean,
 ): StartupMode {
-    if (currentMode == StartupMode.READY) return StartupMode.READY
+    if (currentMode == StartupMode.READY && termsAccepted) return StartupMode.READY
 
     return resolveStartupMode(
         termsAccepted = termsAccepted,
