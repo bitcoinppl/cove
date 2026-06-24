@@ -97,7 +97,7 @@ class OnboardingHelpersTest {
     }
 
     @Test
-    fun readyStartupModeDoesNotReenterOnboardingWhenLastWalletIsDeleted() {
+    fun readyShortcutOnlyAppliesToReadyStartupMode() {
         assertEquals(
             StartupMode.READY,
             resolveStartupModeTransition(
@@ -106,6 +106,18 @@ class OnboardingHelpersTest {
                 hasWallets = false,
                 cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
                 hasPersistedOnboardingProgress = false,
+            ),
+        )
+
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.ONBOARDING,
+                termsAccepted = true,
+                hasWallets = false,
+                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
+                hasPersistedOnboardingProgress = false,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
             ),
         )
     }
@@ -134,20 +146,6 @@ class OnboardingHelpersTest {
                 hasWallets = true,
                 cloudBackupLifecycle = configuredLifecycle(),
                 hasPersistedOnboardingProgress = true,
-            ),
-        )
-    }
-
-    @Test
-    fun onboardingStartupModeDoesNotUseReadyShortcut() {
-        assertEquals(
-            StartupMode.ONBOARDING,
-            resolveStartupModeTransition(
-                currentMode = StartupMode.ONBOARDING,
-                termsAccepted = true,
-                hasWallets = false,
-                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
-                hasPersistedOnboardingProgress = false,
             ),
         )
     }
@@ -196,6 +194,34 @@ class OnboardingHelpersTest {
                 cloudBackupLifecycle = configuredLifecycle(),
                 hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(freshProgress.getOrNull()),
                 hasRecoveredOnboardingProgressAfterReadFailure = recoveredProgress,
+            ),
+        )
+    }
+
+    @Test
+    fun recoveredOnboardingProgressRequiresNewProgressAfterPreviousReadFailure() {
+        assertFalse(
+            hasRecoveredOnboardingProgressAfterReadFailure(
+                freshProgress = Result.success("""{"step":"backup_wallet"}"""),
+                previousProgress = """{"step":"terms"}""",
+                previousReadFailed = true,
+            ),
+        )
+        assertFalse(
+            hasRecoveredOnboardingProgressAfterReadFailure(
+                freshProgress = Result.success(null),
+                previousProgress = null,
+                previousReadFailed = true,
+            ),
+        )
+
+        val failedRead: Result<String?> = Result.failure(IllegalStateException("read failed"))
+
+        assertFalse(
+            hasRecoveredOnboardingProgressAfterReadFailure(
+                freshProgress = failedRead,
+                previousProgress = null,
+                previousReadFailed = true,
             ),
         )
     }
