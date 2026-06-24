@@ -514,7 +514,8 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupLifecycle, persistedOnboardingProgress) {
                 persistedOnboardingProgress = readPersistedOnboardingProgress()
                 startupMode =
-                    resolveStartupMode(
+                    resolveStartupModeTransition(
+                        currentMode = startupMode,
                         termsAccepted = app.isTermsAccepted,
                         hasWallets = hasWallets,
                         cloudBackupLifecycle = cloudBackupLifecycle,

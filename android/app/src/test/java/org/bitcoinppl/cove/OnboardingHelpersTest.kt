@@ -97,6 +97,20 @@ class OnboardingHelpersTest {
     }
 
     @Test
+    fun readyStartupModeDoesNotReenterOnboardingWhenLastWalletIsDeleted() {
+        assertEquals(
+            StartupMode.READY,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.READY,
+                termsAccepted = true,
+                hasWallets = false,
+                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
+                hasPersistedOnboardingProgress = false,
+            ),
+        )
+    }
+
+    @Test
     fun persistedOnboardingProgressRequiresNonBlankState() {
         assertFalse(hasPersistedOnboardingProgress(null))
         assertFalse(hasPersistedOnboardingProgress(""))

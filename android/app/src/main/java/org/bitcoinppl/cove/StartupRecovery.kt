@@ -66,3 +66,20 @@ internal fun resolveStartupMode(
         StartupMode.READY
     }
 }
+
+internal fun resolveStartupModeTransition(
+    currentMode: StartupMode,
+    termsAccepted: Boolean,
+    hasWallets: Boolean,
+    cloudBackupLifecycle: CloudBackupLifecycle,
+    hasPersistedOnboardingProgress: Boolean,
+): StartupMode {
+    if (currentMode == StartupMode.READY) return StartupMode.READY
+
+    return resolveStartupMode(
+        termsAccepted = termsAccepted,
+        hasWallets = hasWallets,
+        cloudBackupLifecycle = cloudBackupLifecycle,
+        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress,
+    )
+}

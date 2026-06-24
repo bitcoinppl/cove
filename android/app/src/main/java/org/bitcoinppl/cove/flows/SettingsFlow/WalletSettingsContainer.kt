@@ -44,6 +44,7 @@ fun WalletSettingsContainer(
                         message = "Unable to load wallet: ${e.message}",
                     ),
                 )
+            app.trySelectLatestOrNewWallet()
         }
     }
 

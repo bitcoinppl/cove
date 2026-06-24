@@ -48,8 +48,10 @@ fun TransactionDetailsContainer(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            android.util.Log.e("TransactionDetails", "Failed to load wallet", e)
             error = e.message ?: "failed to load wallet"
             loading = false
+            app.trySelectLatestOrNewWallet()
         }
     }
 
