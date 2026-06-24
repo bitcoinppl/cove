@@ -270,6 +270,21 @@ class OnboardingHelpersTest {
     }
 
     @Test
+    fun onboardingStartupModeDoesNotUseReadyShortcut() {
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.ONBOARDING,
+                termsAccepted = true,
+                hasWallets = false,
+                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
+                hasPersistedOnboardingProgress = false,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
+            ),
+        )
+    }
+
+    @Test
     fun readyStartupModeIgnoresStalePersistedOnboardingProgress() {
         assertEquals(
             StartupMode.READY,
