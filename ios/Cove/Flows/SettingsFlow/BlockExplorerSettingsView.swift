@@ -10,7 +10,6 @@ struct BlockExplorerSettingsView: View {
     @State private var selectedOption: BlockExplorerOption
     @State private var validationError: String?
     @State private var isSaving = false
-    @State private var saveTask: Task<Void, Never>?
     @State private var showInvalidUrlAlert = false
     @FocusState private var isInputFocused: Bool
 
@@ -96,9 +95,6 @@ struct BlockExplorerSettingsView: View {
         .onChange(of: selectedNetwork) { _, _ in
             reload()
         }
-        .onDisappear {
-            saveTask?.cancel()
-        }
         .alert("Invalid URL", isPresented: $showInvalidUrlAlert) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -164,11 +160,11 @@ struct BlockExplorerSettingsView: View {
                 network: selectedNetwork,
                 input: value
             )
+            validationError = nil
         } catch {
-            // keep save as the validation point while the user is still typing
+            preview = ""
+            validationError = error.localizedDescription
         }
-
-        validationError = nil
     }
 
     private func save() {
@@ -176,87 +172,33 @@ struct BlockExplorerSettingsView: View {
 
         let inputToSave = input
         let networkToSave = selectedNetwork
-        let checkUrl: URL
-
-        do {
-            checkUrl = try blockExplorerCheckUrl(
-                network: networkToSave,
-                input: inputToSave
-            )
-        } catch {
-            validationError = error.localizedDescription
-            showInvalidUrlAlert = true
-            return
-        }
 
         isSaving = true
         isInputFocused = false
 
-        saveTask = Task { @MainActor in
-            await MiddlePopup(state: .loading, message: "Checking URL").present()
+        do {
+            let normalized = try config.setCustomBlockExplorer(
+                network: networkToSave,
+                input: inputToSave
+            )
+            input = normalized ?? ""
+            preview = config.effectiveBlockExplorerPreview(network: networkToSave)
+            selectedOption = config.selectedBlockExplorerOption(network: networkToSave)
+            validationError = nil
 
-            do {
-                try await checkBlockExplorerUrl(checkUrl)
-
-                let normalized = try config.setCustomBlockExplorer(
-                    network: networkToSave,
-                    input: inputToSave
-                )
-                input = normalized ?? ""
-                preview = config.effectiveBlockExplorerPreview(network: networkToSave)
-                selectedOption = .custom
-                if normalized == nil {
-                    selectedOption = config.selectedBlockExplorerOption(network: networkToSave)
-                }
-                validationError = nil
-
+            Task { @MainActor in
                 await dismissAllPopups()
                 try? await Task.sleep(for: .milliseconds(250))
                 await MiddlePopup(state: .success("Block explorer saved successfully"))
                     .dismissAfter(2)
                     .present()
-            } catch is CancellationError {
-                await dismissAllPopups()
-            } catch {
-                let message = error.localizedDescription
-                validationError = message
-
-                await dismissAllPopups()
-                try? await Task.sleep(for: .milliseconds(250))
-                await MiddlePopup(state: .failure(message))
-                    .dismissAfter(7)
-                    .present()
             }
-
-            isSaving = false
-            saveTask = nil
-        }
-    }
-
-    private func blockExplorerCheckUrl(network: Network, input: String) throws -> URL {
-        let previewUrl = try config.previewCustomBlockExplorer(network: network, input: input)
-
-        guard let url = URL(string: previewUrl) else {
-            throw BlockExplorerCheckError.invalidUrl
+        } catch {
+            validationError = error.localizedDescription
+            showInvalidUrlAlert = true
         }
 
-        return url
-    }
-
-    private func checkBlockExplorerUrl(_ url: URL) async throws {
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        request.timeoutInterval = 10
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw BlockExplorerCheckError.invalidResponse
-        }
-
-        guard 200 ..< 300 ~= httpResponse.statusCode else {
-            throw BlockExplorerCheckError.unsuccessfulStatus(httpResponse.statusCode)
-        }
+        isSaving = false
     }
 
     private func reset() {
@@ -265,23 +207,6 @@ struct BlockExplorerSettingsView: View {
             reload()
         } catch {
             validationError = error.localizedDescription
-        }
-    }
-}
-
-private enum BlockExplorerCheckError: LocalizedError {
-    case invalidUrl
-    case invalidResponse
-    case unsuccessfulStatus(Int)
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidUrl:
-            "Invalid URL"
-        case .invalidResponse:
-            "Block explorer check did not return an HTTP response"
-        case let .unsuccessfulStatus(statusCode):
-            "Block explorer returned HTTP \(statusCode) for the test transaction"
         }
     }
 }

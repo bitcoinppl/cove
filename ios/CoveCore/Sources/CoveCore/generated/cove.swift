@@ -4114,8 +4114,6 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func deleteHashedPinCode() throws
 
-    func effectiveBlockExplorerHost(network: Network)  -> String
-
     func effectiveBlockExplorerPreview(network: Network)  -> String
 
     func get(key: GlobalConfigKey) throws  -> String?
@@ -4270,16 +4268,6 @@ open func deleteHashedPinCode()throws   {try rustCallWithError(FfiConverterTypeD
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
-}
-
-open func effectiveBlockExplorerHost(network: Network) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_globalconfigtable_effective_block_explorer_host(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
-    )
-})
 }
 
 open func effectiveBlockExplorerPreview(network: Network) -> String  {
@@ -19257,7 +19245,7 @@ public enum BlockExplorerOption: Equatable, Hashable {
 
 
     /**
-     * Returns the user-visible label for this explorer option.
+     * Returns the user-visible label for this explorer option
      */
 public func displayName() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
@@ -39680,7 +39668,7 @@ public func activeMigration() -> Migration?  {
 })
 }
 /**
- * Returns every block explorer option exposed to mobile clients.
+ * Returns every block explorer option exposed to mobile clients
  */
 public func allBlockExplorerOptions() -> [BlockExplorerOption]  {
     return try!  FfiConverterSequenceTypeBlockExplorerOption.lift(try! rustCall() {
@@ -40171,7 +40159,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_active_migration() != 29388) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_all_block_explorer_options() != 60996) {
+    if (uniffi_cove_checksum_func_all_block_explorer_options() != 40123) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_all_fiat_currencies() != 53482) {
@@ -40511,9 +40499,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code() != 24897) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_host() != 22806) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_preview() != 21192) {

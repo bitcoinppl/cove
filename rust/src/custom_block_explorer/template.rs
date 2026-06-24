@@ -34,7 +34,7 @@ pub enum CustomBlockExplorerError {
 pub struct CustomBlockExplorerTemplate(String);
 
 impl CustomBlockExplorerTemplate {
-    /// Parses user input into a canonical transaction URL template.
+    /// Parses user input into a canonical transaction URL template
     pub fn parse(network: Network, input: &str) -> Result<Self, CustomBlockExplorerError> {
         let trimmed = input.trim();
         if trimmed.is_empty() {
@@ -50,7 +50,7 @@ impl CustomBlockExplorerTemplate {
         Self::parse_base_url(network, trimmed)
     }
 
-    /// Returns the built-in transaction URL template for a network.
+    /// Returns the built-in transaction URL template for a network
     pub fn default_for(network: Network) -> Self {
         let template = match network {
             Network::Bitcoin => "https://mempool.space/tx/{txid}",
@@ -62,7 +62,7 @@ impl CustomBlockExplorerTemplate {
         Self(template.to_string())
     }
 
-    /// Parses an already stored template and rejects values that are not complete templates.
+    /// Parses an already stored template and rejects values that are not complete templates
     pub fn parse_stored(input: &str) -> Result<Self, CustomBlockExplorerError> {
         let trimmed = input.trim();
         if trimmed.is_empty() {
@@ -78,12 +78,12 @@ impl CustomBlockExplorerTemplate {
         Self::parse_template(trimmed)
     }
 
-    /// Returns the canonical template string.
+    /// Returns the canonical template string
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
-    /// Renders this template with a transaction id.
+    /// Renders this template with a transaction id
     pub fn render(&self, txid: impl fmt::Display) -> String {
         let txid = txid.to_string();
         SUPPORTED_PLACEHOLDERS
@@ -95,7 +95,7 @@ impl CustomBlockExplorerTemplate {
         parse_http_url(input).ok().map(|url| Self::from_base_url(network, url))
     }
 
-    /// Parses input that already includes a supported transaction placeholder.
+    /// Parses input that already includes a supported transaction placeholder
     fn parse_template(input: &str) -> Result<Self, CustomBlockExplorerError> {
         let placeholder_marker = placeholder_marker_absent_from(input);
         let probe = replace_supported_placeholders(input, &placeholder_marker);
@@ -110,7 +110,7 @@ impl CustomBlockExplorerTemplate {
         Ok(Self(canonical))
     }
 
-    /// Parses a bare explorer URL and expands it into a transaction template.
+    /// Parses a bare explorer URL and expands it into a transaction template
     fn parse_base_url(network: Network, input: &str) -> Result<Self, CustomBlockExplorerError> {
         let url = parse_http_url_with_optional_scheme(input)?;
         if url.fragment().is_some() {
@@ -124,7 +124,7 @@ impl CustomBlockExplorerTemplate {
         Ok(Self::from_base_url(network, url))
     }
 
-    /// Builds a transaction template from a validated base URL.
+    /// Builds a transaction template from a validated base URL
     fn from_base_url(network: Network, mut url: Url) -> Self {
         let placeholder_marker = placeholder_marker_absent_from(url.as_str());
         let path = canonical_base_path(&url, network, &placeholder_marker);
@@ -180,7 +180,7 @@ impl CustomBlockExplorerTemplate {
     }
 }
 
-/// Parses a URL and accepts only HTTP(S) URLs with a host.
+/// Parses a URL and accepts only HTTP(S) URLs with a host
 fn parse_http_url(input: &str) -> Result<Url, CustomBlockExplorerError> {
     let url = Url::parse(input).map_err(|_| CustomBlockExplorerError::InvalidUrl)?;
 
@@ -250,7 +250,7 @@ fn is_valid_domain_label(label: &str) -> bool {
     label.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
-/// Parses a URL, inferring a scheme when the user omitted one.
+/// Parses a URL, inferring a scheme when the user omitted one
 fn parse_http_url_with_optional_scheme(input: &str) -> Result<Url, CustomBlockExplorerError> {
     match parse_http_url(input) {
         Ok(url) => Ok(url),
@@ -263,12 +263,12 @@ fn parse_http_url_with_optional_scheme(input: &str) -> Result<Url, CustomBlockEx
     }
 }
 
-/// Returns the scheme to use for input that did not include one.
+/// Returns the scheme to use for input that did not include one
 fn default_scheme_for_scheme_less_input(input: &str) -> &'static str {
     if scheme_less_input_prefers_http(input) { "http" } else { "https" }
 }
 
-/// Returns whether scheme-less input should default to HTTP.
+/// Returns whether scheme-less input should default to HTTP
 fn scheme_less_input_prefers_http(input: &str) -> bool {
     let probe = format!("https://{input}");
 
@@ -286,12 +286,12 @@ fn scheme_less_input_prefers_http(input: &str) -> bool {
     }
 }
 
-/// Normalizes a URL path for path comparison and composition.
+/// Normalizes a URL path for path comparison and composition
 fn normalized_path(path: &str) -> &str {
     path.trim_end_matches('/').trim_start_matches('/')
 }
 
-/// Returns the canonical path for a base URL plus transaction placeholder.
+/// Returns the canonical path for a base URL plus transaction placeholder
 fn canonical_base_path(url: &Url, network: Network, placeholder_marker: &str) -> String {
     let path = normalized_path(url.path());
     let path = canonicalize_known_host_path(url.host_str(), network, path);
@@ -305,7 +305,7 @@ fn canonical_base_path(url: &Url, network: Network, placeholder_marker: &str) ->
     }
 }
 
-/// Inserts the network path prefix required by known multi-network hosts.
+/// Inserts the network path prefix required by known multi-network hosts
 fn canonicalize_known_host_path(host: Option<&str>, network: Network, path: &str) -> String {
     let Some(host) = host else {
         return path.to_string();
@@ -322,7 +322,7 @@ fn canonicalize_known_host_path(host: Option<&str>, network: Network, path: &str
     if path.is_empty() { prefix.to_string() } else { format!("{prefix}/{path}") }
 }
 
-/// Returns the network path prefix for hosts whose URL paths encode network selection.
+/// Returns the network path prefix for hosts whose URL paths encode network selection
 fn known_host_network_prefix(host: &str, network: Network) -> Option<&'static str> {
     match (host, network) {
         ("mempool.space", Network::Bitcoin) => Some(""),
@@ -333,7 +333,7 @@ fn known_host_network_prefix(host: &str, network: Network) -> Option<&'static st
     }
 }
 
-/// Validates that the transaction placeholder appears only where URL rendering can replace it.
+/// Validates that the transaction placeholder appears only where URL rendering can replace it
 fn validate_placeholder_location(
     url: &Url,
     placeholder_marker: &str,
@@ -355,7 +355,7 @@ fn validate_placeholder_location(
     Err(CustomBlockExplorerError::UnsupportedPlaceholder)
 }
 
-/// Creates a temporary marker that is not already present in the input.
+/// Creates a temporary marker that is not already present in the input
 fn placeholder_marker_absent_from(input: &str) -> String {
     let mut marker = PLACEHOLDER_MARKER_SEED.to_string();
     while input.contains(&marker) {
@@ -365,7 +365,7 @@ fn placeholder_marker_absent_from(input: &str) -> String {
     marker
 }
 
-/// Validates that every brace-delimited placeholder is supported.
+/// Validates that every brace-delimited placeholder is supported
 fn validate_placeholders(input: &str) -> Result<(), CustomBlockExplorerError> {
     let mut chars = input.char_indices().peekable();
 
@@ -389,12 +389,12 @@ fn validate_placeholders(input: &str) -> Result<(), CustomBlockExplorerError> {
     Ok(())
 }
 
-/// Returns whether the input includes a supported transaction placeholder.
+/// Returns whether the input includes a supported transaction placeholder
 fn contains_supported_placeholder(input: &str) -> bool {
     SUPPORTED_PLACEHOLDERS.iter().any(|placeholder| input.contains(placeholder))
 }
 
-/// Replaces every supported transaction placeholder with a temporary marker.
+/// Replaces every supported transaction placeholder with a temporary marker
 fn replace_supported_placeholders(input: &str, replacement: &str) -> String {
     SUPPORTED_PLACEHOLDERS
         .iter()

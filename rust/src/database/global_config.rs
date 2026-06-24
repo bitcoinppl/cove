@@ -327,15 +327,6 @@ impl GlobalConfigTable {
         Ok(template.render(PREVIEW_TXID))
     }
 
-    pub fn effective_block_explorer_host(&self, network: Network) -> String {
-        let preview = self.effective_block_explorer_preview(network);
-
-        url::Url::parse(&preview)
-            .ok()
-            .and_then(|url| url.host_str().map(ToString::to_string))
-            .unwrap_or_default()
-    }
-
     pub fn set_custom_block_explorer(
         &self,
         network: Network,

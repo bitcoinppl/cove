@@ -19,7 +19,7 @@ pub enum BlockExplorerOption {
 
 #[uniffi::export]
 impl BlockExplorerOption {
-    /// Returns the user-visible label for this explorer option.
+    /// Returns the user-visible label for this explorer option
     pub fn display_name(&self) -> String {
         self.as_display_name().to_string()
     }
@@ -34,12 +34,12 @@ impl BlockExplorerOption {
         Self::Custom,
     ];
 
-    /// Returns all options in the order shown by the settings UI.
+    /// Returns all options in the order shown by the settings UI
     pub(crate) const fn all() -> [Self; 5] {
         Self::PRESETS
     }
 
-    /// Returns the base URL for preset options that are backed by stored custom templates.
+    /// Returns the base URL for preset options that are backed by stored custom templates
     pub(crate) const fn base_url(&self) -> Option<&'static str> {
         match self {
             Self::MempoolSpace | Self::Custom => None,
@@ -49,7 +49,8 @@ impl BlockExplorerOption {
         }
     }
 
-    /// Returns the option represented by a stored template, falling back to the default option.
+    /// Returns the matching preset, Custom for non-preset templates,
+    /// or the default for empty or invalid values
     pub(crate) fn matching_stored_template(
         network: Network,
         stored_template: Option<&str>,
@@ -68,7 +69,7 @@ impl BlockExplorerOption {
             .unwrap_or(Self::Custom)
     }
 
-    /// Returns the static display name for this option.
+    /// Returns the static display name for this option
     fn as_display_name(&self) -> &'static str {
         match self {
             Self::MempoolSpace => "Default (mempool.space)",
@@ -79,7 +80,7 @@ impl BlockExplorerOption {
         }
     }
 
-    /// Builds the canonical transaction template for this option on the given network.
+    /// Builds the canonical transaction template for this option on the given network
     fn template_for_network(&self, network: Network) -> Option<CustomBlockExplorerTemplate> {
         match self {
             Self::MempoolSpace => Some(CustomBlockExplorerTemplate::default_for(network)),
@@ -90,7 +91,7 @@ impl BlockExplorerOption {
         }
     }
 
-    /// Returns whether a stored template exactly matches this preset option.
+    /// Returns whether a stored template exactly matches this preset option
     fn matches_template(&self, network: Network, template: &CustomBlockExplorerTemplate) -> bool {
         self.template_for_network(network)
             .is_some_and(|preset_template| preset_template.as_str() == template.as_str())
@@ -98,12 +99,12 @@ impl BlockExplorerOption {
 }
 
 #[uniffi::export]
-/// Returns every block explorer option exposed to mobile clients.
+/// Returns every block explorer option exposed to mobile clients
 pub fn all_block_explorer_options() -> Vec<BlockExplorerOption> {
     BlockExplorerOption::all().to_vec()
 }
 
-/// Returns the transaction URL for a stored template or the network default.
+/// Returns the transaction URL for a stored template or the network default
 pub fn effective_transaction_url(
     network: Network,
     stored_template: Option<&str>,

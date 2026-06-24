@@ -98,11 +98,11 @@ fun BlockExplorerSettingsScreen(
     fun updatePreview(value: String) {
         try {
             preview = config.previewCustomBlockExplorer(selectedNetwork, value)
-        } catch (_: Exception) {
-            // keep save as the validation point while the user is still typing
+            validationError = null
+        } catch (error: Exception) {
+            preview = ""
+            validationError = error.message ?: error.toString()
         }
-
-        validationError = null
     }
 
     fun save() {
@@ -119,10 +119,7 @@ fun BlockExplorerSettingsScreen(
                     }
                 input = normalized ?: ""
                 preview = config.effectiveBlockExplorerPreview(networkToSave)
-                selectedOption = BlockExplorerOption.CUSTOM
-                if (normalized == null) {
-                    selectedOption = config.selectedBlockExplorerOption(networkToSave)
-                }
+                selectedOption = config.selectedBlockExplorerOption(networkToSave)
                 validationError = null
                 keyboardController?.hide()
                 isSaving = false

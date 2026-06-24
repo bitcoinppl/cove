@@ -1315,8 +1315,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code(
     ): Short
-    external fun uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_host(
-    ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_preview(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_get(
@@ -2305,8 +2303,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_delete_hashed_pin_code(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_globalconfigtable_effective_block_explorer_host(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_effective_block_explorer_preview(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_get(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3705,7 +3701,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_active_migration() != 29388.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_all_block_explorer_options() != 60996.toShort()) {
+    if (lib.uniffi_cove_checksum_func_all_block_explorer_options() != 40123.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_all_fiat_currencies() != 53482.toShort()) {
@@ -4045,9 +4041,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code() != 24897.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_host() != 22806.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_preview() != 21192.toShort()) {
@@ -12301,8 +12294,6 @@ public interface GlobalConfigTableInterface {
 
     fun `deleteHashedPinCode`()
 
-    fun `effectiveBlockExplorerHost`(`network`: Network): kotlin.String
-
     fun `effectiveBlockExplorerPreview`(`network`: Network): kotlin.String
 
     fun `get`(`key`: GlobalConfigKey): kotlin.String?
@@ -12539,20 +12530,6 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 }
     }
 
-
-
-    override fun `effectiveBlockExplorerHost`(`network`: Network): kotlin.String {
-            return FfiConverterString.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_globalconfigtable_effective_block_explorer_host(
-        it,
-
-        FfiConverterTypeNetwork.lower(`network`),_status)
-}
-    }
-    )
-    }
 
 
     override fun `effectiveBlockExplorerPreview`(`network`: Network): kotlin.String {
@@ -34661,7 +34638,7 @@ enum class BlockExplorerOption {
 
 
     /**
-     * Returns the user-visible label for this explorer option.
+     * Returns the user-visible label for this explorer option
      */ fun `displayName`(): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
@@ -59271,7 +59248,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 
 
         /**
-         * Returns every block explorer option exposed to mobile clients.
+         * Returns every block explorer option exposed to mobile clients
          */ fun `allBlockExplorerOptions`(): List<BlockExplorerOption> {
             return FfiConverterSequenceTypeBlockExplorerOption.lift(
     uniffiRustCall() { _status ->
