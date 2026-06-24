@@ -596,6 +596,12 @@ impl Wallets {
     }
 }
 
+impl From<ScannerResponse> for WalletManagerReconcileMessage {
+    fn from(response: ScannerResponse) -> Self {
+        Self::WalletScannerResponse(response)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -661,11 +667,5 @@ mod tests {
 
         assert!(wallets[index(WalletAddressType::WrappedSegwit)].is_none());
         assert!(wallets[index(WalletAddressType::Legacy)].is_some());
-    }
-}
-
-impl From<ScannerResponse> for WalletManagerReconcileMessage {
-    fn from(response: ScannerResponse) -> Self {
-        Self::WalletScannerResponse(response)
     }
 }
