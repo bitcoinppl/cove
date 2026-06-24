@@ -90,7 +90,7 @@ internal fun resolveStartupModeTransition(
     hasWallets: Boolean,
     cloudBackupLifecycle: CloudBackupLifecycle,
     hasPersistedOnboardingProgress: Boolean,
-    hasRecoveredOnboardingProgressAfterReadFailure: Boolean = false,
+    hasRecoveredOnboardingProgressAfterReadFailure: Boolean,
 ): StartupMode {
     // after startup reaches ready, deleting the last wallet should not restart onboarding
     // recovered persisted progress means ready may have been chosen from an earlier failed read

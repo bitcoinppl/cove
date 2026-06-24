@@ -25,6 +25,8 @@ import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.WalletSelectionRecoveryResult
+import org.bitcoinppl.cove.recoverWalletSelectionOrPopRoute
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.types.*
@@ -55,13 +57,22 @@ fun WalletSettingsContainer(
         recoveryGeneration += 1
         loadState = WalletSettingsLoadState.Recovering(message)
 
-        try {
-            app.selectLatestOrNewWallet()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (recoveryError: Exception) {
-            android.util.Log.e(tag, "failed to recover wallet selection", recoveryError)
-            loadState = WalletSettingsLoadState.Failed(message)
+        when (
+            val result =
+                recoverWalletSelectionOrPopRoute(
+                    selectLatestOrNewWallet = app::selectLatestOrNewWallet,
+                    popRoute = app::popRoute,
+                )
+        ) {
+            WalletSelectionRecoveryResult.Recovered -> Unit
+            is WalletSelectionRecoveryResult.PoppedRoute -> {
+                android.util.Log.e(tag, "failed to recover wallet selection", result.recoveryError)
+            }
+            is WalletSelectionRecoveryResult.FailedToPopRoute -> {
+                android.util.Log.e(tag, "failed to recover wallet selection", result.recoveryError)
+                android.util.Log.e(tag, "failed to leave wallet settings after recovery failure", result.navigationError)
+                loadState = WalletSettingsLoadState.Failed(message)
+            }
         }
     }
 

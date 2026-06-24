@@ -106,6 +106,7 @@ class OnboardingHelpersTest {
                 hasWallets = false,
                 cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
                 hasPersistedOnboardingProgress = false,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
             ),
         )
 
@@ -132,6 +133,7 @@ class OnboardingHelpersTest {
                 hasWallets = true,
                 cloudBackupLifecycle = configuredLifecycle(),
                 hasPersistedOnboardingProgress = false,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
             ),
         )
     }
@@ -146,6 +148,7 @@ class OnboardingHelpersTest {
                 hasWallets = true,
                 cloudBackupLifecycle = configuredLifecycle(),
                 hasPersistedOnboardingProgress = true,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
             ),
         )
     }
@@ -236,6 +239,7 @@ class OnboardingHelpersTest {
                 hasWallets = true,
                 cloudBackupLifecycle = configuredLifecycle(),
                 hasPersistedOnboardingProgress = false,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
             ),
         )
     }

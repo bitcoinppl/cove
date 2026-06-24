@@ -15,8 +15,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.WalletSelectionRecoveryResult
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.FullPageLoadingView
+import org.bitcoinppl.cove.recoverWalletSelectionOrPopRoute
 import org.bitcoinppl.cove_core.types.TxId
 import org.bitcoinppl.cove_core.types.WalletId
 import kotlin.coroutines.cancellation.CancellationException
@@ -45,15 +47,25 @@ fun TransactionDetailsContainer(
 
         recoveringWalletSelection = true
 
-        try {
-            app.selectLatestOrNewWallet()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (recoveryError: Exception) {
-            android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", recoveryError)
-            try {
-                app.popRoute()
-            } finally {
+        when (
+            val result =
+                recoverWalletSelectionOrPopRoute(
+                    selectLatestOrNewWallet = app::selectLatestOrNewWallet,
+                    popRoute = app::popRoute,
+                )
+        ) {
+            WalletSelectionRecoveryResult.Recovered -> Unit
+            is WalletSelectionRecoveryResult.PoppedRoute -> {
+                android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", result.recoveryError)
+                recoveringWalletSelection = false
+            }
+            is WalletSelectionRecoveryResult.FailedToPopRoute -> {
+                android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", result.recoveryError)
+                android.util.Log.e(
+                    "TransactionDetails",
+                    "Failed to leave transaction details after recovery failure",
+                    result.navigationError,
+                )
                 recoveringWalletSelection = false
             }
         }
