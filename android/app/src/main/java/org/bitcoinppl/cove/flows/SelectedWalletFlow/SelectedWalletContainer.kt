@@ -79,6 +79,8 @@ fun SelectedWalletContainer(
                 // until AppManager replaces it for another wallet
                 android.util.Log.d(tag, "discarding stale wallet load for $requestedId, now loading $id")
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: WalletManagerException.DatabaseCorruption) {
             android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
             app.alertState = TaggedItem(

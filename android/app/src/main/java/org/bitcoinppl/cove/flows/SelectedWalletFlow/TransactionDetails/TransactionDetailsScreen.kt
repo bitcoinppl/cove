@@ -134,6 +134,8 @@ fun TransactionDetailsScreen(
         try {
             val freshDetails = manager.rust.transactionDetails(txId = txId)
             manager.updateTransactionDetailsCache(txId, freshDetails)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("TransactionDetails", "error fetching fresh details", e)
         }
@@ -144,6 +146,8 @@ fun TransactionDetailsScreen(
         feeFiatFmt =
             try {
                 transactionDetails.feeFiatFmt()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("TransactionDetails", "Failed to fetch fiat fee amount", e)
                 feeFiatFmt // keep cached value on error
@@ -151,6 +155,8 @@ fun TransactionDetailsScreen(
         sentSansFeeFiatFmt =
             try {
                 transactionDetails.sentSansFeeFiatFmt()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("TransactionDetails", "Failed to fetch sent sans fee fiat amount", e)
                 sentSansFeeFiatFmt // keep cached value on error
@@ -158,6 +164,8 @@ fun TransactionDetailsScreen(
         totalSpentFiatFmt =
             try {
                 transactionDetails.amountFiatFmt()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("TransactionDetails", "Failed to fetch total fiat amount", e)
                 totalSpentFiatFmt // keep cached value on error
@@ -165,6 +173,8 @@ fun TransactionDetailsScreen(
         historicalFiatFmt =
             try {
                 transactionDetails.historicalFiatFmt()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("TransactionDetails", "Failed to fetch historical fiat amount", e)
                 historicalFiatFmt // keep cached value on error
@@ -366,6 +376,8 @@ fun TransactionDetailsScreen(
                             val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
                             numberOfConfirmations = confirmations.toInt()
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         android.util.Log.e("TransactionDetails", "error refreshing details", e)
                     }
