@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
@@ -44,6 +45,7 @@ fun WalletSettingsContainer(
                         message = "Unable to load wallet: ${e.message}",
                     ),
                 )
+            delay(WALLET_LOAD_ERROR_RECOVERY_DELAY_MS)
             app.trySelectLatestOrNewWallet()
         }
     }
@@ -78,3 +80,5 @@ fun WalletSettingsContainer(
         }
     }
 }
+
+private const val WALLET_LOAD_ERROR_RECOVERY_DELAY_MS = 5_000L

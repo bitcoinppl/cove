@@ -38,6 +38,12 @@ fun TransactionDetailsContainer(
     var managerRetryAttempt by remember(walletId) { mutableStateOf(0) }
     var recoveringWalletSelection by remember(walletId) { mutableStateOf(false) }
 
+    LaunchedEffect(recoveringWalletSelection, app.isNavigationSettled) {
+        if (recoveringWalletSelection && app.isNavigationSettled) {
+            recoveringWalletSelection = false
+        }
+    }
+
     LaunchedEffect(walletId, managerRetryAttempt) {
         loading = true
         error = null
@@ -51,19 +57,20 @@ fun TransactionDetailsContainer(
             throw e
         } catch (e: Exception) {
             android.util.Log.e("TransactionDetails", "Failed to load wallet", e)
+            error = e.message ?: "failed to load wallet"
             recoveringWalletSelection = true
             loading = false
+
             try {
                 app.selectLatestOrNewWallet()
             } catch (recoveryError: Exception) {
                 android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", recoveryError)
-                recoveringWalletSelection = false
-                error = e.message ?: "failed to load wallet"
             }
         }
     }
 
     val details = manager?.transactionDetailsCache?.get(txId)
+    val suppressWalletLoadRetry = recoveringWalletSelection && !app.isNavigationSettled
 
     LaunchedEffect(manager, txId, retryAttempt) {
         val currentManager = manager ?: return@LaunchedEffect
@@ -83,7 +90,7 @@ fun TransactionDetailsContainer(
     }
 
     when {
-        loading || recoveringWalletSelection -> FullPageLoadingView()
+        loading || suppressWalletLoadRetry -> FullPageLoadingView()
         error != null -> {
             TransactionDetailsLoadError(
                 message = error!!,
