@@ -513,7 +513,11 @@ class MainActivity : FragmentActivity() {
             }
             LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupLifecycle) {
                 val freshProgress = readPersistedOnboardingProgress()
-                val effectiveProgress = freshProgress.getOrElse { persistedOnboardingProgress }
+                val effectiveProgress =
+                    resolveEffectiveOnboardingProgress(
+                        freshProgress = freshProgress,
+                        previousProgress = persistedOnboardingProgress,
+                    )
 
                 persistedOnboardingProgress = effectiveProgress
 

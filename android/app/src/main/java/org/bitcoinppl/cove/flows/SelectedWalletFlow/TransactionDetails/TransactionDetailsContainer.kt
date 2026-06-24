@@ -100,6 +100,7 @@ fun TransactionDetailsContainer(
                     error = null
                     managerRetryAttempt++
                 },
+                onRecoverWalletSelection = { app.trySelectLatestOrNewWallet() },
             )
         }
 
@@ -132,6 +133,7 @@ fun TransactionDetailsContainer(
 private fun TransactionDetailsLoadError(
     message: String,
     onRetry: () -> Unit,
+    onRecoverWalletSelection: (() -> Unit)? = null,
 ) {
     androidx.compose.foundation.layout.Box(
         modifier = Modifier.fillMaxSize(),
@@ -145,6 +147,11 @@ private fun TransactionDetailsLoadError(
             androidx.compose.material3.Text(message)
             androidx.compose.material3.Button(onClick = onRetry) {
                 androidx.compose.material3.Text("Try again")
+            }
+            if (onRecoverWalletSelection != null) {
+                androidx.compose.material3.TextButton(onClick = onRecoverWalletSelection) {
+                    androidx.compose.material3.Text("Open wallet")
+                }
             }
         }
     }

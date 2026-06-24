@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
@@ -66,8 +67,9 @@ fun WalletSettingsContainer(
                     ),
                 )
 
-            // five seconds gives the alert time to be read before route recovery replaces this screen
+            // leave the alert visible before route recovery replaces this screen
             delay(WALLET_LOAD_ERROR_RECOVERY_DELAY_MS)
+            ensureActive()
 
             try {
                 app.selectLatestOrNewWallet()

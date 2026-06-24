@@ -52,6 +52,11 @@ internal fun hasPersistedOnboardingProgress(
     persistedProgress: String?,
 ): Boolean = !persistedProgress.isNullOrBlank()
 
+internal fun resolveEffectiveOnboardingProgress(
+    freshProgress: Result<String?>,
+    previousProgress: String?,
+): String? = freshProgress.getOrElse { previousProgress }
+
 internal fun resolveStartupMode(
     termsAccepted: Boolean,
     hasWallets: Boolean,

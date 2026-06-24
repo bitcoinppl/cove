@@ -125,6 +125,20 @@ class OnboardingHelpersTest {
     }
 
     @Test
+    fun onboardingStartupModeKeepsPersistedProgressEvenWithWallets() {
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.ONBOARDING,
+                termsAccepted = true,
+                hasWallets = true,
+                cloudBackupLifecycle = configuredLifecycle(),
+                hasPersistedOnboardingProgress = true,
+            ),
+        )
+    }
+
+    @Test
     fun onboardingStartupModeDoesNotUseReadyShortcut() {
         assertEquals(
             StartupMode.ONBOARDING,
@@ -172,6 +186,39 @@ class OnboardingHelpersTest {
         assertFalse(hasPersistedOnboardingProgress(""))
         assertFalse(hasPersistedOnboardingProgress("   "))
         assertTrue(hasPersistedOnboardingProgress("""{"step":"backup_wallet"}"""))
+    }
+
+    @Test
+    fun effectiveOnboardingProgressUsesFreshValueOnSuccess() {
+        assertEquals(
+            """{"step":"backup_wallet"}""",
+            resolveEffectiveOnboardingProgress(
+                freshProgress = Result.success("""{"step":"backup_wallet"}"""),
+                previousProgress = """{"step":"terms"}""",
+            ),
+        )
+    }
+
+    @Test
+    fun effectiveOnboardingProgressClearsPreviousValueOnSuccessfulNull() {
+        assertEquals(
+            null,
+            resolveEffectiveOnboardingProgress(
+                freshProgress = Result.success(null),
+                previousProgress = """{"step":"backup_wallet"}""",
+            ),
+        )
+    }
+
+    @Test
+    fun effectiveOnboardingProgressKeepsPreviousValueOnFailure() {
+        assertEquals(
+            """{"step":"backup_wallet"}""",
+            resolveEffectiveOnboardingProgress(
+                freshProgress = Result.failure(IllegalStateException("read failed")),
+                previousProgress = """{"step":"backup_wallet"}""",
+            ),
+        )
     }
 
     @Test
