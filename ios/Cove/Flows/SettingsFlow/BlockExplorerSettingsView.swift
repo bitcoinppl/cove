@@ -121,6 +121,10 @@ struct BlockExplorerSettingsView: View {
     }
 
     private func select(_ option: BlockExplorerOption) {
+        if selectedOption == option {
+            return
+        }
+
         switch option {
         case .custom:
             selectedOption = .custom

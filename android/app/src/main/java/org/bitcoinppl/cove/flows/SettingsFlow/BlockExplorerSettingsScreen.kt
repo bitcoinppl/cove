@@ -48,9 +48,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.views.MaterialDivider
@@ -128,10 +126,7 @@ fun BlockExplorerSettingsScreen(
         scope.launch {
             isSaving = true
             try {
-                val normalized =
-                    withContext(Dispatchers.IO) {
-                        config.setCustomBlockExplorer(networkToSave, inputToSave)
-                    }
+                val normalized = config.setCustomBlockExplorer(networkToSave, inputToSave)
                 input = normalized ?: ""
                 preview = config.effectiveBlockExplorerPreview(networkToSave)
                 selectedOption = config.selectedBlockExplorerOption(networkToSave)
@@ -170,6 +165,10 @@ fun BlockExplorerSettingsScreen(
     fun selectOption(option: BlockExplorerOption) {
         when (option) {
             BlockExplorerOption.CUSTOM -> {
+                if (selectedOption == BlockExplorerOption.CUSTOM) {
+                    return
+                }
+
                 selectedOption = BlockExplorerOption.CUSTOM
                 input = ""
                 updatePreview(input)

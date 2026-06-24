@@ -328,6 +328,9 @@ fn known_host_network_prefix(host: &str, network: Network) -> Option<&'static st
         ("mempool.space", Network::Bitcoin) => Some(""),
         ("mempool.space", Network::Testnet) => Some("testnet"),
         ("mempool.space", Network::Testnet4) => Some("testnet4"),
+        ("blockstream.info", Network::Bitcoin) => Some(""),
+        ("blockstream.info", Network::Testnet) => Some("testnet"),
+        ("blockstream.info", Network::Signet) => Some("signet"),
         ("mutinynet.com", Network::Signet) => Some(""),
         _ => None,
     }
@@ -564,6 +567,23 @@ mod tests {
         assert_eq!(signet.as_str(), "https://mutinynet.com/tx/{txid}");
         assert_eq!(testnet_tx.as_str(), "https://mempool.space/testnet/tx/{txid}");
         assert_eq!(signet_tx.as_str(), "https://mutinynet.com/tx/{txid}");
+    }
+
+    #[test]
+    fn blockstream_preset_canonicalizes_supported_non_bitcoin_network_paths() {
+        let testnet = CustomBlockExplorerTemplate::from_preset_base_url(
+            Network::Testnet,
+            "https://blockstream.info/",
+        )
+        .unwrap();
+        let signet = CustomBlockExplorerTemplate::from_preset_base_url(
+            Network::Signet,
+            "https://blockstream.info/",
+        )
+        .unwrap();
+
+        assert_eq!(testnet.as_str(), "https://blockstream.info/testnet/tx/{txid}");
+        assert_eq!(signet.as_str(), "https://blockstream.info/signet/tx/{txid}");
     }
 
     #[test]

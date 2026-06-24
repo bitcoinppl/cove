@@ -359,8 +359,17 @@ impl GlobalConfigTable {
             BlockExplorerOption::MempoolGuide
             | BlockExplorerOption::BullBitcoin
             | BlockExplorerOption::Blockstream => {
-                let base_url = option.base_url().expect("preset block explorer has a base URL");
-                self.set_custom_block_explorer(network, base_url.to_string())
+                let template = option.template_for_network(network).ok_or_else(|| {
+                    GlobalConfigTableError::InvalidCustomBlockExplorer(format!(
+                        "{} is not supported on {}",
+                        option.display_name(),
+                        network.display_name()
+                    ))
+                })?;
+                let canonical = template.as_str().to_string();
+                self.set(GlobalConfigKey::CustomBlockExplorer(network), canonical.clone())?;
+
+                Ok(Some(canonical))
             }
         }
     }
@@ -576,6 +585,46 @@ mod tests {
             table.selected_block_explorer_option(Network::Bitcoin),
             BlockExplorerOption::Blockstream
         );
+    }
+
+    #[test]
+    fn block_explorer_option_setter_preserves_preset_network_paths() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let testnet = table
+            .set_block_explorer_option(Network::Testnet, BlockExplorerOption::Blockstream)
+            .unwrap();
+        let signet = table
+            .set_block_explorer_option(Network::Signet, BlockExplorerOption::Blockstream)
+            .unwrap();
+
+        assert_eq!(testnet.as_deref(), Some("https://blockstream.info/testnet/tx/{txid}"));
+        assert_eq!(
+            table.selected_block_explorer_option(Network::Testnet),
+            BlockExplorerOption::Blockstream
+        );
+        assert_eq!(signet.as_deref(), Some("https://blockstream.info/signet/tx/{txid}"));
+        assert_eq!(
+            table.selected_block_explorer_option(Network::Signet),
+            BlockExplorerOption::Blockstream
+        );
+    }
+
+    #[test]
+    fn block_explorer_option_setter_rejects_unsupported_preset_networks() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        assert_eq!(
+            table
+                .set_block_explorer_option(Network::Testnet4, BlockExplorerOption::Blockstream)
+                .unwrap_err(),
+            super::Error::GlobalConfig(super::GlobalConfigTableError::InvalidCustomBlockExplorer(
+                "blockstream.info is not supported on Testnet4".to_string(),
+            ))
+        );
+        assert_eq!(table.custom_block_explorer(Network::Testnet4), None);
     }
 
     #[test]

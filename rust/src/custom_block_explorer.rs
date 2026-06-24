@@ -72,7 +72,7 @@ impl BlockExplorerOption {
     /// Returns the static display name for this option
     fn as_display_name(&self) -> &'static str {
         match self {
-            Self::MempoolSpace => "Default (mempool.space)",
+            Self::MempoolSpace => "Default explorer",
             Self::MempoolGuide => "mempool.guide",
             Self::BullBitcoin => "mempool.bullbitcoin.com",
             Self::Blockstream => "blockstream.info",
@@ -81,10 +81,14 @@ impl BlockExplorerOption {
     }
 
     /// Builds the canonical transaction template for this option on the given network
-    fn template_for_network(&self, network: Network) -> Option<CustomBlockExplorerTemplate> {
+    pub(crate) fn template_for_network(
+        &self,
+        network: Network,
+    ) -> Option<CustomBlockExplorerTemplate> {
         match self {
             Self::MempoolSpace => Some(CustomBlockExplorerTemplate::default_for(network)),
             Self::Custom => None,
+            Self::Blockstream if network == Network::Testnet4 => None,
             _ => self.base_url().and_then(|base_url| {
                 CustomBlockExplorerTemplate::from_preset_base_url(network, base_url)
             }),
@@ -138,7 +142,7 @@ mod tests {
                 BlockExplorerOption::Custom,
             ]
         );
-        assert_eq!(BlockExplorerOption::MempoolSpace.display_name(), "Default (mempool.space)");
+        assert_eq!(BlockExplorerOption::MempoolSpace.display_name(), "Default explorer");
         assert_eq!(BlockExplorerOption::Blockstream.display_name(), "blockstream.info");
     }
 }

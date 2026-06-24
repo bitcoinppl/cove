@@ -133,7 +133,7 @@ fun NodeSettingsScreen(
     }
 
     fun selectPresetNode(nodeName: String) {
-        if (selectedNodeName == nodeName) {
+        if (selectedNodeSelection is NodeSelection.Preset && selectedNodeName == nodeName) {
             return
         }
 
