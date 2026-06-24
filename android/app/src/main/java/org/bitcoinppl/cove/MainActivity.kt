@@ -511,15 +511,17 @@ class MainActivity : FragmentActivity() {
                     ),
                 )
             }
-            LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupLifecycle, persistedOnboardingProgress) {
-                persistedOnboardingProgress = readPersistedOnboardingProgress()
+            LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupLifecycle) {
+                val freshProgress = readPersistedOnboardingProgress()
+                persistedOnboardingProgress = freshProgress
+
                 startupMode =
                     resolveStartupModeTransition(
                         currentMode = startupMode,
                         termsAccepted = app.isTermsAccepted,
                         hasWallets = hasWallets,
                         cloudBackupLifecycle = cloudBackupLifecycle,
-                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
+                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(freshProgress),
                     )
             }
             val onboardingManager =
