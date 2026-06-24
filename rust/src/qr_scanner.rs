@@ -526,11 +526,12 @@ mod tests {
         assert!(result.is_ok(), "Scanner should succeed: {:?}", result);
 
         match result.unwrap() {
-            ScanResult::Complete { data, .. } => {
+            ScanResult::Complete { data, haptic } => {
                 assert!(
                     matches!(data, crate::multi_format::MultiFormat::HardwareExport(_)),
                     "Should be HardwareExport"
                 );
+                assert_eq!(haptic, HapticFeedback::Success);
             }
             ScanResult::InProgress { .. } => {
                 panic!("Single-part scan should complete immediately");

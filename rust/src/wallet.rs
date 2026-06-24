@@ -340,6 +340,7 @@ impl Wallet {
             if let Some(existing_metadata) = existing {
                 return Self::upgrade_to_cold(
                     existing_metadata,
+                    &metadata,
                     xpub,
                     descriptors,
                     keychain,
@@ -686,6 +687,7 @@ impl Wallet {
     /// Upgrade an existing watch-only wallet to cold by saving the xpub and descriptors
     fn upgrade_to_cold(
         mut metadata: WalletMetadata,
+        import_metadata: &WalletMetadata,
         xpub: Xpub,
         descriptors: Descriptors,
         keychain: &Keychain,
@@ -698,8 +700,7 @@ impl Wallet {
         let id = metadata.id.clone();
         keychain.save_wallet_xpub(&id, xpub)?;
 
-        metadata.wallet_type = WalletType::Cold;
-        metadata.origin = descriptors.origin().ok();
+        metadata = metadata_for_cold_upgrade(metadata, import_metadata, &descriptors);
 
         keychain.save_public_descriptor(
             &id,
@@ -740,6 +741,22 @@ fn check_for_duplicate_wallet(
     }
 
     Ok(())
+}
+
+fn metadata_for_cold_upgrade(
+    mut existing_metadata: WalletMetadata,
+    import_metadata: &WalletMetadata,
+    descriptors: &Descriptors,
+) -> WalletMetadata {
+    existing_metadata.wallet_type = WalletType::Cold;
+    existing_metadata.origin = descriptors.origin().ok();
+    existing_metadata.address_type = import_metadata.address_type;
+
+    if import_metadata.discovery_state != DiscoveryState::Single {
+        existing_metadata.discovery_state = import_metadata.discovery_state.clone();
+    }
+
+    existing_metadata
 }
 
 /// Builds an incremental scan request that checks revealed-unused receive addresses first
@@ -1121,6 +1138,44 @@ mod tests {
 
         assert_eq!(address_type, WalletAddressType::WrappedSegwit);
         assert!(!should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn cold_upgrade_metadata_carries_json_discovery_state() {
+        let json = descriptor_json(
+            Some(bip44_descriptors()),
+            Some(bip49_descriptors()),
+            Some(bip84_descriptors()),
+        );
+        let descriptors = Descriptors::from(bip84_descriptors());
+
+        let mut existing_metadata = WalletMetadata::preview_new();
+        existing_metadata.name = "Existing watch-only wallet".to_string();
+        existing_metadata.wallet_type = WalletType::WatchOnly;
+        existing_metadata.discovery_state = DiscoveryState::Single;
+        existing_metadata.address_type = WalletAddressType::Legacy;
+
+        let mut import_metadata = existing_metadata.clone();
+        import_metadata.name = "Incoming hardware wallet".to_string();
+        import_metadata.wallet_type = WalletType::Cold;
+        import_metadata.address_type = WalletAddressType::NativeSegwit;
+        import_metadata.discovery_state =
+            DiscoveryState::StartedJson(Arc::new(json.clone().into()));
+
+        let updated =
+            metadata_for_cold_upgrade(existing_metadata.clone(), &import_metadata, &descriptors);
+
+        assert_eq!(updated.name, existing_metadata.name);
+        assert_ne!(updated.name, import_metadata.name);
+        assert_eq!(updated.wallet_type, WalletType::Cold);
+        assert_eq!(updated.address_type, WalletAddressType::NativeSegwit);
+        assert_eq!(updated.origin, descriptors.origin().ok());
+
+        let DiscoveryState::StartedJson(found_json) = updated.discovery_state else {
+            panic!("expected JSON discovery to start after cold upgrade");
+        };
+
+        assert_eq!(found_json.as_ref().0, json);
     }
 
     fn scan_indexes(
