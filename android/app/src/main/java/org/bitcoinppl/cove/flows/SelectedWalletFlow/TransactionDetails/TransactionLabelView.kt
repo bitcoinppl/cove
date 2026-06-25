@@ -70,7 +70,7 @@ fun TransactionLabelView(
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
 
-    val labelManager = remember(manager.id) { manager.rust.labelManager() }
+    val labelManager = remember(manager.id) { manager.labelManager() }
     val txId: TxId = transactionDetails.txId()
 
     // cleanup labelManager when composable leaves composition
@@ -93,7 +93,7 @@ fun TransactionLabelView(
         scope.launch {
             try {
                 // bypass cache to get fresh label data from rust
-                val details = manager.rust.transactionDetails(txId)
+                val details = manager.transactionDetails(txId)
                 currentLabel = details.transactionLabel()
 
                 // update the cache so future reads get the updated label

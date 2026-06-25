@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * ported from iOS CoinControlManager.swift
  */
 @Stable
-class CoinControlManager(
+class CoinControlManager internal constructor(
     private val rust: RustCoinControlManager,
 ) : CoinControlManagerReconciler,
     Closeable {
@@ -30,6 +30,14 @@ class CoinControlManager(
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val isClosed = AtomicBoolean(false)
+    private val rustGuard =
+        RustHandleGuard(
+            ownerName = "CoinControlManager",
+            handleName = "RustCoinControlManager",
+            isClosed = isClosed,
+        ) {
+            android.util.Log.w(tag, it)
+        }
 
     val id: WalletId = rust.id()
 
@@ -68,6 +76,24 @@ class CoinControlManager(
         android.util.Log.d(tag, message)
     }
 
+    private fun <T> withRust(
+        block: RustCoinControlManager.() -> T,
+    ): T = rustGuard.withHandle(rust, block)
+
+    private fun <T> withRustOr(
+        defaultValue: T,
+        block: RustCoinControlManager.() -> T,
+    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
+
+    private suspend fun <T> withRustSuspend(
+        block: suspend RustCoinControlManager.() -> T,
+    ): T = rustGuard.withHandleSuspend(rust, block)
+
+    private suspend fun <T> withRustOrSuspend(
+        defaultValue: T,
+        block: suspend RustCoinControlManager.() -> T,
+    ): T = rustGuard.withHandleOrSuspend(rust, defaultValue, block)
+
     /**
      * update search and dispatch notification
      */
@@ -82,8 +108,6 @@ class CoinControlManager(
      * update selected utxos and dispatch notification
      */
     fun updateSelected(value: Set<ULong>) {
-        if (isClosed.get()) return
-
         val visibleIds = utxos.map { it.outpoint.hashToUint() }.toSet()
         val visibleSpendableIds = utxos.filter { it.spendable }.map { it.outpoint.hashToUint() }.toSet()
         val selectedOutsideVisibleSearch = selected.subtract(visibleIds)
@@ -91,8 +115,9 @@ class CoinControlManager(
         selected = spendableSelection
 
         val hiddenSelectedOutpoints =
-            rust
-                .selectedUtxos()
+            withRustOr(emptyList()) {
+                selectedUtxos()
+            }
                 .filter { selectedOutsideVisibleSearch.contains(it.outpoint.hashToUint()) }
                 .map { it.outpoint }
         val visibleSelectedOutpoints =
@@ -106,10 +131,10 @@ class CoinControlManager(
     /**
      * get current button presentation based on sort state
      */
-    fun buttonPresentation(key: CoinControlListSortKey): ButtonPresentation? {
-        if (isClosed.get()) return null
-        return rust.buttonPresentation(key)
-    }
+    fun buttonPresentation(key: CoinControlListSortKey): ButtonPresentation? =
+        withRustOr(null) {
+            buttonPresentation(key)
+        }
 
     /**
      * get button arrow icon based on sort state
@@ -137,10 +162,11 @@ class CoinControlManager(
      * navigates forward to CoinControlSetAmount screen with selected UTXOs
      */
     fun continuePressed(app: AppManager) {
-        if (isClosed.get()) return
-
         val walletId = id
-        val selectedUtxos = rust.selectedUtxos()
+        val selectedUtxos =
+            withRustOr(emptyList()) {
+                selectedUtxos()
+            }
 
         // navigate forward to coin control set amount screen
         val sendRoute = SendRoute.CoinControlSetAmount(walletId, selectedUtxos)
@@ -153,9 +179,12 @@ class CoinControlManager(
         updateSendFlowManagerTask =
             mainScope.launch {
                 delay(SEND_FLOW_UPDATE_DELAY_MS)
-                if (!isActive || isClosed.get()) return@launch
+                if (!isActive) return@launch
 
-                val selectedUtxos = rust.selectedUtxos()
+                val selectedUtxos =
+                    withRustOr(emptyList()) {
+                        selectedUtxos()
+                    }
                 sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
             }
     }
@@ -204,17 +233,16 @@ class CoinControlManager(
         }
 
     suspend fun reloadLabels() {
-        if (isClosed.get()) return
-        rust.reloadLabels()
+        withRustOrSuspend(Unit) {
+            reloadLabels()
+        }
     }
 
     suspend fun setSpendability(
         outpoint: OutPoint,
         spendable: Boolean,
-    ) {
-        check(!isClosed.get()) { "CoinControlManager is closed" }
-
-        rust.setUtxoSpendability(outpoint, spendable)
+    ) = withRustSuspend {
+        setUtxoSpendability(outpoint, spendable)
     }
 
     override fun reconcile(message: CoinControlManagerReconcileMessage) {
@@ -232,21 +260,21 @@ class CoinControlManager(
     }
 
     fun dispatch(action: CoinControlManagerAction) {
-        if (isClosed.get()) return
-
         logDebug("dispatch: $action")
         mainScope.launch(Dispatchers.IO) {
-            if (isClosed.get()) return@launch
-            rust.dispatch(action)
+            withRustOr(Unit) {
+                dispatch(action)
+            }
         }
     }
 
     override fun close() {
-        if (!isClosed.compareAndSet(false, true)) return
-        logDebug("Closing CoinControlManager")
-        updateSendFlowManagerTask?.cancel()
-        mainScope.cancel()
-        rust.close()
+        rustGuard.closeOnce {
+            logDebug("Closing CoinControlManager")
+            updateSendFlowManagerTask?.cancel()
+            mainScope.cancel()
+            rust.close()
+        }
     }
 
     companion object {

@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicBoolean
 
 enum class UnlockMode {
     MAIN,
@@ -29,8 +30,17 @@ class AuthManager private constructor() : AuthManagerReconciler {
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    internal var rust: RustAuthManager = RustAuthManager()
+    private var rust: RustAuthManager = RustAuthManager()
         private set
+    private val isRustClosed = AtomicBoolean(false)
+    private val rustGuard =
+        RustHandleGuard(
+            ownerName = "AuthManager",
+            handleName = "RustAuthManager",
+            isClosed = isRustClosed,
+        ) {
+            android.util.Log.w(tag, it)
+        }
 
     var type by mutableStateOf<AuthType>(Database().globalConfig().authType())
         private set
@@ -50,12 +60,24 @@ class AuthManager private constructor() : AuthManagerReconciler {
         get() = type != AuthType.NONE
 
     val lockedAt: Instant?
-        get() = rust.lockedAt()?.let { Instant.ofEpochSecond(it.toLong()) }
+        get() =
+            withRustOr(null) {
+                lockedAt()
+            }?.let { Instant.ofEpochSecond(it.toLong()) }
 
     init {
         logDebug("Initializing AuthManager")
         rust.listenForUpdates(this)
     }
+
+    private fun <T> withRust(
+        block: RustAuthManager.() -> T,
+    ): T = rustGuard.withHandle(rust, block)
+
+    private fun <T> withRustOr(
+        defaultValue: T,
+        block: RustAuthManager.() -> T,
+    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
 
     companion object {
         @Volatile
@@ -90,7 +112,9 @@ class AuthManager private constructor() : AuthManagerReconciler {
         logDebug("[AUTH] locking at $now")
         isLocked = true
         try {
-            rust.setLockedAt(lockedAt = now)
+            withRust {
+                setLockedAt(lockedAt = now)
+            }
         } catch (e: Exception) {
             android.util.Log.e(tag, "failed to set locked at", e)
         }
@@ -102,7 +126,9 @@ class AuthManager private constructor() : AuthManagerReconciler {
     fun unlock() {
         isLocked = false
         try {
-            rust.setLockedAt(lockedAt = 0UL)
+            withRust {
+                setLockedAt(lockedAt = 0UL)
+            }
         } catch (e: Exception) {
             android.util.Log.e(tag, "failed to unlock", e)
         }
@@ -111,7 +137,10 @@ class AuthManager private constructor() : AuthManagerReconciler {
     /**
      * check if in decoy mode
      */
-    fun isInDecoyMode(): Boolean = rust.isInDecoyMode()
+    fun isInDecoyMode(): Boolean =
+        withRustOr(false) {
+            isInDecoyMode()
+        }
 
     /**
      * check if PIN matches main wallet PIN
@@ -121,12 +150,18 @@ class AuthManager private constructor() : AuthManagerReconciler {
     /**
      * check if PIN is decoy PIN
      */
-    fun checkDecoyPin(pin: String): Boolean = rust.checkDecoyPin(pin)
+    fun checkDecoyPin(pin: String): Boolean =
+        withRustOr(false) {
+            checkDecoyPin(pin)
+        }
 
     /**
      * check if PIN is wipe data PIN
      */
-    fun checkWipeDataPin(pin: String): Boolean = rust.checkWipeDataPin(pin)
+    fun checkWipeDataPin(pin: String): Boolean =
+        withRustOr(false) {
+            checkWipeDataPin(pin)
+        }
 
     /**
      * reset app and select wallet (helper to avoid duplication)
@@ -159,7 +194,9 @@ class AuthManager private constructor() : AuthManagerReconciler {
             // enter decoy mode if not already in decoy mode and reset app and router
             if (Database().globalConfig().isInMainMode()) {
                 try {
-                    rust.switchToDecoyMode()
+                    withRust {
+                        switchToDecoyMode()
+                    }
                     resetAppAndSelectWallet()
                 } catch (e: Exception) {
                     android.util.Log.e(tag, "failed to switch to decoy mode", e)
@@ -176,11 +213,13 @@ class AuthManager private constructor() : AuthManagerReconciler {
         if (checkWipeDataPin(pin)) {
             App.isLoading = true
             try {
-                App.rust.dangerousWipeAllData()
+                App.dangerousWipeAllData()
 
                 // reset auth manager
                 val oldRust = rust
                 rust = RustAuthManager()
+                rustGuard.markOpen()
+                rust.listenForUpdates(this)
                 oldRust.close()
                 unlock()
 
@@ -204,7 +243,9 @@ class AuthManager private constructor() : AuthManagerReconciler {
      */
     fun switchToMainMode() {
         try {
-            rust.switchToMainMode()
+            withRust {
+                switchToMainMode()
+            }
             resetAppAndSelectWallet()
         } catch (e: Exception) {
             android.util.Log.e(tag, "failed to switch to main mode", e)
@@ -220,11 +261,17 @@ class AuthManager private constructor() : AuthManagerReconciler {
                 }
 
                 is AuthManagerReconcileMessage.WipeDataPinChanged -> {
-                    isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
+                    isWipeDataPinEnabled =
+                        withRustOr(isWipeDataPinEnabled) {
+                            isWipeDataPinEnabled()
+                        }
                 }
 
                 is AuthManagerReconcileMessage.DecoyPinChanged -> {
-                    isDecoyPinEnabled = rust.isDecoyPinEnabled()
+                    isDecoyPinEnabled =
+                        withRustOr(isDecoyPinEnabled) {
+                            isDecoyPinEnabled()
+                        }
                 }
             }
         }
@@ -232,7 +279,40 @@ class AuthManager private constructor() : AuthManagerReconciler {
 
     fun dispatch(action: AuthManagerAction) {
         logDebug("dispatch: $action")
-        rust.dispatch(action)
+        withRustOr(Unit) {
+            dispatch(action)
+        }
+    }
+
+    fun validateSecurityAction(
+        action: SecuritySettingsAction,
+        unverifiedWalletIds: List<WalletId>,
+    ): SecuritySettingsResult =
+        withRust {
+            validateSecurityAction(action, unverifiedWalletIds)
+        }
+
+    fun validateNewPin(pin: String): String? =
+        withRustOr(null) {
+            validateNewPin(pin)
+        }
+
+    fun setWipeDataPin(pin: String) {
+        withRust {
+            setWipeDataPin(pin)
+        }
+    }
+
+    fun setDecoyPin(pin: String) {
+        withRust {
+            setDecoyPin(pin)
+        }
+    }
+
+    fun closeRust() {
+        rustGuard.closeOnce {
+            rust.close()
+        }
     }
 }
 

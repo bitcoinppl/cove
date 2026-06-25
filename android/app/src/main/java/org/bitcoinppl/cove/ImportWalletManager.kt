@@ -18,14 +18,31 @@ class ImportWalletManager :
     private val tag = "ImportWalletManager"
     private val isClosed = AtomicBoolean(false)
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val rustGuard =
+        RustHandleGuard(
+            ownerName = "ImportWalletManager",
+            handleName = "RustImportWalletManager",
+            isClosed = isClosed,
+        ) {
+            Log.w(tag, it)
+        }
 
-    val rust: RustImportWalletManager
+    private val rust: RustImportWalletManager
 
     init {
         Log.d(tag, "Initializing ImportWalletManager")
         rust = RustImportWalletManager()
         rust.listenForUpdates(this)
     }
+
+    private fun <T> withRust(
+        block: RustImportWalletManager.() -> T,
+    ): T = rustGuard.withHandle(rust, block)
+
+    private fun <T> withRustOr(
+        defaultValue: T,
+        block: RustImportWalletManager.() -> T,
+    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
 
     override fun reconcile(message: ImportWalletManagerReconcileMessage) {
         Log.d(tag, "Reconcile: $message")
@@ -40,7 +57,9 @@ class ImportWalletManager :
 
     fun dispatch(action: ImportWalletManagerAction) {
         Log.d(tag, "Dispatch: $action")
-        rust.dispatch(action)
+        withRustOr(Unit) {
+            dispatch(action)
+        }
     }
 
     /**
@@ -51,13 +70,17 @@ class ImportWalletManager :
      */
     fun importWallet(enteredWords: List<List<String>>): WalletMetadata {
         Log.d(tag, "Importing wallet with ${enteredWords.flatten().size} words")
-        return rust.importWallet(enteredWords)
+
+        return withRust {
+            importWallet(enteredWords)
+        }
     }
 
     override fun close() {
-        if (!isClosed.compareAndSet(false, true)) return
-        Log.d(tag, "Closing ImportWalletManager")
-        mainScope.cancel()
-        rust.close()
+        rustGuard.closeOnce {
+            Log.d(tag, "Closing ImportWalletManager")
+            mainScope.cancel()
+            rust.close()
+        }
     }
 }

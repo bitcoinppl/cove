@@ -64,7 +64,7 @@ fun VerificationCompleteScreen(
     fun goToWallet() {
         manager?.let {
             try {
-                it.rust.markWalletAsVerified()
+                it.markWalletAsVerified()
                 app.resetRoute(Route.SelectedWallet(it.id))
             } catch (e: Exception) {
                 Log.e("VerificationComplete", "error marking wallet as verified: $e")

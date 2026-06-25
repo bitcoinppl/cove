@@ -189,7 +189,7 @@ fun SelectedWalletContainer(
     when (val wm = manager) {
         null -> FullPageLoadingView(modifier = modifier)
         else -> {
-            val canGoBack = app.rust.canGoBack()
+            val canGoBack = app.canGoBack()
             android.util.Log.d("SelectedWalletContainer", "canGoBack=$canGoBack, routes=${app.router.routes.size}, default=${app.router.default}")
             val handleSend = send@{
                 if (wm.walletMetadata?.walletType == WalletType.WATCH_ONLY) {

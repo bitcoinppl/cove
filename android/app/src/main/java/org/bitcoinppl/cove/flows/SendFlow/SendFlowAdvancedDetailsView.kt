@@ -76,7 +76,7 @@ fun SendFlowAdvancedDetailsView(
     LaunchedEffect(walletManager) {
         splitOutput =
             try {
-                walletManager.rust.splitTransactionOutputs(details.outputs())
+                walletManager.splitTransactionOutputs(details.outputs())
             } catch (e: Exception) {
                 null
             }
@@ -87,7 +87,7 @@ fun SendFlowAdvancedDetailsView(
             FiatOrBtc.FIAT -> {
                 val prices = app.prices
                 if (prices != null) {
-                    "≈ ${walletManager.rust.convertAndDisplayFiat(amount, prices)}"
+                    "≈ ${walletManager.convertAndDisplayFiat(amount, prices)}"
                 } else {
                     app.dispatch(AppAction.UpdateFiatPrices)
                     "---"

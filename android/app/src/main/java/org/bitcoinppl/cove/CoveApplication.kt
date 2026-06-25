@@ -154,14 +154,14 @@ class CoveApplication : Application() {
             }
 
             try {
-                AppManager.getInstance().rust.close()
+                AppManager.getInstance().closeRust()
                 Log.d(TAG, "AppManager FFI object closed")
             } catch (e: Exception) {
                 Log.e(TAG, "Error closing AppManager FFI object", e)
             }
 
             try {
-                AuthManager.getInstance().rust.close()
+                AuthManager.getInstance().closeRust()
                 Log.d(TAG, "AuthManager FFI object closed")
             } catch (e: Exception) {
                 Log.e(TAG, "Error closing AuthManager FFI object", e)

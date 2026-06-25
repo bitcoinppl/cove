@@ -131,7 +131,7 @@ private fun GlobalAlertDialog(
                         TextButton(onClick = {
                             onDismiss()
                             try {
-                                app.getWalletManager(walletId).rust.setWalletType(WalletType.COLD)
+                                app.getWalletManager(walletId).setWalletType(WalletType.COLD)
                             } catch (e: Exception) {
                                 Log.e("GlobalAlert", "Failed to set wallet type to cold", e)
                                 app.alertState =
@@ -505,7 +505,7 @@ private fun GlobalAlertDialog(
                     Column(horizontalAlignment = Alignment.End) {
                         TextButton(onClick = {
                             onDismiss()
-                            app.rust.deleteCorruptedWallet(state.walletId)
+                            app.deleteCorruptedWallet(state.walletId)
                         }) {
                             Text("Delete Wallet", color = MaterialTheme.colorScheme.error)
                         }

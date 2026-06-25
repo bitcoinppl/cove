@@ -60,7 +60,7 @@ fun VerifyWordsContainer(
         loading = true
         try {
             val walletManager = app.getWalletManager(id)
-            val wordValidator = walletManager.rust.wordValidator()
+            val wordValidator = walletManager.wordValidator()
             val sm = WordVerifyStateMachine(wordValidator, 1u)
 
             manager = walletManager

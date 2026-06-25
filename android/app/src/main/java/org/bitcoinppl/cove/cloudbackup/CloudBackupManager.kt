@@ -11,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.RustHandleGuard
 import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
@@ -33,6 +34,7 @@ import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.OtherBackupsOperation
 import org.bitcoinppl.cove_core.RustCloudBackupManager
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
+import java.util.concurrent.atomic.AtomicBoolean
 
 @Stable
 class CloudBackupManager private constructor(
@@ -52,6 +54,15 @@ class CloudBackupManager private constructor(
         } else {
             CoroutineScope(SupervisorJob())
         }
+    private val isClosed = AtomicBoolean(false)
+    private val rustGuard =
+        RustHandleGuard(
+            ownerName = "CloudBackupManager",
+            handleName = "RustCloudBackupManager",
+            isClosed = isClosed,
+        ) {
+            Log.w(TAG, it)
+        }
 
     var state by mutableStateOf(initialState)
         private set
@@ -67,13 +78,27 @@ class CloudBackupManager private constructor(
         if (startLiveUpdates && rust != null) {
             rust.listenForUpdates(this)
             rustScope.launch {
-                runCatching { rust.cloudStorageDidChange() }
+                runCatching {
+                    withRust {
+                        cloudStorageDidChange()
+                    }
+                }
                     .onFailure { error ->
                         Log.w(TAG, "initial cloud storage refresh failed", error)
                     }
             }
         }
     }
+
+    private fun <T> withRust(
+        block: RustCloudBackupManager.() -> T,
+    ): T? = rust?.let { rustGuard.withHandleOr(it, null, block) }
+
+    private fun <T> withRustOr(
+        defaultValue: T,
+        block: RustCloudBackupManager.() -> T,
+    ): T =
+        withRust(block) ?: defaultValue
 
     internal constructor(initialState: CloudBackupState) : this(null, initialState, false)
 
@@ -236,8 +261,11 @@ class CloudBackupManager private constructor(
 
     fun dispatch(action: CloudBackupManagerAction) {
         rustScope.launch {
-            val rust = rust ?: return@launch
-            runCatching { rust.dispatch(action) }
+            runCatching {
+                withRust {
+                    dispatch(action)
+                }
+            }
                 .onFailure { error ->
                     Log.e(TAG, "cloud backup action failed: $action", error)
                 }
@@ -246,9 +274,13 @@ class CloudBackupManager private constructor(
 
     fun syncPersistedState() {
         rustScope.launch {
-            val rust = rust ?: return@launch
-            runCatching { rust.syncPersistedState() }
-                .onSuccess {
+            runCatching {
+                withRust {
+                    syncPersistedState()
+                }
+            }
+                .onSuccess { didSync ->
+                    if (didSync == null) return@onSuccess
                     mainScope.launch {
                         refreshPersistedEnabledState()
                     }
@@ -261,9 +293,13 @@ class CloudBackupManager private constructor(
 
     fun resumePendingCloudUploadVerification() {
         rustScope.launch {
-            val rust = rust ?: return@launch
-            runCatching { rust.resumePendingCloudUploadVerification() }
-                .onSuccess {
+            runCatching {
+                withRust {
+                    resumePendingCloudUploadVerification()
+                }
+            }
+                .onSuccess { didResume ->
+                    if (didResume == null) return@onSuccess
                     mainScope.launch {
                         refreshPersistedEnabledState()
                     }
@@ -276,9 +312,13 @@ class CloudBackupManager private constructor(
 
     fun refreshCloudState() {
         rustScope.launch {
-            val rust = rust ?: return@launch
-            runCatching { rust.cloudStorageDidChange() }
-                .onSuccess {
+            runCatching {
+                withRust {
+                    cloudStorageDidChange()
+                }
+            }
+                .onSuccess { didRefresh ->
+                    if (didRefresh == null) return@onSuccess
                     mainScope.launch {
                         refreshPersistedEnabledState()
                     }
@@ -307,7 +347,11 @@ class CloudBackupManager private constructor(
     }
 
     private fun refreshPersistedEnabledState(forceDisabledNotification: Boolean = false) {
-        isCloudBackupEnabled = runCatching { rust?.isCloudBackupEnabled() == true }
+        isCloudBackupEnabled = runCatching {
+            withRustOr(isCloudBackupEnabled) {
+                isCloudBackupEnabled()
+            }
+        }
             .getOrDefault(isCloudBackupEnabled)
 
         reconcileDisabledState(forceNotification = forceDisabledNotification)
@@ -342,9 +386,11 @@ class CloudBackupManager private constructor(
     }
 
     override fun close() {
-        mainScope.cancel()
-        rustScope.cancel()
-        rust?.close()
+        rustGuard.closeOnce {
+            mainScope.cancel()
+            rustScope.cancel()
+            rust?.close()
+        }
     }
 
     companion object {

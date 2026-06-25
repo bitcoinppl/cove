@@ -91,7 +91,7 @@ internal fun WalletSheetsHost(
             onExportLabels = {
                 onDismissMoreOptions()
                 // show confirmation dialog instead of direct export
-                exportLabelManager = manager.rust.labelManager()
+                exportLabelManager = manager.labelManager()
                 showExportLabelsDialog = true
             },
             onExportTransactions = {
@@ -181,9 +181,9 @@ internal fun WalletSheetsHost(
                 QrExportView(
                     title = "Export Labels",
                     subtitle = "Scan to import labels\ninto another wallet",
-                    generateBbqrStrings = { density -> manager.rust.exportLabelsForQr(density) },
+                    generateBbqrStrings = { density -> manager.exportLabelsForQr(density) },
                     generateUrStrings = null,
-                    onCopy = { manager.rust.exportLabelsForShare().content },
+                    onCopy = { manager.exportLabelsForShare().content },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
                 )
             }
@@ -244,9 +244,9 @@ internal fun WalletSheetsHost(
             QrExportView(
                 title = "Export Xpub",
                 subtitle = "Public descriptor for\nwatch-only wallet",
-                generateBbqrStrings = { density -> manager.rust.exportXpubForQr(density) },
+                generateBbqrStrings = { density -> manager.exportXpubForQr(density) },
                 generateUrStrings = null,
-                onCopy = { manager.rust.exportXpubForShare().content },
+                onCopy = { manager.exportXpubForShare().content },
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
             )
         }
@@ -258,7 +258,7 @@ internal fun WalletSheetsHost(
     LaunchedEffect(showNfcScanner, manager) {
         if (showNfcScanner) {
             try {
-                nfcLabelManager = manager.rust.labelManager()
+                nfcLabelManager = manager.labelManager()
             } catch (e: Exception) {
                 android.util.Log.e(tag, "Failed to get label manager")
                 nfcLabelManager = null
@@ -331,7 +331,7 @@ private suspend fun shareLabelsFile(
     context: Context,
     manager: WalletManager,
 ) {
-    val result = manager.rust.exportLabelsForShare()
+    val result = manager.exportLabelsForShare()
 
     val uri =
         withContext(Dispatchers.IO) {
@@ -359,7 +359,7 @@ private suspend fun shareTransactionsFile(
     context: Context,
     manager: WalletManager,
 ) {
-    val result = manager.rust.exportTransactionsCsv()
+    val result = manager.exportTransactionsCsv()
 
     val uri =
         withContext(Dispatchers.IO) {
@@ -387,7 +387,7 @@ private suspend fun shareXpubFile(
     context: Context,
     manager: WalletManager,
 ) {
-    val result = manager.rust.exportXpubForShare()
+    val result = manager.exportXpubForShare()
 
     val uri =
         withContext(Dispatchers.IO) {
