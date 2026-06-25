@@ -97,11 +97,203 @@ class OnboardingHelpersTest {
     }
 
     @Test
+    fun readyShortcutOnlyAppliesToReadyStartupMode() {
+        assertEquals(
+            StartupMode.READY,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.READY,
+                termsAccepted = true,
+                hasWallets = false,
+                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
+                hasPersistedOnboardingProgress = false,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
+            ),
+        )
+
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.ONBOARDING,
+                termsAccepted = true,
+                hasWallets = false,
+                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
+                hasPersistedOnboardingProgress = false,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
+            ),
+        )
+    }
+
+    @Test
+    fun onboardingStartupModePromotesToReadyWhenSetupIsComplete() {
+        assertEquals(
+            StartupMode.READY,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.ONBOARDING,
+                termsAccepted = true,
+                hasWallets = true,
+                cloudBackupLifecycle = configuredLifecycle(),
+                hasPersistedOnboardingProgress = false,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
+            ),
+        )
+    }
+
+    @Test
+    fun onboardingStartupModeKeepsPersistedProgressEvenWithWallets() {
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.ONBOARDING,
+                termsAccepted = true,
+                hasWallets = true,
+                cloudBackupLifecycle = configuredLifecycle(),
+                hasPersistedOnboardingProgress = true,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
+            ),
+        )
+    }
+
+    @Test
+    fun readyStartupModeIgnoresStalePersistedOnboardingProgress() {
+        val freshProgress = Result.success("""{"step":"backup_wallet"}""")
+        val recoveredProgress =
+            hasRecoveredOnboardingProgressAfterReadFailure(
+                freshProgress = freshProgress,
+                previousProgress = null,
+                previousReadFailed = false,
+            )
+
+        assertFalse(recoveredProgress)
+        assertEquals(
+            StartupMode.READY,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.READY,
+                termsAccepted = true,
+                hasWallets = false,
+                cloudBackupLifecycle = CloudBackupLifecycle.Disabled,
+                hasPersistedOnboardingProgress = true,
+                hasRecoveredOnboardingProgressAfterReadFailure = recoveredProgress,
+            ),
+        )
+    }
+
+    @Test
+    fun readyStartupModeReevaluatesRecoveredPersistedOnboardingProgress() {
+        val freshProgress = Result.success("""{"step":"backup_wallet"}""")
+        val recoveredProgress =
+            hasRecoveredOnboardingProgressAfterReadFailure(
+                freshProgress = freshProgress,
+                previousProgress = null,
+                previousReadFailed = true,
+            )
+
+        assertTrue(recoveredProgress)
+        assertEquals(
+            StartupMode.READY,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.READY,
+                termsAccepted = true,
+                hasWallets = true,
+                cloudBackupLifecycle = configuredLifecycle(),
+                hasPersistedOnboardingProgress = true,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
+            ),
+        )
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.READY,
+                termsAccepted = true,
+                hasWallets = true,
+                cloudBackupLifecycle = configuredLifecycle(),
+                hasPersistedOnboardingProgress = true,
+                hasRecoveredOnboardingProgressAfterReadFailure = recoveredProgress,
+            ),
+        )
+    }
+
+    @Test
+    fun recoveredOnboardingProgressRequiresNewProgressAfterPreviousReadFailure() {
+        assertFalse(
+            hasRecoveredOnboardingProgressAfterReadFailure(
+                freshProgress = Result.success("""{"step":"backup_wallet"}"""),
+                previousProgress = """{"step":"terms"}""",
+                previousReadFailed = true,
+            ),
+        )
+        assertFalse(
+            hasRecoveredOnboardingProgressAfterReadFailure(
+                freshProgress = Result.success(null),
+                previousProgress = null,
+                previousReadFailed = true,
+            ),
+        )
+
+        val failedRead: Result<String?> = Result.failure(IllegalStateException("read failed"))
+
+        assertFalse(
+            hasRecoveredOnboardingProgressAfterReadFailure(
+                freshProgress = failedRead,
+                previousProgress = null,
+                previousReadFailed = true,
+            ),
+        )
+    }
+
+    @Test
+    fun readyStartupModeStillRequiresAcceptedTerms() {
+        assertEquals(
+            StartupMode.ONBOARDING,
+            resolveStartupModeTransition(
+                currentMode = StartupMode.READY,
+                termsAccepted = false,
+                hasWallets = true,
+                cloudBackupLifecycle = configuredLifecycle(),
+                hasPersistedOnboardingProgress = false,
+                hasRecoveredOnboardingProgressAfterReadFailure = false,
+            ),
+        )
+    }
+
+    @Test
     fun persistedOnboardingProgressRequiresNonBlankState() {
         assertFalse(hasPersistedOnboardingProgress(null))
         assertFalse(hasPersistedOnboardingProgress(""))
         assertFalse(hasPersistedOnboardingProgress("   "))
         assertTrue(hasPersistedOnboardingProgress("""{"step":"backup_wallet"}"""))
+    }
+
+    @Test
+    fun effectiveOnboardingProgressUsesFreshValueOnSuccess() {
+        assertEquals(
+            """{"step":"backup_wallet"}""",
+            resolveEffectiveOnboardingProgress(
+                freshProgress = Result.success("""{"step":"backup_wallet"}"""),
+                previousProgress = """{"step":"terms"}""",
+            ),
+        )
+    }
+
+    @Test
+    fun effectiveOnboardingProgressClearsPreviousValueOnSuccessfulNull() {
+        assertEquals(
+            null,
+            resolveEffectiveOnboardingProgress(
+                freshProgress = Result.success(null),
+                previousProgress = """{"step":"backup_wallet"}""",
+            ),
+        )
+    }
+
+    @Test
+    fun effectiveOnboardingProgressKeepsPreviousValueOnFailure() {
+        assertEquals(
+            """{"step":"backup_wallet"}""",
+            resolveEffectiveOnboardingProgress(
+                freshProgress = Result.failure(IllegalStateException("read failed")),
+                previousProgress = """{"step":"backup_wallet"}""",
+            ),
+        )
     }
 
     @Test

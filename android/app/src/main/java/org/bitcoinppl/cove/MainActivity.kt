@@ -493,14 +493,20 @@ class MainActivity : FragmentActivity() {
             val snackbarHostState = remember { SnackbarHostState() }
             val cloudBackupLifecycle = app.cloudBackupManager.lifecycle
             val hasWallets = app.wallets.isNotEmpty() || app.hasWallets
-            val readPersistedOnboardingProgress = {
+            val readPersistedOnboardingProgress: () -> Result<String?> = {
                 runCatching {
                     Database().globalConfig().get(GlobalConfigKey.OnboardingProgress)
                 }.onFailure { error ->
-                    Log.w(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
-                }.getOrNull()
+                    Log.e(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
+                }
             }
-            var persistedOnboardingProgress by remember { mutableStateOf(readPersistedOnboardingProgress()) }
+            val initialPersistedOnboardingProgress = remember { readPersistedOnboardingProgress() }
+            var persistedOnboardingProgress by remember {
+                mutableStateOf(initialPersistedOnboardingProgress.getOrNull())
+            }
+            var previousPersistedOnboardingProgressReadFailed by remember {
+                mutableStateOf(initialPersistedOnboardingProgress.isFailure)
+            }
             var startupMode by remember {
                 mutableStateOf(
                     resolveStartupMode(
@@ -511,15 +517,34 @@ class MainActivity : FragmentActivity() {
                     ),
                 )
             }
-            LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupLifecycle, persistedOnboardingProgress) {
-                persistedOnboardingProgress = readPersistedOnboardingProgress()
+            LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupLifecycle) {
+                val freshProgress = readPersistedOnboardingProgress()
+                val recoveredOnboardingProgressAfterReadFailure =
+                    hasRecoveredOnboardingProgressAfterReadFailure(
+                        freshProgress = freshProgress,
+                        previousProgress = persistedOnboardingProgress,
+                        previousReadFailed = previousPersistedOnboardingProgressReadFailed,
+                    )
+                val effectiveProgress =
+                    resolveEffectiveOnboardingProgress(
+                        freshProgress = freshProgress,
+                        previousProgress = persistedOnboardingProgress,
+                    )
+
+                persistedOnboardingProgress = effectiveProgress
+
                 startupMode =
-                    resolveStartupMode(
+                    resolveStartupModeTransition(
+                        currentMode = startupMode,
                         termsAccepted = app.isTermsAccepted,
                         hasWallets = hasWallets,
                         cloudBackupLifecycle = cloudBackupLifecycle,
-                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
+                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(effectiveProgress),
+                        hasRecoveredOnboardingProgressAfterReadFailure =
+                            recoveredOnboardingProgressAfterReadFailure,
                     )
+
+                previousPersistedOnboardingProgressReadFailed = freshProgress.isFailure
             }
             val onboardingManager =
                 remember(startupMode) {
