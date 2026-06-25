@@ -159,6 +159,7 @@ private fun GlobalAlertDialog(
                 message = state.message(),
                 choices = choices,
                 onDismiss = onDismiss,
+                showCancelButton = false,
             )
         }
 

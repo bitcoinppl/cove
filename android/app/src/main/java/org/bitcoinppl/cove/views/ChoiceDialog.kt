@@ -45,6 +45,7 @@ internal fun ChoiceAlertDialog(
     onDismiss: () -> Unit,
     onCancel: () -> Unit = onDismiss,
     cancelText: String = "Cancel",
+    showCancelButton: Boolean = true,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -66,8 +67,10 @@ internal fun ChoiceAlertDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onCancel) {
-                Text(cancelText)
+            if (showCancelButton) {
+                TextButton(onClick = onCancel) {
+                    Text(cancelText)
+                }
             }
         },
     )

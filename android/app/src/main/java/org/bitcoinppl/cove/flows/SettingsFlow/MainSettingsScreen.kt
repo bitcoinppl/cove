@@ -1,7 +1,6 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
 import androidx.biometric.BiometricPrompt
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -381,13 +380,16 @@ private fun FullScreenSettingsModal(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    BackHandler(onBack = onDismiss)
-
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        content()
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            content()
+        }
     }
 }
 
