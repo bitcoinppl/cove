@@ -4501,7 +4501,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 15850.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 13212.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571.toShort()) {
@@ -21195,9 +21195,6 @@ public interface RustWalletManagerInterface {
 
     /**
      * Send entry point for unsigned hot wallet PSBTs
-     *
-     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
-     * PayJoin negotiation is handled in the actor stub.
      */
     suspend fun `initiatePayment`(`psbt`: Psbt, `payjoinEndpoint`: kotlin.String?)
 
@@ -21848,9 +21845,6 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
     /**
      * Send entry point for unsigned hot wallet PSBTs
-     *
-     * Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
-     * PayJoin negotiation is handled in the actor stub.
      */
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
@@ -55174,7 +55168,7 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             22 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
                 FfiConverterULong.read(buf),
                 )
-            20 -> WalletManagerReconcileMessage.PayjoinTxBroadcast
+            23 -> WalletManagerReconcileMessage.PayjoinTxBroadcast
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -55453,7 +55447,7 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 Unit
             }
             is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {
-                buf.putInt(20)
+                buf.putInt(23)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
