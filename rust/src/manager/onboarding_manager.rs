@@ -6,18 +6,16 @@ use std::{
     time::Duration,
 };
 
-use backon::{FibonacciBuilder, Retryable as _};
-use cove_cspp::backup_data::{EncryptedMasterKeyBackup, PasskeyProviderHint};
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
 use flume::Receiver;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use crate::{
     app::{App, AppAction, FfiApp},
-    database::{Database, global_config::GlobalConfigKey},
+    database::Database,
     manager::{
         cloud_backup_manager::{
             CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupPasskeyHint,
@@ -39,6 +37,21 @@ use crate::{
 };
 
 use super::deferred_sender::{DeferredSender, MessageSender, SingleOrMany};
+
+mod cloud_restore;
+mod progress;
+
+#[cfg(test)]
+use self::cloud_restore::{
+    CloudRestoreBackupSnapshot, choose_restore_provider_hint, record_cloud_restore_download_error,
+    resolve_provider_hint,
+};
+pub(crate) use self::cloud_restore::{
+    cloud_check_inconclusive_message, determine_cloud_check_outcome, inspect_cloud_restore_backup,
+};
+pub(crate) use self::progress::{OnboardingProgress, resolve_initial_flow};
+#[cfg(test)]
+use cove_cspp::backup_data::PasskeyProviderHint;
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Default, uniffi::Enum)]
 pub enum OnboardingStep {
@@ -187,40 +200,33 @@ pub trait OnboardingManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-enum CompletionTarget {
+pub(crate) enum CompletionTarget {
     SelectLatestOrNew,
     SelectWallet { wallet_id: WalletId, post_onboarding: PostOnboardingDestination },
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-enum PostOnboardingDestination {
+pub(crate) enum PostOnboardingDestination {
     None,
     VerifyWords,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-enum TermsContext {
+pub(crate) enum TermsContext {
     SelectLatestOrNew,
     SelectWallet { wallet_id: WalletId, post_onboarding: PostOnboardingDestination },
     StartupRestoreRecovery,
 }
 
-#[derive(Debug, Clone)]
-struct InitialFlowResolution {
-    flow: FlowState,
-    clear_persisted_progress: bool,
-    start_cloud_check: bool,
-}
-
 #[derive(Debug, Clone, Eq, PartialEq)]
-enum CloudCheckOutcome {
+pub(crate) enum CloudCheckOutcome {
     BackupFound(Option<CloudRestoreProviderHint>),
     NoBackupConfirmed,
     Inconclusive(CloudCheckIssue),
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-enum CloudCheckIssue {
+pub(crate) enum CloudCheckIssue {
     Offline,
     CloudUnavailable,
     Unknown,
@@ -241,7 +247,7 @@ impl From<CloudStorageError> for CloudCheckIssue {
 }
 
 #[derive(Debug, Clone)]
-struct CreatedWalletFlow {
+pub(crate) struct CreatedWalletFlow {
     branch: OnboardingBranch,
     wallet_id: WalletId,
     network: Network,
@@ -253,14 +259,14 @@ struct CreatedWalletFlow {
 }
 
 #[derive(Debug, Clone)]
-enum CloudBackupFlow {
+pub(crate) enum CloudBackupFlow {
     CreatedWallet(CreatedWalletFlow),
     SoftwareImport { wallet_id: WalletId },
     HardwareImport { wallet_id: WalletId },
 }
 
 #[derive(Debug, Clone)]
-enum FlowState {
+pub(crate) enum FlowState {
     CloudCheck {
         origin: RestoreOrigin,
     },
@@ -335,18 +341,6 @@ enum InternalEvent {
     CompletionFailed { error: String },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-enum OnboardingProgress {
-    CreatedWallet {
-        wallet_id: WalletId,
-        branch: OnboardingBranch,
-        network: Network,
-        wallet_mode: WalletMode,
-        secret_words_saved: bool,
-        cloud_backup_enabled: bool,
-    },
-}
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 enum CloudRestoreDiscovery {
     Checking,
@@ -373,7 +367,7 @@ impl OnboardingCloudBackupEnableStart {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-enum RestoreOrigin {
+pub(crate) enum RestoreOrigin {
     Startup,
     Welcome,
     BitcoinChoice,
@@ -852,59 +846,6 @@ impl RustOnboardingManager {
             cloud_backup_enabled: false,
             secret_words_saved: false,
         })
-    }
-
-    fn load_onboarding_progress() -> Option<OnboardingProgress> {
-        let config = &Database::global().global_config;
-        let raw = match config.get(GlobalConfigKey::OnboardingProgress) {
-            Ok(Some(raw)) => raw,
-            Ok(None) => return None,
-            Err(error) => {
-                warn!("Onboarding: failed to load persisted onboarding progress: {error}");
-                return None;
-            }
-        };
-
-        match serde_json::from_str(&raw) {
-            Ok(progress) => Some(progress),
-            Err(error) => {
-                warn!("Onboarding: invalid persisted onboarding progress: {error}");
-                if let Err(delete_error) = config.delete(GlobalConfigKey::OnboardingProgress) {
-                    warn!(
-                        "Onboarding: failed to clear invalid onboarding progress: {delete_error}"
-                    );
-                }
-                None
-            }
-        }
-    }
-
-    fn sync_onboarding_progress(progress: Option<OnboardingProgress>) {
-        let config = &Database::global().global_config;
-        let current = config.get(GlobalConfigKey::OnboardingProgress).ok().flatten();
-
-        match progress {
-            Some(progress) => match serde_json::to_string(&progress) {
-                Ok(serialized) => {
-                    if current.as_deref() == Some(serialized.as_str()) {
-                        return;
-                    }
-                    if let Err(error) = config.set(GlobalConfigKey::OnboardingProgress, serialized)
-                    {
-                        warn!("Onboarding: failed to persist onboarding progress: {error}");
-                    }
-                }
-                Err(error) => warn!("Onboarding: failed to encode onboarding progress: {error}"),
-            },
-            None => {
-                if current.is_none() {
-                    return;
-                }
-                if let Err(error) = config.delete(GlobalConfigKey::OnboardingProgress) {
-                    warn!("Onboarding: failed to clear onboarding progress: {error}");
-                }
-            }
-        }
     }
 }
 
@@ -1775,91 +1716,6 @@ impl TermsContext {
     }
 }
 
-impl From<CreatedWalletFlow> for OnboardingProgress {
-    fn from(flow: CreatedWalletFlow) -> Self {
-        Self::CreatedWallet {
-            wallet_id: flow.wallet_id,
-            branch: flow.branch,
-            network: flow.network,
-            wallet_mode: flow.wallet_mode,
-            secret_words_saved: flow.secret_words_saved,
-            cloud_backup_enabled: flow.cloud_backup_enabled,
-        }
-    }
-}
-
-impl OnboardingProgress {
-    fn restore_flow<F>(&self, load_mnemonic: F) -> Option<FlowState>
-    where
-        F: FnOnce(&WalletId, Network, WalletMode) -> Option<bip39::Mnemonic>,
-    {
-        match self {
-            Self::CreatedWallet {
-                wallet_id,
-                branch,
-                network,
-                wallet_mode,
-                secret_words_saved,
-                cloud_backup_enabled,
-            } => {
-                let mnemonic = load_mnemonic(wallet_id, *network, *wallet_mode)?;
-                let created_words = mnemonic.words().map(str::to_string).collect();
-
-                Some(FlowState::BackupWallet(CreatedWalletFlow {
-                    branch: *branch,
-                    wallet_id: wallet_id.clone(),
-                    network: *network,
-                    wallet_mode: *wallet_mode,
-                    created_words,
-                    word_validator: Arc::new(WordValidator::new(mnemonic)),
-                    cloud_backup_enabled: *cloud_backup_enabled,
-                    secret_words_saved: *secret_words_saved,
-                }))
-            }
-        }
-    }
-}
-
-fn default_initial_flow(has_wallets: bool, terms_accepted: bool) -> FlowState {
-    if has_wallets {
-        FlowState::terms(TermsContext::SelectLatestOrNew, None)
-    } else if terms_accepted {
-        FlowState::CloudCheck { origin: RestoreOrigin::Startup }
-    } else {
-        FlowState::Welcome { error_message: None }
-    }
-}
-
-fn resolve_initial_flow<F>(
-    progress: Option<OnboardingProgress>,
-    has_wallets: bool,
-    terms_accepted: bool,
-    load_mnemonic: F,
-) -> InitialFlowResolution
-where
-    F: FnOnce(&WalletId, Network, WalletMode) -> Option<bip39::Mnemonic>,
-{
-    match progress {
-        Some(progress) => match progress.restore_flow(load_mnemonic) {
-            Some(flow) => InitialFlowResolution {
-                flow,
-                clear_persisted_progress: false,
-                start_cloud_check: false,
-            },
-            None => InitialFlowResolution {
-                flow: default_initial_flow(has_wallets, terms_accepted),
-                clear_persisted_progress: true,
-                start_cloud_check: !has_wallets,
-            },
-        },
-        None => InitialFlowResolution {
-            flow: default_initial_flow(has_wallets, terms_accepted),
-            clear_persisted_progress: false,
-            start_cloud_check: !has_wallets,
-        },
-    }
-}
-
 impl CloudRestoreDiscovery {
     fn ui_state(&self) -> OnboardingCloudRestoreState {
         match self {
@@ -1909,198 +1765,6 @@ impl RestoreOrigin {
 
     fn flow_state_after_restore_unavailable(self) -> FlowState {
         self.flow_state()
-    }
-}
-
-fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String {
-    match issue {
-        CloudCheckIssue::Offline => {
-            "You're offline, so Cove can't check for a cloud backup right now. You can continue onboarding now and check Cloud Backup later in Settings.".into()
-        }
-        CloudCheckIssue::CloudUnavailable => {
-            "We couldn't confirm whether a cloud backup is available because cloud storage may be unavailable. You can still try restoring with your passkey if you're reinstalling this device.".into()
-        }
-        CloudCheckIssue::Unknown => {
-            "We couldn't confirm whether a cloud backup is available. You can still try restoring with your passkey if you're reinstalling this device.".into()
-        }
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-struct CloudRestoreBackupSnapshot {
-    has_backup: bool,
-    provider_hint: Option<CloudRestoreProviderHint>,
-}
-
-async fn inspect_cloud_restore_backup(
-    cloud: cove_device::cloud_storage::CloudStorageClient,
-) -> Result<CloudRestoreBackupSnapshot, CloudStorageError> {
-    let namespaces = cloud.list_namespaces().await?;
-    if namespaces.is_empty() {
-        info!("Onboarding: cloud backup namespace check found no namespaces");
-        return Ok(CloudRestoreBackupSnapshot { has_backup: false, provider_hint: None });
-    }
-
-    info!("Onboarding: cloud backup namespace check found {} namespace(s)", namespaces.len());
-
-    let provider_hint = inspect_cloud_restore_namespaces(&cloud, namespaces).await?;
-    Ok(CloudRestoreBackupSnapshot {
-        has_backup: provider_hint.has_backup,
-        provider_hint: provider_hint.provider_hint,
-    })
-}
-
-struct InspectedCloudRestoreNamespaces {
-    has_backup: bool,
-    provider_hint: Option<CloudRestoreProviderHint>,
-}
-
-async fn inspect_cloud_restore_namespaces(
-    cloud: &cove_device::cloud_storage::CloudStorageClient,
-    namespaces: Vec<String>,
-) -> Result<InspectedCloudRestoreNamespaces, CloudStorageError> {
-    let mut hints = Vec::new();
-    let mut found_backup = false;
-    let mut first_non_not_found_error = None;
-
-    for namespace in namespaces {
-        let master_json = match cloud.download_master_key_backup(namespace.clone()).await {
-            Ok(master_json) => master_json,
-            Err(error @ CloudStorageError::NotFound(_)) => {
-                info!("No cloud restore backup namespace={namespace} reason=not_found");
-                record_cloud_restore_download_error(&mut first_non_not_found_error, error);
-                continue;
-            }
-            Err(error) => {
-                info!("No cloud restore backup namespace={namespace} reason=download_failed");
-                record_cloud_restore_download_error(&mut first_non_not_found_error, error);
-                continue;
-            }
-        };
-
-        let Ok(encrypted) = serde_json::from_slice::<EncryptedMasterKeyBackup>(&master_json) else {
-            info!(
-                "No cloud restore passkey provider hint namespace={namespace} reason=deserialize_failed"
-            );
-            continue;
-        };
-        found_backup = true;
-
-        if encrypted.remote_metadata.normalized_master_key(&namespace).is_err() {
-            info!(
-                "No cloud restore passkey provider hint namespace={namespace} reason=invalid_payload_metadata"
-            );
-            continue;
-        }
-
-        let Some(raw_hint) = encrypted.passkey_provider_hint.as_ref() else {
-            info!("No cloud restore passkey provider hint namespace={namespace} reason=missing");
-            continue;
-        };
-
-        debug!(
-            "Found cloud restore passkey provider hint namespace={namespace} aaguid={} registered_platform={:?} registered_at={}",
-            raw_hint.aaguid, raw_hint.registered_platform, raw_hint.registered_at
-        );
-
-        let hint = resolve_provider_hint(raw_hint);
-        if hint.provider_name.is_none() {
-            debug!(
-                "No resolved cloud restore passkey provider hint namespace={namespace} aaguid={} registered_platform={:?} registered_at={} reason=unknown_provider",
-                raw_hint.aaguid, raw_hint.registered_platform, raw_hint.registered_at
-            );
-        }
-
-        hints.push(hint);
-    }
-
-    if found_backup {
-        return Ok(InspectedCloudRestoreNamespaces {
-            has_backup: true,
-            provider_hint: choose_restore_provider_hint(hints),
-        });
-    }
-
-    if let Some(error) = first_non_not_found_error {
-        return Err(error);
-    }
-
-    Ok(InspectedCloudRestoreNamespaces { has_backup: false, provider_hint: None })
-}
-
-fn record_cloud_restore_download_error(
-    first_non_not_found_error: &mut Option<CloudStorageError>,
-    error: CloudStorageError,
-) {
-    if !matches!(error, CloudStorageError::NotFound(_)) {
-        first_non_not_found_error.get_or_insert(error);
-    }
-}
-
-fn choose_restore_provider_hint(
-    hints: Vec<CloudRestoreProviderHint>,
-) -> Option<CloudRestoreProviderHint> {
-    hints.into_iter().max_by_key(|hint| hint.registered_at)
-}
-
-fn resolve_provider_hint(hint: &PasskeyProviderHint) -> CloudRestoreProviderHint {
-    CloudRestoreProviderHint {
-        provider_name: hint.known_provider().map(|provider| provider.display_name().into()),
-        registered_at: hint.registered_at,
-        name_suffix: hint.name_suffix.clone(),
-    }
-}
-
-async fn determine_cloud_check_outcome<F, Fut, S>(
-    mut inspect_backup: F,
-    sleep: S,
-) -> CloudCheckOutcome
-where
-    F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<CloudRestoreBackupSnapshot, CloudStorageError>>,
-    S: backon::Sleeper,
-{
-    let max_retries = 6;
-    let mut attempt = 0;
-    let result = (|| {
-        attempt += 1;
-        info!("Onboarding: checking cloud backup attempt={attempt}");
-        inspect_backup()
-    })
-    .retry(
-        FibonacciBuilder::default()
-            .with_max_delay(Duration::from_secs(10))
-            .with_max_times(max_retries),
-    )
-    .sleep(sleep)
-    .notify(|error: &CloudStorageError, _| warn!("Onboarding: cloud backup check failed: {error}"))
-    .await;
-
-    match result {
-        Ok(snapshot) if snapshot.has_backup => {
-            log_cloud_restore_provider_hint(snapshot.provider_hint.as_ref());
-            CloudCheckOutcome::BackupFound(snapshot.provider_hint)
-        }
-        Ok(_) => {
-            info!("Onboarding: cloud backup check completed backup_found=false");
-            CloudCheckOutcome::NoBackupConfirmed
-        }
-        Err(error) => {
-            warn!("Onboarding: final cloud backup check failed: {error}");
-            CloudCheckOutcome::Inconclusive(error.into())
-        }
-    }
-}
-
-fn log_cloud_restore_provider_hint(provider_hint: Option<&CloudRestoreProviderHint>) {
-    match provider_hint {
-        Some(hint) => info!(
-            "Onboarding: cloud backup check completed backup_found=true provider_hint=some provider_name={:?} registered_at={}",
-            hint.provider_name, hint.registered_at
-        ),
-        None => {
-            info!("Onboarding: cloud backup check completed backup_found=true provider_hint=none")
-        }
     }
 }
 

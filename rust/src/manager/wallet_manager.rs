@@ -1,8 +1,11 @@
 pub mod actor;
 pub mod balance_presentation;
+mod display;
+mod exports;
 pub mod ledger_state;
 mod payjoin;
 pub mod receive_address;
+mod transaction_locks;
 
 use std::{
     sync::Arc,
@@ -21,7 +24,7 @@ use tracing::{debug, error, warn};
 
 use cove_common::consts::MAX_RESCAN_GAP_LIMIT;
 use cove_tokio::task::{self, spawn_actor};
-use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
+use cove_util::result_ext::ResultExt as _;
 
 use crate::{
     app::{
@@ -32,24 +35,19 @@ use crate::{
     database::{Database, error::DatabaseError},
     discovery_scanner::{ScannerResponse, WalletDiscoveryScanner},
     fee_client::{FEE_CLIENT, FEES, FeeResponse},
-    fiat::{
-        FiatCurrency,
-        client::{FIAT_CLIENT, PriceResponse},
-    },
+    fiat::client::PriceResponse,
     keychain::{Keychain, KeychainError},
-    label_manager::{LabelManager, LabelManagerError},
-    loading_popup::with_loading_popup,
+    label_manager::LabelManager,
     manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
     psbt::Psbt,
-    reporting::HistoricalFiatPriceReport,
     router::Route,
     tap_card::tap_signer_reader::DeriveInfo,
     transaction::{
-        Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TransactionDirection,
-        TxId, Unit, ffi::BitcoinTransaction, unsigned_transaction::UnsignedTransaction,
+        Amount, FeeRate, Transaction, TransactionDetails, TxId, Unit, ffi::BitcoinTransaction,
+        unsigned_transaction::UnsignedTransaction,
     },
     wallet::{
-        Address, AddressInfo, Wallet, WalletAddressType, WalletError, amount_display,
+        Address, AddressInfo, Wallet, WalletAddressType, WalletError,
         balance::Balance,
         fingerprint::Fingerprint,
         metadata::{
@@ -60,8 +58,7 @@ use crate::{
     word_validator::WordValidator,
 };
 
-use bitcoin::OutPoint;
-use cove_types::confirm::{ConfirmDetails, QrDensity, SplitOutput};
+use cove_types::confirm::{ConfirmDetails, SplitOutput};
 use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
 
 use super::{
@@ -83,6 +80,9 @@ pub enum WalletManagerReconcileMessage {
     AvailableTransactions(Vec<Transaction>),
     ScanComplete(Vec<Transaction>),
     UpdatedTransactions(Vec<Transaction>),
+    TransactionUpdated(Transaction),
+    TransactionDetailsUpdated(Arc<TransactionDetails>),
+    TransactionConfirmationsUpdated(TransactionConfirmationUpdate),
 
     NodeConnectionFailed(String),
     WalletMetadataChanged(Box<WalletMetadata>),
@@ -145,6 +145,12 @@ pub struct WalletScanProgress {
     pub gap: u32,
     pub stop_gap: u32,
     pub progress_basis_points: u32,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct TransactionConfirmationUpdate {
+    pub tx_id: Arc<TxId>,
+    pub confirmations: u32,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -545,153 +551,11 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub fn selected_fiat_currency(&self) -> FiatCurrency {
-        Database::global().global_config.fiat_currency().unwrap_or_default()
-    }
-
-    #[uniffi::method]
     pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
         let fees = fee_client.fetch_and_get_fees().await.map_err_str(Error::FeesError)?;
 
         Ok(fees.into())
-    }
-
-    #[uniffi::method]
-    pub async fn create_transactions_with_fiat_export(&self) -> Result<String, Error> {
-        let fiat_currency = Database::global().global_config.fiat_currency().unwrap_or_default();
-
-        let txns_with_prices = call!(self.actor.txns_with_prices()).await.unwrap().unwrap();
-
-        let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
-        let csv = report.create_csv().map_err_str(Error::CsvCreationError)?;
-
-        Ok(csv.into_string())
-    }
-
-    /// Export labels for share with conditional loading popup
-    #[uniffi::method]
-    pub async fn export_labels_for_share(&self) -> Result<LabelExportResult, LabelManagerError> {
-        let lm = self.label_manager.clone();
-        let name = self.metadata.read().name.clone();
-
-        with_loading_popup(async move {
-            let content = lm.export().await?;
-            let filename = format!("{}.jsonl", lm.export_default_file_name(name));
-            Ok(LabelExportResult { content, filename })
-        })
-        .await
-    }
-
-    /// Export labels as QR codes with conditional loading popup
-    #[uniffi::method]
-    pub async fn export_labels_for_qr(
-        &self,
-        density: Arc<QrDensity>,
-    ) -> Result<Vec<String>, LabelManagerError> {
-        let lm = self.label_manager.clone();
-
-        with_loading_popup(async move { lm.export_to_bbqr_with_density(&density).await }).await
-    }
-
-    /// Export public descriptors (xpub) for share
-    #[uniffi::method]
-    pub async fn export_xpub_for_share(&self) -> Result<XpubExportResult, Error> {
-        let id = self.id.clone();
-        let name = self.metadata.read().name.clone();
-
-        with_loading_popup(async move {
-            let content = get_public_descriptor_content(&id)?;
-
-            let sanitized_name = name
-                .replace(' ', "_")
-                .replace(|c: char| !c.is_alphanumeric() && c != '_', "")
-                .to_ascii_lowercase();
-
-            let sanitized_name =
-                if sanitized_name.is_empty() { "wallet".to_string() } else { sanitized_name };
-
-            let filename = format!("{sanitized_name}_descriptors.txt");
-
-            Ok(XpubExportResult { content, filename })
-        })
-        .await
-    }
-
-    /// Export public descriptors (xpub) as QR codes
-    #[uniffi::method]
-    pub async fn export_xpub_for_qr(&self, density: Arc<QrDensity>) -> Result<Vec<String>, Error> {
-        use bbqr::{
-            encode::Encoding,
-            file_type::FileType,
-            qr::Version,
-            split::{Split, SplitOptions},
-        };
-
-        let id = self.id.clone();
-
-        with_loading_popup(async move {
-            let content = get_public_descriptor_content(&id)?;
-            let max_version = density.bbqr_max_version();
-
-            cove_tokio::task::spawn_blocking(move || {
-                let data = content.as_bytes();
-                let version = Version::try_from(max_version).unwrap_or(Version::V15);
-
-                let split = Split::try_from_data(
-                    data,
-                    FileType::UnicodeText,
-                    SplitOptions {
-                        encoding: Encoding::Zlib,
-                        min_split_number: 1,
-                        max_split_number: 100,
-                        min_version: Version::V01,
-                        max_version: version,
-                    },
-                )
-                .map_err_prefix("BBQr encoding failed", Error::UnknownError)?;
-
-                Ok(split.parts)
-            })
-            .await
-            .map_err_str(Error::UnknownError)?
-        })
-        .await
-    }
-
-    /// Export transactions as CSV with conditional loading popup
-    #[uniffi::method]
-    pub async fn export_transactions_csv(&self) -> Result<TransactionExportResult, Error> {
-        let name = self.metadata.read().name.clone();
-        let actor = self.actor.clone();
-
-        with_loading_popup(async move {
-            let txns_with_prices = call!(actor.txns_with_prices())
-                .await
-                .map_err_str(Error::TransactionsRetrievalError)?
-                .map_err_str(Error::GetHistoricalPricesError)?;
-
-            cove_tokio::task::spawn_blocking(move || {
-                let fiat_currency =
-                    Database::global().global_config.fiat_currency().unwrap_or_default();
-                let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
-                let csv = report.create_csv().map_err_str(Error::CsvCreationError)?;
-
-                let sanitized_name = name
-                    .replace(' ', "_")
-                    .replace(|c: char| !c.is_alphanumeric() && c != '_', "")
-                    .to_ascii_lowercase();
-
-                let sanitized_name =
-                    if sanitized_name.is_empty() { "wallet".to_string() } else { sanitized_name };
-
-                let filename = format!("{sanitized_name}_transactions.csv");
-                Ok(TransactionExportResult { content: csv.into_string(), filename })
-            })
-            .await
-            .map_err_str(Error::CsvCreationError)?
-        })
-        .await
     }
 
     #[uniffi::method]
@@ -798,9 +662,6 @@ impl RustWalletManager {
     }
 
     /// Send entry point for unsigned hot wallet PSBTs
-    ///
-    /// Currently signs and broadcasts directly regardless of `payjoin_endpoint`.
-    /// PayJoin negotiation is handled in the actor stub.
     #[uniffi::method]
     pub async fn initiate_payment(
         &self,
@@ -838,130 +699,6 @@ impl RustWalletManager {
         Ok(())
     }
 
-    /// Sync method using cached prices, returns None if no cached prices
-    #[uniffi::method]
-    pub fn amount_in_fiat(&self, amount: Arc<Amount>) -> Option<f64> {
-        amount_display::wallet_amount_in_fiat_cached(amount)
-    }
-
-    /// Formats a raw amount for display (e.g., "0.00050000 BTC")
-    ///
-    /// Use this for absolute amounts like balances or input values.
-    /// Does NOT include direction prefix - use `display_sent_and_received_amount`
-    /// for transaction amounts that need +/- indicators.
-    #[uniffi::method(default(show_unit = true))]
-    pub fn display_amount(&self, amount: Arc<Amount>, show_unit: bool) -> String {
-        let metadata = self.metadata.read().clone();
-        amount_display::wallet_display_amount(metadata, amount, show_unit)
-    }
-
-    /// Formats a pending BTC amount (e.g. "+ 0.00050000 BTC pending")
-    /// Returns None if the amount is zero.
-    #[uniffi::method]
-    pub fn display_amount_pending_fmt(&self, amount: Arc<Amount>) -> Option<String> {
-        let metadata = self.metadata.read().clone();
-        amount_display::wallet_display_amount_pending_fmt(metadata, amount)
-    }
-
-    /// Formats a BTC amount with direction prefix (e.g., "-0.00050000 BTC")
-    ///
-    /// Includes "-" prefix for outgoing transactions, no prefix for incoming.
-    /// Use this for displaying unsigned transaction BTC amounts in lists.
-    #[uniffi::method]
-    pub fn display_amount_with_direction(
-        &self,
-        amount: Arc<Amount>,
-        direction: TransactionDirection,
-    ) -> String {
-        let metadata = self.metadata.read().clone();
-        amount_display::wallet_display_amount_with_direction(metadata, amount, direction)
-    }
-
-    /// Formats a transaction amount with direction prefix (e.g., "-0.00050000 BTC")
-    ///
-    /// Includes "-" prefix for outgoing transactions, no prefix for incoming.
-    /// Use this for displaying confirmed/unconfirmed transaction amounts in lists.
-    #[uniffi::method]
-    pub fn display_sent_and_received_amount(
-        &self,
-        sent_and_received: Arc<SentAndReceived>,
-    ) -> String {
-        let metadata = self.metadata.read().clone();
-        amount_display::wallet_display_sent_and_received_amount(metadata, sent_and_received)
-    }
-
-    #[uniffi::method(default(with_suffix = true))]
-    pub fn display_fiat_amount(&self, amount: f64, with_suffix: bool) -> String {
-        let metadata = self.metadata.read().clone();
-        amount_display::wallet_display_fiat_amount(metadata, amount, with_suffix)
-    }
-
-    /// Formats a pending fiat amount (e.g. "+ $50.00 pending")
-    /// Returns None if the amount is zero.
-    #[uniffi::method(default(with_suffix = true))]
-    pub fn display_fiat_amount_pending_fmt(
-        &self,
-        amount: f64,
-        with_suffix: bool,
-    ) -> Option<String> {
-        let metadata = self.metadata.read().clone();
-        amount_display::wallet_display_fiat_amount_pending_fmt(metadata, amount, with_suffix)
-    }
-
-    /// Formats a fiat amount with direction prefix (e.g., "-$50.00")
-    ///
-    /// Includes "-" prefix for outgoing transactions, no prefix for incoming.
-    /// Use this for displaying confirmed/unconfirmed transaction fiat amounts in lists.
-    #[uniffi::method(default(with_suffix = true))]
-    pub fn display_fiat_amount_with_direction(
-        &self,
-        amount: f64,
-        direction: TransactionDirection,
-        with_suffix: bool,
-    ) -> String {
-        let metadata = self.metadata.read().clone();
-        amount_display::wallet_display_fiat_amount_with_direction(
-            metadata,
-            amount,
-            direction,
-            with_suffix,
-        )
-    }
-
-    #[uniffi::method]
-    pub fn convert_to_fiat(&self, amount: Arc<Amount>, prices: Arc<PriceResponse>) -> f64 {
-        let currency = self.selected_fiat_currency();
-        let price = prices.get_for_currency(currency) as f64;
-        ((amount.as_btc() * price) * 100.0).ceil() / 100.0
-    }
-
-    #[uniffi::method(default(with_suffix = true))]
-    pub fn convert_and_display_fiat(
-        &self,
-        amount: Arc<Amount>,
-        prices: Arc<PriceResponse>,
-        with_suffix: bool,
-    ) -> String {
-        let fiat = self.convert_to_fiat(amount, prices);
-        self.display_fiat_amount(fiat, with_suffix)
-    }
-
-    #[uniffi::method]
-    pub async fn sent_and_received_fiat(
-        &self,
-        sent_and_received: Arc<SentAndReceived>,
-    ) -> Result<f64, Error> {
-        let amount = sent_and_received.amount();
-        let currency = self.selected_fiat_currency();
-
-        let fiat =
-            FIAT_CLIENT.current_value_in_currency(amount, currency).await.map_err(|error| {
-                Error::FiatError(format!("unable to get fiat value for amount: {error}"))
-            })?;
-
-        Ok(fiat)
-    }
-
     #[uniffi::method]
     pub async fn current_block_height(&self) -> Result<u32, Error> {
         let height =
@@ -997,59 +734,6 @@ impl RustWalletManager {
         }
 
         Ok(details)
-    }
-
-    #[uniffi::method]
-    pub async fn transaction_lock_state(
-        &self,
-        tx_id: Arc<TxId>,
-    ) -> Result<TransactionLockState, Error> {
-        let tx_id = Arc::unwrap_or_clone(tx_id);
-        let state = call!(self.actor.transaction_lock_state(tx_id))
-            .await
-            .map_err(|_| Error::ActorNotFound)??;
-
-        Ok(state)
-    }
-
-    #[uniffi::method]
-    pub async fn toggle_transaction_lock_state(
-        &self,
-        tx_id: Arc<TxId>,
-    ) -> Result<TransactionLockState, Error> {
-        let tx_id = Arc::unwrap_or_clone(tx_id);
-        let state = call!(self.actor.transaction_lock_state(tx_id))
-            .await
-            .map_err(|_| Error::ActorNotFound)??;
-        let outpoints = call!(self.actor.current_wallet_unspent_outpoints_for_txn(tx_id))
-            .await
-            .map_err(|_| Error::ActorNotFound)?;
-        let Some((outpoints, spendable)) = transaction_lock_toggle_update(state, outpoints) else {
-            return Ok(TransactionLockState::None);
-        };
-
-        self.label_manager
-            .set_output_spendability_for_outpoints(outpoints, spendable)
-            .map_err_str(Error::OutputLabelsError)?;
-
-        let state = call!(self.actor.transaction_lock_state(tx_id))
-            .await
-            .map_err(|_| Error::ActorNotFound)??;
-
-        Ok(state)
-    }
-
-    #[uniffi::method]
-    pub async fn number_of_confirmations(&self, block_height: u32) -> Result<u32, Error> {
-        // always get fresh height to ensure confirmation count reflects latest blocks
-        let current_height = self.force_update_height().await?;
-        if block_height > current_height { Ok(0) } else { Ok(current_height - block_height + 1) }
-    }
-
-    #[uniffi::method]
-    pub async fn number_of_confirmations_fmt(&self, block_height: u32) -> Result<String, Error> {
-        let number_of_confirmations = self.number_of_confirmations(block_height).await?;
-        Ok(number_of_confirmations.thousands_int())
     }
 
     /// Get address at the given index
@@ -1705,30 +1389,6 @@ fn downgrade_and_notify_if_needed(
     Ok(updated)
 }
 
-/// Get the public descriptor content for export
-///
-/// Tries single-line BIP-389 multipath `<0;1>` format first,
-/// falls back to two normalized descriptors on separate lines
-fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
-    use cove_bdk::descriptor_ext::DescriptorExt;
-
-    match Wallet::try_load_persisted(id.clone()) {
-        Ok(wallet) => {
-            let external = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::External);
-            let internal = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::Internal);
-
-            Ok(DescriptorExt::to_export_string(external, internal))
-        }
-        Err(load_error) => {
-            if let Ok(Some((external, internal))) = Keychain::global().get_public_descriptor(id) {
-                return Ok(DescriptorExt::to_export_string(&external, &internal));
-            }
-
-            Err(Error::UnknownError(format!("failed to load wallet: {load_error}")))
-        }
-    }
-}
-
 fn wallet_account_number(id: &WalletId) -> Option<u32> {
     use cove_bdk::descriptor_ext::DescriptorExt as _;
 
@@ -1744,41 +1404,14 @@ fn wallet_account_number(id: &WalletId) -> Option<u32> {
     }
 }
 
-fn spendability_for_transaction_lock_toggle(state: TransactionLockState) -> Option<bool> {
-    match state {
-        TransactionLockState::None => None,
-        TransactionLockState::Locked => Some(true),
-        TransactionLockState::Unlocked | TransactionLockState::Mixed => Some(false),
-    }
-}
-
-fn transaction_lock_toggle_update(
-    state: TransactionLockState,
-    outpoints: Vec<OutPoint>,
-) -> Option<(Vec<OutPoint>, bool)> {
-    let spendable = spendability_for_transaction_lock_toggle(state)?;
-    if outpoints.is_empty() {
-        return None;
-    }
-
-    Some((outpoints, spendable))
-}
-
 #[cfg(test)]
 mod tests {
-    use bitcoin::{OutPoint, Txid, hashes::Hash as _};
-
     use super::{
-        PREVIEW_FULL_SCAN_COMPLETED_AT, TransactionLockState, WalletLedgerState, WalletScanStatus,
-        preview_ledger_ready_metadata, spendability_for_transaction_lock_toggle,
-        transaction_lock_toggle_update,
+        PREVIEW_FULL_SCAN_COMPLETED_AT, WalletLedgerState, WalletScanStatus,
+        preview_ledger_ready_metadata,
     };
 
     use crate::wallet::metadata::WalletMetadata;
-
-    fn outpoint(vout: u32) -> OutPoint {
-        OutPoint { txid: Txid::from_byte_array([1; 32]), vout }
-    }
 
     #[test]
     fn preview_wallet_metadata_is_ledger_ready_for_spend() {
@@ -1789,48 +1422,6 @@ mod tests {
             WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
             WalletLedgerState::Complete
         );
-    }
-
-    #[test]
-    fn transaction_lock_toggle_decides_target_spendability_from_state() {
-        assert_eq!(spendability_for_transaction_lock_toggle(TransactionLockState::None), None);
-        assert_eq!(
-            spendability_for_transaction_lock_toggle(TransactionLockState::Unlocked),
-            Some(false)
-        );
-        assert_eq!(
-            spendability_for_transaction_lock_toggle(TransactionLockState::Mixed),
-            Some(false)
-        );
-        assert_eq!(
-            spendability_for_transaction_lock_toggle(TransactionLockState::Locked),
-            Some(true)
-        );
-    }
-
-    #[test]
-    fn transaction_lock_toggle_uses_current_outpoints_for_bulk_label_update() {
-        let outpoints = vec![outpoint(0), outpoint(2)];
-
-        assert_eq!(
-            transaction_lock_toggle_update(TransactionLockState::Unlocked, outpoints.clone()),
-            Some((outpoints.clone(), false))
-        );
-        assert_eq!(
-            transaction_lock_toggle_update(TransactionLockState::Mixed, outpoints.clone()),
-            Some((outpoints.clone(), false))
-        );
-        assert_eq!(
-            transaction_lock_toggle_update(TransactionLockState::Locked, outpoints.clone()),
-            Some((outpoints, true))
-        );
-    }
-
-    #[test]
-    fn transaction_lock_toggle_noops_without_current_outpoints() {
-        assert_eq!(transaction_lock_toggle_update(TransactionLockState::None, vec![]), None);
-        assert_eq!(transaction_lock_toggle_update(TransactionLockState::Unlocked, vec![]), None);
-        assert_eq!(transaction_lock_toggle_update(TransactionLockState::Locked, vec![]), None);
     }
 }
 

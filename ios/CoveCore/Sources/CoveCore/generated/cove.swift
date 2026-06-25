@@ -16533,6 +16533,60 @@ public func FfiConverterTypeTapSignerSetupComplete_lower(_ value: TapSignerSetup
 }
 
 
+public struct TransactionConfirmationUpdate {
+    public var txId: TxId
+    public var confirmations: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(txId: TxId, confirmations: UInt32) {
+        self.txId = txId
+        self.confirmations = confirmations
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TransactionConfirmationUpdate: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransactionConfirmationUpdate: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionConfirmationUpdate {
+        return
+            try TransactionConfirmationUpdate(
+                txId: FfiConverterTypeTxId.read(from: &buf),
+                confirmations: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TransactionConfirmationUpdate, into buf: inout [UInt8]) {
+        FfiConverterTypeTxId.write(value.txId, into: &buf)
+        FfiConverterUInt32.write(value.confirmations, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionConfirmationUpdate_lift(_ buf: RustBuffer) throws -> TransactionConfirmationUpdate {
+    return try FfiConverterTypeTransactionConfirmationUpdate.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionConfirmationUpdate_lower(_ value: TransactionConfirmationUpdate) -> RustBuffer {
+    return FfiConverterTypeTransactionConfirmationUpdate.lower(value)
+}
+
+
 public struct TransactionExportResult: Equatable, Hashable {
     public var content: String
     public var filename: String
@@ -34984,6 +35038,12 @@ public enum WalletManagerReconcileMessage {
     )
     case updatedTransactions([Transaction]
     )
+    case transactionUpdated(Transaction
+    )
+    case transactionDetailsUpdated(TransactionDetails
+    )
+    case transactionConfirmationsUpdated(TransactionConfirmationUpdate
+    )
     case nodeConnectionFailed(String
     )
     case walletMetadataChanged(WalletMetadata
@@ -35048,45 +35108,54 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case 5: return .updatedTransactions(try FfiConverterSequenceTypeTransaction.read(from: &buf)
         )
 
-        case 6: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
+        case 6: return .transactionUpdated(try FfiConverterTypeTransaction.read(from: &buf)
         )
 
-        case 7: return .walletMetadataChanged(try FfiConverterTypeWalletMetadata.read(from: &buf)
+        case 7: return .transactionDetailsUpdated(try FfiConverterTypeTransactionDetails.read(from: &buf)
         )
 
-        case 8: return .walletBalanceChanged(try FfiConverterTypeBalance.read(from: &buf)
+        case 8: return .transactionConfirmationsUpdated(try FfiConverterTypeTransactionConfirmationUpdate.read(from: &buf)
         )
 
-        case 9: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
+        case 9: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
         )
 
-        case 10: return .unknownError(try FfiConverterString.read(from: &buf)
+        case 10: return .walletMetadataChanged(try FfiConverterTypeWalletMetadata.read(from: &buf)
         )
 
-        case 11: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
+        case 11: return .walletBalanceChanged(try FfiConverterTypeBalance.read(from: &buf)
         )
 
-        case 12: return .unsignedTransactionsChanged
-
-        case 13: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
+        case 12: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
         )
 
-        case 14: return .hotWalletKeyMissing(try FfiConverterTypeWalletId.read(from: &buf)
+        case 13: return .unknownError(try FfiConverterString.read(from: &buf)
         )
 
-        case 15: return .receiveAddressUpdated(try FfiConverterTypeReceiveAddressState.read(from: &buf)
+        case 14: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
         )
 
-        case 16: return .receiveAddressPresentationUpdated(try FfiConverterTypeReceiveAddressPresentation.read(from: &buf)
+        case 15: return .unsignedTransactionsChanged
+
+        case 16: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
         )
 
-        case 17: return .receiveAddressLoadingChanged(try FfiConverterBool.read(from: &buf)
+        case 17: return .hotWalletKeyMissing(try FfiConverterTypeWalletId.read(from: &buf)
         )
 
-        case 18: return .receiveAddressError(try FfiConverterString.read(from: &buf)
+        case 18: return .receiveAddressUpdated(try FfiConverterTypeReceiveAddressState.read(from: &buf)
         )
 
-        case 19: return .receiveAddressClosed(try FfiConverterUInt64.read(from: &buf)
+        case 19: return .receiveAddressPresentationUpdated(try FfiConverterTypeReceiveAddressPresentation.read(from: &buf)
+        )
+
+        case 20: return .receiveAddressLoadingChanged(try FfiConverterBool.read(from: &buf)
+        )
+
+        case 21: return .receiveAddressError(try FfiConverterString.read(from: &buf)
+        )
+
+        case 22: return .receiveAddressClosed(try FfiConverterUInt64.read(from: &buf)
         )
 
         case 20: return .payjoinTxBroadcast
@@ -35124,72 +35193,87 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
             FfiConverterSequenceTypeTransaction.write(v1, into: &buf)
 
 
-        case let .nodeConnectionFailed(v1):
+        case let .transactionUpdated(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterTypeTransaction.write(v1, into: &buf)
+
+
+        case let .transactionDetailsUpdated(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterTypeTransactionDetails.write(v1, into: &buf)
+
+
+        case let .transactionConfirmationsUpdated(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeTransactionConfirmationUpdate.write(v1, into: &buf)
+
+
+        case let .nodeConnectionFailed(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .walletMetadataChanged(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeWalletMetadata.write(v1, into: &buf)
 
 
         case let .walletBalanceChanged(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeBalance.write(v1, into: &buf)
 
 
         case let .walletError(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeWalletManagerError.write(v1, into: &buf)
 
 
         case let .unknownError(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(13))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .walletScannerResponse(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeScannerResponse.write(v1, into: &buf)
 
 
         case .unsignedTransactionsChanged:
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(15))
 
 
         case let .sendFlowError(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(16))
             FfiConverterTypeSendFlowErrorAlert.write(v1, into: &buf)
 
 
         case let .hotWalletKeyMissing(v1):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(17))
             FfiConverterTypeWalletId.write(v1, into: &buf)
 
 
         case let .receiveAddressUpdated(v1):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(18))
             FfiConverterTypeReceiveAddressState.write(v1, into: &buf)
 
 
         case let .receiveAddressPresentationUpdated(v1):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(19))
             FfiConverterTypeReceiveAddressPresentation.write(v1, into: &buf)
 
 
         case let .receiveAddressLoadingChanged(v1):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(20))
             FfiConverterBool.write(v1, into: &buf)
 
 
         case let .receiveAddressError(v1):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(21))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .receiveAddressClosed(v1):
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(22))
             FfiConverterUInt64.write(v1, into: &buf)
 
 

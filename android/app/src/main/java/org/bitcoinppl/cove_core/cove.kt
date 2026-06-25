@@ -30805,6 +30805,53 @@ public object FfiConverterTypeTapSignerSetupComplete: FfiConverterRustBuffer<Tap
 
 
 
+data class TransactionConfirmationUpdate (
+    var `txId`: TxId
+    ,
+    var `confirmations`: kotlin.UInt
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`txId`,
+        this.`confirmations`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTransactionConfirmationUpdate: FfiConverterRustBuffer<TransactionConfirmationUpdate> {
+    override fun read(buf: ByteBuffer): TransactionConfirmationUpdate {
+        return TransactionConfirmationUpdate(
+            FfiConverterTypeTxId.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TransactionConfirmationUpdate) = (
+            FfiConverterTypeTxId.allocationSize(value.`txId`) +
+            FfiConverterUInt.allocationSize(value.`confirmations`)
+    )
+
+    override fun write(value: TransactionConfirmationUpdate, buf: ByteBuffer) {
+            FfiConverterTypeTxId.write(value.`txId`, buf)
+            FfiConverterUInt.write(value.`confirmations`, buf)
+    }
+}
+
+
+
 data class TransactionExportResult (
     var `content`: kotlin.String
     ,
@@ -54746,6 +54793,33 @@ sealed class WalletManagerReconcileMessage: Disposable  {
         companion object
     }
 
+    data class TransactionUpdated(
+        val v1: org.bitcoinppl.cove_core.Transaction) : WalletManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    data class TransactionDetailsUpdated(
+        val v1: org.bitcoinppl.cove_core.TransactionDetails) : WalletManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    data class TransactionConfirmationsUpdated(
+        val v1: org.bitcoinppl.cove_core.TransactionConfirmationUpdate) : WalletManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
     data class NodeConnectionFailed(
         val v1: kotlin.String) : WalletManagerReconcileMessage()
 
@@ -54909,6 +54983,27 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     )
 
             }
+            is WalletManagerReconcileMessage.TransactionUpdated -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is WalletManagerReconcileMessage.TransactionDetailsUpdated -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is WalletManagerReconcileMessage.TransactionConfirmationsUpdated -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
             is WalletManagerReconcileMessage.NodeConnectionFailed -> {
 
     Disposable.destroy(
@@ -55036,44 +55131,53 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             5 -> WalletManagerReconcileMessage.UpdatedTransactions(
                 FfiConverterSequenceTypeTransaction.read(buf),
                 )
-            6 -> WalletManagerReconcileMessage.NodeConnectionFailed(
+            6 -> WalletManagerReconcileMessage.TransactionUpdated(
+                FfiConverterTypeTransaction.read(buf),
+                )
+            7 -> WalletManagerReconcileMessage.TransactionDetailsUpdated(
+                FfiConverterTypeTransactionDetails.read(buf),
+                )
+            8 -> WalletManagerReconcileMessage.TransactionConfirmationsUpdated(
+                FfiConverterTypeTransactionConfirmationUpdate.read(buf),
+                )
+            9 -> WalletManagerReconcileMessage.NodeConnectionFailed(
                 FfiConverterString.read(buf),
                 )
-            7 -> WalletManagerReconcileMessage.WalletMetadataChanged(
+            10 -> WalletManagerReconcileMessage.WalletMetadataChanged(
                 FfiConverterTypeWalletMetadata.read(buf),
                 )
-            8 -> WalletManagerReconcileMessage.WalletBalanceChanged(
+            11 -> WalletManagerReconcileMessage.WalletBalanceChanged(
                 FfiConverterTypeBalance.read(buf),
                 )
-            9 -> WalletManagerReconcileMessage.WalletException(
+            12 -> WalletManagerReconcileMessage.WalletException(
                 FfiConverterTypeWalletManagerError.read(buf),
                 )
-            10 -> WalletManagerReconcileMessage.UnknownError(
+            13 -> WalletManagerReconcileMessage.UnknownError(
                 FfiConverterString.read(buf),
                 )
-            11 -> WalletManagerReconcileMessage.WalletScannerResponse(
+            14 -> WalletManagerReconcileMessage.WalletScannerResponse(
                 FfiConverterTypeScannerResponse.read(buf),
                 )
-            12 -> WalletManagerReconcileMessage.UnsignedTransactionsChanged
-            13 -> WalletManagerReconcileMessage.SendFlowException(
+            15 -> WalletManagerReconcileMessage.UnsignedTransactionsChanged
+            16 -> WalletManagerReconcileMessage.SendFlowException(
                 FfiConverterTypeSendFlowErrorAlert.read(buf),
                 )
-            14 -> WalletManagerReconcileMessage.HotWalletKeyMissing(
+            17 -> WalletManagerReconcileMessage.HotWalletKeyMissing(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            15 -> WalletManagerReconcileMessage.ReceiveAddressUpdated(
+            18 -> WalletManagerReconcileMessage.ReceiveAddressUpdated(
                 FfiConverterTypeReceiveAddressState.read(buf),
                 )
-            16 -> WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated(
+            19 -> WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated(
                 FfiConverterTypeReceiveAddressPresentation.read(buf),
                 )
-            17 -> WalletManagerReconcileMessage.ReceiveAddressLoadingChanged(
+            20 -> WalletManagerReconcileMessage.ReceiveAddressLoadingChanged(
                 FfiConverterBoolean.read(buf),
                 )
-            18 -> WalletManagerReconcileMessage.ReceiveAddressError(
+            21 -> WalletManagerReconcileMessage.ReceiveAddressError(
                 FfiConverterString.read(buf),
                 )
-            19 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
+            22 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
                 FfiConverterULong.read(buf),
                 )
             20 -> WalletManagerReconcileMessage.PayjoinTxBroadcast
@@ -55115,6 +55219,27 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             (
                 4UL
                 + FfiConverterSequenceTypeTransaction.allocationSize(value.v1)
+            )
+        }
+        is WalletManagerReconcileMessage.TransactionUpdated -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTransaction.allocationSize(value.v1)
+            )
+        }
+        is WalletManagerReconcileMessage.TransactionDetailsUpdated -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTransactionDetails.allocationSize(value.v1)
+            )
+        }
+        is WalletManagerReconcileMessage.TransactionConfirmationsUpdated -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTransactionConfirmationUpdate.allocationSize(value.v1)
             )
         }
         is WalletManagerReconcileMessage.NodeConnectionFailed -> {
@@ -55249,72 +55374,87 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 FfiConverterSequenceTypeTransaction.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerReconcileMessage.NodeConnectionFailed -> {
+            is WalletManagerReconcileMessage.TransactionUpdated -> {
                 buf.putInt(6)
+                FfiConverterTypeTransaction.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.TransactionDetailsUpdated -> {
+                buf.putInt(7)
+                FfiConverterTypeTransactionDetails.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.TransactionConfirmationsUpdated -> {
+                buf.putInt(8)
+                FfiConverterTypeTransactionConfirmationUpdate.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerReconcileMessage.NodeConnectionFailed -> {
+                buf.putInt(9)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
-                buf.putInt(7)
+                buf.putInt(10)
                 FfiConverterTypeWalletMetadata.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
-                buf.putInt(8)
+                buf.putInt(11)
                 FfiConverterTypeBalance.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.WalletException -> {
-                buf.putInt(9)
+                buf.putInt(12)
                 FfiConverterTypeWalletManagerError.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.UnknownError -> {
-                buf.putInt(10)
+                buf.putInt(13)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
-                buf.putInt(11)
+                buf.putInt(14)
                 FfiConverterTypeScannerResponse.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {
-                buf.putInt(12)
+                buf.putInt(15)
                 Unit
             }
             is WalletManagerReconcileMessage.SendFlowException -> {
-                buf.putInt(13)
+                buf.putInt(16)
                 FfiConverterTypeSendFlowErrorAlert.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
-                buf.putInt(14)
+                buf.putInt(17)
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressUpdated -> {
-                buf.putInt(15)
+                buf.putInt(18)
                 FfiConverterTypeReceiveAddressState.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated -> {
-                buf.putInt(16)
+                buf.putInt(19)
                 FfiConverterTypeReceiveAddressPresentation.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressLoadingChanged -> {
-                buf.putInt(17)
+                buf.putInt(20)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressError -> {
-                buf.putInt(18)
+                buf.putInt(21)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
-                buf.putInt(19)
+                buf.putInt(22)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }

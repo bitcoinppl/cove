@@ -10,6 +10,8 @@ use crate::{
     node::{client::NodeClient, client_builder::NodeClientBuilder},
 };
 
+pub const TRANSACTION_WATCHER_TERMINAL_CONFIRMATIONS: u32 = 3;
+
 /// Watches for a transaction to see if it is confirmed or to waits for it to be fully confirmed (3 confirmations)
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -19,6 +21,12 @@ pub struct TransactionWatcher {
     tx_id: Arc<Txid>,
     client_builder: NodeClientBuilder,
     network: Network,
+    keep_watching: bool,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum TransactionWatcherEvent {
+    ConfirmedObserved { tx_id: Txid },
 }
 
 /// If we should keep watching or stop
@@ -56,6 +64,7 @@ impl TransactionWatcher {
             tx_id: Arc::new(tx_id),
             client_builder,
             network,
+            keep_watching: true,
         }
     }
 
@@ -74,6 +83,8 @@ impl TransactionWatcher {
         self.addr.send_fut_with(|addr| async move {
             let client = client;
             loop {
+                let Ok(true) = call!(addr.should_keep_watching()).await else { break };
+
                 debug!("checking txn: {tx_id}");
                 let result = call!(addr.check_txn(client.clone())).await;
 
@@ -81,8 +92,10 @@ impl TransactionWatcher {
                     Ok(WatchResult::Found(txn)) => {
                         let tx_id = txn.compute_txid();
                         info!("found txn: {}", tx_id);
-                        send!(manager.mark_transaction_found(tx_id));
-                        break;
+                        send!(manager.handle_transaction_watcher_event(
+                            TransactionWatcherEvent::ConfirmedObserved { tx_id }
+                        ));
+                        tokio::time::sleep(normal_wait_time).await;
                     }
 
                     // sleep for 10 seconds before checking again
@@ -101,6 +114,16 @@ impl TransactionWatcher {
         });
 
         Produces::ok(())
+    }
+
+    pub async fn stop_watching(&mut self) -> ActorResult<()> {
+        debug!("stop_watching for txn {}", self.tx_id);
+        self.keep_watching = false;
+        Produces::ok(())
+    }
+
+    async fn should_keep_watching(&mut self) -> ActorResult<bool> {
+        Produces::ok(self.keep_watching)
     }
 
     async fn check_txn(&mut self, client: Arc<NodeClient>) -> ActorResult<WatchResult> {
