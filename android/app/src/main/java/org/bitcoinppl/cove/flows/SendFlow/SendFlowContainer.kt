@@ -459,6 +459,30 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
+            // show success UI on payjoin broadcast; TaggedItem key changes each time so
+            // no manual reset is needed even if the user sends multiple payjoin transactions
+            LaunchedEffect(walletManager.payjoinTxBroadcast) {
+                if (walletManager.payjoinTxBroadcast != null && sendState == SendState.Sending) {
+                    sendState = SendState.Sent
+                    showSuccessAlert = true
+                    Auth.unlock()
+                }
+            }
+
+            // payjoin broadcast failure arrives via sendFlowErrorAlert reconcile (not the
+            // catch block), so unblock the UI from Sending and show the error alert
+            LaunchedEffect(walletManager.sendFlowErrorAlert) {
+                if (walletManager.sendFlowErrorAlert != null && sendState == SendState.Sending) {
+                    val message =
+                        when (val alert = walletManager.sendFlowErrorAlert!!.item) {
+                            is SendFlowErrorAlert.SignAndBroadcast -> alert.v1
+                            is SendFlowErrorAlert.ConfirmDetails -> alert.v1
+                        }
+                    sendState = SendState.Error(message)
+                    showErrorAlert = true
+                }
+            }
+
             // timed unlock on disappear
             DisposableEffect(Unit) {
                 onDispose {
@@ -538,6 +562,8 @@ private fun SendFlowRouteToScreen(
                                 }
                                 SendConfirmationInput.Unsigned -> {
                                     walletManager.rust.initiatePayment(details.psbt(), payjoinEndpoint)
+                                    // for payjoin, stay in Sending — PayjoinTxBroadcast reconcile triggers success UI
+                                    if (payjoinEndpoint != null) return@launch
                                 }
                             }
                             sendState = SendState.Sent

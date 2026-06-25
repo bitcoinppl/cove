@@ -1243,6 +1243,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "paste",
+ "payjoin",
  "pretty_assertions",
  "pubport",
  "rand 0.10.1",

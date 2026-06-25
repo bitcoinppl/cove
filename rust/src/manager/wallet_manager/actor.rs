@@ -29,6 +29,7 @@ use crate::{
 };
 mod scan;
 
+use super::payjoin::{PayjoinActor, PayjoinSender, build_sender};
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
@@ -102,6 +103,7 @@ pub struct WalletActor {
     receive_address_refresh_timer: Option<AbortableTask<()>>,
     scan_actor: Option<Addr<WalletScanActor>>,
     scan_generation: WalletScanGeneration,
+    payjoin_actor: Option<Addr<PayjoinActor>>,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -205,6 +207,7 @@ impl WalletActor {
             receive_address_refresh_timer: None,
             scan_actor: None,
             scan_generation: WalletScanGeneration::INITIAL,
+            payjoin_actor: None,
             db,
         })
     }
@@ -635,18 +638,59 @@ impl WalletActor {
     pub async fn initiate_payment(
         &mut self,
         psbt: Psbt,
-        _payjoin_endpoint: Option<String>,
+        payjoin_endpoint: Option<String>,
     ) -> ActorResult<Result<(), Error>> {
         if let Err(error) = self.ensure_ledger_ready_for_spend() {
             return Produces::ok(Err(error));
         }
 
-        // TODO: if payjoin_endpoint is Some, run BIP77 negotiation before broadcast
-        let result = self.do_sign_and_broadcast_transaction(psbt).await;
-        Produces::ok(result)
+        if self.payjoin_actor.is_some() {
+            return Produces::ok(Err(Error::SignAndBroadcastError(
+                "a payjoin session is already in progress".to_string(),
+            )));
+        }
+
+        match payjoin_endpoint {
+            // non-payjoin: sign and broadcast the original transaction directly
+            None => {
+                let result = self.do_sign_and_broadcast_transaction(psbt).await;
+                Produces::ok(result)
+            }
+            // payjoin: initiate BIP77 v2 OHTTP negotiation with the receiver
+            Some(endpoint) => {
+                let result = self.initiate_payjoin_payment(psbt, endpoint).await;
+                Produces::ok(result)
+            }
+        }
     }
 
-    async fn do_sign_and_broadcast_transaction(&mut self, mut psbt: Psbt) -> Result<(), Error> {
+    async fn initiate_payjoin_payment(
+        &mut self,
+        psbt: Psbt,
+        endpoint: String,
+    ) -> Result<(), Error> {
+        // sign the original PSBT first so we have both the
+        // signed PSBT to POST to the directory and a valid fallback tx
+        let (signed_psbt, fallback_tx) = self.do_sign_original_psbt(psbt).await?;
+
+        let network: bitcoin::Network = self.wallet.network.into();
+
+        let Ok(sender) = build_sender(signed_psbt, &fallback_tx, endpoint, network)
+            .inspect_err(|e| warn!("payjoin setup failed, broadcasting fallback tx: {e}"))
+        else {
+            send!(self.addr.handle_payjoin_fallback(fallback_tx));
+            return Ok(());
+        };
+
+        self.spawn_payjoin_actor(sender, fallback_tx);
+        Ok(())
+    }
+
+    /// Sign a PSBT with the wallet's mnemonic, returning the signed PSBT and the extracted fallback tx.
+    async fn do_sign_original_psbt(
+        &mut self,
+        mut psbt: Psbt,
+    ) -> Result<(Psbt, BdkTransaction), Error> {
         fn err(s: &str) -> Error {
             Error::SignAndBroadcastError(s.to_string())
         }
@@ -661,7 +705,7 @@ impl WalletActor {
 
         let create_params = descriptors.into_create_params().network(network.into());
 
-        // create a new temp wallet with the descriptors
+        // create a new temp wallet with the descriptors to sign
         let wallet = create_params
             .create_wallet_no_persist()
             .tap_err(|error| error!("failed to create wallet: {error}"))
@@ -676,10 +720,18 @@ impl WalletActor {
             return Err(err("transaction not finalized, unable to sign"));
         }
 
-        let transaction = psbt
-            .extract_tx()
+        // clone before extract so we retain the signed PSBT for the payjoin POST
+        let fallback_tx = psbt
+            .clone()
+            .extract_tx_fee_rate_limit()
             .tap_err(|error| error!("failed to extract transaction: {error}"))
             .map_err(|_| err("failed to extract transaction"))?;
+
+        Ok((psbt, fallback_tx))
+    }
+
+    async fn do_sign_and_broadcast_transaction(&mut self, psbt: Psbt) -> Result<(), Error> {
+        let (_, transaction) = self.do_sign_original_psbt(psbt).await?;
 
         self.do_broadcast_transaction(transaction.clone()).await?;
 
@@ -783,6 +835,68 @@ impl WalletActor {
 
         // start a transaction watcher to track confirmations
         send!(self.addr.start_transaction_watcher(txid));
+    }
+
+    /// Broadcasts `tx`, inserts it into the local wallet, and sends the appropriate reconcile message.
+    async fn broadcast_and_notify(&mut self, tx: BdkTransaction) {
+        match self.do_broadcast_transaction(tx.clone()).await {
+            Ok(()) => {
+                self.insert_broadcast_transaction(tx).await;
+                self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast);
+            }
+            Err(error) => {
+                error!("payjoin broadcast failed: {error}");
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
+                ));
+            }
+        }
+    }
+
+    /// Called when the payjoin receiver accepted our proposal and returned a signed PSBT.
+    /// Signs the proposal with our keys, broadcasts it, and notifies the platform.
+    /// Falls back to broadcasting the original transaction if proposal signing or broadcast fails.
+    pub async fn handle_payjoin_success(
+        &mut self,
+        proposal_psbt: Psbt,
+        fallback_tx: BdkTransaction,
+    ) -> ActorResult<()> {
+        let Ok((_, proposal_tx)) =
+            self.do_sign_original_psbt(proposal_psbt).await.inspect_err(|e| {
+                error!("failed to sign payjoin proposal, falling back to original tx: {e:?}")
+            })
+        else {
+            self.broadcast_and_notify(fallback_tx).await;
+            self.payjoin_actor = None;
+            return Produces::ok(());
+        };
+
+        match self.do_broadcast_transaction(proposal_tx.clone()).await {
+            Ok(()) => {
+                self.insert_broadcast_transaction(proposal_tx).await;
+                self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast);
+            }
+            Err(error) => {
+                error!(
+                    "failed to broadcast payjoin proposal, falling back to original tx: {error:?}"
+                );
+                self.broadcast_and_notify(fallback_tx).await;
+            }
+        }
+
+        self.payjoin_actor = None;
+        Produces::ok(())
+    }
+
+    /// Called when payjoin negotiation failed or timed out.
+    /// Broadcasts the original signed transaction as a fallback and notifies the platform.
+    pub async fn handle_payjoin_fallback(
+        &mut self,
+        fallback_tx: BdkTransaction,
+    ) -> ActorResult<()> {
+        self.broadcast_and_notify(fallback_tx).await;
+        self.payjoin_actor = None;
+        Produces::ok(())
     }
 
     pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {
@@ -1212,6 +1326,10 @@ impl WalletActor {
             send!(scan_actor.shutdown(scan_generation));
         }
 
+        // cancel any in-flight payjoin negotiation and drop our strong actor handle
+        if let Some(actor) = self.payjoin_actor.take() {
+            send!(actor.cancel_and_fallback());
+        }
         self.stop_receive_address_watcher();
         self.stop_receive_address_refresh_timer();
         self.state = ActorState::Initial;
@@ -2352,6 +2470,11 @@ impl WalletActor {
         if self.scan_actor.as_ref().is_some_and(|scan_actor| scan_actor == &stopped_scan_actor) {
             self.scan_actor = None;
         }
+    }
+
+    fn spawn_payjoin_actor(&mut self, sender: PayjoinSender, fallback_tx: BdkTransaction) {
+        self.payjoin_actor =
+            Some(spawn_actor(PayjoinActor::new(self.addr.clone(), sender, fallback_tx)));
     }
 }
 

@@ -1,6 +1,7 @@
 pub mod actor;
 pub mod balance_presentation;
 pub mod ledger_state;
+mod payjoin;
 pub mod receive_address;
 
 use std::{
@@ -100,6 +101,8 @@ pub enum WalletManagerReconcileMessage {
     ReceiveAddressLoadingChanged(bool),
     ReceiveAddressError(String),
     ReceiveAddressClosed(u64),
+
+    PayjoinTxBroadcast,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]

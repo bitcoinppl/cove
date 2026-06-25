@@ -35011,6 +35011,7 @@ public enum WalletManagerReconcileMessage {
     )
     case receiveAddressClosed(UInt64
     )
+    case payjoinTxBroadcast
 
 
 
@@ -35087,6 +35088,8 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
 
         case 19: return .receiveAddressClosed(try FfiConverterUInt64.read(from: &buf)
         )
+
+        case 20: return .payjoinTxBroadcast
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -35188,6 +35191,10 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case let .receiveAddressClosed(v1):
             writeInt(&buf, Int32(19))
             FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case .payjoinTxBroadcast:
+            writeInt(&buf, Int32(20))
 
         }
     }
