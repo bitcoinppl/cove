@@ -205,6 +205,64 @@ pub struct WalletInitialState {
     pub unsigned_transactions: Vec<Arc<UnsignedTransaction>>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct WalletSnapshot {
+    pub balance: Balance,
+    pub transactions: Vec<Transaction>,
+}
+
+impl WalletSnapshot {
+    pub(crate) fn from_wallet(wallet: &Wallet) -> Self {
+        Self { balance: wallet.balance(), transactions: wallet.transactions() }
+    }
+
+    fn load_state(
+        &self,
+        ledger_state: WalletLedgerState,
+        scan_status: &WalletScanStatus,
+    ) -> WalletLoadState {
+        match (ledger_state, scan_status) {
+            (_, WalletScanStatus::Scanning(_) | WalletScanStatus::ScanningPendingProgress(_)) => {
+                WalletLoadState::Scanning(self.transactions.clone())
+            }
+            (WalletLedgerState::Complete, WalletScanStatus::Idle) => {
+                WalletLoadState::Loaded(self.transactions.clone())
+            }
+            (WalletLedgerState::InitialScanIncomplete(_), WalletScanStatus::Idle)
+                if self.transactions.is_empty() =>
+            {
+                WalletLoadState::Loading
+            }
+            (WalletLedgerState::InitialScanIncomplete(_), WalletScanStatus::Idle) => {
+                WalletLoadState::Scanning(self.transactions.clone())
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum WalletBootstrapUnsignedTransactions {
+    Database(WalletId),
+    InMemory(Vec<Arc<UnsignedTransaction>>),
+}
+
+impl WalletBootstrapUnsignedTransactions {
+    pub(crate) fn database(wallet_id: WalletId) -> Self {
+        Self::Database(wallet_id)
+    }
+
+    pub(crate) fn in_memory(unsigned_transactions: Vec<Arc<UnsignedTransaction>>) -> Self {
+        Self::InMemory(unsigned_transactions)
+    }
+
+    fn load(&self) -> Result<Vec<Arc<UnsignedTransaction>>, Error> {
+        match self {
+            Self::Database(wallet_id) => unsigned_transactions_for_wallet(wallet_id),
+            Self::InMemory(unsigned_transactions) => Ok(unsigned_transactions.clone()),
+        }
+    }
+}
+
 #[uniffi::export(callback_interface)]
 pub trait WalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     fn reconcile(&self, message: Message);
@@ -223,9 +281,10 @@ pub struct RustWalletManager {
     pub reconciler: MessageSender<Message>,
     pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
     scan_status: Arc<RwLock<WalletScanStatus>>,
+    wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
+    unsigned_transactions: WalletBootstrapUnsignedTransactions,
 
     label_manager: Arc<LabelManager>,
-    initial_state: WalletInitialState,
     discovery_scanner: Option<Addr<WalletDiscoveryScanner>>,
 }
 
@@ -326,15 +385,78 @@ pub enum WalletManagerError {
     #[error("Wallet database corrupted for {id}: {error}")]
     DatabaseCorruption { id: WalletId, error: String },
 
+    #[error("unable to load pending unsigned transactions: {0}")]
+    PendingUnsignedTransactionsLoadError(String),
+
     #[error("Receive address error: {0}")]
     ReceiveAddressError(String),
 }
 
+fn initial_state_from_snapshot(
+    metadata: WalletMetadata,
+    scan_status: WalletScanStatus,
+    snapshot: WalletSnapshot,
+    unsigned_transactions: Vec<Arc<UnsignedTransaction>>,
+) -> WalletInitialState {
+    let ledger_state = WalletLedgerState::from_metadata_and_scan_status(&metadata, &scan_status);
+    let balance_presentation = BalancePresentation::for_ledger_state(ledger_state);
+    let load_state = snapshot.load_state(ledger_state, &scan_status);
+
+    WalletInitialState {
+        metadata,
+        ledger_state,
+        load_state,
+        scan_status,
+        balance_presentation,
+        balance: Arc::new(snapshot.balance),
+        unsigned_transactions,
+    }
+}
+
+fn try_initial_state_from_snapshot(
+    metadata: WalletMetadata,
+    scan_status: WalletScanStatus,
+    snapshot: WalletSnapshot,
+    unsigned_transactions: Result<Vec<Arc<UnsignedTransaction>>, Error>,
+) -> Result<WalletInitialState, Error> {
+    let unsigned_transactions = match unsigned_transactions {
+        Ok(unsigned_transactions) => unsigned_transactions,
+        Err(error) => {
+            warn!("unable to load pending unsigned transactions for initial wallet state: {error}");
+            Vec::new()
+        }
+    };
+
+    Ok(initial_state_from_snapshot(metadata, scan_status, snapshot, unsigned_transactions))
+}
+
+fn unsigned_transactions_for_wallet(
+    wallet_id: &WalletId,
+) -> Result<Vec<Arc<UnsignedTransaction>>, Error> {
+    let db = Database::global();
+    let context = format!("wallet id={wallet_id:?}");
+    let txns = db
+        .unsigned_transactions()
+        .get_by_wallet_id(wallet_id)
+        .map_err_prefix(&context, Error::PendingUnsignedTransactionsLoadError)?;
+
+    let txns =
+        txns.into_iter().map(|txn| Arc::new(txn.into())).collect::<Vec<Arc<UnsignedTransaction>>>();
+
+    Ok(txns)
+}
+
 #[uniffi::export(async_runtime = "tokio")]
 impl RustWalletManager {
+    /// Returns the bootstrap wallet snapshot used before reconcile messages arrive
     #[uniffi::method]
-    pub fn initial_state(&self) -> WalletInitialState {
-        self.initial_state.clone()
+    pub fn initial_state(&self) -> Result<WalletInitialState, Error> {
+        try_initial_state_from_snapshot(
+            self.current_metadata(),
+            self.current_scan_status(),
+            self.wallet_snapshot.read().clone(),
+            self.unsigned_transactions.load(),
+        )
     }
 
     /// Returns the metadata-derived bootstrap snapshot; live scan activity arrives through reconcile messages
@@ -1008,9 +1130,12 @@ impl RustWalletManager {
 
         let wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
         let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();
+        let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
+        let unsigned_transactions = WalletBootstrapUnsignedTransactions::in_memory(Vec::new());
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor = WalletActor::new(wallet, sender.clone(), scan_status.clone())
-            .expect("failed to open wallet database for preview wallet");
+        let wallet_actor =
+            WalletActor::new(wallet, sender.clone(), scan_status.clone(), wallet_snapshot.clone())
+                .expect("failed to open wallet database for preview wallet");
         let actor = task::spawn_actor(wallet_actor);
 
         Self {
@@ -1020,19 +1145,9 @@ impl RustWalletManager {
             reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             scan_status,
+            wallet_snapshot,
+            unsigned_transactions,
             label_manager,
-            initial_state: WalletInitialState {
-                metadata: metadata.clone(),
-                ledger_state: WalletLedgerState::from_metadata_and_scan_status(
-                    &metadata,
-                    &WalletScanStatus::Idle,
-                ),
-                load_state: WalletLoadState::Loading,
-                scan_status: WalletScanStatus::Idle,
-                balance_presentation: BalancePresentation::provisional(),
-                balance: Arc::new(Balance::zero()),
-                unsigned_transactions: Vec::new(),
-            },
             discovery_scanner: None,
         }
     }
@@ -1103,12 +1218,19 @@ fn wallet_account_number(id: &WalletId) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::{
-        PREVIEW_FULL_SCAN_COMPLETED_AT, WalletLedgerState, WalletScanStatus,
-        preview_ledger_ready_metadata,
+        Balance, Error, PREVIEW_FULL_SCAN_COMPLETED_AT, WalletLedgerState, WalletLoadState,
+        WalletScanPhase, WalletScanProgress, WalletScanStatus, WalletSnapshot,
+        initial_state_from_snapshot, ledger_state, preview_ledger_ready_metadata,
+        try_initial_state_from_snapshot,
     };
 
-    use crate::wallet::metadata::WalletMetadata;
+    use crate::{
+        transaction::{SentAndReceived, Transaction, TxId, UnconfirmedTransaction},
+        wallet::metadata::WalletMetadata,
+    };
 
     #[test]
     fn preview_wallet_metadata_is_ledger_ready_for_spend() {
@@ -1119,6 +1241,121 @@ mod tests {
             WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
             WalletLedgerState::Complete
         );
+    }
+
+    fn unconfirmed_transaction(amount: i64) -> Transaction {
+        Transaction::Unconfirmed(Arc::new(UnconfirmedTransaction {
+            txid: TxId::preview_new(),
+            sent_and_received: SentAndReceived::new(amount.into(), 0.into()),
+            timestamp: 0,
+            fee: None,
+        }))
+    }
+
+    #[test]
+    fn initial_state_from_snapshot_uses_idle_ledger_state_and_matching_balance_presentation() {
+        let metadata = WalletMetadata::preview_new();
+        let snapshot = WalletSnapshot { balance: Balance::zero(), transactions: Vec::new() };
+
+        let state = initial_state_from_snapshot(
+            metadata.clone(),
+            WalletScanStatus::Idle,
+            snapshot,
+            Vec::new(),
+        );
+
+        let expected_ledger_state =
+            WalletLedgerState::InitialScanIncomplete(ledger_state::InitialScanActivity::Idle);
+        assert_eq!(state.metadata, metadata);
+        assert_eq!(state.load_state, WalletLoadState::Loading);
+        assert_eq!(state.scan_status, WalletScanStatus::Idle);
+        assert_eq!(state.ledger_state, expected_ledger_state);
+        assert_eq!(state.balance.as_ref(), &Balance::zero());
+        assert!(state.unsigned_transactions.is_empty());
+    }
+
+    #[test]
+    fn initial_state_from_snapshot_marks_completed_idle_wallet_loaded() {
+        let metadata = preview_ledger_ready_metadata(WalletMetadata::preview_new());
+        let transactions = vec![unconfirmed_transaction(10_000)];
+        let snapshot = WalletSnapshot { balance: Balance::zero(), transactions: transactions.clone() };
+
+        let state =
+            initial_state_from_snapshot(metadata, WalletScanStatus::Idle, snapshot, Vec::new());
+
+        assert_eq!(state.ledger_state, WalletLedgerState::Complete);
+        assert_eq!(state.load_state, WalletLoadState::Loaded(transactions));
+        assert_eq!(state.scan_status, WalletScanStatus::Idle);
+    }
+
+    #[test]
+    fn initial_state_from_snapshot_keeps_incomplete_idle_empty_wallet_loading() {
+        let metadata = WalletMetadata::preview_new();
+        let snapshot = WalletSnapshot { balance: Balance::zero(), transactions: Vec::new() };
+
+        let state =
+            initial_state_from_snapshot(metadata, WalletScanStatus::Idle, snapshot, Vec::new());
+
+        assert_eq!(
+            state.ledger_state,
+            WalletLedgerState::InitialScanIncomplete(ledger_state::InitialScanActivity::Idle)
+        );
+        assert_eq!(state.load_state, WalletLoadState::Loading);
+        assert_eq!(state.scan_status, WalletScanStatus::Idle);
+    }
+
+    #[test]
+    fn initial_state_from_snapshot_marks_incomplete_idle_wallet_with_transactions_scanning() {
+        let metadata = WalletMetadata::preview_new();
+        let transactions = vec![unconfirmed_transaction(10_000)];
+        let snapshot = WalletSnapshot { balance: Balance::zero(), transactions: transactions.clone() };
+
+        let state =
+            initial_state_from_snapshot(metadata, WalletScanStatus::Idle, snapshot, Vec::new());
+
+        assert_eq!(
+            state.ledger_state,
+            WalletLedgerState::InitialScanIncomplete(ledger_state::InitialScanActivity::Idle)
+        );
+        assert_eq!(state.load_state, WalletLoadState::Scanning(transactions));
+        assert_eq!(state.scan_status, WalletScanStatus::Idle);
+    }
+
+    #[test]
+    fn initial_state_from_snapshot_marks_active_scan_scanning() {
+        let metadata = WalletMetadata::preview_new();
+        let transactions = vec![unconfirmed_transaction(10_000)];
+        let snapshot = WalletSnapshot { balance: Balance::zero(), transactions: transactions.clone() };
+        let scan_status = WalletScanStatus::Scanning(WalletScanProgress {
+            phase: WalletScanPhase::Full,
+            checked: 1,
+            gap: 0,
+            stop_gap: 20,
+            progress_basis_points: 500,
+        });
+
+        let state =
+            initial_state_from_snapshot(metadata, scan_status.clone(), snapshot, Vec::new());
+
+        assert_eq!(
+            state.ledger_state,
+            WalletLedgerState::InitialScanIncomplete(ledger_state::InitialScanActivity::Active)
+        );
+        assert_eq!(state.load_state, WalletLoadState::Scanning(transactions));
+        assert_eq!(state.scan_status, scan_status);
+    }
+
+    #[test]
+    fn try_initial_state_from_snapshot_uses_empty_unsigned_transactions_on_load_errors() {
+        let metadata = WalletMetadata::preview_new();
+        let snapshot = WalletSnapshot { balance: Balance::zero(), transactions: Vec::new() };
+        let error = Error::PendingUnsignedTransactionsLoadError("read failed".to_string());
+
+        let state =
+            try_initial_state_from_snapshot(metadata, WalletScanStatus::Idle, snapshot, Err(error))
+                .expect("pending unsigned transaction load errors should not fail bootstrap");
+
+        assert!(state.unsigned_transactions.is_empty());
     }
 }
 

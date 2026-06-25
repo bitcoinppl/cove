@@ -3,7 +3,7 @@ use crate::{
     historical_price_service::HistoricalPriceService,
     manager::wallet_manager::{
         Error, SendFlowErrorAlert, TransactionLockState, WalletLedgerState, WalletScanPhase,
-        WalletScanStatus, receive_address::ReceiveAddressSession,
+        WalletScanStatus, WalletSnapshot, receive_address::ReceiveAddressSession,
     },
     node::client::{Error as NodeError, NodeClient},
     receive_address_watcher::ReceiveAddressWatcher,
@@ -59,6 +59,7 @@ pub struct WalletActor {
     pub state: ActorState,
     pub receive_address: ReceiveAddressSession,
     pub scan_status: Arc<RwLock<WalletScanStatus>>,
+    pub wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
 
     seed: u64,
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
@@ -150,6 +151,7 @@ impl WalletActor {
         wallet: Wallet,
         reconciler: Sender<SingleOrMany>,
         scan_status: Arc<RwLock<WalletScanStatus>>,
+        wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
     ) -> Result<Self, crate::database::wallet_data::WalletDataError> {
         let db = WalletDataDb::new_or_existing(wallet.id.clone())?;
         let seed = rand::rng().random();
@@ -165,6 +167,7 @@ impl WalletActor {
             state: ActorState::Initial,
             receive_address: ReceiveAddressSession::default(),
             scan_status,
+            wallet_snapshot,
             transaction_watchers: HashMap::default(),
             receive_address_watcher: None,
             receive_address_refresh_timer: None,
@@ -826,6 +829,18 @@ fn ledger_ready_for_spend(completed_initial_scan: bool) -> Result<(), Error> {
 
 impl WalletActor {
     fn send(&self, msg: WalletManagerReconcileMessage) {
+        match &msg {
+            WalletManagerReconcileMessage::WalletBalanceChanged(balance) => {
+                self.wallet_snapshot.write().balance = balance.as_ref().clone();
+            }
+            WalletManagerReconcileMessage::AvailableTransactions(transactions)
+            | WalletManagerReconcileMessage::ScanComplete(transactions)
+            | WalletManagerReconcileMessage::UpdatedTransactions(transactions) => {
+                self.wallet_snapshot.write().transactions = transactions.clone();
+            }
+            _ => {}
+        }
+
         if self.reconciler.send(msg.into()).is_err() {
             warn!("wallet manager reconciler dropped");
         }
@@ -1074,7 +1089,7 @@ mod tests {
             test_support::new_test_wallet_data_db,
         },
         manager::wallet_manager::{
-            TransactionLockState, WalletManagerReconcileMessage, WalletScanStatus,
+            TransactionLockState, WalletManagerReconcileMessage, WalletScanStatus, WalletSnapshot,
         },
         node::Node,
         wallet::{Address, Wallet, WalletAddressType, metadata::WalletId},
@@ -1172,6 +1187,10 @@ mod tests {
         Arc::new(RwLock::new(WalletScanStatus::Idle))
     }
 
+    fn test_wallet_snapshot(wallet: &Wallet) -> Arc<RwLock<WalletSnapshot>> {
+        Arc::new(RwLock::new(WalletSnapshot::from_wallet(wallet)))
+    }
+
     fn test_keychain() -> &'static Keychain {
         static INIT: Once = Once::new();
         INIT.call_once(|| {
@@ -1211,8 +1230,10 @@ mod tests {
         crate::test_support::ensure_tokio_runtime();
 
         let (sender, receiver) = flume::bounded(100);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
         let actor =
-            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
         let addr = spawn_actor(actor);
 
         (addr, receiver)
@@ -1360,8 +1381,10 @@ mod tests {
         let unlocked = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(80_000));
 
         let (sender, _receiver) = flume::bounded(10);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
         let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
         let (db, tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
         db.labels.set_output_spendability(locked, false).expect("output is locked");
         actor.db = db;
@@ -1454,8 +1477,10 @@ mod tests {
             receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(80_000));
 
         let (sender, _receiver) = flume::bounded(10);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
         let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
         actor.db = db;
 
@@ -1477,8 +1502,10 @@ mod tests {
 
         let wallet = Wallet::preview_new_wallet();
         let (sender, _receiver) = flume::bounded(10);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
         let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
         let (db, _tmp) = wallet_data_db_with_mismatched_output_table(actor.wallet.id.clone());
         actor.db = db;
 
