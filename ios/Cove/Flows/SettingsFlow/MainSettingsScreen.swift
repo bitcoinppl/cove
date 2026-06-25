@@ -203,35 +203,6 @@ struct MainSettingsScreen: View {
         }
     }
 
-    var SecuritySection: some View {
-        Section("Security") {
-            if canUseBiometrics() {
-                SettingsToggle(title: "Enable FaceID", symbol: "faceid", item: toggleBiometric)
-            }
-
-            SettingsToggle(title: "Enable PIN", symbol: "lock", item: togglePin)
-
-            if togglePin.wrappedValue {
-                SettingsRow(title: "Change PIN", symbol: "lock.open.rotation") {
-                    sheetState = .init(.changePin)
-                }
-                .foregroundStyle(.link)
-
-                SettingsToggle(
-                    title: "Enable Wipe Data PIN",
-                    symbol: "exclamationmark.lock.fill",
-                    item: toggleWipeMePin
-                )
-
-                SettingsToggle(
-                    title: "Enable Decoy PIN",
-                    symbol: "theatermasks",
-                    item: toggleDecoyPin
-                )
-            }
-        }
-    }
-
     @ViewBuilder
     var BackupSection: some View {
         if isBetaEnabled, isBetaImportExportEnabled, !auth.isInDecoyMode() {
@@ -523,7 +494,15 @@ struct MainSettingsScreen: View {
         Form {
             GeneralSection
             WalletSettingsSection()
-            SecuritySection
+            MainSettingsSecuritySection(
+                canUseBiometrics: canUseBiometrics(),
+                toggleBiometric: toggleBiometric,
+                togglePin: togglePin,
+                toggleWipeMePin: toggleWipeMePin,
+                toggleDecoyPin: toggleDecoyPin
+            ) {
+                sheetState = .init(.changePin)
+            }
             BackupSection
             CloudBackupSection
             BetaToggleSection
