@@ -32,10 +32,19 @@ impl RustSendFlowManager {
 
         let Some(total_fee) = selected_fee_rate.total_fee else {
             let me = self.clone();
+            let address_for_psbt = address.as_ref().clone();
+            let fee_rate = selected_fee_rate.fee_rate;
             cove_tokio::task::spawn(async move {
                 me.get_or_update_fee_rate_options().await;
 
                 if me.selected_fee_rate().and_then(|fee| fee.total_fee).is_none() {
+                    if matches!(
+                        me.build_psbt(Some(address_for_psbt), Some(amount), fee_rate).await,
+                        Err(SendFlowError::SendBelowDustLimit)
+                    ) {
+                        return me.send_alert_async(SendFlowError::SendBelowDustLimit).await;
+                    }
+
                     return me
                         .send_alert_async(SendFlowError::UnableToGetFeeDetails(
                             "selected fee total unavailable".to_string(),

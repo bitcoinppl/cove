@@ -1719,7 +1719,7 @@ mod tests {
         let error =
             actor_value(result).await.expect_err("all locked outputs cannot fund transaction");
 
-        assert!(matches!(error, super::Error::BuildTxError(_)));
+        assert!(matches!(error, super::Error::InsufficientFunds(_)));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -1736,7 +1736,7 @@ mod tests {
             .await
             .expect_err("all locked outputs cannot fund drain transaction");
 
-        assert!(matches!(error, super::Error::BuildTxError(_)));
+        assert!(matches!(error, super::Error::InsufficientFunds(_)));
     }
 
     #[tokio::test(flavor = "current_thread")]

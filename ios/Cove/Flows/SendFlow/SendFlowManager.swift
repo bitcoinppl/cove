@@ -153,9 +153,10 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
             Log.warn("setAlert: \(alertState)")
             let hadSheet = self.presenter.sheetState != .none
             let hadAlert = self.presenter.alertState != .none
+            let isDismissingAlert = self.presenter.isDisappearing
 
-            if hadSheet || hadAlert {
-                self.presenter.alertState = .none
+            if hadSheet || hadAlert || isDismissingAlert {
+                self.presenter.clearAlert()
                 self.presenter.sheetState = .none
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                     self.presenter.alertState = .init(alertState)
@@ -165,7 +166,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
             }
 
         case .clearAlert:
-            self.presenter.alertState = .none
+            self.presenter.clearAlert()
 
         case let .setMaxSelected(maxSelected):
             self.maxSelected = maxSelected

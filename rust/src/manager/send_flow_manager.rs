@@ -699,7 +699,7 @@ impl RustSendFlowManager {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{sync::Arc, time::Duration};
 
     use cove_types::fees::{
         FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptionsWithTotalFee, FeeSpeed,
@@ -928,6 +928,27 @@ mod tests {
         manager.finalize_and_go_to_next_screen();
 
         assert!(manager.reconcile_receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn finalize_reports_dust_when_missing_total_fee_refresh_cannot_build_fee_totals() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 1);
+        set_selected_fee_without_total(&manager);
+
+        manager.finalize_and_go_to_next_screen();
+
+        let message = manager
+            .reconcile_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("dust alert is reconciled");
+
+        assert!(matches!(
+            message,
+            SingleOrMany::Single(super::Message::SetAlert(super::SendFlowAlertState::Error(
+                super::SendFlowError::SendBelowDustLimit
+            )))
+        ));
     }
 
     #[test]
