@@ -1053,7 +1053,7 @@ impl WalletActor {
         debug!("actor switch mnemonic wallet");
 
         self.wallet.switch_mnemonic_to_new_address_type(address_type)?;
-        self.reset_scan_lifecycle_for_address_type_switch();
+        self.restart_scan_after_address_type_switch();
 
         Produces::ok(())
     }
@@ -1066,7 +1066,7 @@ impl WalletActor {
         debug!("actor switch pubkey descriptor wallet");
 
         self.wallet.switch_descriptor_to_new_address_type(descriptors, address_type)?;
-        self.reset_scan_lifecycle_for_address_type_switch();
+        self.restart_scan_after_address_type_switch();
 
         Produces::ok(())
     }
@@ -2228,6 +2228,13 @@ impl WalletActor {
         self.send_scan_idle_status();
     }
 
+    fn restart_scan_after_address_type_switch(&mut self) {
+        self.reset_scan_lifecycle_for_address_type_switch();
+
+        // cached WalletManager instances do not rerun the UI scan trigger after route reset
+        send!(self.addr.wallet_scan_and_notify(true));
+    }
+
     fn advance_scan_generation(&mut self) -> WalletScanGeneration {
         self.scan_generation = self.scan_generation.next();
         self.scan_generation
@@ -2301,20 +2308,178 @@ async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    use act_zero::{Addr, call, runtimes::tokio::spawn_actor};
     use bdk_wallet::KeychainKind;
+    use bip39::Mnemonic;
     use cove_bdk_progressive_scan::ScanUpdate;
-    use std::{collections::BTreeMap, time::UNIX_EPOCH};
+    use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
+    use parking_lot::RwLock;
+    use std::{
+        collections::{BTreeMap, HashMap},
+        str::FromStr as _,
+        sync::{Arc, Once, OnceLock},
+        time::{Duration, UNIX_EPOCH},
+    };
 
     use crate::wallet::metadata::WalletMetadata;
 
     use super::{
         ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, Error, FullScanType, InitialScanRoute,
-        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart,
+        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany,
         full_scan_updates_initial_metadata, initial_scan_route, ledger_ready_for_spend,
         metadata_with_full_scan_performed, progressive_scan_update_response,
         reset_scan_lifecycle_state_for_address_type_switch, should_accept_wallet_scan_generation,
         should_skip_recent_scan, wallet_scan_progress_start,
     };
+    use crate::{
+        manager::wallet_manager::{WalletManagerReconcileMessage, WalletScanStatus},
+        wallet::{Wallet, WalletAddressType},
+    };
+
+    const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+    #[derive(Debug, Default)]
+    struct TestKeychain(parking_lot::Mutex<HashMap<String, String>>);
+
+    impl KeychainAccess for TestKeychain {
+        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+            self.0.lock().insert(key, value);
+            Ok(())
+        }
+
+        fn get(&self, key: String) -> Option<String> {
+            self.0.lock().get(&key).cloned()
+        }
+
+        fn delete(&self, key: String) -> bool {
+            self.0.lock().remove(&key).is_some()
+        }
+    }
+
+    fn test_scan_status() -> Arc<RwLock<WalletScanStatus>> {
+        Arc::new(RwLock::new(WalletScanStatus::Idle))
+    }
+
+    fn test_keychain() -> &'static Keychain {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            Keychain::new(Box::<TestKeychain>::default());
+        });
+
+        Keychain::global()
+    }
+
+    fn test_mnemonic() -> Mnemonic {
+        Mnemonic::from_str(TEST_MNEMONIC).expect("test mnemonic is valid")
+    }
+
+    fn ensure_test_tokio_runtime() {
+        static INIT: OnceLock<()> = OnceLock::new();
+        INIT.get_or_init(|| {
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            std::thread::Builder::new()
+                .name("wallet-manager-test-tokio".into())
+                .spawn(move || {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("create wallet manager test tokio runtime");
+
+                    runtime.block_on(async move {
+                        cove_tokio::init();
+                        sender.send(()).expect("signal wallet manager test tokio runtime");
+                        std::future::pending::<()>().await;
+                    });
+                })
+                .expect("spawn wallet manager test tokio runtime thread");
+
+            receiver.recv().expect("wait for wallet manager test tokio runtime");
+        });
+    }
+
+    fn descriptor_pair_for_address_type(
+        address_type: WalletAddressType,
+    ) -> pubport::descriptor::Descriptors {
+        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+        let descriptor = match address_type {
+            WalletAddressType::NativeSegwit => {
+                format!("wpkh([817e7be0/84h/0h/0h]{xpub}/<0;1>/*)")
+            }
+            WalletAddressType::WrappedSegwit => {
+                format!("sh(wpkh([817e7be0/49h/0h/0h]{xpub}/<0;1>/*))")
+            }
+            WalletAddressType::Legacy => {
+                format!("pkh([817e7be0/44h/0h/0h]{xpub}/<0;1>/*)")
+            }
+        };
+
+        pubport::descriptor::Descriptors::try_from_line(&descriptor)
+            .expect("descriptor pair parses")
+    }
+
+    fn spawn_test_wallet_actor(
+        wallet: Wallet,
+    ) -> (Addr<super::WalletActor>, flume::Receiver<SingleOrMany>) {
+        ensure_test_tokio_runtime();
+
+        let (sender, receiver) = flume::bounded(100);
+        let actor =
+            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+        let addr = spawn_actor(actor);
+
+        (addr, receiver)
+    }
+
+    fn persisted_preview_wallet(metadata: WalletMetadata) -> Wallet {
+        ensure_test_tokio_runtime();
+
+        let wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
+        crate::database::Database::global()
+            .wallets
+            .save_new_wallet_metadata(metadata)
+            .expect("wallet metadata is persisted");
+
+        wallet
+    }
+
+    fn contains_wallet_scan_started(batch: SingleOrMany) -> bool {
+        match batch {
+            SingleOrMany::Single(message) => wallet_scan_started(message),
+            SingleOrMany::Many(messages) => messages.into_iter().any(wallet_scan_started),
+        }
+    }
+
+    fn wallet_scan_started(message: WalletManagerReconcileMessage) -> bool {
+        matches!(
+            message,
+            WalletManagerReconcileMessage::WalletScanStatusChanged(
+                WalletScanStatus::Scanning(_) | WalletScanStatus::ScanningPendingProgress(_)
+            )
+        )
+    }
+
+    async fn wait_for_wallet_scan_started(receiver: &flume::Receiver<SingleOrMany>) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let batch = receiver.recv_async().await.expect("reconcile message is emitted");
+
+                if contains_wallet_scan_started(batch) {
+                    return;
+                }
+            }
+        })
+        .await
+        .expect("address-type switch restarts wallet scan");
+    }
+
+    fn drain_reconcile_messages(receiver: &flume::Receiver<SingleOrMany>) {
+        while receiver.try_recv().is_ok() {}
+    }
+
+    fn address_type_switch_test_lock() -> &'static tokio::sync::Mutex<()> {
+        static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(tokio::sync::Mutex::default)
+    }
 
     #[test]
     fn progressive_scan_update_response_preserves_last_active_indices() {
@@ -2327,6 +2492,50 @@ mod tests {
         let response = progressive_scan_update_response(scan_update);
 
         assert_eq!(response.last_active_indices, BTreeMap::from([(KeychainKind::External, 7)]));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn mnemonic_address_type_switch_restarts_wallet_scan() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        test_keychain().save_wallet_key(&wallet.id, test_mnemonic()).expect("mnemonic is saved");
+
+        let (addr, receiver) = spawn_test_wallet_actor(wallet);
+        drain_reconcile_messages(&receiver);
+
+        call!(addr.switch_mnemonic_to_new_address_type(WalletAddressType::Legacy))
+            .await
+            .expect("address type switches");
+
+        wait_for_wallet_scan_started(&receiver).await;
+
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn descriptor_address_type_switch_restarts_wallet_scan() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
+
+        let (addr, receiver) = spawn_test_wallet_actor(wallet);
+        drain_reconcile_messages(&receiver);
+
+        call!(addr.switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy))
+            .await
+            .expect("address type switches");
+
+        wait_for_wallet_scan_started(&receiver).await;
+
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
     #[test]
