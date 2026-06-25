@@ -23,6 +23,8 @@ import org.bitcoinppl.cove_core.types.TxId
 import org.bitcoinppl.cove_core.types.WalletId
 import kotlin.coroutines.cancellation.CancellationException
 
+private const val TAG = "TransactionDetailsContainer"
+
 /**
  * lifecycle container for transaction details screen
  * manages WalletManager loading and cleanup
@@ -56,18 +58,18 @@ fun TransactionDetailsContainer(
         ) {
             WalletSelectionRecoveryResult.Recovered -> Unit
             is WalletSelectionRecoveryResult.PoppedRoute -> {
-                android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", result.recoveryError)
+                android.util.Log.e(TAG, "Failed to recover wallet selection", result.recoveryError)
                 recoveringWalletSelection = false
             }
             is WalletSelectionRecoveryResult.NoRouteToPop -> {
-                android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", result.recoveryError)
-                android.util.Log.e("TransactionDetails", "No route available to leave transaction details after recovery failure")
+                android.util.Log.e(TAG, "Failed to recover wallet selection", result.recoveryError)
+                android.util.Log.e(TAG, "No route available to leave transaction details after recovery failure")
                 recoveringWalletSelection = false
             }
             is WalletSelectionRecoveryResult.FailedToPopRoute -> {
-                android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", result.recoveryError)
+                android.util.Log.e(TAG, "Failed to recover wallet selection", result.recoveryError)
                 android.util.Log.e(
-                    "TransactionDetails",
+                    TAG,
                     "Failed to leave transaction details after recovery failure",
                     result.navigationError,
                 )
@@ -94,7 +96,7 @@ fun TransactionDetailsContainer(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.e("TransactionDetails", "Failed to load wallet", e)
+            android.util.Log.e(TAG, "Failed to load wallet", e)
             error = e.message ?: "failed to load wallet"
             loading = false
             recoverWalletSelection()
@@ -119,7 +121,7 @@ fun TransactionDetailsContainer(
             throw e
         } catch (e: Exception) {
             detailsError = e.message ?: "failed to load transaction"
-            android.util.Log.e("TransactionDetails", "Failed to load transaction details", e)
+            android.util.Log.e(TAG, "Failed to load transaction details", e)
         }
     }
 

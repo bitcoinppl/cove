@@ -93,7 +93,7 @@ internal fun resolveStartupModeTransition(
     hasRecoveredOnboardingProgressAfterReadFailure: Boolean,
 ): StartupMode {
     // after startup reaches ready, deleting the last wallet should not restart onboarding
-    // recovered persisted progress means ready may have been chosen from an earlier failed read
+    // skip this shortcut when recovered progress proves an earlier failed read hid onboarding state
     if (
         currentMode == StartupMode.READY &&
         termsAccepted &&
