@@ -53081,6 +53081,9 @@ sealed class WalletDataKey {
     object ReceiveAddressCache : WalletDataKey()
 
 
+    object PayjoinSenderSession : WalletDataKey()
+
+
 
 
 
@@ -53101,6 +53104,7 @@ public object FfiConverterTypeWalletDataKey : FfiConverterRustBuffer<WalletDataK
                 FfiConverterTypeWalletAddressType.read(buf),
                 )
             2 -> WalletDataKey.ReceiveAddressCache
+            3 -> WalletDataKey.PayjoinSenderSession
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -53119,6 +53123,12 @@ public object FfiConverterTypeWalletDataKey : FfiConverterRustBuffer<WalletDataK
                 4UL
             )
         }
+        is WalletDataKey.PayjoinSenderSession -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: WalletDataKey, buf: ByteBuffer) {
@@ -53130,6 +53140,10 @@ public object FfiConverterTypeWalletDataKey : FfiConverterRustBuffer<WalletDataK
             }
             is WalletDataKey.ReceiveAddressCache -> {
                 buf.putInt(2)
+                Unit
+            }
+            is WalletDataKey.PayjoinSenderSession -> {
+                buf.putInt(3)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

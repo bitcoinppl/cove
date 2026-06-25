@@ -17,7 +17,7 @@ mod scan;
 mod transaction_confirmation;
 mod transactions;
 
-use super::payjoin::PayjoinActor;
+use super::payjoin::{PayjoinActor, SessionResumption, resume_session};
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
@@ -108,6 +108,7 @@ impl Actor for WalletActor {
         self.addr = addr.downgrade();
         self.spawn_scan_actor();
         send!(addr.check_node_connection());
+        send!(addr.resume_payjoin_session());
         Produces::ok(())
     }
 
@@ -183,6 +184,31 @@ impl WalletActor {
     pub async fn balance(&mut self) -> ActorResult<Balance> {
         let balance = self.wallet.balance();
         Produces::ok(balance)
+    }
+
+    /// Resumes a persisted payjoin session from a previous app run, if one exists
+    pub async fn resume_payjoin_session(&mut self) -> ActorResult<()> {
+        if self.payjoin_actor.is_some() {
+            return Produces::ok(());
+        }
+
+        match resume_session(self.db.clone(), self.addr.clone()) {
+            SessionResumption::None => {}
+
+            SessionResumption::Resume(actor) => {
+                self.payjoin_actor = Some(spawn_actor(*actor));
+            }
+
+            SessionResumption::BroadcastProposal { proposal_psbt, fallback_tx } => {
+                send!(self.addr.handle_payjoin_success(proposal_psbt, fallback_tx));
+            }
+
+            SessionResumption::BroadcastFallback { fallback_tx } => {
+                send!(self.addr.handle_payjoin_fallback(fallback_tx));
+            }
+        }
+
+        Produces::ok(())
     }
 
     #[into_actor_result]
