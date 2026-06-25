@@ -152,6 +152,7 @@ fun WalletSettingsContainer(
             WalletSettingsLoadError(
                 message = state.message,
                 onRetry = {
+                    lastLoadFailureAlertMessage = null
                     loadAttempt++
                 },
                 onBack = recoverWalletSelection,
