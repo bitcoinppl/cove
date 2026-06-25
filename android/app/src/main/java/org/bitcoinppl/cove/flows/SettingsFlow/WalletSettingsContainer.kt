@@ -61,7 +61,7 @@ fun WalletSettingsContainer(
             val result =
                 recoverWalletSelectionOrPopRoute(
                     selectLatestOrNewWallet = app::selectLatestOrNewWallet,
-                    popRoute = app::popRoute,
+                    popRoute = app::popRouteForRecovery,
                 )
         ) {
             WalletSelectionRecoveryResult.Recovered -> {

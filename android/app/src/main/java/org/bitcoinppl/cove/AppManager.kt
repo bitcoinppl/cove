@@ -22,6 +22,8 @@ import org.bitcoinppl.cove_core.util.GenerationToken
 import org.bitcoinppl.cove_core.util.GenerationTracker
 import java.util.UUID
 
+private class RouteUpdateDispatchException(cause: Throwable) : Exception("Unable to dispatch route update", cause)
+
 /**
  * central app state manager (singleton)
  * holds the FfiApp instance, router, and global state
@@ -408,39 +410,39 @@ class AppManager private constructor() : FfiReconcile {
             return
         }
 
-        advanceNavigationGeneration()
-        pushRouteWithoutNavigationGeneration(route)
+        if (pushRouteWithoutNavigationGeneration(route)) {
+            advanceNavigationGeneration()
+        }
     }
 
-    private fun pushRouteWithoutNavigationGeneration(route: Route) {
+    private fun pushRouteWithoutNavigationGeneration(route: Route): Boolean {
         Log.d(tag, "pushRoute: $route")
         isSidebarVisible = false
-        if (isDuplicateTopRoute(route)) return
+        if (isDuplicateTopRoute(route)) return false
 
         val newRoutes = router.routes.toMutableList().apply { add(route) }
+        if (dispatchRouteUpdate(newRoutes).isFailure) return false
 
-        // only dispatch if routes actually changed
-        if (newRoutes != router.routes) {
-            dispatch(AppAction.UpdateRoute(newRoutes))
-        }
         updateRoutesAndClearInactiveSendFlowManager(newRoutes)
+
+        return true
     }
 
     fun pushRoutes(routes: List<Route>) {
-        advanceNavigationGeneration()
-        pushRoutesWithoutNavigationGeneration(routes)
+        if (pushRoutesWithoutNavigationGeneration(routes)) {
+            advanceNavigationGeneration()
+        }
     }
 
-    private fun pushRoutesWithoutNavigationGeneration(routes: List<Route>) {
+    private fun pushRoutesWithoutNavigationGeneration(routes: List<Route>): Boolean {
         Log.d(tag, "pushRoutes: ${routes.size} routes")
         isSidebarVisible = false
         val newRoutes = router.routes.toMutableList().apply { addAll(routes) }
+        if (dispatchRouteUpdate(newRoutes).isFailure) return false
 
-        // only dispatch if routes actually changed
-        if (newRoutes != router.routes) {
-            dispatch(AppAction.UpdateRoute(newRoutes))
-        }
         updateRoutesAndClearInactiveSendFlowManager(newRoutes)
+
+        return true
     }
 
     /**
@@ -449,36 +451,45 @@ class AppManager private constructor() : FfiReconcile {
      * @return `true` only when a route was removed
      */
     fun popRoute(): Boolean {
+        return popRouteForRecovery() == RoutePopResult.Popped
+    }
+
+    internal fun popRouteForRecovery(): RoutePopResult {
         Log.d(tag, "popRoute")
         if (!rust.canGoBack()) {
-            return false
+            return RoutePopResult.NoRouteToPop
         }
 
         val currentRoutes = router.routes
         if (currentRoutes.isEmpty()) {
-            return false
+            return RoutePopResult.NoRouteToPop
         }
 
         val newRoutes = currentRoutes.dropLast(1)
-        if (!dispatchSuccessfully(AppAction.UpdateRoute(newRoutes))) {
-            return false
+        val dispatchError = dispatchRouteUpdate(newRoutes).exceptionOrNull()
+        if (dispatchError != null) {
+            return RoutePopResult.Failed(RouteUpdateDispatchException(dispatchError))
         }
 
         advanceNavigationGeneration()
         updateRoutesAndClearInactiveSendFlowManager(newRoutes)
 
-        return true
+        return RoutePopResult.Popped
     }
 
     fun setRoute(routes: List<Route>) {
-        advanceNavigationGeneration()
         Log.d(tag, "setRoute: ${routes.size} routes")
 
-        // only dispatch if routes actually changed
-        if (routes != router.routes) {
-            dispatch(AppAction.UpdateRoute(routes))
-        }
+        if (dispatchRouteUpdate(routes).isFailure) return
+
+        advanceNavigationGeneration()
         updateRoutesAndClearInactiveSendFlowManager(routes)
+    }
+
+    private fun dispatchRouteUpdate(routes: List<Route>): Result<Unit> {
+        if (routes == router.routes) return Result.success(Unit)
+
+        return dispatchResult(AppAction.UpdateRoute(routes))
     }
 
     private fun updateRoutesAndClearInactiveSendFlowManager(routes: List<Route>) {
@@ -568,8 +579,9 @@ class AppManager private constructor() : FfiReconcile {
         navigationGenerations.isCurrent(generation)
 
     fun agreeToTerms() {
-        dispatch(AppAction.AcceptTerms)
-        isTermsAccepted = true
+        if (dispatch(AppAction.AcceptTerms)) {
+            isTermsAccepted = true
+        }
     }
 
     override fun reconcile(message: AppStateReconcileMessage) {
@@ -672,15 +684,16 @@ class AppManager private constructor() : FfiReconcile {
         }
     }
 
-    fun dispatch(action: AppAction) {
-        dispatchSuccessfully(action)
-    }
+    fun dispatch(action: AppAction): Boolean = dispatchSuccessfully(action)
 
-    private fun dispatchSuccessfully(action: AppAction): Boolean {
+    private fun dispatchSuccessfully(action: AppAction): Boolean =
+        dispatchResult(action).isSuccess
+
+    private fun dispatchResult(action: AppAction): Result<Unit> {
         Log.d(tag, "dispatch $action")
+
         return runCatching { rust.dispatch(action) }
             .onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
-            .isSuccess
     }
 
     companion object {

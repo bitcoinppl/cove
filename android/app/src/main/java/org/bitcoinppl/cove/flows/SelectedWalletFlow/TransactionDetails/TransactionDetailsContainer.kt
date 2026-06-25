@@ -53,7 +53,7 @@ fun TransactionDetailsContainer(
             val result =
                 recoverWalletSelectionOrPopRoute(
                     selectLatestOrNewWallet = app::selectLatestOrNewWallet,
-                    popRoute = app::popRoute,
+                    popRoute = app::popRouteForRecovery,
                 )
         ) {
             WalletSelectionRecoveryResult.Recovered -> Unit
@@ -130,6 +130,7 @@ fun TransactionDetailsContainer(
             BackHandler(onBack = { recoverWalletSelection() })
 
             TransactionDetailsLoadError(
+                title = "Unable to load wallet",
                 message = error!!,
                 onRetry = {
                     error = null
@@ -151,6 +152,7 @@ fun TransactionDetailsContainer(
 
         detailsError != null -> {
             TransactionDetailsLoadError(
+                title = "Unable to load transaction",
                 message = detailsError!!,
                 onRetry = {
                     detailsError = null
@@ -166,6 +168,7 @@ fun TransactionDetailsContainer(
 
 @Composable
 private fun TransactionDetailsLoadError(
+    title: String,
     message: String,
     onRetry: () -> Unit,
     onRecoverWalletSelection: (() -> Unit)? = null,
@@ -178,7 +181,7 @@ private fun TransactionDetailsLoadError(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            androidx.compose.material3.Text("Unable to load transaction")
+            androidx.compose.material3.Text(title)
             androidx.compose.material3.Text(message)
             androidx.compose.material3.Button(onClick = onRetry) {
                 androidx.compose.material3.Text("Try again")

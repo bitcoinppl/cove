@@ -19,9 +19,19 @@ internal sealed interface WalletSelectionRecoveryResult {
     ) : WalletSelectionRecoveryResult
 }
 
+internal sealed interface RoutePopResult {
+    data object Popped : RoutePopResult
+
+    data object NoRouteToPop : RoutePopResult
+
+    data class Failed(
+        val error: Exception,
+    ) : RoutePopResult
+}
+
 internal fun recoverWalletSelectionOrPopRoute(
     selectLatestOrNewWallet: () -> Unit,
-    popRoute: () -> Boolean,
+    popRoute: () -> RoutePopResult,
 ): WalletSelectionRecoveryResult =
     try {
         selectLatestOrNewWallet()
@@ -37,13 +47,17 @@ internal fun recoverWalletSelectionOrPopRoute(
 
 private fun popRouteAfterRecoveryFailure(
     recoveryError: Exception,
-    popRoute: () -> Boolean,
+    popRoute: () -> RoutePopResult,
 ): WalletSelectionRecoveryResult =
     try {
-        if (popRoute()) {
-            WalletSelectionRecoveryResult.PoppedRoute(recoveryError)
-        } else {
-            WalletSelectionRecoveryResult.NoRouteToPop(recoveryError)
+        when (val popResult = popRoute()) {
+            RoutePopResult.Popped -> WalletSelectionRecoveryResult.PoppedRoute(recoveryError)
+            RoutePopResult.NoRouteToPop -> WalletSelectionRecoveryResult.NoRouteToPop(recoveryError)
+            is RoutePopResult.Failed ->
+                WalletSelectionRecoveryResult.FailedToPopRoute(
+                    recoveryError = recoveryError,
+                    navigationError = popResult.error,
+                )
         }
     } catch (e: CancellationException) {
         throw e
