@@ -21,7 +21,7 @@ import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.recoverWalletSelectionOrPopRoute
 import org.bitcoinppl.cove_core.types.TxId
 import org.bitcoinppl.cove_core.types.WalletId
-import kotlin.coroutines.cancellation.CancellationException
+import kotlin.coroutines.cancellation.CancellationException as KotlinCancellationException
 
 private const val TAG = "TransactionDetailsContainer"
 
@@ -92,7 +92,7 @@ fun TransactionDetailsContainer(
         try {
             manager = app.getWalletManager(walletId)
             loading = false
-        } catch (e: CancellationException) {
+        } catch (e: KotlinCancellationException) {
             throw e
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Failed to load wallet", e)
@@ -116,7 +116,7 @@ fun TransactionDetailsContainer(
         try {
             currentManager.transactionDetails(txId)
             didLoadInitialDetails = true
-        } catch (e: CancellationException) {
+        } catch (e: KotlinCancellationException) {
             throw e
         } catch (e: Exception) {
             detailsError = e.message ?: "failed to load transaction"
