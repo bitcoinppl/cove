@@ -478,7 +478,7 @@ private fun SendFlowRouteToScreen(
                 val signedPsbt = (input as? SendConfirmationInput.SignedPsbt)?.v1
                 if (signedPsbt != null && finalizedTransaction == null) {
                     try {
-                        finalizedTransaction = walletManager.rust.finalizePsbt(signedPsbt)
+                        finalizedTransaction = walletManager.finalizePsbt(signedPsbt)
                     } catch (e: WalletManagerException) {
                         app.alertState =
                             TaggedItem(
@@ -528,16 +528,18 @@ private fun SendFlowRouteToScreen(
                         try {
                             when (input) {
                                 is SendConfirmationInput.SignedTransaction -> {
-                                    walletManager.rust.broadcastTransaction(input.v1)
+                                    walletManager.broadcastTransaction(input.v1)
                                 }
                                 is SendConfirmationInput.SignedPsbt -> {
                                     val txnToBroadcast =
                                         finalizedTransaction
                                             ?: error("Unable to finalize transaction")
-                                    walletManager.rust.broadcastTransaction(txnToBroadcast)
+                                    walletManager.broadcastTransaction(txnToBroadcast)
                                 }
                                 SendConfirmationInput.Unsigned -> {
-                                    walletManager.rust.initiatePayment(details.psbt(), payjoinEndpoint)
+                                    walletManager.initiatePayment(details.psbt(), payjoinEndpoint)
+                                    // for payjoin, stay in Sending — PayjoinTxBroadcast reconcile triggers success UI
+                                    if (payjoinEndpoint != null) return@launch
                                 }
                             }
                             sendState = SendState.Sent

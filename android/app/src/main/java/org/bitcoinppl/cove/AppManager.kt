@@ -20,6 +20,7 @@ import org.bitcoinppl.cove_core.types.*
 import org.bitcoinppl.cove_core.util.GenerationToken
 import org.bitcoinppl.cove_core.util.GenerationTracker
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 private class RouteUpdateDispatchException(cause: Throwable) : Exception("Unable to dispatch route update", cause)
 
@@ -39,8 +40,17 @@ class AppManager private constructor() : FfiReconcile {
     private var navigationSettleJob: Job? = null
 
     // rust bridge - not observable
-    internal var rust: FfiApp = FfiApp()
+    private var rust: FfiApp = FfiApp()
         private set
+    private val isRustClosed = AtomicBoolean(false)
+    private val rustGuard =
+        RustHandleGuard(
+            ownerName = "AppManager",
+            handleName = "FfiApp",
+            isClosed = isRustClosed,
+        ) {
+            Log.w(tag, it)
+        }
 
     var router: RouterManager = RouterManager(rust.state().router)
         private set
@@ -109,6 +119,19 @@ class AppManager private constructor() : FfiReconcile {
         wallets = runCatching { Database().wallets().all() }.getOrElse { emptyList() }
     }
 
+    private fun <T> withRust(
+        block: FfiApp.() -> T,
+    ): T = rustGuard.withHandle(rust, block)
+
+    private fun <T> withRustOr(
+        defaultValue: T,
+        block: FfiApp.() -> T,
+    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
+
+    private suspend fun <T> withRustSuspend(
+        block: suspend FfiApp.() -> T,
+    ): T = rustGuard.withHandleSuspend(rust, block)
+
     fun showInitialScanIncompleteAlert() {
         alertState =
             TaggedItem(
@@ -172,7 +195,7 @@ class AppManager private constructor() : FfiReconcile {
         }
 
         Log.d(tag, "did not find SendFlowManager for ${wm.id}, creating new")
-        val manager = SendFlowManager(wm.rust.newSendFlowManager(wm.balance), presenter)
+        val manager = SendFlowManager(wm.newSendFlowManager(wm.balance), presenter)
         sendFlowManager = manager
         return manager
     }
@@ -205,16 +228,33 @@ class AppManager private constructor() : FfiReconcile {
     val fullVersionId: String
         get() {
             val appVersion = BuildConfig.VERSION_NAME
-            return "v$appVersion (${rust.gitShortHash()}-${BuildConfig.VERSION_CODE})"
+            return "v$appVersion ($gitShortHash-${BuildConfig.VERSION_CODE})"
         }
 
-    fun findTapSignerWallet(ts: TapSigner): WalletMetadata? = rust.findTapSignerWallet(ts)
+    val gitShortHash: String
+        get() = withRustOr("") { gitShortHash() }
+
+    fun findTapSignerWallet(ts: TapSigner): WalletMetadata? =
+        withRustOr(null) {
+            findTapSignerWallet(ts)
+        }
 
     @Throws(KeychainException::class)
-    fun getTapSignerBackup(ts: TapSigner): ByteArray? = rust.getTapSignerBackup(ts)
+    fun getTapSignerBackup(ts: TapSigner): ByteArray? =
+        withRust {
+            getTapSignerBackup(ts)
+        }
 
     fun saveTapSignerBackup(ts: TapSigner, backup: ByteArray): Boolean =
-        rust.saveTapSignerBackup(ts, backup)
+        withRustOr(false) {
+            saveTapSignerBackup(ts, backup)
+        }
+
+    fun closeRust() {
+        rustGuard.closeOnce {
+            rust.close()
+        }
+    }
 
     /**
      * reset the manager state
@@ -236,21 +276,32 @@ class AppManager private constructor() : FfiReconcile {
         walletManager = null
         sendFlowManager = null
 
-        val state = rust.state()
-        router = RouterManager(state.router)
+        withRustOr(null) {
+            state()
+        }?.let {
+            router = RouterManager(it.router)
+        }
     }
 
     val currentRoute: Route
         get() = router.currentRoute
 
+    fun canGoBack(): Boolean =
+        withRustOr(false) {
+            canGoBack()
+        }
+
     private fun isDuplicateTopRoute(route: Route): Boolean =
         currentRoute.isSameNavigationDestination(route)
 
     val hasWallets: Boolean
-        get() = rust.hasWallets()
+        get() = withRustOr(false) { hasWallets() }
 
     val numberOfWallets: Int
-        get() = rust.numWallets().toInt()
+        get() =
+            withRustOr(0u) {
+                numWallets()
+            }.toInt()
 
     /**
      * select a wallet and reset the route to selectedWalletRoute
@@ -271,7 +322,7 @@ class AppManager private constructor() : FfiReconcile {
 
     @Throws(Exception::class)
     private fun selectWalletWithoutNavigationGeneration(id: WalletId) {
-        rust.dispatch(AppAction.SelectWallet(id))
+        dispatchResult(AppAction.SelectWallet(id)).getOrThrow()
         isSidebarVisible = false
     }
 
@@ -286,7 +337,7 @@ class AppManager private constructor() : FfiReconcile {
     @Throws(Exception::class)
     fun selectLatestOrNewWallet() {
         advanceNavigationGeneration()
-        rust.dispatch(AppAction.SelectLatestOrNewWallet)
+        dispatchResult(AppAction.SelectLatestOrNewWallet).getOrThrow()
         isSidebarVisible = false
     }
 
@@ -393,7 +444,7 @@ class AppManager private constructor() : FfiReconcile {
 
     internal fun popRouteForRecovery(): RoutePopResult {
         Log.d(tag, "popRoute")
-        if (!rust.canGoBack()) {
+        if (!canGoBack()) {
             return RoutePopResult.NoRouteToPop
         }
 
@@ -455,9 +506,13 @@ class AppManager private constructor() : FfiReconcile {
 
     private fun resetRouteWithoutNavigationGeneration(to: List<Route>) {
         if (to.size > 1) {
-            rust.resetNestedRoutesTo(to[0], to.drop(1))
+            withRustOr(Unit) {
+                resetNestedRoutesTo(to[0], to.drop(1))
+            }
         } else if (to.isNotEmpty()) {
-            rust.resetDefaultRouteTo(to[0])
+            withRustOr(Unit) {
+                resetDefaultRouteTo(to[0])
+            }
         }
     }
 
@@ -467,12 +522,16 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     private fun resetRouteWithoutNavigationGeneration(to: Route) {
-        rust.resetDefaultRouteTo(to)
+        withRustOr(Unit) {
+            resetDefaultRouteTo(to)
+        }
     }
 
     fun loadAndReset(to: Route) {
         advanceNavigationGeneration()
-        rust.loadAndResetDefaultRoute(to)
+        withRustOr(Unit) {
+            loadAndResetDefaultRoute(to)
+        }
     }
 
     fun captureLoadAndResetGeneration(): GenerationToken = navigationGenerations.capture()
@@ -484,7 +543,9 @@ class AppManager private constructor() : FfiReconcile {
     ) {
         if (!isNavigationGenerationCurrent(generation)) return
         if (router.default != route) return
-        rust.resetAfterLoading(nextRoutes)
+        withRustOr(Unit) {
+            resetAfterLoading(nextRoutes)
+        }
     }
 
     private fun advanceNavigationGeneration(skipSettle: Boolean = false): GenerationToken {
@@ -518,6 +579,29 @@ class AppManager private constructor() : FfiReconcile {
     fun agreeToTerms() {
         if (dispatch(AppAction.AcceptTerms)) {
             isTermsAccepted = true
+        }
+    }
+
+    suspend fun initData() {
+        withRustSuspend {
+            initData()
+        }
+    }
+
+    fun deleteCorruptedWallet(id: WalletId) {
+        withRust {
+            deleteCorruptedWallet(id)
+        }
+    }
+
+    fun unverifiedWalletIds(): List<WalletId> =
+        withRustOr(emptyList()) {
+            unverifiedWalletIds()
+        }
+
+    internal fun dangerousWipeAllData() {
+        withRust {
+            dangerousWipeAllData()
         }
     }
 
@@ -631,7 +715,11 @@ class AppManager private constructor() : FfiReconcile {
     private fun dispatchResult(action: AppAction): Result<Unit> {
         Log.d(tag, "dispatch $action")
 
-        return runCatching { rust.dispatch(action) }
+        return runCatching {
+            withRust {
+                dispatch(action)
+            }
+        }
             .onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
     }
 

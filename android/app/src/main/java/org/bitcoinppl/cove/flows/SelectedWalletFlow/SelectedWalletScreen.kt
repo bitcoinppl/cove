@@ -422,9 +422,9 @@ fun SelectedWalletScreen(
                                         val minDelay = async { delay(1750) }
                                         manager.setScanning()
                                         manager.forceWalletScan()
-                                        manager.rust.forceUpdateHeight()
+                                        manager.forceUpdateHeight()
                                         manager.updateWalletBalance()
-                                        manager.rust.getTransactions()
+                                        manager.refreshTransactions()
                                         minDelay.await()
                                     } finally {
                                         isRefreshing = false

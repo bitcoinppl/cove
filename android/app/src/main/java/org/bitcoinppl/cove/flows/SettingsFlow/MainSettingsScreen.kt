@@ -520,25 +520,25 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
     // toggle handlers using Rust validation
     fun onBiometricToggle(enable: Boolean) {
         val action = SecuritySettingsAction.ToggleBiometric(enable)
-        val result = auth.rust.validateSecurityAction(action, app.rust.unverifiedWalletIds())
+        val result = auth.validateSecurityAction(action, app.unverifiedWalletIds())
         handleSecurityResult(result, action)
     }
 
     fun onPinToggle(enable: Boolean) {
         val action = SecuritySettingsAction.TogglePin(enable)
-        val result = auth.rust.validateSecurityAction(action, app.rust.unverifiedWalletIds())
+        val result = auth.validateSecurityAction(action, app.unverifiedWalletIds())
         handleSecurityResult(result, action)
     }
 
     fun onWipeDataPinToggle(enable: Boolean) {
         val action = SecuritySettingsAction.ToggleWipeDataPin(enable)
-        val result = auth.rust.validateSecurityAction(action, app.rust.unverifiedWalletIds())
+        val result = auth.validateSecurityAction(action, app.unverifiedWalletIds())
         handleSecurityResult(result, action)
     }
 
     fun onDecoyPinToggle(enable: Boolean) {
         val action = SecuritySettingsAction.ToggleDecoyPin(enable)
-        val result = auth.rust.validateSecurityAction(action, app.rust.unverifiedWalletIds())
+        val result = auth.validateSecurityAction(action, app.unverifiedWalletIds())
         handleSecurityResult(result, action)
     }
 
@@ -561,7 +561,7 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
         }
 
         try {
-            auth.rust.setWipeDataPin(pin)
+            auth.setWipeDataPin(pin)
         } catch (e: AuthManagerException) {
             alertState = SecurityAlertState.ExtraSetPinError(e.message ?: "Unknown error")
         }
@@ -575,7 +575,7 @@ private fun SecuritySection(app: org.bitcoinppl.cove.AppManager) {
         }
 
         try {
-            auth.rust.setDecoyPin(pin)
+            auth.setDecoyPin(pin)
         } catch (e: AuthManagerException) {
             alertState = SecurityAlertState.ExtraSetPinError(e.message ?: "Unknown error")
         }
@@ -1090,7 +1090,7 @@ private fun SecuritySheetDialog(
                             }
 
                             // use Rust validation for new PIN
-                            val error = auth.rust.validateNewPin(pin)
+                            val error = auth.validateNewPin(pin)
                             if (error != null) {
                                 onDismiss()
                                 onAlertState(SecurityAlertState.ExtraSetPinError(error))

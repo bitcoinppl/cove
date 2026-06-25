@@ -270,7 +270,7 @@ private fun FeeOptionCard(
                     remember(feeOption, app.prices) {
                         totalFee?.let { fee ->
                             app.prices?.let {
-                                "≈ ${manager.rust.convertAndDisplayFiat(fee, it)}"
+                                "≈ ${manager.convertAndDisplayFiat(fee, it)}"
                             }
                         }
                     }

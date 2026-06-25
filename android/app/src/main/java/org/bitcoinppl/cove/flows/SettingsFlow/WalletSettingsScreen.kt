@@ -102,7 +102,7 @@ fun WalletSettingsScreen(
 
     fun deleteWallet() {
         try {
-            manager.rust.deleteWallet()
+            manager.deleteWallet()
             app.popRoute()
         } catch (e: Exception) {
             deleteError = e.message ?: "Failed to delete wallet"
@@ -110,14 +110,14 @@ fun WalletSettingsScreen(
         }
     }
 
-    fun firstDeleteConfirmationMessage(): String = manager.rust.deletionWarningMessage()
+    fun firstDeleteConfirmationMessage(): String = manager.deletionWarningMessage()
 
-    fun requiredDeleteConfirmations(): UByte = manager.rust.requiredDeletionConfirmations()
+    fun requiredDeleteConfirmations(): UByte = manager.requiredDeletionConfirmations()
 
     // validate metadata on appear and disappear
     LaunchedEffect(manager) {
         manager.validateMetadata()
-        accountNumber = manager.rust.nonDefaultAccountNumber()
+        accountNumber = manager.nonDefaultAccountNumber()
     }
 
     DisposableEffect(Unit) {
@@ -209,10 +209,10 @@ fun WalletSettingsScreen(
 
                         // show fingerprint for non-TapSigner wallets
                         val hardwareMeta = metadata.hardwareMetadata
-                        if (manager.rust.masterFingerprint() != null && hardwareMeta !is org.bitcoinppl.cove_core.HardwareWalletMetadata.TapSigner) {
+                        if (manager.masterFingerprint() != null && hardwareMeta !is org.bitcoinppl.cove_core.HardwareWalletMetadata.TapSigner) {
                             MaterialSettingsItem(
                                 title = stringResource(R.string.label_wallet_fingerprint),
-                                subtitle = manager.rust.masterFingerprint() ?: "",
+                                subtitle = manager.masterFingerprint() ?: "",
                             )
                             MaterialDivider()
                         }

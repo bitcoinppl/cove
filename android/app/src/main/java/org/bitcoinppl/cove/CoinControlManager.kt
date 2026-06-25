@@ -22,14 +22,22 @@ import java.util.concurrent.atomic.AtomicBoolean
  * ported from iOS CoinControlManager.swift
  */
 @Stable
-class CoinControlManager(
-    val rust: RustCoinControlManager,
+class CoinControlManager internal constructor(
+    private val rust: RustCoinControlManager,
 ) : CoinControlManagerReconciler,
     Closeable {
     private val tag = "CoinControlManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val isClosed = AtomicBoolean(false)
+    private val rustGuard =
+        RustHandleGuard(
+            ownerName = "CoinControlManager",
+            handleName = "RustCoinControlManager",
+            isClosed = isClosed,
+        ) {
+            android.util.Log.w(tag, it)
+        }
 
     var sort by mutableStateOf<CoinControlListSort?>(
         CoinControlListSort.Date(ListSortDirection.DESCENDING),
@@ -62,6 +70,16 @@ class CoinControlManager(
         android.util.Log.d(tag, message)
     }
 
+    private fun <T> withRustOr(
+        defaultValue: T,
+        block: RustCoinControlManager.() -> T,
+    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
+
+    private suspend fun <T> withRustOrSuspend(
+        defaultValue: T,
+        block: suspend RustCoinControlManager.() -> T,
+    ): T = rustGuard.withHandleOrSuspend(rust, defaultValue, block)
+
     /**
      * update search and dispatch notification
      */
@@ -82,10 +100,18 @@ class CoinControlManager(
     }
 
     /**
+     * get current button presentation based on sort state
+     */
+    fun buttonPresentation(key: CoinControlListSortKey): ButtonPresentation? =
+        withRustOr(null) {
+            buttonPresentation(key)
+        }
+
+    /**
      * get button arrow icon based on sort state
      */
     fun buttonArrow(key: CoinControlListSortKey): String? =
-        when (val presentation = rust.buttonPresentation(key)) {
+        when (val presentation = buttonPresentation(key)) {
             is ButtonPresentation.Selected -> {
                 when (presentation.v1) {
                     ListSortDirection.ASCENDING -> "arrow_upward"
@@ -93,6 +119,7 @@ class CoinControlManager(
                 }
             }
             is ButtonPresentation.NotSelected -> null
+            null -> null
         }
 
     val totalSelectedAmount: String
@@ -106,7 +133,10 @@ class CoinControlManager(
      * navigates forward to CoinControlSetAmount screen with selected UTXOs
      */
     fun continuePressed(app: AppManager) {
-        val walletId = rust.id()
+        val walletId =
+            withRustOr<WalletId?>(null) {
+                id()
+            } ?: return
         val selectedUtxos = utxos.filter { selected.contains(it.outpoint.hashToUint()) }
 
         // navigate forward to coin control set amount screen
@@ -170,27 +200,42 @@ class CoinControlManager(
             else -> amount.satsStringWithUnit()
         }
 
+    suspend fun reloadLabels() {
+        withRustOrSuspend(Unit) {
+            reloadLabels()
+        }
+    }
+
     override fun reconcile(message: CoinControlManagerReconcileMessage) {
+        if (isClosed.get()) return
+
         logDebug("reconcile: $message")
         mainScope.launch { apply(message) }
     }
 
     override fun reconcileMany(messages: List<CoinControlManagerReconcileMessage>) {
+        if (isClosed.get()) return
+
         logDebug("reconcile_messages: ${messages.size} messages")
         mainScope.launch { messages.forEach { apply(it) } }
     }
 
     fun dispatch(action: CoinControlManagerAction) {
         logDebug("dispatch: $action")
-        mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
+        mainScope.launch(Dispatchers.IO) {
+            withRustOr(Unit) {
+                dispatch(action)
+            }
+        }
     }
 
     override fun close() {
-        if (!isClosed.compareAndSet(false, true)) return
-        logDebug("Closing CoinControlManager")
-        updateSendFlowManagerTask?.cancel()
-        mainScope.cancel()
-        rust.close()
+        rustGuard.closeOnce {
+            logDebug("Closing CoinControlManager")
+            updateSendFlowManagerTask?.cancel()
+            mainScope.cancel()
+            rust.close()
+        }
     }
 
     companion object {

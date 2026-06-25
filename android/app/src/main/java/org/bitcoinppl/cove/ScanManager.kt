@@ -73,7 +73,7 @@ class ScanManager private constructor() {
 
                         app.walletManager?.let { wm ->
                             mainScope.launch {
-                                wm.rust.getTransactions()
+                                wm.refreshTransactions()
                             }
                         }
                     } catch (e: Exception) {
@@ -99,7 +99,7 @@ class ScanManager private constructor() {
     private fun importHotWallet(words: List<String>) {
         val manager = ImportWalletManager()
         try {
-            val walletMetadata = manager.rust.importWallet(listOf(words))
+            val walletMetadata = manager.importWallet(listOf(words))
             app.selectWalletOrThrow(walletMetadata.id)
         } catch (e: ImportWalletException.InvalidWordGroup) {
             Log.d(tag, "Invalid word group detected")
@@ -137,7 +137,7 @@ class ScanManager private constructor() {
 
                 if (app.walletManager?.id == id && app.walletManager?.walletMetadata?.walletType != WalletType.HOT) {
                     try {
-                        app.walletManager?.rust?.setWalletType(WalletType.COLD)
+                        app.walletManager?.setWalletType(WalletType.COLD)
                     } catch (e: Exception) {
                         Log.e(tag, "Failed to set wallet type to cold", e)
                     }

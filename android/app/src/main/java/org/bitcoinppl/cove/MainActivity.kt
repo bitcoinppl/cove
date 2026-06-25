@@ -416,7 +416,7 @@ class MainActivity : FragmentActivity() {
                             // non-blocking — initData preloads caches and prices but is not
                             // required for core functionality, failures are logged but not surfaced to the user
                             this@MainActivity.lifecycleScope.launch {
-                                appInstance.rust.initData()
+                                appInstance.initData()
                                 Log.d(TAG, "[STARTUP] initData completed")
                             }
                         }
@@ -889,7 +889,7 @@ private fun GlobalAlertDialog(
                         TextButton(onClick = {
                             onDismiss()
                             try {
-                                app.getWalletManager(walletId).rust.setWalletType(WalletType.COLD)
+                                app.getWalletManager(walletId).setWalletType(WalletType.COLD)
                             } catch (e: Exception) {
                                 Log.e("GlobalAlert", "Failed to set wallet type to cold", e)
                                 app.alertState =
@@ -1263,7 +1263,7 @@ private fun GlobalAlertDialog(
                     Column(horizontalAlignment = Alignment.End) {
                         TextButton(onClick = {
                             onDismiss()
-                            app.rust.deleteCorruptedWallet(state.walletId)
+                            app.deleteCorruptedWallet(state.walletId)
                         }) {
                             Text("Delete Wallet", color = MaterialTheme.colorScheme.error)
                         }

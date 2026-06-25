@@ -95,7 +95,7 @@ fun ChooseWalletTypeSheet(
                 scope.launch {
                     isProcessing = true
                     try {
-                        manager.rust.switchToDifferentWalletAddressType(foundAddress.type)
+                        manager.switchToDifferentWalletAddressType(foundAddress.type)
                         onDismiss()
                     } catch (e: Exception) {
                         Log.e(tag, "Failed to switch wallet address type", e)

@@ -94,7 +94,7 @@ fun AboutSettingsScreen(
     AboutSettingsContent(
         version = BuildConfig.VERSION_NAME,
         buildNumber = BuildConfig.VERSION_CODE.toString(),
-        gitCommit = app.rust.gitShortHash(),
+        gitCommit = app.gitShortHash,
         isBetaEnabled = isBetaEnabled,
         onBack = { app.popRoute() },
         onBuildNumberClick = {

@@ -132,7 +132,7 @@ fun TransactionDetailsScreen(
         if (!refreshOnAppear) return@LaunchedEffect
 
         try {
-            val freshDetails = manager.rust.transactionDetails(txId = txId)
+            val freshDetails = manager.transactionDetails(txId = txId)
             manager.updateTransactionDetailsCache(txId, freshDetails)
         } catch (e: CancellationException) {
             throw e
@@ -195,14 +195,14 @@ fun TransactionDetailsScreen(
                 ensureActive()
 
                 // refresh transaction details and update cache
-                val freshDetails = manager.rust.transactionDetails(txId = txId)
+                val freshDetails = manager.transactionDetails(txId = txId)
                 if (!isActive) break
                 manager.updateTransactionDetailsCache(txId, freshDetails)
 
                 // get confirmations from fresh details
                 val blockNumber = freshDetails.blockNumber()
                 if (blockNumber != null) {
-                    val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
+                    val confirmations = manager.numberOfConfirmations(blockHeight = blockNumber)
                     if (!isActive) break
                     numberOfConfirmations = confirmations.toInt()
 
@@ -367,13 +367,13 @@ fun TransactionDetailsScreen(
                 scope.launch {
                     isRefreshing = true
                     try {
-                        val freshDetails = manager.rust.transactionDetails(txId = txId)
+                        val freshDetails = manager.transactionDetails(txId = txId)
                         manager.updateTransactionDetailsCache(txId, freshDetails)
 
                         // also update confirmations
                         val blockNumber = freshDetails.blockNumber()
                         if (blockNumber != null) {
-                            val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
+                            val confirmations = manager.numberOfConfirmations(blockHeight = blockNumber)
                             numberOfConfirmations = confirmations.toInt()
                         }
                     } catch (e: CancellationException) {
