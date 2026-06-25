@@ -785,8 +785,6 @@ impl RustWalletManager {
         call!(self.actor.balance()).await.unwrap_or_default()
     }
 
-    /// Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
-    /// direct broadcast otherwise.
     #[uniffi::method]
     pub async fn unlocked_spendable_balance(&self) -> Result<Amount, Error> {
         let amount = call!(self.actor.unlocked_trusted_spendable_balance())

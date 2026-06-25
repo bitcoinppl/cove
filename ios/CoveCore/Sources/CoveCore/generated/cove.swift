@@ -9250,10 +9250,6 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func transactionLockState(txId: TxId) async throws  -> TransactionLockState
 
-    /**
-     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
-     * direct broadcast otherwise.
-     */
     func unlockedSpendableBalance() async throws  -> Amount
 
     func validateMetadata()
@@ -10265,10 +10261,6 @@ open func transactionLockState(txId: TxId)async throws  -> TransactionLockState 
         )
 }
 
-    /**
-     * Signs the PSBT and initiates payment: BIP77 PayJoin when an endpoint is provided,
-     * direct broadcast otherwise.
-     */
 open func unlockedSpendableBalance()async throws  -> Amount  {
     return
         try  await uniffiRustCallAsync(
@@ -40963,7 +40955,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state() != 22037) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_unlocked_spendable_balance() != 54797) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_unlocked_spendable_balance() != 11834) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 36684) {

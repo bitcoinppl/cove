@@ -1,6 +1,7 @@
 use act_zero::*;
 use bdk_wallet::chain::bitcoin::Psbt;
 use bitcoin::{Amount, FeeRate as BdkFeeRate, Transaction as BdkTransaction, params::Params};
+use eyre::Result;
 use payjoin::{
     PjParam, Uri, UriExt,
     persist::{NoopSessionPersister, OptionalTransitionOutcome},
@@ -22,12 +23,18 @@ use super::actor::WalletActor;
 // create_poll_request does not check session expiry, so this provides a client-side deadline
 const PAYJOIN_SESSION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
+const OHTTP_RELAYS: [&str; 3] =
+    ["https://relay.payjoin.org", "https://ohttp.achow101.com", "https://pj.bobspacebkk.com"];
+
+/// Opaque alias so `actor.rs` can name the initial sender state without importing payjoin internals
+pub(crate) type PayjoinSender = V2Sender<WithReplyKey>;
+
 // send a payjoin HTTP request via reqwest and return the response bytes
 async fn http_post(
     client: &reqwest::Client,
     req: payjoin::Request,
     timeout: Duration,
-) -> eyre::Result<Vec<u8>> {
+) -> Result<Vec<u8>> {
     Ok(client
         .post(&req.url)
         .header("Content-Type", req.content_type)
@@ -46,11 +53,7 @@ async fn http_post(
 
 // returns OHTTP relay URLs shuffled per call for resilience and privacy
 fn ohttp_relays() -> Vec<&'static str> {
-    let mut relays = vec![
-        "https://relay.payjoin.org",
-        "https://ohttp.achow101.com",
-        "https://pj.bobspacebkk.com",
-    ];
+    let mut relays = OHTTP_RELAYS.to_vec();
     relays.shuffle(&mut rand::rng());
     relays
 }
@@ -59,8 +62,8 @@ fn ohttp_relays() -> Vec<&'static str> {
 async fn try_ohttp_relays<C>(
     client: &reqwest::Client,
     timeout: Duration,
-    build_request: impl Fn(&str) -> eyre::Result<(payjoin::Request, C)>,
-) -> eyre::Result<(Vec<u8>, C)> {
+    build_request: impl Fn(&str) -> Result<(payjoin::Request, C)>,
+) -> Result<(Vec<u8>, C)> {
     let mut last_err = eyre::eyre!("no OHTTP relays configured");
     for relay in ohttp_relays() {
         let (req, ctx) = match build_request(relay) {
@@ -82,11 +85,8 @@ async fn try_ohttp_relays<C>(
     Err(last_err)
 }
 
-/// Opaque alias so `actor.rs` can name the initial sender state without importing payjoin internals
-pub(crate) type PayjoinSender = V2Sender<WithReplyKey>;
-
 // returns the index of the single external (recipient) output, or Err for batch/self-send PSBTs
-fn recipient_output_index(psbt: &Psbt) -> eyre::Result<usize> {
+fn recipient_output_index(psbt: &Psbt) -> Result<usize> {
     let external: Vec<_> = psbt
         .outputs
         .iter()
@@ -111,7 +111,7 @@ pub(crate) fn build_sender(
     fallback_tx: &BdkTransaction,
     endpoint: String,
     network: bitcoin::Network,
-) -> eyre::Result<PayjoinSender> {
+) -> Result<PayjoinSender> {
     // TODO: anti-probing (inputs_seen), verify our inputs have not appeared in a prior session
     // TODO: surface payjoin downgrade to the user when the fallback tx is broadcast instead of the proposal
 
@@ -150,8 +150,10 @@ pub(crate) fn build_sender(
         .ok()
         .and_then(|fee| {
             let wu = fallback_tx.weight().to_wu();
-            let sat_per_kwu = fee.to_sat() * 1000;
-            sat_per_kwu.checked_div(wu).map(BdkFeeRate::from_sat_per_kwu)
+            fee.to_sat()
+                .checked_mul(1000)
+                .and_then(|sat_per_kwu| sat_per_kwu.checked_div(wu))
+                .map(BdkFeeRate::from_sat_per_kwu)
         })
         .unwrap_or(BdkFeeRate::BROADCAST_MIN);
 
@@ -164,6 +166,62 @@ pub(crate) fn build_sender(
         .expect("NoopSessionPersister cannot fail");
 
     Ok(sender)
+}
+
+// polls the payjoin directory for a receiver proposal; called from begin_poll via send_fut_with
+async fn do_poll(addr: WeakAddr<PayjoinActor>, polling_sender: V2Sender<PollingForProposal>) {
+    let client = match cove_http::new_client() {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("payjoin poll: failed to create HTTP client: {e:?}");
+            send!(addr.complete_with_fallback_msg());
+            return;
+        }
+    };
+
+    // polls are long-polling: the directory holds the connection open until a
+    // proposal arrives or its own timeout fires, so allow slightly more than
+    // the server-side timeout to avoid racing it
+    let (poll_response, poll_ctx) =
+        match try_ohttp_relays(&client, Duration::from_secs(35), |relay| {
+            polling_sender.create_poll_request(relay).map_err(|e| eyre::eyre!("{e:?}"))
+        })
+        .await
+        {
+            Ok(pair) => pair,
+            Err(e) => {
+                warn!("payjoin poll: all relays failed, retrying: {e}");
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                send!(addr.begin_next_poll_msg());
+                return;
+            }
+        };
+
+    let persister = NoopSessionPersister::<PayjoinSessionEvent>::default();
+    match polling_sender.process_response(&poll_response, poll_ctx).save(&persister) {
+        Ok(OptionalTransitionOutcome::Progress(proposal_psbt)) => {
+            send!(addr.complete_with_success(proposal_psbt));
+        }
+        Ok(OptionalTransitionOutcome::Stasis(next)) => {
+            debug!("payjoin poll: no proposal yet, continuing");
+            send!(addr.update_polling_sender(next));
+        }
+        Err(e) => {
+            // WellKnown/Unrecognized mean the receiver explicitly rejected the session;
+            // the public API does not expose fatal/transient classification directly —
+            // other opaque response errors retry until the bounded session deadline fires
+            match e.api_error_ref() {
+                Some(ResponseError::WellKnown(_)) | Some(ResponseError::Unrecognized { .. }) => {
+                    warn!("payjoin poll: receiver rejected session: {e:?}");
+                    send!(addr.complete_with_fallback_msg());
+                }
+                _ => {
+                    warn!("payjoin poll: transient error, retrying: {e:?}");
+                    send!(addr.begin_next_poll_msg());
+                }
+            }
+        }
+    }
 }
 
 /// Tracks which phase of the BIP-77 v2 negotiation the actor is currently in
@@ -315,61 +373,7 @@ impl PayjoinActor {
             }
         };
 
-        self.addr.send_fut_with(|addr| async move {
-            let client = match cove_http::new_client() {
-                Ok(c) => c,
-                Err(e) => {
-                    warn!("payjoin poll: failed to create HTTP client: {e:?}");
-                    send!(addr.complete_with_fallback_msg());
-                    return;
-                }
-            };
-
-            // polls are long-polling: the directory holds the connection open until a
-            // proposal arrives or its own timeout fires, so allow slightly more than
-            // the server-side timeout to avoid racing it
-            let (poll_response, poll_ctx) =
-                match try_ohttp_relays(&client, Duration::from_secs(35), |relay| {
-                    polling_sender.create_poll_request(relay).map_err(|e| eyre::eyre!("{e:?}"))
-                })
-                .await
-                {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        warn!("payjoin poll: all relays failed, retrying: {e}");
-                        tokio::time::sleep(Duration::from_secs(2)).await;
-                        send!(addr.begin_next_poll_msg());
-                        return;
-                    }
-                };
-
-            let persister = NoopSessionPersister::<PayjoinSessionEvent>::default();
-            match polling_sender.process_response(&poll_response, poll_ctx).save(&persister) {
-                Ok(OptionalTransitionOutcome::Progress(proposal_psbt)) => {
-                    send!(addr.complete_with_success(proposal_psbt));
-                }
-                Ok(OptionalTransitionOutcome::Stasis(next)) => {
-                    debug!("payjoin poll: no proposal yet, continuing");
-                    send!(addr.update_polling_sender(next));
-                }
-                Err(e) => {
-                    // WellKnown/Unrecognized mean the receiver explicitly rejected the session;
-                    // the public API does not expose fatal/transient classification directly —
-                    // other opaque response errors retry until the bounded session deadline fires
-                    match e.api_error_ref() {
-                        Some(ResponseError::WellKnown(_))
-                        | Some(ResponseError::Unrecognized { .. }) => {
-                            warn!("payjoin poll: receiver rejected session: {e:?}");
-                            send!(addr.complete_with_fallback_msg());
-                        }
-                        _ => {
-                            warn!("payjoin poll: transient error, retrying: {e:?}");
-                            send!(addr.begin_next_poll_msg());
-                        }
-                    }
-                }
-            }
-        });
+        self.addr.send_fut_with(|addr| do_poll(addr, polling_sender));
 
         Produces::ok(())
     }
