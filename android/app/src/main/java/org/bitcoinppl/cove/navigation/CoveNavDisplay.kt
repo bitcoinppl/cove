@@ -64,9 +64,8 @@ fun CoveNavDisplay(
         backStack = backStack,
         onBack = {
             // directly modify backStack for predictive back support
-            if (backStack.size > 1) {
+            if (backStack.size > 1 && app.popRoute()) {
                 backStack.removeAt(backStack.lastIndex)
-                app.popRoute()
             }
         },
         modifier = modifier,

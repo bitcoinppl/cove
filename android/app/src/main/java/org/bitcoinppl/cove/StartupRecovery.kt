@@ -52,6 +52,23 @@ internal fun hasPersistedOnboardingProgress(
     persistedProgress: String?,
 ): Boolean = !persistedProgress.isNullOrBlank()
 
+internal fun resolveEffectiveOnboardingProgress(
+    freshProgress: Result<String?>,
+    previousProgress: String?,
+): String? {
+    // keep last known progress when a transient read failure would otherwise drop onboarding state
+    return freshProgress.getOrElse { previousProgress }
+}
+
+internal fun hasRecoveredOnboardingProgressAfterReadFailure(
+    freshProgress: Result<String?>,
+    previousProgress: String?,
+    previousReadFailed: Boolean,
+): Boolean =
+    previousReadFailed &&
+        !hasPersistedOnboardingProgress(previousProgress) &&
+        hasPersistedOnboardingProgress(freshProgress.getOrNull())
+
 internal fun resolveStartupMode(
     termsAccepted: Boolean,
     hasWallets: Boolean,
@@ -65,4 +82,30 @@ internal fun resolveStartupMode(
     } else {
         StartupMode.READY
     }
+}
+
+internal fun resolveStartupModeTransition(
+    currentMode: StartupMode,
+    termsAccepted: Boolean,
+    hasWallets: Boolean,
+    cloudBackupLifecycle: CloudBackupLifecycle,
+    hasPersistedOnboardingProgress: Boolean,
+    hasRecoveredOnboardingProgressAfterReadFailure: Boolean,
+): StartupMode {
+    // after startup reaches ready, deleting the last wallet should not restart onboarding
+    // skip this shortcut when recovered progress proves an earlier failed read hid onboarding state
+    if (
+        currentMode == StartupMode.READY &&
+        termsAccepted &&
+        !hasRecoveredOnboardingProgressAfterReadFailure
+    ) {
+        return StartupMode.READY
+    }
+
+    return resolveStartupMode(
+        termsAccepted = termsAccepted,
+        hasWallets = hasWallets,
+        cloudBackupLifecycle = cloudBackupLifecycle,
+        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress,
+    )
 }
