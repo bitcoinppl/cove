@@ -25,7 +25,7 @@ use cloud_backup::{
     CloudBackupStateTable, CloudBlobSyncStateTable, ensure_table_type_compatibility,
 };
 use global_cache::GlobalCacheTable;
-use global_config::GlobalConfigTable;
+use global_config::{GlobalConfigKey, GlobalConfigTable};
 use global_flag::GlobalFlagTable;
 use historical_price::HistoricalPriceTable;
 use uniffi::custom_newtype;
@@ -164,7 +164,23 @@ impl Database {
             }
         };
 
-        self.global_flag.backfill_onboarding_complete_from_legacy_state(has_any_wallets);
+        let has_persisted_onboarding_progress = match self
+            .global_config
+            .get(GlobalConfigKey::OnboardingProgress)
+        {
+            Ok(progress) => progress.is_some(),
+            Err(error) => {
+                warn!(
+                    "failed to inspect onboarding progress while backfilling onboarding flag: {error}"
+                );
+                return;
+            }
+        };
+
+        self.global_flag.backfill_onboarding_complete_from_legacy_state(
+            has_any_wallets,
+            has_persisted_onboarding_progress,
+        );
     }
 }
 

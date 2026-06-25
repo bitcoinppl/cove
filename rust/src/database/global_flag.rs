@@ -77,15 +77,25 @@ mod tests {
     fn legacy_backfill_requires_accepted_terms_and_wallets() {
         let (_tmp, table) = test_table();
 
-        table.backfill_onboarding_complete_from_legacy_state(true);
+        table.backfill_onboarding_complete_from_legacy_state(true, false);
         assert!(!table.is_onboarding_complete());
 
         write_legacy_accepted_terms(&table, true);
-        table.backfill_onboarding_complete_from_legacy_state(false);
+        table.backfill_onboarding_complete_from_legacy_state(false, false);
         assert!(!table.is_onboarding_complete());
 
-        table.backfill_onboarding_complete_from_legacy_state(true);
+        table.backfill_onboarding_complete_from_legacy_state(true, false);
         assert!(table.is_onboarding_complete());
+    }
+
+    #[test]
+    fn legacy_backfill_skips_persisted_onboarding_progress() {
+        let (_tmp, table) = test_table();
+
+        write_legacy_accepted_terms(&table, true);
+        table.backfill_onboarding_complete_from_legacy_state(true, true);
+
+        assert!(!table.is_onboarding_complete());
     }
 }
 
@@ -170,8 +180,16 @@ impl GlobalFlagTable {
         self.set_inner(GlobalFlagKey::CompletedOnboarding, true, true)
     }
 
-    pub(crate) fn backfill_onboarding_complete_from_legacy_state(&self, has_any_wallets: bool) {
-        if self.is_onboarding_complete() || !self.is_legacy_terms_accepted() || !has_any_wallets {
+    pub(crate) fn backfill_onboarding_complete_from_legacy_state(
+        &self,
+        has_any_wallets: bool,
+        has_persisted_onboarding_progress: bool,
+    ) {
+        if self.is_onboarding_complete()
+            || !has_any_wallets
+            || has_persisted_onboarding_progress
+            || !self.is_legacy_terms_accepted()
+        {
             return;
         }
 
