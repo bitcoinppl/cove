@@ -216,6 +216,9 @@
     <string name="node_error_url_empty">URL cannot be empty</string>
     <string name="node_error_parse_title">Unable to parse URL</string>
     <string name="content_description_back">Back</string>
+    <string name="content_description_menu">Menu</string>
+    <string name="content_description_qr_code">QR Code</string>
+    <string name="content_description_more">More</string>
     <string name="content_description_selected">Selected</string>
 
     <!-- More Options Menu -->

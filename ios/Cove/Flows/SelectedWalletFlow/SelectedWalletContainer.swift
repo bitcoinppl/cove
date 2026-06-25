@@ -224,7 +224,7 @@ private struct WalletBalanceLoadingHeaderView: View {
     let metadata: WalletMetadata
 
     private var balancePresentation: BalancePresentation {
-        BalancePresentation(primaryOpacity: 0.48, secondaryOpacity: 0.42, pendingOpacity: 0.38)
+        balancePresentationProvisional()
     }
 
     private var eyeIcon: String {
@@ -270,8 +270,11 @@ private struct WalletBalanceLoadingHeaderView: View {
             }
 
             HStack(spacing: 16) {
-                LoadingHeaderButton(title: "Send", systemImage: "arrow.up.right")
-                LoadingHeaderButton(title: "Receive", systemImage: "arrow.down.left")
+                LoadingHeaderButton(title: String(localized: "Send"), systemImage: "arrow.up.right")
+                LoadingHeaderButton(
+                    title: String(localized: "Receive"),
+                    systemImage: "arrow.down.left"
+                )
             }
         }
         .padding()

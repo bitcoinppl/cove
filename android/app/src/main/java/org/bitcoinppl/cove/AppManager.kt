@@ -186,9 +186,7 @@ class AppManager private constructor() : FfiReconcile {
 
             // selecting a different wallet is the boundary for ending in-flight scans
             Log.d(tag, "closing old wallet manager for ${it.id}")
-            it.close()
-            walletManager = null
-            clearSendFlowManager()
+            clearWalletManager()
         }
 
         Log.d(tag, "did not find wallet manager for $id, creating new: ${walletManager?.id}")
@@ -273,6 +271,8 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun clearWalletManager() {
+        clearWalletScopedChildManagers()
+
         try {
             walletManager?.close()
         } catch (e: Exception) {
@@ -291,6 +291,11 @@ class AppManager private constructor() : FfiReconcile {
         }
     }
 
+    private fun clearWalletScopedChildManagers() {
+        clearSendFlowManager()
+        clearActiveCoinControlManager()
+    }
+
     private fun clearSendFlowManager() {
         try {
             sendFlowManager?.close()
@@ -298,6 +303,15 @@ class AppManager private constructor() : FfiReconcile {
             Log.w(tag, "Error closing SendFlowManager: ${e.message}")
         }
         sendFlowManager = null
+    }
+
+    private fun clearActiveCoinControlManager() {
+        try {
+            coinControlManager?.close()
+        } catch (e: Exception) {
+            Log.w(tag, "Error closing CoinControlManager: ${e.message}")
+        }
+        coinControlManager = null
     }
 
     private fun clearInactiveSendFlowManager() {
@@ -351,15 +365,12 @@ class AppManager private constructor() : FfiReconcile {
         advanceNavigationGeneration(skipSettle = true)
 
         // close managers before clearing them
-        walletManager?.close()
-        sendFlowManager?.close()
-        coinControlManager?.close()
+        clearWalletManager()
 
         database = Database()
-        needsOnboarding = rust.needsOnboarding()
-        walletManager = null
-        sendFlowManager = null
-        coinControlManager = null
+        needsOnboarding = withRustOr(needsOnboarding) {
+            needsOnboarding()
+        }
 
         withRustOr(null) {
             state()

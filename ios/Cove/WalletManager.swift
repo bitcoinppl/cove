@@ -95,10 +95,27 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     /// scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String?
 
+    private static func initialStateOrShutdown(_ rust: RustWalletManager) throws -> WalletInitialState {
+        do {
+            return try rust.initialState()
+        } catch {
+            rust.shutdown()
+            throw error
+        }
+    }
+
+    private static func previewInitialState(_ rust: RustWalletManager) -> WalletInitialState {
+        do {
+            return try rust.initialState()
+        } catch {
+            preconditionFailure("Preview wallet initial state failed: \(error.localizedDescription)")
+        }
+    }
+
     init(id: WalletId) throws {
         self.id = id
         let rust = try RustWalletManager(id: id)
-        let initialState = rust.initialState()
+        let initialState = try Self.initialStateOrShutdown(rust)
 
         self.rust = rust
         self.loadState = initialState.loadState
@@ -138,7 +155,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
 
     init(xpub: String) throws {
         let rust = try RustWalletManager.tryNewFromXpub(xpub: xpub)
-        let initialState = rust.initialState()
+        let initialState = try Self.initialStateOrShutdown(rust)
 
         self.rust = rust
         self.loadState = initialState.loadState
@@ -165,7 +182,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             backup: backup,
             birthday: birthday
         )
-        let initialState = rust.initialState()
+        let initialState = try Self.initialStateOrShutdown(rust)
 
         self.rust = rust
         self.loadState = initialState.loadState
@@ -448,7 +465,14 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             withAnimation { self.balance = balance }
 
         case .unsignedTransactionsChanged:
-            self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
+            do {
+                self.unsignedTransactions = try rust.getUnsignedTransactions()
+            } catch {
+                logger.error(
+                    "Unable to refresh unsigned transactions: \(error.localizedDescription)"
+                )
+                self.unsignedTransactions = []
+            }
 
         case let .walletMetadataChanged(metadata):
             withAnimation { self.walletMetadata = metadata }
@@ -576,7 +600,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             }
 
         self.rust = rust
-        let initialState = rust.initialState()
+        let initialState = Self.previewInitialState(rust)
         self.loadState = initialState.loadState
         self.scanStatus = initialState.scanStatus
         self.ledgerState = initialState.ledgerState

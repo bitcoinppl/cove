@@ -55,7 +55,6 @@ import org.bitcoinppl.cove.wallet.rememberWalletExportLaunchers
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove_core.AppAlertState
-import org.bitcoinppl.cove_core.BalancePresentation
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.DiscoveryState
 import org.bitcoinppl.cove_core.FoundAddress
@@ -66,6 +65,7 @@ import org.bitcoinppl.cove_core.WalletLoadState
 import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletType
+import org.bitcoinppl.cove_core.balancePresentationProvisional
 import org.bitcoinppl.cove_core.types.WalletId
 
 // delay to allow UI to settle before updating balance
@@ -362,9 +362,9 @@ private fun SelectedWalletLoadingScreen(
                                 },
                             contentDescription =
                                 if (canGoBack) {
-                                    "Back"
+                                    stringResource(R.string.content_description_back)
                                 } else {
-                                    "Menu"
+                                    stringResource(R.string.content_description_menu)
                                 },
                         )
                     }
@@ -377,7 +377,7 @@ private fun SelectedWalletLoadingScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.QrCode2,
-                                contentDescription = "QR Code",
+                                contentDescription = stringResource(R.string.content_description_qr_code),
                             )
                         }
 
@@ -388,7 +388,7 @@ private fun SelectedWalletLoadingScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.MoreVert,
-                                contentDescription = "More",
+                                contentDescription = stringResource(R.string.content_description_more),
                             )
                         }
                     }
@@ -407,12 +407,7 @@ private fun SelectedWalletLoadingScreen(
                 primaryAmount = null,
                 secondaryAmount = null,
                 pendingAmount = null,
-                balancePresentation =
-                    BalancePresentation(
-                        primaryOpacity = 0.48,
-                        secondaryOpacity = 0.42,
-                        pendingOpacity = 0.38,
-                    ),
+                balancePresentation = balancePresentationProvisional(),
                 onToggleUnit = {},
                 onToggleSensitive = {},
                 onSend = {},
