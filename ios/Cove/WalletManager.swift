@@ -465,9 +465,9 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         case let .walletError(error):
             self.logger.error("WalletError \(error)")
 
-        case let .unknownError(error):
+        case .unknownError:
             // TODO: show to user
-            self.logger.error("Unknown error \(error)")
+            self.logger.error("Unknown wallet actor error")
 
         case let .sendFlowError(error):
             self.sendFlowErrorAlert = TaggedItem(error)

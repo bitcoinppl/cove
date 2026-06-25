@@ -260,8 +260,6 @@ extension SendFlowError {
             String(localized: "Unable to Get Max Send")
         case .UnableToSaveUnsignedTransaction:
             String(localized: "Unable to Save Unsigned Transaction")
-        case .WalletManager(.LockedOutputsSelected):
-            String(localized: "Insufficient Funds")
         case .WalletManager:
             String(localized: "Error")
         case .UnableToGetFeeDetails:
@@ -289,8 +287,6 @@ extension SendFlowError {
             String(localized: "Send amount is too low. Please send at least 5000 sats.")
         case .UnableToGetFeeRate:
             String(localized: "Check your internet connection and try again.")
-        case .WalletManager(.LockedOutputsSelected):
-            String(localized: "Selected coins include locked coins. Unlock them or choose different coins.")
         case .WalletManager:
             String(localized: "Unable to complete the wallet operation. Please try again.")
         case .UnableToGetFeeDetails:

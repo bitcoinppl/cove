@@ -85,7 +85,7 @@ pub enum WalletManagerReconcileMessage {
     WalletBalanceChanged(Arc<Balance>),
 
     WalletError(WalletManagerError),
-    UnknownError(String),
+    UnknownError,
 
     WalletScannerResponse(ScannerResponse),
     UnsignedTransactionsChanged,

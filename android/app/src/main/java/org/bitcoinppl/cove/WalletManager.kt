@@ -744,7 +744,7 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.UnknownError -> {
-                logError("Unknown error: ${message.v1}")
+                logError("Unknown wallet actor error")
             }
 
             is WalletManagerReconcileMessage.SendFlowException -> {

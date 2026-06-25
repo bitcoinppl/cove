@@ -16,7 +16,6 @@ import org.bitcoinppl.cove_core.ScanProgress
 import org.bitcoinppl.cove_core.SendFlowAlertState
 import org.bitcoinppl.cove_core.SendFlowException
 import org.bitcoinppl.cove_core.WalletAddressType
-import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletSecretType
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.types.Network
@@ -206,11 +205,7 @@ fun SendFlowException.localizedTitle(): UiText =
         is SendFlowException.UnableToBuildTxn -> UiText.resource(R.string.send_alert_unable_build_transaction)
         is SendFlowException.UnableToGetMaxSend -> UiText.resource(R.string.send_alert_unable_get_max_send)
         is SendFlowException.UnableToSaveUnsignedTransaction -> UiText.resource(R.string.send_alert_unable_save_unsigned_transaction)
-        is SendFlowException.WalletManager ->
-            when (v1) {
-                is WalletManagerException.LockedOutputsSelected -> UiText.resource(R.string.send_alert_insufficient_funds)
-                else -> UiText.resource(R.string.send_alert_error)
-            }
+        is SendFlowException.WalletManager -> UiText.resource(R.string.send_alert_error)
         is SendFlowException.UnableToGetFeeDetails -> UiText.resource(R.string.send_alert_fee_details_error)
     }
 
@@ -230,11 +225,7 @@ fun SendFlowException.localizedMessage(): UiText =
         is SendFlowException.InsufficientFunds -> UiText.resource(R.string.send_message_insufficient_funds)
         is SendFlowException.SendAmountToLow -> UiText.resource(R.string.send_message_amount_too_low)
         is SendFlowException.UnableToGetFeeRate -> UiText.resource(R.string.send_message_get_fee_rate)
-        is SendFlowException.WalletManager ->
-            when (v1) {
-                is WalletManagerException.LockedOutputsSelected -> UiText.resource(R.string.send_message_locked_outputs_selected)
-                else -> UiText.resource(R.string.send_message_wallet_manager)
-            }
+        is SendFlowException.WalletManager -> UiText.resource(R.string.send_message_wallet_manager)
         is SendFlowException.UnableToGetFeeDetails -> UiText.resource(R.string.send_message_fee_details)
         is SendFlowException.UnableToBuildTxn -> UiText.resource(R.string.send_message_build_transaction)
         is SendFlowException.UnableToGetMaxSend -> UiText.resource(R.string.send_message_get_max_send)

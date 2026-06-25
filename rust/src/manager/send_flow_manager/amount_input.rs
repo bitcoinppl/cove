@@ -4,7 +4,6 @@ use crate::{fiat::client::PriceResponse, transaction::FeeRate, wallet::Address};
 use act_zero::call;
 use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee, psbt::Psbt, unit::BitcoinUnit};
 use cove_util::format::NumberFormatter as _;
-use cove_util::result_ext::ResultExt as _;
 use tracing::{debug, trace, warn};
 
 use super::{
@@ -310,7 +309,7 @@ impl RustSendFlowManager {
         match self.select_max_send().await {
             Ok(()) => {}
             Err(error) => {
-                let error = SendFlowError::UnableToGetMaxSend(error.to_string());
+                let error = SendFlowError::unable_to_get_max_send(error);
                 self.reconciler.send(Message::SetAlert(error.into()));
             }
         }
@@ -363,7 +362,7 @@ impl RustSendFlowManager {
         let psbt: Psbt = call!(wallet_actor.build_ephemeral_drain_tx(address, fee_rate))
             .await
             .unwrap()
-            .map_err_str(Error::UnableToGetMaxSend)?
+            .map_err(Error::unable_to_get_max_send)?
             .into();
 
         let total = Arc::new(psbt.output_total_amount());

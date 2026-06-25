@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use act_zero::call;
 use cove_common::consts::MIN_SEND_SATS;
-use cove_util::result_ext::ResultExt as _;
 use tracing::debug;
 
 use crate::{fee_client::FEE_CLIENT, transaction::FeeRate, wallet::Address};
@@ -47,7 +46,7 @@ impl RustSendFlowManager {
         let fee_rate = Arc::unwrap_or_clone(fee_rate);
         let psbt = self.build_psbt(None, None, fee_rate).await?;
 
-        let total_fee = psbt.fee().map_err_str(Error::UnableToGetFeeDetails)?;
+        let total_fee = psbt.fee().map_err(Error::unable_to_get_fee_details)?;
 
         let fee_rate_option =
             FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee: Some(total_fee) };
@@ -231,14 +230,14 @@ impl RustSendFlowManager {
         let psbt = self
             .build_psbt(Some(address), Some(amount), selected_fee_rate.fee_rate)
             .await
-            .map_err_str(Error::UnableToGetFeeDetails);
+            .map_err(Error::unable_to_get_fee_details);
 
-        let total_fee = psbt.and_then(|psbt| psbt.fee().map_err_str(Error::UnableToGetFeeDetails));
+        let total_fee = psbt.and_then(|psbt| psbt.fee().map_err(Error::unable_to_get_fee_details));
 
         let total_fee = match total_fee {
             Ok(total_fee) => total_fee,
             Err(error) => {
-                let error = SendFlowError::UnableToGetMaxSend(error.to_string());
+                let error = SendFlowError::unable_to_get_max_send(error);
                 self.reconciler.send_async(Message::SetAlert(error.into())).await;
                 return None;
             }

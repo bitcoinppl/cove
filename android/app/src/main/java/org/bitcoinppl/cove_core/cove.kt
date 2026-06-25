@@ -47230,11 +47230,9 @@ sealed class SendFlowException: kotlin.Exception() {
     }
 
     class UnableToGetMaxSend(
-
-        val v1: kotlin.String
         ) : SendFlowException() {
         override val message
-            get() = "v1=${ v1 }"
+            get() = ""
     }
 
     class InsufficientFunds(
@@ -47256,35 +47254,27 @@ sealed class SendFlowException: kotlin.Exception() {
     }
 
     class UnableToBuildTxn(
-
-        val v1: kotlin.String
         ) : SendFlowException() {
         override val message
-            get() = "v1=${ v1 }"
+            get() = ""
     }
 
     class UnableToSaveUnsignedTransaction(
-
-        val v1: kotlin.String
         ) : SendFlowException() {
         override val message
-            get() = "v1=${ v1 }"
+            get() = ""
     }
 
     class WalletManager(
-
-        val v1: WalletManagerException
         ) : SendFlowException() {
         override val message
-            get() = "v1=${ v1 }"
+            get() = ""
     }
 
     class UnableToGetFeeDetails(
-
-        val v1: kotlin.String
         ) : SendFlowException() {
         override val message
-            get() = "v1=${ v1 }"
+            get() = ""
     }
 
 
@@ -47327,24 +47317,14 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
                 )
             5 -> SendFlowException.NoBalance()
             6 -> SendFlowException.ZeroAmount()
-            7 -> SendFlowException.UnableToGetMaxSend(
-                FfiConverterString.read(buf),
-                )
+            7 -> SendFlowException.UnableToGetMaxSend()
             8 -> SendFlowException.InsufficientFunds()
             9 -> SendFlowException.SendAmountToLow()
             10 -> SendFlowException.UnableToGetFeeRate()
-            11 -> SendFlowException.UnableToBuildTxn(
-                FfiConverterString.read(buf),
-                )
-            12 -> SendFlowException.UnableToSaveUnsignedTransaction(
-                FfiConverterString.read(buf),
-                )
-            13 -> SendFlowException.WalletManager(
-                FfiConverterTypeWalletManagerError.read(buf),
-                )
-            14 -> SendFlowException.UnableToGetFeeDetails(
-                FfiConverterString.read(buf),
-                )
+            11 -> SendFlowException.UnableToBuildTxn()
+            12 -> SendFlowException.UnableToSaveUnsignedTransaction()
+            13 -> SendFlowException.WalletManager()
+            14 -> SendFlowException.UnableToGetFeeDetails()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -47382,7 +47362,6 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
             is SendFlowException.UnableToGetMaxSend -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
             )
             is SendFlowException.InsufficientFunds -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -47399,22 +47378,18 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
             is SendFlowException.UnableToBuildTxn -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
             )
             is SendFlowException.UnableToSaveUnsignedTransaction -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
             )
             is SendFlowException.WalletManager -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterTypeWalletManagerError.allocationSize(value.v1)
             )
             is SendFlowException.UnableToGetFeeDetails -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
             )
         }
     }
@@ -47451,7 +47426,6 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
             }
             is SendFlowException.UnableToGetMaxSend -> {
                 buf.putInt(7)
-                FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is SendFlowException.InsufficientFunds -> {
@@ -47468,22 +47442,18 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
             }
             is SendFlowException.UnableToBuildTxn -> {
                 buf.putInt(11)
-                FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is SendFlowException.UnableToSaveUnsignedTransaction -> {
                 buf.putInt(12)
-                FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is SendFlowException.WalletManager -> {
                 buf.putInt(13)
-                FfiConverterTypeWalletManagerError.write(value.v1, buf)
                 Unit
             }
             is SendFlowException.UnableToGetFeeDetails -> {
                 buf.putInt(14)
-                FfiConverterString.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -54401,14 +54371,8 @@ sealed class WalletManagerReconcileMessage: Disposable  {
         companion object
     }
 
-    data class UnknownError(
-        val v1: kotlin.String) : WalletManagerReconcileMessage()
+    object UnknownError : WalletManagerReconcileMessage()
 
-    {
-
-
-        companion object
-    }
 
     data class WalletScannerResponse(
         val v1: org.bitcoinppl.cove_core.ScannerResponse) : WalletManagerReconcileMessage()
@@ -54566,12 +54530,7 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     )
 
             }
-            is WalletManagerReconcileMessage.UnknownError -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
+            is WalletManagerReconcileMessage.UnknownError -> {// Nothing to destroy
             }
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
 
@@ -54679,9 +54638,7 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             12 -> WalletManagerReconcileMessage.WalletException(
                 FfiConverterTypeWalletManagerError.read(buf),
                 )
-            13 -> WalletManagerReconcileMessage.UnknownError(
-                FfiConverterString.read(buf),
-                )
+            13 -> WalletManagerReconcileMessage.UnknownError
             14 -> WalletManagerReconcileMessage.WalletScannerResponse(
                 FfiConverterTypeScannerResponse.read(buf),
                 )
@@ -54798,7 +54755,6 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
             )
         }
         is WalletManagerReconcileMessage.WalletScannerResponse -> {
@@ -54933,7 +54889,6 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             }
             is WalletManagerReconcileMessage.UnknownError -> {
                 buf.putInt(13)
-                FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.WalletScannerResponse -> {

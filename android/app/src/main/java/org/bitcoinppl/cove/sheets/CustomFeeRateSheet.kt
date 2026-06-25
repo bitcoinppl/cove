@@ -146,7 +146,7 @@ fun CustomFeeRateSheet(
                             updatedFeeOptions = updatedFeeOptions.addCustomFeeRate(feeRateOption)
                             presenter.lastWorkingFeeRate = feeRate
                         }
-                    } catch (e: SendFlowException.WalletManager) {
+                    } catch (e: SendFlowException.InsufficientFunds) {
                         // handle insufficient funds - set max fee rate
                         withContext(Dispatchers.Main) {
                             presenter.erroredFeeRate = feeRate

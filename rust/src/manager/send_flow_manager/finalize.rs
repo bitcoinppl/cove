@@ -64,7 +64,7 @@ impl RustSendFlowManager {
             let details = match confirm_details {
                 Ok(details) => details,
                 Err(error) => {
-                    let error = SendFlowError::UnableToBuildTxn(error.to_string());
+                    let error = SendFlowError::unable_to_build_txn(error);
                     return me.send_alert_async(error).await;
                 }
             };
@@ -75,7 +75,7 @@ impl RustSendFlowManager {
             if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly)
                 && let Err(e) = manager.save_unsigned_transaction(details.clone())
             {
-                let error = SendFlowError::UnableToSaveUnsignedTransaction(e.to_string());
+                let error = SendFlowError::unable_to_save_unsigned_transaction(e);
                 me.send_alert_async(error).await;
             }
 
@@ -89,7 +89,7 @@ impl RustSendFlowManager {
                 }
                 WalletType::WatchOnly => {
                     return me
-                        .send_alert_async(SendFlowError::UnableToBuildTxn("watch only".to_string()))
+                        .send_alert_async(SendFlowError::unable_to_build_txn("watch only"))
                         .await;
                 }
             };

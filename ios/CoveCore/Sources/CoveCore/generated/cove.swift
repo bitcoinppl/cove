@@ -30678,19 +30678,14 @@ enum SendFlowError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     )
     case NoBalance
     case ZeroAmount
-    case UnableToGetMaxSend(String
-    )
+    case UnableToGetMaxSend
     case InsufficientFunds
     case SendAmountToLow
     case UnableToGetFeeRate
-    case UnableToBuildTxn(String
-    )
-    case UnableToSaveUnsignedTransaction(String
-    )
-    case WalletManager(WalletManagerError
-    )
-    case UnableToGetFeeDetails(String
-    )
+    case UnableToBuildTxn
+    case UnableToSaveUnsignedTransaction
+    case WalletManager
+    case UnableToGetFeeDetails
 
 
 
@@ -30743,24 +30738,14 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             )
         case 5: return .NoBalance
         case 6: return .ZeroAmount
-        case 7: return .UnableToGetMaxSend(
-            try FfiConverterString.read(from: &buf)
-            )
+        case 7: return .UnableToGetMaxSend
         case 8: return .InsufficientFunds
         case 9: return .SendAmountToLow
         case 10: return .UnableToGetFeeRate
-        case 11: return .UnableToBuildTxn(
-            try FfiConverterString.read(from: &buf)
-            )
-        case 12: return .UnableToSaveUnsignedTransaction(
-            try FfiConverterString.read(from: &buf)
-            )
-        case 13: return .WalletManager(
-            try FfiConverterTypeWalletManagerError.read(from: &buf)
-            )
-        case 14: return .UnableToGetFeeDetails(
-            try FfiConverterString.read(from: &buf)
-            )
+        case 11: return .UnableToBuildTxn
+        case 12: return .UnableToSaveUnsignedTransaction
+        case 13: return .WalletManager
+        case 14: return .UnableToGetFeeDetails
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -30801,9 +30786,8 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
 
 
-        case let .UnableToGetMaxSend(v1):
+        case .UnableToGetMaxSend:
             writeInt(&buf, Int32(7))
-            FfiConverterString.write(v1, into: &buf)
 
 
         case .InsufficientFunds:
@@ -30818,24 +30802,20 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(10))
 
 
-        case let .UnableToBuildTxn(v1):
+        case .UnableToBuildTxn:
             writeInt(&buf, Int32(11))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .UnableToSaveUnsignedTransaction(v1):
+        case .UnableToSaveUnsignedTransaction:
             writeInt(&buf, Int32(12))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .WalletManager(v1):
+        case .WalletManager:
             writeInt(&buf, Int32(13))
-            FfiConverterTypeWalletManagerError.write(v1, into: &buf)
 
 
-        case let .UnableToGetFeeDetails(v1):
+        case .UnableToGetFeeDetails:
             writeInt(&buf, Int32(14))
-            FfiConverterString.write(v1, into: &buf)
 
         }
     }
@@ -35496,8 +35476,7 @@ public enum WalletManagerReconcileMessage {
     )
     case walletError(WalletManagerError
     )
-    case unknownError(String
-    )
+    case unknownError
     case walletScannerResponse(ScannerResponse
     )
     case unsignedTransactionsChanged
@@ -35571,8 +35550,7 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case 12: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
         )
 
-        case 13: return .unknownError(try FfiConverterString.read(from: &buf)
-        )
+        case 13: return .unknownError
 
         case 14: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
         )
@@ -35668,9 +35646,8 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
             FfiConverterTypeWalletManagerError.write(v1, into: &buf)
 
 
-        case let .unknownError(v1):
+        case .unknownError:
             writeInt(&buf, Int32(13))
-            FfiConverterString.write(v1, into: &buf)
 
 
         case let .walletScannerResponse(v1):

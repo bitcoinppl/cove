@@ -115,7 +115,8 @@ impl Actor for WalletActor {
 
         // an error occurred, that wasn't a wallet error, send unknown error
         let Some(error) = error.downcast::<Error>().ok().map(|e| *e) else {
-            self.send(WalletManagerReconcileMessage::UnknownError(error_string));
+            warn!("Unknown wallet actor error: {error_string}");
+            self.send(WalletManagerReconcileMessage::UnknownError);
             return false;
         };
 
