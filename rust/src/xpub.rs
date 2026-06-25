@@ -24,10 +24,6 @@ pub enum XpubError {
     #[error("Invalid JSON {0}")]
     InvalidJson(String),
 
-    /// Retained for UniFFI compatibility with clients that may still match this error
-    #[error("Invalid descriptor in JSON")]
-    InvalidDescriptorInJson,
-
     #[error("JSON has no descriptor")]
     JsonNoDecriptor,
 
