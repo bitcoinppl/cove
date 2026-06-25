@@ -119,6 +119,25 @@ impl GlobalFlagTable {
         self.set_inner(key, value, true)
     }
 
+    pub fn get_bool_config(&self, key: GlobalFlagKey) -> bool {
+        self.get(key).unwrap_or(false)
+    }
+
+    pub fn set_bool_config(&self, key: GlobalFlagKey, value: bool) -> Result<(), Error> {
+        self.set(key, value)
+    }
+
+    pub fn toggle_bool_config(&self, key: GlobalFlagKey) -> Result<(), Error> {
+        let value = self.get(key)?;
+
+        let new_value = !value;
+        self.set(key, new_value)?;
+
+        Ok(())
+    }
+}
+
+impl GlobalFlagTable {
     fn set_inner(&self, key: GlobalFlagKey, value: bool, notify: bool) -> Result<(), Error> {
         debug!("setting global flag: {key:?} to {value}");
         let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
@@ -139,25 +158,6 @@ impl GlobalFlagTable {
         Ok(())
     }
 
-    pub fn get_bool_config(&self, key: GlobalFlagKey) -> bool {
-        self.get(key).unwrap_or(false)
-    }
-
-    pub fn set_bool_config(&self, key: GlobalFlagKey, value: bool) -> Result<(), Error> {
-        self.set(key, value)
-    }
-
-    pub fn toggle_bool_config(&self, key: GlobalFlagKey) -> Result<(), Error> {
-        let value = self.get(key)?;
-
-        let new_value = !value;
-        self.set(key, new_value)?;
-
-        Ok(())
-    }
-}
-
-impl GlobalFlagTable {
     pub(crate) fn is_onboarding_complete(&self) -> bool {
         self.get_bool_config(GlobalFlagKey::CompletedOnboarding)
     }

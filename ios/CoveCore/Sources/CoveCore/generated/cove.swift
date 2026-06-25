@@ -4537,8 +4537,6 @@ public protocol GlobalFlagTableProtocol: AnyObject, Sendable {
 
     func setBoolConfig(key: GlobalFlagKey, value: Bool) throws
 
-    func setInner(key: GlobalFlagKey, value: Bool, notify: Bool) throws
-
     func toggleBoolConfig(key: GlobalFlagKey) throws
 
 }
@@ -4631,17 +4629,6 @@ open func setBoolConfig(key: GlobalFlagKey, value: Bool)throws   {try rustCallWi
             self.uniffiCloneHandle(),
         FfiConverterTypeGlobalFlagKey_lower(key),
         FfiConverterBool.lower(value),uniffiCallStatus
-    )
-}
-}
-
-open func setInner(key: GlobalFlagKey, value: Bool, notify: Bool)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_globalflagtable_set_inner(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeGlobalFlagKey_lower(key),
-        FfiConverterBool.lower(value),
-        FfiConverterBool.lower(notify),uniffiCallStatus
     )
 }
 }
@@ -40651,9 +40638,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalflagtable_set_bool_config() != 64063) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_globalflagtable_set_inner() != 35991) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 15867) {

@@ -1365,8 +1365,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_globalflagtable_set_bool_config(
     ): Short
-    external fun uniffi_cove_checksum_method_globalflagtable_set_inner(
-    ): Short
     external fun uniffi_cove_checksum_method_globalflagtable_toggle_bool_config(
     ): Short
     external fun uniffi_cove_checksum_method_unsignedtransactionrecord_confirm_details(
@@ -2358,8 +2356,6 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_globalflagtable_set(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_globalflagtable_set_bool_config(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: Byte,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
-    external fun uniffi_cove_fn_method_globalflagtable_set_inner(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: Byte,`notify`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_globalflagtable_toggle_bool_config(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -4120,9 +4116,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalflagtable_set_bool_config() != 64063.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_globalflagtable_set_inner() != 35991.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 15867.toShort()) {
@@ -12985,8 +12978,6 @@ public interface GlobalFlagTableInterface {
 
     fun `setBoolConfig`(`key`: GlobalFlagKey, `value`: kotlin.Boolean)
 
-    fun `setInner`(`key`: GlobalFlagKey, `value`: kotlin.Boolean, `notify`: kotlin.Boolean)
-
     fun `toggleBoolConfig`(`key`: GlobalFlagKey)
 
     companion object
@@ -13147,22 +13138,6 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
 
         FfiConverterTypeGlobalFlagKey.lower(`key`),
         FfiConverterBoolean.lower(`value`),_status)
-}
-    }
-
-
-
-
-    @Throws(DatabaseException::class)override fun `setInner`(`key`: GlobalFlagKey, `value`: kotlin.Boolean, `notify`: kotlin.Boolean)
-        =
-    callWithHandle {
-    uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_globalflagtable_set_inner(
-        it,
-
-        FfiConverterTypeGlobalFlagKey.lower(`key`),
-        FfiConverterBoolean.lower(`value`),
-        FfiConverterBoolean.lower(`notify`),_status)
 }
     }
 
