@@ -36189,7 +36189,6 @@ enum XpubError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     )
     case InvalidJson(String
     )
-    case InvalidDescriptorInJson
     case JsonNoDecriptor
     case MissingXpub(String
     )
@@ -36241,12 +36240,11 @@ public struct FfiConverterTypeXpubError: FfiConverterRustBuffer {
         case 2: return .InvalidJson(
             try FfiConverterString.read(from: &buf)
             )
-        case 3: return .InvalidDescriptorInJson
-        case 4: return .JsonNoDecriptor
-        case 5: return .MissingXpub(
+        case 3: return .JsonNoDecriptor
+        case 4: return .MissingXpub(
             try FfiConverterString.read(from: &buf)
             )
-        case 6: return .InvalidXpub(
+        case 5: return .InvalidXpub(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -36271,21 +36269,17 @@ public struct FfiConverterTypeXpubError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case .InvalidDescriptorInJson:
+        case .JsonNoDecriptor:
             writeInt(&buf, Int32(3))
 
 
-        case .JsonNoDecriptor:
-            writeInt(&buf, Int32(4))
-
-
         case let .MissingXpub(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .InvalidXpub(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
 
         }

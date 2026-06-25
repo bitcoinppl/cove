@@ -58,7 +58,7 @@ bdk_wallet = { version = "3.0.0", features = ["keys-bip39", "file_store", "rusql
 bip39 = { version = "2.2.2", features = ["zeroize"] }
 bip329 = "0.5.0"
 payjoin = { version = "0.25.0", default-features = false, features = ["v2"] }
-pubport = { version = "0.5.0" }
+pubport = { version = "0.6.0" }
 
 # bitcoin nodes
 bdk_esplora = { version = "0.22.2", features = ["async-https-rustls", "tokio"], default-features = false }

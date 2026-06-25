@@ -56213,12 +56213,6 @@ sealed class XpubException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
-    class InvalidDescriptorInJson(
-        ) : XpubException() {
-        override val message
-            get() = ""
-    }
-
     class JsonNoDecriptor(
         ) : XpubException() {
         override val message
@@ -56275,12 +56269,11 @@ public object FfiConverterTypeXpubError : FfiConverterRustBuffer<XpubException> 
             2 -> XpubException.InvalidJson(
                 FfiConverterString.read(buf),
                 )
-            3 -> XpubException.InvalidDescriptorInJson()
-            4 -> XpubException.JsonNoDecriptor()
-            5 -> XpubException.MissingXpub(
+            3 -> XpubException.JsonNoDecriptor()
+            4 -> XpubException.MissingXpub(
                 FfiConverterString.read(buf),
                 )
-            6 -> XpubException.InvalidXpub(
+            5 -> XpubException.InvalidXpub(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -56298,10 +56291,6 @@ public object FfiConverterTypeXpubError : FfiConverterRustBuffer<XpubException> 
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
-            )
-            is XpubException.InvalidDescriptorInJson -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
             )
             is XpubException.JsonNoDecriptor -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -56332,21 +56321,17 @@ public object FfiConverterTypeXpubError : FfiConverterRustBuffer<XpubException> 
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is XpubException.InvalidDescriptorInJson -> {
+            is XpubException.JsonNoDecriptor -> {
                 buf.putInt(3)
                 Unit
             }
-            is XpubException.JsonNoDecriptor -> {
-                buf.putInt(4)
-                Unit
-            }
             is XpubException.MissingXpub -> {
-                buf.putInt(5)
+                buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is XpubException.InvalidXpub -> {
-                buf.putInt(6)
+                buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }

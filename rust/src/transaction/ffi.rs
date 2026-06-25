@@ -56,12 +56,13 @@ impl BitcoinTransaction {
         // try dropping the first 64 bytes and try again, coldcard nfc transaction
         // 32 bytes for the txid
         // 32 bytes for the sha256 hash
-        let tx_bytes = &data[64..];
-        let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(tx_bytes)
-            .map_err_str(BitcoinTransactionError::ParseTransactionError);
+        if let Some(tx_bytes) = data.get(64..) {
+            let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(tx_bytes)
+                .map_err_str(BitcoinTransactionError::ParseTransactionError);
 
-        if let Ok(transaction) = transaction {
-            return Ok(transaction.into());
+            if let Ok(transaction) = transaction {
+                return Ok(transaction.into());
+            }
         }
 
         // try again with the full data

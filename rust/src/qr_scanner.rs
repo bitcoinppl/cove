@@ -492,6 +492,53 @@ impl QrScanner {
 mod tests {
     use super::*;
 
+    const ACCOUNT_XPUB: &str = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+    const ACCOUNT_ZPUB: &str = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+
+    fn single_part_bbqr_text(payload: &str) -> String {
+        use bbqr::{
+            encode::Encoding,
+            file_type::FileType,
+            qr::Version,
+            split::{Split, SplitOptions},
+        };
+
+        let split = Split::try_from_data(
+            payload.as_bytes(),
+            FileType::UnicodeText,
+            SplitOptions {
+                encoding: Encoding::Zlib,
+                min_split_number: 1,
+                max_split_number: 1,
+                min_version: Version::V01,
+                max_version: Version::V40,
+            },
+        )
+        .expect("should encode");
+
+        split.parts[0].clone()
+    }
+
+    fn assert_scan_completes_with_hardware_export(input: StringOrData) {
+        let scanner = QrScannerFFI::new();
+        let result = scanner.scan(input);
+
+        assert!(result.is_ok(), "Scanner should succeed: {:?}", result);
+
+        match result.unwrap() {
+            ScanResult::Complete { data, haptic } => {
+                assert!(
+                    matches!(data, crate::multi_format::MultiFormat::HardwareExport(_)),
+                    "Should be HardwareExport"
+                );
+                assert_eq!(haptic, HapticFeedback::Success);
+            }
+            ScanResult::InProgress { .. } => {
+                panic!("Single-part scan should complete immediately");
+            }
+        }
+    }
+
     /// Test QrScanner returns Complete with MultiFormat for single-part BBQR containing an address
     #[test]
     fn test_qr_scanner_single_part_bbqr_address() {
@@ -568,75 +615,29 @@ mod tests {
     /// Test QrScanner returns Complete with MultiFormat for single-part BBQR containing an xpub
     #[test]
     fn test_qr_scanner_single_part_bbqr_xpub() {
-        use bbqr::{
-            encode::Encoding,
-            file_type::FileType,
-            qr::Version,
-            split::{Split, SplitOptions},
-        };
+        let bbqr_string = single_part_bbqr_text(ACCOUNT_XPUB);
 
-        // a valid CHILD xpub (depth > 0) - pubport rejects master xpubs
-        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+        assert_scan_completes_with_hardware_export(StringOrData::String(bbqr_string));
+    }
 
-        // create a single-part BBQR containing the xpub
-        let split = Split::try_from_data(
-            xpub.as_bytes(),
-            FileType::UnicodeText,
-            SplitOptions {
-                encoding: Encoding::Zlib,
-                min_split_number: 1,
-                max_split_number: 1,
-                min_version: Version::V01,
-                max_version: Version::V40,
-            },
-        )
-        .expect("should encode");
+    /// Test QrScanner returns Complete with MultiFormat for single-part BBQR containing a zpub
+    #[test]
+    fn test_qr_scanner_single_part_bbqr_zpub() {
+        let bbqr_string = single_part_bbqr_text(ACCOUNT_ZPUB);
 
-        let bbqr_string = &split.parts[0];
-
-        // use QrScanner - should return Complete with MultiFormat
-        let scanner = QrScannerFFI::new();
-        let result = scanner.scan(StringOrData::String(bbqr_string.clone()));
-
-        assert!(result.is_ok(), "Scanner should succeed: {:?}", result);
-
-        match result.unwrap() {
-            ScanResult::Complete { data, .. } => {
-                // should be a HardwareExport containing the xpub
-                assert!(
-                    matches!(data, crate::multi_format::MultiFormat::HardwareExport(_)),
-                    "Should be HardwareExport, got: {:?}",
-                    data
-                );
-            }
-            ScanResult::InProgress { .. } => {
-                panic!("Single-part BBQR should complete immediately, not be in progress");
-            }
-        }
+        assert_scan_completes_with_hardware_export(StringOrData::String(bbqr_string));
     }
 
     /// Test QrScanner handles plain xpub string
     #[test]
     fn test_qr_scanner_plain_xpub() {
-        // use a CHILD xpub (depth > 0) - pubport rejects master xpubs
-        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+        assert_scan_completes_with_hardware_export(StringOrData::String(ACCOUNT_XPUB.to_string()));
+    }
 
-        let scanner = QrScannerFFI::new();
-        let result = scanner.scan(StringOrData::String(xpub.to_string()));
-
-        assert!(result.is_ok(), "Scanner should succeed: {:?}", result);
-
-        match result.unwrap() {
-            ScanResult::Complete { data, .. } => {
-                assert!(
-                    matches!(data, crate::multi_format::MultiFormat::HardwareExport(_)),
-                    "Should be HardwareExport"
-                );
-            }
-            ScanResult::InProgress { .. } => {
-                panic!("Plain xpub should complete immediately");
-            }
-        }
+    /// Test QrScanner handles plain zpub string
+    #[test]
+    fn test_qr_scanner_plain_zpub() {
+        assert_scan_completes_with_hardware_export(StringOrData::String(ACCOUNT_ZPUB.to_string()));
     }
 
     /// Test multi-part UR: progress tracking, completion, and result parsing

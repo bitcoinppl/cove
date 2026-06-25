@@ -144,9 +144,10 @@ impl WalletDiscoveryScanner {
 
         let id = metadata.id.clone();
         let (wallets, scan_source) = match metadata.discovery_state {
-            DiscoveryState::StartedJson(json) => {
-                (Wallets::try_from_json(&json, network)?, ScanSource::Json(json))
-            }
+            DiscoveryState::StartedJson(json) => (
+                Wallets::try_from_json(&json, network, metadata.address_type)?,
+                ScanSource::Json(json),
+            ),
             DiscoveryState::StartedMnemonic => {
                 let mnemonic = Keychain::global()
                     .get_wallet_key(&id)
@@ -535,25 +536,33 @@ fn index(type_: WalletAddressType) -> usize {
     match type_ {
         WalletAddressType::WrappedSegwit => 0,
         WalletAddressType::Legacy => 1,
-        WalletAddressType::NativeSegwit => panic!("Not scanning the default one NativeSegwit"),
+        WalletAddressType::NativeSegwit => panic!("NativeSegwit has no alternate discovery slot"),
     }
 }
 
 impl Wallets {
-    pub fn try_from_json(json: &Json, network: Network) -> Result<Self, WalletError> {
+    pub fn try_from_json(
+        json: &Json,
+        network: Network,
+        current_address_type: WalletAddressType,
+    ) -> Result<Self, WalletError> {
         let mut wallets = Self::default();
 
         for (json, type_) in [
             (&json.bip49, WalletAddressType::WrappedSegwit),
             (&json.bip44, WalletAddressType::Legacy),
         ] {
+            // skip the primary type, it's covered by the main wallet
+            if type_ == current_address_type {
+                continue;
+            }
+
             if let Some(json) = json {
-                // TODO: remove string round-trip once bdk_wallet updates to miniscript 0.13
-                // expect is okay: descriptor already validated by pubport, just bridging miniscript versions
+                // TODO: remove string round-trip once bdk_wallet updates to miniscript 13
                 let external: ExtendedDescriptor =
-                    json.external.to_string().parse().expect("pubport already validated");
+                    json.external.to_string().parse().map_err_str(WalletError::BdkError)?;
                 let internal: ExtendedDescriptor =
-                    json.internal.to_string().parse().expect("pubport already validated");
+                    json.internal.to_string().parse().map_err_str(WalletError::BdkError)?;
                 let params = BdkWallet::create(external, internal).network(network);
 
                 let wallet =
@@ -590,5 +599,73 @@ impl Wallets {
 impl From<ScannerResponse> for WalletManagerReconcileMessage {
     fn from(response: ScannerResponse) -> Self {
         Self::WalletScannerResponse(response)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pubport_descriptors(descriptor: &str) -> pubport::descriptor::Descriptors {
+        pubport::descriptor::Descriptors::try_from_line(descriptor)
+            .expect("descriptor fixture is valid")
+    }
+
+    fn descriptor_json(
+        bip44: Option<pubport::descriptor::Descriptors>,
+        bip49: Option<pubport::descriptor::Descriptors>,
+        bip84: Option<pubport::descriptor::Descriptors>,
+    ) -> pubport::formats::Json {
+        pubport::formats::Json { bip44, bip49, bip84, bip86: None }
+    }
+
+    fn bip44_descriptors() -> pubport::descriptor::Descriptors {
+        pubport_descriptors(
+            "pkh([817e7be0/44h/0h/0h]xpub6BoKN14JzSFN1T3cqe9FnrwnXGAsmbgETJyeazoa3F7aMXh4XndvVrJAYyM127FsrH8KFv5XFXDroqXNfZMfsinow7xp93ueYSpnrjBBFs4/<0;1>/*)#tdtrl3y9",
+        )
+    }
+
+    fn bip49_descriptors() -> pubport::descriptor::Descriptors {
+        pubport_descriptors(
+            "sh(wpkh([817e7be0/49h/0h/0h]xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm/<0;1>/*))#8llmt36x",
+        )
+    }
+
+    fn bip84_descriptors() -> pubport::descriptor::Descriptors {
+        pubport_descriptors(
+            "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7",
+        )
+    }
+
+    #[test]
+    fn json_discovery_builds_wrapped_and_legacy_alternates_for_native_segwit() {
+        let json = descriptor_json(
+            Some(bip44_descriptors()),
+            Some(bip49_descriptors()),
+            Some(bip84_descriptors()),
+        );
+
+        let wallets =
+            Wallets::try_from_json(&json, Network::Bitcoin, WalletAddressType::NativeSegwit)
+                .unwrap();
+
+        assert!(wallets[index(WalletAddressType::WrappedSegwit)].is_some());
+        assert!(wallets[index(WalletAddressType::Legacy)].is_some());
+    }
+
+    #[test]
+    fn json_discovery_skips_current_wrapped_segwit_alternate() {
+        let json = descriptor_json(
+            Some(bip44_descriptors()),
+            Some(bip49_descriptors()),
+            Some(bip84_descriptors()),
+        );
+
+        let wallets =
+            Wallets::try_from_json(&json, Network::Bitcoin, WalletAddressType::WrappedSegwit)
+                .unwrap();
+
+        assert!(wallets[index(WalletAddressType::WrappedSegwit)].is_none());
+        assert!(wallets[index(WalletAddressType::Legacy)].is_some());
     }
 }

@@ -1,5 +1,6 @@
 use bdk_wallet::bitcoin::bip32::{ChildNumber, Xpub};
 use pubport::descriptor;
+use tracing::warn;
 
 pub(crate) trait XpubExt {
     fn account_index(&self) -> u32;
@@ -22,9 +23,6 @@ pub enum XpubError {
 
     #[error("Invalid JSON {0}")]
     InvalidJson(String),
-
-    #[error("Invalid descriptor in JSON")]
-    InvalidDescriptorInJson,
 
     #[error("JSON has no descriptor")]
     JsonNoDecriptor,
@@ -102,6 +100,8 @@ impl From<descriptor::Error> for DescriptorError {
             DS::InvalidXpub(error) => Self::InvalidXpub(error.to_string()),
             DS::SinglePubkeyNotSupported => Self::SinglePubkeyNotSupported,
             DS::UnableToParseXpub(error) => Self::UnableToParseXpub(error.to_string()),
+            DS::InvalidDerivationPath(error) => Self::InvalidDescriptor(error.to_string()),
+            DS::InvalidFingerprint(error) => Self::InvalidDescriptor(error.to_string()),
             DS::NoXpubInDescriptor => Self::NoXpubInDescriptor,
             DS::MasterXpub => Self::MasterXpub,
             DS::InvalidJsonDescriptor(..) => {
@@ -117,14 +117,15 @@ impl From<descriptor::Error> for DescriptorError {
 
 impl From<pubport::Error> for XpubError {
     fn from(error: pubport::Error) -> Self {
-        use pubport::Error;
-
         match error {
-            Error::InvalidDescriptor(error) => Self::InvalidDescriptor(error.into()),
-            Error::InvalidJsonParse(error) => Self::InvalidJson(error.to_string()),
-            Error::InvalidDescriptorInJson => Self::InvalidDescriptorInJson,
-            Error::JsonNoDecriptor => Self::JsonNoDecriptor,
-            Error::InvalidXpub(error) => Self::InvalidXpub(error.to_string()),
+            pubport::Error::InvalidDescriptor(error) => Self::InvalidDescriptor(error.into()),
+            pubport::Error::InvalidJsonParse(error) => Self::InvalidJson(error.to_string()),
+            pubport::Error::MissingJsonDescriptorData => Self::JsonNoDecriptor,
+            pubport::Error::InvalidXpub(error) => Self::InvalidXpub(error.to_string()),
+            pubport::Error::UnsupportedFormat(error) => {
+                warn!("unsupported wallet export format: {error:?}");
+                Self::InvalidDescriptor(DescriptorError::InvalidDescriptor(error.to_string()))
+            }
         }
     }
 }
@@ -132,5 +133,23 @@ impl From<pubport::Error> for XpubError {
 impl From<descriptor::Error> for XpubError {
     fn from(error: descriptor::Error) -> Self {
         Self::InvalidDescriptor(error.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unsupported_pubport_format_maps_to_invalid_descriptor() {
+        let error = pubport::Format::try_new_from_str("not a wallet").unwrap_err();
+        let error = XpubError::from(error);
+
+        let XpubError::InvalidDescriptor(DescriptorError::InvalidDescriptor(message)) = error
+        else {
+            panic!("expected invalid descriptor error");
+        };
+
+        assert_eq!(message, "no supported wallet export format matched");
     }
 }

@@ -24,6 +24,7 @@ use bdk_wallet::KeychainKind;
 use bdk_wallet::bitcoin::bip32::Xpub;
 use bdk_wallet::chain::rusqlite::Connection;
 use bdk_wallet::chain::spk_client::FullScanRequest;
+use bdk_wallet::miniscript::descriptor::ShInner;
 use bip39::Mnemonic;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_common::consts::GAP_LIMIT;
@@ -300,11 +301,13 @@ impl Wallet {
         let pubport_descriptors = match pubport {
             Format::Descriptor(descriptors) => descriptors,
             Format::Json(json) => {
-                let descriptors = json.bip84.clone().ok_or(WalletError::ParseXpubError(
-                    xpub::XpubError::MissingXpub("No BIP84 xpub found".to_string()),
-                ))?;
+                let (descriptors, address_type) = preferred_json_descriptors(&json)?;
 
-                metadata.discovery_state = DiscoveryState::StartedJson(Arc::new((*json).into()));
+                if should_start_json_discovery(&json, address_type) {
+                    metadata.discovery_state =
+                        DiscoveryState::StartedJson(Arc::new((*json).into()));
+                }
+
                 descriptors
             }
             Format::Wasabi(descriptors) => descriptors,
@@ -312,12 +315,11 @@ impl Wallet {
             Format::KeyExpression(descriptors) => descriptors,
         };
 
-        let fingerprint = pubport_descriptors.fingerprint();
-
         // compute xpub and descriptors early so they're available for the upgrade path
-        let xpub =
-            pubport_descriptors.xpub().map_err(Into::into).map_err(WalletError::ParseXpubError)?;
         let descriptors: Descriptors = pubport_descriptors.into();
+        metadata.address_type = address_type_from_descriptors(&descriptors)?;
+        let fingerprint = descriptors.fingerprint();
+        let xpub = xpub_from_descriptors(&descriptors)?;
 
         let incoming_identity = PublicWalletIdentity::from_descriptors(&descriptors);
 
@@ -339,6 +341,7 @@ impl Wallet {
             if let Some(existing_metadata) = existing {
                 return Self::upgrade_to_cold(
                     existing_metadata,
+                    &metadata,
                     xpub,
                     descriptors,
                     keychain,
@@ -685,6 +688,7 @@ impl Wallet {
     /// Upgrade an existing watch-only wallet to cold by saving the xpub and descriptors
     fn upgrade_to_cold(
         mut metadata: WalletMetadata,
+        import_metadata: &WalletMetadata,
         xpub: Xpub,
         descriptors: Descriptors,
         keychain: &Keychain,
@@ -697,8 +701,7 @@ impl Wallet {
         let id = metadata.id.clone();
         keychain.save_wallet_xpub(&id, xpub)?;
 
-        metadata.wallet_type = WalletType::Cold;
-        metadata.origin = descriptors.origin().ok();
+        metadata = metadata_for_cold_upgrade(metadata, import_metadata, &descriptors);
 
         keychain.save_public_descriptor(
             &id,
@@ -741,6 +744,22 @@ fn check_for_duplicate_wallet(
     Ok(())
 }
 
+fn metadata_for_cold_upgrade(
+    mut existing_metadata: WalletMetadata,
+    import_metadata: &WalletMetadata,
+    descriptors: &Descriptors,
+) -> WalletMetadata {
+    existing_metadata.wallet_type = WalletType::Cold;
+    existing_metadata.origin = descriptors.origin().ok();
+    existing_metadata.address_type = import_metadata.address_type;
+
+    if import_metadata.discovery_state != DiscoveryState::Single {
+        existing_metadata.discovery_state = import_metadata.discovery_state.clone();
+    }
+
+    existing_metadata
+}
+
 /// Builds an incremental scan request that checks revealed-unused receive addresses first
 ///
 /// The request still uses unbounded BDK SPK iterators. The progressive scanner owns stop-gap
@@ -772,6 +791,85 @@ fn receive_prioritized_full_scan_request(
     }
 
     builder.build()
+}
+
+/// Selects the JSON descriptor set that becomes the imported wallet
+///
+/// A JSON export can carry several standard account types. Cove imports the most modern
+/// supported primary wallet and lets discovery scan any supported older alternates separately
+fn preferred_json_descriptors(
+    json: &pubport::formats::Json,
+) -> Result<(pubport::descriptor::Descriptors, WalletAddressType), WalletError> {
+    [
+        (&json.bip84, WalletAddressType::NativeSegwit),
+        (&json.bip49, WalletAddressType::WrappedSegwit),
+        (&json.bip44, WalletAddressType::Legacy),
+    ]
+    .into_iter()
+    .find_map(|(descriptors, address_type)| {
+        descriptors.as_ref().map(|descriptors| (descriptors.clone(), address_type))
+    })
+    .ok_or_else(|| {
+        WalletError::ParseXpubError(xpub::XpubError::MissingXpub(
+            "No supported BIP44, BIP49, or BIP84 xpub found".to_string(),
+        ))
+    })
+}
+
+fn xpub_from_descriptors(descriptors: &Descriptors) -> Result<Xpub, WalletError> {
+    descriptors.external.xpub().ok_or(WalletError::ParseXpubError(XpubError::InvalidDescriptor(
+        xpub::DescriptorError::NoXpubInDescriptor,
+    )))
+}
+
+fn address_type_from_descriptors(
+    descriptors: &Descriptors,
+) -> Result<WalletAddressType, WalletError> {
+    let external = address_type_from_descriptor(&descriptors.external)?;
+    let internal = address_type_from_descriptor(&descriptors.internal)?;
+
+    if external != internal {
+        return Err(WalletError::UnsupportedWallet(
+            "external and internal descriptors use different address types".to_string(),
+        ));
+    }
+
+    Ok(external)
+}
+
+fn address_type_from_descriptor(descriptor: &Descriptor) -> Result<WalletAddressType, WalletError> {
+    match &descriptor.extended_descriptor {
+        bdk_wallet::miniscript::Descriptor::Pkh(_) => Ok(WalletAddressType::Legacy),
+        bdk_wallet::miniscript::Descriptor::Wpkh(_) => Ok(WalletAddressType::NativeSegwit),
+        bdk_wallet::miniscript::Descriptor::Sh(sh) => match sh.as_inner() {
+            ShInner::Wpkh(_) => Ok(WalletAddressType::WrappedSegwit),
+            _ => Err(unsupported_descriptor_address_type("non-wrapped-SegWit P2SH")),
+        },
+        bdk_wallet::miniscript::Descriptor::Tr(_) => {
+            Err(unsupported_descriptor_address_type("Taproot"))
+        }
+        _ => Err(unsupported_descriptor_address_type("this descriptor type")),
+    }
+}
+
+fn unsupported_descriptor_address_type(name: &str) -> WalletError {
+    WalletError::UnsupportedWallet(format!("{name} descriptors are not supported"))
+}
+
+/// Returns whether a JSON import needs alternate address-type discovery
+///
+/// Discovery only starts when the export has a supported alternate that differs from the
+/// primary wallet, because the primary descriptor is synced by the main wallet
+///
+/// Native SegWit (`bip84`) is intentionally absent because it is the preferred primary
+/// descriptor when present, not an alternate discovery target
+fn should_start_json_discovery(
+    json: &pubport::formats::Json,
+    address_type: WalletAddressType,
+) -> bool {
+    [(&json.bip49, WalletAddressType::WrappedSegwit), (&json.bip44, WalletAddressType::Legacy)]
+        .into_iter()
+        .any(|(descriptors, type_)| descriptors.is_some() && type_ != address_type)
 }
 
 impl Wallet {
@@ -858,6 +956,9 @@ mod tests {
         insert_tx,
     };
 
+    const BIP49_YPUB: &str = "ypub6Ww3ibxVfGzLrAH1PNcjyAWenMTbbAosGNB6VvmSEgytSER9azLDWCxoJwW7Ke7icmizBMXrzBx9979FfaHxHcrArf3zbeJJJUZPf663zsP";
+    const BIP84_ZPUB: &str = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+
     fn test_bdk_wallet() -> bdk_wallet::Wallet {
         let (external_descriptor, internal_descriptor) = get_test_wpkh_and_change_desc();
 
@@ -865,6 +966,284 @@ mod tests {
             .network(Network::Regtest)
             .create_wallet_no_persist()
             .expect("wallet is created")
+    }
+
+    fn pubport_descriptors(descriptor: &str) -> pubport::descriptor::Descriptors {
+        pubport::descriptor::Descriptors::try_from_line(descriptor)
+            .expect("descriptor fixture is valid")
+    }
+
+    fn descriptor_json(
+        bip44: Option<pubport::descriptor::Descriptors>,
+        bip49: Option<pubport::descriptor::Descriptors>,
+        bip84: Option<pubport::descriptor::Descriptors>,
+    ) -> pubport::formats::Json {
+        pubport::formats::Json { bip44, bip49, bip84, bip86: None }
+    }
+
+    fn json_from_export(export: &str) -> pubport::formats::Json {
+        let format = pubport::Format::try_new_from_str(export).expect("export fixture is valid");
+        let pubport::Format::Json(json) = format else {
+            panic!("Expected JSON export");
+        };
+
+        *json
+    }
+
+    fn bip44_descriptors() -> pubport::descriptor::Descriptors {
+        pubport_descriptors(
+            "pkh([817e7be0/44h/0h/0h]xpub6BoKN14JzSFN1T3cqe9FnrwnXGAsmbgETJyeazoa3F7aMXh4XndvVrJAYyM127FsrH8KFv5XFXDroqXNfZMfsinow7xp93ueYSpnrjBBFs4/<0;1>/*)#tdtrl3y9",
+        )
+    }
+
+    fn bip49_descriptors() -> pubport::descriptor::Descriptors {
+        pubport_descriptors(
+            "sh(wpkh([817e7be0/49h/0h/0h]xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm/<0;1>/*))#8llmt36x",
+        )
+    }
+
+    fn bip84_descriptors() -> pubport::descriptor::Descriptors {
+        pubport_descriptors(
+            "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7",
+        )
+    }
+
+    fn bip86_descriptors() -> pubport::descriptor::Descriptors {
+        pubport_descriptors(
+            "tr([817e7be0/86h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)",
+        )
+    }
+
+    fn assert_missing_supported_xpub(error: WalletError) {
+        let WalletError::ParseXpubError(xpub::XpubError::MissingXpub(message)) = error else {
+            panic!("expected missing xpub error");
+        };
+
+        assert_eq!(message, "No supported BIP44, BIP49, or BIP84 xpub found");
+    }
+
+    #[test]
+    fn preferred_json_descriptors_uses_native_segwit_when_present() {
+        let json = descriptor_json(
+            Some(bip44_descriptors()),
+            Some(bip49_descriptors()),
+            Some(bip84_descriptors()),
+        );
+
+        let (descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::NativeSegwit);
+        assert!(descriptors.external.to_string().starts_with("wpkh("));
+    }
+
+    #[test]
+    fn preferred_json_descriptors_falls_back_to_wrapped_segwit() {
+        let json = descriptor_json(Some(bip44_descriptors()), Some(bip49_descriptors()), None);
+
+        let (descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::WrappedSegwit);
+        assert!(descriptors.external.to_string().starts_with("sh(wpkh("));
+    }
+
+    #[test]
+    fn preferred_json_descriptors_falls_back_to_legacy() {
+        let json = descriptor_json(Some(bip44_descriptors()), None, None);
+
+        let (descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::Legacy);
+        assert!(descriptors.external.to_string().starts_with("pkh("));
+    }
+
+    #[test]
+    fn preferred_json_descriptors_errors_without_supported_xpub() {
+        let json = descriptor_json(None, None, None);
+        let error = preferred_json_descriptors(&json).unwrap_err();
+
+        assert_missing_supported_xpub(error);
+    }
+
+    #[test]
+    fn preferred_json_descriptors_rejects_bip86_only_export() {
+        let json = json_from_export(
+            r#"{
+  "xfp": "817e7be0",
+  "bip86": {
+    "deriv": "m/86'/0'/0'",
+    "xpub": "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM",
+    "first": "bc1p5cyxnuxmeuwuvkwfem96l9z7k3d5en0fhzc3wkvsgq4wv5q3xpqsv0gz6u"
+  }
+}"#,
+        );
+        let error = preferred_json_descriptors(&json).unwrap_err();
+
+        assert_missing_supported_xpub(error);
+    }
+
+    #[test]
+    fn bare_ypub_import_selects_wrapped_segwit_descriptor() {
+        let json = json_from_export(BIP49_YPUB);
+
+        assert!(json.bip49.is_some());
+        assert!(json.bip84.is_none());
+
+        let (descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::WrappedSegwit);
+        assert!(descriptors.external.to_string().starts_with("sh(wpkh("));
+        assert!(!should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn wrapped_segwit_json_import_material_exposes_nested_xpub() {
+        let json = descriptor_json(None, Some(bip49_descriptors()), None);
+
+        let (pubport_descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+        let descriptors: Descriptors = pubport_descriptors.into();
+
+        assert_eq!(address_type, WalletAddressType::WrappedSegwit);
+        assert_eq!(
+            descriptors.fingerprint().map(|fingerprint| fingerprint.to_string()),
+            Some("817e7be0".to_string())
+        );
+        assert_eq!(
+            xpub_from_descriptors(&descriptors).unwrap().to_string(),
+            "xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm"
+        );
+    }
+
+    #[test]
+    fn converted_json_import_material_matches_pubport_for_primary_descriptors() {
+        for pubport_descriptors in [bip84_descriptors(), bip44_descriptors()] {
+            let descriptors: Descriptors = pubport_descriptors.clone().into();
+
+            assert_eq!(descriptors.fingerprint(), pubport_descriptors.fingerprint());
+            assert_eq!(
+                xpub_from_descriptors(&descriptors).unwrap(),
+                pubport_descriptors.xpub().unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn descriptor_address_type_infers_supported_descriptor_formats() {
+        for (pubport_descriptors, expected) in [
+            (bip84_descriptors(), WalletAddressType::NativeSegwit),
+            (bip49_descriptors(), WalletAddressType::WrappedSegwit),
+            (bip44_descriptors(), WalletAddressType::Legacy),
+        ] {
+            let descriptors = Descriptors::from(pubport_descriptors);
+
+            assert_eq!(address_type_from_descriptors(&descriptors).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn descriptor_address_type_rejects_taproot() {
+        let descriptors = Descriptors::from(bip86_descriptors());
+        let error = address_type_from_descriptors(&descriptors).unwrap_err();
+
+        assert_eq!(
+            error,
+            WalletError::UnsupportedWallet("Taproot descriptors are not supported".to_string())
+        );
+    }
+
+    #[test]
+    fn bare_zpub_import_selects_native_segwit_descriptor() {
+        let json = json_from_export(BIP84_ZPUB);
+
+        assert!(json.bip84.is_some());
+        assert!(json.bip49.is_none());
+
+        let (descriptors, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::NativeSegwit);
+        assert!(descriptors.external.to_string().starts_with("wpkh("));
+        assert!(!should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn json_discovery_starts_for_native_segwit_with_alternates() {
+        let json = descriptor_json(
+            Some(bip44_descriptors()),
+            Some(bip49_descriptors()),
+            Some(bip84_descriptors()),
+        );
+
+        let (_, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::NativeSegwit);
+        assert!(should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn json_discovery_starts_for_wrapped_segwit_with_legacy_alternate() {
+        let json = descriptor_json(Some(bip44_descriptors()), Some(bip49_descriptors()), None);
+
+        let (_, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::WrappedSegwit);
+        assert!(should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn json_discovery_does_not_start_for_single_native_segwit_export() {
+        let json = descriptor_json(None, None, Some(bip84_descriptors()));
+
+        let (_, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::NativeSegwit);
+        assert!(!should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn json_discovery_does_not_start_for_wrapped_segwit_export() {
+        let json = descriptor_json(None, Some(bip49_descriptors()), None);
+
+        let (_, address_type) = preferred_json_descriptors(&json).unwrap();
+
+        assert_eq!(address_type, WalletAddressType::WrappedSegwit);
+        assert!(!should_start_json_discovery(&json, address_type));
+    }
+
+    #[test]
+    fn cold_upgrade_metadata_carries_json_discovery_state() {
+        let json = descriptor_json(
+            Some(bip44_descriptors()),
+            Some(bip49_descriptors()),
+            Some(bip84_descriptors()),
+        );
+        let descriptors = Descriptors::from(bip84_descriptors());
+
+        let mut existing_metadata = WalletMetadata::preview_new();
+        existing_metadata.name = "Existing watch-only wallet".to_string();
+        existing_metadata.wallet_type = WalletType::WatchOnly;
+        existing_metadata.discovery_state = DiscoveryState::Single;
+        existing_metadata.address_type = WalletAddressType::Legacy;
+
+        let mut import_metadata = existing_metadata.clone();
+        import_metadata.name = "Incoming hardware wallet".to_string();
+        import_metadata.wallet_type = WalletType::Cold;
+        import_metadata.address_type = WalletAddressType::NativeSegwit;
+        import_metadata.discovery_state =
+            DiscoveryState::StartedJson(Arc::new(json.clone().into()));
+
+        let updated =
+            metadata_for_cold_upgrade(existing_metadata.clone(), &import_metadata, &descriptors);
+
+        assert_eq!(updated.name, existing_metadata.name);
+        assert_ne!(updated.name, import_metadata.name);
+        assert_eq!(updated.wallet_type, WalletType::Cold);
+        assert_eq!(updated.address_type, WalletAddressType::NativeSegwit);
+        assert_eq!(updated.origin, descriptors.origin().ok());
+
+        let DiscoveryState::StartedJson(found_json) = updated.discovery_state else {
+            panic!("expected JSON discovery to start after cold upgrade");
+        };
+
+        assert_eq!(found_json.as_ref().0, json);
     }
 
     fn scan_indexes(
