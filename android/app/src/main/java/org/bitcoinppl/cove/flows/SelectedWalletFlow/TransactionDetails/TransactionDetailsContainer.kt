@@ -25,6 +25,8 @@ import kotlin.coroutines.cancellation.CancellationException as KotlinCancellatio
 
 private const val TAG = "TransactionDetailsContainer"
 
+private const val TAG = "TransactionDetailsContainer"
+
 /**
  * lifecycle container for transaction details screen
  * manages WalletManager loading and cleanup
@@ -63,11 +65,6 @@ fun TransactionDetailsContainer(
             is WalletSelectionRecoveryResult.NoRouteToPop -> {
                 android.util.Log.e(TAG, "Failed to recover wallet selection", result.recoveryError)
                 android.util.Log.e(TAG, "No route available to leave transaction details after recovery failure")
-                recoveringWalletSelection = false
-            }
-            is WalletSelectionRecoveryResult.NoRouteToPop -> {
-                android.util.Log.e("TransactionDetails", "Failed to recover wallet selection", result.recoveryError)
-                android.util.Log.e("TransactionDetails", "No route available to leave transaction details after recovery failure")
                 recoveringWalletSelection = false
             }
             is WalletSelectionRecoveryResult.FailedToPopRoute -> {
