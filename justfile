@@ -153,7 +153,7 @@ compile-android:
 # run ios and android manual ui tests
 [group('test')]
 ui-manual:
-    just android-ui-manual && just ios-ui-manual
+    just android-ui-manual && just ios-ui-background
 
 # Run manual Android full-launch onboarding UI tests
 [group('test')]
