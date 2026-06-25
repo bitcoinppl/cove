@@ -6,7 +6,7 @@ use crate::{
 };
 use cove_types::amount::Amount;
 
-use super::{EnterMode, Message, RustSendFlowManager, SendFlowError};
+use super::{EnterMode, Message, RustSendFlowManager, SendFlowAlertState, SendFlowError};
 
 impl RustSendFlowManager {
     /// Create the PSBT and everything is valid go to the next screen
@@ -29,6 +29,35 @@ impl RustSendFlowManager {
         let Some(selected_fee_rate) = self.selected_fee_rate() else {
             return self.send_alert(SendFlowError::UnableToGetFeeRate);
         };
+
+        let Some(total_fee) = selected_fee_rate.total_fee else {
+            let me = self.clone();
+            cove_tokio::task::spawn(async move {
+                me.get_or_update_fee_rate_options().await;
+
+                if me.selected_fee_rate().and_then(|fee| fee.total_fee).is_none() {
+                    return me
+                        .send_alert_async(SendFlowError::UnableToGetFeeDetails(
+                            "selected fee total unavailable".to_string(),
+                        ))
+                        .await;
+                }
+
+                me.finalize_and_go_to_next_screen();
+            });
+            return;
+        };
+
+        if total_fee.as_sats() > amount_sats {
+            return self.send_alert(SendFlowAlertState::General {
+                title: "Fee Too High!".to_string(),
+                message: "The fee is higher than the amount you are sending".to_string(),
+            });
+        }
+
+        if let Some(warning) = self.pending_send_warning() {
+            return self.reconciler.send(Message::SetAlert(warning));
+        }
 
         self.reconciler.send(Message::UpdateFocusField(None));
 
@@ -64,8 +93,7 @@ impl RustSendFlowManager {
             let details = match confirm_details {
                 Ok(details) => details,
                 Err(error) => {
-                    let error = SendFlowError::UnableToBuildTxn(error.to_string());
-                    return me.send_alert_async(error).await;
+                    return me.send_alert_async(SendFlowError::from(error)).await;
                 }
             };
 

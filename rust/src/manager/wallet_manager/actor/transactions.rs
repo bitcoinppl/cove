@@ -14,7 +14,6 @@ use bitcoin::{
     params::Params,
 };
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
-use cove_common::consts::MIN_SEND_AMOUNT;
 use cove_types::{
     confirm::{AddressAndAmount, ConfirmDetails, ExtraItem, InputOutputDetails, SplitOutput},
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
@@ -52,7 +51,7 @@ impl WalletActor {
 
         exclude_locked_outpoints(&mut tx_builder, locked_outpoints);
         tx_builder.drain_wallet().drain_to(script_pubkey).fee_rate(fee.into());
-        let psbt = tx_builder.finish().map_err_str(Error::BuildTxError)?;
+        let psbt = tx_builder.finish().map_err(Error::from)?;
         self.wallet.unreserve_tx_change_addresses(&psbt.unsigned_tx);
 
         Ok(psbt)
@@ -81,7 +80,7 @@ impl WalletActor {
         tx_builder.add_recipient(script_pubkey, amount);
         tx_builder.fee_rate(fee_rate);
 
-        let psbt = tx_builder.finish().map_err_str(Error::BuildTxError)?;
+        let psbt = tx_builder.finish().map_err(Error::from)?;
         Ok(psbt)
     }
 
@@ -124,7 +123,7 @@ impl WalletActor {
         tx_builder.add_recipient(address.script_pubkey(), send_amount);
         tx_builder.fee_rate(fee_rate);
 
-        let psbt = tx_builder.finish().map_err_str(Error::BuildTxError)?;
+        let psbt = tx_builder.finish().map_err(Error::from)?;
         Ok(psbt)
     }
 
@@ -722,12 +721,11 @@ impl WalletActor {
                     ))
                 })?;
 
+            let recipient_dust_limit = address.script_pubkey().minimal_non_dust();
             let mut fee_psbt = None;
             while fee_psbt.is_none() {
-                if max_send_estimate < MIN_SEND_AMOUNT {
-                    return Err(Error::InsufficientFunds(format!(
-                        "no enough funds to cover the fees, total available: {total_amount}, fees: {fee_estimate}",
-                    )));
+                if max_send_estimate < recipient_dust_limit {
+                    return Err(Error::OutputBelowDustLimit);
                 }
 
                 let mut tx_builder = self.wallet.bdk.build_tx();
@@ -746,7 +744,7 @@ impl WalletActor {
                         let difference = result.needed - result.available;
                         max_send_estimate -= difference;
                     }
-                    Err(err) => return Err(Error::BuildTxError(err.to_string())),
+                    Err(err) => return Err(Error::from(err)),
                 }
             }
 

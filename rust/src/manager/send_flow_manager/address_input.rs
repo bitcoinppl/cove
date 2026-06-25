@@ -48,6 +48,9 @@ impl RustSendFlowManager {
         let address = parsed.map(|address_with_network| Arc::new(address_with_network.address));
         {
             let mut state = self.state.lock();
+            if state.address != address {
+                state.clear_warning_acknowledgements();
+            }
             state.address = address.clone();
             state.payjoin_endpoint = payjoin_endpoint;
         }
@@ -80,6 +83,9 @@ impl RustSendFlowManager {
     pub(crate) fn clear_send_amount(self: &Arc<Self>) {
         {
             let mut state = self.state.lock();
+            if state.amount_sats.is_some() {
+                state.clear_warning_acknowledgements();
+            }
             state.amount_sats = None;
             state.amount_fiat = None;
         }
@@ -107,6 +113,9 @@ impl RustSendFlowManager {
         let mut sender = DeferredSender::new(self.reconciler.clone());
         {
             let mut state = self.state.lock();
+            if state.address.is_some() {
+                state.clear_warning_acknowledgements();
+            }
             state.address = None;
             state.payjoin_endpoint = None;
         }
@@ -152,6 +161,9 @@ impl RustSendFlowManager {
 
         {
             let mut state = self.state.lock();
+            if state.address.as_ref() != Some(&address) {
+                state.clear_warning_acknowledgements();
+            }
             state.address = Some(address.clone());
             state.payjoin_endpoint = payjoin_endpoint;
         }

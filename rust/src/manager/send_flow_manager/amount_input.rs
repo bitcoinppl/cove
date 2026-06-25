@@ -4,7 +4,6 @@ use crate::{fiat::client::PriceResponse, transaction::FeeRate, wallet::Address};
 use act_zero::call;
 use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee, psbt::Psbt, unit::BitcoinUnit};
 use cove_util::format::NumberFormatter as _;
-use cove_util::result_ext::ResultExt as _;
 use tracing::{debug, trace, warn};
 
 use super::{
@@ -63,7 +62,13 @@ impl RustSendFlowManager {
         if let Some(amount) = amount_btc {
             let current_amount_sats = self.state.lock().amount_sats;
             let amount_sats = amount.to_sat();
-            self.state.lock().amount_sats = Some(amount_sats);
+            {
+                let mut state = self.state.lock();
+                if current_amount_sats != Some(amount_sats) {
+                    state.clear_warning_acknowledgements();
+                }
+                state.amount_sats = Some(amount_sats);
+            }
 
             if current_amount_sats != Some(amount_sats) {
                 sender.queue(Message::UpdateAmountSats(amount_sats));
@@ -128,7 +133,13 @@ impl RustSendFlowManager {
 
         if let Some(btc_amount) = btc_amount {
             let btc_amount = btc_amount.as_sats();
-            self.state.lock().amount_sats = Some(btc_amount);
+            {
+                let mut state = self.state.lock();
+                if state.amount_sats != Some(btc_amount) {
+                    state.clear_warning_acknowledgements();
+                }
+                state.amount_sats = Some(btc_amount);
+            }
             sender.queue(Message::UpdateAmountSats(btc_amount));
             self.schedule_fee_rate_update();
         }
@@ -151,7 +162,13 @@ impl RustSendFlowManager {
         let mut sender = DeferredSender::new(self.reconciler.clone());
         if let Some(options) = self.fee_rate_options() {
             let selection = FeeSelection::new(options, fee_rate.clone());
-            self.state.lock().fee_selection = Some(selection.clone());
+            {
+                let mut state = self.state.lock();
+                if state.fee_selection.as_ref() != Some(&selection) {
+                    state.clear_warning_acknowledgements();
+                }
+                state.fee_selection = Some(selection.clone());
+            }
             sender.queue(Message::UpdateFeeSelection(selection));
         }
 
@@ -179,8 +196,6 @@ impl RustSendFlowManager {
             }
             _ => {}
         }
-
-        self.validate_fee_percentage_internal(true);
     }
 
     /// When amount is changed, we will need to update the entering and fiat amounts
@@ -223,7 +238,13 @@ impl RustSendFlowManager {
 
         let old_amount_sats = self.state.lock().amount_sats;
         let amount_sats = amount.to_sat();
-        self.state.lock().amount_sats = Some(amount_sats);
+        {
+            let mut state = self.state.lock();
+            if old_amount_sats != Some(amount_sats) {
+                state.clear_warning_acknowledgements();
+            }
+            state.amount_sats = Some(amount_sats);
+        }
 
         if old_amount_sats != Some(amount_sats) {
             sender.queue(Message::UpdateAmountSats(amount_sats));
@@ -309,6 +330,9 @@ impl RustSendFlowManager {
     pub(crate) async fn select_max_send_report_error(self: &Arc<Self>) {
         match self.select_max_send().await {
             Ok(()) => {}
+            Err(SendFlowError::SendBelowDustLimit) => {
+                self.reconciler.send(Message::SetAlert(SendFlowError::SendBelowDustLimit.into()));
+            }
             Err(error) => {
                 let error = SendFlowError::UnableToGetMaxSend(error.to_string());
                 self.reconciler.send(Message::SetAlert(error.into()));
@@ -360,11 +384,8 @@ impl RustSendFlowManager {
         }
 
         let fee_rate = fee_rate.unwrap_or_else(|| FeeRate::from_sat_per_vb(50.0));
-        let psbt: Psbt = call!(wallet_actor.build_ephemeral_drain_tx(address, fee_rate))
-            .await
-            .unwrap()
-            .map_err_str(Error::UnableToGetMaxSend)?
-            .into();
+        let psbt: Psbt =
+            call!(wallet_actor.build_ephemeral_drain_tx(address, fee_rate)).await.unwrap()?.into();
 
         let total = Arc::new(psbt.output_total_amount());
         trace!("psbt: {psbt:?}, total: {total:?}, fee_rate: {fee_rate:?}");

@@ -57,6 +57,8 @@ import SwiftUI
             errorAlertTitle(error)
         case let .some(.general(title: title, message: _)):
             title
+        case let .some(.warning(kind: _, title: title, message: _)):
+            title
         case .none:
             ""
         }
@@ -75,7 +77,7 @@ import SwiftUI
             "Invalid Address"
         case .InvalidNumber, .ZeroAmount: "Invalid Amount"
         case .InsufficientFunds, .NoBalance: "Insufficient Funds"
-        case .SendAmountToLow: "Send Amount Too Low"
+        case .SendBelowDustLimit: "Amount Below Dust Limit"
         case .UnableToGetFeeRate: "Unable to get fee rate"
         case .UnableToBuildTxn: "Unable to build transaction"
         case .UnableToGetMaxSend:
@@ -98,6 +100,8 @@ import SwiftUI
             Text(errorAlertMessage(error))
         case let .general(title: _, message: message):
             Text(message)
+        case let .warning(kind: _, title: _, message: message):
+            Text(message)
         }
     }
 
@@ -117,8 +121,8 @@ import SwiftUI
             "The address \(address) is on the wrong network, is it for (\(validFor). You are on \(currentNetwork)"
         case .InsufficientFunds:
             "You do not have enough bitcoin in your wallet to cover the amount plus fees"
-        case .SendAmountToLow:
-            "Send amount is too low. Please send atleast 5000 sats"
+        case .SendBelowDustLimit:
+            "This amount is below Bitcoin's dust limit for this address type. The network would reject it. Please send a bit more."
         case .UnableToGetFeeRate:
             "Are you connected to the internet?"
         case .WalletManager(.LockedOutputsSelected):
@@ -137,12 +141,22 @@ import SwiftUI
     }
 
     @ViewBuilder
-    func alertButtons(alert: TaggedItem<SendFlowAlertState>) -> some View {
+    func alertButtons(
+        alert: TaggedItem<SendFlowAlertState>,
+        acknowledgeWarning: @escaping (SendFlowWarningKind) -> Void
+    ) -> some View {
         switch alert.item {
         case let .error(error):
             errorAlertButtons(error)
         case .general:
             Button("OK") { self.alertState = .none }
+        case let .warning(kind: kind, title: _, message: _):
+            Button("Send Anyway") {
+                acknowledgeWarning(kind)
+            }
+            Button("Cancel", role: .cancel) {
+                self.alertState = .none
+            }
         }
     }
 
@@ -159,7 +173,7 @@ import SwiftUI
                 self.alertState = .none
                 self.app.popRoute()
             }
-        case .InvalidNumber, .InsufficientFunds, .SendAmountToLow, .ZeroAmount, .WalletManager, .UnableToGetFeeDetails:
+        case .InvalidNumber, .InsufficientFunds, .SendBelowDustLimit, .ZeroAmount, .WalletManager, .UnableToGetFeeDetails:
             Button("OK") {
                 self.focusField = .amount
                 self.alertState = .none

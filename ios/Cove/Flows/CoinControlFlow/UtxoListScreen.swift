@@ -244,7 +244,7 @@ struct UtxoListScreen: View {
                     )
                 }
                 .buttonStyle(
-                    manager.totalSelectedSats < minSendSats
+                    manager.totalSelectedSats < conservativeDustLimitSats
                         ? DarkButtonStyle(
                             backgroundColor: .systemGray4, foregroundColor: .secondary
                         )
@@ -254,7 +254,7 @@ struct UtxoListScreen: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal)
                 .padding(.bottom, 4)
-                .disabled(manager.totalSelectedSats < minSendSats)
+                .disabled(manager.totalSelectedSats < conservativeDustLimitSats)
                 .contentTransition(.interpolate)
             }
         }

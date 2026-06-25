@@ -19,6 +19,7 @@ use std::{
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
 pub use balance_presentation::BalancePresentation;
+use bdk_wallet::error::CreateTxError;
 use flume::Receiver;
 pub use ledger_state::WalletLedgerState;
 use parking_lot::RwLock;
@@ -352,6 +353,9 @@ pub enum WalletManagerError {
     #[error("insufficient funds: {0}")]
     InsufficientFunds(String),
 
+    #[error("send amount is below the dust limit")]
+    OutputBelowDustLimit,
+
     #[error("selected UTXOs include locked outputs")]
     LockedOutputsSelected,
 
@@ -444,6 +448,16 @@ fn unsigned_transactions_for_wallet(
         txns.into_iter().map(|txn| Arc::new(txn.into())).collect::<Vec<Arc<UnsignedTransaction>>>();
 
     Ok(txns)
+}
+
+impl From<CreateTxError> for WalletManagerError {
+    fn from(error: CreateTxError) -> Self {
+        match error {
+            CreateTxError::OutputBelowDustLimit(_) => Self::OutputBelowDustLimit,
+            CreateTxError::CoinSelection(error) => Self::InsufficientFunds(error.to_string()),
+            error => Self::BuildTxError(error.to_string()),
+        }
+    }
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -1220,10 +1234,13 @@ fn wallet_account_number(id: &WalletId) -> Option<u32> {
 mod tests {
     use std::sync::Arc;
 
+    use bdk_wallet::{coin_selection::InsufficientFunds, error::CreateTxError};
+    use bitcoin::Amount;
+
     use super::{
         Balance, BalancePresentation, Error, PREVIEW_FULL_SCAN_COMPLETED_AT, WalletLedgerState,
-        WalletLoadState, WalletScanPhase, WalletScanProgress, WalletScanStatus, WalletSnapshot,
-        initial_state_from_snapshot,
+        WalletLoadState, WalletManagerError, WalletScanPhase, WalletScanProgress, WalletScanStatus,
+        WalletSnapshot, initial_state_from_snapshot,
         initial_state_from_snapshot_with_pending_unsigned_transactions, ledger_state,
         preview_ledger_ready_metadata,
     };
@@ -1373,6 +1390,23 @@ mod tests {
 
         assert!(state.unsigned_transactions.is_empty());
         assert_eq!(state.load_state, WalletLoadState::Loading);
+    }
+
+    #[test]
+    fn create_tx_output_below_dust_maps_to_wallet_output_below_dust() {
+        let error = WalletManagerError::from(CreateTxError::OutputBelowDustLimit(0));
+
+        assert!(matches!(error, WalletManagerError::OutputBelowDustLimit));
+    }
+
+    #[test]
+    fn create_tx_coin_selection_maps_to_insufficient_funds() {
+        let error = WalletManagerError::from(CreateTxError::CoinSelection(InsufficientFunds {
+            needed: Amount::from_sat(10_000),
+            available: Amount::from_sat(1_000),
+        }));
+
+        assert!(matches!(error, WalletManagerError::InsufficientFunds(_)));
     }
 }
 

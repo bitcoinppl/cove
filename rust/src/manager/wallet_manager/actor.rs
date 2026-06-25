@@ -1760,6 +1760,36 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn actor_manual_max_send_uses_recipient_exact_dust_floor() {
+        crate::database::test_support::init_test_database();
+
+        let mut wallet = Wallet::preview_new_wallet();
+        mark_wallet_ledger_ready(&mut wallet);
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([2; 32]) },
+        );
+        let spendable = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(4_000));
+
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor =
+            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+        actor.db = db;
+
+        let result = actor
+            .build_manual_tx(
+                vec![spendable],
+                Amount::from_sat(4_000),
+                Address::preview_new(),
+                one_sat_vbyte_fee_rate(),
+            )
+            .await;
+
+        actor_value(result).await.expect("manual max send above dust is allowed below 5000 sats");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn mnemonic_address_type_switch_restarts_wallet_scan() {
         let _guard = address_type_switch_test_lock().lock().await;
 

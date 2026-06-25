@@ -29,11 +29,11 @@ use crate::{
     },
 };
 use act_zero::WeakAddr;
-use alert_state::SendFlowAlertState;
+use alert_state::{SendFlowAlertState, SendFlowWarningKind};
 use amount_or_max::AmountOrMax;
 use backon::{ExponentialBuilder, Retryable};
 use btc_on_change::BtcOnChangeHandler;
-use cove_common::consts::MIN_SEND_SATS;
+use cove_common::consts::LOW_SEND_WARNING_SATS;
 use cove_types::{
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed},
@@ -62,6 +62,8 @@ type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 type DeferredSender = deferred_sender::DeferredSender<Message>;
 
 const LOCK_STATE_LOAD_FAILED_ERROR_ID: &str = "send_flow_lock_state_load_failed";
+const HIGH_FEE_WARNING_PERCENT: f64 = 5.0;
+const VERY_HIGH_FEE_WARNING_PERCENT: f64 = 20.0;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SetAmountFocusField {
@@ -154,6 +156,7 @@ pub enum SendFlowManagerAction {
     ChangeFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
 
     FinalizeAndGoToNextScreen,
+    AcknowledgeWarningAndFinalize(SendFlowWarningKind),
 }
 
 impl RustSendFlowManager {
@@ -232,11 +235,6 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method(default(display_alert = false))]
-    pub fn validate_fee_percentage(self: &Arc<Self>, display_alert: bool) -> bool {
-        self.validate_fee_percentage_internal(display_alert)
-    }
-
-    #[uniffi::method(default(display_alert = false))]
     pub fn validate_amount(self: &Arc<Self>, display_alert: bool) -> bool {
         self.validate_amount_internal(display_alert)
     }
@@ -256,44 +254,7 @@ impl RustSendFlowManager {
 
         true
     }
-    pub(crate) fn validate_fee_percentage_internal(self: &Arc<Self>, display_alert: bool) -> bool {
-        let Some(amount) = self.state.lock().amount_sats else { return false };
-        let Some(fee_rate) = self.selected_fee_rate() else { return false };
-        let Some(total_fee) = fee_rate.total_fee() else { return false };
 
-        let fee_sats = total_fee.as_sats();
-        let fee_percentage = fee_sats * 100 / amount;
-
-        debug!("validate_fee_percentage: {fee_sats} / {amount} = {fee_percentage} ");
-        if fee_percentage > 100 {
-            let error = SendFlowAlertState::General {
-                title: "Fee Too High!".to_string(),
-                message: "The fee is higher than the amount you are sending".to_string(),
-            };
-
-            if display_alert {
-                self.reconciler.send(Message::SetAlert(error));
-            }
-
-            return false;
-        }
-
-        if fee_percentage > 20 {
-            let error = SendFlowAlertState::General {
-                title: "Warning, High Fee!".to_string(),
-                message: "The fee is higher than 20% of the amount you are sending".to_string(),
-            };
-
-            if display_alert {
-                self.reconciler.send(Message::SetAlert(error));
-            }
-
-            // just a warning not a error
-            return true;
-        }
-
-        true
-    }
     pub(crate) fn validate_amount_internal(self: &Arc<Self>, display_alert: bool) -> bool {
         let mut sender = DeferredSender::new(self.reconciler.clone());
         let Some(amount) = self.state.lock().amount_sats else {
@@ -309,16 +270,6 @@ impl RustSendFlowManager {
 
         if amount == 0 {
             let msg = Message::SetAlert(SendFlowError::ZeroAmount.into());
-            if display_alert {
-                sender.queue(msg);
-            } else {
-                debug!("validate_amount_failed: {msg:?}");
-            }
-            return false;
-        }
-
-        if amount < MIN_SEND_SATS {
-            let msg = Message::SetAlert(SendFlowError::SendAmountToLow.into());
             if display_alert {
                 sender.queue(msg);
             } else {
@@ -367,6 +318,82 @@ impl RustSendFlowManager {
         }
 
         true
+    }
+
+    fn pending_send_warning(&self) -> Option<SendFlowAlertState> {
+        let (
+            amount_sats,
+            fee_sats,
+            small_amount_acknowledged,
+            high_fee_acknowledged,
+            very_high_fee_acknowledged,
+        ) = {
+            let state = self.state.lock();
+            let amount_sats = state.amount_sats?;
+            let fee_sats = state
+                .fee_selection
+                .as_ref()
+                .and_then(|selection| selection.selected.total_fee)
+                .map(|fee| fee.as_sats());
+
+            (
+                amount_sats,
+                fee_sats,
+                state.has_acknowledged_warning(SendFlowWarningKind::SmallAmount),
+                state.has_acknowledged_warning(SendFlowWarningKind::HighFee),
+                state.has_acknowledged_warning(SendFlowWarningKind::VeryHighFee),
+            )
+        };
+
+        if amount_sats > 0 && amount_sats < LOW_SEND_WARNING_SATS && !small_amount_acknowledged {
+            return Some(SendFlowAlertState::Warning {
+                kind: SendFlowWarningKind::SmallAmount,
+                title: "Small On-chain Payment".to_string(),
+                message: "On-chain payments always pay a network fee, so they are usually best for larger amounts. If you are making lots of small payments, Lightning may be a better fit outside Cove because it is built for fast, low-fee microtransactions.".to_string(),
+            });
+        }
+
+        let fee_sats = fee_sats?;
+        if amount_sats == 0 {
+            return None;
+        }
+
+        let fee_percentage = fee_sats as f64 / amount_sats as f64 * 100.0;
+        let display_fee_percentage = format!("{fee_percentage:.0}");
+
+        if fee_percentage >= VERY_HIGH_FEE_WARNING_PERCENT && !very_high_fee_acknowledged {
+            return Some(SendFlowAlertState::Warning {
+                kind: SendFlowWarningKind::VeryHighFee,
+                title: "Very High Network Fee".to_string(),
+                message: format!(
+                    "The network fee is {display_fee_percentage}% of the amount you are sending. That is unusually high for an on-chain payment. Consider sending a larger amount, lowering the fee rate if timing allows, or using an external Lightning option for small payments."
+                ),
+            });
+        }
+
+        if fee_percentage >= HIGH_FEE_WARNING_PERCENT && !high_fee_acknowledged {
+            return Some(SendFlowAlertState::Warning {
+                kind: SendFlowWarningKind::HighFee,
+                title: "High Network Fee".to_string(),
+                message: format!(
+                    "The network fee is {display_fee_percentage}% of the amount you are sending. On-chain fees are per transaction, so they take a bigger bite out of small payments. Consider a larger amount or an external Lightning option."
+                ),
+            });
+        }
+
+        None
+    }
+
+    fn acknowledge_warning_and_finalize(self: &Arc<Self>, kind: SendFlowWarningKind) {
+        if let Some(SendFlowAlertState::Warning { kind: pending_kind, .. }) =
+            self.pending_send_warning()
+            && pending_kind == kind
+        {
+            self.state.lock().acknowledge_warning(kind);
+        }
+
+        self.reconciler.send(Message::ClearAlert);
+        self.finalize_and_go_to_next_screen();
     }
 }
 
@@ -468,9 +495,15 @@ impl RustSendFlowManager {
             Action::NotifyPricesChanged(prices) => self.handle_prices_changed(prices),
 
             Action::FinalizeAndGoToNextScreen => self.finalize_and_go_to_next_screen(),
+            Action::AcknowledgeWarningAndFinalize(kind) => {
+                self.acknowledge_warning_and_finalize(kind);
+            }
 
             Action::NotifyAddressChanged(address) => {
                 let mut state = self.state.lock();
+                if state.address.as_ref() != Some(&address) {
+                    state.clear_warning_acknowledgements();
+                }
                 state.address = Some(address.clone());
                 state.entering_address = address.to_string();
                 state.payjoin_endpoint = None;
@@ -484,7 +517,13 @@ impl RustSendFlowManager {
 
             Action::ChangeFeeRateOptions(fee_options) => {
                 let selection = self.fee_selection_for_options(fee_options);
-                self.state.lock().fee_selection = Some(selection.clone());
+                {
+                    let mut state = self.state.lock();
+                    if state.fee_selection.as_ref() != Some(&selection) {
+                        state.clear_warning_acknowledgements();
+                    }
+                    state.fee_selection = Some(selection.clone());
+                }
                 self.reconciler.send(Message::UpdateFeeSelection(selection));
             }
 
@@ -609,6 +648,9 @@ impl RustSendFlowManager {
 
             let mut state_guard = state.lock();
             state_guard.fee_rate_options_base = Some(Arc::new(base_options));
+            if state_guard.fee_selection.as_ref() != Some(&fee_selection) {
+                state_guard.clear_warning_acknowledgements();
+            }
             state_guard.fee_selection = Some(fee_selection);
             state_guard.has_base_fees = true;
         });
@@ -659,10 +701,15 @@ impl RustSendFlowManager {
 mod tests {
     use std::sync::Arc;
 
+    use cove_types::fees::{
+        FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptionsWithTotalFee, FeeSpeed,
+    };
+
     use crate::{
         manager::{deferred_sender::SingleOrMany, wallet_manager::RustWalletManager},
-        wallet::{balance::Balance, metadata::WalletMetadata},
+        wallet::{Address, balance::Balance, metadata::WalletMetadata},
     };
+
     fn manager_for_validation() -> Arc<super::RustSendFlowManager> {
         crate::database::test_support::init_test_database();
         crate::test_support::ensure_tokio_runtime();
@@ -685,6 +732,204 @@ mod tests {
         })
     }
 
+    fn fee_rate_option_with_total_fee(
+        fee_speed: FeeSpeed,
+        total_fee_sats: u64,
+    ) -> FeeRateOptionWithTotalFee {
+        let fee_option = FeeRateOption::new(fee_speed, 1.0);
+        FeeRateOptionWithTotalFee::new(fee_option, super::Amount::from_sat(total_fee_sats))
+    }
+
+    fn set_selected_fee_total(
+        manager: &super::RustSendFlowManager,
+        total_fee_sats: u64,
+    ) -> Arc<FeeRateOptionWithTotalFee> {
+        let selected =
+            fee_rate_option_with_total_fee(FeeSpeed::Custom { duration_mins: 10 }, total_fee_sats);
+        let options = FeeRateOptionsWithTotalFee {
+            fast: fee_rate_option_with_total_fee(FeeSpeed::Fast, total_fee_sats),
+            medium: fee_rate_option_with_total_fee(FeeSpeed::Medium, total_fee_sats),
+            slow: fee_rate_option_with_total_fee(FeeSpeed::Slow, total_fee_sats),
+            custom: Some(selected),
+        };
+        let selected = Arc::new(selected);
+
+        manager.state.lock().fee_selection =
+            Some(super::FeeSelection::new(Arc::new(options), selected.clone()));
+
+        selected
+    }
+
+    fn set_selected_fee_without_total(manager: &super::RustSendFlowManager) {
+        let base_options = super::FeeRateOptions::_ffi_preview_new();
+        let selected = FeeRateOptionWithTotalFee {
+            fee_speed: FeeSpeed::Custom { duration_mins: 10 },
+            fee_rate: FeeRateOption::new(FeeSpeed::Custom { duration_mins: 10 }, 1.0).fee_rate,
+            total_fee: None,
+        };
+        let options = FeeRateOptionsWithTotalFee::without_totals(base_options);
+
+        let mut state = manager.state.lock();
+        state.fee_rate_options_base = Some(Arc::new(base_options));
+        state.fee_selection = Some(super::FeeSelection::new(Arc::new(options), Arc::new(selected)));
+    }
+
+    fn set_valid_amount_and_address(manager: &super::RustSendFlowManager, amount_sats: u64) {
+        let mut state = manager.state.lock();
+        state.amount_sats = Some(amount_sats);
+        state.unlocked_spendable_sats = Some(50_000);
+        state.address = Some(Arc::new(Address::preview_new()));
+    }
+
+    fn next_reconcile_message(manager: &super::RustSendFlowManager) -> super::Message {
+        let message = manager.reconcile_receiver.try_recv().expect("message is reconciled");
+        let SingleOrMany::Single(message) = message else {
+            panic!("expected a single reconcile message");
+        };
+
+        message
+    }
+
+    fn pending_warning_kind(
+        manager: &super::RustSendFlowManager,
+    ) -> Option<super::SendFlowWarningKind> {
+        match manager.pending_send_warning()? {
+            super::SendFlowAlertState::Warning { kind, .. } => Some(kind),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn validate_amount_allows_low_nonzero_amount() {
+        let manager = manager_for_validation();
+        {
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(1_000);
+            state.unlocked_spendable_sats = Some(50_000);
+        }
+
+        assert!(manager.validate_amount(false));
+    }
+
+    #[test]
+    fn pending_warning_returns_small_amount_before_high_fee() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 1_000);
+        set_selected_fee_total(&manager, 60);
+
+        assert_eq!(pending_warning_kind(&manager), Some(super::SendFlowWarningKind::SmallAmount));
+    }
+
+    #[test]
+    fn pending_warning_returns_very_high_fee_for_20_percent_or_more() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 10_000);
+        set_selected_fee_total(&manager, 2_000);
+
+        assert_eq!(pending_warning_kind(&manager), Some(super::SendFlowWarningKind::VeryHighFee));
+    }
+
+    #[test]
+    fn pending_warning_returns_high_fee_for_5_to_20_percent() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 10_000);
+        set_selected_fee_total(&manager, 500);
+
+        assert_eq!(pending_warning_kind(&manager), Some(super::SendFlowWarningKind::HighFee));
+    }
+
+    #[test]
+    fn acknowledging_small_amount_then_rerunning_finalize_reveals_high_fee() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 1_000);
+        set_selected_fee_total(&manager, 60);
+
+        assert_eq!(pending_warning_kind(&manager), Some(super::SendFlowWarningKind::SmallAmount));
+
+        manager.state.lock().acknowledge_warning(super::SendFlowWarningKind::SmallAmount);
+
+        assert_eq!(pending_warning_kind(&manager), Some(super::SendFlowWarningKind::HighFee));
+    }
+
+    #[test]
+    fn stale_warning_acknowledgement_does_not_record() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 1_000);
+        set_selected_fee_total(&manager, 60);
+
+        manager.acknowledge_warning_and_finalize(super::SendFlowWarningKind::HighFee);
+
+        let state = manager.state.lock();
+        assert!(!state.has_acknowledged_warning(super::SendFlowWarningKind::SmallAmount));
+        assert!(!state.has_acknowledged_warning(super::SendFlowWarningKind::HighFee));
+    }
+
+    #[test]
+    fn warning_acknowledgements_reset_on_amount_change() {
+        let manager = manager_for_validation();
+        manager.state.lock().acknowledge_warning(super::SendFlowWarningKind::SmallAmount);
+
+        manager.handle_amount_changed(super::Amount::from_sat(1_000));
+
+        assert!(
+            !manager.state.lock().has_acknowledged_warning(super::SendFlowWarningKind::SmallAmount)
+        );
+    }
+
+    #[test]
+    fn warning_acknowledgements_reset_on_address_change() {
+        let manager = manager_for_validation();
+        manager.state.lock().acknowledge_warning(super::SendFlowWarningKind::SmallAmount);
+
+        manager
+            .clone()
+            .dispatch(super::Action::NotifyAddressChanged(Arc::new(Address::preview_new())));
+
+        assert!(
+            !manager.state.lock().has_acknowledged_warning(super::SendFlowWarningKind::SmallAmount)
+        );
+    }
+
+    #[test]
+    fn warning_acknowledgements_reset_on_fee_change() {
+        let manager = manager_for_validation();
+        set_selected_fee_total(&manager, 500);
+        manager.state.lock().acknowledge_warning(super::SendFlowWarningKind::HighFee);
+
+        let selected = fee_rate_option_with_total_fee(FeeSpeed::Custom { duration_mins: 20 }, 750);
+        manager.selected_fee_rate_changed(Arc::new(selected));
+
+        assert!(
+            !manager.state.lock().has_acknowledged_warning(super::SendFlowWarningKind::HighFee)
+        );
+    }
+
+    #[test]
+    fn fee_greater_than_amount_hard_blocks_before_warnings() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 1_000);
+        set_selected_fee_total(&manager, 1_001);
+
+        manager.finalize_and_go_to_next_screen();
+
+        assert!(matches!(
+            next_reconcile_message(&manager),
+            super::Message::SetAlert(super::SendFlowAlertState::General { title, .. })
+                if title == "Fee Too High!"
+        ));
+    }
+
+    #[test]
+    fn finalize_refreshes_missing_total_fee_before_warning_detection() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 1_000);
+        set_selected_fee_without_total(&manager);
+
+        manager.finalize_and_go_to_next_screen();
+
+        assert!(manager.reconcile_receiver.try_recv().is_err());
+    }
+
     #[test]
     fn validate_amount_blocks_send_when_lock_state_load_failed() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
@@ -698,8 +943,7 @@ mod tests {
 
         assert!(!manager.validate_amount(true));
 
-        let message = manager.reconcile_receiver.try_recv().expect("alert is reconciled");
-        let SingleOrMany::Single(super::Message::SetAlert(alert)) = message else {
+        let super::Message::SetAlert(alert) = next_reconcile_message(&manager) else {
             panic!("expected a single lock-state load failure alert");
         };
 

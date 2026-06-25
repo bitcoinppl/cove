@@ -285,7 +285,11 @@ struct SendFlowSetAmountScreen: View {
             presenter.alertTitle,
             isPresented: presenter.showingAlert,
             presenting: presenter.alertState,
-            actions: presenter.alertButtons,
+            actions: { alert in
+                presenter.alertButtons(alert: alert) { kind in
+                    sendFlowManager.dispatch(action: .acknowledgeWarningAndFinalize(kind))
+                }
+            },
             message: presenter.alertMessage
         )
     }

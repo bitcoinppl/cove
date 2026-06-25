@@ -31,6 +31,7 @@ import org.bitcoinppl.cove.flows.CoinControlFlow.displayDate
 import org.bitcoinppl.cove.flows.CoinControlFlow.displayName
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.SendFlowManagerAction
+import org.bitcoinppl.cove_core.ffiConservativeDustLimitSats
 import org.bitcoinppl.cove_core.types.Amount
 import org.bitcoinppl.cove_core.types.Utxo
 import org.bitcoinppl.cove_core.types.UtxoType
@@ -66,21 +67,22 @@ fun CoinControlCustomAmountSheet(
     var debounceJob: Job? by remember { mutableStateOf(null) }
 
     // min/max calculations
-    val minSendSats = 546L
-    val minSend = if (isSats) minSendSats.toDouble() else minSendSats / 100_000_000.0
+    val conservativeDustLimitSatsU = remember { ffiConservativeDustLimitSats() }
+    val conservativeDustLimitSats = conservativeDustLimitSatsU.toLong()
+    val minSend = if (isSats) conservativeDustLimitSats.toDouble() else conservativeDustLimitSats.toDouble() / 100_000_000.0
 
     val step = if (isSats) 10.0 else 0.0000001
 
     val maxSend =
         remember(sendFlowManager.amount, unit) {
-            val amount = sendFlowManager.maxSendMinusFees() ?: Amount.fromSat(minSendSats.toULong() + 1000u)
+            val amount = sendFlowManager.maxSendMinusFees() ?: Amount.fromSat(conservativeDustLimitSatsU + 1_000uL)
             val value = if (isSats) amount.asSats().toDouble() else amount.asBtc()
             value.coerceAtLeast(minSend)
         }
 
     val softMaxSend =
         remember(sendFlowManager.amount, unit) {
-            val amount = sendFlowManager.maxSendMinusFeesAndSmallUtxo() ?: Amount.fromSat(minSendSats.toULong())
+            val amount = sendFlowManager.maxSendMinusFeesAndSmallUtxo() ?: Amount.fromSat(conservativeDustLimitSatsU)
             val value = if (isSats) amount.asSats().toDouble() else amount.asBtc()
             value.coerceAtLeast(minSend)
         }

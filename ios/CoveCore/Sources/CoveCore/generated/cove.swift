@@ -8680,8 +8680,6 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
 
     func validateAmount(displayAlert: Bool)  -> Bool
 
-    func validateFeePercentage(displayAlert: Bool)  -> Bool
-
     /**
      * get the custom fee rate option
      */
@@ -8834,16 +8832,6 @@ open func validateAmount(displayAlert: Bool = false) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustsendflowmanager_validate_amount(
-            self.uniffiCloneHandle(),
-        FfiConverterBool.lower(displayAlert),uniffiCallStatus
-    )
-})
-}
-
-open func validateFeePercentage(displayAlert: Bool = false) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_rustsendflowmanager_validate_fee_percentage(
             self.uniffiCloneHandle(),
         FfiConverterBool.lower(displayAlert),uniffiCallStatus
     )
@@ -30269,6 +30257,8 @@ public enum SendFlowAlertState: Equatable, Hashable {
     )
     case general(title: String, message: String
     )
+    case warning(kind: SendFlowWarningKind, title: String, message: String
+    )
 
 
 
@@ -30296,6 +30286,9 @@ public struct FfiConverterTypeSendFlowAlertState: FfiConverterRustBuffer {
         case 2: return .general(title: try FfiConverterString.read(from: &buf), message: try FfiConverterString.read(from: &buf)
         )
 
+        case 3: return .warning(kind: try FfiConverterTypeSendFlowWarningKind.read(from: &buf), title: try FfiConverterString.read(from: &buf), message: try FfiConverterString.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -30311,6 +30304,13 @@ public struct FfiConverterTypeSendFlowAlertState: FfiConverterRustBuffer {
 
         case let .general(title,message):
             writeInt(&buf, Int32(2))
+            FfiConverterString.write(title, into: &buf)
+            FfiConverterString.write(message, into: &buf)
+
+
+        case let .warning(kind,title,message):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeSendFlowWarningKind.write(kind, into: &buf)
             FfiConverterString.write(title, into: &buf)
             FfiConverterString.write(message, into: &buf)
 
@@ -30420,7 +30420,7 @@ enum SendFlowError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     case UnableToGetMaxSend(String
     )
     case InsufficientFunds
-    case SendAmountToLow
+    case SendBelowDustLimit
     case UnableToGetFeeRate
     case UnableToBuildTxn(String
     )
@@ -30486,7 +30486,7 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 8: return .InsufficientFunds
-        case 9: return .SendAmountToLow
+        case 9: return .SendBelowDustLimit
         case 10: return .UnableToGetFeeRate
         case 11: return .UnableToBuildTxn(
             try FfiConverterString.read(from: &buf)
@@ -30549,7 +30549,7 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(8))
 
 
-        case .SendAmountToLow:
+        case .SendBelowDustLimit:
             writeInt(&buf, Int32(9))
 
 
@@ -30809,6 +30809,8 @@ public enum SendFlowManagerAction {
     case changeFeeRateOptions(FeeRateOptionsWithTotalFee
     )
     case finalizeAndGoToNextScreen
+    case acknowledgeWarningAndFinalize(SendFlowWarningKind
+    )
 
 
 
@@ -30892,6 +30894,9 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         )
 
         case 23: return .finalizeAndGoToNextScreen
+
+        case 24: return .acknowledgeWarningAndFinalize(try FfiConverterTypeSendFlowWarningKind.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -31013,6 +31018,11 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
 
         case .finalizeAndGoToNextScreen:
             writeInt(&buf, Int32(23))
+
+
+        case let .acknowledgeWarningAndFinalize(v1):
+            writeInt(&buf, Int32(24))
+            FfiConverterTypeSendFlowWarningKind.write(v1, into: &buf)
 
         }
     }
@@ -31204,6 +31214,79 @@ public func FfiConverterTypeSendFlowManagerReconcileMessage_lift(_ buf: RustBuff
 #endif
 public func FfiConverterTypeSendFlowManagerReconcileMessage_lower(_ value: SendFlowManagerReconcileMessage) -> RustBuffer {
     return FfiConverterTypeSendFlowManagerReconcileMessage.lower(value)
+}
+
+
+
+
+public enum SendFlowWarningKind: Equatable, Hashable {
+
+    case smallAmount
+    case highFee
+    case veryHighFee
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SendFlowWarningKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendFlowWarningKind: FfiConverterRustBuffer {
+    typealias SwiftType = SendFlowWarningKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowWarningKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .smallAmount
+
+        case 2: return .highFee
+
+        case 3: return .veryHighFee
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SendFlowWarningKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .smallAmount:
+            writeInt(&buf, Int32(1))
+
+
+        case .highFee:
+            writeInt(&buf, Int32(2))
+
+
+        case .veryHighFee:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowWarningKind_lift(_ buf: RustBuffer) throws -> SendFlowWarningKind {
+    return try FfiConverterTypeSendFlowWarningKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowWarningKind_lower(_ value: SendFlowWarningKind) -> RustBuffer {
+    return FfiConverterTypeSendFlowWarningKind.lower(value)
 }
 
 
@@ -34881,6 +34964,7 @@ enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     )
     case InsufficientFunds(String
     )
+    case OutputBelowDustLimit
     case LockedOutputsSelected
     case GetConfirmDetailsError(String
     )
@@ -34999,42 +35083,43 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
         case 20: return .InsufficientFunds(
             try FfiConverterString.read(from: &buf)
             )
-        case 21: return .LockedOutputsSelected
-        case 22: return .GetConfirmDetailsError(
+        case 21: return .OutputBelowDustLimit
+        case 22: return .LockedOutputsSelected
+        case 23: return .GetConfirmDetailsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 23: return .SignAndBroadcastError(
+        case 24: return .SignAndBroadcastError(
             try FfiConverterString.read(from: &buf)
             )
-        case 24: return .Converter(
+        case 25: return .Converter(
             try FfiConverterTypeConverterError.read(from: &buf)
             )
-        case 25: return .UnknownError(
+        case 26: return .UnknownError(
             try FfiConverterString.read(from: &buf)
             )
-        case 26: return .PsbtFinalizeError(
+        case 27: return .PsbtFinalizeError(
             try FfiConverterString.read(from: &buf)
             )
-        case 27: return .GetHistoricalPricesError(
+        case 28: return .GetHistoricalPricesError(
             try FfiConverterString.read(from: &buf)
             )
-        case 28: return .CsvCreationError(
+        case 29: return .CsvCreationError(
             try FfiConverterString.read(from: &buf)
             )
-        case 29: return .AddUtxosError(
+        case 30: return .AddUtxosError(
             try FfiConverterString.read(from: &buf)
             )
-        case 30: return .OutputLabelsError(
+        case 31: return .OutputLabelsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 31: return .DatabaseCorruption(
+        case 32: return .DatabaseCorruption(
             id: try FfiConverterTypeWalletId.read(from: &buf),
             error: try FfiConverterString.read(from: &buf)
             )
-        case 32: return .PendingUnsignedTransactionsLoadError(
+        case 33: return .PendingUnsignedTransactionsLoadError(
             try FfiConverterString.read(from: &buf)
             )
-        case 33: return .ReceiveAddressError(
+        case 34: return .ReceiveAddressError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -35146,68 +35231,72 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case .LockedOutputsSelected:
+        case .OutputBelowDustLimit:
             writeInt(&buf, Int32(21))
 
 
-        case let .GetConfirmDetailsError(v1):
+        case .LockedOutputsSelected:
             writeInt(&buf, Int32(22))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .SignAndBroadcastError(v1):
+        case let .GetConfirmDetailsError(v1):
             writeInt(&buf, Int32(23))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Converter(v1):
+        case let .SignAndBroadcastError(v1):
             writeInt(&buf, Int32(24))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Converter(v1):
+            writeInt(&buf, Int32(25))
             FfiConverterTypeConverterError.write(v1, into: &buf)
 
 
         case let .UnknownError(v1):
-            writeInt(&buf, Int32(25))
-            FfiConverterString.write(v1, into: &buf)
-
-
-        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(26))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .GetHistoricalPricesError(v1):
+        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(27))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .CsvCreationError(v1):
+        case let .GetHistoricalPricesError(v1):
             writeInt(&buf, Int32(28))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .AddUtxosError(v1):
+        case let .CsvCreationError(v1):
             writeInt(&buf, Int32(29))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .OutputLabelsError(v1):
+        case let .AddUtxosError(v1):
             writeInt(&buf, Int32(30))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .DatabaseCorruption(id,error):
+        case let .OutputLabelsError(v1):
             writeInt(&buf, Int32(31))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .DatabaseCorruption(id,error):
+            writeInt(&buf, Int32(32))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterString.write(error, into: &buf)
 
 
         case let .PendingUnsignedTransactionsLoadError(v1):
-            writeInt(&buf, Int32(32))
+            writeInt(&buf, Int32(33))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .ReceiveAddressError(v1):
-            writeInt(&buf, Int32(33))
+            writeInt(&buf, Int32(34))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -40262,17 +40351,31 @@ public func walletDisplaySentAndReceivedAmount(metadata: WalletMetadata, sentAnd
     )
 })
 }
-public func ffiMinSendAmount() -> Amount  {
+public func ffiConservativeDustLimitAmount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_cove_fn_func_ffi_min_send_amount(uniffiCallStatus
+    uniffi_cove_fn_func_ffi_conservative_dust_limit_amount(uniffiCallStatus
     )
 })
 }
-public func ffiMinSendSats() -> UInt64  {
+public func ffiConservativeDustLimitSats() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_cove_fn_func_ffi_min_send_sats(uniffiCallStatus
+    uniffi_cove_fn_func_ffi_conservative_dust_limit_sats(uniffiCallStatus
+    )
+})
+}
+public func ffiLowSendWarningAmount() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_ffi_low_send_warning_amount(uniffiCallStatus
+    )
+})
+}
+public func ffiLowSendWarningSats() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_ffi_low_send_warning_sats(uniffiCallStatus
     )
 })
 }
@@ -40488,10 +40591,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_wallet_display_sent_and_received_amount() != 2923) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_ffi_min_send_amount() != 61138) {
+    if (uniffi_cove_checksum_func_ffi_conservative_dust_limit_amount() != 11787) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_ffi_min_send_sats() != 550) {
+    if (uniffi_cove_checksum_func_ffi_conservative_dust_limit_sats() != 54311) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_ffi_low_send_warning_amount() != 6176) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_ffi_low_send_warning_sats() != 35697) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_preview_new_legacy_found_address() != 25458) {
@@ -41053,9 +41162,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_validate_amount() != 64774) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustsendflowmanager_validate_fee_percentage() != 52935) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_get_custom_fee_option() != 7512) {

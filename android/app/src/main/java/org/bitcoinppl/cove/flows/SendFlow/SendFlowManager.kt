@@ -168,9 +168,7 @@ class SendFlowManager internal constructor(
      */
     fun validate(displayAlert: Boolean = false): Boolean {
         if (isClosed.get()) return false
-        return validateAmount(displayAlert) &&
-                validateAddress(displayAlert) &&
-                validateFeePercentage(displayAlert)
+        return validateAmount(displayAlert) && validateAddress(displayAlert)
     }
 
     suspend fun waitForInit(): Boolean =
@@ -222,11 +220,6 @@ class SendFlowManager internal constructor(
     fun validateAmount(displayAlert: Boolean = false): Boolean =
         withRustOr(false) {
             validateAmount(displayAlert)
-        }
-
-    fun validateFeePercentage(displayAlert: Boolean = false): Boolean =
-        withRustOr(false) {
-            validateFeePercentage(displayAlert)
         }
 
     fun updateAddress(address: Address) {

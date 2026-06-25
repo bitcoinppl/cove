@@ -2,10 +2,18 @@ use cove_types::address::AddressError;
 
 use super::error::SendFlowError;
 
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SendFlowWarningKind {
+    SmallAmount,
+    HighFee,
+    VeryHighFee,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum SendFlowAlertState {
     Error(SendFlowError),
     General { title: String, message: String },
+    Warning { kind: SendFlowWarningKind, title: String, message: String },
 }
 
 impl SendFlowAlertState {

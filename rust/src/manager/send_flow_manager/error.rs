@@ -29,8 +29,8 @@ pub enum SendFlowError {
     #[error("insufficient funds")]
     InsufficientFunds,
 
-    #[error("send amount to low")]
-    SendAmountToLow,
+    #[error("send amount is below the dust limit")]
+    SendBelowDustLimit,
 
     #[error("unable to get fee rate")]
     UnableToGetFeeRate,
@@ -42,10 +42,20 @@ pub enum SendFlowError {
     UnableToSaveUnsignedTransaction(String),
 
     #[error(transparent)]
-    WalletManager(#[from] WalletManagerError),
+    WalletManager(WalletManagerError),
 
     #[error("unable to get fee details: {0}")]
     UnableToGetFeeDetails(String),
+}
+
+impl From<WalletManagerError> for SendFlowError {
+    fn from(error: WalletManagerError) -> Self {
+        match error {
+            WalletManagerError::OutputBelowDustLimit => Self::SendBelowDustLimit,
+            WalletManagerError::InsufficientFunds(_) => Self::InsufficientFunds,
+            error => Self::WalletManager(error),
+        }
+    }
 }
 
 impl SendFlowError {
@@ -59,5 +69,26 @@ impl SendFlowError {
 
             _ => Self::InvalidAddress(address),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SendFlowError, WalletManagerError};
+
+    #[test]
+    fn wallet_output_below_dust_maps_to_send_below_dust() {
+        let error = SendFlowError::from(WalletManagerError::OutputBelowDustLimit);
+
+        assert!(matches!(error, SendFlowError::SendBelowDustLimit));
+    }
+
+    #[test]
+    fn wallet_insufficient_funds_maps_to_send_insufficient_funds() {
+        let error = SendFlowError::from(WalletManagerError::InsufficientFunds(
+            "not enough funds".to_string(),
+        ));
+
+        assert!(matches!(error, SendFlowError::InsufficientFunds));
     }
 }

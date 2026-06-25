@@ -62,7 +62,6 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     func validate(displayAlert: Bool = false) -> Bool {
         validateAmount(displayAlert: displayAlert)
             && validateAddress(displayAlert: displayAlert)
-            && validateFeePercentage(displayAlert: displayAlert)
     }
 
     func validateAddress(displayAlert: Bool = false) -> Bool {
@@ -71,10 +70,6 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
     func validateAmount(displayAlert: Bool = false) -> Bool {
         rust.validateAmount(displayAlert: displayAlert)
-    }
-
-    func validateFeePercentage(_: String? = nil, displayAlert: Bool = false) -> Bool {
-        rust.validateFeePercentage(displayAlert: displayAlert)
     }
 
     /// private
@@ -156,14 +151,17 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
         case let .setAlert(alertState):
             Log.warn("setAlert: \(alertState)")
-            self.presenter.alertState = .init(alertState)
+            let hadSheet = self.presenter.sheetState != .none
+            let hadAlert = self.presenter.alertState != .none
 
-            if self.presenter.sheetState != .none || self.presenter.alertState != .none {
+            if hadSheet || hadAlert {
                 self.presenter.alertState = .none
                 self.presenter.sheetState = .none
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                     self.presenter.alertState = .init(alertState)
                 }
+            } else {
+                self.presenter.alertState = .init(alertState)
             }
 
         case .clearAlert:

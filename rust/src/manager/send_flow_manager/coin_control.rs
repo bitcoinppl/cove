@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cove_common::consts::{MIN_SEND_AMOUNT, MIN_SEND_SATS};
+use cove_common::consts::CONSERVATIVE_DUST_LIMIT_AMOUNT;
 use cove_types::{
     amount::Amount,
     unit::BitcoinUnit,
@@ -24,7 +24,7 @@ impl RustSendFlowManager {
             BitcoinUnit::Btc => Amount::from_btc(amount).ok()?,
             BitcoinUnit::Sat => Amount::from_sat(amount as u64),
         }
-        .max(MIN_SEND_AMOUNT.into());
+        .max(CONSERVATIVE_DUST_LIMIT_AMOUNT.into());
 
         // if the amount we are selecting is within 1000 sats of the max send, then select the max send
         let max_send_without_fees_and_small_utxo = self.max_send_minus_fees_and_small_utxo()?;
@@ -64,7 +64,14 @@ impl RustSendFlowManager {
         let amount = amount.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
         let amount_float = amount.parse::<f64>().ok()?;
 
-        if amount_float < MIN_SEND_SATS as f64 && is_focused {
+        let unit = self.state.lock().metadata.selected_unit;
+        let amount = match unit {
+            BitcoinUnit::Btc => Amount::from_btc(amount_float).ok()?,
+            BitcoinUnit::Sat => Amount::from_sat(amount_float as u64),
+        };
+        let dust_limit = CONSERVATIVE_DUST_LIMIT_AMOUNT.into();
+
+        if amount < dust_limit && is_focused {
             return None;
         }
 
@@ -92,6 +99,7 @@ impl RustSendFlowManager {
                 .as_ref()
                 .and_then(|selection| selection.selected.total_fee.map(|f| f.as_sats()));
 
+            state.clear_warning_acknowledgements();
             state.mode = EnterMode::coin_control_max(utxo_list.clone());
             let total_minus_fees =
                 utxo_list.total.as_sats().saturating_sub(total_fee_sats.unwrap_or(1000));
@@ -113,7 +121,11 @@ impl RustSendFlowManager {
             return;
         }
 
-        self.state.lock().mode = EnterMode::SetAmount;
+        {
+            let mut state = self.state.lock();
+            state.clear_warning_acknowledgements();
+            state.mode = EnterMode::SetAmount;
+        }
 
         let me = self.clone();
         cove_tokio::task::spawn(async move {
