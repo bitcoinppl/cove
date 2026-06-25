@@ -150,6 +150,11 @@ compile-android:
 # test
 # ------------------------------------------------------------------------------
 
+# run ios and android manual ui tests
+[group('test')]
+ui-manual:
+    just android-ui-manual && just ios-ui-manual
+
 # Run manual Android full-launch onboarding UI tests
 [group('test')]
 [script('bash')]
