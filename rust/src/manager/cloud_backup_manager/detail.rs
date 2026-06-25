@@ -4,9 +4,10 @@ use tracing::error;
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
     CLOUD_BACKUP_MANAGER, CloudBackupDetail, CloudBackupManagerAction,
-    CloudBackupPasskeyChoiceIntent, CloudBackupRestoreFlow, CloudBackupWalletItem,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation,
-    RustCloudBackupManager, SavedPasskeyConfirmationMode, actors::CloudBackupOperation,
+    CloudBackupPasskeyChoiceIntent, CloudBackupRestoreFlow, CloudBackupStateReducerEvent,
+    CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    OtherBackupsOperation, RustCloudBackupManager, SavedPasskeyConfirmationMode,
+    actors::CloudBackupOperation,
 };
 
 type Action = CloudBackupManagerAction;
@@ -429,5 +430,224 @@ impl RustCloudBackupManager {
                 self.apply_failed_verification(failure);
             }
         }
+    }
+}
+
+impl RustCloudBackupManager {
+    pub(crate) fn apply_detail_outcome(&self, outcome: CloudBackupDetailOutcome) {
+        let detail = match outcome {
+            CloudBackupDetailOutcome::Cleared => None,
+            CloudBackupDetailOutcome::Refreshed(detail) => Some(detail),
+        };
+        let detail_snapshot = self.cloud_only_detail_snapshot.read().clone();
+        let reset_cloud_only = {
+            let state = self.state.read();
+            detail.as_ref().is_some_and(|detail| {
+                cloud_only_cache_is_stale(&state.cloud_only(), detail, detail_snapshot.as_ref())
+            })
+        };
+
+        if reset_cloud_only {
+            *self.cloud_only_detail_snapshot.write() = None;
+        }
+
+        self.apply_model_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+            detail,
+            reset_cloud_only,
+        });
+    }
+
+    fn apply_cloud_only_state(&self, cloud_only: CloudOnlyState) {
+        if !matches!(cloud_only, CloudOnlyState::Loaded { .. }) {
+            *self.cloud_only_detail_snapshot.write() = None;
+        }
+
+        self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(cloud_only));
+    }
+
+    fn apply_loaded_cloud_only(&self, wallets: Vec<CloudBackupWalletItem>) {
+        let detail = self.state.read().detail().clone();
+        *self.cloud_only_detail_snapshot.write() = detail;
+        self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+            CloudOnlyState::Loaded { wallets },
+        ));
+    }
+
+    pub(crate) fn apply_cloud_only_fetch_outcome(&self, outcome: CloudBackupCloudOnlyFetchOutcome) {
+        match outcome {
+            CloudBackupCloudOnlyFetchOutcome::Reset => {
+                self.apply_cloud_only_state(CloudOnlyState::NotFetched);
+                self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
+            }
+            CloudBackupCloudOnlyFetchOutcome::Started => {
+                self.apply_cloud_only_state(CloudOnlyState::Loading);
+                self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
+            }
+            CloudBackupCloudOnlyFetchOutcome::Loaded(wallets) => {
+                self.apply_loaded_cloud_only(wallets);
+            }
+            CloudBackupCloudOnlyFetchOutcome::Failed(error) => {
+                self.apply_cloud_only_state(CloudOnlyState::Failed { error });
+            }
+        }
+    }
+
+    fn apply_cloud_only_operation(&self, cloud_only_operation: CloudOnlyOperation) {
+        self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyOperationResolved(
+            cloud_only_operation,
+        ));
+    }
+
+    pub(crate) fn apply_cloud_only_wallet_outcome(
+        &self,
+        outcome: CloudBackupCloudOnlyWalletOutcome,
+    ) {
+        match outcome {
+            CloudBackupCloudOnlyWalletOutcome::Started { record_id } => {
+                self.apply_cloud_only_operation(CloudOnlyOperation::Operating { record_id });
+            }
+            CloudBackupCloudOnlyWalletOutcome::Restored { record_id, warning } => {
+                self.apply_finished_cloud_only_wallet_operation(record_id, warning);
+            }
+            CloudBackupCloudOnlyWalletOutcome::SkippedDuplicate { record_id } => {
+                self.apply_finished_cloud_only_wallet_operation(record_id, None);
+            }
+            CloudBackupCloudOnlyWalletOutcome::Deleted { record_id } => {
+                self.apply_finished_cloud_only_wallet_operation(record_id, None);
+            }
+            CloudBackupCloudOnlyWalletOutcome::Failed(error) => {
+                self.apply_cloud_only_operation(CloudOnlyOperation::Failed { error });
+            }
+        }
+    }
+
+    fn apply_finished_cloud_only_wallet_operation(
+        &self,
+        record_id: String,
+        warning: Option<CloudBackupCloudOnlyOperationWarning>,
+    ) {
+        if let Some(warning) = warning {
+            self.apply_cloud_only_operation(CloudOnlyOperation::Warning {
+                message: warning.message,
+                error: warning.error,
+            });
+        } else {
+            self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
+        }
+
+        let mut cloud_only = self.state.read().cloud_only().clone();
+        if let CloudOnlyState::Loaded { wallets } = &mut cloud_only {
+            wallets.retain(|wallet| wallet.record_id != record_id);
+        }
+        self.apply_cloud_only_state(cloud_only);
+    }
+}
+
+fn cloud_only_cache_is_stale(
+    cloud_only: &CloudOnlyState,
+    detail: &CloudBackupDetail,
+    detail_snapshot: Option<&CloudBackupDetail>,
+) -> bool {
+    let CloudOnlyState::Loaded { wallets } = cloud_only else {
+        return false;
+    };
+
+    if detail_snapshot != Some(detail) {
+        return true;
+    }
+
+    if wallets.len() as u32 != detail.cloud_only_count {
+        return true;
+    }
+
+    wallets.iter().any(|cloud_wallet| {
+        detail
+            .up_to_date
+            .iter()
+            .chain(detail.needs_sync.iter())
+            .any(|local_wallet| local_wallet.record_id == cloud_wallet.record_id)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::ops::test_support::{
+        ensure_cloud_backup_test_tokio_runtime, test_globals, test_lock,
+    };
+    use super::super::{
+        CloudBackupOtherBackupsState, CloudBackupWalletStatus, PersistedCloudBackupState,
+    };
+    use super::*;
+    use crate::database::Database;
+
+    fn init_manager() -> std::sync::Arc<RustCloudBackupManager> {
+        ensure_cloud_backup_test_tokio_runtime();
+        test_globals().reset();
+        Database::global().cloud_backup_state.set(&PersistedCloudBackupState::default()).unwrap();
+        RustCloudBackupManager::init()
+    }
+
+    fn cloud_backup_wallet_item(record_id: &str) -> CloudBackupWalletItem {
+        CloudBackupWalletItem {
+            name: record_id.into(),
+            network: None,
+            wallet_mode: None,
+            wallet_type: None,
+            fingerprint: None,
+            label_count: None,
+            backup_updated_at: None,
+            sync_status: CloudBackupWalletStatus::DeletedFromDevice,
+            record_id: record_id.into(),
+        }
+    }
+
+    fn cloud_backup_detail(cloud_only_count: u32) -> CloudBackupDetail {
+        CloudBackupDetail {
+            last_sync: None,
+            up_to_date: Vec::new(),
+            needs_sync: Vec::new(),
+            cloud_only_count,
+            other_backups: CloudBackupOtherBackupsState::Loaded { summary: Default::default() },
+        }
+    }
+
+    #[test]
+    fn detail_refresh_resets_empty_cloud_only_cache_when_remote_count_increases() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+
+        manager
+            .apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(Vec::new()));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(1)));
+
+        assert!(matches!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched));
+    }
+
+    #[test]
+    fn detail_refresh_resets_loaded_cloud_only_cache_when_remote_count_drops_to_zero() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+
+        manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+            cloud_backup_wallet_item("wallet-1"),
+        ]));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(0)));
+
+        assert!(matches!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched));
+    }
+
+    #[test]
+    fn detail_refresh_resets_cloud_only_cache_when_loaded_wallet_is_now_local() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        let wallet = cloud_backup_wallet_item("wallet-1");
+        let mut detail = cloud_backup_detail(1);
+        detail.up_to_date.push(wallet.clone());
+
+        manager
+            .apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![wallet]));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
+
+        assert!(matches!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched));
     }
 }
