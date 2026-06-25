@@ -100,6 +100,7 @@ class WalletManager :
 
     // cached transaction details (observable for Compose)
     val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
+    val transactionConfirmations: SnapshotStateMap<TxId, UInt> = mutableStateMapOf()
 
     var receiveAddressState by mutableStateOf<ReceiveAddressState?>(null)
     var receiveAddressPresentation by mutableStateOf(
@@ -313,6 +314,18 @@ class WalletManager :
         return details
     }
 
+    suspend fun refreshTransactionDetails(txId: TxId): TransactionDetails {
+        val details = rust.transactionDetails(txId)
+        transactionDetailsCache[txId] = details
+
+        val blockNumber = details.blockNumber()
+        if (blockNumber != null) {
+            transactionConfirmations[txId] = rust.numberOfConfirmations(blockNumber)
+        }
+
+        return details
+    }
+
     suspend fun transactionLockState(txId: TxId): TransactionLockState = rust.transactionLockState(txId)
 
     suspend fun toggleTransactionLockState(txId: TxId): TransactionLockState {
@@ -351,6 +364,43 @@ class WalletManager :
 
     fun updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {
         transactionDetailsCache[txId] = details
+    }
+
+    fun updateTransactionConfirmations(
+        txId: TxId,
+        confirmations: UInt,
+    ) {
+        transactionConfirmations[txId] = confirmations
+    }
+
+    private fun replaceTransactionInLoadState(transaction: Transaction) {
+        fun replace(txns: List<Transaction>): List<Transaction> {
+            val txId = transaction.txId()
+            var replaced = false
+            val updated =
+                txns.map { current ->
+                    if (current.txId() == txId) {
+                        replaced = true
+                        transaction
+                    } else {
+                        current
+                    }
+                }
+
+            return if (replaced) updated else listOf(transaction) + updated
+        }
+
+        loadState =
+            when (val current = loadState) {
+                is WalletLoadState.LOADING ->
+                    if (ledgerState.initialScanComplete) {
+                        WalletLoadState.LOADED(listOf(transaction))
+                    } else {
+                        WalletLoadState.SCANNING(listOf(transaction))
+                    }
+                is WalletLoadState.SCANNING -> WalletLoadState.SCANNING(replace(current.txns))
+                is WalletLoadState.LOADED -> WalletLoadState.LOADED(replace(current.txns))
+            }
     }
 
     suspend fun updateWalletBalance() {
@@ -420,6 +470,18 @@ class WalletManager :
                                 WalletLoadState.SCANNING(message.v1)
                             }
                     }
+            }
+
+            is WalletManagerReconcileMessage.TransactionUpdated -> {
+                replaceTransactionInLoadState(message.v1)
+            }
+
+            is WalletManagerReconcileMessage.TransactionDetailsUpdated -> {
+                transactionDetailsCache[message.v1.txId()] = message.v1
+            }
+
+            is WalletManagerReconcileMessage.TransactionConfirmationsUpdated -> {
+                transactionConfirmations[message.v1.txId] = message.v1.confirmations
             }
 
             is WalletManagerReconcileMessage.ScanComplete -> {
@@ -539,6 +601,12 @@ class WalletManager :
         logDebug("dispatch: $action")
         mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
     }
+
+    private fun Transaction.txId(): TxId =
+        when (this) {
+            is Transaction.Confirmed -> v1.id()
+            is Transaction.Unconfirmed -> v1.id()
+        }
 
     private fun persistWalletMetadata(metadata: WalletMetadata) {
         ioScope.launch { rust.setWalletMetadata(metadata) }

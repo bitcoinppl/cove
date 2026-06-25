@@ -61,8 +61,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
@@ -86,11 +84,6 @@ import org.bitcoinppl.cove_core.types.TxId
 import org.bitcoinppl.cove_core.types.TransactionDirection
 
 private const val INITIAL_DELAY_MS = 2000L
-private const val FREQUENT_POLL_INTERVAL_MS = 30000L
-private const val NORMAL_POLL_INTERVAL_MS = 60000L
-private const val MAX_POLL_ERRORS = 10
-private const val CONFIRMATIONS_THRESHOLD = 3
-
 /**
  * Transaction details screen - now using manager-based pattern
  * Ported from iOS TransactionDetailsView.swift
@@ -115,8 +108,7 @@ fun TransactionDetailsScreen(
     // read transaction details from cache (observable), fallback to passed-in details
     val transactionDetails = manager.transactionDetailsCache[txId] ?: details
 
-    // state for confirmation polling and pull-to-refresh
-    var numberOfConfirmations by remember { mutableStateOf<Int?>(null) }
+    val numberOfConfirmations = manager.transactionConfirmations[txId]?.toInt()
     var isRefreshing by remember { mutableStateOf(false) }
     var lockState by remember { mutableStateOf<TransactionLockState?>(null) }
     var isUpdatingLockState by remember { mutableStateOf(false) }
@@ -178,13 +170,18 @@ fun TransactionDetailsScreen(
         }
     }
 
+    suspend fun refreshTransactionDetails() {
+        manager.refreshTransactionDetails(txId)
+    }
+
     // immediately fetch fresh transaction details on screen load
     LaunchedEffect(manager, txId, refreshOnAppear) {
-        if (!refreshOnAppear) return@LaunchedEffect
-
+        var latestDetails = transactionDetails
         try {
-            val freshDetails = manager.rust.transactionDetails(txId = txId)
-            manager.updateTransactionDetailsCache(txId, freshDetails)
+            if (refreshOnAppear) {
+                refreshTransactionDetails()
+                latestDetails = manager.transactionDetailsCache[txId] ?: latestDetails
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -192,6 +189,11 @@ fun TransactionDetailsScreen(
         }
 
         refreshTransactionLockState(showSnackbar = false)
+
+        if (!latestDetails.isConfirmed()) {
+            delay(INITIAL_DELAY_MS)
+            manager.dispatch(WalletManagerAction.StartTransactionWatcher(txId))
+        }
     }
 
     // load fiat amounts (update cached values with fresh async values)
@@ -232,60 +234,6 @@ fun TransactionDetailsScreen(
                 android.util.Log.e("TransactionDetails", "Failed to fetch historical fiat amount", e)
                 historicalFiatFmt // keep cached value on error
             }
-    }
-
-    // poll for confirmations if not fully confirmed
-    LaunchedEffect(txId) {
-        if (!transactionDetails.isConfirmed()) {
-            delay(INITIAL_DELAY_MS)
-        }
-
-        var needsFrequentCheck = true
-        var errors = 0
-
-        while (isActive) {
-            try {
-                ensureActive()
-
-                // refresh transaction details and update cache
-                val freshDetails = manager.rust.transactionDetails(txId = txId)
-                if (!isActive) break
-                manager.updateTransactionDetailsCache(txId, freshDetails)
-
-                // get confirmations from fresh details
-                val blockNumber = freshDetails.blockNumber()
-                if (blockNumber != null) {
-                    val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
-                    if (!isActive) break
-                    numberOfConfirmations = confirmations.toInt()
-
-                    // if fully confirmed, slow down polling
-                    if (confirmations >= CONFIRMATIONS_THRESHOLD.toUInt() && needsFrequentCheck) {
-                        needsFrequentCheck = false
-                    }
-                }
-
-                // reset error count on success
-                errors = 0
-
-                // wait before next poll
-                if (needsFrequentCheck) {
-                    delay(FREQUENT_POLL_INTERVAL_MS)
-                } else {
-                    delay(NORMAL_POLL_INTERVAL_MS)
-                }
-            } catch (e: CancellationException) {
-                // composable left composition, exit gracefully
-                break
-            } catch (e: Exception) {
-                android.util.Log.e("TransactionDetails", "error polling confirmations", e)
-                errors++
-                if (errors > MAX_POLL_ERRORS) {
-                    break
-                }
-                delay(FREQUENT_POLL_INTERVAL_MS)
-            }
-        }
     }
 
     // theme colors
@@ -418,15 +366,7 @@ fun TransactionDetailsScreen(
                 scope.launch {
                     isRefreshing = true
                     try {
-                        val freshDetails = manager.rust.transactionDetails(txId = txId)
-                        manager.updateTransactionDetailsCache(txId, freshDetails)
-
-                        // also update confirmations
-                        val blockNumber = freshDetails.blockNumber()
-                        if (blockNumber != null) {
-                            val confirmations = manager.rust.numberOfConfirmations(blockHeight = blockNumber)
-                            numberOfConfirmations = confirmations.toInt()
-                        }
+                        refreshTransactionDetails()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -590,7 +530,7 @@ fun TransactionDetailsScreen(
                     Spacer(Modifier.height(32.dp))
 
                     // show confirmation indicator if < 3 confirmations
-                    if (numberOfConfirmations != null && numberOfConfirmations!! < 3) {
+                    if (numberOfConfirmations != null && numberOfConfirmations < 3) {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Spacer(Modifier.height(24.dp))
                             Box(
@@ -602,7 +542,7 @@ fun TransactionDetailsScreen(
                             )
                             Spacer(Modifier.height(24.dp))
                             ConfirmationIndicatorView(
-                                current = numberOfConfirmations!!,
+                                current = numberOfConfirmations,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             // only add spacing if details are collapsed
