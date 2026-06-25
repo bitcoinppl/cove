@@ -11,17 +11,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -53,8 +50,10 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.TaggedItem
-import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.views.ChoiceAlertDialog
+import org.bitcoinppl.cove.views.DialogChoice
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.CloudBackupEnablePromptChoice
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
@@ -463,19 +462,12 @@ fun CloudBackupPresentationHost(
 
     when (val presentation = coordinator.currentPresentation) {
         is CloudBackupRootPresentation.ExistingBackupFound -> {
-            AlertDialog(
-                onDismissRequest = {
-                    if (!coordinator.consumeDismissEvent()) {
-                        manager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
-                    }
-                },
-                title = { Text("Existing Cloud Backup Found") },
-                text = {
-                    Text(existingBackupMessage(presentation.passkeyHint))
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
+            ChoiceAlertDialog(
+                title = "Existing Cloud Backup Found",
+                message = existingBackupMessage(presentation.passkeyHint),
+                choices =
+                    listOf(
+                        DialogChoice("Create New Backup") {
                             coordinator.dismissCurrentPresentation()
                             manager.dispatch(
                                 CloudBackupManagerAction.AcceptEnablePrompt(
@@ -483,9 +475,7 @@ fun CloudBackupPresentationHost(
                                 ),
                             )
                         },
-                    ) { Text("Create New Backup") }
-                    TextButton(
-                        onClick = {
+                        DialogChoice("Try Existing Passkey") {
                             coordinator.dismissCurrentPresentation()
                             manager.dispatch(
                                 CloudBackupManagerAction.AcceptEnablePrompt(
@@ -493,75 +483,64 @@ fun CloudBackupPresentationHost(
                                 ),
                             )
                         },
-                    ) { Text("Try Existing Passkey") }
+                    ),
+                onDismiss = {
+                    if (!coordinator.consumeDismissEvent()) {
+                        manager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
+                    }
                 },
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            coordinator.dismissCurrentPresentation()
-                            manager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
-                        },
-                    ) { Text("Cancel") }
+                onCancel = {
+                    coordinator.dismissCurrentPresentation()
+                    manager.dispatch(CloudBackupManagerAction.DiscardPendingEnableCloudBackup)
                 },
             )
         }
 
         is CloudBackupRootPresentation.PasskeyChoice -> {
-            AlertDialog(
-                onDismissRequest = {
+            ChoiceAlertDialog(
+                title = "Passkey Options",
+                message = "Would you like to use an existing passkey or create a new one?",
+                choices =
+                    listOf(
+                        DialogChoice(
+                            existingPasskeyButtonTitle(
+                                (presentation.intent as? CloudBackupPasskeyChoiceIntent.Enable)?.v2,
+                            ),
+                        ) {
+                            coordinator.dismissCurrentPresentation()
+                            when (val intent = presentation.intent) {
+                                is CloudBackupPasskeyChoiceIntent.Enable ->
+                                    manager.dispatch(
+                                        CloudBackupManagerAction.AcceptEnablePrompt(
+                                            CloudBackupEnablePromptChoice.USE_EXISTING,
+                                        ),
+                                    )
+                                is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
+                                    manager.dispatch(CloudBackupManagerAction.RepairPasskey)
+                            }
+                        },
+                        DialogChoice("Create New Passkey") {
+                            coordinator.dismissCurrentPresentation()
+                            when (val intent = presentation.intent) {
+                                is CloudBackupPasskeyChoiceIntent.Enable ->
+                                    manager.dispatch(
+                                        CloudBackupManagerAction.AcceptEnablePrompt(
+                                            CloudBackupEnablePromptChoice.CREATE_NEW,
+                                        ),
+                                    )
+                                is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
+                                    manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery)
+                            }
+                        },
+                    ),
+                onDismiss = {
                     if (!coordinator.consumeDismissEvent()) {
                         manager.dispatch(CloudBackupManagerAction.DismissPasskeyChoicePrompt)
                     }
                 },
-                title = { Text("Passkey Options") },
-                text = {
-                    Text("Would you like to use an existing passkey or create a new one?")
-                },
-                confirmButton = {
-                    Column(horizontalAlignment = Alignment.End) {
-                        TextButton(
-                            onClick = {
-                                coordinator.dismissCurrentPresentation()
-                                when (val intent = presentation.intent) {
-                                    is CloudBackupPasskeyChoiceIntent.Enable ->
-                                        manager.dispatch(
-                                            CloudBackupManagerAction.AcceptEnablePrompt(
-                                                CloudBackupEnablePromptChoice.USE_EXISTING,
-                                            ),
-                                        )
-                                    is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
-                                        manager.dispatch(CloudBackupManagerAction.RepairPasskey)
-                                }
-                            },
-                        ) {
-                            Text(
-                                existingPasskeyButtonTitle(
-                                    (presentation.intent as? CloudBackupPasskeyChoiceIntent.Enable)?.v2,
-                                ),
-                            )
-                        }
-                        TextButton(
-                            onClick = {
-                                coordinator.dismissCurrentPresentation()
-                                when (val intent = presentation.intent) {
-                                    is CloudBackupPasskeyChoiceIntent.Enable ->
-                                        manager.dispatch(
-                                            CloudBackupManagerAction.AcceptEnablePrompt(
-                                                CloudBackupEnablePromptChoice.CREATE_NEW,
-                                            ),
-                                        )
-                                    is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
-                                        manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery)
-                                }
-                            },
-                        ) { Text("Create New Passkey") }
-                        TextButton(
-                            onClick = {
-                                coordinator.dismissCurrentPresentation()
-                                manager.dispatch(CloudBackupManagerAction.DismissPasskeyChoicePrompt)
-                            },
-                        ) { Text("Cancel") }
-                    }
+                onCancel = {
+                    coordinator.dismissCurrentPresentation()
+                    manager.dispatch(CloudBackupManagerAction.DismissPasskeyChoicePrompt)
                 },
             )
         }
@@ -670,9 +649,9 @@ private fun CloudBackupVerificationPrompt(
 
     val title =
         when {
-            isVerifying -> "Verifying Cloud Backup"
-            failure != null -> "Verification Failed"
-            else -> "Verify"
+            isVerifying -> "Verifying cloud backup"
+            failure != null -> "Verification failed"
+            else -> "Verify cloud backup?"
         }
 
     val message =
@@ -684,86 +663,95 @@ private fun CloudBackupVerificationPrompt(
                 "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey."
         }
 
-    Dialog(
+    CloudBackupVerificationPromptDialog(
+        title = title,
+        message = message,
+        isVerifying = isVerifying,
+        hasFailure = failure != null,
         onDismissRequest = {
             if (!isVerifying) {
                 onDismiss()
             }
         },
+        onDismiss = onDismiss,
+        onVerify = onVerify,
+    )
+}
+
+@Composable
+internal fun CloudBackupVerificationPromptDialog(
+    title: String,
+    message: String,
+    isVerifying: Boolean,
+    hasFailure: Boolean,
+    onDismissRequest: () -> Unit,
+    onDismiss: () -> Unit,
+    onVerify: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        icon = {
+            if (isVerifying) {
+                CircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(24.dp),
+                )
+            } else {
+                Icon(
+                    imageVector = if (hasFailure) Icons.Default.Warning else Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint =
+                        if (hasFailure) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                )
+            }
+        },
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(
+                onClick = onVerify,
+                enabled = !isVerifying,
+            ) {
+                Text(if (hasFailure) "Try Again" else "Verify")
+            }
+        },
+        dismissButton = {
+            if (!isVerifying) {
+                TextButton(onClick = onDismiss) {
+                    Text("Not Now")
+                }
+            }
+        },
         properties =
             DialogProperties(
                 dismissOnBackPress = !isVerifying,
-                dismissOnClickOutside = false,
-                usePlatformDefaultWidth = false,
+                dismissOnClickOutside = !isVerifying,
             ),
-    ) {
+    )
+}
+
+@Composable
+internal fun CloudBackupVerificationPromptPreviewContent() {
+    CoveTheme(darkTheme = false, dynamicColor = false) {
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.9f)),
+                    .background(MaterialTheme.colorScheme.background),
         ) {
-            Surface(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.Center)
-                        .padding(24.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                tonalElevation = 6.dp,
-            ) {
-                Column(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        if (!isVerifying) {
-                            IconButton(
-                                onClick = onDismiss,
-                                modifier = Modifier.align(Alignment.TopEnd),
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Close")
-                            }
-                        }
-                    }
-
-                    Icon(
-                        imageVector = if (failure == null) Icons.Default.CheckCircle else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (failure == null) MaterialTheme.coveColors.systemGreen else CoveColor.WarningOrange,
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                    )
-
-                    Text(title, style = MaterialTheme.typography.headlineSmall)
-                    Text(message, style = MaterialTheme.typography.bodyMedium)
-
-                    Button(
-                        onClick = onVerify,
-                        enabled = !isVerifying,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        if (isVerifying) {
-                            CircularProgressIndicator(
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.padding(end = 8.dp).height(18.dp),
-                            )
-                        }
-                        Text(if (failure == null) "Verify" else "Try Again")
-                    }
-
-                    if (!isVerifying) {
-                        TextButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Not Now")
-                        }
-                    }
-                }
-            }
+            CloudBackupVerificationPromptDialog(
+                title = "Verify cloud backup?",
+                message = "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey.",
+                isVerifying = false,
+                hasFailure = false,
+                onDismissRequest = {},
+                onDismiss = {},
+                onVerify = {},
+            )
         }
     }
 }

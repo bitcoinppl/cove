@@ -1,17 +1,30 @@
 package org.bitcoinppl.cove.cloudbackup
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -19,9 +32,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
@@ -103,7 +118,7 @@ internal fun CloudOnlySection(
     }
 
     selectedWallet?.let { wallet ->
-        CloudOnlyWalletActionDialog(
+        CloudOnlyWalletActionSheet(
             wallet = wallet,
             onDismiss = { selectedWallet = null },
             onRestore = {
@@ -152,58 +167,116 @@ internal fun CloudOnlySection(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CloudOnlyWalletActionDialog(
+private fun CloudOnlyWalletActionSheet(
     wallet: CloudBackupWalletItem,
     onDismiss: () -> Unit,
     onRestore: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        CloudOnlyWalletActionSheetContent(
+            walletName = wallet.name,
+            onRestore = onRestore,
+            onDelete = onDelete,
+        )
+    }
+}
+
+@Composable
+private fun CloudOnlyWalletActionSheetContent(
+    walletName: String,
+    onRestore: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+            Text(walletName, style = MaterialTheme.typography.titleLarge)
+            Text(
+                "Restore this wallet to the device or delete it from Cloud Backup.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        HorizontalDivider(
+            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+
+        ListItem(
+            headlineContent = { Text("Restore to this device") },
+            supportingContent = { Text("Download and decrypt this backup") },
+            leadingContent = {
+                Icon(
+                    imageVector = Icons.Default.Restore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onRestore),
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
+
+        ListItem(
+            headlineContent = {
+                Text(
+                    "Delete from Cloud Backup",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            },
+            supportingContent = { Text("Remove the cloud copy permanently") },
+            leadingContent = {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onDelete),
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
+    }
+}
+
+@Composable
+internal fun CloudOnlyWalletActionSheetPreviewContent() {
+    CoveTheme(darkTheme = false, dynamicColor = false) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(wallet.name, style = MaterialTheme.typography.headlineSmall)
-                    Text(
-                        "Restore this wallet to the device or delete it from Cloud Backup",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = onRestore,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Restore")
-                    }
-
-                    TextButton(
-                        onClick = onDelete,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Delete from Cloud Backup", color = MaterialTheme.colorScheme.error)
-                    }
-
-                    TextButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Cancel")
-                    }
-                }
+                CloudOnlyWalletActionSheetContent(
+                    walletName = "Savings wallet",
+                    onRestore = {},
+                    onDelete = {},
+                )
             }
         }
     }
