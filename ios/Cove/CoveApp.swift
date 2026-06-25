@@ -237,10 +237,7 @@ extension CoveApp {
         self.bdkMigrationWarning = warning
         startInitData(appManager)
 
-        let needsOnboarding = !appManager.isTermsAccepted
-            || shouldRunCloudRestoreCheck(appManager: appManager)
-
-        if needsOnboarding {
+        if appManager.needsOnboarding {
             Log.info("[STARTUP] entering onboarding flow")
             self.startupState = .onboarding(
                 appManager,
@@ -252,19 +249,6 @@ extension CoveApp {
             self.startupState = .ready(appManager, AuthManager.shared)
             startBackupIntegrityCheck()
         }
-    }
-
-    private func shouldRunCloudRestoreCheck(appManager: AppManager) -> Bool {
-        guard appManager.isTermsAccepted else { return false }
-        guard CloudBackupManager.shared.isLifecycleDisabled else { return false }
-        do {
-            guard try !appManager.database.wallets().hasAnyWallets() else { return false }
-        } catch {
-            Log.error("[STARTUP] failed to check for existing wallets before restore onboarding: \(error)")
-            return false
-        }
-        guard FileManager.default.ubiquityIdentityToken != nil else { return false }
-        return true
     }
 
     /// Re-bootstrap after recovery (Start Fresh / Wipe / Cloud Restore)

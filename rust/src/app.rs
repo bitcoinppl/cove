@@ -13,7 +13,7 @@ use backon::{ConstantBuilder, Retryable as _};
 use crate::{
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
-    database::{Database, error::DatabaseError, global_flag::GlobalFlagKey},
+    database::{Database, error::DatabaseError},
     fee_client::{FEE_CLIENT, FeeResponse},
     fiat::{
         FiatCurrency,
@@ -70,7 +70,6 @@ pub enum AppAction {
     SetSelectedNode(Node),
     UpdateFiatPrices,
     UpdateFees,
-    AcceptTerms,
     RefreshAfterImport,
 }
 
@@ -253,17 +252,6 @@ impl App {
                 FfiApp::global().select_latest_or_new_wallet()?;
             }
 
-            AppAction::AcceptTerms => {
-                if let Err(error) = Database::global()
-                    .global_flag
-                    .set_bool_config(GlobalFlagKey::AcceptedTerms, true)
-                {
-                    error!("unable to set accepted terms: {error}");
-                }
-
-                Updater::send_update(AppMessage::AcceptedTerms);
-            }
-
             AppAction::RefreshAfterImport => {
                 debug!("refreshing state after backup import");
                 Updater::send_update(AppMessage::WalletsChanged);
@@ -435,6 +423,11 @@ impl FfiApp {
     /// Check if there's any wallets
     pub fn has_wallets(&self) -> bool {
         self.num_wallets() > 0
+    }
+
+    /// Whether the host app should render onboarding instead of the main app
+    pub fn needs_onboarding(&self) -> bool {
+        !Database::global().global_flag.is_onboarding_complete()
     }
 
     /// Number of wallets

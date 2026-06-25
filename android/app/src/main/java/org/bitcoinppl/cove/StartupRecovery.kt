@@ -2,7 +2,6 @@ package org.bitcoinppl.cove
 
 import org.bitcoinppl.cove_core.AppInitException
 import org.bitcoinppl.cove_core.CatastrophicCloudRestoreResult
-import org.bitcoinppl.cove_core.CloudBackupLifecycle
 
 internal enum class StartupMode {
     ONBOARDING,
@@ -48,64 +47,6 @@ internal fun classifyBootstrapFailure(error: Exception): BootstrapFailure =
         else -> BootstrapFailure.Fatal(error.message ?: "Unknown error")
     }
 
-internal fun hasPersistedOnboardingProgress(
-    persistedProgress: String?,
-): Boolean = !persistedProgress.isNullOrBlank()
-
-internal fun resolveEffectiveOnboardingProgress(
-    freshProgress: Result<String?>,
-    previousProgress: String?,
-): String? {
-    // keep last known progress when a transient read failure would otherwise drop onboarding state
-    return freshProgress.getOrElse { previousProgress }
-}
-
-internal fun hasRecoveredOnboardingProgressAfterReadFailure(
-    freshProgress: Result<String?>,
-    previousProgress: String?,
-    previousReadFailed: Boolean,
-): Boolean =
-    previousReadFailed &&
-        !hasPersistedOnboardingProgress(previousProgress) &&
-        hasPersistedOnboardingProgress(freshProgress.getOrNull())
-
 internal fun resolveStartupMode(
-    termsAccepted: Boolean,
-    hasWallets: Boolean,
-    cloudBackupLifecycle: CloudBackupLifecycle,
-    hasPersistedOnboardingProgress: Boolean,
-): StartupMode {
-    // mirror CoveApp.swift's app-shell onboarding decision
-    val shouldStartStartupRestore = !hasWallets && cloudBackupLifecycle is CloudBackupLifecycle.Disabled
-    return if (!termsAccepted || hasPersistedOnboardingProgress || shouldStartStartupRestore) {
-        StartupMode.ONBOARDING
-    } else {
-        StartupMode.READY
-    }
-}
-
-internal fun resolveStartupModeTransition(
-    currentMode: StartupMode,
-    termsAccepted: Boolean,
-    hasWallets: Boolean,
-    cloudBackupLifecycle: CloudBackupLifecycle,
-    hasPersistedOnboardingProgress: Boolean,
-    hasRecoveredOnboardingProgressAfterReadFailure: Boolean,
-): StartupMode {
-    // after startup reaches ready, deleting the last wallet should not restart onboarding
-    // skip this shortcut when recovered progress proves an earlier failed read hid onboarding state
-    if (
-        currentMode == StartupMode.READY &&
-        termsAccepted &&
-        !hasRecoveredOnboardingProgressAfterReadFailure
-    ) {
-        return StartupMode.READY
-    }
-
-    return resolveStartupMode(
-        termsAccepted = termsAccepted,
-        hasWallets = hasWallets,
-        cloudBackupLifecycle = cloudBackupLifecycle,
-        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress,
-    )
-}
+    needsOnboarding: Boolean,
+): StartupMode = if (needsOnboarding) StartupMode.ONBOARDING else StartupMode.READY
