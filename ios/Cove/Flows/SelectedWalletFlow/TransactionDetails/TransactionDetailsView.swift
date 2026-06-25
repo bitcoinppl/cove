@@ -444,10 +444,13 @@ struct TransactionDetailsView: View {
             await refreshTransactionLockState()
 
             // start watcher after a delay to avoid race condition with onDisappear
-            if !transactionDetails.isConfirmed() {
-                try? await Task.sleep(for: .seconds(2))
-                manager.dispatch(action: .startTransactionWatcher(transactionDetails.txId()))
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
             }
+
+            manager.dispatch(action: .startTransactionWatcher(transactionDetails.txId()))
         }
         .background(
             GeometryReader { geometry in
@@ -484,10 +487,7 @@ struct TransactionDetailsView: View {
 
     func refreshTransactionDetails() async {
         do {
-            let details = try await manager.refreshTransactionDetails(for: txId)
-            await MainActor.run {
-                manager.updateTransactionDetailsCache(txId: txId, details: details)
-            }
+            _ = try await manager.refreshTransactionDetails(for: txId)
         } catch {
             Log.error("Error refreshing transaction details: \(error)")
         }

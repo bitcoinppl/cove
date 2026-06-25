@@ -291,22 +291,31 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     }
 
     func transactionDetails(for txId: TxId) async throws -> TransactionDetails {
-        if let details = transactionDetails[txId] {
+        if let details = await MainActor.run(body: { transactionDetails[txId] }) {
             return details
         }
 
         let details = try await rust.transactionDetails(txId: txId)
-        transactionDetails[txId] = details
+        await MainActor.run {
+            transactionDetails[txId] = details
+        }
 
         return details
     }
 
     func refreshTransactionDetails(for txId: TxId) async throws -> TransactionDetails {
         let details = try await rust.transactionDetails(txId: txId)
-        transactionDetails[txId] = details
+        let confirmations: UInt32? = if let blockNumber = details.blockNumber() {
+            try await rust.numberOfConfirmations(blockHeight: blockNumber)
+        } else {
+            nil
+        }
 
-        if let blockNumber = details.blockNumber() {
-            transactionConfirmations[txId] = try await rust.numberOfConfirmations(blockHeight: blockNumber)
+        await MainActor.run {
+            transactionDetails[txId] = details
+            if let confirmations {
+                transactionConfirmations[txId] = confirmations
+            }
         }
 
         return details
@@ -332,10 +341,6 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     func reconcileAfterLabelsChanged() {
         transactionDetails.removeAll()
         Task { await rust.getTransactions() }
-    }
-
-    func updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {
-        transactionDetails[txId] = details
     }
 
     func updateTransactionConfirmations(txId: TxId, confirmations: UInt32) {

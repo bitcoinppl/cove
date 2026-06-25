@@ -84,6 +84,7 @@ import org.bitcoinppl.cove_core.types.TxId
 import org.bitcoinppl.cove_core.types.TransactionDirection
 
 private const val INITIAL_DELAY_MS = 2000L
+
 /**
  * Transaction details screen - now using manager-based pattern
  * Ported from iOS TransactionDetailsView.swift
@@ -176,11 +177,9 @@ fun TransactionDetailsScreen(
 
     // immediately fetch fresh transaction details on screen load
     LaunchedEffect(manager, txId, refreshOnAppear) {
-        var latestDetails = transactionDetails
         try {
             if (refreshOnAppear) {
                 refreshTransactionDetails()
-                latestDetails = manager.transactionDetailsCache[txId] ?: latestDetails
             }
         } catch (e: CancellationException) {
             throw e
@@ -190,10 +189,8 @@ fun TransactionDetailsScreen(
 
         refreshTransactionLockState(showSnackbar = false)
 
-        if (!latestDetails.isConfirmed()) {
-            delay(INITIAL_DELAY_MS)
-            manager.dispatch(WalletManagerAction.StartTransactionWatcher(txId))
-        }
+        delay(INITIAL_DELAY_MS)
+        manager.dispatch(WalletManagerAction.StartTransactionWatcher(txId))
     }
 
     // load fiat amounts (update cached values with fresh async values)

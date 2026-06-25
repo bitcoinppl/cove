@@ -98,7 +98,7 @@ impl TransactionWatcher {
                         tokio::time::sleep(normal_wait_time).await;
                     }
 
-                    // sleep for 10 seconds before checking again
+                    // sleep for the normal wait time before checking again
                     Ok(WatchResult::Continue) => {
                         debug!("continue watching, waiting for {}", normal_wait_time.as_secs());
                         tokio::time::sleep(normal_wait_time).await;

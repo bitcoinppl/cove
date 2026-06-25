@@ -28,6 +28,10 @@ impl WalletActor {
             return Produces::ok(());
         }
 
+        if !self.transaction_watcher_needed(tx_id) {
+            return Produces::ok(());
+        }
+
         let network = self.wallet.network;
         let node = Database::global().global_config.selected_node();
         let options = NodeClientOptions { batch_size: 1 };
@@ -39,6 +43,22 @@ impl WalletActor {
         self.transaction_watchers.insert(tx_id, addr);
 
         Produces::ok(())
+    }
+
+    fn transaction_watcher_needed(&mut self, tx_id: Txid) -> bool {
+        let details = match self.transaction_details_for_tx_id(tx_id.into()) {
+            Ok(details) => details,
+            Err(error) => {
+                warn!("not starting transaction watcher for tx_id={tx_id}: {error}");
+                return false;
+            }
+        };
+
+        let Some(confirmations) = self.confirmation_count_for_details(&details) else {
+            return true;
+        };
+
+        confirmations < TRANSACTION_WATCHER_TERMINAL_CONFIRMATIONS
     }
 
     pub async fn handle_transaction_watcher_event(
