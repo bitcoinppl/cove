@@ -64,7 +64,9 @@ fun WalletSettingsContainer(
                     popRoute = app::popRoute,
                 )
         ) {
-            WalletSelectionRecoveryResult.Recovered -> Unit
+            WalletSelectionRecoveryResult.Recovered -> {
+                loadState = WalletSettingsLoadState.Loading
+            }
             is WalletSelectionRecoveryResult.PoppedRoute -> {
                 android.util.Log.e(tag, "failed to recover wallet selection", result.recoveryError)
             }

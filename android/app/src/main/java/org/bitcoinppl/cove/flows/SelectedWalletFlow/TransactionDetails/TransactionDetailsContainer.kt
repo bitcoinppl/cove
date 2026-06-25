@@ -59,7 +59,6 @@ fun TransactionDetailsContainer(
             WalletSelectionRecoveryResult.Recovered -> Unit
             is WalletSelectionRecoveryResult.PoppedRoute -> {
                 android.util.Log.e(TAG, "Failed to recover wallet selection", result.recoveryError)
-                recoveringWalletSelection = false
             }
             is WalletSelectionRecoveryResult.NoRouteToPop -> {
                 android.util.Log.e(TAG, "Failed to recover wallet selection", result.recoveryError)

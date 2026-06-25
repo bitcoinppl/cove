@@ -460,8 +460,11 @@ class AppManager private constructor() : FfiReconcile {
         }
 
         val newRoutes = currentRoutes.dropLast(1)
+        if (!dispatchSuccessfully(AppAction.UpdateRoute(newRoutes))) {
+            return false
+        }
+
         advanceNavigationGeneration()
-        dispatch(AppAction.UpdateRoute(newRoutes))
         updateRoutesAndClearInactiveSendFlowManager(newRoutes)
 
         return true
@@ -670,9 +673,14 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun dispatch(action: AppAction) {
+        dispatchSuccessfully(action)
+    }
+
+    private fun dispatchSuccessfully(action: AppAction): Boolean {
         Log.d(tag, "dispatch $action")
-        runCatching { rust.dispatch(action) }
+        return runCatching { rust.dispatch(action) }
             .onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
+            .isSuccess
     }
 
     companion object {
