@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.ui.theme.CoveTheme
@@ -33,7 +34,7 @@ internal data class DialogChoice(
     val label: String,
     val supportingText: String? = null,
     val icon: ImageVector? = null,
-    val destructive: Boolean = false,
+    val emphasized: Boolean = false,
     val onClick: () -> Unit,
 )
 
@@ -79,10 +80,16 @@ internal fun ChoiceAlertDialog(
 @Composable
 private fun DialogChoiceRow(choice: DialogChoice) {
     val contentColor =
-        if (choice.destructive) {
-            MaterialTheme.colorScheme.error
+        if (choice.emphasized) {
+            MaterialTheme.colorScheme.onPrimaryContainer
         } else {
             MaterialTheme.colorScheme.onSurface
+        }
+    val containerColor =
+        if (choice.emphasized) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            Color.Transparent
         }
 
     ListItem(
@@ -115,10 +122,13 @@ private fun DialogChoiceRow(choice: DialogChoice) {
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = choice.onClick),
+                .clickable(
+                    role = Role.Button,
+                    onClick = choice.onClick,
+                ),
         colors =
             ListItemDefaults.colors(
-                containerColor = Color.Transparent,
+                containerColor = containerColor,
             ),
     )
 }
@@ -159,10 +169,52 @@ internal fun ChoiceAlertDialogPreviewContent() {
                             label = "Download backup",
                             supportingText = "Restore from Cloud Backup",
                             icon = Icons.Default.Download,
+                            emphasized = true,
                             onClick = {},
                         ),
                     ),
                 onDismiss = {},
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true, widthDp = 393, heightDp = 852)
+@Composable
+private fun ChoiceAlertDialogNoCancelPreview() {
+    ChoiceAlertDialogNoCancelPreviewContent()
+}
+
+@Composable
+internal fun ChoiceAlertDialogNoCancelPreviewContent() {
+    CoveTheme(darkTheme = false, dynamicColor = false) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+        ) {
+            ChoiceAlertDialog(
+                title = "Found Address",
+                message = "Choose where to send this payment.",
+                choices =
+                    listOf(
+                        DialogChoice(
+                            label = "Send To Address",
+                            supportingText = "Use the address from the scanned request",
+                            icon = Icons.Default.QrCodeScanner,
+                            emphasized = true,
+                            onClick = {},
+                        ),
+                        DialogChoice(
+                            label = "Copy Address",
+                            supportingText = "Review the address before sending",
+                            icon = Icons.Default.ContentCopy,
+                            onClick = {},
+                        ),
+                    ),
+                onDismiss = {},
+                showCancelButton = false,
             )
         }
     }

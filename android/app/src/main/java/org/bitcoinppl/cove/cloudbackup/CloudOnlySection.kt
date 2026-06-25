@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
@@ -229,7 +230,10 @@ private fun CloudOnlyWalletActionSheetContent(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onRestore),
+                    .clickable(
+                        role = Role.Button,
+                        onClick = onRestore,
+                    ),
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         )
 
@@ -251,7 +255,10 @@ private fun CloudOnlyWalletActionSheetContent(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onDelete),
+                    .clickable(
+                        role = Role.Button,
+                        onClick = onDelete,
+                    ),
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         )
     }

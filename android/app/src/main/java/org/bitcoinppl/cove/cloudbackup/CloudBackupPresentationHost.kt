@@ -698,7 +698,7 @@ internal fun CloudBackupVerificationPromptDialog(
                         if (hasFailure) {
                             MaterialTheme.colorScheme.error
                         } else {
-                            MaterialTheme.colorScheme.primary
+                            MaterialTheme.coveColors.systemGreen
                         },
                 )
             }
@@ -730,6 +730,53 @@ internal fun CloudBackupVerificationPromptDialog(
 
 @Composable
 internal fun CloudBackupVerificationPromptPreviewContent() {
+    CloudBackupVerificationPromptPreviewScaffold {
+        CloudBackupVerificationPromptDialog(
+            title = "Verify cloud backup?",
+            message = "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey.",
+            isVerifying = false,
+            hasFailure = false,
+            onDismissRequest = {},
+            onDismiss = {},
+            onVerify = {},
+        )
+    }
+}
+
+@Composable
+internal fun CloudBackupVerificationPromptRunningPreviewContent() {
+    CloudBackupVerificationPromptPreviewScaffold {
+        CloudBackupVerificationPromptDialog(
+            title = "Verifying cloud backup",
+            message = "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey.",
+            isVerifying = true,
+            hasFailure = false,
+            onDismissRequest = {},
+            onDismiss = {},
+            onVerify = {},
+        )
+    }
+}
+
+@Composable
+internal fun CloudBackupVerificationPromptFailurePreviewContent() {
+    CloudBackupVerificationPromptPreviewScaffold {
+        CloudBackupVerificationPromptDialog(
+            title = "Verification failed",
+            message = "Cove could not decrypt the latest cloud backup with the selected passkey.",
+            isVerifying = false,
+            hasFailure = true,
+            onDismissRequest = {},
+            onDismiss = {},
+            onVerify = {},
+        )
+    }
+}
+
+@Composable
+private fun CloudBackupVerificationPromptPreviewScaffold(
+    content: @Composable () -> Unit,
+) {
     CoveTheme(darkTheme = false, dynamicColor = false) {
         Box(
             modifier =
@@ -737,15 +784,7 @@ internal fun CloudBackupVerificationPromptPreviewContent() {
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background),
         ) {
-            CloudBackupVerificationPromptDialog(
-                title = "Verify cloud backup?",
-                message = "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey.",
-                isVerifying = false,
-                hasFailure = false,
-                onDismissRequest = {},
-                onDismiss = {},
-                onVerify = {},
-            )
+            content()
         }
     }
 }

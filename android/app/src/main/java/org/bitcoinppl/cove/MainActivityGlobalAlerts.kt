@@ -219,11 +219,15 @@ private fun GlobalAlertDialog(
                 buildList {
                     if (selectedWallet != null) {
                         add(
-                            DialogChoice("Send To Address") {
-                                val route = RouteFactory().sendSetAmount(selectedWallet, state.address, state.amount)
-                                app.pushRoute(route)
-                                onDismiss()
-                            },
+                            DialogChoice(
+                                label = "Send To Address",
+                                emphasized = true,
+                                onClick = {
+                                    val route = RouteFactory().sendSetAmount(selectedWallet, state.address, state.amount)
+                                    app.pushRoute(route)
+                                    onDismiss()
+                                },
+                            ),
                         )
                     }
                     add(
