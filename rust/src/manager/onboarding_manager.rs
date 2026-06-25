@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
-    app::{App, AppAction, FfiApp},
+    app::FfiApp,
     database::Database,
     manager::{
         cloud_backup_manager::{
@@ -49,10 +49,12 @@ use self::cloud_restore::{
 pub(crate) use self::cloud_restore::{
     cloud_check_inconclusive_message, determine_cloud_check_outcome, inspect_cloud_restore_backup,
 };
+#[cfg(test)]
+use self::flow_state::RestoreOrigin;
 pub(crate) use self::flow_state::{
     CloudRestoreDiscovery, CompletionTarget, CreatedWalletFlow, FlowState, InternalEvent,
-    InternalState, OnboardingCloudBackupEnableStart, PostOnboardingDestination, RestoreOrigin,
-    TermsContext, TransitionCommand,
+    InternalState, OnboardingCloudBackupEnableStart, PostOnboardingDestination, TermsContext,
+    TransitionCommand,
 };
 pub(crate) use self::progress::{OnboardingProgress, resolve_initial_flow};
 #[cfg(test)]
@@ -247,11 +249,9 @@ impl RustOnboardingManager {
     pub fn new() -> Arc<Self> {
         let (sender, receiver) = flume::bounded(100);
         let has_wallets = !Database::global().wallets.all().unwrap_or_default().is_empty();
-        let terms_accepted = Database::global().global_flag.is_terms_accepted();
         let resolution = resolve_initial_flow(
             Self::load_onboarding_progress(),
             has_wallets,
-            terms_accepted,
             |wallet_id, network, wallet_mode| {
                 let wallet_exists = Database::global()
                     .wallets
@@ -282,7 +282,6 @@ impl RustOnboardingManager {
         });
 
         manager.start_connectivity_listener();
-        manager.maybe_advance_accepted_terms();
 
         if should_start_cloud_check {
             manager.start_cloud_check();
@@ -349,7 +348,6 @@ impl RustOnboardingManager {
                 state.cloud_restore_alert_dismissed = true;
             }
 
-            let command = state.maybe_advance_accepted_terms(command);
             state.sync_ui(deferred);
             command
         });
@@ -476,9 +474,8 @@ impl RustOnboardingManager {
                 &mut state.cloud_restore_discovery,
                 state.restore_offer_allowed,
             );
-            let command = state.maybe_advance_accepted_terms(TransitionCommand::None);
             state.sync_ui(deferred);
-            command
+            TransitionCommand::None
         });
         self.run_command(command);
     }
@@ -586,19 +583,6 @@ impl RustOnboardingManager {
         }
     }
 
-    fn maybe_advance_accepted_terms(&self) {
-        if !Database::global().global_flag.is_terms_accepted() {
-            return;
-        }
-
-        let command = self.mutate_state(|state, deferred| {
-            let command = state.flow.resolve_terms_acceptance(true);
-            state.sync_ui(deferred);
-            command
-        });
-        self.run_command(command);
-    }
-
     fn create_wallet_for_branch(&self, branch: OnboardingBranch) {
         let event = match Self::create_wallet(branch) {
             Ok(flow) => InternalEvent::WalletCreated { flow },
@@ -628,7 +612,12 @@ impl RustOnboardingManager {
 
         match result {
             Ok(()) => {
-                App::global().handle_action(AppAction::AcceptTerms);
+                if let Err(error) = Database::global().global_flag.mark_onboarding_complete() {
+                    self.apply_event(InternalEvent::CompletionFailed {
+                        error: format!("failed to persist onboarding completion: {error}"),
+                    });
+                    return;
+                }
                 Self::sync_onboarding_progress(None);
                 self.send(Message::Complete);
             }
@@ -1485,7 +1474,7 @@ mod tests {
     #[test]
     fn start_restore_enters_restoring_finding() {
         let mut flow =
-            FlowState::RestoreOffer { origin: RestoreOrigin::Startup, error_message: None };
+            FlowState::RestoreOffer { origin: RestoreOrigin::Welcome, error_message: None };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
@@ -1499,7 +1488,7 @@ mod tests {
         assert!(matches!(
             flow,
             FlowState::Restoring {
-                origin: RestoreOrigin::Startup,
+                origin: RestoreOrigin::Welcome,
                 attempt_id: 12,
                 flow: CloudBackupRestoreFlow::Finding,
             }
@@ -1547,7 +1536,7 @@ mod tests {
     fn restore_success_enters_restore_complete_with_report() {
         let report = preview_restore_report();
         let mut flow = FlowState::Restoring {
-            origin: RestoreOrigin::Startup,
+            origin: RestoreOrigin::Welcome,
             attempt_id: 7,
             flow: CloudBackupRestoreFlow::Restoring { completed: 1, total: 1 },
         };
@@ -1562,7 +1551,7 @@ mod tests {
         assert!(matches!(
             flow,
             FlowState::RestoreComplete {
-                origin: RestoreOrigin::Startup,
+                origin: RestoreOrigin::Welcome,
                 report: ref stored_report,
             } if stored_report == &report
         ));
@@ -1618,9 +1607,9 @@ mod tests {
     }
 
     #[test]
-    fn done_from_restore_complete_goes_to_startup_recovery_terms() {
+    fn done_from_restore_complete_goes_to_latest_wallet_terms() {
         let mut flow = FlowState::RestoreComplete {
-            origin: RestoreOrigin::Startup,
+            origin: RestoreOrigin::Welcome,
             report: preview_restore_report(),
         };
         let mut restore_offer_allowed = true;
@@ -1639,7 +1628,6 @@ mod tests {
                 context: TermsContext::SelectLatestOrNew,
                 error_message: None,
                 progress: None,
-                allow_auto_advance: true,
             }
         ));
     }
@@ -1675,7 +1663,7 @@ mod tests {
     #[test]
     fn skip_restore_from_failed_follows_original_origin() {
         let mut flow =
-            FlowState::RestoreFailed { origin: RestoreOrigin::Startup, message: "failed".into() };
+            FlowState::RestoreFailed { origin: RestoreOrigin::Welcome, message: "failed".into() };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
@@ -1687,21 +1675,13 @@ mod tests {
 
         assert_eq!(command, TransitionCommand::None);
         assert!(!restore_offer_allowed);
-        assert!(matches!(
-            flow,
-            FlowState::Terms {
-                context: TermsContext::StartupRestoreRecovery,
-                error_message: None,
-                progress: None,
-                allow_auto_advance: true,
-            }
-        ));
+        assert!(matches!(flow, FlowState::Welcome { error_message: None }));
     }
 
     #[test]
     fn timeout_failure_enters_restore_failed_with_timeout_message() {
         let mut flow = FlowState::Restoring {
-            origin: RestoreOrigin::Startup,
+            origin: RestoreOrigin::Welcome,
             attempt_id: 3,
             flow: CloudBackupRestoreFlow::Finding,
         };
@@ -1716,7 +1696,7 @@ mod tests {
         assert!(matches!(
             flow,
             FlowState::RestoreFailed {
-                origin: RestoreOrigin::Startup,
+                origin: RestoreOrigin::Welcome,
                 message,
             } if message == "Restore timed out"
         ));
@@ -1778,23 +1758,11 @@ mod tests {
 
     #[test]
     fn empty_wallet_startup_begins_at_welcome_and_starts_background_cloud_check() {
-        let resolution = resolve_initial_flow(None, false, false, |_, _, _| None);
+        let resolution = resolve_initial_flow(None, false, |_, _, _| None);
 
         assert!(!resolution.clear_persisted_progress);
         assert!(resolution.start_cloud_check);
         assert!(matches!(resolution.flow, FlowState::Welcome { error_message: None }));
-    }
-
-    #[test]
-    fn accepted_terms_without_wallets_begins_at_startup_cloud_check() {
-        let resolution = resolve_initial_flow(None, false, true, |_, _, _| None);
-
-        assert!(!resolution.clear_persisted_progress);
-        assert!(resolution.start_cloud_check);
-        assert!(matches!(
-            resolution.flow,
-            FlowState::CloudCheck { origin: RestoreOrigin::Startup }
-        ));
     }
 
     #[test]
@@ -2092,7 +2060,7 @@ mod tests {
 
     #[test]
     fn cloud_check_offline_goes_to_restore_offline_screen() {
-        let mut flow = FlowState::CloudCheck { origin: RestoreOrigin::Startup };
+        let mut flow = FlowState::CloudCheck { origin: RestoreOrigin::Welcome };
         let mut discovery = CloudRestoreDiscovery::Checking;
 
         flow.apply_event(
@@ -2104,13 +2072,13 @@ mod tests {
         );
 
         assert_eq!(discovery, CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline));
-        assert!(matches!(flow, FlowState::RestoreOffline { origin: RestoreOrigin::Startup }));
+        assert!(matches!(flow, FlowState::RestoreOffline { origin: RestoreOrigin::Welcome }));
         assert_eq!(flow.ui_state(&discovery, false, false).step, OnboardingStep::RestoreOffline);
     }
 
     #[test]
     fn cloud_check_non_offline_inconclusive_keeps_restore_offer_flow() {
-        let mut flow = FlowState::CloudCheck { origin: RestoreOrigin::Startup };
+        let mut flow = FlowState::CloudCheck { origin: RestoreOrigin::Welcome };
         let mut discovery = CloudRestoreDiscovery::Checking;
 
         flow.apply_event(
@@ -2127,7 +2095,7 @@ mod tests {
         );
         assert!(matches!(
             flow,
-            FlowState::RestoreOffer { origin: RestoreOrigin::Startup, error_message: None }
+            FlowState::RestoreOffer { origin: RestoreOrigin::Welcome, error_message: None }
         ));
     }
 
@@ -2176,9 +2144,9 @@ mod tests {
     }
 
     #[test]
-    fn back_from_startup_restore_offer_goes_to_terms() {
+    fn back_from_welcome_restore_offer_returns_to_welcome() {
         let mut flow =
-            FlowState::RestoreOffer { origin: RestoreOrigin::Startup, error_message: None };
+            FlowState::RestoreOffer { origin: RestoreOrigin::Welcome, error_message: None };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
@@ -2190,21 +2158,13 @@ mod tests {
 
         assert_eq!(command, TransitionCommand::None);
         assert!(restore_offer_allowed);
-        assert!(matches!(
-            flow,
-            FlowState::Terms {
-                context: TermsContext::StartupRestoreRecovery,
-                error_message: None,
-                progress: None,
-                allow_auto_advance: true,
-            }
-        ));
+        assert!(matches!(flow, FlowState::Welcome { error_message: None }));
     }
 
     #[test]
-    fn skip_restore_from_startup_check_goes_to_terms() {
+    fn skip_restore_from_welcome_check_returns_to_welcome() {
         let mut flow =
-            FlowState::RestoreOffer { origin: RestoreOrigin::Startup, error_message: None };
+            FlowState::RestoreOffer { origin: RestoreOrigin::Welcome, error_message: None };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
@@ -2216,20 +2176,12 @@ mod tests {
 
         assert_eq!(command, TransitionCommand::None);
         assert!(!restore_offer_allowed);
-        assert!(matches!(
-            flow,
-            FlowState::Terms {
-                context: TermsContext::StartupRestoreRecovery,
-                error_message: None,
-                progress: None,
-                allow_auto_advance: true,
-            }
-        ));
+        assert!(matches!(flow, FlowState::Welcome { error_message: None }));
     }
 
     #[test]
-    fn continue_without_cloud_restore_from_startup_goes_to_terms() {
-        let mut flow = FlowState::RestoreUnavailable { origin: RestoreOrigin::Startup };
+    fn continue_without_cloud_restore_from_welcome_returns_to_welcome() {
+        let mut flow = FlowState::RestoreUnavailable { origin: RestoreOrigin::Welcome };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
@@ -2240,20 +2192,12 @@ mod tests {
         );
 
         assert_eq!(command, TransitionCommand::None);
-        assert!(matches!(
-            flow,
-            FlowState::Terms {
-                context: TermsContext::StartupRestoreRecovery,
-                error_message: None,
-                progress: None,
-                allow_auto_advance: true,
-            }
-        ));
+        assert!(matches!(flow, FlowState::Welcome { error_message: None }));
     }
 
     #[test]
-    fn continue_without_cloud_restore_from_startup_offline_goes_to_terms() {
-        let mut flow = FlowState::RestoreOffline { origin: RestoreOrigin::Startup };
+    fn continue_without_cloud_restore_from_welcome_offline_returns_to_welcome() {
+        let mut flow = FlowState::RestoreOffline { origin: RestoreOrigin::Welcome };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
@@ -2264,72 +2208,7 @@ mod tests {
         );
 
         assert_eq!(command, TransitionCommand::None);
-        assert!(matches!(
-            flow,
-            FlowState::Terms {
-                context: TermsContext::StartupRestoreRecovery,
-                error_message: None,
-                progress: None,
-                allow_auto_advance: true,
-            }
-        ));
-    }
-
-    #[test]
-    fn accepting_startup_recovery_terms_goes_to_welcome() {
-        let mut flow = FlowState::terms(TermsContext::StartupRestoreRecovery, None);
-        let mut restore_offer_allowed = false;
-
-        let command = flow.apply_user_action(
-            OnboardingAction::AcceptTerms,
-            CloudRestoreDiscovery::Checking,
-            &mut restore_offer_allowed,
-            None,
-        );
-
-        assert_eq!(command, TransitionCommand::None);
         assert!(matches!(flow, FlowState::Welcome { error_message: None }));
-    }
-
-    #[test]
-    fn auto_accepting_startup_recovery_terms_goes_to_welcome() {
-        let mut flow = FlowState::terms(TermsContext::StartupRestoreRecovery, None);
-
-        let command = flow.resolve_terms_acceptance(true);
-
-        assert_eq!(command, TransitionCommand::None);
-        assert!(matches!(flow, FlowState::Welcome { error_message: None }));
-    }
-
-    #[test]
-    fn auto_accepting_terminal_terms_triggers_completion() {
-        let wallet_id = WalletId::new();
-        let mut flow = FlowState::terms(
-            TermsContext::SelectWallet {
-                wallet_id: wallet_id.clone(),
-                post_onboarding: PostOnboardingDestination::VerifyWords,
-            },
-            None,
-        );
-
-        let command = flow.resolve_terms_acceptance(true);
-
-        assert_eq!(
-            command,
-            TransitionCommand::CompleteOnboarding(CompletionTarget::SelectWallet {
-                wallet_id,
-                post_onboarding: PostOnboardingDestination::VerifyWords,
-            })
-        );
-        assert!(matches!(
-            flow,
-            FlowState::Terms {
-                context: TermsContext::SelectWallet { .. },
-                error_message: None,
-                progress: None,
-                allow_auto_advance: false,
-            }
-        ));
     }
 
     #[test]
@@ -2351,13 +2230,13 @@ mod tests {
     #[test]
     fn offline_retry_rechecks_from_restore_offline_screen() {
         let mut state = preview_internal_state(
-            FlowState::RestoreOffline { origin: RestoreOrigin::Startup },
+            FlowState::RestoreOffline { origin: RestoreOrigin::Welcome },
             CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline),
         );
 
         assert!(prepare_offline_cloud_check_retry(&mut state));
         assert_eq!(state.cloud_restore_discovery, CloudRestoreDiscovery::Checking);
-        assert!(matches!(state.flow, FlowState::CloudCheck { origin: RestoreOrigin::Startup }));
+        assert!(matches!(state.flow, FlowState::CloudCheck { origin: RestoreOrigin::Welcome }));
         assert_eq!(state.ui.step, OnboardingStep::CloudCheck);
         assert_eq!(state.ui.cloud_restore_state, OnboardingCloudRestoreState::Checking);
     }
@@ -2478,9 +2357,9 @@ mod tests {
     }
 
     #[test]
-    fn startup_restore_retry_after_offline_finish_skips_transient_offline_messages() {
+    fn restore_retry_after_offline_finish_skips_transient_offline_messages() {
         let manager = preview_manager(
-            FlowState::CloudCheck { origin: RestoreOrigin::Startup },
+            FlowState::CloudCheck { origin: RestoreOrigin::Welcome },
             CloudRestoreDiscovery::Checking,
         );
         manager.cloud_check_in_flight.store(true, Ordering::Release);
@@ -2688,7 +2567,6 @@ mod tests {
                 cloud_backup_enabled: false,
             }),
             true,
-            false,
             |_, _, _| None,
         );
 
@@ -2700,7 +2578,6 @@ mod tests {
                 context: TermsContext::SelectLatestOrNew,
                 error_message: None,
                 progress: None,
-                allow_auto_advance: true,
             }
         ));
     }
@@ -2714,7 +2591,6 @@ mod tests {
             },
             error_message: None,
             progress: None,
-            allow_auto_advance: false,
         };
         let mut discovery = CloudRestoreDiscovery::Checking;
 
@@ -2725,7 +2601,7 @@ mod tests {
         );
 
         match flow {
-            FlowState::Terms { error_message: Some(error), allow_auto_advance: false, .. } => {
+            FlowState::Terms { error_message: Some(error), .. } => {
                 assert_eq!(error, "selection failed")
             }
             other => panic!("unexpected flow state: {other:?}"),

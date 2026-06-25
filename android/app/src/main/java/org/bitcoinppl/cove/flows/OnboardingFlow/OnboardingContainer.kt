@@ -33,7 +33,6 @@ internal fun OnboardingContainer(
             OnboardingTermsScreen(
                 errorMessage = manager.state.errorMessage,
                 onAgree = {
-                    manager.app.agreeToTerms()
                     manager.dispatch(OnboardingAction.AcceptTerms)
                 },
             )

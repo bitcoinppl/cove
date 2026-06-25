@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tracing::warn;
 
 use crate::{
-    database::Database,
     manager::cloud_backup_manager::{CloudBackupRestoreFlow, CloudBackupRestoreReport},
     network::Network,
     wallet::metadata::{WalletId, WalletMode},
@@ -33,7 +32,6 @@ pub(crate) enum PostOnboardingDestination {
 pub(crate) enum TermsContext {
     SelectLatestOrNew,
     SelectWallet { wallet_id: WalletId, post_onboarding: PostOnboardingDestination },
-    StartupRestoreRecovery,
 }
 
 #[derive(Debug, Clone)]
@@ -106,7 +104,6 @@ pub(crate) enum FlowState {
         context: TermsContext,
         error_message: Option<String>,
         progress: Option<OnboardingProgress>,
-        allow_auto_advance: bool,
     },
 }
 
@@ -158,7 +155,6 @@ impl OnboardingCloudBackupEnableStart {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) enum RestoreOrigin {
-    Startup,
     Welcome,
     BitcoinChoice,
     StorageChoice,
@@ -191,19 +187,6 @@ impl InternalState {
             next_restore_attempt_id,
             ui,
         }
-    }
-
-    pub(crate) fn maybe_advance_accepted_terms(
-        &mut self,
-        command: TransitionCommand,
-    ) -> TransitionCommand {
-        if !matches!(command, TransitionCommand::None)
-            || !Database::global().global_flag.is_terms_accepted()
-        {
-            return command;
-        }
-
-        self.flow.resolve_terms_acceptance(true)
     }
 
     pub(crate) fn prepare_offline_cloud_check_retry(
@@ -287,7 +270,7 @@ impl InternalState {
 
 impl FlowState {
     pub(crate) fn terms(context: TermsContext, progress: Option<OnboardingProgress>) -> Self {
-        Self::Terms { context, error_message: None, progress, allow_auto_advance: true }
+        Self::Terms { context, error_message: None, progress }
     }
 
     pub(crate) fn apply_user_action(
@@ -544,7 +527,7 @@ impl FlowState {
                 (Self::terms(TermsContext::SelectLatestOrNew, None), TransitionCommand::None)
             }
             (mut terms @ Self::Terms { .. }, OnboardingAction::AcceptTerms) => {
-                let command = terms.resolve_terms_acceptance(false);
+                let command = terms.accept_terms();
                 (terms, command)
             }
             (Self::BitcoinChoice { .. }, OnboardingAction::Back) => {
@@ -581,27 +564,16 @@ impl FlowState {
         command
     }
 
-    pub(crate) fn resolve_terms_acceptance(&mut self, automatic: bool) -> TransitionCommand {
-        let Self::Terms { context, progress, allow_auto_advance, .. } = self else {
+    pub(crate) fn accept_terms(&mut self) -> TransitionCommand {
+        let Self::Terms { context, progress, .. } = self else {
             return TransitionCommand::None;
         };
-
-        if automatic && !*allow_auto_advance {
-            return TransitionCommand::None;
-        }
 
         let context = context.clone();
         let progress = progress.clone();
 
-        if let Some(next_flow) = context.next_flow_after_acceptance() {
-            *self = next_flow;
-            return TransitionCommand::None;
-        }
-
-        let target = context
-            .completion_target()
-            .expect("terminal terms context should resolve to a completion target");
-        *self = Self::Terms { context, error_message: None, progress, allow_auto_advance: false };
+        let target = context.completion_target();
+        *self = Self::Terms { context, error_message: None, progress };
         TransitionCommand::CompleteOnboarding(target)
     }
 
@@ -702,15 +674,9 @@ impl FlowState {
                     error,
                 },
             ) => Self::SoftwareImport { error_message: Some(error) },
-            (
-                Self::Terms { context, progress, allow_auto_advance: _, .. },
-                InternalEvent::CompletionFailed { error },
-            ) => Self::Terms {
-                context,
-                error_message: Some(error),
-                progress,
-                allow_auto_advance: false,
-            },
+            (Self::Terms { context, progress, .. }, InternalEvent::CompletionFailed { error }) => {
+                Self::Terms { context, error_message: Some(error), progress }
+            }
             (state, event) => {
                 warn!("Onboarding: invalid event={event:?} flow={state:?}");
                 state
@@ -1025,23 +991,13 @@ impl FlowState {
 }
 
 impl TermsContext {
-    fn completion_target(&self) -> Option<CompletionTarget> {
+    fn completion_target(&self) -> CompletionTarget {
         match self {
-            Self::SelectLatestOrNew => Some(CompletionTarget::SelectLatestOrNew),
-            Self::SelectWallet { wallet_id, post_onboarding } => {
-                Some(CompletionTarget::SelectWallet {
-                    wallet_id: wallet_id.clone(),
-                    post_onboarding: *post_onboarding,
-                })
-            }
-            Self::StartupRestoreRecovery => None,
-        }
-    }
-
-    fn next_flow_after_acceptance(&self) -> Option<FlowState> {
-        match self {
-            Self::StartupRestoreRecovery => Some(FlowState::Welcome { error_message: None }),
-            Self::SelectLatestOrNew | Self::SelectWallet { .. } => None,
+            Self::SelectLatestOrNew => CompletionTarget::SelectLatestOrNew,
+            Self::SelectWallet { wallet_id, post_onboarding } => CompletionTarget::SelectWallet {
+                wallet_id: wallet_id.clone(),
+                post_onboarding: *post_onboarding,
+            },
         }
     }
 }
@@ -1084,7 +1040,6 @@ impl From<CloudCheckOutcome> for CloudRestoreDiscovery {
 impl RestoreOrigin {
     fn flow_state(self) -> FlowState {
         match self {
-            Self::Startup => FlowState::terms(TermsContext::StartupRestoreRecovery, None),
             Self::Welcome => FlowState::Welcome { error_message: None },
             Self::BitcoinChoice => FlowState::BitcoinChoice { error_message: None },
             Self::StorageChoice => FlowState::StorageChoice { error_message: None },

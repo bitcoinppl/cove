@@ -10,10 +10,7 @@ use crate::{
     word_validator::WordValidator,
 };
 
-use super::{
-    CreatedWalletFlow, FlowState, OnboardingBranch, RestoreOrigin, RustOnboardingManager,
-    TermsContext,
-};
+use super::{CreatedWalletFlow, FlowState, OnboardingBranch, RustOnboardingManager, TermsContext};
 
 #[derive(Debug, Clone)]
 pub(crate) struct InitialFlowResolution {
@@ -134,11 +131,9 @@ impl OnboardingProgress {
     }
 }
 
-fn default_initial_flow(has_wallets: bool, terms_accepted: bool) -> FlowState {
+fn default_initial_flow(has_wallets: bool) -> FlowState {
     if has_wallets {
         FlowState::terms(TermsContext::SelectLatestOrNew, None)
-    } else if terms_accepted {
-        FlowState::CloudCheck { origin: RestoreOrigin::Startup }
     } else {
         FlowState::Welcome { error_message: None }
     }
@@ -147,7 +142,6 @@ fn default_initial_flow(has_wallets: bool, terms_accepted: bool) -> FlowState {
 pub(crate) fn resolve_initial_flow<F>(
     progress: Option<OnboardingProgress>,
     has_wallets: bool,
-    terms_accepted: bool,
     load_mnemonic: F,
 ) -> InitialFlowResolution
 where
@@ -161,13 +155,13 @@ where
                 start_cloud_check: false,
             },
             None => InitialFlowResolution {
-                flow: default_initial_flow(has_wallets, terms_accepted),
+                flow: default_initial_flow(has_wallets),
                 clear_persisted_progress: true,
                 start_cloud_check: !has_wallets,
             },
         },
         None => InitialFlowResolution {
-            flow: default_initial_flow(has_wallets, terms_accepted),
+            flow: default_initial_flow(has_wallets),
             clear_persisted_progress: false,
             start_cloud_check: !has_wallets,
         },

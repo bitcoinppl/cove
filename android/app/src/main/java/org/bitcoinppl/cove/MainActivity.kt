@@ -71,8 +71,6 @@ import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.CatastrophicCloudRestoreProvider
 import org.bitcoinppl.cove_core.CatastrophicCloudRestoreResult
 import org.bitcoinppl.cove_core.ColdWalletRoute
-import org.bitcoinppl.cove_core.Database
-import org.bitcoinppl.cove_core.GlobalConfigKey
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.ImportType
 import org.bitcoinppl.cove_core.NewWalletRoute
@@ -432,60 +430,11 @@ class MainActivity : FragmentActivity() {
             val app = remember { AppManager.getInstance() }
             val auth = remember { AuthManager.getInstance() }
             val snackbarHostState = remember { SnackbarHostState() }
-            val cloudBackupLifecycle = app.cloudBackupManager.lifecycle
-            val hasWallets = app.wallets.isNotEmpty() || app.hasWallets
-            val readPersistedOnboardingProgress: () -> Result<String?> = {
-                runCatching {
-                    Database().globalConfig().get(GlobalConfigKey.OnboardingProgress)
-                }.onFailure { error ->
-                    Log.e(TAG, "[STARTUP] failed to read persisted onboarding progress before routing", error)
-                }
-            }
-            val initialPersistedOnboardingProgress = remember { readPersistedOnboardingProgress() }
-            var persistedOnboardingProgress by remember {
-                mutableStateOf(initialPersistedOnboardingProgress.getOrNull())
-            }
-            var previousPersistedOnboardingProgressReadFailed by remember {
-                mutableStateOf(initialPersistedOnboardingProgress.isFailure)
-            }
             var startupMode by remember {
-                mutableStateOf(
-                    resolveStartupMode(
-                        termsAccepted = app.isTermsAccepted,
-                        hasWallets = hasWallets,
-                        cloudBackupLifecycle = cloudBackupLifecycle,
-                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(persistedOnboardingProgress),
-                    ),
-                )
+                mutableStateOf(resolveStartupMode(app.needsOnboarding))
             }
-            LaunchedEffect(app.isTermsAccepted, hasWallets, cloudBackupLifecycle) {
-                val freshProgress = readPersistedOnboardingProgress()
-                val recoveredOnboardingProgressAfterReadFailure =
-                    hasRecoveredOnboardingProgressAfterReadFailure(
-                        freshProgress = freshProgress,
-                        previousProgress = persistedOnboardingProgress,
-                        previousReadFailed = previousPersistedOnboardingProgressReadFailed,
-                    )
-                val effectiveProgress =
-                    resolveEffectiveOnboardingProgress(
-                        freshProgress = freshProgress,
-                        previousProgress = persistedOnboardingProgress,
-                    )
-
-                persistedOnboardingProgress = effectiveProgress
-
-                startupMode =
-                    resolveStartupModeTransition(
-                        currentMode = startupMode,
-                        termsAccepted = app.isTermsAccepted,
-                        hasWallets = hasWallets,
-                        cloudBackupLifecycle = cloudBackupLifecycle,
-                        hasPersistedOnboardingProgress = hasPersistedOnboardingProgress(effectiveProgress),
-                        hasRecoveredOnboardingProgressAfterReadFailure =
-                            recoveredOnboardingProgressAfterReadFailure,
-                    )
-
-                previousPersistedOnboardingProgressReadFailed = freshProgress.isFailure
+            LaunchedEffect(app.needsOnboarding) {
+                startupMode = resolveStartupMode(app.needsOnboarding)
             }
             val onboardingManager =
                 remember(startupMode) {
@@ -504,7 +453,6 @@ class MainActivity : FragmentActivity() {
                 onboardingManager = onboardingManager,
                 isPrivacyCoverVisible = isPrivacyCoverVisible,
             ) {
-                persistedOnboardingProgress = null
                 startupMode = StartupMode.READY
             }
         }

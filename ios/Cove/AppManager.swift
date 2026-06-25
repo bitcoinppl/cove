@@ -32,7 +32,7 @@ private let navigationSettleDelayMs = 800
     /// tracks if current screen is scrolled past header for adaptive nav styling
     var isPastHeader = false
 
-    var isTermsAccepted: Bool = Database().globalFlag().isTermsAccepted()
+    var needsOnboarding = true
     var selectedNetwork = Database().globalConfig().selectedNetwork()
 
     var colorSchemeSelection = Database().globalConfig().colorScheme()
@@ -102,6 +102,7 @@ private let navigationSettleDelayMs = 800
         self.rust = rust
         database = Database()
         wallets = (try? database.wallets().all()) ?? []
+        needsOnboarding = rust.needsOnboarding()
 
         // set the cached prices and fees
         prices = try? rust.prices()
@@ -337,6 +338,7 @@ private let navigationSettleDelayMs = 800
         advanceNavigationGeneration()
 
         database = Database()
+        needsOnboarding = rust.needsOnboarding()
         clearWalletManager()
         coinControlManager?.close()
         coinControlManager = nil
@@ -603,11 +605,6 @@ private let navigationSettleDelayMs = 800
         navigationGenerations.isCurrent(capturedToken: generation)
     }
 
-    func agreeToTerms() {
-        self.dispatch(action: .acceptTerms)
-        withAnimation { isTermsAccepted = true }
-    }
-
     func reconcile(message: AppStateReconcileMessage) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -635,6 +632,7 @@ private let navigationSettleDelayMs = 800
 
             case .databaseUpdated:
                 database = Database()
+                needsOnboarding = rust.needsOnboarding()
 
             case let .colorSchemeChanged(colorSchemeSelection):
                 self.colorSchemeSelection = colorSchemeSelection
@@ -669,9 +667,6 @@ private let navigationSettleDelayMs = 800
                         await walletManager.updateWalletBalance()
                     }
                 }
-
-            case .acceptedTerms:
-                isTermsAccepted = true
 
             case .walletModeChanged:
                 isLoading = true
