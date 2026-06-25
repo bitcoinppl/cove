@@ -13,7 +13,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CancellationException
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.WalletSelectionRecoveryResult
@@ -22,8 +21,6 @@ import org.bitcoinppl.cove.recoverWalletSelectionOrPopRoute
 import org.bitcoinppl.cove_core.types.TxId
 import org.bitcoinppl.cove_core.types.WalletId
 import kotlin.coroutines.cancellation.CancellationException as KotlinCancellationException
-
-private const val TAG = "TransactionDetailsContainer"
 
 private const val TAG = "TransactionDetailsContainer"
 
