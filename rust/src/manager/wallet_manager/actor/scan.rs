@@ -680,7 +680,10 @@ impl ProgressiveScanRunner {
                 }
 
                 // delayed scans switch from the lightweight spinner to detailed progress
-                _ = &mut progress_reveal_timer, if !self.progress_is_visible => {
+                _ = &mut progress_reveal_timer, if should_reveal_delayed_progress(
+                    self.progress_is_visible,
+                    &self.cancel_token,
+                ) => {
                     self.reveal_delayed_progress();
                 }
             }
