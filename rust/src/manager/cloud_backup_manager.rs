@@ -3,10 +3,13 @@ mod catastrophic_recovery;
 mod cloud_inventory;
 mod cspp_exports;
 mod detail;
+mod error;
 mod keychain;
 mod model;
 mod ops;
 mod pending;
+mod pending_enable;
+mod pending_verification;
 mod store;
 mod verify;
 mod wallets;
@@ -36,8 +39,6 @@ use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobDirtyState, CloudBlobFailureIssue, PersistedCloudBackupState,
     PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
-    PersistedDeepVerificationReport, PersistedPendingVerificationCompletion,
-    PersistedPendingVerificationUpload,
 };
 use crate::wallet::metadata::{
     WalletId, WalletMetadata, WalletMode as LocalWalletMode, WalletType,
@@ -66,6 +67,10 @@ pub use self::detail::{
     CloudBackupVerificationSource, CloudOnlyOperation, CloudOnlyState,
     PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
 };
+pub(crate) use self::error::{
+    BlockingCloudStep, CloudBackupError, CloudStorageIssue, blocking_cloud_error,
+    is_connectivity_related_issue, offline_error_for_step,
+};
 pub(crate) use self::keychain::CloudBackupKeychain;
 use self::model::{
     CloudBackupAcceptedEnablePrompt, CloudBackupExclusiveOperation,
@@ -83,12 +88,20 @@ pub(crate) use self::ops::{
     CloudBackupSavedPasskeyConfirmation, CloudBackupUploadedEnableBackup,
     EnablePasskeyRegistrationFlow,
 };
+pub(crate) use self::pending_enable::PendingEnableSession;
+#[cfg(test)]
+pub(crate) use self::pending_enable::PendingEnableSessionMaterial;
+pub(crate) use self::pending_verification::{
+    PendingVerificationCompletion, PendingVerificationUpload,
+};
 pub(crate) use self::store::CloudBackupStore;
 use self::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
 };
+#[cfg(test)]
+pub(crate) use self::wallets::UnpersistedPrfKey;
 use self::wallets::wallet_metadata_change_requires_upload;
-use self::wallets::{StagedPrfKey, UnpersistedPrfKey, WalletBackupLookup, WalletBackupReader};
+use self::wallets::{WalletBackupLookup, WalletBackupReader};
 use super::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 pub(crate) use cspp_exports::master_key_wrapper_revision_hash;
 #[allow(unused_imports)]
@@ -498,80 +511,6 @@ pub(crate) mod test_support {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CloudStorageIssue {
-    AuthorizationRequired,
-    Offline,
-    Unavailable,
-    NotFound,
-    QuotaExceeded,
-    Other,
-}
-
-pub(crate) fn is_connectivity_related_issue(issue: impl Into<CloudStorageIssue>) -> bool {
-    matches!(issue.into(), CloudStorageIssue::Offline | CloudStorageIssue::Unavailable)
-}
-
-pub(crate) fn blocking_cloud_error(
-    step: BlockingCloudStep,
-    error: CloudBackupError,
-) -> CloudBackupError {
-    if CloudStorageIssue::from(&error) == CloudStorageIssue::Offline {
-        return offline_error_for_step(step);
-    }
-
-    error
-}
-
-impl From<CloudBackupError> for CloudStorageIssue {
-    fn from(error: CloudBackupError) -> Self {
-        Self::from(&error)
-    }
-}
-
-impl From<&CloudBackupError> for CloudStorageIssue {
-    fn from(error: &CloudBackupError) -> Self {
-        match error {
-            CloudBackupError::Offline(_) | CloudBackupError::Deferred(_) => Self::Offline,
-            CloudBackupError::CloudStorage(error) => error.into(),
-            CloudBackupError::CloudStorageContext { source, .. } => source.into(),
-            CloudBackupError::Cloud(_) => Self::Other,
-            CloudBackupError::NotSupported(_)
-            | CloudBackupError::UnsupportedPasskeyProvider
-            | CloudBackupError::RecoveryRequired(_)
-            | CloudBackupError::Passkey(_)
-            | CloudBackupError::Crypto(_)
-            | CloudBackupError::Internal(_)
-            | CloudBackupError::Compatibility(_)
-            | CloudBackupError::PasskeyMismatch
-            | CloudBackupError::NoBackupFound
-            | CloudBackupError::PasskeyDiscoveryCancelled
-            | CloudBackupError::Cancelled => Self::Other,
-        }
-    }
-}
-
-impl From<CloudStorageError> for CloudStorageIssue {
-    fn from(error: CloudStorageError) -> Self {
-        Self::from(&error)
-    }
-}
-
-impl From<&CloudStorageError> for CloudStorageIssue {
-    fn from(error: &CloudStorageError) -> Self {
-        match error {
-            CloudStorageError::AuthorizationRequired(_) => Self::AuthorizationRequired,
-            CloudStorageError::Offline(_) => Self::Offline,
-            CloudStorageError::NotAvailable(_) => Self::Unavailable,
-            CloudStorageError::NotFound(_) => Self::NotFound,
-            CloudStorageError::QuotaExceeded => Self::QuotaExceeded,
-            CloudStorageError::UploadFailed(_)
-            | CloudStorageError::DownloadFailed(_)
-            | CloudStorageError::InvalidNamespace(_) => Self::Other,
-        }
-    }
-}
-
 impl From<&PersistedCloudBackupState> for CloudBackupVerificationMetadata {
     fn from(db_state: &PersistedCloudBackupState) -> Self {
         if db_state.is_unverified() {
@@ -587,81 +526,6 @@ impl From<&PersistedCloudBackupState> for CloudBackupVerificationMetadata {
             None => Self::ConfiguredNeverVerified,
         }
     }
-}
-
-pub(crate) fn offline_error_for_step(step: BlockingCloudStep) -> CloudBackupError {
-    CloudBackupError::Offline(offline_message_for_step(step).into())
-}
-
-fn offline_message_for_step(step: BlockingCloudStep) -> &'static str {
-    use BlockingCloudStep as B;
-    match step {
-        B::Enable => "Reconnect to the internet, then try enabling cloud backup again",
-        B::Restore => "Reconnect to the internet, then try restoring from cloud backup again",
-        B::Verify => "Reconnect to the internet, then try verifying cloud backup again",
-        B::Sync => "Reconnect to the internet, then try syncing cloud backup again",
-        B::FetchCloudOnly => "Reconnect to the internet, then try loading cloud-only wallets again",
-        B::RestoreCloudWallet => {
-            "Reconnect to the internet, then try restoring this cloud wallet again"
-        }
-        B::DeleteCloudWallet => {
-            "Reconnect to the internet, then try deleting this cloud wallet again"
-        }
-        B::RecoverOtherBackups => {
-            "Reconnect to the internet, then try recovering the other cloud backups again"
-        }
-        B::DeleteOtherBackups => {
-            "Reconnect to the internet, then try deleting the other cloud backups again"
-        }
-        B::Disable => "Reconnect to the internet, then try disabling cloud backup again",
-        B::RecreateManifest => {
-            "Reconnect to the internet, then try recreating the cloud backup manifest again"
-        }
-        B::RepairPasskey => "Reconnect to the internet, then try repairing cloud backup again",
-        B::DetailRefresh => {
-            "Reconnect to the internet, then try refreshing cloud backup details again"
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BlockingCloudStep {
-    Enable,
-    Restore,
-    Verify,
-    Sync,
-    FetchCloudOnly,
-    RestoreCloudWallet,
-    DeleteCloudWallet,
-    RecoverOtherBackups,
-    DeleteOtherBackups,
-    Disable,
-    RecreateManifest,
-    RepairPasskey,
-    DetailRefresh,
-}
-
-pub(crate) struct PendingEnableSessionMaterial {
-    master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
-    passkey: Zeroizing<UnpersistedPrfKey>,
-    context: CloudBackupEnableContext,
-}
-
-pub(crate) struct PendingSavedPasskeySessionMaterial {
-    master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
-    passkey: Zeroizing<StagedPrfKey>,
-    context: CloudBackupEnableContext,
-}
-
-/// Tracks passkey material created during enable before the flow fully completes
-#[allow(dead_code)]
-pub(crate) enum PendingEnableSession {
-    /// A new passkey and master key are staged while the user confirms Create New Backup
-    AwaitingForceNewConfirmation(PendingEnableSessionMaterial),
-    /// Upload already started and should retry with the same staged passkey material
-    RetryUpload(PendingEnableSessionMaterial),
-    /// A registered passkey is staged until targeted PRF auth confirms it can be used
-    AwaitingSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial),
 }
 
 fn cloud_only_cache_is_stale(
@@ -688,154 +552,6 @@ fn cloud_only_cache_is_stale(
             .chain(detail.needs_sync.iter())
             .any(|local_wallet| local_wallet.record_id == cloud_wallet.record_id)
     })
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct PendingVerificationCompletion {
-    report: DeepVerificationReport,
-    namespace_id: String,
-    uploads: Vec<PendingVerificationUpload>,
-    created_at: Option<u64>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum PendingVerificationUpload {
-    MasterKeyWrapper,
-    Wallet { record_id: String, expected_revision: String },
-}
-
-impl std::fmt::Debug for PendingEnableSession {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PendingEnableSession").finish_non_exhaustive()
-    }
-}
-
-impl PendingEnableSessionMaterial {
-    fn new(
-        master_key: cove_cspp::master_key::MasterKey,
-        passkey: UnpersistedPrfKey,
-        context: CloudBackupEnableContext,
-    ) -> Self {
-        Self { master_key: Zeroizing::new(master_key), passkey: Zeroizing::new(passkey), context }
-    }
-
-    fn into_parts(
-        self,
-    ) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<UnpersistedPrfKey>) {
-        (self.master_key, self.passkey)
-    }
-
-    fn namespace_id(&self) -> String {
-        self.master_key.namespace_id()
-    }
-
-    fn context(&self) -> CloudBackupEnableContext {
-        self.context
-    }
-}
-
-impl PendingSavedPasskeySessionMaterial {
-    fn new(
-        master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
-        passkey: Zeroizing<StagedPrfKey>,
-        context: CloudBackupEnableContext,
-    ) -> Self {
-        Self { master_key, passkey, context }
-    }
-
-    fn into_parts(self) -> (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<StagedPrfKey>) {
-        (self.master_key, self.passkey)
-    }
-
-    fn namespace_id(&self) -> String {
-        self.master_key.namespace_id()
-    }
-
-    fn context(&self) -> CloudBackupEnableContext {
-        self.context
-    }
-}
-
-impl PendingEnableSession {
-    fn retry_upload(
-        master_key: cove_cspp::master_key::MasterKey,
-        passkey: UnpersistedPrfKey,
-        context: CloudBackupEnableContext,
-    ) -> Self {
-        Self::RetryUpload(PendingEnableSessionMaterial::new(master_key, passkey, context))
-    }
-
-    fn into_ready_parts(
-        self,
-    ) -> Result<
-        (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<UnpersistedPrfKey>),
-        CloudBackupError,
-    > {
-        match self {
-            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
-                Ok(material.into_parts())
-            }
-            Self::AwaitingSavedPasskeyConfirmation(_) => Err(CloudBackupError::Internal(
-                "pending enable session did not contain authenticated passkey material".into(),
-            )),
-        }
-    }
-
-    fn into_staged_parts(
-        self,
-    ) -> Result<
-        (Zeroizing<cove_cspp::master_key::MasterKey>, Zeroizing<StagedPrfKey>),
-        CloudBackupError,
-    > {
-        match self {
-            Self::AwaitingSavedPasskeyConfirmation(material) => Ok(material.into_parts()),
-            Self::AwaitingForceNewConfirmation(_) | Self::RetryUpload(_) => {
-                Err(CloudBackupError::Internal(
-                    "pending enable session did not contain staged passkey material".into(),
-                ))
-            }
-        }
-    }
-
-    fn namespace_id(&self) -> String {
-        match self {
-            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
-                material.namespace_id()
-            }
-            Self::AwaitingSavedPasskeyConfirmation(material) => material.namespace_id(),
-        }
-    }
-
-    fn context(&self) -> CloudBackupEnableContext {
-        match self {
-            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
-                material.context()
-            }
-            Self::AwaitingSavedPasskeyConfirmation(material) => material.context(),
-        }
-    }
-
-    fn is_retry_upload(&self) -> bool {
-        matches!(self, Self::RetryUpload(_))
-    }
-
-    fn is_awaiting_force_new_confirmation(&self) -> bool {
-        matches!(self, Self::AwaitingForceNewConfirmation(_))
-    }
-
-    fn is_awaiting_saved_passkey_confirmation(&self) -> bool {
-        matches!(self, Self::AwaitingSavedPasskeyConfirmation(_))
-    }
-
-    fn awaiting_saved_passkey_confirmation(
-        master_key: Zeroizing<cove_cspp::master_key::MasterKey>,
-        passkey: Zeroizing<StagedPrfKey>,
-        context: CloudBackupEnableContext,
-    ) -> Self {
-        Self::AwaitingSavedPasskeyConfirmation(PendingSavedPasskeySessionMaterial::new(
-            master_key, passkey, context,
-        ))
-    }
 }
 
 #[uniffi::export]
@@ -905,131 +621,6 @@ impl CloudBackupDetailResult {
     }
 }
 
-impl PendingVerificationCompletion {
-    fn new(
-        report: DeepVerificationReport,
-        namespace_id: String,
-        uploads: Vec<PendingVerificationUpload>,
-    ) -> Self {
-        Self {
-            report,
-            namespace_id,
-            uploads,
-            created_at: Some(crate::manager::cloud_backup_manager::current_timestamp()),
-        }
-    }
-
-    pub(crate) fn report(&self) -> &DeepVerificationReport {
-        &self.report
-    }
-
-    pub(crate) fn namespace_id(&self) -> &str {
-        &self.namespace_id
-    }
-
-    pub(crate) fn uploads(&self) -> &[PendingVerificationUpload] {
-        &self.uploads
-    }
-
-    pub(crate) fn is_expired(&self, now: u64, ttl_seconds: u64) -> bool {
-        let Some(created_at) = self.created_at else {
-            // legacy persisted completions predate created_at and must be restarted
-            return true;
-        };
-
-        if created_at > now {
-            return true;
-        }
-
-        now.saturating_sub(created_at) >= ttl_seconds
-    }
-
-    fn persisted(&self) -> PersistedPendingVerificationCompletion {
-        PersistedPendingVerificationCompletion {
-            report: PersistedDeepVerificationReport::from(&self.report),
-            namespace_id: self.namespace_id.clone(),
-            created_at: self.created_at,
-            uploads: self
-                .uploads
-                .iter()
-                .cloned()
-                .map(PersistedPendingVerificationUpload::from)
-                .collect(),
-        }
-    }
-
-    fn from_persisted(completion: PersistedPendingVerificationCompletion) -> Self {
-        Self {
-            report: DeepVerificationReport::from(completion.report),
-            namespace_id: completion.namespace_id,
-            created_at: completion.created_at,
-            uploads: completion
-                .uploads
-                .into_iter()
-                .map(PendingVerificationUpload::from_persisted)
-                .collect(),
-        }
-    }
-}
-
-impl PendingVerificationUpload {
-    pub(crate) fn new(record_id: String, expected_revision: String) -> Self {
-        Self::Wallet { record_id, expected_revision }
-    }
-
-    pub(crate) fn master_key_wrapper() -> Self {
-        Self::MasterKeyWrapper
-    }
-
-    pub(crate) fn record_id(&self) -> &str {
-        match self {
-            Self::MasterKeyWrapper => MASTER_KEY_RECORD_ID,
-            Self::Wallet { record_id, .. } => record_id,
-        }
-    }
-
-    pub(crate) fn expected_revision(&self) -> &str {
-        match self {
-            Self::MasterKeyWrapper => "master-key-wrapper",
-            Self::Wallet { expected_revision, .. } => expected_revision,
-        }
-    }
-
-    pub(crate) fn wallet_record_id(&self) -> Option<&str> {
-        match self {
-            Self::MasterKeyWrapper => None,
-            Self::Wallet { record_id, .. } => Some(record_id),
-        }
-    }
-
-    pub(crate) fn wallet_revision(&self) -> Option<&str> {
-        match self {
-            Self::MasterKeyWrapper => None,
-            Self::Wallet { expected_revision, .. } => Some(expected_revision),
-        }
-    }
-
-    pub(crate) fn target_revision(&self, sync_state: Option<&PersistedCloudBlobState>) -> String {
-        let Self::Wallet { expected_revision, .. } = self else {
-            return self.expected_revision().to_owned();
-        };
-
-        sync_state
-            .and_then(PersistedCloudBlobState::revision_hash)
-            .unwrap_or(expected_revision)
-            .to_owned()
-    }
-
-    fn from_persisted(upload: PersistedPendingVerificationUpload) -> Self {
-        match upload {
-            PersistedPendingVerificationUpload::MasterKeyWrapper => Self::MasterKeyWrapper,
-            PersistedPendingVerificationUpload::Wallet { record_id, expected_revision } => {
-                Self::Wallet { record_id, expected_revision }
-            }
-        }
-    }
-}
-
 impl PersistedCloudBlobState {
     pub(crate) fn revision_hash(&self) -> Option<&str> {
         match self {
@@ -1039,108 +630,6 @@ impl PersistedCloudBlobState {
             Self::Failed(state) => state.revision_hash.as_deref(),
             Self::Dirty(_) => None,
         }
-    }
-}
-
-impl DeepVerificationReport {
-    fn from(report: PersistedDeepVerificationReport) -> Self {
-        Self {
-            master_key_wrapper_repaired: report.master_key_wrapper_repaired,
-            local_master_key_repaired: report.local_master_key_repaired,
-            credential_recovered: report.credential_recovered,
-            wallets_verified: report.wallets_verified,
-            wallets_failed: report.wallets_failed,
-            wallets_unsupported: report.wallets_unsupported,
-            detail: None,
-        }
-    }
-}
-
-impl From<&DeepVerificationReport> for PersistedDeepVerificationReport {
-    fn from(report: &DeepVerificationReport) -> Self {
-        Self {
-            master_key_wrapper_repaired: report.master_key_wrapper_repaired,
-            local_master_key_repaired: report.local_master_key_repaired,
-            credential_recovered: report.credential_recovered,
-            wallets_verified: report.wallets_verified,
-            wallets_failed: report.wallets_failed,
-            wallets_unsupported: report.wallets_unsupported,
-        }
-    }
-}
-
-impl From<PendingVerificationUpload> for PersistedPendingVerificationUpload {
-    fn from(upload: PendingVerificationUpload) -> Self {
-        match upload {
-            PendingVerificationUpload::MasterKeyWrapper => Self::MasterKeyWrapper,
-            PendingVerificationUpload::Wallet { record_id, expected_revision } => {
-                Self::Wallet { record_id, expected_revision }
-            }
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CloudBackupError {
-    #[error("not supported: {0}")]
-    NotSupported(String),
-
-    #[error("passkey provider does not support PRF for Cloud Backup")]
-    UnsupportedPasskeyProvider,
-
-    #[error("{0}")]
-    RecoveryRequired(String),
-
-    #[error("passkey error: {0}")]
-    Passkey(String),
-
-    #[error("crypto error: {0}")]
-    Crypto(String),
-
-    #[error("cloud storage error: {0}")]
-    Cloud(String),
-
-    #[error("cloud storage error: {0}")]
-    CloudStorage(#[from] CloudStorageError),
-
-    #[error("cloud storage error: {context}: {source}")]
-    CloudStorageContext { context: String, source: CloudStorageError },
-
-    #[error("offline: {0}")]
-    Offline(String),
-
-    #[error("deferred until connected: {0}")]
-    Deferred(String),
-
-    #[error("internal error: {0}")]
-    Internal(String),
-
-    #[error("compatibility error: {0}")]
-    Compatibility(String),
-
-    #[error("Passkey didn't match any backups, please try a new one")]
-    PasskeyMismatch,
-
-    #[error("no cloud backups found")]
-    NoBackupFound,
-
-    #[error("user cancelled passkey discovery")]
-    PasskeyDiscoveryCancelled,
-
-    #[error("restore cancelled")]
-    Cancelled,
-}
-
-impl CloudBackupError {
-    pub(crate) fn cloud_storage_context(
-        context: impl Into<String>,
-        source: CloudStorageError,
-    ) -> Self {
-        Self::CloudStorageContext { context: context.into(), source }
-    }
-
-    pub(crate) fn is_cloud_error(&self) -> bool {
-        matches!(self, Self::Cloud(_) | Self::CloudStorage(_) | Self::CloudStorageContext { .. })
     }
 }
 
