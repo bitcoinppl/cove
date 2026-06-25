@@ -1,10 +1,15 @@
+mod address_input;
 pub mod alert_state;
+mod amount_input;
 pub mod amount_or_max;
 pub mod btc_on_change;
 mod coin_control;
 pub mod error;
 mod fee_selection;
 pub mod fiat_on_change;
+mod finalize;
+mod psbt_builder;
+mod read_api;
 mod sanitize;
 pub mod state;
 mod validation;
@@ -12,45 +17,37 @@ mod validation;
 use std::{sync::Arc, time::Duration};
 
 use cove_tokio::DebouncedTask;
-use cove_util::result_ext::ResultExt as _;
 
 use crate::{
-    app::{App, AppAction},
+    app::App,
     fee_client::FEE_CLIENT,
     fiat::client::PriceResponse,
-    router::RouteFactory,
-    transaction::FeeRate,
     wallet::{
         Address,
         balance::Balance,
-        metadata::{FiatOrBtc, WalletMetadata, WalletType},
+        metadata::{FiatOrBtc, WalletMetadata},
     },
 };
-use act_zero::{WeakAddr, call};
+use act_zero::WeakAddr;
 use alert_state::SendFlowAlertState;
 use amount_or_max::AmountOrMax;
 use backon::{ExponentialBuilder, Retryable};
 use btc_on_change::BtcOnChangeHandler;
 use cove_common::consts::MIN_SEND_SATS;
 use cove_types::{
-    WalletId,
-    address::AddressWithNetwork,
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed},
-    psbt::Psbt,
     unit::BitcoinUnit,
     utxo::Utxo,
 };
-use cove_util::format::NumberFormatter as _;
 use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
 use flume::Receiver;
 use parking_lot::Mutex;
 use state::{CoinControlMode, EnterMode, FeeSelection, SendFlowManagerState, State};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, trace};
 
 use super::{
-    deferred_dispatch::DeferredDispatch,
     deferred_sender::{self, MessageSender},
     wallet_manager::{RustWalletManager, actor::WalletActor},
 };
@@ -211,7 +208,7 @@ impl RustSendFlowManager {
     }
 }
 
-#[uniffi::export(async_runtime = "tokio")]
+#[uniffi::export]
 impl RustSendFlowManager {
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
@@ -228,195 +225,25 @@ impl RustSendFlowManager {
         });
     }
 
-    // MARK: read only methods
-    #[uniffi::method]
-    pub fn wallet_id(&self) -> WalletId {
-        self.state.lock().metadata.id.clone()
-    }
-
-    #[uniffi::method]
-    pub fn amount(&self) -> Arc<Amount> {
-        Arc::new(Amount::from_sat(self.amount_sats()))
-    }
-
-    #[uniffi::method]
-    pub fn entering_fiat_amount(&self) -> String {
-        self.state.lock().entering_fiat_amount.clone()
-    }
-
-    #[uniffi::method(name = "maxSendMinusFees")]
-    pub fn ffi_max_send_minus_fees(&self) -> Option<Arc<Amount>> {
-        self.max_send_minus_fees().map(Arc::new)
-    }
-
-    #[uniffi::method(name = "maxSendMinusFeesAndSmallUtxo")]
-    pub fn ffi_max_send_minus_fees_and_small_utxo(&self) -> Option<Arc<Amount>> {
-        self.max_send_minus_fees_and_small_utxo().map(Arc::new)
-    }
-
-    #[uniffi::method]
-    pub fn utxos(&self) -> Option<Vec<Utxo>> {
-        let mode = self.state.lock().mode.clone();
-        match mode {
-            EnterMode::CoinControl(cc) => Some(cc.utxo_list.utxos.clone()),
-            _ => None,
-        }
-    }
-
-    /// Wait until we have base fee rates, returns false if timeout
-    /// Returns immediately if we already have cached fees
-    /// Only blocks if no cached fees exist (first launch, network needed)
-    /// On timeout: shows alert and pops route
-    #[uniffi::method]
-    pub async fn wait_for_init(self: &Arc<Self>) -> bool {
-        let mut times = 0;
-        const MAX_WAIT_MS: u64 = 20_000;
-        let mut total_waited: u64 = 0;
-
-        loop {
-            if self.state.lock().has_base_fees {
-                return true;
-            }
-
-            if total_waited >= MAX_WAIT_MS {
-                warn!("wait_for_init timed out after {MAX_WAIT_MS}ms");
-
-                self.reconciler.send(Message::SetAlert(SendFlowAlertState::General {
-                    title: "Unable to Load Fees".to_string(),
-                    message: "Cannot create a transaction without fee information. Please check your internet connection and try again.".to_string(),
-                }));
-
-                let mut deferred = DeferredDispatch::<AppAction>::new();
-                deferred.queue(AppAction::PopRoute);
-
-                return false;
-            }
-
-            debug!("waiting for base fees {times}");
-            let wait_time = (33 + times * 10).min(200);
-            tokio::time::sleep(std::time::Duration::from_millis(wait_time)).await;
-            total_waited += wait_time;
-            times += 1;
-        }
-    }
-
-    #[uniffi::method]
-    pub fn amount_sats(&self) -> u64 {
-        self.state.lock().amount_sats.unwrap_or(0)
-    }
-
-    #[uniffi::method]
-    pub fn amount_exceeds_balance(&self) -> bool {
-        let state = self.state.lock();
-
-        validation::amount_exceeds_spendable_balance(
-            state.amount_sats,
-            state.unlocked_spendable_sats,
-        )
-    }
-
-    #[uniffi::method]
-    pub fn send_amount_btc(&self) -> String {
-        let selected_unit = self.state.lock().metadata.selected_unit;
-        let send_amount = self.send_amount().unwrap_or(Amount::ZERO);
-
-        match selected_unit {
-            BitcoinUnit::Btc => {
-                let string = send_amount.as_btc().thousands();
-                if string.contains('e') { send_amount.btc_string() } else { string.to_string() }
-            }
-            BitcoinUnit::Sat => send_amount.as_sats().thousands_int().to_string(),
-        }
-    }
-
-    #[uniffi::method]
-    pub fn send_amount_fiat(&self) -> String {
-        let Some(btc_price_in_fiat) = self.state.lock().btc_price_in_fiat else {
-            return "---".to_string();
-        };
-
-        let send_amount = self.send_amount().unwrap_or(Amount::ZERO);
-        let send_amount_in_fiat = self
-            .state
-            .lock()
-            .amount_fiat
-            .unwrap_or_else(|| send_amount.as_btc().ceil() * (btc_price_in_fiat as f64));
-
-        self.display_fiat_amount(send_amount_in_fiat, true).to_string()
-    }
-
-    #[uniffi::method]
-    pub fn total_spent_in_btc(self: &Arc<Self>) -> String {
-        if self.state.lock().amount_sats.is_none() {
-            return "---".to_string();
-        }
-
-        let Some(total_spent) = self.total_spent_btc_amount() else {
-            return "---".to_string();
-        };
-
-        match self.state.lock().metadata.selected_unit {
-            BitcoinUnit::Btc => format!("{} BTC", total_spent.as_btc().thousands()),
-            BitcoinUnit::Sat => format!("{} sats", total_spent.as_sats().thousands_int()),
-        }
-    }
-
-    #[uniffi::method]
-    pub fn total_spent_in_fiat(self: &Arc<Self>) -> String {
-        if self.state.lock().amount_sats.is_none() {
-            return "---".to_string();
-        }
-
-        let Some(total_spent) = self.total_spent_btc_amount() else {
-            return "---".to_string();
-        };
-
-        let Some(btc_price_in_fiat) = self.state.lock().btc_price_in_fiat else {
-            return "---".to_string();
-        };
-
-        let total_spent_in_fiat = total_spent.as_btc() * (btc_price_in_fiat as f64);
-        format!("≈ {}", self.display_fiat_amount(total_spent_in_fiat, true))
-    }
-
-    #[uniffi::method]
-    pub fn total_fee_string(&self) -> Option<String> {
-        let selected_fee_rate = self.selected_fee_rate()?;
-        let total_fee = selected_fee_rate.total_fee()?;
-
-        let string = match self.state.lock().metadata.selected_unit {
-            BitcoinUnit::Btc => format!("{} BTC", total_fee.as_btc().thousands()),
-            BitcoinUnit::Sat => format!("{} sats", total_fee.as_sats().thousands_int()),
-        };
-
-        Some(string)
-    }
-
-    #[uniffi::method(default(with_suffix = true))]
-    pub fn display_fiat_amount(&self, amount: f64, with_suffix: bool) -> String {
-        {
-            let sensitive_visible = self.state.lock().metadata.sensitive_visible;
-            if !sensitive_visible {
-                return "**************".to_string();
-            }
-        }
-
-        let fiat = amount.thousands_fiat();
-        let currency = self.state.lock().selected_fiat_currency;
-
-        let symbol = currency.symbol();
-        let suffix = currency.suffix();
-
-        if with_suffix && !suffix.is_empty() {
-            return format!("{symbol}{fiat} {suffix}");
-        }
-
-        format!("{symbol}{fiat}")
-    }
-
     // MARK: Validators
     #[uniffi::method(default(display_alert = false))]
     pub fn validate_address(self: &Arc<Self>, display_alert: bool) -> bool {
+        self.validate_address_internal(display_alert)
+    }
+
+    #[uniffi::method(default(display_alert = false))]
+    pub fn validate_fee_percentage(self: &Arc<Self>, display_alert: bool) -> bool {
+        self.validate_fee_percentage_internal(display_alert)
+    }
+
+    #[uniffi::method(default(display_alert = false))]
+    pub fn validate_amount(self: &Arc<Self>, display_alert: bool) -> bool {
+        self.validate_amount_internal(display_alert)
+    }
+}
+
+impl RustSendFlowManager {
+    pub(crate) fn validate_address_internal(self: &Arc<Self>, display_alert: bool) -> bool {
         if self.state.lock().address.is_none() {
             if display_alert {
                 let error =
@@ -429,9 +256,7 @@ impl RustSendFlowManager {
 
         true
     }
-
-    #[uniffi::method(default(display_alert = false))]
-    pub fn validate_fee_percentage(self: &Arc<Self>, display_alert: bool) -> bool {
+    pub(crate) fn validate_fee_percentage_internal(self: &Arc<Self>, display_alert: bool) -> bool {
         let Some(amount) = self.state.lock().amount_sats else { return false };
         let Some(fee_rate) = self.selected_fee_rate() else { return false };
         let Some(total_fee) = fee_rate.total_fee() else { return false };
@@ -469,9 +294,7 @@ impl RustSendFlowManager {
 
         true
     }
-
-    #[uniffi::method(default(display_alert = false))]
-    pub fn validate_amount(self: &Arc<Self>, display_alert: bool) -> bool {
+    pub(crate) fn validate_amount_internal(self: &Arc<Self>, display_alert: bool) -> bool {
         let mut sender = DeferredSender::new(self.reconciler.clone());
         let Some(amount) = self.state.lock().amount_sats else {
             let msg = Message::SetAlert(SendFlowError::InvalidNumber.into());
@@ -545,7 +368,10 @@ impl RustSendFlowManager {
 
         true
     }
+}
 
+#[uniffi::export]
+impl RustSendFlowManager {
     #[uniffi::method]
     fn sanitize_btc_entering_amount(
         self: &Arc<Self>,
@@ -717,871 +543,10 @@ impl RustSendFlowManager {
 }
 
 /// MARK: State mutating impl
-impl RustSendFlowManager {
-    fn handle_btc_field_changed(self: Arc<Self>, old: String, new: String) -> Option<()> {
-        trace!("btc_field_changed {old} --> {new}");
-        if old == new {
-            return None;
-        }
-
-        // update the state
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-        self.state.lock().entering_btc_amount = new.clone();
-
-        let state: State = self.state.clone().into();
-        let me = self.clone();
-
-        let needs_fee_rate_options_base = self.state.lock().fee_rate_options_base.is_none();
-        if needs_fee_rate_options_base {
-            cove_tokio::task::spawn(async move {
-                me.get_and_update_base_fee_rate_options().await;
-            });
-        }
-
-        let handler = BtcOnChangeHandler::new(state.clone());
-        let changes = handler.on_change(&old, &new);
-        debug!("btc_on_change_handler changes: {changes:?}");
-
-        let btc_on_change::Changeset { entering_amount_btc, max_selected, amount_btc, amount_fiat } =
-            changes;
-
-        match max_selected {
-            Some(Some(max)) => {
-                let max = Arc::new(max);
-                self.state.lock().max_selected = Some(max.clone());
-                sender.queue(Message::SetMaxSelected(max));
-            }
-            Some(None) => {
-                let was_max_selected = self.state.lock().max_selected.take().is_some();
-                if was_max_selected {
-                    sender.queue(Message::UnsetMaxSelected);
-                }
-            }
-            None => {}
-        }
-
-        if let Some(amount) = amount_btc {
-            let current_amount_sats = self.state.lock().amount_sats;
-            let amount_sats = amount.to_sat();
-            self.state.lock().amount_sats = Some(amount_sats);
-
-            if current_amount_sats != Some(amount_sats) {
-                sender.queue(Message::UpdateAmountSats(amount_sats));
-                self.schedule_fee_rate_update();
-            }
-        }
-
-        if let Some(amount) = amount_fiat {
-            self.state.lock().amount_fiat = Some(amount);
-            sender.queue(Message::UpdateAmountFiat(amount));
-        }
-
-        if let Some(entering_amount) = entering_amount_btc {
-            self.set_and_send_entering_btc_amount(entering_amount, &mut sender);
-        }
-
-        Some(())
-    }
-
-    fn handle_fiat_field_changed(
-        self: &Arc<Self>,
-        old_value: String,
-        new_value: String,
-    ) -> Option<()> {
-        debug!("fiat_field_changed {old_value} --> {new_value}");
-        if old_value == new_value {
-            return None;
-        }
-
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-
-        // update the state
-        self.state.lock().entering_fiat_amount = new_value.clone();
-
-        let prices = self.app.prices()?;
-        let selected_currency = self.state.lock().selected_fiat_currency;
-        let max_selected = self.state.lock().max_selected.as_deref().copied();
-
-        let handler = FiatOnChangeHandler::new(prices, selected_currency, max_selected);
-        let Ok(result) = handler.on_change(&old_value, &new_value) else {
-            tracing::error!("unable to get fiat on change result");
-            return None;
-        };
-
-        debug!("result: {result:?}, old_value: {old_value}, new_value: {new_value}");
-        let fiat_on_change::Changeset {
-            entering_fiat_amount,
-            fiat_value,
-            btc_amount,
-            max_selected,
-        } = result;
-
-        if let Some(entering_fiat_amount) = entering_fiat_amount {
-            self.state.lock().entering_fiat_amount = entering_fiat_amount.clone();
-            sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
-        }
-
-        if let Some(amount_fiat) = fiat_value {
-            self.state.lock().amount_fiat = Some(amount_fiat);
-            sender.queue(Message::UpdateAmountFiat(amount_fiat));
-        }
-
-        if let Some(btc_amount) = btc_amount {
-            let btc_amount = btc_amount.as_sats();
-            self.state.lock().amount_sats = Some(btc_amount);
-            sender.queue(Message::UpdateAmountSats(btc_amount));
-            self.schedule_fee_rate_update();
-        }
-
-        if max_selected == Some(None) {
-            let was_max_selected = self.state.lock().max_selected.take().is_some();
-            if was_max_selected {
-                sender.queue(Message::UnsetMaxSelected);
-            }
-        }
-
-        Some(())
-    }
-
-    /// Called when the user types or pastes into the address field.
-    /// Handles plain addresses and full bitcoin: URIs (extracts amount if present).
-    fn handle_entering_address_changed(self: &Arc<Self>, address: String) {
-        debug!("handle_entering_address_changed: {address}");
-
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-
-        self.state.lock().entering_address = address.clone();
-
-        let network = self.state.lock().metadata.network;
-        let parsed = AddressWithNetwork::try_new(&address).ok();
-        let parsed = parsed
-            .filter(|address_with_network| address_with_network.is_valid_for_network(network));
-
-        // if input was a URI, show just the address in the text field
-        if let Some(address_with_network) = &parsed {
-            let clean = address_with_network.address.to_string();
-            if clean != address {
-                self.state.lock().entering_address = clean.clone();
-                sender.queue(Message::UpdateEnteringAddress(clean));
-            }
-        }
-
-        let is_coin_control = self.state.lock().mode.is_coin_control();
-        if let Some(amount) =
-            parsed.as_ref().and_then(|address_with_network| address_with_network.amount)
-            && !is_coin_control
-        {
-            let max_was_selected = self.state.lock().max_selected.take().is_some();
-            if max_was_selected {
-                sender.queue(Message::UnsetMaxSelected);
-            }
-            self.handle_amount_changed(amount);
-        }
-
-        let payjoin_endpoint = parsed
-            .as_ref()
-            .and_then(|address_with_network| address_with_network.payjoin.as_ref())
-            .map(|payjoin| payjoin.endpoint.clone());
-        let address = parsed.map(|address_with_network| Arc::new(address_with_network.address));
-        {
-            let mut state = self.state.lock();
-            state.address = address.clone();
-            state.payjoin_endpoint = payjoin_endpoint;
-        }
-        sender.queue(Message::UpdateAddress(address.clone()));
-
-        // if both address and amount are valid, then clear the focus field, if amount is invalid, then focus on amount
-        if self.validate_address(false) {
-            let focus_field =
-                if self.validate_amount(false) { None } else { Some(SetAmountFocusField::Amount) };
-
-            self.state.lock().focus_field = focus_field;
-            sender.queue(Message::UpdateFocusField(focus_field));
-        }
-
-        // when we have a valid address, use that to get the fee rate options
-        let me = self.clone();
-        let is_max_selected = self.state.lock().max_selected.is_some();
-        cove_tokio::task::spawn(async move {
-            me.get_or_update_fee_rate_options().await;
-
-            if is_max_selected {
-                me.select_max_send_report_error().await;
-            }
-        });
-    }
-
-    fn clear_send_amount(self: &Arc<Self>) {
-        {
-            let mut state = self.state.lock();
-            state.amount_sats = None;
-            state.amount_fiat = None;
-        }
-
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-        sender.queue(Message::UpdateAmountFiat(0.0));
-        sender.queue(Message::UpdateAmountSats(0));
-        self.schedule_fee_rate_update();
-
-        // fiat
-        let currency = self.state.lock().selected_fiat_currency;
-        let entering_fiat_amount = currency.symbol().to_string();
-        self.set_and_send_entering_fiat_amount(entering_fiat_amount, &mut sender);
-
-        // btc
-        self.set_and_send_entering_btc_amount(String::new(), &mut sender);
-
-        let was_max_selected = self.state.lock().max_selected.take().is_some();
-        if was_max_selected {
-            sender.queue(Message::UnsetMaxSelected);
-        }
-    }
-
-    fn clear_address(self: &Arc<Self>) {
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-        {
-            let mut state = self.state.lock();
-            state.address = None;
-            state.payjoin_endpoint = None;
-        }
-        sender.queue(Message::UpdateAddress(None));
-
-        self.state.lock().entering_address = String::new();
-        sender.queue(Message::UpdateEnteringAddress(String::new()));
-    }
-
-    fn selected_fee_rate_changed(self: &Arc<Self>, fee_rate: Arc<FeeRateOptionWithTotalFee>) {
-        debug!("selected_fee_rate_changed: {fee_rate:?}");
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-        if let Some(options) = self.fee_rate_options() {
-            let selection = FeeSelection::new(options, fee_rate.clone());
-            self.state.lock().fee_selection = Some(selection.clone());
-            sender.queue(Message::UpdateFeeSelection(selection));
-        }
-
-        // max was selected before, so we need to update it to match the new fee rate
-        let max_selected = self.state.lock().max_selected.clone();
-        if max_selected.is_some() {
-            self.clone().dispatch(Action::SelectMaxSend);
-        }
-
-        if self.validate_amount(false) && self.validate_address(false) {
-            self.state.lock().focus_field = None;
-            sender.queue(Message::UpdateFocusField(None));
-        }
-
-        // if we are in coin control mode max mode, change the amount when fee changes
-        let mode = self.state.lock().mode.clone();
-        match mode {
-            EnterMode::CoinControl(cc) if cc.is_max_selected => {
-                if let Some(total_fee) = fee_rate.total_fee {
-                    let max_amount = cc.max_send();
-                    let amount = max_amount - total_fee;
-                    self.handle_amount_changed(amount);
-                }
-            }
-            _ => {}
-        }
-
-        self.validate_fee_percentage(true);
-    }
-
-    /// When amount is changed, we will need to update the entering and fiat amounts
-    fn handle_amount_changed(self: &Arc<Self>, amount: Amount) {
-        debug!("handle_amount_changed: {amount:?}");
-
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-        let (unit, fiat_or_btc, btc_price_in_fiat) = {
-            let state = self.state.lock();
-
-            let unit = state.metadata.selected_unit;
-            let fiat_or_btc = state.metadata.fiat_or_btc;
-            let btc_price_in_fiat = state.btc_price_in_fiat;
-
-            (unit, fiat_or_btc, btc_price_in_fiat)
-        };
-
-        match fiat_or_btc {
-            FiatOrBtc::Fiat => {
-                if let Some(price) = btc_price_in_fiat {
-                    let currency = self.state.lock().selected_fiat_currency;
-                    let amount_fiat = amount.as_btc() * (price as f64);
-
-                    let enterting_amount_fiat =
-                        format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat());
-
-                    self.set_and_send_entering_fiat_amount(enterting_amount_fiat, &mut sender);
-                }
-            }
-
-            FiatOrBtc::Btc => {
-                let amount_string = match unit {
-                    BitcoinUnit::Btc => amount.btc_string(),
-                    BitcoinUnit::Sat => amount.as_sats().thousands_int(),
-                };
-
-                self.set_and_send_entering_btc_amount(amount_string, &mut sender);
-            }
-        }
-
-        let old_amount_sats = self.state.lock().amount_sats;
-        let amount_sats = amount.to_sat();
-        self.state.lock().amount_sats = Some(amount_sats);
-
-        if old_amount_sats != Some(amount_sats) {
-            sender.queue(Message::UpdateAmountSats(amount_sats));
-            self.schedule_fee_rate_update();
-        }
-
-        if let Some(price) = btc_price_in_fiat {
-            let amount_fiat = amount.as_btc() * (price as f64);
-            self.state.lock().amount_fiat = Some(amount_fiat);
-            sender.queue(Message::UpdateAmountFiat(amount_fiat));
-        }
-    }
-
-    fn handle_focus_field_changed(
-        self: &Arc<Self>,
-        old: Option<SetAmountFocusField>,
-        new: Option<SetAmountFocusField>,
-    ) {
-        debug!("handle_focus_field_changed: {old:?} --> {new:?}");
-
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-
-        // most likely the first load, so ignore for now let front end handle it
-        if old.is_none() && new.is_some() && self.state.lock().focus_field.is_none() {
-            return;
-        }
-
-        // make sure having no focus field is only possible is address and amount are valid
-        if new.is_none() {
-            // hacky way of finding out if this is the initial load
-            let should_show_error = {
-                let state = self.state.lock();
-                state.address.is_some()
-                    && state.amount_sats.is_some()
-                    && state.amount_sats.unwrap_or_default() != 0
-            };
-
-            if !self.validate_amount(should_show_error) {
-                self.state.lock().focus_field = Some(SetAmountFocusField::Amount);
-                sender.queue(Message::UpdateFocusField(Some(SetAmountFocusField::Amount)));
-                return;
-            }
-
-            if !self.validate_address(should_show_error) {
-                self.state.lock().focus_field = Some(SetAmountFocusField::Address);
-                sender.queue(Message::UpdateFocusField(Some(SetAmountFocusField::Address)));
-                return;
-            }
-        }
-
-        // format on blur
-        if old == Some(SetAmountFocusField::Amount) {
-            let amount = self.state.lock().amount_sats.map(Amount::from_sat);
-            let amount_fiat = self.state.lock().amount_fiat;
-
-            if let Some(amount_fiat) = amount_fiat {
-                let currency = self.state.lock().selected_fiat_currency;
-                let entering_fiat_amount =
-                    format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat());
-
-                self.state.lock().entering_fiat_amount = entering_fiat_amount.clone();
-                sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
-            }
-
-            let unit = self.state.lock().metadata.selected_unit;
-            match (amount, unit) {
-                (Some(amount), BitcoinUnit::Sat) => {
-                    let entering_btc_amount = amount.as_sats().thousands_int().to_string();
-                    self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
-                }
-                (Some(amount_sats), BitcoinUnit::Btc) => {
-                    let entering_btc_amount = amount_sats.as_btc().thousands().to_string();
-                    self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
-                }
-                _ => {}
-            }
-        }
-
-        self.state.lock().focus_field = new;
-        sender.queue(Message::UpdateFocusField(new));
-    }
-
-    async fn build_psbt(
-        &self,
-        address: Option<Address>,
-        amount: Option<Amount>,
-        fee_rate: FeeRate,
-    ) -> Result<Psbt> {
-        debug!("build_psbt");
-        let mode = self.state.lock().mode.clone();
-
-        match mode {
-            EnterMode::SetAmount => self.build_psbt_for_amount(address, amount, fee_rate).await,
-            EnterMode::CoinControl(coin_control) => {
-                self.build_psbt_for_coin_control(coin_control, address, fee_rate).await
-            }
-        }
-    }
-
-    async fn build_psbt_for_amount(
-        &self,
-        address: Option<Address>,
-        amount: Option<Amount>,
-        fee_rate: FeeRate,
-    ) -> Result<Psbt> {
-        debug!("build_psbt_for_amount");
-
-        let (amount, address) = {
-            let state = self.state.lock();
-
-            let amount_sats = amount
-                .map(|amount| amount.to_sat())
-                .or_else(|| state.amount_sats)
-                .ok_or_else(|| Error::UnableToBuildTxn("no amount".to_string()))?;
-
-            let amount = if state.max_selected.is_some() {
-                AmountOrMax::Max
-            } else {
-                AmountOrMax::Amount(Amount::from_sat(amount_sats).into())
-            };
-
-            let address = address
-                .or_else(|| state.address.clone().map(|address| address.as_ref().clone()))
-                .ok_or_else(|| Error::UnableToBuildTxn("no address".to_string()))?;
-
-            (amount, address)
-        };
-
-        let actor = self.wallet_actor();
-        let psbt = match amount {
-            AmountOrMax::Amount(amount) => {
-                let amount = amount.as_ref().0;
-                call!(actor.build_ephemeral_tx(amount, address, fee_rate)).await.unwrap()
-            }
-
-            AmountOrMax::Max => {
-                call!(actor.build_ephemeral_drain_tx(address, fee_rate)).await.unwrap()
-            }
-        }?;
-
-        Ok(psbt.into())
-    }
-
-    async fn build_psbt_for_coin_control(
-        &self,
-        coin_control: CoinControlMode,
-        address: Option<Address>,
-        fee_rate: FeeRate,
-    ) -> Result<Psbt> {
-        debug!("build_psbt_for_utxo_list");
-
-        let (address, amount) = {
-            let state = self.state.lock();
-
-            let amount = if coin_control.is_max_selected {
-                coin_control.max_send()
-            } else {
-                state.amount_sats.map_or_else(|| coin_control.max_send(), Amount::from_sat)
-            };
-
-            let address = address
-                .or_else(|| state.address.clone().map(|address| address.as_ref().clone()))
-                .ok_or_else(|| Error::UnableToBuildTxn("no address".to_string()))?;
-
-            (address, bitcoin::Amount::from(amount))
-        };
-
-        let outpoints = coin_control.outpoints();
-        let actor = self.wallet_actor();
-        let psbt =
-            call!(actor.build_manual_ephemeral_tx(outpoints, amount, address, fee_rate)).await;
-
-        let psbt = psbt.map_err_str(SendFlowError::UnableToBuildTxn)??;
-        Ok(psbt.into())
-    }
-
-    async fn select_max_send_report_error(self: &Arc<Self>) {
-        match self.select_max_send().await {
-            Ok(()) => {}
-            Err(error) => {
-                let error = SendFlowError::UnableToGetMaxSend(error.to_string());
-                self.reconciler.send(Message::SetAlert(error.into()));
-            }
-        }
-    }
-
-    async fn select_max_send(self: &Arc<Self>) -> Result<()> {
-        debug!("select_max_send");
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-
-        // access the mutex once
-        let (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base) = {
-            let state = self.state.lock();
-
-            let address = state.address.clone();
-            let address_string = &state.entering_address;
-
-            let address = address
-                .map(Arc::unwrap_or_clone)
-                .or_else(|| Address::from_string(address_string, state.metadata.network).ok())
-                .or_else(|| state.first_address.clone().map(Arc::unwrap_or_clone));
-
-            let selected_fee_rate_base = state.fee_rate_options_base.clone();
-            let fee_rate_options =
-                state.fee_selection.as_ref().map(|selection| selection.options.clone());
-            let selected_fee_rate =
-                state.fee_selection.as_ref().map(|selection| selection.selected.clone());
-            let address = address.ok_or(Error::InvalidAddress(address_string.to_string()))?;
-
-            (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base)
-        };
-
-        if fee_rate_options.is_none() {
-            self.get_or_update_fee_rate_options().await;
-        }
-
-        let wallet_actor = self.wallet_actor();
-
-        // use the selected fee rate if we have have
-        // or the medium base fee rate
-        // or a default of 50 sat/vb
-        let fee_rate = selected_fee_rate
-            .map(|selected| selected.fee_rate)
-            .or_else(|| selected_fee_rate_base.map(|base| base.medium.fee_rate));
-
-        if fee_rate.is_none() {
-            warn!("unable to get selected fee rate or base fee rate using default of 50 sat/vb");
-        }
-
-        let fee_rate = fee_rate.unwrap_or_else(|| FeeRate::from_sat_per_vb(50.0));
-        let psbt: Psbt = call!(wallet_actor.build_ephemeral_drain_tx(address, fee_rate))
-            .await
-            .unwrap()
-            .map_err_str(Error::UnableToGetMaxSend)?
-            .into();
-
-        let total = Arc::new(psbt.output_total_amount());
-        trace!("psbt: {psbt:?}, total: {total:?}, fee_rate: {fee_rate:?}");
-
-        self.state.lock().max_selected = Some(total.clone());
-        sender.queue(Message::SetMaxSelected(total.clone()));
-        self.handle_amount_changed(*total);
-
-        let address_is_valid = self.state.lock().address.is_some();
-        if address_is_valid {
-            self.state.lock().focus_field = None;
-            sender.queue(Message::UpdateFocusField(None));
-        } else {
-            self.state.lock().focus_field = Some(SetAmountFocusField::Address);
-            sender.queue(Message::UpdateFocusField(Some(SetAmountFocusField::Address)));
-        }
-
-        Ok(())
-    }
-
-    fn handle_selected_unit_changed(self: &Arc<Self>, old: BitcoinUnit, new: BitcoinUnit) {
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-        self.state.lock().metadata.selected_unit = new;
-
-        sender.queue(Message::RefreshPresenters);
-
-        if old == new {
-            return;
-        }
-
-        // if its already empty clear everything
-        {
-            let state = self.state.lock();
-            let amount_is_empty = state.amount_sats.is_none();
-            let entering_btc_amount_is_empty = state.entering_btc_amount.is_empty();
-            drop(state);
-
-            if entering_btc_amount_is_empty || amount_is_empty {
-                return self.clear_send_amount();
-            }
-        }
-
-        // if we are entering fiat, then we don't need to update the entering field
-        if self.state.lock().metadata.fiat_or_btc == FiatOrBtc::Fiat {
-            return;
-        }
-
-        let Some(amount_sats) = self.state.lock().amount_sats else {
-            return;
-        };
-
-        match new {
-            BitcoinUnit::Btc => {
-                let amount_string = Amount::from_sat(amount_sats).btc_string();
-                self.set_and_send_entering_btc_amount(amount_string, &mut sender);
-            }
-            BitcoinUnit::Sat => {
-                let amount_string = amount_sats.thousands_int();
-                self.set_and_send_entering_btc_amount(amount_string, &mut sender);
-            }
-        }
-    }
-
-    fn handle_btc_or_fiat_changed(self: &Arc<Self>, _old_value: FiatOrBtc, new_value: FiatOrBtc) {
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-        self.state.lock().metadata.fiat_or_btc = new_value;
-
-        sender.queue(Message::RefreshPresenters);
-
-        let Some(amount_sats) = self.state.lock().amount_sats else {
-            return;
-        };
-
-        match new_value {
-            FiatOrBtc::Btc => {
-                let amount = Amount::from_sat(amount_sats);
-
-                let amount_fmt = match self.state.lock().metadata.selected_unit {
-                    BitcoinUnit::Btc => amount.btc_string(),
-                    BitcoinUnit::Sat => amount.sats_string(),
-                };
-
-                self.set_and_send_entering_btc_amount(amount_fmt.clone(), &mut sender);
-            }
-
-            FiatOrBtc::Fiat => {
-                let currency = self.state.lock().selected_fiat_currency;
-                let fiat_amount = self.state.lock().amount_fiat.unwrap_or_default();
-                let fiat_amount_fmt =
-                    format!("{}{}", currency.symbol(), fiat_amount.thousands_fiat(),);
-
-                self.set_and_send_entering_fiat_amount(fiat_amount_fmt.clone(), &mut sender);
-            }
-        }
-    }
-
-    fn handle_prices_changed(self: &Arc<Self>, prices: Arc<PriceResponse>) {
-        let selected_currency = self.state.lock().selected_fiat_currency;
-        let btc_price_in_fiat = prices.get_for_currency(selected_currency);
-
-        self.state.lock().btc_price_in_fiat = Some(btc_price_in_fiat);
-
-        let Some(amount) = self.state.lock().amount_sats else {
-            return;
-        };
-
-        let amount_fiat = Amount::from_sat(amount).as_btc() * (btc_price_in_fiat as f64);
-        self.state.lock().amount_fiat = Some(amount_fiat);
-        self.reconciler.send(Message::UpdateAmountFiat(amount_fiat));
-    }
-
-    fn handle_scan_code_changed(self: &Arc<Self>, _old_value: String, new_value: String) {
-        debug!("handle_scan_code_changed {new_value}");
-        let mut sender = DeferredSender::new(self.reconciler.clone());
-
-        let network = self.state.lock().metadata.network;
-        let address_with_network = {
-            let new_value_moved = new_value;
-            match AddressWithNetwork::try_new(&new_value_moved) {
-                Ok(address_with_network) => address_with_network,
-                Err(err) => {
-                    let error = SendFlowError::from_address_error(err, new_value_moved);
-                    return self.send_alert(error);
-                }
-            }
-        };
-
-        if !address_with_network.is_valid_for_network(network) {
-            let error = SendFlowError::WrongNetwork {
-                address: address_with_network.address.to_string(),
-                valid_for: address_with_network.network,
-                current: network,
-            };
-            return self.send_alert(error);
-        }
-
-        // set address
-        let payjoin_endpoint =
-            address_with_network.payjoin.as_ref().map(|payjoin| payjoin.endpoint.clone());
-        let address = Arc::new(address_with_network.address);
-
-        {
-            let mut state = self.state.lock();
-            state.address = Some(address.clone());
-            state.payjoin_endpoint = payjoin_endpoint;
-        }
-        sender.queue(Message::UpdateAddress(Some(address.clone())));
-
-        self.state.lock().entering_address = address.to_string();
-        sender.queue(Message::UpdateEnteringAddress(address.to_string()));
-
-        // handle amount if its present
-        let mut should_show_amount_error = false;
-
-        // set amount if its valid
-        let is_coin_control = self.state.lock().mode.is_coin_control();
-        if let Some(amount) = address_with_network.amount
-            && !is_coin_control
-        {
-            let max_was_selected = self.state.lock().max_selected.take().is_some();
-            if max_was_selected {
-                sender.queue(Message::UnsetMaxSelected);
-            }
-
-            should_show_amount_error = true;
-            self.handle_amount_changed(amount);
-        }
-
-        // if amount is invalid, go to amount field
-        if !self.validate_amount(should_show_amount_error) {
-            let focus_field = SetAmountFocusField::Amount;
-            self.state.lock().focus_field = Some(focus_field);
-            sender.queue(Message::UpdateFocusField(Some(focus_field)));
-        }
-
-        // if both address and amount are valid, then clear the focus field
-        if self.validate_amount(false) && self.validate_address(false) {
-            self.state.lock().focus_field = None;
-            sender.queue(Message::UpdateFocusField(None));
-        }
-
-        // the address or amount might have changed
-        // lets update the fee rate options if its needed
-        let me = self.clone();
-        let is_max_selected = self.state.lock().max_selected.is_some();
-        cove_tokio::task::spawn(async move {
-            me.get_or_update_fee_rate_options().await;
-            if is_max_selected {
-                me.select_max_send_report_error().await;
-            }
-        });
-    }
-
-    /// Create the PSBT and everything is valid go to the next screen
-    fn finalize_and_go_to_next_screen(self: &Arc<Self>) {
-        if !self.validate_amount(true) || !self.validate_address(true) {
-            return;
-        }
-
-        let Some(amount_sats) = self.state.lock().amount_sats else {
-            return self.send_alert(SendFlowError::InvalidNumber);
-        };
-
-        let amount = Amount::from_sat(amount_sats);
-
-        let Some(address) = self.state.lock().address.clone() else {
-            let invalid_address = self.state.lock().entering_address.clone();
-            return self.send_alert(SendFlowError::InvalidAddress(invalid_address));
-        };
-
-        let Some(selected_fee_rate) = self.selected_fee_rate() else {
-            return self.send_alert(SendFlowError::UnableToGetFeeRate);
-        };
-
-        self.reconciler.send(Message::UpdateFocusField(None));
-
-        let (wallet_type, wallet_id, payjoin_endpoint) = {
-            let state = self.state.lock();
-            (state.metadata.wallet_type, state.metadata.id.clone(), state.payjoin_endpoint.clone())
-        };
-
-        let me = self.clone();
-        let send_mode = self.state.lock().mode.clone();
-        let manager = self.wallet_manager.clone();
-
-        cove_tokio::task::spawn(async move {
-            let confirm_details = match send_mode {
-                EnterMode::SetAmount => {
-                    manager.confirm_txn(amount, address, selected_fee_rate.fee_rate).await
-                }
-                EnterMode::CoinControl(coin_control) => {
-                    let amount =
-                        if coin_control.is_max_selected { coin_control.max_send() } else { amount };
-
-                    manager
-                        .confirm_manual_txn(
-                            coin_control.outpoints(),
-                            amount,
-                            address,
-                            selected_fee_rate.fee_rate,
-                        )
-                        .await
-                }
-            };
-
-            let details = match confirm_details {
-                Ok(details) => details,
-                Err(error) => {
-                    let error = SendFlowError::UnableToBuildTxn(error.to_string());
-                    return me.send_alert_async(error).await;
-                }
-            };
-
-            let details = Arc::new(details);
-
-            // save the unsigned transaction if its a cold wallet
-            if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly)
-                && let Err(e) = manager.save_unsigned_transaction(details.clone())
-            {
-                let error = SendFlowError::UnableToSaveUnsignedTransaction(e.to_string());
-                me.send_alert_async(error).await;
-            }
-
-            // update the route send the frontend to the proper next screen
-            let next_route = match wallet_type {
-                WalletType::Hot => {
-                    RouteFactory::new().send_confirm(wallet_id, details, payjoin_endpoint)
-                }
-                WalletType::Cold | WalletType::XpubOnly => {
-                    RouteFactory::new().send_hardware_export(wallet_id, details)
-                }
-                WalletType::WatchOnly => {
-                    return me
-                        .send_alert_async(SendFlowError::UnableToBuildTxn("watch only".to_string()))
-                        .await;
-                }
-            };
-
-            let mut deferred = DeferredDispatch::<AppAction>::new();
-            deferred.queue(AppAction::PushRoute(next_route));
-        });
-    }
-}
+impl RustSendFlowManager {}
 
 /// MARK: helper method impls
 impl RustSendFlowManager {
-    fn set_and_send_entering_btc_amount(
-        self: &Arc<Self>,
-        new_entering_btc_amount: String,
-        deffered_sender: &mut DeferredSender,
-    ) {
-        let is_changed = {
-            let mut state = self.state.lock();
-            let current = std::mem::take(&mut state.entering_btc_amount);
-            state.entering_btc_amount = new_entering_btc_amount.clone();
-            current != new_entering_btc_amount
-        };
-
-        if is_changed {
-            deffered_sender.queue(Message::UpdateEnteringBtcAmount(new_entering_btc_amount));
-        }
-    }
-
-    fn set_and_send_entering_fiat_amount(
-        self: &Arc<Self>,
-        new_entering_fiat_amount: String,
-        deferred_sender: &mut DeferredSender,
-    ) {
-        let is_changed = {
-            let mut state = self.state.lock();
-            let current = std::mem::take(&mut state.entering_fiat_amount);
-            state.entering_fiat_amount = new_entering_fiat_amount.clone();
-            current != new_entering_fiat_amount
-        };
-
-        if is_changed {
-            deferred_sender.queue(Message::UpdateEnteringFiatAmount(new_entering_fiat_amount));
-        }
-    }
-
     fn send_alert(self: &Arc<Self>, alert: impl Into<SendFlowAlertState>) {
         self.reconciler.send(Message::SetAlert(alert.into()));
     }
