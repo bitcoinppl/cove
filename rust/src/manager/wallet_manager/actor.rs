@@ -1203,23 +1203,28 @@ mod tests {
         wallet
     }
 
-    fn contains_available_transactions(batch: SingleOrMany) -> bool {
+    fn contains_wallet_scan_started(batch: SingleOrMany) -> bool {
         match batch {
-            SingleOrMany::Single(message) => {
-                matches!(message, WalletManagerReconcileMessage::AvailableTransactions(_))
-            }
-            SingleOrMany::Many(messages) => messages.into_iter().any(|message| {
-                matches!(message, WalletManagerReconcileMessage::AvailableTransactions(_))
-            }),
+            SingleOrMany::Single(message) => wallet_scan_started(message),
+            SingleOrMany::Many(messages) => messages.into_iter().any(wallet_scan_started),
         }
     }
 
-    async fn wait_for_available_transactions(receiver: &flume::Receiver<SingleOrMany>) {
+    fn wallet_scan_started(message: WalletManagerReconcileMessage) -> bool {
+        matches!(
+            message,
+            WalletManagerReconcileMessage::WalletScanStatusChanged(
+                WalletScanStatus::Scanning(_) | WalletScanStatus::ScanningPendingProgress(_)
+            )
+        )
+    }
+
+    async fn wait_for_wallet_scan_started(receiver: &flume::Receiver<SingleOrMany>) {
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 let batch = receiver.recv_async().await.expect("reconcile message is emitted");
 
-                if contains_available_transactions(batch) {
+                if contains_wallet_scan_started(batch) {
                     return;
                 }
             }
@@ -1637,7 +1642,7 @@ mod tests {
             .await
             .expect("address type switches");
 
-        wait_for_available_transactions(&receiver).await;
+        wait_for_wallet_scan_started(&receiver).await;
 
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
@@ -1659,7 +1664,7 @@ mod tests {
             .await
             .expect("address type switches");
 
-        wait_for_available_transactions(&receiver).await;
+        wait_for_wallet_scan_started(&receiver).await;
 
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
