@@ -194,10 +194,7 @@ struct MainSettingsScreen: View {
                 title: "Node", route: .node, symbol: "point.3.filled.connected.trianglepath.dotted"
             )
             SettingsRow(
-                title: "Block Explorer",
-                subtitle: Database().globalConfig().effectiveBlockExplorerHost(network: .bitcoin),
-                route: .blockExplorer,
-                symbol: "safari"
+                title: "Block Explorer", route: .blockExplorer, symbol: "safari"
             )
             SettingsRow(title: "Currency", route: .fiatCurrency, symbol: "dollarsign.circle")
         }

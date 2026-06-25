@@ -4114,8 +4114,6 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func deleteHashedPinCode() throws
 
-    func effectiveBlockExplorerHost(network: Network)  -> String
-
     func effectiveBlockExplorerPreview(network: Network)  -> String
 
     func get(key: GlobalConfigKey) throws  -> String?
@@ -4132,6 +4130,8 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func selectedFiatCurrency()  -> FiatCurrency
 
+    func selectedBlockExplorerOption(network: Network)  -> BlockExplorerOption
+
     func selectedNetwork()  -> Network
 
     func selectedNode()  -> Node
@@ -4141,6 +4141,8 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     func set(key: GlobalConfigKey, value: String) throws
 
     func setColorScheme(colorScheme: ColorSchemeSelection) throws
+
+    func setBlockExplorerOption(network: Network, option: BlockExplorerOption) throws  -> String?
 
     func setCustomBlockExplorer(network: Network, input: String) throws  -> String?
 
@@ -4268,16 +4270,6 @@ open func deleteHashedPinCode()throws   {try rustCallWithError(FfiConverterTypeD
 }
 }
 
-open func effectiveBlockExplorerHost(network: Network) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_globalconfigtable_effective_block_explorer_host(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
-    )
-})
-}
-
 open func effectiveBlockExplorerPreview(network: Network) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -4354,6 +4346,16 @@ open func selectedFiatCurrency() -> FiatCurrency  {
 })
 }
 
+open func selectedBlockExplorerOption(network: Network) -> BlockExplorerOption  {
+    return try!  FfiConverterTypeBlockExplorerOption_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_selected_block_explorer_option(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
+    )
+})
+}
+
 open func selectedNetwork() -> Network  {
     return try!  FfiConverterTypeNetwork_lift(try! rustCall() {
         uniffiCallStatus in
@@ -4398,6 +4400,17 @@ open func setColorScheme(colorScheme: ColorSchemeSelection)throws   {try rustCal
         FfiConverterTypeColorSchemeSelection_lower(colorScheme),uniffiCallStatus
     )
 }
+}
+
+open func setBlockExplorerOption(network: Network, option: BlockExplorerOption)throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_set_block_explorer_option(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNetwork_lower(network),
+        FfiConverterTypeBlockExplorerOption_lower(option),uniffiCallStatus
+    )
+})
 }
 
 open func setCustomBlockExplorer(network: Network, input: String)throws  -> String?  {
@@ -19260,6 +19273,105 @@ public func FfiConverterTypeBitcoinTransactionError_lift(_ buf: RustBuffer) thro
 public func FfiConverterTypeBitcoinTransactionError_lower(_ value: BitcoinTransactionError) -> RustBuffer {
     return FfiConverterTypeBitcoinTransactionError.lower(value)
 }
+
+
+
+public enum BlockExplorerOption: Equatable, Hashable {
+
+    case mempoolSpace
+    case mempoolGuide
+    case bullBitcoin
+    case blockstream
+    case custom
+
+
+
+    /**
+     * Returns the user-visible label for this explorer option
+     */
+public func displayName() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_blockexploreroption_display_name(
+            FfiConverterTypeBlockExplorerOption_lower(self),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension BlockExplorerOption: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlockExplorerOption: FfiConverterRustBuffer {
+    typealias SwiftType = BlockExplorerOption
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlockExplorerOption {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .mempoolSpace
+
+        case 2: return .mempoolGuide
+
+        case 3: return .bullBitcoin
+
+        case 4: return .blockstream
+
+        case 5: return .custom
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BlockExplorerOption, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .mempoolSpace:
+            writeInt(&buf, Int32(1))
+
+
+        case .mempoolGuide:
+            writeInt(&buf, Int32(2))
+
+
+        case .bullBitcoin:
+            writeInt(&buf, Int32(3))
+
+
+        case .blockstream:
+            writeInt(&buf, Int32(4))
+
+
+        case .custom:
+            writeInt(&buf, Int32(5))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlockExplorerOption_lift(_ buf: RustBuffer) throws -> BlockExplorerOption {
+    return try FfiConverterTypeBlockExplorerOption.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlockExplorerOption_lower(_ value: BlockExplorerOption) -> RustBuffer {
+    return FfiConverterTypeBlockExplorerOption.lower(value)
+}
+
 
 
 
@@ -38999,6 +39111,31 @@ fileprivate struct FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeBlockExplorerOption: FfiConverterRustBuffer {
+    typealias SwiftType = [BlockExplorerOption]
+
+    public static func write(_ value: [BlockExplorerOption], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBlockExplorerOption.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BlockExplorerOption] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BlockExplorerOption]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBlockExplorerOption.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCoinControlManagerReconcileMessage: FfiConverterRustBuffer {
     typealias SwiftType = [CoinControlManagerReconcileMessage]
 
@@ -39609,6 +39746,16 @@ public func activeMigration() -> Migration?  {
     )
 })
 }
+/**
+ * Returns every block explorer option exposed to mobile clients
+ */
+public func allBlockExplorerOptions() -> [BlockExplorerOption]  {
+    return try!  FfiConverterSequenceTypeBlockExplorerOption.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_all_block_explorer_options(uniffiCallStatus
+    )
+})
+}
 public func allFiatCurrencies() -> [FiatCurrency]  {
     return try!  FfiConverterSequenceTypeFiatCurrency.lift(try! rustCall() {
         uniffiCallStatus in
@@ -40091,6 +40238,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_active_migration() != 29388) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_all_block_explorer_options() != 40123) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_all_fiat_currencies() != 53482) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -40430,9 +40580,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code() != 24897) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_host() != 22806) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_globalconfigtable_effective_block_explorer_preview() != 21192) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -40457,6 +40604,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_selectedfiatcurrency() != 11234) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_selected_block_explorer_option() != 31659) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_selected_network() != 17475) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -40470,6 +40620,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_setcolorscheme() != 42967) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_block_explorer_option() != 32847) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer() != 26335) {

@@ -27,9 +27,17 @@
     <string name="title_settings_node">Node</string>
     <string name="title_settings_currency">Currency</string>
     <string name="block_explorer_preview">Preview</string>
+    <string name="block_explorer_description_title">Description</string>
+    <string name="block_explorer_description">Block explorers are public websites for checking Bitcoin transaction details and confirmations. Cove opens the selected explorer when you view a transaction.</string>
+    <string name="block_explorer_options">Explorer</string>
     <string name="block_explorer_url_placeholder">URL or template</string>
     <string name="block_explorer_save">Save</string>
+    <string name="block_explorer_saved">Block explorer saved successfully</string>
     <string name="block_explorer_reset">Reset to Default</string>
+    <string name="block_explorer_invalid_url_title">Invalid URL</string>
+    <string name="block_explorer_invalid_url_message">Enter a valid URL, IP address, or block explorer template.</string>
+    <string name="block_explorer_update_failed_title">Unable to Update Block Explorer</string>
+    <string name="block_explorer_update_failed_message">Try again later.</string>
     <string name="title_wallet_information">Wallet information</string>
     <string name="label_wallet_network">Network</string>
     <string name="label_wallet_birthday">Birthday</string>

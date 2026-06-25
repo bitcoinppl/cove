@@ -1,3 +1,4 @@
+import MijickPopups
 import SwiftUI
 
 struct BlockExplorerSettingsView: View {
@@ -6,15 +7,21 @@ struct BlockExplorerSettingsView: View {
     @State private var selectedNetwork: Network
     @State private var input: String
     @State private var preview: String
-    @State private var validationError: String?
+    @State private var selectedOption: BlockExplorerOption
+    @State private var isSaving = false
+    @State private var showInvalidUrlAlert = false
+    @State private var showUpdateFailedAlert = false
+    @FocusState private var isInputFocused: Bool
 
     init() {
         // only Bitcoin explorer overrides are editable; other networks use built-in defaults
         let network = Network.bitcoin
         let config = Database().globalConfig()
+        let input = config.customBlockExplorer(network: network) ?? ""
         _selectedNetwork = State(initialValue: network)
-        _input = State(initialValue: config.customBlockExplorer(network: network) ?? "")
+        _input = State(initialValue: input)
         _preview = State(initialValue: config.effectiveBlockExplorerPreview(network: network))
+        _selectedOption = State(initialValue: config.selectedBlockExplorerOption(network: network))
     }
 
     private var editableNetworks: [Network] {
@@ -34,32 +41,47 @@ struct BlockExplorerSettingsView: View {
                 }
             }
 
+            Section {
+                Text(
+                    "Block explorers are public websites for checking Bitcoin transaction details and confirmations. Cove opens the selected explorer when you view a transaction."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            } header: {
+                Text("Description")
+            }
+
             Section("Preview") {
                 Text(preview)
                     .font(.footnote.monospaced())
                     .textSelection(.enabled)
             }
 
-            Section {
-                TextField("URL or template", text: $input, axis: .vertical)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .lineLimit(2 ... 5)
-                    .onChange(of: input) { _, newValue in
-                        updatePreview(for: newValue)
-                    }
-
-                if let validationError {
-                    Text(validationError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+            Section("Explorer") {
+                ForEach(allBlockExplorerOptions(), id: \.self) { option in
+                    blockExplorerOptionRow(option)
                 }
+            }
 
-                Button("Save", action: save)
-                    .disabled(input == (config.customBlockExplorer(network: selectedNetwork) ?? ""))
+            if selectedOption == .custom {
+                Section("Custom") {
+                    TextField("URL or template", text: $input)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .lineLimit(1)
+                        .submitLabel(.done)
+                        .focused($isInputFocused)
+                        .onChange(of: input) { _, newValue in
+                            updatePreview(for: newValue)
+                        }
+                        .onSubmit(save)
 
-                Button("Reset to Default", role: .destructive, action: reset)
+                    Button("Save", action: save)
+                        .disabled(isSaving || input == (config.customBlockExplorer(network: selectedNetwork) ?? ""))
+
+                    Button("Reset to Default", role: .destructive, action: reset)
+                }
             }
         }
         .scrollContentBackground(.hidden)
@@ -67,12 +89,70 @@ struct BlockExplorerSettingsView: View {
         .onChange(of: selectedNetwork) { _, _ in
             reload()
         }
+        .alert("Invalid URL", isPresented: $showInvalidUrlAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Enter a valid URL, IP address, or block explorer template.")
+        }
+        .alert("Unable to Update Block Explorer", isPresented: $showUpdateFailedAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Try again later.")
+        }
+    }
+
+    private func blockExplorerOptionRow(_ option: BlockExplorerOption) -> some View {
+        HStack {
+            Text(option.displayName())
+
+            Spacer()
+
+            if selectedOption == option {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.blue)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            select(option)
+        }
+    }
+
+    private func select(_ option: BlockExplorerOption) {
+        if selectedOption == option {
+            return
+        }
+
+        switch option {
+        case .custom:
+            selectedOption = .custom
+            input = ""
+            updatePreview(for: input)
+        default:
+            savePreset(option)
+        }
+    }
+
+    private func savePreset(_ option: BlockExplorerOption) {
+        do {
+            let normalized = try config.setBlockExplorerOption(
+                network: selectedNetwork,
+                option: option
+            )
+            input = normalized ?? ""
+            preview = config.effectiveBlockExplorerPreview(network: selectedNetwork)
+            selectedOption = config.selectedBlockExplorerOption(network: selectedNetwork)
+        } catch {
+            showUpdateFailedAlert = true
+        }
     }
 
     private func reload() {
         input = config.customBlockExplorer(network: selectedNetwork) ?? ""
         preview = config.effectiveBlockExplorerPreview(network: selectedNetwork)
-        validationError = nil
+        selectedOption = config.selectedBlockExplorerOption(network: selectedNetwork)
     }
 
     private func updatePreview(for value: String) {
@@ -81,24 +161,41 @@ struct BlockExplorerSettingsView: View {
                 network: selectedNetwork,
                 input: value
             )
-            validationError = nil
         } catch {
-            validationError = error.localizedDescription
+            preview = ""
         }
     }
 
     private func save() {
+        guard !isSaving else { return }
+
+        let inputToSave = input
+        let networkToSave = selectedNetwork
+
+        isSaving = true
+        isInputFocused = false
+
         do {
             let normalized = try config.setCustomBlockExplorer(
-                network: selectedNetwork,
-                input: input
+                network: networkToSave,
+                input: inputToSave
             )
             input = normalized ?? ""
-            preview = config.effectiveBlockExplorerPreview(network: selectedNetwork)
-            validationError = nil
+            preview = config.effectiveBlockExplorerPreview(network: networkToSave)
+            selectedOption = config.selectedBlockExplorerOption(network: networkToSave)
+
+            Task { @MainActor in
+                await dismissAllPopups()
+                try? await Task.sleep(for: .milliseconds(250))
+                await MiddlePopup(state: .success("Block explorer saved successfully"))
+                    .dismissAfter(2)
+                    .present()
+            }
         } catch {
-            validationError = error.localizedDescription
+            showInvalidUrlAlert = true
         }
+
+        isSaving = false
     }
 
     private func reset() {
@@ -106,7 +203,7 @@ struct BlockExplorerSettingsView: View {
             try config.clearCustomBlockExplorer(network: selectedNetwork)
             reload()
         } catch {
-            validationError = error.localizedDescription
+            showUpdateFailedAlert = true
         }
     }
 }
