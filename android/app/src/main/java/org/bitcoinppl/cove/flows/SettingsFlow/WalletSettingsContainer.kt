@@ -150,7 +150,6 @@ fun WalletSettingsContainer(
             WalletSettingsLoadError(
                 message = state.message,
                 onRetry = {
-                    recoveryGeneration += 1
                     loadAttempt++
                 },
                 onBack = recoverWalletSelection,

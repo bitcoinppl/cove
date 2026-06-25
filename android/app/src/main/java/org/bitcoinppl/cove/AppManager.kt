@@ -443,17 +443,23 @@ class AppManager private constructor() : FfiReconcile {
         updateRoutesAndClearInactiveSendFlowManager(newRoutes)
     }
 
+    /**
+     * Pops the top route when both Rust and the local route stack can go back
+     *
+     * @return `true` only when a route was removed
+     */
     fun popRoute(): Boolean {
         Log.d(tag, "popRoute")
         if (!rust.canGoBack()) {
             return false
         }
 
-        val newRoutes = router.routes.dropLast(1)
-        if (newRoutes == router.routes) {
+        val currentRoutes = router.routes
+        if (currentRoutes.isEmpty()) {
             return false
         }
 
+        val newRoutes = currentRoutes.dropLast(1)
         advanceNavigationGeneration()
         dispatch(AppAction.UpdateRoute(newRoutes))
         updateRoutesAndClearInactiveSendFlowManager(newRoutes)

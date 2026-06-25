@@ -15,8 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.WalletSelectionRecoveryResult
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.WalletSelectionRecoveryResult
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.recoverWalletSelectionOrPopRoute
 import org.bitcoinppl.cove_core.types.TxId
