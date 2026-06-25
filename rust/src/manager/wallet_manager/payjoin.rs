@@ -607,6 +607,9 @@ impl PayjoinActor {
             error!(
                 "failed to persist fallback intent, aborting fallback dispatch to preserve recovery state: {error}"
             );
+            send!(self.wallet_addr.notify_payjoin_error(
+                "payment is paused — please restart the app to complete or cancel it".to_string()
+            ));
             return;
         }
 
@@ -914,6 +917,37 @@ mod tests {
         persister.create_session(&tx).unwrap();
         // a log that does not start with a Created event cannot be replayed
         persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt()).unwrap();
+
+        let resumption = resume_session(db, WeakAddr::default());
+
+        match resumption {
+            SessionResumption::BroadcastFallback { fallback_tx } => assert_eq!(fallback_tx, tx),
+            _ => panic!("expected BroadcastFallback"),
+        }
+    }
+
+    #[test]
+    fn save_event_rejected_after_set_pending_fallback() {
+        let (persister, _db, _tmp) = new_test_persister();
+        persister.create_session(&test_fallback_tx()).unwrap();
+        persister.set_pending_fallback().unwrap();
+
+        let result = persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt());
+
+        assert!(result.is_err(), "save_event must be rejected after fallback is committed");
+    }
+
+    #[test]
+    fn resume_prioritises_pending_fallback_over_event_log() {
+        let (_persister, db, _tmp) = new_test_persister();
+        let tx = test_fallback_tx();
+        let session = PayjoinSenderSession {
+            events: vec!["irrelevant_event".to_string()],
+            fallback_tx: consensus::serialize(&tx),
+            created_at_secs: None,
+            pending_action: Some(PendingAction::BroadcastFallback),
+        };
+        db.set_payjoin_sender_session(session).unwrap();
 
         let resumption = resume_session(db, WeakAddr::default());
 

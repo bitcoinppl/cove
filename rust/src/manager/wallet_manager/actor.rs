@@ -211,6 +211,13 @@ impl WalletActor {
         Produces::ok(())
     }
 
+    pub async fn notify_payjoin_error(&mut self, msg: String) -> ActorResult<()> {
+        self.send(WalletManagerReconcileMessage::SendFlowError(
+            SendFlowErrorAlert::SignAndBroadcast(msg),
+        ));
+        Produces::ok(())
+    }
+
     #[into_actor_result]
     pub async fn unlocked_trusted_spendable_balance(&mut self) -> Result<Amount, Error> {
         self.unlocked_trusted_spendable_balance_inner()
