@@ -44,11 +44,6 @@ use self::actors::{
     CloudBackupWalletCountRefresh, CloudBackupWriteBlocker, CloudBackupWriteClient,
     CloudBackupWriteCompletion, CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
 };
-#[allow(unused_imports)]
-pub use self::catastrophic_recovery::{
-    CatastrophicCloudRestoreProvider, CatastrophicCloudRestoreResult, CatastrophicRecoveryError,
-    check_catastrophic_cloud_restore_backup, reset_local_data_for_catastrophic_recovery,
-};
 pub(crate) use self::detail::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
     CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailOutcome, CloudBackupEnableOutcome,
@@ -86,8 +81,7 @@ pub(crate) use self::pending_enable::PendingEnableSessionMaterial;
 pub(crate) use self::pending_verification::{
     PendingVerificationCompletion, PendingVerificationUpload,
 };
-#[allow(unused_imports)]
-pub use self::reconcile::{CloudBackupManagerReconciler, CloudBackupReconcileMessage};
+use self::reconcile::CloudBackupReconcileMessage;
 pub(crate) use self::remote_inventory::current_namespace_wallet_record_ids;
 pub(crate) use self::store::CloudBackupStore;
 pub(crate) use self::sync_health::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE;
@@ -96,11 +90,6 @@ pub(crate) use self::wallet_changes::{LIVE_UPLOAD_DEBOUNCE, live_upload_retry_de
 pub(crate) use self::wallets::UnpersistedPrfKey;
 use super::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 pub(crate) use cspp_exports::master_key_wrapper_revision_hash;
-#[allow(unused_imports)]
-pub use cspp_exports::{
-    cspp_master_key_directory, cspp_master_key_filename, cspp_master_key_record_id,
-    cspp_namespaces_subdirectory, cspp_wallet_file_prefix, cspp_wallet_filename_from_record_id,
-};
 
 type LocalWalletSecret = crate::backup::model::WalletSecret;
 

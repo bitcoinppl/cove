@@ -57,7 +57,8 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupStatus, PendingEnableSessionMaterial, UnpersistedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
-    SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE, cspp_master_key_record_id,
+    SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
+    cspp_exports::cspp_master_key_record_id,
     keychain::{
         CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, CloudBackupKeychainError,
     },
