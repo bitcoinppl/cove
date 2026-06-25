@@ -1227,6 +1227,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after(
     ): Short
+    external fun uniffi_cove_checksum_method_ffiapp_needs_onboarding(
+    ): Short
     external fun uniffi_cove_checksum_method_ffiapp_network(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_num_wallets(
@@ -1358,8 +1360,6 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_globalflagtable_get(
     ): Short
     external fun uniffi_cove_checksum_method_globalflagtable_get_bool_config(
-    ): Short
-    external fun uniffi_cove_checksum_method_globalflagtable_is_terms_accepted(
     ): Short
     external fun uniffi_cove_checksum_method_globalflagtable_set(
     ): Short
@@ -2165,6 +2165,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_ffiapp_load_and_reset_default_route_after(`ptr`: Long,`route`: RustBuffer.ByValue,`afterMillis`: Int,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_ffiapp_needs_onboarding(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_method_ffiapp_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBufferNetwork.ByValue
     external fun uniffi_cove_fn_method_ffiapp_num_wallets(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2350,8 +2352,6 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_globalflagtable_get(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_globalflagtable_get_bool_config(`ptr`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Byte
-    external fun uniffi_cove_fn_method_globalflagtable_is_terms_accepted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_globalflagtable_set(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -3911,6 +3911,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 21077.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_ffiapp_needs_onboarding() != 25615.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_ffiapp_network() != 44430.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4107,9 +4110,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalflagtable_get_bool_config() != 63323.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_globalflagtable_is_terms_accepted() != 22175.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalflagtable_set() != 34408.toShort()) {
@@ -10283,6 +10283,11 @@ public interface FfiAppInterface {
      */
     fun `loadAndResetDefaultRouteAfter`(`route`: Route, `afterMillis`: kotlin.UInt)
 
+    /**
+     * Whether the host app should render onboarding instead of the main app
+     */
+    fun `needsOnboarding`(): kotlin.Boolean
+
     fun `network`(): Network
 
     /**
@@ -10726,6 +10731,22 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 }
     }
 
+
+
+
+    /**
+     * Whether the host app should render onboarding instead of the main app
+     */override fun `needsOnboarding`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_needs_onboarding(
+        it,
+        _status)
+}
+    }
+    )
+    }
 
 
     override fun `network`(): Network {
@@ -12953,8 +12974,6 @@ public interface GlobalFlagTableInterface {
 
     fun `getBoolConfig`(`key`: GlobalFlagKey): kotlin.Boolean
 
-    fun `isTermsAccepted`(): kotlin.Boolean
-
     fun `set`(`key`: GlobalFlagKey, `value`: kotlin.Boolean)
 
     fun `setBoolConfig`(`key`: GlobalFlagKey, `value`: kotlin.Boolean)
@@ -13088,19 +13107,6 @@ open class GlobalFlagTable: Disposable, AutoCloseable, GlobalFlagTableInterface
         it,
 
         FfiConverterTypeGlobalFlagKey.lower(`key`),_status)
-}
-    }
-    )
-    }
-
-
-    override fun `isTermsAccepted`(): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_globalflagtable_is_terms_accepted(
-        it,
-        _status)
 }
     }
     )
@@ -31665,9 +31671,6 @@ sealed class AppAction: Disposable  {
     object UpdateFees : AppAction()
 
 
-    object AcceptTerms : AppAction()
-
-
     object RefreshAfterImport : AppAction()
 
 
@@ -31733,8 +31736,6 @@ sealed class AppAction: Disposable  {
             }
             is AppAction.UpdateFees -> {// Nothing to destroy
             }
-            is AppAction.AcceptTerms -> {// Nothing to destroy
-            }
             is AppAction.RefreshAfterImport -> {// Nothing to destroy
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -31779,8 +31780,7 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
                 )
             10 -> AppAction.UpdateFiatPrices
             11 -> AppAction.UpdateFees
-            12 -> AppAction.AcceptTerms
-            13 -> AppAction.RefreshAfterImport
+            12 -> AppAction.RefreshAfterImport
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -31859,12 +31859,6 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
                 4UL
             )
         }
-        is AppAction.AcceptTerms -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
         is AppAction.RefreshAfterImport -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -31926,12 +31920,8 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
                 buf.putInt(11)
                 Unit
             }
-            is AppAction.AcceptTerms -> {
-                buf.putInt(12)
-                Unit
-            }
             is AppAction.RefreshAfterImport -> {
-                buf.putInt(13)
+                buf.putInt(12)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -33174,9 +33164,6 @@ sealed class AppStateReconcileMessage: Disposable  {
         companion object
     }
 
-    object AcceptedTerms : AppStateReconcileMessage()
-
-
     object WalletsChanged : AppStateReconcileMessage()
 
 
@@ -33273,8 +33260,6 @@ sealed class AppStateReconcileMessage: Disposable  {
     )
 
             }
-            is AppStateReconcileMessage.AcceptedTerms -> {// Nothing to destroy
-            }
             is AppStateReconcileMessage.WalletsChanged -> {// Nothing to destroy
             }
             is AppStateReconcileMessage.ClearCachedWalletManager -> {
@@ -33337,13 +33322,12 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
             11 -> AppStateReconcileMessage.PushedRoute(
                 FfiConverterTypeRoute.read(buf),
                 )
-            12 -> AppStateReconcileMessage.AcceptedTerms
-            13 -> AppStateReconcileMessage.WalletsChanged
-            14 -> AppStateReconcileMessage.ClearCachedWalletManager(
+            12 -> AppStateReconcileMessage.WalletsChanged
+            13 -> AppStateReconcileMessage.ClearCachedWalletManager(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            15 -> AppStateReconcileMessage.ShowLoadingPopup
-            16 -> AppStateReconcileMessage.HideLoadingPopup
+            14 -> AppStateReconcileMessage.ShowLoadingPopup
+            15 -> AppStateReconcileMessage.HideLoadingPopup
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -33424,12 +33408,6 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
             (
                 4UL
                 + FfiConverterTypeRoute.allocationSize(value.v1)
-            )
-        }
-        is AppStateReconcileMessage.AcceptedTerms -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
             )
         }
         is AppStateReconcileMessage.WalletsChanged -> {
@@ -33516,25 +33494,21 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 FfiConverterTypeRoute.write(value.v1, buf)
                 Unit
             }
-            is AppStateReconcileMessage.AcceptedTerms -> {
+            is AppStateReconcileMessage.WalletsChanged -> {
                 buf.putInt(12)
                 Unit
             }
-            is AppStateReconcileMessage.WalletsChanged -> {
-                buf.putInt(13)
-                Unit
-            }
             is AppStateReconcileMessage.ClearCachedWalletManager -> {
-                buf.putInt(14)
+                buf.putInt(13)
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
             is AppStateReconcileMessage.ShowLoadingPopup -> {
-                buf.putInt(15)
+                buf.putInt(14)
                 Unit
             }
             is AppStateReconcileMessage.HideLoadingPopup -> {
-                buf.putInt(16)
+                buf.putInt(15)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -41643,7 +41617,6 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
 enum class GlobalFlagKey {
 
     COMPLETED_ONBOARDING,
-    ACCEPTED_TERMS,
     BETA_FEATURES_ENABLED,
     BETA_IMPORT_EXPORT_ENABLED;
 

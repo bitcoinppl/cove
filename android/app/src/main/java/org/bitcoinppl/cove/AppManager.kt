@@ -74,10 +74,11 @@ class AppManager private constructor() : FfiReconcile {
     var alertState by mutableStateOf<TaggedItem<AppAlertState>?>(null)
     var sheetState by mutableStateOf<TaggedItem<AppSheetState>?>(null)
 
-    // settings state
-    var isTermsAccepted by mutableStateOf(Database().globalFlag().isTermsAccepted())
+    // startup state
+    var needsOnboarding by mutableStateOf(rust.needsOnboarding())
         private set
 
+    // settings state
     var selectedNetwork by mutableStateOf(Database().globalConfig().selectedNetwork())
         private set
 
@@ -335,6 +336,7 @@ class AppManager private constructor() : FfiReconcile {
         coinControlManager?.close()
 
         database = Database()
+        needsOnboarding = rust.needsOnboarding()
         walletManager = null
         sendFlowManager = null
         coinControlManager = null
@@ -639,12 +641,6 @@ class AppManager private constructor() : FfiReconcile {
     private fun isNavigationGenerationCurrent(generation: GenerationToken): Boolean =
         navigationGenerations.isCurrent(generation)
 
-    fun agreeToTerms() {
-        if (dispatch(AppAction.AcceptTerms)) {
-            isTermsAccepted = true
-        }
-    }
-
     suspend fun initData() {
         withRustSuspend {
             initData()
@@ -693,6 +689,7 @@ class AppManager private constructor() : FfiReconcile {
 
                 is AppStateReconcileMessage.DatabaseUpdated -> {
                     database = Database()
+                    needsOnboarding = rust.needsOnboarding()
                 }
 
                 is AppStateReconcileMessage.ColorSchemeChanged -> {
@@ -734,10 +731,6 @@ class AppManager private constructor() : FfiReconcile {
                             wm.updateWalletBalance()
                         }
                     }
-                }
-
-                is AppStateReconcileMessage.AcceptedTerms -> {
-                    isTermsAccepted = true
                 }
 
                 is AppStateReconcileMessage.WalletModeChanged -> {

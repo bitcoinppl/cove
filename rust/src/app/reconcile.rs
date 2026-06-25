@@ -28,7 +28,6 @@ pub enum AppStateReconcileMessage {
     FiatCurrencyChanged(FiatCurrency),
     WalletModeChanged(WalletMode),
     PushedRoute(Route),
-    AcceptedTerms,
     WalletsChanged,
     ClearCachedWalletManager(WalletId),
     ShowLoadingPopup,

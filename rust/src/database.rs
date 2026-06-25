@@ -25,7 +25,7 @@ use cloud_backup::{
     CloudBackupStateTable, CloudBlobSyncStateTable, ensure_table_type_compatibility,
 };
 use global_cache::GlobalCacheTable;
-use global_config::GlobalConfigTable;
+use global_config::{GlobalConfigKey, GlobalConfigTable};
 use global_flag::GlobalFlagTable;
 use historical_price::HistoricalPriceTable;
 use uniffi::custom_newtype;
@@ -33,7 +33,7 @@ use unsigned_transactions::UnsignedTransactionsTable;
 use wallet::WalletsTable;
 
 use once_cell::sync::OnceCell;
-use tracing::error;
+use tracing::{error, warn};
 
 use cove_common::consts::ROOT_DATA_DIR;
 
@@ -139,7 +139,7 @@ impl Database {
 
         write_txn.commit()?;
 
-        Ok(Self {
+        let database = Self {
             global_flag,
             global_config,
             global_cache,
@@ -148,7 +148,39 @@ impl Database {
             wallets,
             unsigned_transactions,
             historical_prices,
-        })
+        };
+
+        database.backfill_onboarding_complete_from_legacy_state();
+
+        Ok(database)
+    }
+
+    fn backfill_onboarding_complete_from_legacy_state(&self) {
+        let has_any_wallets = match self.wallets.has_any_wallets() {
+            Ok(has_any_wallets) => has_any_wallets,
+            Err(error) => {
+                warn!("failed to inspect wallets while backfilling onboarding flag: {error}");
+                return;
+            }
+        };
+
+        let has_persisted_onboarding_progress = match self
+            .global_config
+            .get(GlobalConfigKey::OnboardingProgress)
+        {
+            Ok(progress) => progress.is_some(),
+            Err(error) => {
+                warn!(
+                    "failed to inspect onboarding progress while backfilling onboarding flag: {error}"
+                );
+                return;
+            }
+        };
+
+        self.global_flag.backfill_onboarding_complete_from_legacy_state(
+            has_any_wallets,
+            has_persisted_onboarding_progress,
+        );
     }
 }
 

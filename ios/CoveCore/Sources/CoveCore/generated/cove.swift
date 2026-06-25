@@ -3035,6 +3035,11 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      */
     func loadAndResetDefaultRouteAfter(route: Route, afterMillis: UInt32)
 
+    /**
+     * Whether the host app should render onboarding instead of the main app
+     */
+    func needsOnboarding()  -> Bool
+
     func network()  -> Network
 
     /**
@@ -3354,6 +3359,18 @@ open func loadAndResetDefaultRouteAfter(route: Route, afterMillis: UInt32)  {try
         FfiConverterUInt32.lower(afterMillis),uniffiCallStatus
     )
 }
+}
+
+    /**
+     * Whether the host app should render onboarding instead of the main app
+     */
+open func needsOnboarding() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_ffiapp_needs_onboarding(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
 }
 
 open func network() -> Network  {
@@ -4516,8 +4533,6 @@ public protocol GlobalFlagTableProtocol: AnyObject, Sendable {
 
     func getBoolConfig(key: GlobalFlagKey)  -> Bool
 
-    func isTermsAccepted()  -> Bool
-
     func set(key: GlobalFlagKey, value: Bool) throws
 
     func setBoolConfig(key: GlobalFlagKey, value: Bool) throws
@@ -4594,15 +4609,6 @@ open func getBoolConfig(key: GlobalFlagKey) -> Bool  {
     uniffi_cove_fn_method_globalflagtable_get_bool_config(
             self.uniffiCloneHandle(),
         FfiConverterTypeGlobalFlagKey_lower(key),uniffiCallStatus
-    )
-})
-}
-
-open func isTermsAccepted() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_globalflagtable_is_terms_accepted(
-            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -17405,7 +17411,6 @@ public enum AppAction {
     )
     case updateFiatPrices
     case updateFees
-    case acceptTerms
     case refreshAfterImport
 
 
@@ -17457,9 +17462,7 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
 
         case 11: return .updateFees
 
-        case 12: return .acceptTerms
-
-        case 13: return .refreshAfterImport
+        case 12: return .refreshAfterImport
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -17520,12 +17523,8 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(11))
 
 
-        case .acceptTerms:
-            writeInt(&buf, Int32(12))
-
-
         case .refreshAfterImport:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(12))
 
         }
     }
@@ -18183,7 +18182,6 @@ public enum AppStateReconcileMessage {
     )
     case pushedRoute(Route
     )
-    case acceptedTerms
     case walletsChanged
     case clearCachedWalletManager(WalletId
     )
@@ -18242,16 +18240,14 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case 11: return .pushedRoute(try FfiConverterTypeRoute.read(from: &buf)
         )
 
-        case 12: return .acceptedTerms
+        case 12: return .walletsChanged
 
-        case 13: return .walletsChanged
-
-        case 14: return .clearCachedWalletManager(try FfiConverterTypeWalletId.read(from: &buf)
+        case 13: return .clearCachedWalletManager(try FfiConverterTypeWalletId.read(from: &buf)
         )
 
-        case 15: return .showLoadingPopup
+        case 14: return .showLoadingPopup
 
-        case 16: return .hideLoadingPopup
+        case 15: return .hideLoadingPopup
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -18316,25 +18312,21 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
             FfiConverterTypeRoute.write(v1, into: &buf)
 
 
-        case .acceptedTerms:
+        case .walletsChanged:
             writeInt(&buf, Int32(12))
 
 
-        case .walletsChanged:
-            writeInt(&buf, Int32(13))
-
-
         case let .clearCachedWalletManager(v1):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeWalletId.write(v1, into: &buf)
 
 
         case .showLoadingPopup:
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(14))
 
 
         case .hideLoadingPopup:
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(15))
 
         }
     }
@@ -24956,7 +24948,6 @@ public func FfiConverterTypeGlobalConfigTableError_lower(_ value: GlobalConfigTa
 public enum GlobalFlagKey: Equatable, Hashable {
 
     case completedOnboarding
-    case acceptedTerms
     case betaFeaturesEnabled
     case betaImportExportEnabled
 
@@ -24982,11 +24973,9 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
 
         case 1: return .completedOnboarding
 
-        case 2: return .acceptedTerms
+        case 2: return .betaFeaturesEnabled
 
-        case 3: return .betaFeaturesEnabled
-
-        case 4: return .betaImportExportEnabled
+        case 3: return .betaImportExportEnabled
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -25000,16 +24989,12 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
 
 
-        case .acceptedTerms:
+        case .betaFeaturesEnabled:
             writeInt(&buf, Int32(2))
 
 
-        case .betaFeaturesEnabled:
-            writeInt(&buf, Int32(3))
-
-
         case .betaImportExportEnabled:
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(3))
 
         }
     }
@@ -40448,6 +40433,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 21077) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_ffiapp_needs_onboarding() != 25615) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffiapp_network() != 44430) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -40644,9 +40632,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalflagtable_get_bool_config() != 63323) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_globalflagtable_is_terms_accepted() != 22175) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalflagtable_set() != 34408) {
