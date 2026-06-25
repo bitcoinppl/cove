@@ -82,6 +82,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
 
     /// cached transaction details
     var transactionDetails: [TxId: TransactionDetails] = [:]
+    var transactionConfirmations: [TxId: UInt32] = [:]
 
     var receiveAddressState: ReceiveAddressState?
     var receiveAddressPresentation = ReceiveAddressPresentation(
@@ -290,12 +291,32 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     }
 
     func transactionDetails(for txId: TxId) async throws -> TransactionDetails {
-        if let details = transactionDetails[txId] {
+        if let details = await MainActor.run(body: { transactionDetails[txId] }) {
             return details
         }
 
         let details = try await rust.transactionDetails(txId: txId)
-        transactionDetails[txId] = details
+        await MainActor.run {
+            transactionDetails[txId] = details
+        }
+
+        return details
+    }
+
+    func refreshTransactionDetails(for txId: TxId) async throws -> TransactionDetails {
+        let details = try await rust.transactionDetails(txId: txId)
+        let confirmations: UInt32? = if let blockNumber = details.blockNumber() {
+            try await rust.numberOfConfirmations(blockHeight: blockNumber)
+        } else {
+            nil
+        }
+
+        await MainActor.run {
+            transactionDetails[txId] = details
+            if let confirmations {
+                transactionConfirmations[txId] = confirmations
+            }
+        }
 
         return details
     }
@@ -322,8 +343,31 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         Task { await rust.getTransactions() }
     }
 
-    func updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {
-        transactionDetails[txId] = details
+    func updateTransactionConfirmations(txId: TxId, confirmations: UInt32) {
+        transactionConfirmations[txId] = confirmations
+    }
+
+    private func replaceTransactionInLoadState(_ transaction: CoveCore.Transaction) {
+        func replace(in txns: [CoveCore.Transaction]) -> [CoveCore.Transaction] {
+            let txId = transaction.id
+            var replaced = false
+            let updated = txns.map { current in
+                guard current.id == txId else { return current }
+                replaced = true
+                return transaction
+            }
+
+            return replaced ? updated : [transaction] + updated
+        }
+
+        switch loadState {
+        case .loading:
+            loadState = ledgerState.initialScanComplete ? .loaded([transaction]) : .scanning([transaction])
+        case let .scanning(txns):
+            loadState = .scanning(replace(in: txns))
+        case let .loaded(txns):
+            loadState = .loaded(replace(in: txns))
+        }
     }
 
     func updateWalletBalance() async {
@@ -383,6 +427,15 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
                     ? .loaded(txns)
                     : .scanning(txns)
             }
+
+        case let .transactionUpdated(transaction):
+            replaceTransactionInLoadState(transaction)
+
+        case let .transactionDetailsUpdated(details):
+            transactionDetails[details.txId()] = details
+
+        case let .transactionConfirmationsUpdated(update):
+            transactionConfirmations[update.txId] = update.confirmations
 
         case let .scanComplete(txns):
             self.loadState = ledgerState.initialScanComplete ? .loaded(txns) : .scanning(txns)

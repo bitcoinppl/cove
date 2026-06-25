@@ -7,16 +7,30 @@
 use super::{
     CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext,
     CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupPasskeyChoiceIntent,
-    CloudBackupPasskeyHint, CloudBackupRootPrompt, CloudBackupSettingsRowStatus, CloudBackupStatus,
+    CloudBackupRootPrompt, CloudBackupSettingsRowStatus, CloudBackupStatus,
     CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
-    CloudBackupVerificationReason, CloudOnlyOperation, CloudOnlyState, DeepVerificationFailure,
-    DeepVerificationReport, OtherBackupsOperation, PendingUploadVerificationState, RecoveryAction,
-    RecoveryState, SyncState, VerificationState,
+    CloudBackupVerificationReason, CloudOnlyOperation, CloudOnlyState, OtherBackupsOperation,
+    PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
 };
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use cove_device::cloud_storage::CloudSyncHealth;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+mod events;
+mod state_types;
+
+pub(crate) use self::events::{
+    CloudBackupAcceptedEnablePrompt, CloudBackupExclusiveOperation,
+    CloudBackupExclusiveOperationClaim, CloudBackupLifecycleEffect, CloudBackupStateReducerEffects,
+    CloudBackupStateReducerEvent, CloudBackupStateReducerEventRejection,
+};
+pub use self::state_types::{
+    CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupDetailState,
+    CloudBackupEnableFlow, CloudBackupFailure, CloudBackupLifecycle, CloudBackupPasskeyRepairState,
+    CloudBackupPasskeyState, CloudBackupRestoreFlow, CloudBackupSyncState,
+    CloudBackupVerificationState, LoadedCloudBackupDetail,
+};
 
 const PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE: &str = "cloud authorization required";
 const STALE_VERIFICATION_THRESHOLD: Duration = Duration::from_secs(60 * 60 * 24 * 30);
@@ -64,51 +78,6 @@ struct CloudBackupConfiguredReducerState {
 enum CloudBackupConfiguredPrompt {
     None,
     PasskeyChoice(CloudBackupPasskeyChoiceIntent),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CloudBackupAcceptedEnablePrompt {
-    Enable(CloudBackupEnableContext),
-    ForceNew(CloudBackupEnableContext),
-    NoDiscovery(CloudBackupEnableContext),
-}
-
-/// Exclusive operation category where newer claims replace active older claims
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CloudBackupExclusiveOperation {
-    Enable,
-    EnableForceNew,
-    EnableNoDiscovery,
-    Restore,
-    Disable,
-    RecreateManifest,
-    ReinitializeBackup,
-    RepairPasskey,
-    VerificationRepair,
-    RecoverOtherBackups,
-    DeleteOtherBackups,
-    RestoreCloudWallet,
-    DeleteCloudWallet,
-}
-
-/// Generation-tagged ownership proof for an exclusive operation
-///
-/// Async completions must present the claim they started with before the
-/// reducer or supervisor accepts their result
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct CloudBackupExclusiveOperationClaim {
-    operation: CloudBackupExclusiveOperation,
-    generation: u64,
-}
-
-impl CloudBackupExclusiveOperationClaim {
-    pub(crate) fn new(operation: CloudBackupExclusiveOperation, generation: u64) -> Self {
-        Self { operation, generation }
-    }
-
-    pub(crate) fn operation(self) -> CloudBackupExclusiveOperation {
-        self.operation
-    }
 }
 
 impl Default for CloudBackupReducerState {
@@ -940,194 +909,6 @@ impl CloudBackupReducerState {
         )
         .presentation
     }
-}
-
-/// Event accepted by the private reducer
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum CloudBackupStateReducerEvent {
-    ExclusiveOperationStarted(CloudBackupExclusiveOperationClaim),
-    ExclusiveOperationFinished(CloudBackupExclusiveOperationClaim),
-    EnableContextStarted(CloudBackupEnableContext),
-    RuntimeStatusReconciled(CloudBackupStatus),
-    ExistingBackupFoundPromptSet {
-        context: CloudBackupEnableContext,
-        passkey_hint: Option<CloudBackupPasskeyHint>,
-    },
-    ExistingBackupFoundPromptCleared,
-    PasskeyChoicePromptSet(CloudBackupPasskeyChoiceIntent),
-    PasskeyChoicePromptCleared,
-    MissingPasskeyPromptDismissed,
-    MissingPasskeyDismissalCleared,
-    PromptStateCleared,
-    EnableProgressReported(Option<super::CloudBackupProgress>),
-    RestoreProgressReported(CloudBackupRestoreFlow),
-    SyncHealthObserved(CloudSyncHealth),
-    EnableFlowAdvanced(CloudBackupEnableState),
-    PendingUploadVerificationReconciled(PendingUploadVerificationState),
-    PendingUploadVerificationAndFlagsReconciled {
-        pending: PendingUploadVerificationState,
-        metadata: CloudBackupVerificationMetadata,
-        should_prompt: bool,
-    },
-    VerificationFlagsReconciled {
-        metadata: CloudBackupVerificationMetadata,
-        should_prompt: bool,
-    },
-    VerificationPresentationReconciled(CloudBackupVerificationPresentation),
-    VerificationStateResolved(VerificationState),
-    SyncStateResolved(SyncState),
-    RecoveryStateResolved(RecoveryState),
-    DisableStateResolved(CloudBackupDisableOutcome),
-    DetailRefreshApplied {
-        detail: Option<CloudBackupDetail>,
-        reset_cloud_only: bool,
-    },
-    CloudOnlyStateResolved(CloudOnlyState),
-    CloudOnlyOperationResolved(CloudOnlyOperation),
-    OtherBackupsOperationResolved(OtherBackupsOperation),
-}
-
-/// Intentionally uninhabited marker because reducer events are currently total
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum CloudBackupStateReducerEventRejection {}
-
-/// Side effects the manager should emit after applying a reducer event
-#[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) struct CloudBackupStateReducerEffects {
-    pub(crate) lifecycle: Option<CloudBackupLifecycleEffect>,
-    pub(crate) enable_completed: Option<CloudBackupEnableContext>,
-    pub(crate) status_changed: bool,
-    pub(crate) verification_presentation_changed: bool,
-    pub(crate) verification_decision_pending: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CloudBackupLifecycleEffect {
-    pub(crate) lifecycle: CloudBackupLifecycle,
-    pub(crate) settings_row_status: CloudBackupSettingsRowStatus,
-}
-
-impl PartialEq<CloudBackupLifecycle> for CloudBackupLifecycleEffect {
-    fn eq(&self, other: &CloudBackupLifecycle) -> bool {
-        self.lifecycle == *other
-    }
-}
-
-/// Public passkey health state for the configured backup
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum CloudBackupPasskeyState {
-    Available,
-    Missing,
-    UnsupportedProvider,
-    NeedsRepair { state: CloudBackupPasskeyRepairState },
-}
-
-/// Public repair status for a missing or stale backup passkey
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum CloudBackupPasskeyRepairState {
-    Idle,
-    Running,
-    Failed(String),
-}
-
-/// Public backup verification state shown by settings and prompts
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum CloudBackupVerificationState {
-    NotVerified,
-    Verified { report: Option<DeepVerificationReport>, last_verified_at: Option<u64> },
-    Required,
-    Running,
-    AwaitingUploadConfirmation,
-    Failed(DeepVerificationFailure),
-}
-
-/// Public sync status for background cloud backup work
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum CloudBackupSyncState {
-    Idle,
-    Syncing,
-    Blocked(String),
-    Failed(String),
-}
-
-/// Public status for destructive operations that can affect remote backup data
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum CloudBackupDestructiveOperationState {
-    Idle,
-    RecreatingManifest,
-    ReinitializingBackup,
-    Disabling,
-    DisableFailed { message: String, can_keep_enabled: bool },
-}
-
-/// Detail payload shown after remote backup detail has loaded
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct LoadedCloudBackupDetail {
-    pub detail: CloudBackupDetail,
-    pub cloud_only: CloudOnlyState,
-    pub cloud_only_operation: CloudOnlyOperation,
-    pub other_backups_operation: OtherBackupsOperation,
-}
-
-/// Public loading state for the cloud backup detail screen
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum CloudBackupDetailState {
-    NotLoaded,
-    Loading,
-    Loaded { state: LoadedCloudBackupDetail },
-    Failed(String),
-}
-
-/// Public configured-backup state projected from the private reducer
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct CloudBackupConfiguredState {
-    pub passkey: CloudBackupPasskeyState,
-    pub verification: CloudBackupVerificationState,
-    pub sync: CloudBackupSyncState,
-    pub destructive_operation: CloudBackupDestructiveOperationState,
-    pub detail: CloudBackupDetailState,
-    pub root_prompt: CloudBackupRootPrompt,
-    pub sync_health: CloudSyncHealth,
-    pub verification_presentation: CloudBackupVerificationPresentation,
-}
-
-/// Public enable flow state for onboarding and settings
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum CloudBackupEnableFlow {
-    DiscoveringExistingBackup,
-    AwaitingForceNewConfirmation(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
-    AwaitingPasskeyChoice(CloudBackupPasskeyChoiceIntent),
-    CreatingPasskey,
-    AwaitingSavedPasskeyConfirmation(super::SavedPasskeyConfirmationMode),
-    ConfirmingSavedPasskey,
-    UploadingInitialBackup { progress: Option<super::CloudBackupProgress> },
-    RetryingUploadWithStagedMaterial { progress: Option<super::CloudBackupProgress> },
-    WaitingForPasskeyAvailability,
-}
-
-/// Public restore progress state
-#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
-pub enum CloudBackupRestoreFlow {
-    Finding,
-    Downloading { completed: u32, total: u32 },
-    Restoring { completed: u32, total: u32 },
-}
-
-/// Public terminal cloud backup failure
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct CloudBackupFailure {
-    pub message: String,
-}
-
-/// Public top-level cloud backup lifecycle
-#[expect(clippy::large_enum_variant, reason = "exported UniFFI enum keeps payloads inline")]
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum CloudBackupLifecycle {
-    Disabled,
-    Enabling(CloudBackupEnableFlow),
-    Restoring(CloudBackupRestoreFlow),
-    Configured(CloudBackupConfiguredState),
-    Failed(CloudBackupFailure),
 }
 
 impl CloudBackupStateReducer {

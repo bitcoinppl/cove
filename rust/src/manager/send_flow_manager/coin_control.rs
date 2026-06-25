@@ -1,0 +1,123 @@
+use std::sync::Arc;
+
+use cove_common::consts::{MIN_SEND_AMOUNT, MIN_SEND_SATS};
+use cove_types::{
+    amount::Amount,
+    unit::BitcoinUnit,
+    utxo::{Utxo, UtxoList},
+};
+use tracing::debug;
+
+use super::{RustSendFlowManager, state::EnterMode};
+
+impl RustSendFlowManager {
+    pub(crate) fn handle_coin_control_amount_changed(self: &Arc<Self>, amount: f64) -> Option<()> {
+        debug!("handle_coin_control_amount_changed: {amount}");
+
+        let mut coin_control_mode = match self.state.lock().mode.clone() {
+            EnterMode::CoinControl(coin_control_mode) => coin_control_mode,
+            _ => return None,
+        };
+
+        let unit = self.state.lock().metadata.selected_unit;
+        let amount = match unit {
+            BitcoinUnit::Btc => Amount::from_btc(amount).ok()?,
+            BitcoinUnit::Sat => Amount::from_sat(amount as u64),
+        }
+        .max(MIN_SEND_AMOUNT.into());
+
+        // if the amount we are selecting is within 1000 sats of the max send, then select the max send
+        let max_send_without_fees_and_small_utxo = self.max_send_minus_fees_and_small_utxo()?;
+
+        if amount >= max_send_without_fees_and_small_utxo {
+            debug!(
+                "setting coin control to max amount close to max {} {}",
+                amount.as_sats(),
+                max_send_without_fees_and_small_utxo.as_sats()
+            );
+
+            let max_send = coin_control_mode.max_send();
+            coin_control_mode.is_max_selected = true;
+
+            self.state.lock().mode = EnterMode::CoinControl(coin_control_mode);
+            self.handle_amount_changed(max_send);
+            return Some(());
+        }
+
+        {
+            let mut state = self.state.lock();
+            coin_control_mode.is_max_selected = false;
+            state.mode = EnterMode::CoinControl(coin_control_mode);
+        }
+
+        self.handle_amount_changed(amount);
+
+        Some(())
+    }
+
+    pub(crate) fn handle_coin_control_entered_amount_changed(
+        self: &Arc<Self>,
+        amount: String,
+        is_focused: bool,
+    ) -> Option<()> {
+        debug!("handle_coin_control_entered_amount_changed: {amount}");
+        let amount = amount.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
+        let amount_float = amount.parse::<f64>().ok()?;
+
+        if amount_float < MIN_SEND_SATS as f64 && is_focused {
+            return None;
+        }
+
+        self.handle_coin_control_amount_changed(amount_float)
+    }
+
+    pub(crate) fn set_coin_control_mode(self: &Arc<Self>, utxos: Vec<Utxo>) {
+        if utxos.is_empty() {
+            return;
+        }
+
+        match self.state.lock().mode.clone() {
+            // already in coin control mode with the same utxos, so do nothing
+            EnterMode::CoinControl(cc) if cc.utxo_list.utxos == utxos => {
+                return;
+            }
+            _ => {}
+        }
+
+        let utxo_list = Arc::new(UtxoList::from(utxos));
+        let total_minus_fees = {
+            let mut state = self.state.lock();
+            let total_fee_sats = state
+                .fee_selection
+                .as_ref()
+                .and_then(|selection| selection.selected.total_fee.map(|f| f.as_sats()));
+
+            state.mode = EnterMode::coin_control_max(utxo_list.clone());
+            let total_minus_fees =
+                utxo_list.total.as_sats().saturating_sub(total_fee_sats.unwrap_or(1000));
+
+            Amount::from_sat(total_minus_fees)
+        };
+
+        let me = self.clone();
+        cove_tokio::task::spawn(async move {
+            me.get_or_update_fee_rate_options().await;
+        });
+
+        self.handle_amount_changed(total_minus_fees);
+    }
+
+    pub(crate) fn disable_coin_control_mode(self: &Arc<Self>) {
+        if !self.state.lock().mode.is_coin_control() {
+            debug!("coin control mode is already disabled");
+            return;
+        }
+
+        self.state.lock().mode = EnterMode::SetAmount;
+
+        let me = self.clone();
+        cove_tokio::task::spawn(async move {
+            me.get_or_update_fee_rate_options().await;
+        });
+    }
+}
