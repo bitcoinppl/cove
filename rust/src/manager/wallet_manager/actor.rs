@@ -211,6 +211,14 @@ impl WalletActor {
     }
 
     pub async fn wallet_scan_and_notify(&mut self, force_scan: bool) -> ActorResult<()> {
+        self.wallet_scan_and_notify_with_node_check(force_scan, true).await
+    }
+
+    async fn wallet_scan_and_notify_with_node_check(
+        &mut self,
+        force_scan: bool,
+        check_node: bool,
+    ) -> ActorResult<()> {
         use WalletManagerReconcileMessage as Msg;
         debug!("wallet_scan_and_notify");
 
@@ -234,7 +242,7 @@ impl WalletActor {
         };
 
         // start the wallet scan in a background task
-        self.start_wallet_scan_in_task(force_scan, scan_progress_start)
+        self.start_wallet_scan_in_task(force_scan, scan_progress_start, check_node)
             .await?
             .await
             .map_err_str(Error::WalletScanError)?;
@@ -246,6 +254,7 @@ impl WalletActor {
         &mut self,
         force_scan: bool,
         progress_start: ScanProgressStart,
+        check_node: bool,
     ) -> ActorResult<()> {
         debug!("start_wallet_scan");
 
@@ -258,8 +267,9 @@ impl WalletActor {
             return Produces::ok(());
         }
 
-        // check the node connection, and send frontend the error if it fails
-        self.check_node_connection().await?;
+        if check_node {
+            self.ensure_node_connection().await?;
+        }
 
         // perform that scanning in a background task
         let addr = self.addr.clone();
@@ -277,8 +287,9 @@ impl WalletActor {
     ) -> ActorResult<()> {
         debug!("actor switch mnemonic wallet");
 
+        self.ensure_node_connection().await?;
         self.wallet.switch_mnemonic_to_new_address_type(address_type)?;
-        self.restart_scan_after_address_type_switch();
+        self.restart_scan_after_address_type_switch().await?;
 
         Produces::ok(())
     }
@@ -290,8 +301,9 @@ impl WalletActor {
     ) -> ActorResult<()> {
         debug!("actor switch pubkey descriptor wallet");
 
+        self.ensure_node_connection().await?;
         self.wallet.switch_descriptor_to_new_address_type(descriptors, address_type)?;
-        self.restart_scan_after_address_type_switch();
+        self.restart_scan_after_address_type_switch().await?;
 
         Produces::ok(())
     }
@@ -884,11 +896,13 @@ impl WalletActor {
         self.send_scan_idle_status();
     }
 
-    fn restart_scan_after_address_type_switch(&mut self) {
+    async fn restart_scan_after_address_type_switch(&mut self) -> ActorResult<()> {
         self.reset_scan_lifecycle_for_address_type_switch();
 
         // cached WalletManager instances do not rerun the UI scan trigger after route reset
-        send!(self.addr.wallet_scan_and_notify(true));
+        self.wallet_scan_and_notify_with_node_check(true, false).await?.await?;
+
+        Produces::ok(())
     }
 
     fn advance_scan_generation(&mut self) -> WalletScanGeneration {
@@ -1030,12 +1044,18 @@ mod tests {
     };
     use cove_bdk_progressive_scan::ScanUpdate;
     use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
+    use cove_types::network::Network as CoveNetwork;
     use parking_lot::RwLock;
     use std::{
         collections::{BTreeMap, HashMap, HashSet},
         str::FromStr as _,
         sync::{Arc, Once, OnceLock},
         time::{Duration, UNIX_EPOCH},
+    };
+    use tokio::{
+        io::{AsyncReadExt as _, AsyncWriteExt as _},
+        net::TcpListener,
+        task::JoinHandle,
     };
 
     use crate::wallet::metadata::WalletMetadata;
@@ -1056,6 +1076,7 @@ mod tests {
         manager::wallet_manager::{
             TransactionLockState, WalletManagerReconcileMessage, WalletScanStatus,
         },
+        node::Node,
         wallet::{Address, Wallet, WalletAddressType, metadata::WalletId},
     };
 
@@ -1203,14 +1224,21 @@ mod tests {
         wallet
     }
 
-    fn contains_wallet_scan_started(batch: SingleOrMany) -> bool {
+    fn contains_wallet_scan_started(batch: &SingleOrMany) -> bool {
         match batch {
             SingleOrMany::Single(message) => wallet_scan_started(message),
-            SingleOrMany::Many(messages) => messages.into_iter().any(wallet_scan_started),
+            SingleOrMany::Many(messages) => messages.iter().any(wallet_scan_started),
         }
     }
 
-    fn wallet_scan_started(message: WalletManagerReconcileMessage) -> bool {
+    fn contains_node_connection_failed(batch: &SingleOrMany) -> bool {
+        match batch {
+            SingleOrMany::Single(message) => node_connection_failed(message),
+            SingleOrMany::Many(messages) => messages.iter().any(node_connection_failed),
+        }
+    }
+
+    fn wallet_scan_started(message: &WalletManagerReconcileMessage) -> bool {
         matches!(
             message,
             WalletManagerReconcileMessage::WalletScanStatusChanged(
@@ -1219,12 +1247,16 @@ mod tests {
         )
     }
 
+    fn node_connection_failed(message: &WalletManagerReconcileMessage) -> bool {
+        matches!(message, WalletManagerReconcileMessage::NodeConnectionFailed(_))
+    }
+
     async fn wait_for_wallet_scan_started(receiver: &flume::Receiver<SingleOrMany>) {
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 let batch = receiver.recv_async().await.expect("reconcile message is emitted");
 
-                if contains_wallet_scan_started(batch) {
+                if contains_wallet_scan_started(&batch) {
                     return;
                 }
             }
@@ -1240,6 +1272,62 @@ mod tests {
     fn address_type_switch_test_lock() -> &'static tokio::sync::Mutex<()> {
         static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(tokio::sync::Mutex::default)
+    }
+
+    fn set_unreachable_bitcoin_esplora_node() {
+        let node = Node::new_esplora(
+            "unreachable test node".to_string(),
+            "http://127.0.0.1:1".to_string(),
+            CoveNetwork::Bitcoin,
+        );
+
+        crate::database::Database::global()
+            .global_config
+            .set_selected_node(&node)
+            .expect("unreachable node config is saved");
+    }
+
+    async fn set_test_bitcoin_esplora_node() -> JoinHandle<()> {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("test esplora server binds");
+        let address = listener.local_addr().expect("test esplora server has address");
+        let node = Node::new_esplora(
+            "test esplora node".to_string(),
+            format!("http://{address}"),
+            CoveNetwork::Bitcoin,
+        );
+
+        crate::database::Database::global()
+            .global_config
+            .set_selected_node(&node)
+            .expect("test node config is saved");
+
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else { return };
+                tokio::spawn(async move {
+                    let mut request = [0; 1024];
+                    let _ = stream.read(&mut request).await;
+                    let response = concat!(
+                        "HTTP/1.1 200 OK\r\n",
+                        "Content-Length: 1\r\n",
+                        "Content-Type: text/plain\r\n",
+                        "Connection: close\r\n",
+                        "\r\n",
+                        "1",
+                    );
+                    let _ = stream.write_all(response.as_bytes()).await;
+                });
+            }
+        })
+    }
+
+    fn restore_default_bitcoin_node() {
+        let node = Node::default(CoveNetwork::Bitcoin);
+
+        crate::database::Database::global()
+            .global_config
+            .set_selected_node(&node)
+            .expect("default node config is saved");
     }
 
     fn mark_wallet_ledger_ready(wallet: &mut Wallet) {
@@ -1630,6 +1718,7 @@ mod tests {
         let _guard = address_type_switch_test_lock().lock().await;
 
         crate::database::test_support::init_test_database();
+        let server = set_test_bitcoin_esplora_node().await;
 
         let metadata = WalletMetadata::preview_new();
         let wallet = persisted_preview_wallet(metadata.clone());
@@ -1644,6 +1733,43 @@ mod tests {
 
         wait_for_wallet_scan_started(&receiver).await;
 
+        restore_default_bitcoin_node();
+        server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn mnemonic_address_type_switch_surfaces_scan_start_failure() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        set_unreachable_bitcoin_esplora_node();
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        test_keychain().save_wallet_key(&wallet.id, test_mnemonic()).expect("mnemonic is saved");
+
+        let (addr, receiver) = spawn_test_wallet_actor(wallet);
+        drain_reconcile_messages(&receiver);
+
+        let _error = call!(addr.switch_mnemonic_to_new_address_type(WalletAddressType::Legacy))
+            .await
+            .expect_err("address-type switch fails when scan startup fails");
+        let messages = receiver.try_iter().collect::<Vec<_>>();
+        let persisted_metadata = crate::database::Database::global()
+            .wallets
+            .get(&metadata.id, metadata.network, metadata.wallet_mode)
+            .expect("wallet metadata loads")
+            .expect("wallet metadata exists");
+
+        let node_connection_failed = messages.iter().any(contains_node_connection_failed);
+        let wallet_scan_started = messages.iter().any(contains_wallet_scan_started);
+
+        restore_default_bitcoin_node();
+
+        assert!(node_connection_failed);
+        assert!(!wallet_scan_started);
+        assert_eq!(persisted_metadata.address_type, WalletAddressType::NativeSegwit);
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
@@ -1652,6 +1778,7 @@ mod tests {
         let _guard = address_type_switch_test_lock().lock().await;
 
         crate::database::test_support::init_test_database();
+        let server = set_test_bitcoin_esplora_node().await;
 
         let metadata = WalletMetadata::preview_new();
         let wallet = persisted_preview_wallet(metadata.clone());
@@ -1666,6 +1793,45 @@ mod tests {
 
         wait_for_wallet_scan_started(&receiver).await;
 
+        restore_default_bitcoin_node();
+        server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn descriptor_address_type_switch_surfaces_scan_start_failure() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        set_unreachable_bitcoin_esplora_node();
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
+
+        let (addr, receiver) = spawn_test_wallet_actor(wallet);
+        drain_reconcile_messages(&receiver);
+
+        let _error = call!(
+            addr.switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy)
+        )
+        .await
+        .expect_err("address-type switch fails when scan startup fails");
+        let messages = receiver.try_iter().collect::<Vec<_>>();
+        let persisted_metadata = crate::database::Database::global()
+            .wallets
+            .get(&metadata.id, metadata.network, metadata.wallet_mode)
+            .expect("wallet metadata loads")
+            .expect("wallet metadata exists");
+
+        let node_connection_failed = messages.iter().any(contains_node_connection_failed);
+        let wallet_scan_started = messages.iter().any(contains_wallet_scan_started);
+
+        restore_default_bitcoin_node();
+
+        assert!(node_connection_failed);
+        assert!(!wallet_scan_started);
+        assert_eq!(persisted_metadata.address_type, WalletAddressType::NativeSegwit);
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 

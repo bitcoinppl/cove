@@ -16,6 +16,18 @@ use crate::{
 };
 
 impl WalletActor {
+    pub(crate) async fn ensure_node_connection(&mut self) -> Result<(), Error> {
+        let node = Database::global().global_config.selected_node();
+        check_node_connection_inner(&node).await.map_err(Error::NodeConnectionFailed)?;
+
+        let node_client = NodeClient::new(&node)
+            .await
+            .map_err_prefix("failed to create node client", Error::NodeConnectionFailed)?;
+        self.node_client = Some(node_client);
+
+        Ok(())
+    }
+
     #[into_actor_result]
     pub async fn check_node_connection(&mut self) {
         let node = Database::global().global_config.selected_node();
@@ -132,13 +144,11 @@ impl WalletActor {
 }
 
 async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
-    // Create a fresh client with its own TCP connection for this background check.
-    // We cannot reuse the actor's cached client because:
-    // 1. This runs in a background task (spawned via send_fut)
-    // 2. The actor continues processing messages with its own client
-    // 3. The underlying rust-electrum-client is NOT designed for concurrent access
-    //    (it uses a "reader thread" pattern with try_lock that fails on concurrent use)
-    // Creating a fresh connection ensures no shared state or concurrent access.
+    // create a fresh client with its own TCP connection for connection probes
+    // because the actor may continue processing messages with its cached client
+    // while a background check is running. the underlying rust-electrum-client
+    // is not designed for concurrent access, so a fresh connection ensures no
+    // shared state or concurrent access
     //
     // TODO: We could optimize this to reuse the cached client when using esplora,
     // since esplora uses HTTP and doesn't have the concurrent access limitations
