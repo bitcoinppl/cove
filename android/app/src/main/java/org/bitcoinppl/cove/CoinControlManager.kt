@@ -77,26 +77,22 @@ class CoinControlManager internal constructor(
     }
 
     private fun <T> withRust(
-        callName: String,
         block: RustCoinControlManager.() -> T,
-    ): T = rustGuard.withHandle(rust, callName, block)
+    ): T = rustGuard.withHandle(rust, block)
 
     private fun <T> withRustOr(
         defaultValue: T,
-        callName: String,
         block: RustCoinControlManager.() -> T,
-    ): T = rustGuard.withHandleOr(rust, defaultValue, callName, block)
+    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
 
     private suspend fun <T> withRustSuspend(
-        callName: String,
         block: suspend RustCoinControlManager.() -> T,
-    ): T = rustGuard.withHandleSuspend(rust, callName, block)
+    ): T = rustGuard.withHandleSuspend(rust, block)
 
     private suspend fun <T> withRustOrSuspend(
         defaultValue: T,
-        callName: String,
         block: suspend RustCoinControlManager.() -> T,
-    ): T = rustGuard.withHandleOrSuspend(rust, defaultValue, callName, block)
+    ): T = rustGuard.withHandleOrSuspend(rust, defaultValue, block)
 
     /**
      * update search and dispatch notification
@@ -119,7 +115,7 @@ class CoinControlManager internal constructor(
         selected = spendableSelection
 
         val hiddenSelectedOutpoints =
-            withRustOr(emptyList(), "selectedUtxos") {
+            withRustOr(emptyList()) {
                 selectedUtxos()
             }
                 .filter { selectedOutsideVisibleSearch.contains(it.outpoint.hashToUint()) }
@@ -136,7 +132,7 @@ class CoinControlManager internal constructor(
      * get current button presentation based on sort state
      */
     fun buttonPresentation(key: CoinControlListSortKey): ButtonPresentation? =
-        withRustOr(null, "buttonPresentation") {
+        withRustOr(null) {
             buttonPresentation(key)
         }
 
@@ -168,7 +164,7 @@ class CoinControlManager internal constructor(
     fun continuePressed(app: AppManager) {
         val walletId = id
         val selectedUtxos =
-            withRustOr(emptyList(), "selectedUtxos") {
+            withRustOr(emptyList()) {
                 selectedUtxos()
             }
 
@@ -186,7 +182,7 @@ class CoinControlManager internal constructor(
                 if (!isActive) return@launch
 
                 val selectedUtxos =
-                    withRustOr(emptyList(), "selectedUtxos") {
+                    withRustOr(emptyList()) {
                         selectedUtxos()
                     }
                 sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
@@ -237,7 +233,7 @@ class CoinControlManager internal constructor(
         }
 
     suspend fun reloadLabels() {
-        withRustOrSuspend(Unit, "reloadLabels") {
+        withRustOrSuspend(Unit) {
             reloadLabels()
         }
     }
@@ -245,7 +241,7 @@ class CoinControlManager internal constructor(
     suspend fun setSpendability(
         outpoint: OutPoint,
         spendable: Boolean,
-    ) = withRustSuspend("setUtxoSpendability") {
+    ) = withRustSuspend {
         setUtxoSpendability(outpoint, spendable)
     }
 
@@ -266,7 +262,7 @@ class CoinControlManager internal constructor(
     fun dispatch(action: CoinControlManagerAction) {
         logDebug("dispatch: $action")
         mainScope.launch(Dispatchers.IO) {
-            withRustOr(Unit, "dispatch") {
+            withRustOr(Unit) {
                 dispatch(action)
             }
         }

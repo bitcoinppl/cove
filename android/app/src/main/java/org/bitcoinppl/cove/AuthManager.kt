@@ -61,7 +61,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
 
     val lockedAt: Instant?
         get() =
-            withRustOr(null, "lockedAt") {
+            withRustOr(null) {
                 lockedAt()
             }?.let { Instant.ofEpochSecond(it.toLong()) }
 
@@ -71,15 +71,13 @@ class AuthManager private constructor() : AuthManagerReconciler {
     }
 
     private fun <T> withRust(
-        callName: String,
         block: RustAuthManager.() -> T,
-    ): T = rustGuard.withHandle(rust, callName, block)
+    ): T = rustGuard.withHandle(rust, block)
 
     private fun <T> withRustOr(
         defaultValue: T,
-        callName: String,
         block: RustAuthManager.() -> T,
-    ): T = rustGuard.withHandleOr(rust, defaultValue, callName, block)
+    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
 
     companion object {
         @Volatile
@@ -114,7 +112,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
         logDebug("[AUTH] locking at $now")
         isLocked = true
         try {
-            withRust("setLockedAt") {
+            withRust {
                 setLockedAt(lockedAt = now)
             }
         } catch (e: Exception) {
@@ -128,7 +126,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
     fun unlock() {
         isLocked = false
         try {
-            withRust("setLockedAt") {
+            withRust {
                 setLockedAt(lockedAt = 0UL)
             }
         } catch (e: Exception) {
@@ -140,7 +138,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
      * check if in decoy mode
      */
     fun isInDecoyMode(): Boolean =
-        withRustOr(false, "isInDecoyMode") {
+        withRustOr(false) {
             isInDecoyMode()
         }
 
@@ -153,7 +151,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
      * check if PIN is decoy PIN
      */
     fun checkDecoyPin(pin: String): Boolean =
-        withRustOr(false, "checkDecoyPin") {
+        withRustOr(false) {
             checkDecoyPin(pin)
         }
 
@@ -161,7 +159,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
      * check if PIN is wipe data PIN
      */
     fun checkWipeDataPin(pin: String): Boolean =
-        withRustOr(false, "checkWipeDataPin") {
+        withRustOr(false) {
             checkWipeDataPin(pin)
         }
 
@@ -196,7 +194,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
             // enter decoy mode if not already in decoy mode and reset app and router
             if (Database().globalConfig().isInMainMode()) {
                 try {
-                    withRust("switchToDecoyMode") {
+                    withRust {
                         switchToDecoyMode()
                     }
                     resetAppAndSelectWallet()
@@ -245,7 +243,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
      */
     fun switchToMainMode() {
         try {
-            withRust("switchToMainMode") {
+            withRust {
                 switchToMainMode()
             }
             resetAppAndSelectWallet()
@@ -264,14 +262,14 @@ class AuthManager private constructor() : AuthManagerReconciler {
 
                 is AuthManagerReconcileMessage.WipeDataPinChanged -> {
                     isWipeDataPinEnabled =
-                        withRustOr(isWipeDataPinEnabled, "isWipeDataPinEnabled") {
+                        withRustOr(isWipeDataPinEnabled) {
                             isWipeDataPinEnabled()
                         }
                 }
 
                 is AuthManagerReconcileMessage.DecoyPinChanged -> {
                     isDecoyPinEnabled =
-                        withRustOr(isDecoyPinEnabled, "isDecoyPinEnabled") {
+                        withRustOr(isDecoyPinEnabled) {
                             isDecoyPinEnabled()
                         }
                 }
@@ -281,7 +279,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
 
     fun dispatch(action: AuthManagerAction) {
         logDebug("dispatch: $action")
-        withRustOr(Unit, "dispatch") {
+        withRustOr(Unit) {
             dispatch(action)
         }
     }
@@ -290,23 +288,23 @@ class AuthManager private constructor() : AuthManagerReconciler {
         action: SecuritySettingsAction,
         unverifiedWalletIds: List<WalletId>,
     ): SecuritySettingsResult =
-        withRust("validateSecurityAction") {
+        withRust {
             validateSecurityAction(action, unverifiedWalletIds)
         }
 
     fun validateNewPin(pin: String): String? =
-        withRustOr(null, "validateNewPin") {
+        withRustOr(null) {
             validateNewPin(pin)
         }
 
     fun setWipeDataPin(pin: String) {
-        withRust("setWipeDataPin") {
+        withRust {
             setWipeDataPin(pin)
         }
     }
 
     fun setDecoyPin(pin: String) {
-        withRust("setDecoyPin") {
+        withRust {
             setDecoyPin(pin)
         }
     }

@@ -36,15 +36,13 @@ class ImportWalletManager :
     }
 
     private fun <T> withRust(
-        callName: String,
         block: RustImportWalletManager.() -> T,
-    ): T = rustGuard.withHandle(rust, callName, block)
+    ): T = rustGuard.withHandle(rust, block)
 
     private fun <T> withRustOr(
         defaultValue: T,
-        callName: String,
         block: RustImportWalletManager.() -> T,
-    ): T = rustGuard.withHandleOr(rust, defaultValue, callName, block)
+    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
 
     override fun reconcile(message: ImportWalletManagerReconcileMessage) {
         Log.d(tag, "Reconcile: $message")
@@ -59,7 +57,7 @@ class ImportWalletManager :
 
     fun dispatch(action: ImportWalletManagerAction) {
         Log.d(tag, "Dispatch: $action")
-        withRustOr(Unit, "dispatch") {
+        withRustOr(Unit) {
             dispatch(action)
         }
     }
@@ -73,7 +71,7 @@ class ImportWalletManager :
     fun importWallet(enteredWords: List<List<String>>): WalletMetadata {
         Log.d(tag, "Importing wallet with ${enteredWords.flatten().size} words")
 
-        return withRust("importWallet") {
+        return withRust {
             importWallet(enteredWords)
         }
     }

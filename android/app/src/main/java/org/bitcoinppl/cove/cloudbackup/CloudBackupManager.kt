@@ -79,7 +79,7 @@ class CloudBackupManager private constructor(
             rust.listenForUpdates(this)
             rustScope.launch {
                 runCatching {
-                    withRust("cloudStorageDidChange") {
+                    withRust {
                         cloudStorageDidChange()
                     }
                 }
@@ -91,16 +91,14 @@ class CloudBackupManager private constructor(
     }
 
     private fun <T> withRust(
-        callName: String,
         block: RustCloudBackupManager.() -> T,
-    ): T? = rust?.let { rustGuard.withHandleOr(it, null, callName, block) }
+    ): T? = rust?.let { rustGuard.withHandleOr(it, null, block) }
 
     private fun <T> withRustOr(
         defaultValue: T,
-        callName: String,
         block: RustCloudBackupManager.() -> T,
     ): T =
-        withRust(callName, block) ?: defaultValue
+        withRust(block) ?: defaultValue
 
     internal constructor(initialState: CloudBackupState) : this(null, initialState, false)
 
@@ -264,7 +262,7 @@ class CloudBackupManager private constructor(
     fun dispatch(action: CloudBackupManagerAction) {
         rustScope.launch {
             runCatching {
-                withRust("dispatch") {
+                withRust {
                     dispatch(action)
                 }
             }
@@ -277,7 +275,7 @@ class CloudBackupManager private constructor(
     fun syncPersistedState() {
         rustScope.launch {
             runCatching {
-                withRust("syncPersistedState") {
+                withRust {
                     syncPersistedState()
                 }
             }
@@ -296,7 +294,7 @@ class CloudBackupManager private constructor(
     fun resumePendingCloudUploadVerification() {
         rustScope.launch {
             runCatching {
-                withRust("resumePendingCloudUploadVerification") {
+                withRust {
                     resumePendingCloudUploadVerification()
                 }
             }
@@ -315,7 +313,7 @@ class CloudBackupManager private constructor(
     fun refreshCloudState() {
         rustScope.launch {
             runCatching {
-                withRust("cloudStorageDidChange") {
+                withRust {
                     cloudStorageDidChange()
                 }
             }
@@ -350,7 +348,7 @@ class CloudBackupManager private constructor(
 
     private fun refreshPersistedEnabledState(forceDisabledNotification: Boolean = false) {
         isCloudBackupEnabled = runCatching {
-            withRustOr(isCloudBackupEnabled, "isCloudBackupEnabled") {
+            withRustOr(isCloudBackupEnabled) {
                 isCloudBackupEnabled()
             }
         }

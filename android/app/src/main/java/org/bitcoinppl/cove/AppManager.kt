@@ -124,20 +124,17 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     private fun <T> withRust(
-        callName: String,
         block: FfiApp.() -> T,
-    ): T = rustGuard.withHandle(rust, callName, block)
+    ): T = rustGuard.withHandle(rust, block)
 
     private fun <T> withRustOr(
         defaultValue: T,
-        callName: String,
         block: FfiApp.() -> T,
-    ): T = rustGuard.withHandleOr(rust, defaultValue, callName, block)
+    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
 
     private suspend fun <T> withRustSuspend(
-        callName: String,
         block: suspend FfiApp.() -> T,
-    ): T = rustGuard.withHandleSuspend(rust, callName, block)
+    ): T = rustGuard.withHandleSuspend(rust, block)
 
     fun showInitialScanIncompleteAlert() {
         alertState =
@@ -296,21 +293,21 @@ class AppManager private constructor() : FfiReconcile {
         }
 
     val gitShortHash: String
-        get() = withRustOr("", "gitShortHash") { gitShortHash() }
+        get() = withRustOr("") { gitShortHash() }
 
     fun findTapSignerWallet(ts: TapSigner): WalletMetadata? =
-        withRustOr(null, "findTapSignerWallet") {
+        withRustOr(null) {
             findTapSignerWallet(ts)
         }
 
     @Throws(KeychainException::class)
     fun getTapSignerBackup(ts: TapSigner): ByteArray? =
-        withRust("getTapSignerBackup") {
+        withRust {
             getTapSignerBackup(ts)
         }
 
     fun saveTapSignerBackup(ts: TapSigner, backup: ByteArray): Boolean =
-        withRustOr(false, "saveTapSignerBackup") {
+        withRustOr(false) {
             saveTapSignerBackup(ts, backup)
         }
 
@@ -342,7 +339,7 @@ class AppManager private constructor() : FfiReconcile {
         sendFlowManager = null
         coinControlManager = null
 
-        withRustOr(null, "state") {
+        withRustOr(null) {
             state()
         }?.let {
             router = RouterManager(it.router)
@@ -353,7 +350,7 @@ class AppManager private constructor() : FfiReconcile {
         get() = router.currentRoute
 
     fun canGoBack(): Boolean =
-        withRustOr(false, "canGoBack") {
+        withRustOr(false) {
             canGoBack()
         }
 
@@ -361,11 +358,11 @@ class AppManager private constructor() : FfiReconcile {
         currentRoute.isSameNavigationDestination(route)
 
     val hasWallets: Boolean
-        get() = withRustOr(false, "hasWallets") { hasWallets() }
+        get() = withRustOr(false) { hasWallets() }
 
     val numberOfWallets: Int
         get() =
-            withRustOr(0u, "numWallets") {
+            withRustOr(0u) {
                 numWallets()
             }.toInt()
 
@@ -572,11 +569,11 @@ class AppManager private constructor() : FfiReconcile {
 
     private fun resetRouteWithoutNavigationGeneration(to: List<Route>) {
         if (to.size > 1) {
-            withRustOr(Unit, "resetNestedRoutesTo") {
+            withRustOr(Unit) {
                 resetNestedRoutesTo(to[0], to.drop(1))
             }
         } else if (to.isNotEmpty()) {
-            withRustOr(Unit, "resetDefaultRouteTo") {
+            withRustOr(Unit) {
                 resetDefaultRouteTo(to[0])
             }
         }
@@ -588,14 +585,14 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     private fun resetRouteWithoutNavigationGeneration(to: Route) {
-        withRustOr(Unit, "resetDefaultRouteTo") {
+        withRustOr(Unit) {
             resetDefaultRouteTo(to)
         }
     }
 
     fun loadAndReset(to: Route) {
         advanceNavigationGeneration()
-        withRustOr(Unit, "loadAndResetDefaultRoute") {
+        withRustOr(Unit) {
             loadAndResetDefaultRoute(to)
         }
     }
@@ -609,7 +606,7 @@ class AppManager private constructor() : FfiReconcile {
     ) {
         if (!isNavigationGenerationCurrent(generation)) return
         if (router.default != route) return
-        withRustOr(Unit, "resetAfterLoading") {
+        withRustOr(Unit) {
             resetAfterLoading(nextRoutes)
         }
     }
@@ -649,24 +646,24 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     suspend fun initData() {
-        withRustSuspend("initData") {
+        withRustSuspend {
             initData()
         }
     }
 
     fun deleteCorruptedWallet(id: WalletId) {
-        withRust("deleteCorruptedWallet") {
+        withRust {
             deleteCorruptedWallet(id)
         }
     }
 
     fun unverifiedWalletIds(): List<WalletId> =
-        withRustOr(emptyList(), "unverifiedWalletIds") {
+        withRustOr(emptyList()) {
             unverifiedWalletIds()
         }
 
     internal fun dangerousWipeAllData() {
-        withRust("dangerousWipeAllData") {
+        withRust {
             dangerousWipeAllData()
         }
     }
@@ -780,7 +777,7 @@ class AppManager private constructor() : FfiReconcile {
         Log.d(tag, "dispatch $action")
 
         return runCatching {
-            withRust("dispatch") {
+            withRust {
                 dispatch(action)
             }
         }

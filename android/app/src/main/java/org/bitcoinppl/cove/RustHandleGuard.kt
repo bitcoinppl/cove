@@ -21,17 +21,16 @@ internal class RustHandleGuard(
 
     fun <Handle, T> withHandle(
         handle: Handle,
-        callName: String,
         block: Handle.() -> T,
     ): T {
-        if (isClosed.get()) throw closedError(callName)
+        if (isClosed.get()) throw closedError()
 
         return try {
             handle.block()
         } catch (e: IllegalStateException) {
             if (isDestroyedHandleError(e)) {
-                markClosedAfterDestroyedHandle(callName, e)
-                throw closedError(callName)
+                markClosedAfterDestroyedHandle(e)
+                throw closedError()
             }
 
             throw e
@@ -41,7 +40,6 @@ internal class RustHandleGuard(
     fun <Handle, T> withHandleOr(
         handle: Handle,
         defaultValue: T,
-        callName: String,
         block: Handle.() -> T,
     ): T {
         if (isClosed.get()) return defaultValue
@@ -50,7 +48,7 @@ internal class RustHandleGuard(
             handle.block()
         } catch (e: IllegalStateException) {
             if (isDestroyedHandleError(e)) {
-                markClosedAfterDestroyedHandle(callName, e)
+                markClosedAfterDestroyedHandle(e)
                 defaultValue
             } else {
                 throw e
@@ -60,17 +58,16 @@ internal class RustHandleGuard(
 
     suspend fun <Handle, T> withHandleSuspend(
         handle: Handle,
-        callName: String,
         block: suspend Handle.() -> T,
     ): T {
-        if (isClosed.get()) throw closedError(callName)
+        if (isClosed.get()) throw closedError()
 
         return try {
             handle.block()
         } catch (e: IllegalStateException) {
             if (isDestroyedHandleError(e)) {
-                markClosedAfterDestroyedHandle(callName, e)
-                throw closedError(callName)
+                markClosedAfterDestroyedHandle(e)
+                throw closedError()
             }
 
             throw e
@@ -80,7 +77,6 @@ internal class RustHandleGuard(
     suspend fun <Handle, T> withHandleOrSuspend(
         handle: Handle,
         defaultValue: T,
-        callName: String,
         block: suspend Handle.() -> T,
     ): T {
         if (isClosed.get()) return defaultValue
@@ -89,7 +85,7 @@ internal class RustHandleGuard(
             handle.block()
         } catch (e: IllegalStateException) {
             if (isDestroyedHandleError(e)) {
-                markClosedAfterDestroyedHandle(callName, e)
+                markClosedAfterDestroyedHandle(e)
                 defaultValue
             } else {
                 throw e
@@ -97,17 +93,14 @@ internal class RustHandleGuard(
         }
     }
 
-    private fun closedError(callName: String): IllegalStateException =
-        IllegalStateException("$ownerName is closed while calling $callName")
+    private fun closedError(): IllegalStateException =
+        IllegalStateException("$ownerName is closed")
 
     private fun isDestroyedHandleError(error: IllegalStateException): Boolean =
         error.message?.contains("object has already been destroyed") == true
 
-    private fun markClosedAfterDestroyedHandle(
-        callName: String,
-        error: IllegalStateException,
-    ) {
+    private fun markClosedAfterDestroyedHandle(error: IllegalStateException) {
         isClosed.set(true)
-        logWarn("$callName skipped because $handleName is closed: ${error.message}")
+        logWarn("$handleName is closed: ${error.message}")
     }
 }

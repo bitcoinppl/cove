@@ -105,27 +105,25 @@ class OnboardingManager internal constructor(
     }
 
     private fun withRustOr(
-        callName: String,
         block: OnboardingRustHandle.() -> Unit,
     ) {
         runCatching {
-            rustGuard.withHandleOr(rust, Unit, callName, block)
+            rustGuard.withHandleOr(rust, Unit, block)
         }
             .onFailure { error ->
-                Log.e(TAG, "onboarding rust call failed: $callName", error)
+                Log.e(TAG, "onboarding rust call failed", error)
             }
     }
 
     private fun <T> withRustOr(
         defaultValue: T,
-        callName: String,
         block: OnboardingRustHandle.() -> T,
     ): T {
         return runCatching {
-            rustGuard.withHandleOr(rust, defaultValue, callName, block)
+            rustGuard.withHandleOr(rust, defaultValue, block)
         }
             .onFailure { error ->
-                Log.e(TAG, "onboarding rust call failed: $callName", error)
+                Log.e(TAG, "onboarding rust call failed", error)
             }
             .getOrDefault(defaultValue)
     }
@@ -133,14 +131,14 @@ class OnboardingManager internal constructor(
     fun dispatch(action: OnboardingAction) {
         rustScope.launch {
             val actionType = action::class.simpleName ?: "Unknown"
-            withRustOr("dispatch.$actionType") {
+            withRustOr {
                 dispatch(action)
             }
         }
     }
 
     fun currentWalletId(): WalletId? =
-        withRustOr(null, "currentWalletId") {
+        withRustOr(null) {
             currentWalletId()
         }
 

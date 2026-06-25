@@ -115,21 +115,18 @@ class SendFlowManager internal constructor(
     }
 
     private suspend fun <T> withRustSuspend(
-        callName: String,
         block: suspend RustSendFlowManager.() -> T,
-    ): T = rustGuard.withHandleSuspend(rust, callName, block)
+    ): T = rustGuard.withHandleSuspend(rust, block)
 
     private fun <T> withRustOr(
         defaultValue: T,
-        callName: String,
         block: RustSendFlowManager.() -> T,
-    ): T = rustGuard.withHandleOr(rust, defaultValue, callName, block)
+    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
 
     private suspend fun <T> withRustOrSuspend(
         defaultValue: T,
-        callName: String,
         block: suspend RustSendFlowManager.() -> T,
-    ): T = rustGuard.withHandleOrSuspend(rust, defaultValue, callName, block)
+    ): T = rustGuard.withHandleOrSuspend(rust, defaultValue, block)
 
     /**
      * get/set entering address with dispatch
@@ -177,27 +174,27 @@ class SendFlowManager internal constructor(
     }
 
     suspend fun waitForInit(): Boolean =
-        withRustOrSuspend(false, "waitForInit") {
+        withRustOrSuspend(false) {
             waitForInit()
         }
 
     fun amountExceedsBalance(): Boolean =
-        withRustOr(false, "amountExceedsBalance") {
+        withRustOr(false) {
             amountExceedsBalance()
         }
 
     fun currentAmount(): Amount? =
-        withRustOr(null, "amount") {
+        withRustOr(null) {
             amount()
         }
 
     fun maxSendMinusFees(): Amount? =
-        withRustOr(null, "maxSendMinusFees") {
+        withRustOr(null) {
             maxSendMinusFees()
         }
 
     fun maxSendMinusFeesAndSmallUtxo(): Amount? =
-        withRustOr(null, "maxSendMinusFeesAndSmallUtxo") {
+        withRustOr(null) {
             maxSendMinusFeesAndSmallUtxo()
         }
 
@@ -205,7 +202,7 @@ class SendFlowManager internal constructor(
         oldValue: String,
         newValue: String,
     ): String? =
-        withRustOr(null, "sanitizeBtcEnteringAmount") {
+        withRustOr(null) {
             sanitizeBtcEnteringAmount(oldValue, newValue)
         }
 
@@ -213,22 +210,22 @@ class SendFlowManager internal constructor(
         oldValue: String,
         newValue: String,
     ): String? =
-        withRustOr(null, "sanitizeFiatEnteringAmount") {
+        withRustOr(null) {
             sanitizeFiatEnteringAmount(oldValue, newValue)
         }
 
     fun validateAddress(displayAlert: Boolean = false): Boolean =
-        withRustOr(false, "validateAddress") {
+        withRustOr(false) {
             validateAddress(displayAlert)
         }
 
     fun validateAmount(displayAlert: Boolean = false): Boolean =
-        withRustOr(false, "validateAmount") {
+        withRustOr(false) {
             validateAmount(displayAlert)
         }
 
     fun validateFeePercentage(displayAlert: Boolean = false): Boolean =
-        withRustOr(false, "validateFeePercentage") {
+        withRustOr(false) {
             validateFeePercentage(displayAlert)
         }
 
@@ -247,23 +244,23 @@ class SendFlowManager internal constructor(
 
     fun refreshPresenters() {
         totalSpentInFiat =
-            withRustOr(totalSpentInFiat, "totalSpentInFiat") {
+            withRustOr(totalSpentInFiat) {
                 totalSpentInFiat()
             }
         totalSpentInBtc =
-            withRustOr(totalSpentInBtc, "totalSpentInBtc") {
+            withRustOr(totalSpentInBtc) {
                 totalSpentInBtc()
             }
         totalFeeString =
-            withRustOr(totalFeeString, "totalFeeString") {
+            withRustOr(totalFeeString) {
                 totalFeeString()
             }
         sendAmountBtc =
-            withRustOr(sendAmountBtc, "sendAmountBtc") {
+            withRustOr(sendAmountBtc) {
                 sendAmountBtc()
             }
         sendAmountFiat =
-            withRustOr(sendAmountFiat, "sendAmountFiat") {
+            withRustOr(sendAmountFiat) {
                 sendAmountFiat()
             }
     }
@@ -276,7 +273,7 @@ class SendFlowManager internal constructor(
         feeRate: FeeRate,
         feeSpeed: FeeSpeed,
     ): FeeRateOptionWithTotalFee =
-        withRustSuspend("getCustomFeeOption") {
+        withRustSuspend {
             getCustomFeeOption(feeRate, feeSpeed)
         }
 
@@ -368,7 +365,7 @@ class SendFlowManager internal constructor(
         if (isClosed.get()) return
         logDebug("dispatch: $action")
         mainScope.launch {
-            withRustOr(Unit, "dispatch") {
+            withRustOr(Unit) {
                 dispatch(action)
             }
         }

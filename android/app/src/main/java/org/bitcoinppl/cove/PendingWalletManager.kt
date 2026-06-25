@@ -55,15 +55,13 @@ class PendingWalletManager(
     }
 
     private fun <T> withRust(
-        callName: String,
         block: RustPendingWalletManager.() -> T,
-    ): T = rustGuard.withHandle(rust, callName, block)
+    ): T = rustGuard.withHandle(rust, block)
 
     private fun <T> withRustOr(
         defaultValue: T,
-        callName: String,
         block: RustPendingWalletManager.() -> T,
-    ): T = rustGuard.withHandleOr(rust, defaultValue, callName, block)
+    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
 
     override fun reconcile(message: PendingWalletManagerReconcileMessage) {
         logDebug("Reconcile: $message")
@@ -71,7 +69,7 @@ class PendingWalletManager(
             when (message) {
                 is PendingWalletManagerReconcileMessage.Words -> {
                     numberOfWords = message.v1
-                    bip39Words = withRustOr(emptyList(), "bip39Words") {
+                    bip39Words = withRustOr(emptyList()) {
                         bip39Words()
                     }
                 }
@@ -82,19 +80,19 @@ class PendingWalletManager(
     fun dispatch(action: PendingWalletManagerAction) {
         logDebug("dispatch: $action")
         mainScope.launch(Dispatchers.IO) {
-            withRustOr(Unit, "dispatch") {
+            withRustOr(Unit) {
                 dispatch(action)
             }
         }
     }
 
     fun bip39WordsGrouped(): List<List<GroupedWord>> =
-        withRustOr(emptyList(), "bip39WordsGrouped") {
+        withRustOr(emptyList()) {
             bip39WordsGrouped()
         }
 
     fun saveWallet(): PendingWalletSaveResult =
-        withRust("saveWallet") {
+        withRust {
             saveWallet()
         }
 
