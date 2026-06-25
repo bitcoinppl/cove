@@ -357,7 +357,7 @@ class MainActivity : FragmentActivity() {
                             // non-blocking — initData preloads caches and prices but is not
                             // required for core functionality, failures are logged but not surfaced to the user
                             this@MainActivity.lifecycleScope.launch {
-                                appInstance.rust.initData()
+                                appInstance.initData()
                                 Log.d(TAG, "[STARTUP] initData completed")
                             }
                         }
@@ -543,4 +543,3 @@ class MainActivity : FragmentActivity() {
         private const val TAG = "MainActivity"
     }
 }
-

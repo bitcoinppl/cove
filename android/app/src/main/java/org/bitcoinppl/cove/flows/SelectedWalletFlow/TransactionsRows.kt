@@ -530,7 +530,7 @@ internal fun UnsignedTransactionWidget(
                 onClick = {
                     showDeleteMenu = false
                     try {
-                        manager.rust.deleteUnsignedTransaction(txn.id())
+                        manager.deleteUnsignedTransaction(txn.id())
                     } catch (e: Exception) {
                         android.util.Log.e("UnsignedTxWidget", "Failed to delete unsigned transaction", e)
                         app.alertState =

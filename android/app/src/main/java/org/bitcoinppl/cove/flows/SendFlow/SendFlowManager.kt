@@ -12,6 +12,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.RustHandleGuard
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
@@ -23,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * ported from iOS SendFlowManager.swift
  */
 @Stable
-class SendFlowManager(
+class SendFlowManager internal constructor(
     private val rust: RustSendFlowManager,
     var presenter: SendFlowPresenter,
 ) : SendFlowManagerReconciler,
@@ -33,6 +34,14 @@ class SendFlowManager(
     // Scope for UI-bound work; reconcile and UI updates run on Main
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val isClosed = AtomicBoolean(false)
+    private val rustGuard =
+        RustHandleGuard(
+            ownerName = "SendFlowManager",
+            handleName = "RustSendFlowManager",
+            isClosed = isClosed,
+        ) {
+            logWarn(it)
+        }
 
     val id: WalletId = rust.walletId()
 
@@ -105,43 +114,22 @@ class SendFlowManager(
         android.util.Log.w(tag, message)
     }
 
-    private fun markClosedAfterDestroyedHandle(
+    private suspend fun <T> withRustSuspend(
         callName: String,
-        error: IllegalStateException,
-    ) {
-        isClosed.set(true)
-        logWarn("$callName skipped because RustSendFlowManager is closed: ${error.message}")
-    }
+        block: suspend RustSendFlowManager.() -> T,
+    ): T = rustGuard.withHandleSuspend(rust, callName, block)
 
-    private inline fun <T> withRustOr(
+    private fun <T> withRustOr(
         defaultValue: T,
         callName: String,
         block: RustSendFlowManager.() -> T,
-    ): T {
-        if (isClosed.get()) return defaultValue
+    ): T = rustGuard.withHandleOr(rust, defaultValue, callName, block)
 
-        return try {
-            rust.block()
-        } catch (e: IllegalStateException) {
-            markClosedAfterDestroyedHandle(callName, e)
-            defaultValue
-        }
-    }
-
-    private suspend inline fun <T> withRustOrSuspend(
+    private suspend fun <T> withRustOrSuspend(
         defaultValue: T,
         callName: String,
-        crossinline block: suspend RustSendFlowManager.() -> T,
-    ): T {
-        if (isClosed.get()) return defaultValue
-
-        return try {
-            rust.block()
-        } catch (e: IllegalStateException) {
-            markClosedAfterDestroyedHandle(callName, e)
-            defaultValue
-        }
-    }
+        block: suspend RustSendFlowManager.() -> T,
+    ): T = rustGuard.withHandleOrSuspend(rust, defaultValue, callName, block)
 
     /**
      * get/set entering address with dispatch
@@ -287,18 +275,10 @@ class SendFlowManager(
     suspend fun getNewCustomFeeRateWithTotal(
         feeRate: FeeRate,
         feeSpeed: FeeSpeed,
-    ): FeeRateOptionWithTotalFee {
-        if (isClosed.get()) {
-            throw IllegalStateException("SendFlowManager is closed")
+    ): FeeRateOptionWithTotalFee =
+        withRustSuspend("getCustomFeeOption") {
+            getCustomFeeOption(feeRate, feeSpeed)
         }
-
-        return try {
-            rust.getCustomFeeOption(feeRate, feeSpeed)
-        } catch (e: IllegalStateException) {
-            markClosedAfterDestroyedHandle("getCustomFeeOption", e)
-            throw e
-        }
-    }
 
     private fun apply(message: SendFlowManagerReconcileMessage) {
         when (message) {
@@ -418,12 +398,13 @@ class SendFlowManager(
     }
 
     override fun close() {
-        if (!isClosed.compareAndSet(false, true)) return
-        logDebug("Closing SendFlowManager for $id")
-        debouncedTask?.cancel()
-        debouncedTask = null
-        mainScope.cancel()
-        rust.close()
+        rustGuard.closeOnce {
+            logDebug("Closing SendFlowManager for $id")
+            debouncedTask?.cancel()
+            debouncedTask = null
+            mainScope.cancel()
+            rust.close()
+        }
     }
 
     companion object {

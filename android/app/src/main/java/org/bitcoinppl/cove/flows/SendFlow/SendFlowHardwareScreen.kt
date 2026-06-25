@@ -83,7 +83,7 @@ fun SendFlowHardwareScreen(
     LaunchedEffect(app.prices) {
         app.prices?.let { prices ->
             val amount = details.sendingAmount()
-            fiatAmount = walletManager.rust.convertAndDisplayFiat(amount, prices)
+            fiatAmount = walletManager.convertAndDisplayFiat(amount, prices)
         } ?: run {
             app.dispatch(AppAction.UpdateFiatPrices)
         }
@@ -115,7 +115,7 @@ fun SendFlowHardwareScreen(
                 actions = {
                     IconButton(onClick = {
                         try {
-                            walletManager.rust.deleteUnsignedTransaction(details.id())
+                            walletManager.deleteUnsignedTransaction(details.id())
                             app.popRoute()
                         } catch (e: Exception) {
                             Log.e(

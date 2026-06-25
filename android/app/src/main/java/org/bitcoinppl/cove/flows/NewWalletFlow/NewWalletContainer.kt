@@ -26,7 +26,7 @@ fun NewWalletContainer(
 
     when (route) {
         is NewWalletRoute.Select -> {
-            val canGoBack = app.rust.canGoBack()
+            val canGoBack = app.canGoBack()
 
             NewWalletSelectScreen(
                 app = app,

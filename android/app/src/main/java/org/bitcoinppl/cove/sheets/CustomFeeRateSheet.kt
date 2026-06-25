@@ -200,7 +200,7 @@ fun CustomFeeRateSheet(
         remember(totalSats, app.prices) {
             val sats = totalSats ?: return@remember ""
             app.prices?.let { prices ->
-                "≈ ${walletManager.rust.convertAndDisplayFiat(Amount.fromSat(sats.toULong()), prices)}"
+                "≈ ${walletManager.convertAndDisplayFiat(Amount.fromSat(sats.toULong()), prices)}"
             } ?: ""
         }
 

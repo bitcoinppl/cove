@@ -85,7 +85,7 @@ fun SendFlowConfirmScreen(
     LaunchedEffect(app.prices) {
         app.prices?.let { prices ->
             val amount = details.sendingAmount()
-            fiatAmount = walletManager.rust.convertAndDisplayFiat(amount, prices)
+            fiatAmount = walletManager.convertAndDisplayFiat(amount, prices)
         } ?: run {
             app.dispatch(org.bitcoinppl.cove_core.AppAction.UpdateFiatPrices)
         }

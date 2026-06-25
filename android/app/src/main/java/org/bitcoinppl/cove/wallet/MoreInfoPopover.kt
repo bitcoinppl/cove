@@ -61,7 +61,7 @@ fun rememberWalletExportLaunchers(
                             } ?: throw Exception("Unable to read file")
 
                         // validate import was successful before showing success message
-                        currentManager.rust.labelManager().use { labelManager ->
+                        currentManager.labelManager().use { labelManager ->
                             labelManager.import(fileContents.trim())
                         }
 
@@ -100,10 +100,10 @@ fun rememberWalletExportLaunchers(
                         val content =
                             when (currentExportType) {
                                 is ExportType.Transactions -> {
-                                    currentManager?.rust?.exportTransactionsCsv()?.content
+                                    currentManager?.exportTransactionsCsv()?.content
                                 }
                                 is ExportType.Labels -> {
-                                    currentManager?.rust?.exportLabelsForShare()?.content
+                                    currentManager?.exportLabelsForShare()?.content
                                 }
                                 null -> null
                             }

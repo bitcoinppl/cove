@@ -53,7 +53,7 @@ class WalletManager :
     private val isClosed = AtomicBoolean(false)
 
     val id: WalletId
-    internal val rust: RustWalletManager
+    private val rust: RustWalletManager
 
     // observable state
     var walletMetadata by mutableStateOf<WalletMetadata?>(null)
@@ -223,16 +223,53 @@ class WalletManager :
         }
     }
 
+    private val rustGuard =
+        RustHandleGuard(
+            ownerName = "WalletManager",
+            handleName = "RustWalletManager",
+            isClosed = isClosed,
+        ) {
+            android.util.Log.w(tag, it)
+        }
+
+    private fun <T> withRust(
+        callName: String,
+        block: RustWalletManager.() -> T,
+    ): T = rustGuard.withHandle(rust, callName, block)
+
+    private fun <T> withRustOr(
+        defaultValue: T,
+        callName: String,
+        block: RustWalletManager.() -> T,
+    ): T = rustGuard.withHandleOr(rust, defaultValue, callName, block)
+
+    private suspend fun <T> withRustSuspend(
+        callName: String,
+        block: suspend RustWalletManager.() -> T,
+    ): T = rustGuard.withHandleSuspend(rust, callName, block)
+
+    private suspend fun <T> withRustOrSuspend(
+        defaultValue: T,
+        callName: String,
+        block: suspend RustWalletManager.() -> T,
+    ): T = rustGuard.withHandleOrSuspend(rust, defaultValue, callName, block)
+
     fun validateMetadata() {
-        rust.validateMetadata()
+        withRustOr(Unit, "validateMetadata") {
+            validateMetadata()
+        }
     }
 
     suspend fun forceWalletScan() {
-        rust.forceWalletScan()
+        withRustSuspend("forceWalletScan") {
+            forceWalletScan()
+        }
     }
 
     suspend fun startWalletScan() {
-        rust.startWalletScan()
+        withRustSuspend("startWalletScan") {
+            startWalletScan()
+        }
     }
 
     fun setScanning() {
@@ -245,7 +282,161 @@ class WalletManager :
         loadState = WalletLoadState.SCANNING(currentTxns)
     }
 
-    suspend fun firstAddress(): AddressInfo = rust.addressAt(0u)
+    suspend fun firstAddress(): AddressInfo =
+        withRustSuspend("addressAt") {
+            addressAt(0u)
+        }
+
+    internal fun newSendFlowManager(balance: Balance): RustSendFlowManager =
+        withRust("newSendFlowManager") {
+            newSendFlowManager(balance)
+        }
+
+    suspend fun newCoinControlManager(): CoinControlManager =
+        CoinControlManager(
+            withRustSuspend("newCoinControlManager") {
+                newCoinControlManager()
+            },
+        )
+
+    suspend fun refreshTransactions() {
+        withRustSuspend("getTransactions") {
+            getTransactions()
+        }
+    }
+
+    suspend fun forceUpdateHeight(): UInt =
+        withRustSuspend("forceUpdateHeight") {
+            forceUpdateHeight()
+        }
+
+    fun labelManager(): LabelManager =
+        withRust("labelManager") {
+            labelManager()
+        }
+
+    fun hasLabels(): Boolean =
+        withRustOr(false, "labelManager.hasLabels") {
+            labelManager().use { it.hasLabels() }
+        }
+
+    suspend fun switchToDifferentWalletAddressType(type: WalletAddressType) {
+        withRustSuspend("switchToDifferentWalletAddressType") {
+            switchToDifferentWalletAddressType(type)
+        }
+    }
+
+    fun deleteWallet() {
+        withRust("deleteWallet") {
+            deleteWallet()
+        }
+    }
+
+    fun deletionWarningMessage(): String =
+        withRustOr("", "deletionWarningMessage") {
+            deletionWarningMessage()
+        }
+
+    fun requiredDeletionConfirmations(): UByte =
+        withRustOr(1u, "requiredDeletionConfirmations") {
+            requiredDeletionConfirmations()
+        }
+
+    fun nonDefaultAccountNumber(): UInt? =
+        withRustOr(null, "nonDefaultAccountNumber") {
+            nonDefaultAccountNumber()
+        }
+
+    fun masterFingerprint(): String? =
+        withRustOr(null, "masterFingerprint") {
+            masterFingerprint()
+        }
+
+    suspend fun exportLabelsForQr(density: QrDensity): List<String> =
+        withRustOrSuspend(emptyList(), "exportLabelsForQr") {
+            exportLabelsForQr(density)
+        }
+
+    suspend fun exportLabelsForShare(): LabelExportResult =
+        withRustSuspend("exportLabelsForShare") {
+            exportLabelsForShare()
+        }
+
+    suspend fun exportTransactionsCsv(): TransactionExportResult =
+        withRustSuspend("exportTransactionsCsv") {
+            exportTransactionsCsv()
+        }
+
+    suspend fun exportXpubForQr(density: QrDensity): List<String> =
+        withRustOrSuspend(emptyList(), "exportXpubForQr") {
+            exportXpubForQr(density)
+        }
+
+    suspend fun exportXpubForShare(): XpubExportResult =
+        withRustSuspend("exportXpubForShare") {
+            exportXpubForShare()
+        }
+
+    fun setWalletType(walletType: WalletType) {
+        withRust("setWalletType") {
+            setWalletType(walletType)
+        }
+    }
+
+    fun markWalletAsVerified() {
+        withRust("markWalletAsVerified") {
+            markWalletAsVerified()
+        }
+    }
+
+    fun wordValidator(): WordValidator =
+        withRust("wordValidator") {
+            wordValidator()
+        }
+
+    fun deleteUnsignedTransaction(txnId: TxId) {
+        withRust("deleteUnsignedTransaction") {
+            deleteUnsignedTransaction(txnId)
+        }
+    }
+
+    suspend fun deleteUnsignedTransactionAsync(txnId: TxId) {
+        withRustSuspend("deleteUnsignedTransaction") {
+            deleteUnsignedTransaction(txnId)
+        }
+    }
+
+    suspend fun splitTransactionOutputs(outputs: List<AddressAndAmount>): SplitOutput =
+        withRustSuspend("splitTransactionOutputs") {
+            splitTransactionOutputs(outputs)
+        }
+
+    fun convertAndDisplayFiat(amount: Amount, prices: PriceResponse): String =
+        withRustOr("", "convertAndDisplayFiat") {
+            convertAndDisplayFiat(amount, prices)
+        }
+
+    suspend fun finalizePsbt(psbt: Psbt): BitcoinTransaction =
+        withRustSuspend("finalizePsbt") {
+            finalizePsbt(psbt)
+        }
+
+    suspend fun broadcastTransaction(transaction: BitcoinTransaction) {
+        withRustSuspend("broadcastTransaction") {
+            broadcastTransaction(transaction)
+        }
+    }
+
+    suspend fun initiatePayment(psbt: Psbt, payjoinEndpoint: String?) {
+        withRustSuspend("initiatePayment") {
+            initiatePayment(psbt, payjoinEndpoint)
+        }
+    }
+
+    suspend fun numberOfConfirmations(blockHeight: UInt): UInt =
+        withRustSuspend("numberOfConfirmations") {
+            numberOfConfirmations(blockHeight)
+        }
 
     fun amountFmt(amount: Amount): String =
         when (walletMetadata?.selectedUnit) {
@@ -309,27 +500,42 @@ class WalletManager :
         transactionDetailsCache[txId]?.let { return it }
 
         // fetch from rust and cache
-        val details = rust.transactionDetails(txId)
+        val details =
+            withRustSuspend("transactionDetails") {
+                transactionDetails(txId)
+            }
         transactionDetailsCache[txId] = details
         return details
     }
 
     suspend fun refreshTransactionDetails(txId: TxId): TransactionDetails {
-        val details = rust.transactionDetails(txId)
+        val details =
+            withRustSuspend("transactionDetails") {
+                transactionDetails(txId)
+            }
         transactionDetailsCache[txId] = details
 
         val blockNumber = details.blockNumber()
         if (blockNumber != null) {
-            transactionConfirmations[txId] = rust.numberOfConfirmations(blockNumber)
+            transactionConfirmations[txId] =
+                withRustSuspend("numberOfConfirmations") {
+                    numberOfConfirmations(blockNumber)
+                }
         }
 
         return details
     }
 
-    suspend fun transactionLockState(txId: TxId): TransactionLockState = rust.transactionLockState(txId)
+    suspend fun transactionLockState(txId: TxId): TransactionLockState =
+        withRustSuspend("transactionLockState") {
+            transactionLockState(txId)
+        }
 
     suspend fun toggleTransactionLockState(txId: TxId): TransactionLockState {
-        val state = rust.toggleTransactionLockState(txId)
+        val state =
+            withRustSuspend("toggleTransactionLockState") {
+                toggleTransactionLockState(txId)
+            }
         AppManager.getInstance().reconcileAfterLabelImport(id)
 
         return state
@@ -344,7 +550,9 @@ class WalletManager :
         transactionDetailsCache.clear()
 
         return try {
-            rust.getTransactions()
+            withRustSuspend("getTransactions") {
+                getTransactions()
+            }
             true
         } catch (e: CancellationException) {
             throw e
@@ -404,7 +612,10 @@ class WalletManager :
     }
 
     suspend fun updateWalletBalance() {
-        val bal = rust.balance()
+        val bal =
+            withRustSuspend("balance") {
+                balance()
+            }
         withContext(Dispatchers.Main) {
             balance = bal
         }
@@ -414,7 +625,10 @@ class WalletManager :
         when (message) {
             is WalletManagerReconcileMessage.WalletScanStatusChanged -> {
                 scanStatus = message.v1
-                balancePresentationState = rust.balancePresentationForState(ledgerState)
+                balancePresentationState =
+                    withRustOr(balancePresentationState, "balancePresentationForState") {
+                        balancePresentationForState(ledgerState)
+                    }
                 if (message.v1.isActive) {
                     when (val current = loadState) {
                         is WalletLoadState.SCANNING -> Unit
@@ -435,7 +649,10 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.LedgerStateChanged -> {
                 ledgerState = message.v1
-                balancePresentationState = rust.balancePresentationForState(message.v1)
+                balancePresentationState =
+                    withRustOr(balancePresentationState, "balancePresentationForState") {
+                        balancePresentationForState(message.v1)
+                    }
                 reconcileLoadStateWithLedgerState()
             }
 
@@ -499,9 +716,9 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {
                 unsignedTransactions =
-                    runCatching {
-                        rust.getUnsignedTransactions()
-                    }.getOrElse { emptyList() }
+                    withRustOr(emptyList(), "getUnsignedTransactions") {
+                        getUnsignedTransactions()
+                    }
             }
 
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
@@ -599,7 +816,11 @@ class WalletManager :
         }
 
         logDebug("dispatch: $action")
-        mainScope.launch(Dispatchers.IO) { rust.dispatch(action) }
+        mainScope.launch(Dispatchers.IO) {
+            withRustOr(Unit, "dispatch") {
+                dispatch(action)
+            }
+        }
     }
 
     private fun Transaction.txId(): TxId =
@@ -609,7 +830,11 @@ class WalletManager :
         }
 
     private fun persistWalletMetadata(metadata: WalletMetadata) {
-        ioScope.launch { rust.setWalletMetadata(metadata) }
+        ioScope.launch {
+            withRustOr(Unit, "setWalletMetadata") {
+                setWalletMetadata(metadata)
+            }
+        }
     }
 
     private fun reconcileLoadStateWithLedgerState() {
@@ -629,12 +854,13 @@ class WalletManager :
     }
 
     override fun close() {
-        if (!isClosed.compareAndSet(false, true)) return
-        logDebug("Closing WalletManager for $id")
-        rust.shutdown()
-        ioScope.cancel()
-        mainScope.cancel()
-        rust.close()
+        rustGuard.closeOnce {
+            logDebug("Closing WalletManager for $id")
+            rust.shutdown()
+            ioScope.cancel()
+            mainScope.cancel()
+            rust.close()
+        }
     }
 }
 

@@ -89,7 +89,7 @@ fun HotWalletCreateScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     onBackPressed: (() -> Unit)? = null,
 ) {
-    val groupedWords = remember(manager) { manager.rust.bip39WordsGrouped() }
+    val groupedWords = remember(manager) { manager.bip39WordsGrouped() }
     var currentPage by remember { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { groupedWords.size })
     val scope = rememberCoroutineScope()
@@ -128,7 +128,7 @@ fun HotWalletCreateScreen(
         isSaving = true
 
         try {
-            val result = manager.rust.saveWallet()
+            val result = manager.saveWallet()
             app.resetRoute(result.routes)
         } catch (e: Exception) {
             Log.e("HotWalletCreate", "error saving wallet", e)

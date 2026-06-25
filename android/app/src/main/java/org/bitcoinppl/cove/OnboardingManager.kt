@@ -85,6 +85,14 @@ class OnboardingManager internal constructor(
     private val mainScope = CoroutineScope(SupervisorJob() + mainDispatcher)
     private val rustScope = CoroutineScope(SupervisorJob() + rustDispatcher)
     private val isClosed = AtomicBoolean(false)
+    private val rustGuard =
+        RustHandleGuard(
+            ownerName = "OnboardingManager",
+            handleName = "RustOnboardingManager",
+            isClosed = isClosed,
+        ) {
+            Log.w(TAG, it)
+        }
 
     var state by mutableStateOf(rust.state())
         private set
@@ -96,17 +104,45 @@ class OnboardingManager internal constructor(
         rust.listenForUpdates(this)
     }
 
+    private fun withRustOr(
+        callName: String,
+        block: OnboardingRustHandle.() -> Unit,
+    ) {
+        runCatching {
+            rustGuard.withHandleOr(rust, Unit, callName, block)
+        }
+            .onFailure { error ->
+                Log.e(TAG, "onboarding rust call failed: $callName", error)
+            }
+    }
+
+    private fun <T> withRustOr(
+        defaultValue: T,
+        callName: String,
+        block: OnboardingRustHandle.() -> T,
+    ): T {
+        return runCatching {
+            rustGuard.withHandleOr(rust, defaultValue, callName, block)
+        }
+            .onFailure { error ->
+                Log.e(TAG, "onboarding rust call failed: $callName", error)
+            }
+            .getOrDefault(defaultValue)
+    }
+
     fun dispatch(action: OnboardingAction) {
         rustScope.launch {
-            runCatching { rust.dispatch(action) }
-                .onFailure { error ->
-                    val actionType = action::class.simpleName ?: "Unknown"
-                    Log.e(TAG, "onboarding action failed: $actionType", error)
-                }
+            val actionType = action::class.simpleName ?: "Unknown"
+            withRustOr("dispatch.$actionType") {
+                dispatch(action)
+            }
         }
     }
 
-    fun currentWalletId(): WalletId? = rust.currentWalletId()
+    fun currentWalletId(): WalletId? =
+        withRustOr(null, "currentWalletId") {
+            currentWalletId()
+        }
 
     override fun reconcile(message: OnboardingReconcileMessage) {
         mainScope.launch {
@@ -117,10 +153,11 @@ class OnboardingManager internal constructor(
     }
 
     override fun close() {
-        if (!isClosed.compareAndSet(false, true)) return
-        mainScope.cancel()
-        rustScope.cancel()
-        rust.close()
+        rustGuard.closeOnce {
+            mainScope.cancel()
+            rustScope.cancel()
+            rust.close()
+        }
     }
 
     companion object {
