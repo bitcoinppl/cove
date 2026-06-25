@@ -762,7 +762,7 @@ impl RustWalletManager {
                 .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
                 self.refresh_metadata_from_database()?;
 
-                // reset route so it reloads the wallet with new txns
+                // reset route as a navigation fallback; actor scan refreshes transactions
                 FfiApp::global().load_and_reset_default_route(Route::SelectedWallet(id));
             }
 
@@ -776,7 +776,7 @@ impl RustWalletManager {
 
                 debug!("switch done");
 
-                // reset route so it reloads the wallet with new txns
+                // reset route as a navigation fallback; actor scan refreshes transactions
                 FfiApp::global().load_and_reset_default_route(Route::SelectedWallet(id));
             }
 
