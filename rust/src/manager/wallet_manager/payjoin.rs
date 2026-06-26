@@ -682,8 +682,10 @@ pub(crate) enum SessionResumption {
     Resume(Box<PayjoinActor>),
     /// A BroadcastProposal marker was stored: broadcast this exact consensus-encoded tx
     BroadcastStoredProposal { proposal_tx: BdkTransaction },
-    /// Session closed with a success outcome but no stored tx: re-sign and broadcast
-    BroadcastProposal { proposal_psbt: Psbt, fallback_tx: BdkTransaction },
+    /// Session closed with a success outcome but no stored tx: sign the recovered PSBT and broadcast.
+    /// `fallback_tx` is intentionally omitted — a local signing failure during recovery must pause
+    /// and preserve the record rather than downgrade to the original transaction.
+    SignRecoveredProposal { proposal_psbt: Psbt },
     /// Session ended without a proposal, broadcast the original tx
     BroadcastFallback { fallback_tx: BdkTransaction },
     /// The stored proposal tx is corrupt; the record is retained and the user must be notified.
@@ -755,7 +757,7 @@ pub(crate) fn resume_session(
         }
 
         SendSession::Closed(SessionOutcome::Success(proposal_psbt)) => {
-            SessionResumption::BroadcastProposal { proposal_psbt, fallback_tx }
+            SessionResumption::SignRecoveredProposal { proposal_psbt }
         }
 
         SendSession::Closed(_) => SessionResumption::BroadcastFallback { fallback_tx },

@@ -203,8 +203,8 @@ impl WalletActor {
                 send!(self.addr.handle_payjoin_proposal_broadcast(proposal_tx));
             }
 
-            SessionResumption::BroadcastProposal { proposal_psbt, fallback_tx } => {
-                send!(self.addr.handle_payjoin_success(proposal_psbt, fallback_tx));
+            SessionResumption::SignRecoveredProposal { proposal_psbt } => {
+                send!(self.addr.handle_recovered_payjoin_success(proposal_psbt));
             }
 
             SessionResumption::BroadcastFallback { fallback_tx } => {

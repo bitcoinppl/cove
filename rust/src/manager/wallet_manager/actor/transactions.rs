@@ -811,6 +811,47 @@ impl WalletActor {
         Produces::ok(())
     }
 
+    /// Handles a recovered session that closed with a receiver proposal but no stored tx.
+    /// On signing failure the session record is kept for retry — the receiver's proposal was valid
+    /// and the original transaction must not be broadcast as a fallback.
+    pub async fn handle_recovered_payjoin_success(
+        &mut self,
+        proposal_psbt: Psbt,
+    ) -> ActorResult<()> {
+        let proposal_tx = match self.do_sign_original_psbt(proposal_psbt).await {
+            Ok((_, tx)) => tx,
+            Err(error) => {
+                error!("failed to sign recovered payjoin proposal, pausing for retry: {error:?}");
+                // retain the session record — the receiver's proposal was valid;
+                // do not broadcast the fallback or write any terminal marker
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::SignAndBroadcast(
+                        "could not sign the recovered payjoin proposal; unlock the wallet and restart"
+                            .to_string(),
+                    ),
+                ));
+                self.payjoin_actor = None;
+                return Produces::ok(());
+            }
+        };
+
+        let persister = PayjoinSessionPersister::new(self.db.clone());
+        if let Err(error) = persister.set_pending_proposal(&proposal_tx) {
+            error!("failed to persist recovered proposal intent, aborting: {error}");
+            self.send(WalletManagerReconcileMessage::SendFlowError(
+                SendFlowErrorAlert::SignAndBroadcast(
+                    "failed to persist recovery state; please restart the app".to_string(),
+                ),
+            ));
+            self.payjoin_actor = None;
+            return Produces::ok(());
+        }
+
+        self.broadcast_payjoin_terminal(proposal_tx).await;
+        self.payjoin_actor = None;
+        Produces::ok(())
+    }
+
     pub async fn handle_payjoin_fallback(
         &mut self,
         fallback_tx: BdkTransaction,
