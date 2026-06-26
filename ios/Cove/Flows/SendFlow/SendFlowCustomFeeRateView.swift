@@ -7,6 +7,17 @@
 
 import SwiftUI
 
+func isTooHighCustomFeeError(_ error: Error) -> Bool {
+    switch error {
+    case SendFlowError.InsufficientFunds:
+        true
+    case SendFlowError.WalletManager(.InsufficientFunds(_)):
+        true
+    default:
+        false
+    }
+}
+
 struct SendFlowCustomFeeRateView: View {
     @Environment(AppManager.self) private var app
     @Environment(WalletManager.self) private var manager
@@ -90,7 +101,12 @@ struct SendFlowCustomFeeRateView: View {
                     self.feeOptions = feeOptions
                     presenter.lastWorkingFeeRate = feeRate.satPerVb()
                 }
-            } catch let SendFlowError.WalletManager(.InsufficientFunds(error)) {
+            } catch {
+                guard isTooHighCustomFeeError(error) else {
+                    Log.error("Unable to get accurate total sats \(error)")
+                    return
+                }
+
                 Log.error("Unable to get accurate total sats \(error), setting max fee rate to \(feeRate.satPerVb())")
                 let feeRate = feeRate.satPerVb()
 
@@ -104,8 +120,6 @@ struct SendFlowCustomFeeRateView: View {
                         presenter.alertState = .init(.general(title: "Fee too high!", message: "The fee rate you entered is too high, we automatically selected a lower fee"))
                     }
                 }
-            } catch {
-                Log.error("Unable to get accurate total sats \(error)")
             }
         }
     }

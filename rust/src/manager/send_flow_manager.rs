@@ -794,11 +794,33 @@ mod tests {
         message
     }
 
+    fn drain_reconcile_messages(manager: &super::RustSendFlowManager) -> Vec<super::Message> {
+        let mut messages = Vec::new();
+
+        while let Ok(message) = manager.reconcile_receiver.try_recv() {
+            match message {
+                SingleOrMany::Single(message) => messages.push(message),
+                SingleOrMany::Many(batch) => messages.extend(batch),
+            }
+        }
+
+        messages
+    }
+
     fn pending_warning_kind(
         manager: &super::RustSendFlowManager,
     ) -> Option<super::SendFlowWarningKind> {
         match manager.pending_send_warning()? {
             super::SendFlowAlertState::Warning { kind, .. } => Some(kind),
+            _ => None,
+        }
+    }
+
+    fn warning_message_kind(message: &super::Message) -> Option<super::SendFlowWarningKind> {
+        match message {
+            super::Message::SetAlert(super::SendFlowAlertState::Warning { kind, .. }) => {
+                Some(*kind)
+            }
             _ => None,
         }
     }
@@ -856,16 +878,93 @@ mod tests {
     }
 
     #[test]
-    fn acknowledging_small_amount_then_rerunning_finalize_reveals_high_fee() {
+    fn acknowledging_small_amount_through_finalize_reveals_high_fee() {
         let manager = manager_for_validation();
         set_valid_amount_and_address(&manager, 1_000);
         set_selected_fee_total(&manager, 60);
 
+        manager.finalize_and_go_to_next_screen();
+
+        let message = next_reconcile_message(&manager);
+        assert_eq!(warning_message_kind(&message), Some(super::SendFlowWarningKind::SmallAmount));
+
+        manager.clone().dispatch(super::Action::AcknowledgeWarningAndFinalize(
+            super::SendFlowWarningKind::SmallAmount,
+        ));
+
+        let messages = drain_reconcile_messages(&manager);
+        assert!(messages.contains(&super::Message::ClearAlert));
+        assert!(
+            messages.iter().any(|message| warning_message_kind(message)
+                == Some(super::SendFlowWarningKind::HighFee))
+        );
+    }
+
+    #[test]
+    fn acknowledging_final_warning_through_finalize_proceeds_past_warning_gate() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 1_000);
+        set_selected_fee_total(&manager, 60);
+
+        manager.finalize_and_go_to_next_screen();
+        assert_eq!(
+            warning_message_kind(&next_reconcile_message(&manager)),
+            Some(super::SendFlowWarningKind::SmallAmount)
+        );
+
+        manager.clone().dispatch(super::Action::AcknowledgeWarningAndFinalize(
+            super::SendFlowWarningKind::SmallAmount,
+        ));
+        let messages = drain_reconcile_messages(&manager);
+        assert!(
+            messages.iter().any(|message| warning_message_kind(message)
+                == Some(super::SendFlowWarningKind::HighFee))
+        );
+
+        manager.clone().dispatch(super::Action::AcknowledgeWarningAndFinalize(
+            super::SendFlowWarningKind::HighFee,
+        ));
+
+        let messages = drain_reconcile_messages(&manager);
+        let focus_update_index = messages
+            .iter()
+            .position(|message| matches!(message, super::Message::UpdateFocusField(None)));
+        let alert_index =
+            messages.iter().position(|message| matches!(message, super::Message::SetAlert(_)));
+
+        assert!(messages.contains(&super::Message::ClearAlert));
+        assert!(focus_update_index.is_some());
+        assert!(alert_index.is_none_or(|alert_index| {
+            focus_update_index.is_some_and(|focus_update_index| focus_update_index < alert_index)
+        }));
+    }
+
+    #[test]
+    fn acknowledged_small_amount_rearms_when_amount_changes_through_dispatch() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 1_000);
+        set_selected_fee_total(&manager, 60);
+
+        manager.finalize_and_go_to_next_screen();
+        assert_eq!(
+            warning_message_kind(&next_reconcile_message(&manager)),
+            Some(super::SendFlowWarningKind::SmallAmount)
+        );
+
+        manager.clone().dispatch(super::Action::AcknowledgeWarningAndFinalize(
+            super::SendFlowWarningKind::SmallAmount,
+        ));
+        assert!(drain_reconcile_messages(&manager).iter().any(|message| warning_message_kind(
+            message
+        ) == Some(
+            super::SendFlowWarningKind::HighFee
+        )));
+
+        manager
+            .clone()
+            .dispatch(super::Action::NotifyAmountChanged(Arc::new(super::Amount::from_sat(2_000))));
+
         assert_eq!(pending_warning_kind(&manager), Some(super::SendFlowWarningKind::SmallAmount));
-
-        manager.state.lock().acknowledge_warning(super::SendFlowWarningKind::SmallAmount);
-
-        assert_eq!(pending_warning_kind(&manager), Some(super::SendFlowWarningKind::HighFee));
     }
 
     #[test]
