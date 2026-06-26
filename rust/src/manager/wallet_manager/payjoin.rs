@@ -136,6 +136,25 @@ impl PayjoinSessionPersister {
         };
         self.db.set_payjoin_sender_session(session)
     }
+
+    /// Returns the txid committed in the session's terminal marker, if any.
+    /// Used by the send gate to detect stale-cleanup state without a network call.
+    pub(crate) fn pending_txid(&self) -> Option<bitcoin::Txid> {
+        let session = self.db.get_payjoin_sender_session().ok()??;
+        match &session.pending_action {
+            None => None,
+            Some(PendingAction::BroadcastFallback) => {
+                consensus::deserialize::<BdkTransaction>(&session.fallback_tx)
+                    .ok()
+                    .map(|tx| tx.compute_txid())
+            }
+            Some(PendingAction::BroadcastProposal { transaction }) => {
+                consensus::deserialize::<BdkTransaction>(transaction)
+                    .ok()
+                    .map(|tx| tx.compute_txid())
+            }
+        }
+    }
 }
 
 impl SessionPersister for PayjoinSessionPersister {
@@ -704,7 +723,9 @@ pub(crate) fn resume_session(
         Ok(None) => return SessionResumption::None,
         Err(error) => {
             error!("failed to read payjoin session record: {error}");
-            return SessionResumption::None;
+            return SessionResumption::ReportError {
+                message: "could not read payjoin session; reopen the wallet to retry".to_string(),
+            };
         }
     };
 
@@ -764,16 +785,32 @@ pub(crate) fn resume_session(
     }
 }
 
-/// Recovers the fallback tx stored in the session record when replay is not possible
+/// Recovers the fallback tx from the session record when replay is not possible.
 fn fallback_from_record(db: &WalletDataDb, record: PayjoinSenderSession) -> SessionResumption {
     match consensus::deserialize(&record.fallback_tx) {
         Ok(fallback_tx) => SessionResumption::BroadcastFallback { fallback_tx },
-        Err(error) => {
-            error!("stored payjoin fallback tx is corrupt, abandoning session: {error}");
-            if let Err(error) = db.delete_payjoin_sender_session() {
-                warn!("failed to clear corrupt payjoin session record: {error}");
+
+        Err(error) if matches!(record.pending_action, Some(PendingAction::BroadcastFallback)) => {
+            // Marker was written before broadcast, so the fallback may have reached the node.
+            // Retain the record — we can't know the outcome.
+            error!(
+                "committed payjoin fallback tx is unreadable; retaining session record: {error}"
+            );
+            SessionResumption::ReportError {
+                message: "payjoin fallback data is unreadable — check your transaction history before retrying".to_string(),
             }
-            SessionResumption::None
+        }
+
+        Err(error) => {
+            // No terminal marker means the fallback was never dispatched; safe to clear.
+            error!("payjoin fallback tx is corrupt, clearing session: {error}");
+            if let Err(delete_error) = db.delete_payjoin_sender_session() {
+                warn!("failed to clear corrupt payjoin session record: {delete_error}");
+            }
+            SessionResumption::ReportError {
+                message: "saved payjoin recovery data was unreadable; the payment was not sent"
+                    .to_string(),
+            }
         }
     }
 }
@@ -1133,7 +1170,37 @@ mod tests {
 
         let resumption = resume_session(db.clone(), WeakAddr::default());
 
-        assert!(matches!(resumption, SessionResumption::None));
-        assert_eq!(db.get_payjoin_sender_session().unwrap(), None);
+        assert!(
+            matches!(resumption, SessionResumption::ReportError { .. }),
+            "corrupt fallback with no marker must surface an error"
+        );
+        assert_eq!(
+            db.get_payjoin_sender_session().unwrap(),
+            None,
+            "record must be cleared when fallback was never dispatched"
+        );
+    }
+
+    #[test]
+    fn resume_with_corrupt_committed_fallback_retains_the_record() {
+        let (_persister, db, _tmp) = new_test_persister();
+        let session = PayjoinSenderSession {
+            events: vec![],
+            fallback_tx: vec![0xff],
+            created_at_secs: None,
+            pending_action: Some(PendingAction::BroadcastFallback), // marker written before crash
+        };
+        db.set_payjoin_sender_session(session).unwrap();
+
+        let resumption = resume_session(db.clone(), WeakAddr::default());
+
+        assert!(
+            matches!(resumption, SessionResumption::ReportError { .. }),
+            "corrupt committed fallback must surface an error"
+        );
+        assert!(
+            db.get_payjoin_sender_session().unwrap().is_some(),
+            "record must be retained when broadcast outcome is unknown"
+        );
     }
 }

@@ -458,10 +458,39 @@ impl WalletActor {
             Ok(None) => {}
 
             Ok(Some(_)) => {
-                return Produces::ok(Err(Error::SignAndBroadcastError(
-                    "a previous payjoin session is pending recovery; please try again later"
-                        .to_string(),
-                )));
+                // If the session has a terminal marker and the tx is already in the local
+                // wallet, the only remaining work is session cleanup — no network needed.
+                // Attempt it here so this send can proceed without requiring a restart.
+                let persister = PayjoinSessionPersister::new(self.db.clone());
+                let can_cleanup = persister
+                    .pending_txid()
+                    .is_some_and(|txid| self.wallet.bdk.get_tx(txid).is_some());
+
+                if !can_cleanup {
+                    return Produces::ok(Err(Error::SignAndBroadcastError(
+                        "a previous payjoin session is pending recovery; please try again later"
+                            .to_string(),
+                    )));
+                }
+
+                // Retry persistence before cleanup — a prior broadcast may have applied the tx
+                // in memory without flushing to disk; only drop the session once it is durable.
+                if let Err(error) = self.wallet.persist() {
+                    warn!("failed to persist wallet at send gate before payjoin cleanup: {error}");
+                    return Produces::ok(Err(Error::SignAndBroadcastError(
+                        "a previous payjoin session is pending cleanup; please try again later"
+                            .to_string(),
+                    )));
+                }
+
+                if let Err(error) = self.db.delete_payjoin_sender_session() {
+                    warn!("payjoin session cleanup at send gate failed: {error}");
+                    return Produces::ok(Err(Error::SignAndBroadcastError(
+                        "a previous payjoin session is pending cleanup; please try again later"
+                            .to_string(),
+                    )));
+                }
+                // record cleared — fall through to allow this send
             }
 
             Err(error) => {
@@ -747,9 +776,13 @@ impl WalletActor {
             )));
         }
 
-        if let Err(error) = self.db.delete_payjoin_sender_session() {
-            warn!("failed to clear payjoin session record: {error}");
-        }
+        let session_cleared = match self.db.delete_payjoin_sender_session() {
+            Ok(()) => true,
+            Err(error) => {
+                warn!("failed to clear payjoin session record: {error}");
+                false
+            }
+        };
 
         let balance = self.wallet.balance();
         self.send(Msg::WalletBalanceChanged(balance.into()));
@@ -758,7 +791,17 @@ impl WalletActor {
         self.send(Msg::UpdatedTransactions(transactions));
 
         send!(self.addr.start_transaction_watcher(txid));
-        self.send(Msg::PayjoinTxBroadcast);
+
+        if session_cleared {
+            self.send(Msg::PayjoinTxBroadcast);
+        } else {
+            // tx is broadcast and wallet-persisted, but the session record remains
+            // initiate_payment will reject new sends until the record is gone
+            // the next startup will clear it automatically via the wallet pre-check
+            self.send(Msg::SendFlowError(SendFlowErrorAlert::SignAndBroadcast(
+                "transaction was broadcast; restart the app to unlock sending".to_string(),
+            )));
+        }
 
         Produces::ok(Ok(()))
     }
