@@ -3074,6 +3074,7 @@ async fn disable_corrupted_persisted_state_fails_closed() {
         )
         .unwrap();
     globals.cloud.fail_list_wallet_files("disable should not inspect cloud wallets");
+    let list_wallet_files_attempt_count = globals.cloud.list_wallet_files_attempt_count();
 
     let error = manager.prepare_disable_cloud_backup().await.unwrap_err();
 
@@ -3089,7 +3090,7 @@ async fn disable_corrupted_persisted_state_fails_closed() {
         manager.current_status(),
         CloudBackupStatus::Error(message) if message == CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE
     ));
-    assert_eq!(globals.cloud.list_wallet_files_attempt_count(), 0);
+    assert_eq!(globals.cloud.list_wallet_files_attempt_count(), list_wallet_files_attempt_count);
 }
 
 #[tokio::test(flavor = "current_thread")]
