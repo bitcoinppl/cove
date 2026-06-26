@@ -128,6 +128,11 @@ impl EsploraClient {
         Ok(tx)
     }
 
+    /// Fetches a transaction from the mempool or chain; returns `None` if not found
+    pub async fn get_transaction(&self, txid: Txid) -> Result<Option<bitcoin::Transaction>, Error> {
+        self.client.get_tx(&txid).await.map_err(Error::EsploraGetTransaction)
+    }
+
     pub async fn broadcast_transaction(&self, txn: bitcoin::Transaction) -> Result<Txid, Error> {
         self.client.broadcast(&txn).await.map_err(Error::EsploraBroadcast)?;
 

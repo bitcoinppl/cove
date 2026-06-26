@@ -717,6 +717,10 @@ impl WalletActor {
         self.start_payjoin_terminal_broadcast(proposal_tx);
     }
 
+    async fn payjoin_terminal_tx_in_wallet(&mut self, txid: Txid) -> ActorResult<bool> {
+        Produces::ok(self.wallet.bdk.get_tx(txid).is_some())
+    }
+
     async fn apply_payjoin_terminal_broadcast(
         &mut self,
         tx: BdkTransaction,
@@ -847,8 +851,7 @@ impl WalletActor {
             return Produces::ok(());
         }
 
-        self.broadcast_payjoin_terminal(proposal_tx).await;
-        self.payjoin_actor = None;
+        self.start_payjoin_terminal_broadcast(proposal_tx);
         Produces::ok(())
     }
 
@@ -1051,7 +1054,24 @@ async fn broadcast_payjoin_terminal_with_connection(
     connection: Produces<Result<(), Error>>,
     transaction: BdkTransaction,
 ) -> Result<(), BroadcastTransactionError> {
-    broadcast_to_node_with_connection(addr.clone(), connection, &transaction).await?;
+    let txid = transaction.compute_txid();
+    let already_in_wallet = call!(addr.payjoin_terminal_tx_in_wallet(txid))
+        .await
+        .map_err(|_| BroadcastTransactionError::BroadcastFailed(Error::ActorNotFound))?;
+
+    if !already_in_wallet {
+        match broadcast_to_node_with_connection(addr.clone(), connection, &transaction).await {
+            Ok(()) => {}
+
+            Err(BroadcastTransactionError::BroadcastFailed(error)) => {
+                if !payjoin_tx_known_to_node(addr.clone(), txid).await {
+                    return Err(BroadcastTransactionError::BroadcastFailed(error));
+                }
+            }
+
+            Err(error) => return Err(error),
+        }
+    }
 
     call!(addr.apply_payjoin_terminal_broadcast(transaction))
         .await
@@ -1059,6 +1079,15 @@ async fn broadcast_payjoin_terminal_with_connection(
         .map_err(BroadcastTransactionError::PostBroadcastFailed)?;
 
     Ok(())
+}
+
+async fn payjoin_tx_known_to_node(addr: WeakAddr<WalletActor>, txid: Txid) -> bool {
+    let node_client = match call!(addr.node_client_for_broadcast()).await {
+        Ok(Ok(node_client)) => node_client,
+        _ => return false,
+    };
+
+    matches!(node_client.get_transaction(txid).await, Ok(Some(ref found)) if found.compute_txid() == txid)
 }
 
 async fn broadcast_to_node_with_connection(

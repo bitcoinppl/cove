@@ -166,6 +166,21 @@ impl ElectrumClient {
         Ok(Some(txn))
     }
 
+    /// Fetches a transaction from the mempool or chain; returns `None` if not found.
+    pub async fn get_transaction(&self, txid: Txid) -> Result<Option<bitcoin::Transaction>, Error> {
+        let client = self.client.clone();
+        cove_tokio::unblock::run_blocking(move || client.inner.transaction_get(&txid))
+            .await
+            .map(Some)
+            .or_else(|e| match e {
+                // Only a null response is a definitive "not found"; all other
+                // protocol errors (malformed request, server failure, unsupported
+                // method) are propagated so the caller can fail safely.
+                electrum_client::Error::InvalidResponse(Value::Null) => Ok(None),
+                other => Err(Error::ElectrumGetTransaction(other)),
+            })
+    }
+
     async fn get_confirmed_transaction_fallback(
         &self,
         txid: Txid,
