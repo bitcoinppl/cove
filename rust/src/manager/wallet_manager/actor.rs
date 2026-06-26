@@ -1403,6 +1403,10 @@ mod tests {
         bitcoin::FeeRate::from_sat_per_vb(1).expect("fee rate")
     }
 
+    fn high_sat_vbyte_fee_rate() -> bitcoin::FeeRate {
+        bitcoin::FeeRate::from_sat_per_vb(100).expect("fee rate")
+    }
+
     #[test]
     fn progressive_scan_update_response_preserves_last_active_indices() {
         let scan_update = ScanUpdate {
@@ -1787,6 +1791,39 @@ mod tests {
             .await;
 
         actor_value(result).await.expect("manual max send above dust is allowed below 5000 sats");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn actor_manual_max_send_returns_domain_error_when_fee_shortfall_consumes_estimate() {
+        crate::database::test_support::init_test_database();
+
+        let mut wallet = Wallet::preview_new_wallet();
+        mark_wallet_ledger_ready(&mut wallet);
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([2; 32]) },
+        );
+        let spendable = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(7_500));
+
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor =
+            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+        actor.db = db;
+
+        let result = actor
+            .build_manual_tx(
+                vec![spendable],
+                Amount::from_sat(7_500),
+                Address::preview_new(),
+                high_sat_vbyte_fee_rate(),
+            )
+            .await;
+        let error = actor_value(result)
+            .await
+            .expect_err("fee shortfall consuming the estimate is rejected");
+
+        assert!(matches!(error, super::Error::InsufficientFunds(_)));
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -658,6 +658,7 @@ private fun SendFlowRouteToScreen(
                         TextButton(
                             onClick = {
                                 presenter.setDisappearing()
+                                presenter.alertState = null
                                 sendFlowManager.dispatch(
                                     SendFlowManagerAction.AcknowledgeWarningAndFinalize(alert.kind),
                                 )

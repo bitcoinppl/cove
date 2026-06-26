@@ -742,7 +742,18 @@ impl WalletActor {
                     }
                     Err(CreateTxError::CoinSelection(result)) => {
                         let difference = result.needed - result.available;
-                        max_send_estimate -= difference;
+                        let Some(reduced_estimate) = max_send_estimate.checked_sub(difference)
+                        else {
+                            return Err(Error::InsufficientFunds(format!(
+                                "not enough funds to cover the fee shortfall, total available: {utxo_total_amount}, estimate: {max_send_estimate}, shortfall: {difference}",
+                            )));
+                        };
+
+                        if reduced_estimate < recipient_dust_limit {
+                            return Err(Error::OutputBelowDustLimit);
+                        }
+
+                        max_send_estimate = reduced_estimate;
                     }
                     Err(err) => return Err(Error::from(err)),
                 }

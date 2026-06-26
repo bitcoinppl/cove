@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
 use crate::{
-    app::AppAction, manager::deferred_dispatch::DeferredDispatch, router::RouteFactory,
-    wallet::metadata::WalletType,
+    app::AppAction,
+    manager::deferred_dispatch::DeferredDispatch,
+    router::RouteFactory,
+    wallet::{Address, metadata::WalletType},
 };
-use cove_types::amount::Amount;
+use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee};
 
 use super::{EnterMode, Message, RustSendFlowManager, SendFlowAlertState, SendFlowError};
 
@@ -33,23 +35,52 @@ impl RustSendFlowManager {
         let Some(total_fee) = selected_fee_rate.total_fee else {
             let me = self.clone();
             let address_for_psbt = address.as_ref().clone();
+            let address_for_finalize = address.clone();
             let fee_rate = selected_fee_rate.fee_rate;
+            let selected_fee_rate_for_finalize = selected_fee_rate.clone();
             cove_tokio::task::spawn(async move {
                 me.get_or_update_fee_rate_options().await;
 
                 if me.selected_fee_rate().and_then(|fee| fee.total_fee).is_none() {
-                    if matches!(
-                        me.build_psbt(Some(address_for_psbt), Some(amount), fee_rate).await,
-                        Err(SendFlowError::SendBelowDustLimit)
-                    ) {
-                        return me.send_alert_async(SendFlowError::SendBelowDustLimit).await;
-                    }
+                    match me.build_psbt(Some(address_for_psbt), Some(amount), fee_rate).await {
+                        Ok(psbt) => {
+                            let total_fee = match psbt.fee() {
+                                Ok(total_fee) => total_fee,
+                                Err(error) => {
+                                    return me
+                                        .send_alert_async(SendFlowError::UnableToGetFeeDetails(
+                                            format!("selected fee total unavailable: {error}"),
+                                        ))
+                                        .await;
+                                }
+                            };
+                            let mut selected_fee_rate =
+                                Arc::unwrap_or_clone(selected_fee_rate_for_finalize);
+                            selected_fee_rate.total_fee = Some(total_fee);
 
-                    return me
-                        .send_alert_async(SendFlowError::UnableToGetFeeDetails(
-                            "selected fee total unavailable".to_string(),
-                        ))
-                        .await;
+                            me.continue_with_selected_fee(
+                                amount_sats,
+                                amount,
+                                address_for_finalize,
+                                Arc::new(selected_fee_rate),
+                                Some(total_fee),
+                            );
+                            return;
+                        }
+                        Err(
+                            error @ (SendFlowError::SendBelowDustLimit
+                            | SendFlowError::InsufficientFunds),
+                        ) => {
+                            return me.send_alert_async(error).await;
+                        }
+                        Err(error) => {
+                            return me
+                                .send_alert_async(SendFlowError::UnableToGetFeeDetails(format!(
+                                    "selected fee total unavailable: {error}"
+                                )))
+                                .await;
+                        }
+                    }
                 }
 
                 me.finalize_and_go_to_next_screen();
@@ -57,12 +88,31 @@ impl RustSendFlowManager {
             return;
         };
 
-        if total_fee.as_sats() > amount_sats {
+        self.continue_with_selected_fee(
+            amount_sats,
+            amount,
+            address,
+            selected_fee_rate,
+            Some(total_fee),
+        );
+    }
+
+    fn continue_with_selected_fee(
+        self: &Arc<Self>,
+        amount_sats: u64,
+        amount: Amount,
+        address: Arc<Address>,
+        selected_fee_rate: Arc<FeeRateOptionWithTotalFee>,
+        total_fee: Option<Amount>,
+    ) {
+        if total_fee.is_some_and(|total_fee| total_fee.as_sats() > amount_sats) {
             return self.send_alert(SendFlowAlertState::General {
                 title: "Fee Too High!".to_string(),
                 message: "The fee is higher than the amount you are sending".to_string(),
             });
         }
+
+        self.update_selected_fee_total_if_current(selected_fee_rate.clone());
 
         if let Some(warning) = self.pending_send_warning() {
             return self.reconciler.send(Message::SetAlert(warning));
@@ -134,5 +184,118 @@ impl RustSendFlowManager {
             let mut deferred = DeferredDispatch::<AppAction>::new();
             deferred.queue(AppAction::PushRoute(next_route));
         });
+    }
+
+    fn update_selected_fee_total_if_current(
+        self: &Arc<Self>,
+        selected_fee_rate: Arc<FeeRateOptionWithTotalFee>,
+    ) {
+        let Some(total_fee) = selected_fee_rate.total_fee else {
+            return;
+        };
+
+        let mut state = self.state.lock();
+        let Some(selection) = &mut state.fee_selection else {
+            return;
+        };
+
+        let current = &selection.selected;
+        if current.fee_speed == selected_fee_rate.fee_speed
+            && current.fee_rate == selected_fee_rate.fee_rate
+            && current.total_fee != Some(total_fee)
+        {
+            selection.selected = selected_fee_rate;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use cove_types::fees::{
+        FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
+        FeeSpeed,
+    };
+
+    use crate::{
+        manager::{deferred_sender::SingleOrMany, wallet_manager::RustWalletManager},
+        wallet::{Address, balance::Balance, metadata::WalletMetadata},
+    };
+
+    use super::super::{
+        App, DebouncedTask, FeeSelection, MessageSender, RustSendFlowManager, SendFlowAlertState,
+        SendFlowWarningKind,
+    };
+    use super::*;
+
+    fn manager_for_finalize() -> Arc<RustSendFlowManager> {
+        crate::database::test_support::init_test_database();
+        crate::test_support::ensure_tokio_runtime();
+
+        let (sender, receiver) = flume::bounded(50);
+        let balance = Arc::new(Balance::default());
+        let state = super::super::State::new(WalletMetadata::preview_new(), balance);
+        let wallet_manager = Arc::new(RustWalletManager::preview_new_wallet());
+
+        Arc::new(RustSendFlowManager {
+            app: App::global().clone(),
+            wallet_manager,
+            state: state.into_inner(),
+            reconciler: MessageSender::new(sender),
+            reconcile_receiver: Arc::new(receiver),
+            fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
+        })
+    }
+
+    fn selected_fee_without_total() -> FeeRateOptionWithTotalFee {
+        FeeRateOptionWithTotalFee {
+            fee_speed: FeeSpeed::Custom { duration_mins: 10 },
+            fee_rate: FeeRateOption::new(FeeSpeed::Custom { duration_mins: 10 }, 1.0).fee_rate,
+            total_fee: None,
+        }
+    }
+
+    #[test]
+    fn fallback_total_fee_populates_selected_fee_before_warning_detection() {
+        let manager = manager_for_finalize();
+        let address = Arc::new(Address::preview_new());
+        let selected = selected_fee_without_total();
+        {
+            let options =
+                FeeRateOptionsWithTotalFee::without_totals(FeeRateOptions::_ffi_preview_new());
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(10_000);
+            state.unlocked_spendable_sats = Some(50_000);
+            state.address = Some(address.clone());
+            state.fee_selection = Some(FeeSelection::new(Arc::new(options), Arc::new(selected)));
+        }
+
+        let total_fee = Amount::from_sat(2_000);
+        let mut selected = selected_fee_without_total();
+        selected.total_fee = Some(total_fee);
+
+        manager.continue_with_selected_fee(
+            10_000,
+            Amount::from_sat(10_000),
+            address,
+            Arc::new(selected),
+            Some(total_fee),
+        );
+
+        let message = manager.reconcile_receiver.try_recv().expect("warning is reconciled");
+        let SingleOrMany::Single(message) = message else {
+            panic!("expected a single reconcile message");
+        };
+
+        assert!(matches!(
+            message,
+            super::super::SendFlowManagerReconcileMessage::SetAlert(SendFlowAlertState::Warning {
+                kind: SendFlowWarningKind::VeryHighFee,
+                ..
+            })
+        ));
+
+        assert_eq!(manager.selected_fee_rate().and_then(|fee| fee.total_fee), Some(total_fee));
     }
 }

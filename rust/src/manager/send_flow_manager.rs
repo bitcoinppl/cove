@@ -361,14 +361,18 @@ impl RustSendFlowManager {
         let fee_percentage = fee_sats as f64 / amount_sats as f64 * 100.0;
         let display_fee_percentage = format!("{fee_percentage:.0}");
 
-        if fee_percentage >= VERY_HIGH_FEE_WARNING_PERCENT && !very_high_fee_acknowledged {
-            return Some(SendFlowAlertState::Warning {
-                kind: SendFlowWarningKind::VeryHighFee,
-                title: "Very High Network Fee".to_string(),
-                message: format!(
-                    "The network fee is {display_fee_percentage}% of the amount you are sending. That is unusually high for an on-chain payment. Consider sending a larger amount, lowering the fee rate if timing allows, or using an external Lightning option for small payments."
-                ),
-            });
+        if fee_percentage >= VERY_HIGH_FEE_WARNING_PERCENT {
+            if !very_high_fee_acknowledged {
+                return Some(SendFlowAlertState::Warning {
+                    kind: SendFlowWarningKind::VeryHighFee,
+                    title: "Very High Network Fee".to_string(),
+                    message: format!(
+                        "The network fee is {display_fee_percentage}% of the amount you are sending. That is unusually high for an on-chain payment. Consider sending a larger amount, lowering the fee rate if timing allows, or using an external Lightning option for small payments."
+                    ),
+                });
+            }
+
+            return None;
         }
 
         if fee_percentage >= HIGH_FEE_WARNING_PERCENT && !high_fee_acknowledged {
@@ -836,6 +840,19 @@ mod tests {
         set_selected_fee_total(&manager, 500);
 
         assert_eq!(pending_warning_kind(&manager), Some(super::SendFlowWarningKind::HighFee));
+    }
+
+    #[test]
+    fn acknowledging_very_high_fee_does_not_reveal_high_fee_for_same_fee() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 10_000);
+        set_selected_fee_total(&manager, 2_000);
+
+        assert_eq!(pending_warning_kind(&manager), Some(super::SendFlowWarningKind::VeryHighFee));
+
+        manager.state.lock().acknowledge_warning(super::SendFlowWarningKind::VeryHighFee);
+
+        assert_eq!(pending_warning_kind(&manager), None);
     }
 
     #[test]
