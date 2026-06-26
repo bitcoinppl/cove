@@ -199,12 +199,20 @@ impl WalletActor {
                 self.payjoin_actor = Some(spawn_actor(*actor));
             }
 
+            SessionResumption::BroadcastStoredProposal { proposal_tx } => {
+                send!(self.addr.handle_payjoin_proposal_broadcast(proposal_tx));
+            }
+
             SessionResumption::BroadcastProposal { proposal_psbt, fallback_tx } => {
                 send!(self.addr.handle_payjoin_success(proposal_psbt, fallback_tx));
             }
 
             SessionResumption::BroadcastFallback { fallback_tx } => {
                 send!(self.addr.handle_payjoin_fallback(fallback_tx));
+            }
+
+            SessionResumption::ReportError { message } => {
+                send!(self.addr.notify_payjoin_error(message));
             }
         }
 

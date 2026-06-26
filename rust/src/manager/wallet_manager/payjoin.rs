@@ -50,8 +50,8 @@ impl PayjoinSessionPersister {
     }
 
     /// Marks the session as committed to broadcasting the fallback transaction.
-    /// Must be called before the fallback broadcast begins so a crash mid-broadcast
-    /// causes the next startup to go straight to fallback instead of resuming negotiation.
+    /// Idempotent: `None → BroadcastFallback` and `BroadcastFallback → ok`.
+    /// Rejects an attempt to downgrade a `BroadcastProposal` commitment.
     pub(crate) fn set_pending_fallback(&self) -> Result<(), WalletDataError> {
         let _guard = self
             .lock
@@ -63,7 +63,54 @@ impl PayjoinSessionPersister {
             .get_payjoin_sender_session()?
             .ok_or_else(|| WalletDataError::Save("no payjoin session record".to_string()))?;
 
+        match &session.pending_action {
+            None => {}
+
+            Some(PendingAction::BroadcastFallback) => return Ok(()),
+
+            Some(PendingAction::BroadcastProposal { .. }) => {
+                return Err(WalletDataError::Save(
+                    "cannot overwrite BroadcastProposal commitment with BroadcastFallback"
+                        .to_string(),
+                ));
+            }
+        }
+
         session.pending_action = Some(PendingAction::BroadcastFallback);
+        self.db.set_payjoin_sender_session(session)
+    }
+
+    /// Persists the exact consensus-encoded proposal transaction before broadcasting.
+    /// Idempotent when called with the same transaction bytes.
+    /// Rejects overwriting with a different transaction or any other pending action.
+    pub(crate) fn set_pending_proposal(&self, tx: &BdkTransaction) -> Result<(), WalletDataError> {
+        let tx_bytes = consensus::serialize(tx);
+
+        let _guard = self
+            .lock
+            .lock()
+            .map_err(|_| WalletDataError::Save("session lock poisoned".to_string()))?;
+
+        let mut session = self
+            .db
+            .get_payjoin_sender_session()?
+            .ok_or_else(|| WalletDataError::Save("no payjoin session record".to_string()))?;
+
+        match &session.pending_action {
+            None => {}
+
+            Some(PendingAction::BroadcastProposal { transaction }) if *transaction == tx_bytes => {
+                return Ok(());
+            }
+
+            Some(_) => {
+                return Err(WalletDataError::Save(
+                    "cannot overwrite existing terminal action with BroadcastProposal".to_string(),
+                ));
+            }
+        }
+
+        session.pending_action = Some(PendingAction::BroadcastProposal { transaction: tx_bytes });
         self.db.set_payjoin_sender_session(session)
     }
 
@@ -106,13 +153,12 @@ impl SessionPersister for PayjoinSessionPersister {
             .get_payjoin_sender_session()?
             .ok_or_else(|| WalletDataError::Save("no payjoin session record".to_string()))?;
 
-        // Reject late events after the fallback commitment is written: an in-flight
-        // poll response arriving after complete_with_fallback must not overwrite
-        // pending_action back to None and corrupt the crash-recovery marker.
-        // The shared lock ensures this check-then-write is atomic with set_pending_fallback.
-        if matches!(session.pending_action, Some(PendingAction::BroadcastFallback)) {
+        // Reject late events once any terminal intent is committed: an in-flight poll
+        // response must not overwrite a BroadcastFallback or BroadcastProposal marker.
+        // The shared lock ensures this check-then-write is atomic with set_pending_action.
+        if session.pending_action.is_some() {
             return Err(WalletDataError::Save(
-                "session is committed to fallback; rejecting late event".to_string(),
+                "session has a committed terminal action; rejecting late event".to_string(),
             ));
         }
 
@@ -634,10 +680,16 @@ pub(crate) enum SessionResumption {
     None,
     /// Session is still in flight, spawn this actor to continue it
     Resume(Box<PayjoinActor>),
-    /// Session already completed with a proposal, sign and broadcast it
+    /// A BroadcastProposal marker was stored: broadcast this exact consensus-encoded tx
+    BroadcastStoredProposal { proposal_tx: BdkTransaction },
+    /// Session closed with a success outcome but no stored tx: re-sign and broadcast
     BroadcastProposal { proposal_psbt: Psbt, fallback_tx: BdkTransaction },
     /// Session ended without a proposal, broadcast the original tx
     BroadcastFallback { fallback_tx: BdkTransaction },
+    /// The stored proposal tx is corrupt; the record is retained and the user must be notified.
+    /// Cove cannot know whether that proposal reached the network before the corruption/restart,
+    /// so it must not fall back automatically.
+    ReportError { message: String },
 }
 
 /// Replays a persisted payjoin session from the wallet's database, if one exists
@@ -658,6 +710,12 @@ pub(crate) fn resume_session(
     // non-terminal events in the log; honour the stored intent instead of replaying them.
     if matches!(record.pending_action, Some(PendingAction::BroadcastFallback)) {
         return fallback_from_record(&db, record);
+    }
+
+    // A crash after set_pending_proposal but before the broadcast completed means the
+    // proposal tx is committed — re-broadcast it without re-signing instead of replaying.
+    if matches!(record.pending_action, Some(PendingAction::BroadcastProposal { .. })) {
+        return proposal_from_record(&db, record);
     }
 
     let persister = PayjoinSessionPersister::new(db.clone());
@@ -714,6 +772,30 @@ fn fallback_from_record(db: &WalletDataDb, record: PayjoinSenderSession) -> Sess
                 warn!("failed to clear corrupt payjoin session record: {error}");
             }
             SessionResumption::None
+        }
+    }
+}
+
+/// Recovers the proposal tx committed in a `BroadcastProposal` marker so it can be
+/// re-broadcast on the next startup without re-signing.
+///
+/// If the stored bytes are corrupt the record is **retained** and `ReportError` is returned.
+/// We cannot know whether that proposal reached the network before the corruption/restart,
+/// so deleting the record or broadcasting the fallback would be unsafe.
+fn proposal_from_record(_db: &WalletDataDb, record: PayjoinSenderSession) -> SessionResumption {
+    let tx_bytes = match &record.pending_action {
+        Some(PendingAction::BroadcastProposal { transaction }) => transaction.clone(),
+        _ => unreachable!("proposal_from_record called without BroadcastProposal action"),
+    };
+    match consensus::deserialize::<BdkTransaction>(&tx_bytes) {
+        Ok(proposal_tx) => SessionResumption::BroadcastStoredProposal { proposal_tx },
+        Err(error) => {
+            error!(
+                "stored payjoin proposal tx is corrupt; retaining record for manual recovery: {error}"
+            );
+            SessionResumption::ReportError {
+                message: "payjoin proposal data is unreadable — check your transaction history before retrying".to_string(),
+            }
         }
     }
 }
@@ -955,6 +1037,85 @@ mod tests {
             SessionResumption::BroadcastFallback { fallback_tx } => assert_eq!(fallback_tx, tx),
             _ => panic!("expected BroadcastFallback"),
         }
+    }
+
+    #[test]
+    fn set_pending_fallback_rejects_overwrite_of_proposal() {
+        let (persister, _db, _tmp) = new_test_persister();
+        let tx = empty_transaction();
+        persister.create_session(&test_fallback_tx()).unwrap();
+        persister.set_pending_proposal(&tx).unwrap();
+
+        let result = persister.set_pending_fallback();
+
+        assert!(result.is_err(), "BroadcastFallback must not overwrite BroadcastProposal");
+    }
+
+    #[test]
+    fn set_pending_proposal_is_idempotent() {
+        let (persister, db, _tmp) = new_test_persister();
+        let tx = empty_transaction();
+        persister.create_session(&test_fallback_tx()).unwrap();
+        persister.set_pending_proposal(&tx).unwrap();
+
+        // calling again with the same tx must succeed
+        persister.set_pending_proposal(&tx).unwrap();
+
+        let session = db.get_payjoin_sender_session().unwrap().unwrap();
+        assert!(
+            matches!(session.pending_action, Some(PendingAction::BroadcastProposal { .. })),
+            "action must still be BroadcastProposal after idempotent call"
+        );
+    }
+
+    #[test]
+    fn resume_with_proposal_marker_returns_broadcast_stored_proposal() {
+        let (_persister, db, _tmp) = new_test_persister();
+        let tx = empty_transaction();
+        let session = PayjoinSenderSession {
+            events: vec![],
+            fallback_tx: consensus::serialize(&test_fallback_tx()),
+            created_at_secs: None,
+            pending_action: Some(PendingAction::BroadcastProposal {
+                transaction: consensus::serialize(&tx),
+            }),
+        };
+        db.set_payjoin_sender_session(session).unwrap();
+
+        let resumption = resume_session(db, WeakAddr::default());
+
+        match resumption {
+            SessionResumption::BroadcastStoredProposal { proposal_tx } => {
+                assert_eq!(proposal_tx, tx)
+            }
+            _ => panic!("expected BroadcastStoredProposal"),
+        }
+    }
+
+    #[test]
+    fn resume_with_corrupt_proposal_retains_record_and_reports_error() {
+        let (_persister, db, _tmp) = new_test_persister();
+        let session = PayjoinSenderSession {
+            events: vec![],
+            fallback_tx: consensus::serialize(&test_fallback_tx()),
+            created_at_secs: None,
+            pending_action: Some(PendingAction::BroadcastProposal {
+                transaction: vec![0xff], // corrupt bytes
+            }),
+        };
+        db.set_payjoin_sender_session(session).unwrap();
+
+        let resumption = resume_session(db.clone(), WeakAddr::default());
+
+        assert!(
+            matches!(resumption, SessionResumption::ReportError { .. }),
+            "corrupt proposal must return ReportError, not None or BroadcastFallback"
+        );
+        // record must be retained so a human can investigate before retrying
+        assert!(
+            db.get_payjoin_sender_session().unwrap().is_some(),
+            "session record must not be deleted when proposal bytes are corrupt"
+        );
     }
 
     #[test]

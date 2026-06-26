@@ -85,6 +85,7 @@ impl ReceiveAddressCache {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PendingAction {
     BroadcastFallback,
+    BroadcastProposal { transaction: Vec<u8> },
 }
 
 /// Event log for an in-flight payjoin sender session, allowing it to survive app restarts

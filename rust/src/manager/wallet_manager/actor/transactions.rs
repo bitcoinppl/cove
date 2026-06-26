@@ -658,19 +658,53 @@ impl WalletActor {
         send!(self.addr.start_transaction_watcher(txid));
     }
 
-    fn start_payjoin_broadcast_and_notify(&mut self, tx: BdkTransaction) {
+    fn start_payjoin_terminal_broadcast(&mut self, tx: BdkTransaction) {
         let connection = self.deferred_node_connection();
 
         self.addr.send_fut_with(|addr| async move {
-            let result = broadcast_transaction_with_connection(addr.clone(), connection, tx).await;
-            send!(addr.handle_payjoin_broadcast_result(result));
+            let result =
+                broadcast_payjoin_terminal_with_connection(addr.clone(), connection, tx).await;
+            send!(addr.handle_payjoin_terminal_broadcast_result(result));
         });
     }
 
     fn start_payjoin_fallback_broadcast(&mut self, tx: BdkTransaction) {
+        match self.db.get_payjoin_sender_session() {
+            Ok(None) => {}
+
+            Ok(Some(_)) => {
+                let persister = PayjoinSessionPersister::new(self.db.clone());
+                if let Err(error) = persister.set_pending_fallback() {
+                    error!("failed to persist fallback intent before broadcast, aborting: {error}");
+                    self.send(WalletManagerReconcileMessage::SendFlowError(
+                        SendFlowErrorAlert::SignAndBroadcast(
+                            "failed to persist recovery state; please restart the app".to_string(),
+                        ),
+                    ));
+                    self.payjoin_actor = None;
+                    return;
+                }
+            }
+
+            Err(error) => {
+                error!("failed to check for payjoin session before fallback, aborting: {error}");
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::SignAndBroadcast(
+                        "failed to persist recovery state; please restart the app".to_string(),
+                    ),
+                ));
+                self.payjoin_actor = None;
+                return;
+            }
+        }
+
+        self.start_payjoin_terminal_broadcast(tx);
+    }
+
+    fn start_payjoin_proposal_broadcast(&mut self, proposal_tx: BdkTransaction) {
         let persister = PayjoinSessionPersister::new(self.db.clone());
-        if let Err(error) = persister.set_pending_fallback() {
-            error!("failed to persist fallback intent before broadcast, aborting: {error}");
+        if let Err(error) = persister.set_pending_proposal(&proposal_tx) {
+            error!("failed to persist proposal broadcast intent, aborting: {error}");
             self.send(WalletManagerReconcileMessage::SendFlowError(
                 SendFlowErrorAlert::SignAndBroadcast(
                     "failed to persist recovery state; please restart the app".to_string(),
@@ -680,38 +714,57 @@ impl WalletActor {
             return;
         }
 
-        self.start_payjoin_broadcast_and_notify(tx);
+        self.start_payjoin_terminal_broadcast(proposal_tx);
     }
 
-    fn start_payjoin_proposal_broadcast(
+    async fn apply_payjoin_terminal_broadcast(
         &mut self,
-        proposal_tx: BdkTransaction,
-        fallback_tx: BdkTransaction,
-    ) {
-        let connection = self.deferred_node_connection();
+        tx: BdkTransaction,
+    ) -> ActorResult<Result<(), Error>> {
+        use WalletManagerReconcileMessage as Msg;
 
-        self.addr.send_fut_with(|addr| async move {
-            let result =
-                broadcast_transaction_with_connection(addr.clone(), connection, proposal_tx).await;
-            send!(addr.handle_payjoin_proposal_broadcast_result(result, fallback_tx));
-        });
-    }
+        let now =
+            SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or_else(|e| {
+                warn!("System clock skew detected: {e}");
+                u64::MAX
+            });
+        let txid = tx.compute_txid();
 
-    fn clear_payjoin_sender_session(&self) {
+        self.wallet.bdk.apply_unconfirmed_txs([(tx, now)]);
+
+        // keep the session record until wallet state is durable so startup can recover
+        if let Err(error) = self.wallet.persist() {
+            error!(
+                "failed to persist wallet after payjoin broadcast; retaining session record for recovery: {error}"
+            );
+            return Produces::ok(Err(Error::SignAndBroadcastError(
+                "transaction was broadcast but wallet state could not be saved; please restart the app"
+                    .to_string(),
+            )));
+        }
+
         if let Err(error) = self.db.delete_payjoin_sender_session() {
             warn!("failed to clear payjoin session record: {error}");
         }
+
+        let balance = self.wallet.balance();
+        self.send(Msg::WalletBalanceChanged(balance.into()));
+
+        let transactions = self.do_transactions().await;
+        self.send(Msg::UpdatedTransactions(transactions));
+
+        send!(self.addr.start_transaction_watcher(txid));
+        self.send(Msg::PayjoinTxBroadcast);
+
+        Produces::ok(Ok(()))
     }
 
-    async fn handle_payjoin_broadcast_result(
+    async fn handle_payjoin_terminal_broadcast_result(
         &mut self,
         result: Result<(), BroadcastTransactionError>,
     ) -> ActorResult<()> {
         match result {
-            Ok(()) => {
-                self.clear_payjoin_sender_session();
-                self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast);
-            }
+            Ok(()) => {}
 
             Err(BroadcastTransactionError::BroadcastFailed(error)) => {
                 error!("payjoin broadcast failed: {error}");
@@ -721,7 +774,6 @@ impl WalletActor {
             }
 
             Err(BroadcastTransactionError::PostBroadcastFailed(error)) => {
-                self.clear_payjoin_sender_session();
                 error!("payjoin broadcast bookkeeping failed: {error}");
                 self.send(WalletManagerReconcileMessage::SendFlowError(
                     SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
@@ -730,36 +782,6 @@ impl WalletActor {
         }
 
         self.payjoin_actor = None;
-        Produces::ok(())
-    }
-
-    pub(crate) async fn handle_payjoin_proposal_broadcast_result(
-        &mut self,
-        result: Result<(), BroadcastTransactionError>,
-        fallback_tx: BdkTransaction,
-    ) -> ActorResult<()> {
-        match result {
-            Ok(()) => {
-                self.clear_payjoin_sender_session();
-                self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast);
-                self.payjoin_actor = None;
-            }
-            Err(BroadcastTransactionError::BroadcastFailed(error)) => {
-                error!(
-                    "failed to broadcast payjoin proposal, falling back to original tx: {error:?}"
-                );
-                self.start_payjoin_fallback_broadcast(fallback_tx);
-            }
-            Err(BroadcastTransactionError::PostBroadcastFailed(error)) => {
-                self.clear_payjoin_sender_session();
-                error!("payjoin proposal broadcast bookkeeping failed: {error}");
-                self.send(WalletManagerReconcileMessage::SendFlowError(
-                    SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
-                ));
-                self.payjoin_actor = None;
-            }
-        }
-
         Produces::ok(())
     }
 
@@ -777,7 +799,15 @@ impl WalletActor {
             return Produces::ok(());
         };
 
-        self.start_payjoin_proposal_broadcast(proposal_tx, fallback_tx);
+        self.start_payjoin_proposal_broadcast(proposal_tx);
+        Produces::ok(())
+    }
+
+    pub async fn handle_payjoin_proposal_broadcast(
+        &mut self,
+        proposal_tx: BdkTransaction,
+    ) -> ActorResult<()> {
+        self.start_payjoin_terminal_broadcast(proposal_tx);
         Produces::ok(())
     }
 
@@ -785,7 +815,7 @@ impl WalletActor {
         &mut self,
         fallback_tx: BdkTransaction,
     ) -> ActorResult<()> {
-        self.start_payjoin_broadcast_and_notify(fallback_tx);
+        self.start_payjoin_fallback_broadcast(fallback_tx);
         Produces::ok(())
     }
 
@@ -965,6 +995,36 @@ async fn broadcast_transaction_with_connection(
     connection: Produces<Result<(), Error>>,
     transaction: BdkTransaction,
 ) -> Result<(), BroadcastTransactionError> {
+    broadcast_to_node_with_connection(addr.clone(), connection, &transaction).await?;
+
+    call!(addr.apply_broadcast_transaction(transaction))
+        .await
+        .map_err(|_| BroadcastTransactionError::PostBroadcastFailed(Error::ActorNotFound))?
+        .map_err(BroadcastTransactionError::PostBroadcastFailed)?;
+
+    Ok(())
+}
+
+async fn broadcast_payjoin_terminal_with_connection(
+    addr: WeakAddr<WalletActor>,
+    connection: Produces<Result<(), Error>>,
+    transaction: BdkTransaction,
+) -> Result<(), BroadcastTransactionError> {
+    broadcast_to_node_with_connection(addr.clone(), connection, &transaction).await?;
+
+    call!(addr.apply_payjoin_terminal_broadcast(transaction))
+        .await
+        .map_err(|_| BroadcastTransactionError::PostBroadcastFailed(Error::ActorNotFound))?
+        .map_err(BroadcastTransactionError::PostBroadcastFailed)?;
+
+    Ok(())
+}
+
+async fn broadcast_to_node_with_connection(
+    addr: WeakAddr<WalletActor>,
+    connection: Produces<Result<(), Error>>,
+    transaction: &BdkTransaction,
+) -> Result<(), BroadcastTransactionError> {
     connection
         .await
         .map_err(|_| BroadcastTransactionError::BroadcastFailed(Error::ActorNotFound))?
@@ -984,11 +1044,6 @@ async fn broadcast_transaction_with_connection(
             "failed to broadcast transaction, try again: {error:?}"
         )))
     })?;
-
-    call!(addr.apply_broadcast_transaction(transaction))
-        .await
-        .map_err(|_| BroadcastTransactionError::PostBroadcastFailed(Error::ActorNotFound))?
-        .map_err(BroadcastTransactionError::PostBroadcastFailed)?;
 
     Ok(())
 }
