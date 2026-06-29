@@ -859,8 +859,7 @@ pub(crate) fn async_test_lock() -> &'static tokio::sync::Mutex<()> {
 }
 
 fn shared_test_lock() -> &'static tokio::sync::Mutex<()> {
-    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(tokio::sync::Mutex::default)
+    crate::test_support::global_state_test_lock()
 }
 
 fn clear_local_wallets() {

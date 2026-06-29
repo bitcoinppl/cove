@@ -187,6 +187,7 @@ mod tests {
 
     #[test]
     fn new_starts_with_unknown_unlocked_spendable_balance() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::database::test_support::init_test_database();
 
         let metadata = WalletMetadata::preview_new();

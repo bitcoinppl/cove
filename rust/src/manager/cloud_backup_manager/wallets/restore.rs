@@ -431,6 +431,7 @@ mod tests {
 
     #[test]
     fn restore_downloaded_tracks_restored_wallet_identity() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::database::test_support::init_test_database();
         test_keychain();
 

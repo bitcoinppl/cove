@@ -687,6 +687,7 @@ mod tests {
 
     #[test]
     fn validate_amount_blocks_send_when_lock_state_load_failed() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         let manager = manager_for_validation();
         {
             let mut state = manager.state.lock();
