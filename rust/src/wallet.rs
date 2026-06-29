@@ -1513,6 +1513,7 @@ mod tests {
 
     #[test]
     fn test_fingerprint() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::database::test_support::delete_database();
 
         let mnemonic = Mnemonic::parse_normalized(

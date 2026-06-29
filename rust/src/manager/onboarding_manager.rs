@@ -1826,6 +1826,7 @@ mod tests {
 
     #[test]
     fn dismissed_cloud_restore_alert_stays_hidden() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         let manager =
             preview_manager(FlowState::HardwareImport, CloudRestoreDiscovery::BackupFound(None));
 
@@ -1837,6 +1838,7 @@ mod tests {
 
     #[test]
     fn stale_dismiss_cloud_restore_alert_outside_import_does_not_hide_later_import_alert() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         let manager = preview_manager(
             FlowState::Welcome { error_message: None },
             CloudRestoreDiscovery::BackupFound(None),
@@ -2313,6 +2315,7 @@ mod tests {
 
     #[test]
     fn connectivity_reconnect_while_cloud_check_is_in_flight_retries_after_offline_finish() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         let manager = preview_manager(
             FlowState::Welcome { error_message: None },
             CloudRestoreDiscovery::Checking,
@@ -2337,6 +2340,7 @@ mod tests {
 
     #[test]
     fn late_pending_connectivity_retry_after_offline_finish_is_taken_over() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         let manager = preview_manager(
             FlowState::Welcome { error_message: None },
             CloudRestoreDiscovery::Checking,
@@ -2358,6 +2362,7 @@ mod tests {
 
     #[test]
     fn restore_retry_after_offline_finish_skips_transient_offline_messages() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         let manager = preview_manager(
             FlowState::CloudCheck { origin: RestoreOrigin::Welcome },
             CloudRestoreDiscovery::Checking,
@@ -2380,6 +2385,7 @@ mod tests {
 
     #[test]
     fn connectivity_reconnect_while_cloud_check_is_in_flight_does_not_retry_non_offline_finish() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         let manager = preview_manager(
             FlowState::Welcome { error_message: None },
             CloudRestoreDiscovery::Checking,

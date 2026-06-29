@@ -630,8 +630,6 @@ mod tests {
 
     use super::*;
 
-    static SELECTED_WALLET_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     fn test_manager() -> (LabelManager, tempfile::TempDir) {
         let (db, tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
 
@@ -797,7 +795,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn parsed_label_import_rejects_unselected_wallet() {
-        let _guard = SELECTED_WALLET_TEST_LOCK.lock().expect("test lock is acquired");
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::init_test_database();
 
@@ -821,7 +819,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn parsed_label_import_accepts_selected_wallet() {
-        let _guard = SELECTED_WALLET_TEST_LOCK.lock().expect("test lock is acquired");
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::init_test_database();
 

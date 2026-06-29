@@ -1049,7 +1049,7 @@ mod tests {
     use std::{
         collections::{BTreeMap, HashMap, HashSet},
         str::FromStr as _,
-        sync::{Arc, Once, OnceLock},
+        sync::{Arc, Once},
         time::{Duration, UNIX_EPOCH},
     };
     use tokio::{
@@ -1112,6 +1112,12 @@ mod tests {
             .expect("actor method should not fail")
             .await
             .expect("actor method should produce a value")
+    }
+
+    impl super::WalletActor {
+        async fn in_memory_wallet_metadata(&mut self) -> act_zero::ActorResult<WalletMetadata> {
+            act_zero::Produces::ok(self.wallet.metadata.clone())
+        }
     }
 
     fn local_output_with_outpoint(
@@ -1224,6 +1230,14 @@ mod tests {
         wallet
     }
 
+    fn persisted_wallet_metadata(metadata: &WalletMetadata) -> WalletMetadata {
+        crate::database::Database::global()
+            .wallets
+            .get(&metadata.id, metadata.network, metadata.wallet_mode)
+            .expect("wallet metadata loads")
+            .expect("wallet metadata exists")
+    }
+
     fn contains_wallet_scan_started(batch: &SingleOrMany) -> bool {
         match batch {
             SingleOrMany::Single(message) => wallet_scan_started(message),
@@ -1270,8 +1284,7 @@ mod tests {
     }
 
     fn address_type_switch_test_lock() -> &'static tokio::sync::Mutex<()> {
-        static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(tokio::sync::Mutex::default)
+        crate::test_support::global_state_test_lock()
     }
 
     fn set_unreachable_bitcoin_esplora_node() {
@@ -1418,6 +1431,7 @@ mod tests {
 
     #[test]
     fn unlocked_trusted_spendable_balance_subtracts_locked_bdk_spendable_outputs() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::database::test_support::init_test_database();
 
         let mut wallet = Wallet::preview_new_wallet();
@@ -1458,6 +1472,7 @@ mod tests {
 
     #[test]
     fn unlocked_trusted_spendable_balance_propagates_lock_state_read_errors() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::database::test_support::init_test_database();
 
         let wallet = Wallet::preview_new_wallet();
@@ -1635,6 +1650,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn actor_build_tx_excludes_db_locked_outpoints_from_psbt_inputs() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         let fixture = locked_actor_fixture();
         let mut actor = fixture.actor;
 
@@ -1650,6 +1666,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn actor_drain_tx_excludes_db_locked_outpoints_from_psbt_inputs() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         let fixture = locked_actor_fixture();
         let mut actor = fixture.actor;
 
@@ -1665,6 +1682,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn actor_build_tx_fails_when_all_outputs_are_locked() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         let fixture = locked_actor_fixture();
         let mut actor = fixture.actor;
         lock_output(&actor, fixture.unlocked);
@@ -1680,6 +1698,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn actor_drain_tx_fails_when_all_outputs_are_locked() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         let fixture = locked_actor_fixture();
         let mut actor = fixture.actor;
         lock_output(&actor, fixture.unlocked);
@@ -1696,6 +1715,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn actor_manual_tx_rejects_db_locked_outpoints() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         let fixture = locked_actor_fixture();
         let mut actor = fixture.actor;
 
@@ -1756,11 +1776,8 @@ mod tests {
             .await
             .expect_err("address-type switch fails when scan startup fails");
         let messages = receiver.try_iter().collect::<Vec<_>>();
-        let persisted_metadata = crate::database::Database::global()
-            .wallets
-            .get(&metadata.id, metadata.network, metadata.wallet_mode)
-            .expect("wallet metadata loads")
-            .expect("wallet metadata exists");
+        let actor_metadata =
+            call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
 
         let node_connection_failed = messages.iter().any(contains_node_connection_failed);
         let wallet_scan_started = messages.iter().any(contains_wallet_scan_started);
@@ -1769,7 +1786,11 @@ mod tests {
 
         assert!(node_connection_failed);
         assert!(!wallet_scan_started);
-        assert_eq!(persisted_metadata.address_type, WalletAddressType::NativeSegwit);
+        assert_eq!(actor_metadata.address_type, WalletAddressType::NativeSegwit);
+        assert_eq!(
+            persisted_wallet_metadata(&metadata).address_type,
+            WalletAddressType::NativeSegwit
+        );
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
@@ -1818,11 +1839,8 @@ mod tests {
         .await
         .expect_err("address-type switch fails when scan startup fails");
         let messages = receiver.try_iter().collect::<Vec<_>>();
-        let persisted_metadata = crate::database::Database::global()
-            .wallets
-            .get(&metadata.id, metadata.network, metadata.wallet_mode)
-            .expect("wallet metadata loads")
-            .expect("wallet metadata exists");
+        let actor_metadata =
+            call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
 
         let node_connection_failed = messages.iter().any(contains_node_connection_failed);
         let wallet_scan_started = messages.iter().any(contains_wallet_scan_started);
@@ -1831,7 +1849,11 @@ mod tests {
 
         assert!(node_connection_failed);
         assert!(!wallet_scan_started);
-        assert_eq!(persisted_metadata.address_type, WalletAddressType::NativeSegwit);
+        assert_eq!(actor_metadata.address_type, WalletAddressType::NativeSegwit);
+        assert_eq!(
+            persisted_wallet_metadata(&metadata).address_type,
+            WalletAddressType::NativeSegwit
+        );
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 

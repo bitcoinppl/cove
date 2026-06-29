@@ -1,5 +1,12 @@
 use std::sync::OnceLock;
 
+/// Serializes tests that mutate process-wide database or global config state
+pub(crate) fn global_state_test_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+    LOCK.get_or_init(tokio::sync::Mutex::default)
+}
+
 /// Starts a process-long Tokio runtime for tests that need the shared cove_tokio handle
 pub(crate) fn ensure_tokio_runtime() {
     static INIT: OnceLock<()> = OnceLock::new();
