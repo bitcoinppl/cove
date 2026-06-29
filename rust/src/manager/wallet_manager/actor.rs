@@ -1114,6 +1114,12 @@ mod tests {
             .expect("actor method should produce a value")
     }
 
+    impl super::WalletActor {
+        async fn in_memory_wallet_metadata(&mut self) -> act_zero::ActorResult<WalletMetadata> {
+            act_zero::Produces::ok(self.wallet.metadata.clone())
+        }
+    }
+
     fn local_output_with_outpoint(
         keychain: KeychainKind,
         chain_position: ChainPosition<ConfirmationBlockTime>,
@@ -1770,6 +1776,8 @@ mod tests {
             .await
             .expect_err("address-type switch fails when scan startup fails");
         let messages = receiver.try_iter().collect::<Vec<_>>();
+        let actor_metadata =
+            call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
 
         let node_connection_failed = messages.iter().any(contains_node_connection_failed);
         let wallet_scan_started = messages.iter().any(contains_wallet_scan_started);
@@ -1778,6 +1786,7 @@ mod tests {
 
         assert!(node_connection_failed);
         assert!(!wallet_scan_started);
+        assert_eq!(actor_metadata.address_type, WalletAddressType::NativeSegwit);
         assert_eq!(
             persisted_wallet_metadata(&metadata).address_type,
             WalletAddressType::NativeSegwit
@@ -1830,6 +1839,8 @@ mod tests {
         .await
         .expect_err("address-type switch fails when scan startup fails");
         let messages = receiver.try_iter().collect::<Vec<_>>();
+        let actor_metadata =
+            call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
 
         let node_connection_failed = messages.iter().any(contains_node_connection_failed);
         let wallet_scan_started = messages.iter().any(contains_wallet_scan_started);
@@ -1838,6 +1849,7 @@ mod tests {
 
         assert!(node_connection_failed);
         assert!(!wallet_scan_started);
+        assert_eq!(actor_metadata.address_type, WalletAddressType::NativeSegwit);
         assert_eq!(
             persisted_wallet_metadata(&metadata).address_type,
             WalletAddressType::NativeSegwit
