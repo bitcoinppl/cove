@@ -1114,12 +1114,6 @@ mod tests {
             .expect("actor method should produce a value")
     }
 
-    impl super::WalletActor {
-        async fn current_wallet_metadata(&mut self) -> act_zero::ActorResult<WalletMetadata> {
-            act_zero::Produces::ok(self.wallet.metadata.clone())
-        }
-    }
-
     fn local_output_with_outpoint(
         keychain: KeychainKind,
         chain_position: ChainPosition<ConfirmationBlockTime>,
@@ -1228,6 +1222,14 @@ mod tests {
             .expect("wallet metadata is persisted");
 
         wallet
+    }
+
+    fn persisted_wallet_metadata(metadata: &WalletMetadata) -> WalletMetadata {
+        crate::database::Database::global()
+            .wallets
+            .get(&metadata.id, metadata.network, metadata.wallet_mode)
+            .expect("wallet metadata loads")
+            .expect("wallet metadata exists")
     }
 
     fn contains_wallet_scan_started(batch: &SingleOrMany) -> bool {
@@ -1768,8 +1770,6 @@ mod tests {
             .await
             .expect_err("address-type switch fails when scan startup fails");
         let messages = receiver.try_iter().collect::<Vec<_>>();
-        let actor_metadata =
-            call!(addr.current_wallet_metadata()).await.expect("wallet metadata loads");
 
         let node_connection_failed = messages.iter().any(contains_node_connection_failed);
         let wallet_scan_started = messages.iter().any(contains_wallet_scan_started);
@@ -1778,7 +1778,10 @@ mod tests {
 
         assert!(node_connection_failed);
         assert!(!wallet_scan_started);
-        assert_eq!(actor_metadata.address_type, WalletAddressType::NativeSegwit);
+        assert_eq!(
+            persisted_wallet_metadata(&metadata).address_type,
+            WalletAddressType::NativeSegwit
+        );
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
@@ -1827,8 +1830,6 @@ mod tests {
         .await
         .expect_err("address-type switch fails when scan startup fails");
         let messages = receiver.try_iter().collect::<Vec<_>>();
-        let actor_metadata =
-            call!(addr.current_wallet_metadata()).await.expect("wallet metadata loads");
 
         let node_connection_failed = messages.iter().any(contains_node_connection_failed);
         let wallet_scan_started = messages.iter().any(contains_wallet_scan_started);
@@ -1837,7 +1838,10 @@ mod tests {
 
         assert!(node_connection_failed);
         assert!(!wallet_scan_started);
-        assert_eq!(actor_metadata.address_type, WalletAddressType::NativeSegwit);
+        assert_eq!(
+            persisted_wallet_metadata(&metadata).address_type,
+            WalletAddressType::NativeSegwit
+        );
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
