@@ -897,6 +897,20 @@ mod tests {
     }
 
     #[test]
+    fn coin_control_amount_change_preserves_amount_when_fallback_max_is_zero() {
+        let manager = manager_for_validation();
+        set_coin_control_mode_with_total(&manager, 900);
+
+        assert!(manager.handle_coin_control_amount_changed(600.0).is_some());
+
+        let state = manager.state.lock();
+        assert_eq!(state.amount_sats, Some(600));
+        assert!(
+            matches!(&state.mode, super::EnterMode::CoinControl(mode) if !mode.is_max_selected)
+        );
+    }
+
+    #[test]
     fn coin_control_amount_change_snaps_to_max_when_fee_adjusted_max_exceeded() {
         let manager = manager_for_validation();
         set_coin_control_mode_with_total(&manager, 1_500);

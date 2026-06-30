@@ -25,7 +25,8 @@ impl RustSendFlowManager {
         };
 
         // if the amount we are selecting is within 1000 sats of the max send, then select the max send
-        let max_send_without_fees = self.max_send_minus_fees();
+        let max_send_without_fees =
+            self.max_send_minus_fees().filter(|amount| amount.as_sats() > 0);
         let max_send_threshold =
             self.max_send_minus_fees_and_small_utxo().or(max_send_without_fees);
         if let Some(max_send_threshold) = max_send_threshold
