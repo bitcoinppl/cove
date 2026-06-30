@@ -297,11 +297,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
     private func pasteAddress() {
         let address = UIPasteboard.general.string ?? ""
         sendFlowManager.dispatch(action: .changeEnteringAddress(address))
-
-        if address.isEmpty { return }
-        if !validateAddress() { return }
-
-        presenter.focusField = .none
     }
 
     private func showCustomAmount() {
