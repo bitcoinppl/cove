@@ -25,8 +25,9 @@ impl RustSendFlowManager {
         };
 
         // if the amount we are selecting is within 1000 sats of the max send, then select the max send
+        let max_send_without_fees = self.max_send_minus_fees();
         let max_send_threshold =
-            self.max_send_minus_fees_and_small_utxo().or_else(|| self.max_send_minus_fees());
+            self.max_send_minus_fees_and_small_utxo().or(max_send_without_fees);
         if let Some(max_send_threshold) = max_send_threshold
             && amount >= max_send_threshold
         {
@@ -36,11 +37,12 @@ impl RustSendFlowManager {
                 max_send_threshold.as_sats()
             );
 
-            let max_send = coin_control_mode.max_send();
+            let max_send_amount =
+                max_send_without_fees.unwrap_or_else(|| coin_control_mode.max_send());
             coin_control_mode.is_max_selected = true;
 
             self.state.lock().mode = EnterMode::CoinControl(coin_control_mode);
-            self.handle_amount_changed(max_send);
+            self.handle_amount_changed(max_send_amount);
             return Some(());
         }
 
