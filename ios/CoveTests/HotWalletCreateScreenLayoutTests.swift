@@ -409,6 +409,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         try saveScreenshotIfRequested(image)
         try saveAuditScreenshotIfDirectoryRequested(image, name: "hot-wallet-create-after.png")
         try assertNavigationChromeDoesNotShowWordCardBackground(in: image)
+        try assertRecoveryWordCardsStayInsideHorizontalViewport(in: image)
         try assertPrimaryActionIsNotClippedAtBottom(in: image)
 
         let recognizedText = try normalizedRecognizedText(in: image)
@@ -420,6 +421,34 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         XCTAssertTrue(
             recognizedText.contains("recovery words"),
             "expected compact recovery words screen to keep the word-copy context visible, got:\n\(recognizedText)"
+        )
+    }
+
+    func testLargeRecoveryWordsLayoutKeepsWordCardsInsideViewport() async throws {
+        try await bootstrapIfNeeded()
+
+        let size = CGSize(width: 430, height: 932)
+        let manager = PendingWalletManager(numberOfWords: .twelve)
+        let view = NavigationStack {
+            WordsView(
+                manager: manager,
+                initialTabIndex: manager.rust.bip39WordsGrouped().count - 1
+            )
+            .environment(AppManager.shared)
+        }
+        .frame(width: size.width, height: size.height)
+        let image = render(view: view, size: size)
+        addScreenshotAttachment(image, name: "large-recovery-words-final-page")
+        try saveAuditScreenshotIfDirectoryRequested(image, name: "hot-wallet-create-large-after.png")
+        try assertNavigationChromeDoesNotShowWordCardBackground(in: image)
+        try assertRecoveryWordCardsStayInsideHorizontalViewport(in: image)
+        try assertPrimaryActionIsNotClippedAtBottom(in: image)
+
+        let recognizedText = try normalizedRecognizedText(in: image)
+
+        XCTAssertTrue(
+            recognizedText.contains("save wallet"),
+            "expected large recovery words screen to show Save Wallet, got:\n\(recognizedText)"
         )
     }
 
@@ -712,6 +741,57 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
             file: file,
             line: line
         )
+    }
+
+    private func assertRecoveryWordCardsStayInsideHorizontalViewport(
+        in image: UIImage,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let scale = CGFloat(cgImage.width) / image.size.width
+        let edgeWidth = max(Int(8 * scale), 1)
+        let bandTop = max(Int(110 * scale), 0)
+        let bandHeight = min(Int(300 * scale), cgImage.height - bandTop)
+        let leftEdge = CGRect(x: 0, y: bandTop, width: edgeWidth, height: bandHeight)
+        let rightEdge = CGRect(
+            x: cgImage.width - edgeWidth,
+            y: bandTop,
+            width: edgeWidth,
+            height: bandHeight
+        )
+        let leftCardPixels = try lightWordCardPixelCount(in: cgImage, rect: leftEdge)
+        let rightCardPixels = try lightWordCardPixelCount(in: cgImage, rect: rightEdge)
+        let maximumAllowedEdgePixels = max(1, edgeWidth * bandHeight / 25)
+
+        XCTAssertLessThan(
+            leftCardPixels,
+            maximumAllowedEdgePixels,
+            "expected recovery word cards to stay inside the left viewport edge",
+            file: file,
+            line: line
+        )
+        XCTAssertLessThan(
+            rightCardPixels,
+            maximumAllowedEdgePixels,
+            "expected recovery word cards to stay inside the right viewport edge",
+            file: file,
+            line: line
+        )
+    }
+
+    private func lightWordCardPixelCount(in image: CGImage, rect: CGRect) throws -> Int {
+        let croppedImage = try XCTUnwrap(image.cropping(to: rect))
+        let pixels = try rgbaPixels(in: croppedImage)
+
+        return stride(from: 0, to: pixels.count, by: 4).count { offset in
+            pixels[offset] > 190 &&
+                pixels[offset] < 245 &&
+                pixels[offset + 1] > 195 &&
+                pixels[offset + 1] < 245 &&
+                pixels[offset + 2] > 200 &&
+                pixels[offset + 2] < 245
+        }
     }
 
     private func rgbaPixels(in image: CGImage) throws -> [UInt8] {

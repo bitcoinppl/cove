@@ -37,6 +37,8 @@ const ANDROID_SCREENSHOT_DIRS: &[&str] =
 const ANDROID_PROJECT_DIR: &str = "../android";
 const STAY_AWAKE_SETTING: &str = "stay_on_while_plugged_in";
 const STAY_AWAKE_WHILE_PLUGGED_IN: &str = "7";
+const SCREEN_OFF_TIMEOUT_SETTING: &str = "screen_off_timeout";
+const STAY_AWAKE_SCREEN_OFF_TIMEOUT_MS: &str = "1800000";
 const UI_TEST_PACKAGE_NAME: &str = "org.bitcoinppl.cove.uitest";
 const UI_TEST_RUNNER_PACKAGE_NAME: &str = "org.bitcoinppl.cove.uitest.test";
 
@@ -650,12 +652,25 @@ pub fn run_with_stay_awake(command: &[String]) -> Result<()> {
         bail!("adb command not found");
     }
 
-    let previous_setting = read_stay_awake_setting()?;
-    let _guard = AndroidStayAwakeGuard::new(previous_setting);
+    let previous_stay_awake_setting = read_stay_awake_setting()?;
+    let previous_screen_off_timeout = read_screen_off_timeout_setting()?;
+    let _guard =
+        AndroidStayAwakeGuard::new(previous_stay_awake_setting, previous_screen_off_timeout);
 
     adb_status(
         &["shell", "settings", "put", "global", STAY_AWAKE_SETTING, STAY_AWAKE_WHILE_PLUGGED_IN],
         "Failed to enable Android stay-awake setting",
+    )?;
+    adb_status(
+        &[
+            "shell",
+            "settings",
+            "put",
+            "system",
+            SCREEN_OFF_TIMEOUT_SETTING,
+            STAY_AWAKE_SCREEN_OFF_TIMEOUT_MS,
+        ],
+        "Failed to increase Android screen-off timeout",
     )?;
     adb_status(&["shell", "input", "keyevent", "KEYCODE_WAKEUP"], "Failed to wake Android device")?;
 
@@ -692,18 +707,22 @@ pub fn run_manual_ui_tests() -> Result<()> {
 }
 
 struct AndroidStayAwakeGuard {
-    previous_setting: String,
+    previous_stay_awake_setting: String,
+    previous_screen_off_timeout: String,
 }
 
 impl AndroidStayAwakeGuard {
-    fn new(previous_setting: String) -> Self {
-        Self { previous_setting }
+    fn new(previous_stay_awake_setting: String, previous_screen_off_timeout: String) -> Self {
+        Self { previous_stay_awake_setting, previous_screen_off_timeout }
     }
 }
 
 impl Drop for AndroidStayAwakeGuard {
     fn drop(&mut self) {
-        if let Err(error) = restore_stay_awake_setting(&self.previous_setting) {
+        if let Err(error) = restore_stay_awake_setting(&self.previous_stay_awake_setting) {
+            print_warning(&format!("{error}"));
+        }
+        if let Err(error) = restore_screen_off_timeout_setting(&self.previous_screen_off_timeout) {
             print_warning(&format!("{error}"));
         }
     }
@@ -719,14 +738,22 @@ impl Drop for AndroidUiPackageCleanupGuard {
 }
 
 fn read_stay_awake_setting() -> Result<String> {
+    read_android_setting("global", STAY_AWAKE_SETTING, "Android stay-awake setting")
+}
+
+fn read_screen_off_timeout_setting() -> Result<String> {
+    read_android_setting("system", SCREEN_OFF_TIMEOUT_SETTING, "Android screen-off timeout")
+}
+
+fn read_android_setting(namespace: &str, setting: &str, label: &str) -> Result<String> {
     let output = Command::new("adb")
-        .args(["shell", "settings", "get", "global", STAY_AWAKE_SETTING])
+        .args(["shell", "settings", "get", namespace, setting])
         .output()
-        .wrap_err("Failed to read Android stay-awake setting")?;
+        .wrap_err_with(|| format!("Failed to read {label}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("Failed to read Android stay-awake setting: {}", stderr.trim());
+        bail!("Failed to read {label}: {}", stderr.trim());
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -743,6 +770,20 @@ fn restore_stay_awake_setting(previous_setting: &str) -> Result<()> {
     adb_status(
         &["shell", "settings", "put", "global", STAY_AWAKE_SETTING, previous_setting],
         "Failed to restore Android stay-awake setting",
+    )
+}
+
+fn restore_screen_off_timeout_setting(previous_setting: &str) -> Result<()> {
+    if previous_setting == "null" {
+        return adb_status(
+            &["shell", "settings", "delete", "system", SCREEN_OFF_TIMEOUT_SETTING],
+            "Failed to restore Android screen-off timeout",
+        );
+    }
+
+    adb_status(
+        &["shell", "settings", "put", "system", SCREEN_OFF_TIMEOUT_SETTING, previous_setting],
+        "Failed to restore Android screen-off timeout",
     )
 }
 
