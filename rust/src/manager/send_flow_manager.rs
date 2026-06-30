@@ -942,6 +942,42 @@ mod tests {
     }
 
     #[test]
+    fn coin_control_fee_update_preserves_amount_when_real_max_is_zero() {
+        let manager = manager_for_validation();
+        set_coin_control_mode_with_total(&manager, 900);
+        set_selected_fee_without_total(&manager);
+        {
+            let mut state = manager.state.lock();
+            state.address = Some(Arc::new(Address::preview_new()));
+            state.unlocked_spendable_sats = Some(50_000);
+        }
+
+        assert!(manager.handle_coin_control_amount_changed(850.0).is_some());
+
+        let selected =
+            fee_rate_option_with_total_fee(FeeSpeed::Custom { duration_mins: 20 }, 1_000);
+        manager.selected_fee_rate_changed(Arc::new(selected));
+
+        {
+            let state = manager.state.lock();
+            assert_eq!(state.amount_sats, Some(850));
+            assert!(
+                matches!(&state.mode, super::EnterMode::CoinControl(mode) if !mode.is_max_selected)
+            );
+        }
+
+        drain_reconcile_messages(&manager);
+
+        manager.finalize_and_go_to_next_screen();
+
+        assert!(matches!(
+            next_reconcile_message(&manager),
+            super::Message::SetAlert(super::SendFlowAlertState::General { title, .. })
+                if title == "Fee Too High!"
+        ));
+    }
+
+    #[test]
     fn coin_control_amount_change_snaps_to_max_when_fee_adjusted_max_exceeded() {
         let manager = manager_for_validation();
         set_coin_control_mode_with_total(&manager, 1_500);

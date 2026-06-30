@@ -82,6 +82,10 @@ impl RustSendFlowManager {
         };
 
         let max_send_sats = coin_control_mode.max_send().as_sats().saturating_sub(total_fee_sats);
+        if max_send_sats == 0 {
+            return;
+        }
+
         if coin_control_mode.is_max_selected {
             if amount_sats != Some(max_send_sats) {
                 self.handle_amount_changed(Amount::from_sat(max_send_sats));
