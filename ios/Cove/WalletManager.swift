@@ -357,8 +357,19 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     }
 
     func reconcileAfterLabelsChanged() {
-        transactionDetails.removeAll()
-        Task { await rust.getTransactions() }
+        let cachedTransactionIds = Array(transactionDetails.keys)
+
+        Task {
+            for txId in cachedTransactionIds {
+                do {
+                    _ = try await refreshTransactionDetails(for: txId)
+                } catch {
+                    logger.error("Failed to refresh transaction details after label change: \(error)")
+                }
+            }
+
+            await rust.getTransactions()
+        }
     }
 
     func updateTransactionConfirmations(txId: TxId, confirmations: UInt32) {

@@ -551,13 +551,25 @@ class WalletManager :
     }
 
     suspend fun reconcileAfterLabelImportAndWait(): Boolean {
-        transactionDetailsCache.clear()
+        val cachedTransactionIds = transactionDetailsCache.keys.toList()
+        var refreshedDetails = true
+
+        for (txId in cachedTransactionIds) {
+            try {
+                refreshTransactionDetails(txId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(tag, "failed to refresh transaction details after label import", e)
+                refreshedDetails = false
+            }
+        }
 
         return try {
             withRustSuspend {
                 getTransactions()
             }
-            true
+            refreshedDetails
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
