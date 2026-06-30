@@ -528,6 +528,7 @@ impl RustSendFlowManager {
                     }
                     state.fee_selection = Some(selection.clone());
                 }
+                self.reconcile_coin_control_amount_for_selected_fee();
                 self.reconciler.send(Message::UpdateFeeSelection(selection));
             }
 
@@ -908,6 +909,36 @@ mod tests {
         assert!(
             matches!(&state.mode, super::EnterMode::CoinControl(mode) if !mode.is_max_selected)
         );
+    }
+
+    #[test]
+    fn coin_control_amount_change_caps_to_selected_total_when_fee_max_unavailable() {
+        let manager = manager_for_validation();
+        set_coin_control_mode_with_total(&manager, 900);
+
+        assert!(manager.handle_coin_control_amount_changed(1_546.0).is_some());
+
+        let state = manager.state.lock();
+        assert_eq!(state.amount_sats, Some(900));
+        assert!(
+            matches!(&state.mode, super::EnterMode::CoinControl(mode) if !mode.is_max_selected)
+        );
+    }
+
+    #[test]
+    fn coin_control_fee_update_caps_preserved_amount_to_real_max() {
+        let manager = manager_for_validation();
+        set_coin_control_mode_with_total(&manager, 900);
+        set_selected_fee_without_total(&manager);
+
+        assert!(manager.handle_coin_control_amount_changed(850.0).is_some());
+
+        let selected = fee_rate_option_with_total_fee(FeeSpeed::Custom { duration_mins: 20 }, 100);
+        manager.selected_fee_rate_changed(Arc::new(selected));
+
+        let state = manager.state.lock();
+        assert_eq!(state.amount_sats, Some(800));
+        assert!(matches!(&state.mode, super::EnterMode::CoinControl(mode) if mode.is_max_selected));
     }
 
     #[test]

@@ -7,9 +7,9 @@ use cove_util::format::NumberFormatter as _;
 use tracing::{debug, trace, warn};
 
 use super::{
-    BtcOnChangeHandler, DeferredSender, EnterMode, Error, FeeSelection, FiatOnChangeHandler,
-    FiatOrBtc, Message, Result, RustSendFlowManager, SendFlowError, SetAmountFocusField, State,
-    btc_on_change, fiat_on_change,
+    BtcOnChangeHandler, DeferredSender, Error, FeeSelection, FiatOnChangeHandler, FiatOrBtc,
+    Message, Result, RustSendFlowManager, SendFlowError, SetAmountFocusField, State, btc_on_change,
+    fiat_on_change,
 };
 
 impl RustSendFlowManager {
@@ -172,6 +172,8 @@ impl RustSendFlowManager {
             sender.queue(Message::UpdateFeeSelection(selection));
         }
 
+        self.reconcile_coin_control_amount_for_selected_fee();
+
         // max was selected before, so we need to update it to match the new fee rate
         let max_selected = self.state.lock().max_selected.clone();
         if max_selected.is_some() {
@@ -182,19 +184,6 @@ impl RustSendFlowManager {
         if self.validate_amount_internal(false) && self.validate_address_internal(false) {
             self.state.lock().focus_field = None;
             sender.queue(Message::UpdateFocusField(None));
-        }
-
-        // if we are in coin control mode max mode, change the amount when fee changes
-        let mode = self.state.lock().mode.clone();
-        match mode {
-            EnterMode::CoinControl(cc) if cc.is_max_selected => {
-                if let Some(total_fee) = fee_rate.total_fee {
-                    let max_amount = cc.max_send();
-                    let amount = max_amount - total_fee;
-                    self.handle_amount_changed(amount);
-                }
-            }
-            _ => {}
         }
     }
 

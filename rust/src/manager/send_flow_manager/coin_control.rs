@@ -23,6 +23,7 @@ impl RustSendFlowManager {
             BitcoinUnit::Btc => Amount::from_btc(amount).ok()?,
             BitcoinUnit::Sat => Amount::from_sat(amount as u64),
         };
+        let amount = amount.min(coin_control_mode.max_send());
 
         // if the amount we are selecting is within 1000 sats of the max send, then select the max send
         let max_send_without_fees =
@@ -56,6 +57,49 @@ impl RustSendFlowManager {
         self.handle_amount_changed(amount);
 
         Some(())
+    }
+
+    pub(crate) fn reconcile_coin_control_amount_for_selected_fee(self: &Arc<Self>) {
+        let (mut coin_control_mode, amount_sats, total_fee_sats) = {
+            let state = self.state.lock();
+            let EnterMode::CoinControl(coin_control_mode) = state.mode.clone() else {
+                return;
+            };
+
+            let total_fee_sats = state
+                .fee_selection
+                .as_ref()
+                .and_then(|selection| {
+                    selection.selected.total_fee.or(selection.options.medium.total_fee)
+                })
+                .map(|fee| fee.as_sats());
+
+            (coin_control_mode, state.amount_sats, total_fee_sats)
+        };
+
+        let Some(total_fee_sats) = total_fee_sats else {
+            return;
+        };
+
+        let max_send_sats = coin_control_mode.max_send().as_sats().saturating_sub(total_fee_sats);
+        if coin_control_mode.is_max_selected {
+            if amount_sats != Some(max_send_sats) {
+                self.handle_amount_changed(Amount::from_sat(max_send_sats));
+            }
+            return;
+        }
+
+        let Some(amount_sats) = amount_sats else {
+            return;
+        };
+
+        if amount_sats < max_send_sats {
+            return;
+        }
+
+        coin_control_mode.is_max_selected = true;
+        self.state.lock().mode = EnterMode::CoinControl(coin_control_mode);
+        self.handle_amount_changed(Amount::from_sat(max_send_sats));
     }
 
     pub(crate) fn handle_coin_control_entered_amount_changed(

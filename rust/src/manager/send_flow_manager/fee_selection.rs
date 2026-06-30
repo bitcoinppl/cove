@@ -200,23 +200,7 @@ impl RustSendFlowManager {
             state.fee_selection = Some(fee_selection.clone());
         }
 
-        match &mode {
-            EnterMode::CoinControl(cc) if cc.is_max_selected => {
-                let max = cc.max_send();
-                let total_fee = fee_selection
-                    .selected
-                    .total_fee
-                    .map(|fee| fee.as_sats())
-                    .or_else(|| fee_selection.options.medium.total_fee.map(|fee| fee.as_sats()))
-                    .unwrap_or(0);
-
-                let send_amount = max.as_sats() - total_fee;
-                if Some(send_amount) != amount_sats {
-                    self.handle_amount_changed(Amount::from_sat(send_amount));
-                }
-            }
-            _ => {}
-        }
+        self.reconcile_coin_control_amount_for_selected_fee();
 
         sender.queue(Message::UpdateFeeSelection(fee_selection));
     }
