@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -24,6 +25,7 @@ class SendFlowPresenter(
 ) : Closeable {
     // prevents alerts from reappearing during dismissal animations
     private var disappearing by mutableStateOf(false)
+    private var disappearingResetJob: Job? = null
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val isClosed = AtomicBoolean(false)
@@ -34,6 +36,9 @@ class SendFlowPresenter(
 
     val isShowingAlert: Boolean
         get() = alertState != null && !disappearing
+
+    val isDisappearing: Boolean
+        get() = disappearing
 
     var lastWorkingFeeRate by mutableStateOf<Float?>(null)
     var erroredFeeRate by mutableStateOf<Float?>(null)
@@ -58,11 +63,20 @@ class SendFlowPresenter(
     }
 
     fun setDisappearing() {
+        disappearingResetJob?.cancel()
         disappearing = true
-        mainScope.launch {
+        disappearingResetJob = mainScope.launch {
             delay(500)
             disappearing = false
         }
+    }
+
+    fun clearAlert() {
+        if (alertState != null) {
+            setDisappearing()
+        }
+
+        alertState = null
     }
 
     /**
@@ -218,6 +232,8 @@ class SendFlowPresenter(
 
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return
+        disappearingResetJob?.cancel()
+        disappearingResetJob = null
         mainScope.cancel()
     }
 }

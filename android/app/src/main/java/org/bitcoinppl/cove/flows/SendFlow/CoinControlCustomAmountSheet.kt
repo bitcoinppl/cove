@@ -75,7 +75,11 @@ fun CoinControlCustomAmountSheet(
 
     val maxSend =
         remember(sendFlowManager.amount, unit) {
-            val amount = sendFlowManager.maxSendMinusFees() ?: Amount.fromSat(conservativeDustLimitSatsU + 1_000uL)
+            var amount = sendFlowManager.maxSendMinusFees() ?: Amount.fromSat(conservativeDustLimitSatsU + 1_000uL)
+            if (amount.asSats() <= conservativeDustLimitSatsU) {
+                amount = Amount.fromSat(conservativeDustLimitSatsU + 1_000uL)
+            }
+
             val value = if (isSats) amount.asSats().toDouble() else amount.asBtc()
             value.coerceAtLeast(minSend)
         }

@@ -97,7 +97,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     private var maxSend: Double {
         var amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: conservativeDustLimitSatsU + 1000)
-        if amount.asSats() < conservativeDustLimitSatsU {
+        if amount.asSats() <= conservativeDustLimitSatsU {
             amount = Amount.fromSat(sats: conservativeDustLimitSatsU + 1000)
         }
         return amountToDouble(amount)
