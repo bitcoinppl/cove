@@ -110,8 +110,6 @@ private fun AdvancedDetailsBottomSheetPreview() {
                 onDismissRequest = { showBottomSheet = false },
                 sheetState = bottomSheetState,
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                dragHandle = null,
-                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
             ) {
                 AdvancedDetailsBottomSheet(
                     data = sampleData,
@@ -133,25 +131,6 @@ fun AdvancedDetailsBottomSheet(
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .width(36.dp)
-                        .height(4.dp)
-                        .background(
-                            MaterialTheme.colorScheme.outlineVariant,
-                            RoundedCornerShape(2.dp),
-                        ),
-            )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
         Row(
             modifier =
                 Modifier

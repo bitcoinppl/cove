@@ -38,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -334,28 +335,19 @@ fun MainSettingsScreen(
     }
 
     if (showBackupExport) {
-        Dialog(
-            onDismissRequest = { showBackupExport = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
+        FullScreenSettingsModal(onDismiss = { showBackupExport = false }) {
             BackupExportScreen(onDismiss = { showBackupExport = false })
         }
     }
 
     if (showBackupImport) {
-        Dialog(
-            onDismissRequest = { showBackupImport = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
+        FullScreenSettingsModal(onDismiss = { showBackupImport = false }) {
             BackupImportScreen(app = app, onDismiss = { showBackupImport = false })
         }
     }
 
     if (showBackupVerify) {
-        Dialog(
-            onDismissRequest = { showBackupVerify = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
+        FullScreenSettingsModal(onDismiss = { showBackupVerify = false }) {
             BackupVerifyScreen(onDismiss = { showBackupVerify = false })
         }
     }
@@ -380,6 +372,24 @@ fun MainSettingsScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun FullScreenSettingsModal(
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            content()
+        }
     }
 }
 

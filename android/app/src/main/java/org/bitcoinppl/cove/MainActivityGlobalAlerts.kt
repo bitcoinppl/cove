@@ -8,13 +8,11 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
@@ -28,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import org.bitcoinppl.cove.views.ChoiceAlertDialog
+import org.bitcoinppl.cove.views.DialogChoice
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AlertDisplayType
 import org.bitcoinppl.cove_core.AppAlertState
@@ -108,27 +108,30 @@ private fun GlobalAlertDialog(
         is AppAlertState.HotWalletKeyMissing -> {
             val walletId = state.walletId
             val cloudBackupEnabled = app.cloudBackupManager.isCloudBackupEnabled
-            AlertDialog(
-                onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
-                confirmButton = {
-                    Column(horizontalAlignment = Alignment.End) {
-                        if (cloudBackupEnabled) {
-                            TextButton(onClick = {
+            val choices =
+                buildList {
+                    if (cloudBackupEnabled) {
+                        add(
+                            DialogChoice("Open Cloud Backup") {
                                 onDismiss()
                                 app.loadAndReset(Route.Settings(SettingsRoute.CloudBackup))
-                            }) { Text("Open Cloud Backup") }
-                        }
-                        TextButton(onClick = {
+                            },
+                        )
+                    }
+                    add(
+                        DialogChoice("Import 12 Words") {
                             onDismiss()
                             app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
-                        }) { Text("Import 12 Words") }
-                        TextButton(onClick = {
+                        },
+                    )
+                    add(
+                        DialogChoice("Import 24 Words") {
                             onDismiss()
                             app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
-                        }) { Text("Import 24 Words") }
-                        TextButton(onClick = {
+                        },
+                    )
+                    add(
+                        DialogChoice("Use with Hardware Wallet") {
                             onDismiss()
                             try {
                                 app.getWalletManager(walletId).setWalletType(WalletType.COLD)
@@ -142,13 +145,21 @@ private fun GlobalAlertDialog(
                                         ),
                                     )
                             }
-                        }) { Text("Use with Hardware Wallet") }
-                        TextButton(onClick = {
+                        },
+                    )
+                    add(
+                        DialogChoice("Use as Watch Only") {
                             onDismiss()
                             app.alertState = TaggedItem(AppAlertState.ConfirmWatchOnly)
-                        }) { Text("Use as Watch Only") }
-                    }
-                },
+                        },
+                    )
+                }
+            ChoiceAlertDialog(
+                title = state.title(),
+                message = state.message(),
+                choices = choices,
+                onDismiss = onDismiss,
+                showCancelButton = false,
             )
         }
 
@@ -204,29 +215,33 @@ private fun GlobalAlertDialog(
 
         is AppAlertState.FoundAddress -> {
             val selectedWallet = Database().globalConfig().selectedWallet()
-            AlertDialog(
-                onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
-                confirmButton = {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        if (selectedWallet != null) {
-                            FilledTonalButton(onClick = {
-                                val route = RouteFactory().sendSetAmount(selectedWallet, state.address, state.amount)
-                                app.pushRoute(route)
-                                onDismiss()
-                            }) { Text("Send To Address") }
-                        }
-                        TextButton(onClick = {
+            val choices =
+                buildList {
+                    if (selectedWallet != null) {
+                        add(
+                            DialogChoice(
+                                label = "Send To Address",
+                                emphasized = true,
+                                onClick = {
+                                    val route = RouteFactory().sendSetAmount(selectedWallet, state.address, state.amount)
+                                    app.pushRoute(route)
+                                    onDismiss()
+                                },
+                            ),
+                        )
+                    }
+                    add(
+                        DialogChoice("Copy Address") {
                             copyToClipboard(state.address.unformatted())
                             onDismiss()
-                        }) { Text("Copy Address") }
-                        TextButton(onClick = onDismiss) { Text("Cancel") }
-                    }
-                },
+                        },
+                    )
+                }
+            ChoiceAlertDialog(
+                title = state.title(),
+                message = state.message(),
+                choices = choices,
+                onDismiss = onDismiss,
             )
         }
 
@@ -403,42 +418,39 @@ private fun GlobalAlertDialog(
         }
 
         is AppAlertState.CantSendOnWatchOnlyWallet -> {
-            AlertDialog(
-                onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
-                confirmButton = {
-                    Column(horizontalAlignment = Alignment.End) {
-                        TextButton(onClick = {
+            ChoiceAlertDialog(
+                title = state.title(),
+                message = state.message(),
+                choices =
+                    listOf(
+                        DialogChoice("Import Hardware Wallet") {
                             onDismiss()
                             app.alertState = TaggedItem(AppAlertState.WatchOnlyImportHardware)
-                        }) { Text("Import Hardware Wallet") }
-                        TextButton(onClick = {
+                        },
+                        DialogChoice("Import Words") {
                             onDismiss()
                             app.alertState = TaggedItem(AppAlertState.WatchOnlyImportWords)
-                        }) { Text("Import Words") }
-                        TextButton(onClick = onDismiss) { Text("Cancel") }
-                    }
-                },
+                        },
+                    ),
+                onDismiss = onDismiss,
             )
         }
 
         is AppAlertState.WatchOnlyImportHardware -> {
-            AlertDialog(
-                onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
-                confirmButton = {
-                    Column(horizontalAlignment = Alignment.End) {
-                        TextButton(onClick = {
+            ChoiceAlertDialog(
+                title = state.title(),
+                message = state.message(),
+                choices =
+                    listOf(
+                        DialogChoice("QR Code") {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
-                        }) { Text("QR Code") }
-                        TextButton(onClick = {
+                        },
+                        DialogChoice("NFC") {
                             onDismiss()
                             app.scanNfc()
-                        }) { Text("NFC") }
-                        TextButton(onClick = {
+                        },
+                        DialogChoice("Paste") {
                             onDismiss()
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val text =
@@ -460,39 +472,36 @@ private fun GlobalAlertDialog(
                                         )
                                 }
                             }
-                        }) { Text("Paste") }
-                        TextButton(onClick = onDismiss) { Text("Cancel") }
-                    }
-                },
+                        },
+                    ),
+                onDismiss = onDismiss,
             )
         }
 
         is AppAlertState.WatchOnlyImportWords -> {
-            AlertDialog(
-                onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
-                confirmButton = {
-                    Column(horizontalAlignment = Alignment.End) {
-                        TextButton(onClick = {
+            ChoiceAlertDialog(
+                title = state.title(),
+                message = state.message(),
+                choices =
+                    listOf(
+                        DialogChoice("Scan QR") {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR))))
-                        }) { Text("Scan QR") }
-                        TextButton(onClick = {
+                        },
+                        DialogChoice("NFC") {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.NFC))))
-                        }) { Text("NFC") }
-                        TextButton(onClick = {
+                        },
+                        DialogChoice("12 Words") {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
-                        }) { Text("12 Words") }
-                        TextButton(onClick = {
+                        },
+                        DialogChoice("24 Words") {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
-                        }) { Text("24 Words") }
-                        TextButton(onClick = onDismiss) { Text("Cancel") }
-                    }
-                },
+                        },
+                    ),
+                onDismiss = onDismiss,
             )
         }
 
@@ -502,18 +511,18 @@ private fun GlobalAlertDialog(
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
-                    Column(horizontalAlignment = Alignment.End) {
-                        TextButton(onClick = {
-                            onDismiss()
-                            app.deleteCorruptedWallet(state.walletId)
-                        }) {
-                            Text("Delete Wallet", color = MaterialTheme.colorScheme.error)
-                        }
-                        TextButton(onClick = {
-                            onDismiss()
-                            app.trySelectLatestOrNewWallet()
-                        }) { Text("Cancel") }
+                    TextButton(onClick = {
+                        onDismiss()
+                        app.deleteCorruptedWallet(state.walletId)
+                    }) {
+                        Text("Delete Wallet", color = MaterialTheme.colorScheme.error)
                     }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        onDismiss()
+                        app.trySelectLatestOrNewWallet()
+                    }) { Text("Cancel") }
                 },
             )
         }

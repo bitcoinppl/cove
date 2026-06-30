@@ -141,9 +141,7 @@ private fun NetworkFeeBottomSheetPreview() {
             ModalBottomSheet(
                 onDismissRequest = { showBottomSheet = false },
                 sheetState = bottomSheetState,
-                containerColor = Color.White,
-                dragHandle = null,
-                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+                containerColor = MaterialTheme.colorScheme.surface,
             ) {
                 NetworkFeeBottomSheet(
                     feeOptions = allFeeOptions,
@@ -166,9 +164,7 @@ private fun NetworkFeeBottomSheetPreview() {
             ModalBottomSheet(
                 onDismissRequest = { showCustomFeeSheet = false },
                 sheetState = bottomSheetState,
-                containerColor = Color.White,
-                dragHandle = null,
-                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+                containerColor = MaterialTheme.colorScheme.surface,
             ) {
                 CustomNetworkFeeBottomSheet(
                     feeRate = feeRate,
@@ -210,22 +206,6 @@ fun NetworkFeeBottomSheet(
                 .fillMaxWidth()
                 .padding(16.dp, 8.dp, 16.dp, 24.dp),
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .width(36.dp)
-                        .height(4.dp)
-                        .background(
-                            MaterialTheme.colorScheme.outlineVariant,
-                            RoundedCornerShape(2.dp),
-                        ),
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.title_network_fee),
             color = MaterialTheme.colorScheme.onSurface,
@@ -369,22 +349,6 @@ fun CustomNetworkFeeBottomSheet(
                 .fillMaxWidth()
                 .padding(16.dp, 8.dp, 16.dp, 24.dp),
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .width(36.dp)
-                        .height(4.dp)
-                        .background(
-                            MaterialTheme.colorScheme.outlineVariant,
-                            RoundedCornerShape(2.dp),
-                        ),
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.title_set_custom_network_fee),
             color = MaterialTheme.colorScheme.onSurface,
