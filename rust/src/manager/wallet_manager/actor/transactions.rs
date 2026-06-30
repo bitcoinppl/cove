@@ -664,7 +664,7 @@ impl WalletActor {
         let now =
             SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or_else(|e| {
                 warn!("System clock skew detected: {e}");
-                u64::MAX
+                0
             });
         let txid = transaction.compute_txid();
 
@@ -759,7 +759,7 @@ impl WalletActor {
         let now =
             SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or_else(|e| {
                 warn!("System clock skew detected: {e}");
-                u64::MAX
+                0
             });
         let txid = tx.compute_txid();
 
@@ -797,7 +797,8 @@ impl WalletActor {
         } else {
             // tx is broadcast and wallet-persisted, but the session record remains
             // initiate_payment will reject new sends until the record is gone
-            // the next startup will clear it automatically via the wallet pre-check
+            // on restart resume_payjoin_session re-dispatches the stored terminal tx
+            // because it is already in the wallet, broadcast is skipped and cleanup is retried
             self.send(Msg::SendFlowError(SendFlowErrorAlert::SignAndBroadcast(
                 "transaction was broadcast; restart the app to unlock sending".to_string(),
             )));
@@ -859,24 +860,26 @@ impl WalletActor {
     }
 
     /// Handles a recovered session that closed with a receiver proposal but no stored tx.
-    /// On signing failure the session record is kept for retry — the receiver's proposal was valid
-    /// and the original transaction must not be broadcast as a fallback.
+    /// On signing failure the session record is retained — the receiver's proposal was valid
+    /// and the user should retry after resolving the signing issue.
+    /// If the proposal intent cannot be persisted, `fallback_tx` is broadcast instead —
+    /// no terminal marker was written so falling back is safe at that point.
     pub async fn handle_recovered_payjoin_success(
         &mut self,
         proposal_psbt: Psbt,
+        fallback_tx: BdkTransaction,
     ) -> ActorResult<()> {
         let proposal_tx = match self.do_sign_original_psbt(proposal_psbt).await {
             Ok((_, tx)) => tx,
             Err(error) => {
                 error!("failed to sign recovered payjoin proposal, pausing for retry: {error:?}");
-                // retain the session record — the receiver's proposal was valid;
-                // do not broadcast the fallback or write any terminal marker
-                self.send(WalletManagerReconcileMessage::SendFlowError(
-                    SendFlowErrorAlert::SignAndBroadcast(
-                        "could not sign the recovered payjoin proposal; unlock the wallet and restart"
-                            .to_string(),
-                    ),
-                ));
+                // the receiver accepted a valid proposal; do not fall back — retain the record
+                // so the user can retry after resolving the signing failure
+                self
+                    .send(WalletManagerReconcileMessage::WalletError(Error::SignAndBroadcastError(
+                    "could not sign the recovered payjoin proposal; unlock the wallet and restart"
+                        .to_string(),
+                )));
                 self.payjoin_actor = None;
                 return Produces::ok(());
             }
@@ -884,13 +887,9 @@ impl WalletActor {
 
         let persister = PayjoinSessionPersister::new(self.db.clone());
         if let Err(error) = persister.set_pending_proposal(&proposal_tx) {
-            error!("failed to persist recovered proposal intent, aborting: {error}");
-            self.send(WalletManagerReconcileMessage::SendFlowError(
-                SendFlowErrorAlert::SignAndBroadcast(
-                    "failed to persist recovery state; please restart the app".to_string(),
-                ),
-            ));
-            self.payjoin_actor = None;
+            error!("failed to persist recovered proposal intent, falling back: {error}");
+            // no terminal marker was written yet; safe to fall back to the original tx
+            self.start_payjoin_fallback_broadcast(fallback_tx);
             return Produces::ok(());
         }
 

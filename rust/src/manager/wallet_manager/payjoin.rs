@@ -36,8 +36,10 @@ const OHTTP_RELAYS: [&str; 3] =
 
 /// Persists payjoin session events to the wallet's database so sessions survive app restarts.
 ///
-/// `lock` is shared across all clones and serialises `save_event` against `set_pending_fallback`
-/// so that a late in-flight poll response cannot overwrite the fallback-intent marker.
+/// `lock` serialises concurrent calls within a single actor lifetime — the `PayjoinActor`
+/// clones this persister for poll tasks, and all clones share the same lock.  Independently
+/// constructed instances (e.g. in `WalletActor` terminal handlers) do not share the lock
+/// and are safe because the actor is always closed before those handlers run.
 #[derive(Debug, Clone)]
 pub(crate) struct PayjoinSessionPersister {
     db: WalletDataDb,
@@ -174,7 +176,8 @@ impl SessionPersister for PayjoinSessionPersister {
 
         // Reject late events once any terminal intent is committed: an in-flight poll
         // response must not overwrite a BroadcastFallback or BroadcastProposal marker.
-        // The shared lock ensures this check-then-write is atomic with set_pending_action.
+        // The shared lock makes this check-then-write atomic with set_pending_fallback
+        // and set_pending_proposal within the same actor lifetime.
         if session.pending_action.is_some() {
             return Err(WalletDataError::Save(
                 "session has a committed terminal action; rejecting late event".to_string(),
@@ -701,15 +704,16 @@ pub(crate) enum SessionResumption {
     Resume(Box<PayjoinActor>),
     /// A BroadcastProposal marker was stored: broadcast this exact consensus-encoded tx
     BroadcastStoredProposal { proposal_tx: BdkTransaction },
-    /// Session closed with a success outcome but no stored tx: sign the recovered PSBT and broadcast.
-    /// `fallback_tx` is intentionally omitted — a local signing failure during recovery must pause
-    /// and preserve the record rather than downgrade to the original transaction.
-    SignRecoveredProposal { proposal_psbt: Psbt },
+    /// Session closed with a success outcome but no stored tx: sign the recovered PSBT and
+    /// broadcast.  `fallback_tx` is carried so that if persisting the proposal intent fails,
+    /// the actor can fall back to the original transaction.  A signing failure retains the
+    /// session without selecting the fallback — the user must retry.
+    SignRecoveredProposal { proposal_psbt: Psbt, fallback_tx: BdkTransaction },
     /// Session ended without a proposal, broadcast the original tx
     BroadcastFallback { fallback_tx: BdkTransaction },
-    /// The stored proposal tx is corrupt; the record is retained and the user must be notified.
-    /// Cove cannot know whether that proposal reached the network before the corruption/restart,
-    /// so it must not fall back automatically.
+    /// The session data is unreadable or the session is in an unrecoverable state; the user
+    /// must be shown `message`.  Whether the record is retained or cleared depends on which
+    /// producer returned this variant.
     ReportError { message: String },
 }
 
@@ -752,9 +756,11 @@ pub(crate) fn resume_session(
 
     let fallback_tx = history.fallback_tx();
     match session {
-        SendSession::WithReplyKey(sender) => SessionResumption::Resume(Box::new(
-            PayjoinActor::new(wallet_addr, persister, sender, fallback_tx),
-        )),
+        SendSession::WithReplyKey(_) => {
+            // The POST may have already reached the directory before the crash;
+            // re-posting is not retry-safe so fall back to the original transaction.
+            SessionResumption::BroadcastFallback { fallback_tx }
+        }
 
         SendSession::PollingForProposal(polling_sender) => {
             let now_secs =
@@ -778,7 +784,7 @@ pub(crate) fn resume_session(
         }
 
         SendSession::Closed(SessionOutcome::Success(proposal_psbt)) => {
-            SessionResumption::SignRecoveredProposal { proposal_psbt }
+            SessionResumption::SignRecoveredProposal { proposal_psbt, fallback_tx }
         }
 
         SendSession::Closed(_) => SessionResumption::BroadcastFallback { fallback_tx },
@@ -824,7 +830,14 @@ fn fallback_from_record(db: &WalletDataDb, record: PayjoinSenderSession) -> Sess
 fn proposal_from_record(_db: &WalletDataDb, record: PayjoinSenderSession) -> SessionResumption {
     let tx_bytes = match &record.pending_action {
         Some(PendingAction::BroadcastProposal { transaction }) => transaction.clone(),
-        _ => unreachable!("proposal_from_record called without BroadcastProposal action"),
+        _ => {
+            error!(
+                "proposal_from_record called without BroadcastProposal action; retaining record"
+            );
+            return SessionResumption::ReportError {
+                message: "payjoin session state is inconsistent; check your transaction history before retrying".to_string(),
+            };
+        }
     };
     match consensus::deserialize::<BdkTransaction>(&tx_bytes) {
         Ok(proposal_tx) => SessionResumption::BroadcastStoredProposal { proposal_tx },
@@ -1088,6 +1101,20 @@ mod tests {
         let result = persister.set_pending_fallback();
 
         assert!(result.is_err(), "BroadcastFallback must not overwrite BroadcastProposal");
+    }
+
+    #[test]
+    fn set_pending_proposal_rejects_overwrite_with_different_tx() {
+        let (persister, _db, _tmp) = new_test_persister();
+        let tx_a = empty_transaction();
+        let mut tx_b = empty_transaction();
+        tx_b.version = Version::ONE;
+        persister.create_session(&test_fallback_tx()).unwrap();
+        persister.set_pending_proposal(&tx_a).unwrap();
+
+        let result = persister.set_pending_proposal(&tx_b);
+
+        assert!(result.is_err(), "BroadcastProposal must not be overwritten with a different tx");
     }
 
     #[test]

@@ -173,10 +173,12 @@ impl ElectrumClient {
             .await
             .map(Some)
             .or_else(|e| match e {
-                // Only a null response is a definitive "not found"; all other
-                // protocol errors (malformed request, server failure, unsupported
-                // method) are propagated so the caller can fail safely.
-                electrum_client::Error::InvalidResponse(Value::Null) => Ok(None),
+                // Electrum returns a Protocol error when the transaction is not in the
+                // mempool or chain; map to Ok(None) for consistent "not found" semantics
+                // across node backends.  Some server implementations may also return a
+                // null response, so that is handled here too.
+                electrum_client::Error::Protocol(_)
+                | electrum_client::Error::InvalidResponse(Value::Null) => Ok(None),
                 other => Err(Error::ElectrumGetTransaction(other)),
             })
     }
